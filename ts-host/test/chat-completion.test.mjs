@@ -103,6 +103,36 @@ test('streamed deltas assemble into the response a non-streaming request returns
   assert.equal(body.id, 'c1');
 });
 
+test('x_natlang_omit_seed keeps the seed and itself off the wire', async () => {
+  const model = await server(() => [
+    delta({ tool_calls: [{ index: 0, id: 'x', type: 'function', function: { name: 'eval', arguments: '{"code":"return 7"}' } }] }, 'tool_calls')]);
+  try {
+    await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }),
+      { request: { top_p: 0.95, x_natlang_omit_seed: true } })(request());
+    const sent = model.bodies[0];
+    assert.equal('seed' in sent, false); assert.equal('x_natlang_omit_seed' in sent, false); assert.equal(sent.top_p, 0.95);
+  } finally { await model.close(); }
+});
+
+test('x_natlang_host_call_fields go on the calls the runtime wrote, not on sampled ones, and stay off the wire', async () => {
+  const model = await server(() => [
+    delta({ tool_calls: [{ index: 0, id: 'x', type: 'function', function: { name: 'eval', arguments: '{"code":"return 7"}' } }] }, 'tool_calls')]);
+  const fields = { extra_content: { google: { thought_signature: 'skip_thought_signature_validator' } } };
+  const call = id => ({ id, type: 'function', function: { name: 'eval', arguments: '{}' } });
+  const sampled = { id: 's1', type: 'function', function: { name: 'eval', arguments: '{}' }, extra_content: { google: { thought_signature: 'real' } } };
+  try {
+    await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }),
+      { request: { x_natlang_host_call_fields: fields } })({ ...request(), messages: [{ role: 'user', content: 'go' },
+        { role: 'assistant', content: '', natlang_host_generated: true, tool_calls: [call('scope_0')] },
+        { role: 'tool', tool_call_id: 'scope_0', content: '{}' },
+        { role: 'assistant', content: '', tool_calls: [sampled] }, { role: 'tool', tool_call_id: 's1', content: '{}' }] });
+    const sent = model.bodies[0];
+    assert.deepEqual(sent.messages[1].tool_calls[0].extra_content, fields.extra_content);
+    assert.equal(sent.messages[3].tool_calls[0].extra_content.google.thought_signature, 'real');
+    assert.equal('x_natlang_host_call_fields' in sent, false); assert.equal('natlang_host_generated' in sent.messages[1], false);
+  } finally { await model.close(); }
+});
+
 test('the HTTP transport streams, strips private schema keys, and decodes tool calls', async () => {
   const model = await server(() => [
     delta({ role: 'assistant', content: '' }),

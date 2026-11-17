@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason, providerRequestRetryable, underlyingError } from '../dist/teacher/retry.js';
+import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason, providerRequestRetryable, providerAuthFailure, underlyingError } from '../dist/teacher/retry.js';
 import { NatlangCallError } from '../dist/runtime/kernel.js';
 import { ProviderRequestTimeoutError } from '../dist/teacher/provider-deadline.js';
 
@@ -10,6 +10,16 @@ test('transient provider failures are retried, model and authentication errors a
   for (const error of [new Error('incorrect answer'), { status: 401 }, new Error('invalid API key'), new Error('invalid connection error handling in model code')])
     assert.equal(transportFailure(error), false);
   assert.equal(rateLimited({ status: 429 }), true);
+});
+test('refused credentials are an auth failure, distinct from rate limits and model errors', () => {
+  for (const error of [{ status: 401 }, { status: 403 }, Object.assign(new Error('x'), { providerCode: 'invalid_api_key' }),
+    new Error('OAuth refresh failed for openai-codex: OpenAI Codex token refresh failed (400)'),
+    new Error('provider openai-codex has no credentials; run natlang auth login openai-codex'),
+    new Error('model HTTP 401: Unauthorized'), new Error('Your access token has expired')])
+    assert.equal(providerAuthFailure(error), true, String(error.message ?? error.status));
+  for (const error of [{ status: 429 }, new Error('usage_limit_reached'), new Error('HTTP 503'), new Error('incorrect answer'),
+    new Error('model returned malformed tool arguments')])
+    assert.equal(providerAuthFailure(error), false, String(error.message ?? error.status));
 });
 test('same-request retries respect explicit provider non-retryability and non-bridge tool failures', () => {
   assert.equal(providerRequestRetryable(Object.assign(new Error('model HTTP 502'), { status: 502, providerCode: 'NON_BRIDGE_TOOL_USE' })), false);

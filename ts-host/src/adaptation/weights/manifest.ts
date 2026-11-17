@@ -50,9 +50,10 @@ export type SoftState = { readonly binding: string; readonly kind: 'instructions
   /** For a skill: its disclosure target (`skills.<name>` or `skills.<name>/<file>`); null for instructions. */
   readonly target: string | null;
   /** The tuned `nzs1` native-state ID (bound to the manifest base). */
-  readonly state: string; readonly textSha256: string; readonly tokens: number;
-  /** The state as a llama.cpp native state span (`--native-state`), bound to the exact base GGUF. */
-  readonly exports?: { readonly gguf?: { readonly file: string; readonly sha256: string; readonly baseGgufSha256: string } } };
+  readonly state: string; readonly textSha256: string; readonly tokens: number };
+/** Every engine loads a soft state from the release's store file (`states/<state>.nzs`, the native-state format):
+ * the llama.cpp fork with `--native-state`, the in-page engine as `native_states`, native servers by upload. */
+export const softStateFile = (state: Pick<SoftState, 'state'>): string => `states/${state.state}.nzs`;
 
 export type WeightManifest = {
   readonly schema: typeof WEIGHTS_SCHEMA;

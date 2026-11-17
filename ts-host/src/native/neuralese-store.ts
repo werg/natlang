@@ -7,6 +7,7 @@ import { verifyNativeStateDerivation } from './native-state-derivation.js';
  * opaque references (`{ $neuralese: { type, id } }` or `{ $nativeAdapter: { id } }`); exact bytes move between this
  * archive, `.nz` files and native model servers.
  */
+import { sha256 } from '@noble/hashes/sha2.js';
 import { digest, hexDigest } from './hash.js';
 import { validateNativeStateDerivation, nativeStateDerivationDependencies, validateNativeDerivativeArtifact, validateNativeDerivativeTarget, validateNativeFunctionalActor, nativeQueryReadoutDependencies, type NativeStateDerivation } from './native-derivative-contract.js';
 
@@ -163,16 +164,24 @@ export function nativeStateArtifactDependencies(artifact: Pick<NativeStateArtifa
 }
 
 /** Archive either typed native family through one exact dependency mechanism. */
-export async function archiveNativeArtifactFrom(remote: NeuraleseStore, archive: NeuraleseStore,
+/** Where archival reads native artifacts from: another store, a server's HTTP store or the page's engine. */
+export type NativeArtifactSource = Partial<Pick<NeuraleseStore, 'getNativeState' | 'getNativeStateWire' | 'getNativeTensorArtifact'>>;
+
+export async function archiveNativeArtifactFrom(remote: NativeArtifactSource, archive: NeuraleseStore,
     id: string, active = new Set<string>()): Promise<NativeStateArtifact | NativeTensorArtifact> {
   if (active.has(id)) throw new Error('neuralese-native-artifact-cycle: exact native dependencies must form a DAG');
   const nested=new Set(active);nested.add(id);
   if(id.startsWith('nzs1_')) {
     if(!archive.getNativeState||!archive.putNativeState) throw new Error('neuralese-native-archive-unavailable: configure a native state archive');
-    const found=await archive.getNativeState(id), artifact=found??await remote.getNativeState?.(id);
+    const found=await archive.getNativeState(id);
+    // The wire as received: the remote verified it on fetch, the archive keeps those bytes (no decode-encode).
+    const wire=found||!remote.getNativeStateWire||!archive.putNativeStateWire?undefined:await remote.getNativeStateWire(id);
+    const artifact=found??(wire?decodeNativeState(wire,id):await remote.getNativeState?.(id));
     if(!artifact) throw new Error(`neuralese-unknown-native-state: restore native state ${id}`);
     for(const dependency of nativeStateArtifactDependencies(artifact)) await archiveNativeArtifactFrom(remote,archive,dependency,nested);
     if(found)return found;
+    if(wire){const saved=await archive.putNativeStateWire!(wire,id);
+      if(saved.id!==id)throw new Error('neuralese-block-integrity: native state changed during archival');return saved;}
     const {id:_,...input}=artifact,saved=await archive.putNativeState(input);
     if(saved.id!==id)throw new Error('neuralese-block-integrity: native state changed during archival');
     return saved;
@@ -187,7 +196,7 @@ export async function archiveNativeArtifactFrom(remote: NeuraleseStore, archive:
   if(saved.id!==id)throw new Error('neuralese-block-integrity: native artifact changed during archival');
   return saved;
 }
-export async function archiveNativeTensorFrom(remote: NeuraleseStore, archive: NeuraleseStore,id:string):Promise<NativeTensorArtifact> {
+export async function archiveNativeTensorFrom(remote: NativeArtifactSource, archive: NeuraleseStore,id:string):Promise<NativeTensorArtifact> {
   if(!id.startsWith('nnt1_'))throw new RangeError('native tensor archive requires a named tensor ID');
   return await archiveNativeArtifactFrom(remote,archive,id) as NativeTensorArtifact;
 }
@@ -253,6 +262,14 @@ export interface NeuraleseStore {
   putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact>;
   getNativeState(id: string): Promise<NativeStateArtifact | undefined>;
   hasNativeState(id: string): Promise<boolean>;
+  /**
+   * The one handoff of native state between stores and engines: its wire (the `natlang.native-state/1` safetensors
+   * bytes, the Python block store's file format), kept as received. `putNativeStateWire` verifies it once (header,
+   * finite values and content ID in one pass over views; `verifiedId` when the caller verified exactly these bytes)
+   * and stores the bytes as they are; `getNativeStateWire` returns the stored bytes. Neither decodes into copies.
+   */
+  putNativeStateWire?(wire: Uint8Array, verifiedId?: string): Promise<NativeStateArtifact>;
+  getNativeStateWire?(id: string): Promise<Uint8Array | undefined>;
   putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact>;
   getNativeTensorArtifact(id: string): Promise<NativeTensorArtifact | undefined>;
   hasNativeTensorArtifact(id: string): Promise<boolean>;
@@ -594,7 +611,9 @@ export function decodeNativeTensorArtifact(bytes: Uint8Array): NativeTensorArtif
 export function nativeStateContentId(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): string {
   validateNativeState(metadata, tensors);
   const metaBytes = new TextEncoder().encode(nativeCanonicalJson(metadata));
-  const parts: Uint8Array[] = [new TextEncoder().encode('natlang.native-state/1\0'), u64(metaBytes.length), metaBytes];
+  // Hashed incrementally: the tensors are never joined into one more copy of the state.
+  const hash = sha256.create();
+  for (const part of [new TextEncoder().encode('natlang.native-state/1\0'), u64(metaBytes.length), metaBytes]) hash.update(part);
   for (const name of Object.keys(tensors).sort()) {
     const tensor = tensors[name]!;
     const elements = tensor.shape.reduce((product, size) => product * size, 1);
@@ -602,13 +621,19 @@ export function nativeStateContentId(metadata: NativeStateMetadata, tensors: Rec
         tensor.data.length !== elements * NATIVE_DTYPE_BYTES[tensor.dtype]) throw new RangeError(`invalid native tensor ${name}`);
     const nameBytes = new TextEncoder().encode(name);
     const descriptor = new TextEncoder().encode(nativeCanonicalJson({ dtype: tensor.dtype, shape: tensor.shape }));
-    parts.push(u32(nameBytes.length), nameBytes, u32(descriptor.length), descriptor, u64(tensor.data.length), tensor.data);
+    for (const part of [u32(nameBytes.length), nameBytes, u32(descriptor.length), descriptor, u64(tensor.data.length), tensor.data])
+      hash.update(part);
   }
-  return `nzs1_${base32(digest(joinBytes(parts)))}`;
+  return `nzs1_${base32(hash.digest())}`;
 }
 
 /** Multi-tensor safetensors body matching Python `encode_native_state`. */
 export function encodeNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Uint8Array {
+  return encodeNativeStateWire(artifact).wire;
+}
+
+/** The content ID and wire of a native state (one hash pass, one copy into the wire). */
+export function encodeNativeStateWire(artifact: Omit<NativeStateArtifact, 'id'>): { id: string; wire: Uint8Array } {
   const id = nativeStateContentId(artifact.metadata, artifact.tensors);
   const entries: Record<string, unknown> = {};
   const payloads: Uint8Array[] = [];
@@ -622,11 +647,29 @@ export function encodeNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Ui
   let header = new TextEncoder().encode(nativeCanonicalJson(entries));
   const aligned = new Uint8Array(Math.ceil(header.length / 8) * 8).fill(0x20); aligned.set(header); header = aligned;
   const body = joinBytes([u64(header.length), header, ...payloads]);
-  return body;
+  return { id, wire: body };
 }
 
-/** Decode and verify an immutable native state safetensors artifact. */
-export function decodeNativeState(bytes: Uint8Array): NativeStateArtifact {
+/** Exponent masks: a float is non-finite iff all its exponent bits are set (Python `serve/store.py` `_NONFINITE`). */
+function checkNativeStateFinite(tensors: Record<string, NativeStateTensor>): void {
+  for (const [name, tensor] of Object.entries(tensors)) {
+    const { data } = tensor;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    let bad = false;
+    if (tensor.dtype === 'F32') for (let at = 0; at < data.length && !bad; at += 4) bad = (view.getUint32(at, true) & 0x7f800000) === 0x7f800000;
+    else if (tensor.dtype === 'BF16') for (let at = 0; at < data.length && !bad; at += 2) bad = (view.getUint16(at, true) & 0x7f80) === 0x7f80;
+    else if (tensor.dtype === 'F16') for (let at = 0; at < data.length && !bad; at += 2) bad = (view.getUint16(at, true) & 0x7c00) === 0x7c00;
+    else if (tensor.dtype === 'F64') for (let at = 0; at < data.length && !bad; at += 8) bad = (view.getUint32(at + 4, true) & 0x7ff00000) === 0x7ff00000;
+    if (bad) throw new RangeError(`native state ${name} contains non-finite values`);
+  }
+}
+
+/**
+ * Decode and verify an immutable native state safetensors artifact. Tensors are views of `bytes` (no copy). With
+ * `verifiedId` (these exact bytes were verified before, e.g. by the store that holds them) only the header and layout
+ * are checked; otherwise every float is checked finite and the content ID recomputed in one pass.
+ */
+export function decodeNativeState(bytes: Uint8Array, verifiedId?: string): NativeStateArtifact {
   if (bytes.length < 8) throw new RangeError('not a native state safetensors file');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const headerSize = Number(view.getBigUint64(0, true));
@@ -658,20 +701,34 @@ export function decodeNativeState(bytes: Uint8Array): NativeStateArtifact {
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end - start !== count * NATIVE_DTYPE_BYTES[entry.dtype] || end > payload.length)
       throw new RangeError(`invalid native tensor byte range ${name}`);
     spans.push([start, end]);
-    tensors[name] = { dtype: entry.dtype, shape: [...entry.shape], data: payload.slice(start, end) };
+    tensors[name] = { dtype: entry.dtype, shape: [...entry.shape], data: payload.subarray(start, end) };  // views of the immutable body, no copy
   }
   spans.sort((a, b) => a[0] - b[0]);
   if (!spans.length || spans[0]![0] !== 0 || spans.at(-1)![1] !== payload.length ||
       spans.some((span, index) => index > 0 && spans[index - 1]![1] !== span[0]))
     throw new RangeError('native state tensor payload has gaps or overlaps');
+  if (verifiedId !== undefined) {
+    if (id !== verifiedId) throw new RangeError(`native state content ID mismatch: ${String(id)}`);
+    validateNativeState(metadata, tensors);
+    return { id: verifiedId, metadata, tensors };
+  }
+  checkNativeStateFinite(tensors);
   const actual = nativeStateContentId(metadata, tensors);
   if (actual !== id) throw new RangeError(`native state content ID mismatch: ${actual}`);
   return { id: actual, metadata, tensors };
 }
 
+/** A caller's handle on a stored native state: its own metadata, tensors as views of the stored (immutable) bytes. */
+export function nativeStateView(artifact: NativeStateArtifact): NativeStateArtifact {
+  return { id: artifact.id, metadata: structuredClone(artifact.metadata), tensors: Object.fromEntries(
+    Object.entries(artifact.tensors).map(([name, tensor]) => [name, { ...tensor, shape: [...tensor.shape] }])) };
+}
+
 /** Process-local store; the default for runtimes without a model-side store, and for tests. */
 export class MemoryNeuraleseStore implements NeuraleseStore {
+  /** Native states as their wires (kept as received) and the decoded views of them. */
   private readonly nativeStates = new Map<string, NativeStateArtifact>();
+  private readonly nativeWires = new Map<string, Uint8Array>();
   private readonly nativeTensorArtifacts = new Map<string, NativeTensorArtifact>();
   /** Metadata of blocks held elsewhere (`note`). */
   private readonly noted = new Map<string, NeuraleseBlockMeta>();
@@ -682,20 +739,24 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async has(id: string): Promise<boolean> { return this.nativeStates.has(id) || this.nativeTensorArtifacts.has(id); }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
-    if(artifact.metadata.derivation)await verifyNativeStateDerivation(this,artifact);
-    const id = nativeStateContentId(artifact.metadata, artifact.tensors);
-    const stored = { id, metadata: structuredClone(artifact.metadata), tensors: Object.fromEntries(
-      Object.entries(artifact.tensors).map(([name, tensor]) => [name, { ...tensor, shape: [...tensor.shape], data: tensor.data.slice() }])) };
-    const found = this.nativeStates.get(id);
-    if (found) return structuredClone(found);
-    this.nativeStates.set(id, stored);
-    this.noted.delete(id);
-    return structuredClone(stored);
+    const { id, wire } = encodeNativeStateWire(artifact);
+    return this.putNativeStateWire(wire, id);
+  }
+  async putNativeStateWire(wire: Uint8Array, verifiedId?: string): Promise<NativeStateArtifact> {
+    const found = verifiedId !== undefined ? this.nativeStates.get(verifiedId) : undefined;
+    if (found) return nativeStateView(found);
+    const stored = decodeNativeState(wire, verifiedId);
+    if (stored.metadata.derivation) await verifyNativeStateDerivation(this, stored);
+    if (!this.nativeStates.has(stored.id)) {
+      this.nativeStates.set(stored.id, stored); this.nativeWires.set(stored.id, wire); this.noted.delete(stored.id);
+    }
+    return nativeStateView(this.nativeStates.get(stored.id)!);
   }
   async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
     const found = this.nativeStates.get(id);
-    return found && structuredClone(found);
+    return found && nativeStateView(found);
   }
+  async getNativeStateWire(id: string): Promise<Uint8Array | undefined> { return this.nativeWires.get(id); }
   async hasNativeState(id: string): Promise<boolean> { return this.nativeStates.has(id); }
   async putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
     await verifyNativeDerivativeGradientOrigin(this,artifact);
@@ -732,7 +793,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     const removed: string[] = [];
     for (const id of [...this.nativeStates.keys(), ...this.nativeTensorArtifacts.keys()])
       if (!referenced.has(id) && !this.pins.has(id)) {
-        this.nativeStates.delete(id); this.nativeTensorArtifacts.delete(id); removed.push(id);
+        this.nativeStates.delete(id); this.nativeWires.delete(id); this.nativeTensorArtifacts.delete(id); removed.push(id);
       }
     for (const id of [...this.noted.keys()]) if (!referenced.has(id)) this.noted.delete(id);
     return removed;

@@ -253,3 +253,27 @@ test('a native-state server that does not declare streaming gets whole requests'
     } finally { await model.close(); }
   }
 });
+
+test('provider-opaque tool-call fields (Gemini thought signatures) survive streaming and go back in the history', async () => {
+  const extra_content = { google: { thought_signature: 'c2ln' } };
+  const reply = {
+    chunks: [chunk({ role: 'assistant' }),
+      chunk({ tool_calls: [{ index: 0, id: 'call_g', type: 'function', extra_content,
+        function: { name: 'run_code', arguments: '{"code":"return 7"}' } }] }), chunk({}, 'tool_calls')],
+    whole: { id: 'c1', object: 'chat.completion', created: 1, model: 'm', choices: [{ index: 0, finish_reason: 'tool_calls',
+      message: { role: 'assistant', content: null, tool_calls: [{ id: 'call_g', type: 'function', extra_content,
+        function: { name: 'run_code', arguments: '{"code":"return 7"}' } }] } }] },
+  };
+  const model = await server(reply);
+  try {
+    const drive = stream => chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm', stream }), {});
+    const streamed = await drive(true)(request());
+    const whole = await drive(false)(request());
+    assert.deepEqual(streamed.raw_calls, whole.raw_calls);
+    assert.deepEqual(streamed.raw_calls[0].extra_content, extra_content);
+    const followUp = { messages: [...request().messages,
+      { role: 'assistant', content: '', tool_calls: streamed.raw_calls }, { role: 'tool', tool_call_id: 'call_g', content: '7' }], tools };
+    await drive(true)(followUp);
+    assert.deepEqual(model.bodies.at(-1).messages[1].tool_calls[0].extra_content, extra_content);
+  } finally { await model.close(); }
+});

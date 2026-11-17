@@ -136,7 +136,7 @@ export async function promoteBrowserModel({ root = repository, run, artifact, na
  * settings (template arguments, banned marker tokens, greedy decoding). The browser catalog is not changed.
  */
 export async function publishNativeDefault({ root = repository, directory, outtype = 'q8_0', tag, name = 'natlang-lfm25-350m',
-  contextTokens = 16384, upload = uploadReleaseAsset }) {
+  contextTokens = 16384, license = '', upload = uploadReleaseAsset }) {
   root = resolve(root);
   if (!slug(name) || !tag || !/^[A-Za-z0-9._-]+$/.test(tag)) throw new Error('invalid model name or release tag');
   const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
@@ -154,9 +154,11 @@ export async function publishNativeDefault({ root = repository, directory, outty
   const file = `${stem}-${outtype.toUpperCase()}.gguf`, template = `${stem}.jinja`;
   const downloadUrl = await upload({ root, tag, path: source, name: file,
     notes: `natlang native ${manifest.architecture} checkpoint ${manifest.checkpoint_sha256} (training step ${manifest.step}), ` +
-      `exported for llama.cpp (${outtype}). SHA-256 ${sha256}, ${bytes} bytes. Ordinary-token execution: the Neuralese producer ` +
-      'runs on the native server only. Serving: the bundled chat template with ' +
-      `${JSON.stringify(manifest.serving.chat_template_kwargs)}, logit_bias ${JSON.stringify(manifest.serving.logit_bias)}, temperature 0.` });
+      `exported for llama.cpp (${outtype}). SHA-256 ${sha256}, ${bytes} bytes. ` +
+      `${manifest.producer_adapter ? 'Carries the Neuralese producer adapter and native identity: the natlang llama.cpp fork and its wllama build produce and import native states. ' : 'Ordinary-token execution only (no producer adapter). '}` +
+      'Serving: the bundled chat template with ' +
+      `${JSON.stringify(manifest.serving.chat_template_kwargs)}, logit_bias ${JSON.stringify(manifest.serving.logit_bias)}, temperature 0.` +
+      (license ? ` License: ${license}` : '') });
   await mkdir(join(root, 'models/templates'), { recursive: true });
   await writeFile(join(root, 'models/templates', template), templateText);
   const runtimeDefault = { id: `${stem}-${outtype}`.toLowerCase(), label: `natlang ${manifest.architecture} · step ${manifest.step} · ${outtype.toUpperCase()}`,
@@ -209,7 +211,8 @@ async function main() {
   const option = name => args[args.indexOf(name) + 1];
   if (args.includes('--native-gguf')) {
     const result = await publishNativeDefault({ directory: resolve(option('--native-gguf')), tag: option('--release'),
-      ...(args.includes('--outtype') ? { outtype: option('--outtype') } : {}), ...(args.includes('--name') ? { name: option('--name') } : {}) });
+      ...(args.includes('--outtype') ? { outtype: option('--outtype') } : {}), ...(args.includes('--name') ? { name: option('--name') } : {}),
+      ...(args.includes('--license') ? { license: option('--license') } : {}) });
     console.log(JSON.stringify(result));
     return;
   }
@@ -219,7 +222,7 @@ async function main() {
   const downloadUrl = args.includes('--download-url') ? option('--download-url') : '';
   if (!run || !name || !slug(name) || !['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'].includes(quant))
     throw new Error('usage: publish_browser_model.mjs --run runs/NAME --name SLUG [--quant Q4_K_M] [--template PATH] [--artifact models/FILE.gguf] [--download-url HTTPS_URL]\n' +
-      '   or: publish_browser_model.mjs --native-gguf EXPORT_DIR --release TAG [--outtype q8_0] [--name SLUG]');
+      '   or: publish_browser_model.mjs --native-gguf EXPORT_DIR --release TAG [--outtype q8_0] [--name SLUG] [--license TEXT]');
   inside(repository, run, 'runs');
   const candidate = artifact ?? await convert(run, name, quant, repository);
   try {

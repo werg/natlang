@@ -18,6 +18,7 @@ bootstrap; a wall-clock timeout counts as a failure, dropping them is reported b
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import math
@@ -346,15 +347,92 @@ def _finished(journal):
     return journal.exists() and any(row.get('event') == 'finish' for row in read_jsonl(journal))
 
 
-def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None):
+def _finish_seconds(journal):
+    """The episode's wall seconds from its journal's finish row (None while unfinished)."""
+    if not journal.exists():
+        return None
+    finishes = [row for row in read_jsonl(journal) if row.get('event') == 'finish']
+    return finishes[-1].get('elapsed_seconds') if finishes else None
+
+
+def duration_prior(paths):
+    """task_id -> mean episode wall seconds over earlier ``result.json`` files (any policy, same held tasks): the
+    dispatch order's estimate before this run has seen the task."""
+    seconds = collections.defaultdict(list)
+    for path in paths:
+        for sample in json.loads(Path(path).read_text()).get('samples') or ():
+            if sample.get('ran') and isinstance(sample.get('elapsed_seconds'), (int, float)):
+                seconds[sample['task_id']].append(float(sample['elapsed_seconds']))
+    return {task: sum(values) / len(values) for task, values in seconds.items()}
+
+
+class Dispatch:
+    """Which entry a free slot runs next: sample-major (sample s+1 starts only when every sample-s entry has started, so a
+    partly finished run stays balanced), and within a sample the task expected to run longest first, so the last
+    minutes are not spent waiting for one long episode that started late (longest-processing-time-first; run1's six
+    Pop evals replayed: 500-1150 s of 16-18.5k saved). The estimate of a task is the longest of its episodes in this run
+    (finished: their wall time; running: their time so far), else ``prior`` (``duration_prior``), else 0; ties keep the
+    sealed order. ``order='sealed'`` opts out (the sealed queue's order). Order changes only which episodes share a
+    batch, never an episode's task, seed or budget."""
+
+    def __init__(self, entries, *, prior=None, order='longest-first', observed=None):
+        if order not in ('longest-first', 'sealed'):
+            raise ValueError(f'unknown dispatch order {order!r}')
+        self.pending = list(entries)
+        self.order, self.prior = order, dict(prior or {})
+        self.finished = collections.defaultdict(float)   # task_id -> longest finished episode (s)
+        for task, seconds in (observed or {}).items():
+            self.finished[task] = max(self.finished[task], float(seconds))
+        self.running = {}   # key -> (task_id, start time)
+
+    def estimate(self, task, now):
+        seen = [self.finished[task]] if task in self.finished else []
+        seen += [now - start for running_task, start in self.running.values() if running_task == task]
+        return max(seen) if seen else self.prior.get(task, 0.)
+
+    def take(self, now=None):
+        if not self.pending:
+            return None
+        if self.order == 'sealed':
+            entry = self.pending.pop(0)
+        else:
+            now = time.time() if now is None else now
+            sample = min(entry['sample'] for entry in self.pending)
+            best = max(((self.estimate(entry['task_id'], now), -position), position)
+                       for position, entry in enumerate(self.pending) if entry['sample'] == sample)[1]
+            entry = self.pending.pop(best)
+        self.running[entry['key']] = (entry['task_id'], time.time() if now is None else now)
+        return entry
+
+    def done(self, entry, seconds):
+        self.running.pop(entry['key'], None)
+        if isinstance(seconds, (int, float)):
+            self.finished[entry['task_id']] = max(self.finished.get(entry['task_id'], 0.), float(seconds))
+
+
+STOP_DRAIN_SECONDS = 120   # after a stop: terminated episodes get this long, then they are killed and collection returns
+
+
+def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None, prior=None, order='longest-first',
+            drain_seconds=STOP_DRAIN_SECONDS):
     """Work-stealing slots (``endpoints``: [(url, slots)]) over the sealed ``entries``, one ``run_bonsai_queue`` process per
     episode under ``directory/workers`` (a slow episode never holds a shard of others back). Entries with a finished journal
-    are skipped (resume). Returns once every entry ran or ``stop`` is set (its running episodes are terminated)."""
+    are skipped (resume). The next entry is ``Dispatch``'s choice (``prior``, ``order``). Returns once every entry ran or,
+    after ``stop``, within ``drain_seconds``: running episodes get SIGTERM, those still alive at half the drain SIGKILL,
+    and a slot thread still blocked at the end is left behind (daemon) with every thread's stack in the log, so the
+    partial result is always written (the 2026-11-17 Pop smoke's measure sat 55 min after its SIGTERM)."""
     directory, repo = Path(directory), Path(repo)
     work = directory / 'workers'
     work.mkdir(exist_ok=True)
-    todo = [entry for entry in entries if not _finished(work / f"{entry['key']}.journal.jsonl")]
-    lock, cursor, children, done = threading.Lock(), [0], set(), [0]
+    todo, observed = [], {}
+    for entry in entries:
+        seconds = _finish_seconds(work / f"{entry['key']}.journal.jsonl")
+        if seconds is None:
+            todo.append(entry)
+        elif isinstance(seconds, (int, float)):
+            observed[entry['task_id']] = max(observed.get(entry['task_id'], 0.), float(seconds))
+    dispatch = Dispatch(todo, prior=prior, order=order, observed=observed)
+    lock, children, done = threading.Lock(), set(), [0]
     started = time.time()
 
     def serving(url):
@@ -375,10 +453,9 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
                 stop.set()
                 return
             with lock:
-                if cursor[0] >= len(todo):
+                entry = dispatch.take()
+                if entry is None:
                     return
-                entry = todo[cursor[0]]
-                cursor[0] += 1
             key = entry['key']
             queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.journal.jsonl'
             journal.unlink(missing_ok=True)   # an unfinished attempt restarts whole
@@ -395,27 +472,53 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
                 children.add(child)
             child.wait()
             with lock:
+                dispatch.done(entry, _finish_seconds(journal))
                 children.discard(child)
                 done[0] += 1
                 if log and done[0] % 16 == 0:
                     log(json.dumps({'held_eval_progress': done[0], 'of': len(todo),
                                     'minutes': round((time.time() - started) / 60, 1)}))
 
+    def signal_children(kill):
+        with lock:
+            alive = [child for child in children if child.poll() is None]
+        for child in alive:   # outside the lock: a slot thread that just reaped its child needs it
+            try:
+                child.kill() if kill else child.terminate()
+            except OSError:
+                pass
+        return len(alive)
+
     def watch():
         stop.wait()
-        with lock:
-            for child in list(children):
-                if child.poll() is None:
-                    child.terminate()
+        signal_children(kill=False)
+        if not stop_drained.wait(drain_seconds / 2):
+            left = signal_children(kill=True)
+            if log and left:
+                log(json.dumps({'event': 'held eval stop', 'killed_episodes': left}))
 
+    stop_drained = threading.Event()
     threading.Thread(target=watch, daemon=True).start()
     threads = [threading.Thread(target=slot, args=(url.rstrip('/'),), daemon=True)
                for url, slots in endpoints for _ in range(max(1, min(slots, len(todo))))]
     for thread in threads:
         thread.start()
-    for thread in threads:
-        while thread.is_alive():
-            thread.join(5)
+    stopped_at = None
+    while any(thread.is_alive() for thread in threads):
+        for thread in threads:
+            thread.join(1)
+        if stop.is_set():
+            stopped_at = stopped_at or time.monotonic()
+            if time.monotonic() - stopped_at > drain_seconds:
+                stuck = [thread for thread in threads if thread.is_alive()]
+                if log:
+                    import traceback
+                    frames = sys._current_frames()
+                    log(json.dumps({'event': 'held eval stop', 'stuck_slots': len(stuck), 'stacks': [
+                        ''.join(traceback.format_stack(frames[thread.ident])) for thread in stuck
+                        if thread.ident in frames]}))
+                break
+    stop_drained.set()
 
 
 def run(directory):
@@ -435,10 +538,14 @@ def run(directory):
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
+    import faulthandler
+    faulthandler.register(signal.SIGUSR1, all_threads=True)   # kill -USR1 PID: every thread's stack to stderr
     endpoints = spec.get('endpoints') or [[spec['endpoint'], spec['workers']]]
     env = {**os.environ, 'NATLANG_MODEL_FACING': spec['series']['model_facing']}
+    dispatch = spec.get('dispatch') or {}
     collect(directory, entries, endpoints, repo=spec['repo'], runtime=spec['runtime'], env=env, stop=stop,
-            log=lambda line: print(line, flush=True))
+            log=lambda line: print(line, flush=True), order=dispatch.get('order', 'longest-first'),
+            prior=duration_prior(dispatch.get('prior') or ()))
     try:
         result = finalize(directory, spec, started, complete=not stop.is_set())
     except BaseException as error:   # never leave a run without a verdict
@@ -482,6 +589,22 @@ def finalize(directory, spec, started, *, complete):
                         'completion_tokens': (finish or {}).get('completion_tokens'),
                         'model_calls': efficiency.get('model_calls'), 'repeated_actions': efficiency.get('repeated_actions'),
                         'neuralese_exchanges': row.get('neuralese_exchanges', 0)})
+    elapsed = round(time.time() - started, 1)
+    result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
+              'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
+              'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
+              'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
+              'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
+              'sampling': spec.get('sampling', LEGACY_SAMPLING),
+              'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
+              **aggregate(samples, complete=complete, elapsed=elapsed),
+              'score': {'groups_with_spread': report.get('groups_with_spread')}}
+    write_json_durable(directory / 'result.json', result)
+    return result
+
+
+def aggregate(samples, *, complete, elapsed):
+    """The result fields computed from its samples (``finalize``, ``merge``)."""
     ran = [s for s in samples if s['ran']]
     scored = [s for s in ran if s['reward'] is not None]
     counts = {}
@@ -491,30 +614,54 @@ def finalize(directory, spec, started, *, complete):
     successes = sum(s['reward'] == 1.0 for s in scored)
     timeouts = sum(s['timed_out'] for s in ran)
     tokens = sum(s['completion_tokens'] or 0 for s in ran)
-    elapsed = round(time.time() - started, 1)
-    result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
-              'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
-              'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
-              'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
-              'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
-              'sampling': spec.get('sampling', LEGACY_SAMPLING),
-              'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
-              'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
-              'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
-              # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
-              'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
-                                     if scored and all(s.get('graded_reward') is not None for s in scored) else None),
-              'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
-              'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
-              'outcome_counts': counts,
-              'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
-              'ran_out_rate': ran_out_rate({'samples': samples}),
-              'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
-              'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
-              'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
-              'score': {'groups_with_spread': report.get('groups_with_spread')}, 'samples': samples}
-    write_json_durable(directory / 'result.json', result)
-    return result
+    return {'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
+            'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
+            # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
+            'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
+                                   if scored and all(s.get('graded_reward') is not None for s in scored) else None),
+            'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
+            'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
+            'outcome_counts': counts,
+            'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
+            'ran_out_rate': ran_out_rate({'samples': samples}),
+            'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
+            'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
+            'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
+            'samples': samples}
+
+
+def merge(parts):
+    """One result from complete runs of one policy whose seeds continue each other (part k's ``seed_base`` is the
+    first's plus the samples before it: ``measure --samples 2 --seed-base SEED_BASE+2`` measures samples 2-3 of a
+    4-sample run). The samples are renumbered into one series, so ``compare`` reads it as a single run. Parts measured on
+    different engines are allowed: the result's ``engine`` lists them per sample range (``engine_parts``), and ``compare``
+    pairs it only with a result of the same engine mix, where each task sees the same engines in both arms."""
+    first = parts[0]
+    same = ('policy_id', 'manifest_sha256', 'tasks', 'case_seconds', 'context_tokens', 'sampling')
+    offset, samples, engines = 0, [], []
+    for part in parts:
+        for key in same:
+            if part.get(key) != first.get(key):
+                raise ValueError(f'parts differ in {key}: {first.get(key)!r} vs {part.get(key)!r}')
+        if part['series']['key'] != first['series']['key'] or (part.get('code') or {}).get('git_commit') != \
+                (first.get('code') or {}).get('git_commit'):
+            raise ValueError('parts ran different code or scoring series')
+        if not part.get('complete'):
+            raise ValueError('merge takes complete runs only')
+        if part.get('seed_base', SEED_BASE) != first.get('seed_base', SEED_BASE) + offset:
+            raise ValueError(f'part seeds start at {part.get("seed_base")}, not {first.get("seed_base", SEED_BASE) + offset}')
+        samples += [{**s, 'sample': s['sample'] + offset} for s in part['samples']]
+        engines.append({'samples': [offset, offset + part['samples_per_task']], 'engine': result_engine(part)})
+        offset += part['samples_per_task']
+    distinct = {json.dumps(e['engine'], sort_keys=True) for e in engines}
+    elapsed = sum(part.get('elapsed_seconds') or 0 for part in parts)
+    return {**{k: v for k, v in first.items() if k not in ('samples', 'actor', 'endpoint')},
+            'samples_per_task': offset, 'started_at': min(p.get('started_at') or 0 for p in parts),
+            'finished_at': max(p.get('finished_at') or 0 for p in parts), 'elapsed_seconds': elapsed,
+            'engine': first.get('engine') if len(distinct) == 1 else {'engine_parts': engines},
+            'merged_from': [{'seed_base': p.get('seed_base', SEED_BASE), 'samples': p['samples_per_task'],
+                             'finished_at': p.get('finished_at')} for p in parts],
+            **aggregate(samples, complete=True, elapsed=elapsed)}
 
 
 def _level(task):
@@ -742,12 +889,15 @@ BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7
 ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', 'fp8_e4m3',
               '--sglang-kv-gb', '16', '--sglang-max-running', '128', '--sglang-context', '131072')
 ACTOR_BUDGET_GB = 40   # --sglang-kv-gb + 24 (measured 2026-11-12: SGLang 23 GB at 16 GB KV, front 14 GB once a write_text reloads the native model)
-ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction')
+# max_running: SGLang's running-sequence cap (decode batch shapes and CUDA graphs; Pop 14 -> 20 slots at the
+# grpo-v4 pin, plans/neuralese/POP_HELD_THROUGHPUT_20261117.md). Results of actors that did not attest it read None.
+ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction', 'max_running')
 
 
 def engine_of(binding):
     """The arithmetic-relevant serving settings an actor attests (``rl_policy_binding.serving_engine``): engine, fork
-    commit, dtype, projection, KV dtype, overlap, reduction, and the actor export format; None when not attested."""
+    commit, dtype, projection, KV dtype, overlap, reduction, running-sequence cap, and the actor export format; None when not
+    attested."""
     engine = (binding or {}).get('serving_engine')
     if not isinstance(engine, dict):
         return None
@@ -831,11 +981,12 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
             max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
-            top_p=None):
+            top_p=None, order='longest-first', duration_priors=()):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
     ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling).
     ``top_p``: the nucleus of the sampling law (default ``common.sampling.RL_TOP_P``; 1.0: untruncated), recorded as
-    the result's ``sampling``; ``compare`` refuses results of different laws."""
+    the result's ``sampling``; ``compare`` refuses results of different laws. ``order``/``duration_priors``: the dispatch
+    order (``Dispatch``; earlier result.json files of the same tasks seed its estimates), recorded as ``dispatch``."""
     from ..common.sampling import RL_TOP_P, sampling_law_of
     from .actor_client import NativeActorClient
     from ..common.code_provenance import code_provenance, repository_root
@@ -855,7 +1006,8 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
             'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')},
             'engine': engine_of(info.get('rl_policy_binding')),
-            'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p)}
+            'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p),
+            'dispatch': {'order': order, 'prior': [str(Path(p).resolve()) for p in duration_priors]}}
     pin = pinned_engine(manifest)
     if pin and not allow_other_engine:
         attested = spec['engine'] or {}
@@ -886,7 +1038,7 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             raise ValueError(f'{out} holds a run measured on another engine: {previous["engine"]!r}, '
                              f'the endpoint attests {spec["engine"]!r}')
         spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
-                'resumed_code': spec['code']}
+                'dispatch': spec['dispatch'], 'resumed_code': spec['code']}
     (out / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')
     (out / 'result.json').unlink(missing_ok=True)
     return run(out)
@@ -945,6 +1097,12 @@ def main(argv=None):
     m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
     m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
     m.add_argument('--keep-actor', action='store_true')
+    m.add_argument('--dispatch', choices=('longest-first', 'sealed'), default='longest-first',
+                   help='episode order within a sample: the task expected to run longest first (its episodes in this run, '
+                        'else --duration-prior), or the sealed queue order; never changes what is measured')
+    m.add_argument('--duration-prior', type=Path, action='append', default=[],
+                   help='an earlier result.json of the same held tasks (any policy): per-task wall seconds that order the '
+                        'first sample (repeatable)')
     v = sub.add_parser('serve', help='serve a checkpoint as a ledger actor unit (or reuse it) and print its URL')
     v.add_argument('--checkpoint', type=Path, required=True)
     v.add_argument('--checkpoint-sha256')
@@ -963,6 +1121,10 @@ def main(argv=None):
     c.add_argument('--trained-families', type=Path,
                    help='JSON list of families the second policy trained on: splits the change into trained/untrained')
     c.add_argument('--resamples', type=int, default=2000)
+    g = sub.add_parser('merge', help='one result.json from complete runs of one policy with continuing seeds '
+                                     '(e.g. samples 0-1 and, with --seed-base +2, samples 2-3)')
+    g.add_argument('out', type=Path, help='result.json to write')
+    g.add_argument('parts', type=Path, nargs='+', help="result.json files in seed order")
     args = parser.parse_args(argv)
     if args.command == 'run':
         run(args.dir)
@@ -974,6 +1136,11 @@ def main(argv=None):
         if args.out:
             args.out.write_text(text + '\n')
         print(text)
+    elif args.command == 'merge':
+        result = merge([json.loads(path.read_text()) for path in args.parts])
+        write_json_durable(args.out, result)
+        print(json.dumps({k: result[k] for k in ('policy_id', 'samples_per_task', 'ran', 'scored', 'successes',
+                                                 'success_rate', 'ran_out_rate')}))
     elif args.command == 'serve':
         sha = args.checkpoint_sha256 or _sha256(args.checkpoint)
         print(serve(args.checkpoint, sha, args.store, unit=args.unit, budget_gb=args.budget_gb, extra=args.actor_arg,
@@ -1000,7 +1167,7 @@ def main(argv=None):
             measure(args.out, args.manifest, endpoints, policy, samples=args.samples, seed_base=args.seed_base,
                     case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
                     context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine,
-                    top_p=args.top_p)
+                    top_p=args.top_p, order=args.dispatch, duration_priors=args.duration_prior)
         finally:
             if unit and not args.keep_actor:
                 subprocess.run(['systemctl', '--user', 'stop', unit])

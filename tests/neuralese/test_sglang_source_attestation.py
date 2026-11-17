@@ -38,6 +38,9 @@ def test_attestation_records_the_actual_fork_commit_and_warns_never_refuses(tmp_
     (package / 'srt/sampling').mkdir(parents=True)
     (package / 'srt/sampling/natlang_params.py').write_text('NATLANG_TRACK_INPUT_END = True\n')
     assert serve.attest_sglang_source(str(python), {'commit': commit})['track_input_end'] is True
+    assert dirty['native_state_files'] is False   # nor native-state file handoff (the front refuses to launch it)
+    (package / 'srt/sampling/natlang_params.py').write_text('NATLANG_NATIVE_STATE_FILES = True\n')
+    assert serve.attest_sglang_source(str(python), {'commit': commit})['native_state_files'] is True
 
 
 LFM3_KINDS = ['conv', 'conv', 'full_attention', 'conv', 'sliding_attention'] * 2 + ['full_attention']

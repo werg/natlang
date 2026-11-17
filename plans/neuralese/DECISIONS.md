@@ -2312,3 +2312,400 @@ per-task pass-rate change vs the Pop base, p < 0.05 each, and `ran_out_rate` not
 2026-11-14), as does no gain by 48 h of training. A `behaviour_shift` or `grad_spike` is diagnosed at the step it fires
 (the probe's bounds: |logp change| 0.02, |entropy change| 0.03, closes outside 0.67-1.5x; run1 was at 3.3x after step 4).
 Early checks as run1 (step-1 KL < 1e-3, outside-nucleus < 1%, |log rho| < 0.1).
+
+**Step 1 and the step-2 memory stop (2026-11-15).** Step 1 (24 groups, reward 0.558) passed the early checks: KL 0,
+outside-nucleus 0.12%, |log rho| 0.029, probe flat (+0.002 logp, 0.99x closes, +0.002 entropy), grad_norm 0.213. At step 2's
+lowering the reasoning-shift sentinel fired (1,214 reasoning tokens per call, 1.52x step 1). That is batch composition, not
+the policy: the step-2 groups were sampled almost entirely by policy version 0 (`versions.json`), the start policy measured
+for step 1, and per-group reasoning ranges from 300 to 2,000+ tokens per call, weighted by call count (g18: 38 calls per
+episode at 1,894). Step 1 trained on the first 24 groups to finish, the short ones. The v0-sampled groups that finished
+later average 1,318 tokens per call (8 groups). Then the guard stopped the run when the step-2 learner reached 92.6 GB
+(budget 80 x 1.15 overshoot, under memory pressure). Longer chains raise the learner's memory past `--activation-gb`
+(prefixes recompute outside it). The run resumed from the step-1 branch state (`state-step-00001`, next group 32) as
+`grpo-v2-run2-r2`, with budget 84 and `--activation-gb 4`. Ledger headroom is 16.5 GB. Recompute is exact, so the
+treatment is unchanged. The Pop base measurement (231 of 508 episodes) resumes from its journal.
+
+**Base held-v3 on Pop, and the Pop engine crash (2026-11-15).** `held/step-00000-pop`: 235 successes out of 449 scored
+(52.3%), 512 ran, loop and ran-out rate 9.8%, mean graded reward 0.572. The 63 unscored episodes are `unresolved` (run1's Pop
+base had 14). Pop's SGLang engine was OOM-killed 3 times (23:35, 00:21, 01:49; exit 70, then relaunched by the driver),
+and the episodes in flight failed with ECONNREFUSED. The cause is the fork's `NatlangImport.files`, a device-side cache of
+up to 64 whole Neuralese state files: it filled the ~0.8 GB beside the KV pool and CUDA graphs. Pairs drop unscored
+episodes on either side (`held_eval.paired`), so run2's comparisons stay valid, with less power. Fixed in the fork
+(dd2430793: host cache bounded in bytes, only gathered rows reach the device). The fix enters at the next pin with the
+fork's other pending commits. The Pop and DGX checkouts stay at 70b1991e6 while run2 runs, because a crash relaunch on a new
+fork commit would change the attested engine mid-series.
+
+**Step 3 and the second memory stop (2026-11-15).** Step 3: reward 0.679, KL 0.0027, grad_norm 0.296, probe −0.007 logp,
+1.18x closes, +0.007 entropy (inside the bounds; closes rising, watched). The guard stopped `grpo-v2-run2-r2` at 96.7 GB in
+step 4's learner phase (budget 84 x 1.15, under pressure, swap active). The learner's CUDA peak grows with each step's
+chains (39.1 / 44.4 / 45.2 GB at steps 1-3), and `--activation-gb` does not bound that growth. At the peak: the learner held
+about 50 GB GPU and 13 GB host, the actor 15.3 GB plus a 4.2 GB front, and 24 collector slots about 10 GB. Resumed from
+`state-step-00003` (next group 113) as `grpo-v2-run2-r3`: `--slots 16` and actor `--sglang-max-running 32` (its CUDA
+graphs for up to 128 sequences took 1.85 GB, while 16 slots run at most about 20). Budget 86 GB, ledger headroom 15.3 GB.
+These are sizing changes only: the sampling law, objective and data selection are unchanged, and collection runs about a
+third slower per step. The step-2 held eval (194 of 512 ran, 85 of 180 scored successes, partial) continues on the resumed
+run.
+
+**Step 4 sentinel, step-3 held regression: run2 stopped (2026-11-15 09:23).** Step 4 (reward 0.498, grad_norm 0.24, no
+spike) fired the behaviour probe: logp −0.033, closes 1.31x (0.99 / 0.96 / 1.18 / 1.31 over steps 1-4), close logp +0.33;
+k3 KL 0.0006 / 0.0027 / 0.0274. A forward-only check on step 4's own groups (680 calls, 602k tokens, base and steps 2-4
+on identical tokens) found: k3's jump is about one token (actor −0.16, HF learner at the same step-3 weights −7.63; 4 of
+602k tokens disagree by more than 3 nats, cause unknown); the robust drift (d²/2 with |d| < 5: 0.0032 / 0.0140 / 0.0278,
+mean |d| 0.031 / 0.065 / 0.092) is broad (all 24 groups, reasoning tokens, first 50 reasoning positions most) and its
+function-space direction persists across updates (per-token corr 0.60, 0.35) while parameter-space gradient-momentum
+cosines are about 0; the `</think>` rise is global (positive- and negative-advantage episodes and never-trained groups
+alike); the inbox-n7 decisions reversed by about 10 nats in two updates. The reward does not select it: within groups,
+successes reason as long per call as failures (corr(A, tokens/call) 0 to +0.14) and make fewer calls (corr(A, calls)
+−0.2 to −0.3). Ruled out: the resume (masters = exported checkpoints, AdamW continuity), the export path, decisions as the
+step-4 KL source. Unchecked: imported-state calls, a learner backward decomposition, BF16 directionality, the tail mask,
+the actor-learner outlier tokens. The stop also cut the step-3 held eval at 336 of 512 (sample-major: every task once,
+80 twice): **step 3 vs base −9.6 pts per-task pass rate (52.9 → 43.3%, 224 tasks, permutation p = 0.001), McNemar 37:16
+(p = 0.0055), tasks 32 down / 13 up (p = 0.0066), budget run-outs 9.8 → 19.3% (p = 0.0008)**. A significant regression
+whose direction (more calls, earlier closing) the objective selects against: grpo-v2-run2 ends at this eval (unit and
+Pop actor stopped), and the bug hunt starts on the freed DGX. Each memory stop also retired the groups already lowered
+for its unfinished step (g18-g55, g106-g129, about 48 groups, never trained): data loss, not bias. Kept for the hunt: the
+pin, branch states 3 and 4, checkpoints 1-4, rollouts. Memory fixes for the next pin: 5ae700243. Also retired: the w5
+checkpoint-offload owner, whose only job pointed at a deleted bf95-lowlr-1105 checkpoint.
+
+**Hunt, 2026-11-15 afternoon: candidate mechanism, Adam noise steps (under test, not yet a conclusion).** Learner-bench
+replays of run2's own batches from the base (`ops/grpo-v2/hunt/`): real advantages reproduce run2 (closes 1.01 / 1.03 /
+1.15 / 1.19x, sampled logp −0.045 at step 4), so on-policy feedback is not needed; cross-group shuffled advantages move as
+far (closes 0.90 / 0.68 / 0.46 / 0.48x, logp −0.053), within-group shuffled further (closes 4.76x at step 4). Static
+analysis (independently briefed): run2's step-4 AdamW update has mean |m̂/√v̂| 0.427 in every block, the pure-noise value
+for step 4 at betas 0.9/0.99 to three digits (a 0.1-sigma signal would give 0.432); real and shuffled gradient norms are
+equal. So per-weight gradient SNR is below ~0.1 and fresh-state bias-corrected AdamW takes ~full-LR steps in noise-set
+directions: displacement is set by LR and step count, not by signal. Predicted and seen: base-sample logp falls in every
+arm (−KL, sign-definite); the close ratio's sign is a per-realization draw (0.48x / 1.19x / 4.76x), so run1's "step 3
+caused the close shift" is one draw, not a cause; at 0.08-0.25x LR (run1 bench) the probe stays flat. The size of the held
+drop is not derived. Being tested: more shuffle seeds, negated advantages, the same replay at LR 2.5e-6, a loss/gradient
+comparison against TRL's GRPO loss. Context: published GRPO recipes run LR ~1e-6 on thousands of episodes per update; we
+ran 1e-5 on 192 (about 120 in groups with spread). The 1e-5 choice rested on BF16 flips reverting at 3e-6, which FP32
+masters make moot. Kept regardless (each stands on its own evidence): k2 KL, token normalization, the decision cap,
+`lr_data_scale`, the behaviour probe and sentinels, the memory and Pop-engine fixes.
+
+**Hunt result, 2026-11-15 evening (bench, independently briefed from the static analysis).** No advantage-independent
+learner bias with a fixed close direction: two reward-free controls go opposite ways (within-group shuffle closes 1.07 /
+1.45 / 3.24 / 4.76x, cross-episode shuffle 0.90 / 0.68 / 0.46 / 0.48x and seed 2 0.94 / 0.73 / 0.53x), and run2's drift
+(replayed: 1.01 / 1.03 / 1.15 / 1.19x) sits inside that scatter. Negated advantages flip the close direction (0.96 /
+0.98 / 0.82x); (A+N)/2 at step 3 is closes ~0.98, logp −0.021: the close direction follows the realized update, the
+base-sample logp loss is a displacement (KL-like) cost on either sign. Step-4 AdamW decomposition (exact from run2's
+states 3 and 4): the momentum part alone gives closes 1.36, step 4's fresh gradient alone 1.13: the rise was carried from
+steps 1-3. A line scan along θ4 − base is odd in α (closes 1.33 / 0.43 at ±1, 1.63 / 0.19 at ±2) while the same
+magnitudes with random signs or permuted do nothing; grafts put it in layers 0-11 (MLP > attention > conv), not the
+embedding, the `</think>` row or the norms. With the static analysis (step-4 |m̂/√v̂| at the pure-noise value), two
+independent investigations converge: at ~24 groups/step and LR 1e-5 a freshly started AdamW takes near-full-LR steps in
+directions the noise sets, momentum carries them, and held success degrades with the displacement. Not a fixed-sign
+learner bias in the scope checked; still unchecked: arms C (binary reward), D (KL 0), F (no prefix tree), the grpo-v1
+code at 1e-5, import (consumer) calls (missing from the replay), the d ≈ ±16-18 tail tokens, the inbox-n7 decision
+reversals at A < 0, BF16-vs-FP32 masters. Not established: that the reward signal wins at any LR. Next: the LR sweep
+(gain proxy on 8 untouched groups vs drift; arms at warmup 10 and 2) chooses grpo-v3's step size.
+
+## 2026-11-15: grpo-v3-run1, GRPO from base at a smaller step size (supervisor)
+
+**Change vs baseline (one: step size).** Baseline is grpo-v2-run2's treatment (k2 KL, `--loss-norm token`, decision cap
+8 units, `lr_data_scale`, graded reward, explore 0.4, codebase families included) from the untouched base 5ff07638. The
+change is the Adam step size: `--lr 3e-6` (was 1e-5), `--warmup 10` (was 2), `--min-groups 48 --max-groups 96` (was
+24-48). Reason: the 2026-11-15 hunt (two independent investigations) found run2's step-4 update at the pure-noise
+|m̂/√v̂| (per-weight SNR < 0.1): fresh bias-corrected AdamW took near-full-LR steps in directions the noise set, momentum
+carried them, and held success fell with the displacement, while the in-batch gain stayed positive (the learner is sound
+in the scope checked). A 3.3x smaller LR, a 10-step ramp over AdamW's bias-corrected start and twice the groups per step
+(SNR per update about 1.4x) cut the noise displacement per step by roughly 5x at the start and 3x after warmup. The
+hunt's open items (binary reward, KL 0, prefix tree off, consumer calls, tail tokens, BF16 vs FP32) stay open; this run
+does not close them.
+
+**Pin.** 7e929f2ea (origin/main, `check-main.sh --quick` exit 0), `ops/grpo-v3/run1/pin-7e929f2ea36c`. Since run2's pin
+ba9fa02d7 it adds the learner memory cuts (5ae700243: reference weights from a file, FP32 grads only for the policy pass,
+memory-mapped weight sync; same arithmetic), behaviour probe v1 (start-policy calls selected by served export sha),
+`served_policy` in captures, the front's glibc arena cap and byte-bounded token history, and the SGLang fork at 1839b5071
+(hybrid SWA KV ace8d6868, `natlang_track_input_end` 33230160b, NatlangImport host cache dd2430793 and its bound
+1839b5071) on the DGX (checkout moved from 70b1991e6 by fast-forward; editable install) and on Pop. New fork commit and
+new pin: a new attested engine and series, so the base is re-measured on Pop's engine (`held/step-00000-pop`, 4 samples)
+and every compare pairs within this run. Held set held-v3 (sha 45471060); same pools as run2, so no new exposure check.
+
+**Success (declared before the run).** As grpo-v2: two consecutive scheduled Pop held evals with a positive mean per-task
+pass-rate change vs the Pop base, p < 0.05 each, and `ran_out_rate`/loop rate not significantly worse.
+
+**Failure and stops.** One held eval below -3.5 pts with p < 0.05 and no known cause stops the run at that eval and starts
+the bug hunt on the freed DGX; no gain by 48 h of training also ends it. A sentinel (`grad_spike`, `behaviour_shift`,
+`reasoning_shift`, a KL jump) is diagnosed at the step it fires. Early checks: step-1 KL < 1e-3, outside-nucleus < 1%,
+|log rho| < 0.1, `cuda_peak_by_phase_gb` present and within budget, probe flat through warmup (|logp change| < 0.02,
+closes 0.67-1.5x); expected drift is small at these LRs, so a probe shift during warmup is itself a bug signal.
+
+**Sizing (not treatment).** `--slots 32`, `--learner-phase-slots 8`, actor `--sglang-kv-gb 6 --sglang-max-running 48`
+(32 slots run ~40 sequences), `--activation-gb 4`, ledger budget 88 GB (>= 15 GB headroom on 106 GB available). run2
+peaked at 96.7 GB with 24 slots before 5ae700243 (learner ~63 GB GPU+host, actor 19.5, slots ~10); the cuts remove
+~9-15 GB, so 32 slots fit at 88. State: every step a branch state (`--branch-states 2`, /mnt/external), checkpoints kept
+through step 8, held evals on Pop (`--held-remote pop`, every 4 h, 2 samples). Steps take about 2.5-3 h at 48 groups
+(run2: 24 groups in ~1.7 h at 16-24 slots), so the first scheduled held eval reads step 2-3 at an effective LR still in
+warmup.
+
+**2026-11-16 01:40, grpo-v3-run1 step 1 and Pop base eval (supervisor).** Step 1 (48 groups, 34 with spread, reward
+0.479) passed every declared early check: KL 3e-7, outside-nucleus 0.11%, mean |log rho| 0.029, probe logp change -3e-5,
+close ratio 1.01, CUDA peak 34 GB reserved (unit peak 80 of 88 GB). Step wall ~3 h (1.8 h collection, 1.2 h learner),
+as declared. The Pop base measurement (step-00000-pop) stopped at 423/512 episodes: the Pop SGLang actor died at 01:29
+with CUDA OOM (88 MiB) in `natlang_conv_prefill` (fork `lfm3.py:188` materializes the FP32 `windows * weight` product
+on the 8 GB card with ~0.1 GB free). The held loop retries and `measure` resumes, so no data is lost. Fix for the NEXT
+pin, not this run (the fork is an editable install on both machines; changing it mid-run changes the attested engine at
+the next actor restart): accumulate the kernel taps in place (`sum_k history[:, k:k+T] * w[:, k]`, same FP32 order)
+instead of the unfolded product, and leave ~0.5 GB of the Pop pool for transient kernels.
+
+**2026-11-16 08:10, grpo-v3-run1 step-1 held eval is an effective A/A (supervisor).** Pop held-v3, step 1 (ce1326a2) vs
+the Pop base (4 samples base, 2 step): +4.7 pts mean per-task pass rate (0.475 -> 0.522), permutation p 0.047, CI
+[0.0, 9.2], McNemar p 0.043, tasks up/down 48/31 (sign p 0.071), ran-out -2.3 pts (n.s.). Not a gain: one AdamW step
+at LR 3e-7 changed 0.39% of the served BF16 elements (7.8M of 1.99B; median relative change of changed tensors 1.4e-6;
+`bfdiff` of fresh-init vs step-00001 checkpoint.pt), and the behaviour probe moved -3e-5. The served policy is the base
+to within BF16 rounding, so this is a base-vs-base comparison that landed at p 0.047: read later evals with that false-
+positive rate in mind, and judge success only by the declared rule (two consecutive positive evals, p < 0.05 each).
+During warmup most of each FP32 update is below half a BF16 ULP in the export, so the actor samples near-base weights
+until the master accumulates; that is expected, not a defect (learner ratios use the sampled probabilities).
+
+**2026-11-16 10:40, grpo-v3-run1 sizing (supervisor, accounting only).** Steps 1-4 clean (KL ~4e-4, probe flat, no
+sentinel; LR 1.2e-6 at step 4). The learner's CUDA peak is flat at ~48 GB reserved from step 2 (AdamW moments added
+~13.6 GB after step 1), but the unit's measured peak reached 102.4 GB (actor + weight sync + slots), past the guard's
+1.15 x 88 GB stop line under pressure. Ledger budget raised to 92 GB (`adopt --hold-budget`, MemoryMax unchanged), which
+leaves ~13-14 GB headroom during collection: below the 15 GB rule until the next resume, where the fix is
+`--learner-phase-slots` 8 -> 4 or fewer collection slots (sizing, not treatment). Step-1 held result stays an A/A
+(f2b1bba85); next held compare reads step 3 or 4.
+
+**2026-11-16 13:40, grpo-v3-run1 stopped by the memory guard and resumed (supervisor).** Held step 3 (Pop, 2 samples)
+vs base: +1.2 pts (0.475 -> 0.486), p 0.61, CI [-2.9, 5.1], tasks up/down 44/42: neutral, as expected at LR 9e-7.
+At 12:57, in step 5's learner phase, the guard stopped the unit "over budget under memory pressure" at 105.8 GB
+(1.15 x 92). Cause: the actor front (`serve_native_checkpoint.py`) leaks host memory, 4.6 GB RSS at 00:00 -> 12.4 GB at
+12:30 (~0.8 GB/h, anon), on top of the learner's flat ~48 GB peak; 8 GB of stale /dev/shm hunt weights (killed units
+skip atexit) had also been holding RAM until removed at 12:45 (fix 9bc8fcb7f: owner.pid sweep, next pin). Resumed from
+state-step-00004 as `grpo-v3-run1-r1` (same pin and treatment; sizing only: `--learner-phase-slots 4`, ledger budget 98
+GB). Step 5 is recollected from the step-4 policy. The front leak is a correctness-of-operations bug to fix before the
+next pin (the earlier arena cap / byte bound did not stop it); until then a resume every ~10 h restarts the front.
+
+**2026-11-16 16:10, next-pin queue: native-state handoff without tensor materialization (supervisor).** Owner-approved
+design change after the front leak (c62f8659c, per-request threads): native state crosses the SGLang front and fork as
+files in the block store's own format (795131dc9; fork `natlang-path-handoff` b6b2319c7, declared in
+`training/neuralese/sglang-fork.json`). Capture: the fork writes the store file, the store verifies it from its header
+plus one streaming hash/finiteness pass and renames it in; import: the fork reads the stored file's path; GET serves the
+file as stored. Content ids unchanged. Synthetic 0.48 GB block, front: peak heap growth 2.06 -> 0.045 GB, retained 1.05
+-> 0.013 GB, 4.5 -> 0.47 s, no extra import copy on disk. Inventory across engines/consumers in the commit and
+`docs/ENGINE_PARITY.md` (llama-server row: next action recorded; wllama not applicable; Python native engine, learner
+`NativeStates`, ts-host collector archive updated). The next pin moves both fork checkouts (DGX, Pop) to b6b2319c7 with
+this natlang commit (the front refuses an older fork), runs `check_sglang_producer_parity.py` on the GPU before launch,
+and re-measures the start policy on the new attested engine. Also queued for that pin: 9bc8fcb7f (stale /dev/shm weights
+sweep), --learner-phase-slots 4.
+
+**2026-11-16 17:20, next-pin queue: bounded short-convolution transients on every engine (supervisor).** Pop's held
+SGLang engine OOMed in the fork's `natlang_conv_prefill` (two FP32 T x 7 x 2048 temporaries per request over the whole
+prefill chunk, up to 2 x 117 MB). Fork `natlang-conv-bounded` dbc51ddb72 (on `natlang-path-handoff` b6b2319c7) computes
+the same per-row expression in 256-row blocks; natlang 302617680 gathers the Python native engine's no-grad graph
+convolution histories per 1024-row block (`_convolve_eager`). Both bitwise equal to the previous outputs on the DGX
+(sm121; block edges, odd lengths, empty requests). Inventory with code citations in the agent report: SGLang decode,
+Python `native_step`/`native_decode_batch`, `lfm2_port` (conv1d), llama.cpp `ggml_ssm_conv` (managed llama-server and
+wllama) already bounded; training autograd paths K-fold by design. Pop SGLang mem-fraction 0.8 -> 0.77 (FP8 pool ~318k
+-> ~280k tokens, ~0.23 GB more headroom; pool size only). At the pin: merge dbc51ddb72 into the fork's `natlang`, update
+`training/neuralese/sglang-fork.json`, run the fork's bitwise conv test on Pop (sm89, unverified) and
+`check_sglang_producer_parity.py`, re-measure the start policy on Pop's new engine config.
+
+**2026-11-16 17:30, next-pin queue: host memory of the learner and the shared HTTP server (supervisor).** Inventory of
+the torch-mimalloc per-thread-heap mechanism (front fixed in c62f8659c) across the stack: one more affected component,
+`serve/http.py` (ThreadingHTTPServer keep-alive connection threads allocate native-state tensors; used by the front and
+the Python native engine): each request now runs on a thread that ends with it. The learner's 10.4 -> 17 GB host growth
+in grpo-v3-run1 is a different cause: `ReferenceWeights` slices of one mapping of the 3.4 GB KL-reference file became
+private pages on GPU copy and stayed alive through a loop variable (+3.4 GB), and safetensors' pinned CUDA staging cache
+after a resume (+1.0 GB). Fixed in 12509988a (per-tensor reads, cache emptied in `release_host_memory` and after
+resume); targeted suites 69/69. Enter at the next pin with the front, conv and handoff changes.
+
+**2026-11-16 23:00, grpo-v3-run1 held step 5 (Pop, 2 samples vs the Pop base at 4; supervisor).** Per-task pass rate
+47.5% -> 51.2%, +3.7 pts, permutation p 0.086, task-bootstrap 95% CI [-0.4, +8.0]; 45 tasks up, 35 down (sign p 0.31);
+loop and ran-out rates flat (-0.6 pts). Series so far: step 1 +4.7 (an A/A: 0.39% of weights changed), step 3 +1.2,
+step 4 +2.5, step 5 +3.7; no sentinel through step 7 (grad_norm 0.145-0.177, KL ~5e-4, LR still warming to 3e-6). No
+stop; the run continues. Ops: the memory guard's floor stopped teacher generation (requeued, restarted) and the 66 MB
+dashboard collector (not requeued; page stale 1 h) at 21:36; the guard no longer stops units under 0.5 GiB (58f40939e).
+
+**2026-11-16 23:30, grpo-v3-run1 decision rule amended before further results (supervisor).** The declared success rule
+(two consecutive 2-sample Pop held evals each p < 0.05) is underpowered: at 2 samples the task-bootstrap 95% CI is about
++/-4 pts, so the largest effect seen so far (+3.7) reaches only p 0.086, and a true gain of ~3-4 pts would be judged "no
+gain" at the 48 h limit. Amended: the run's verdict is one 4-sample Pop held eval (~9 h) of its final checkpoint vs the
+4-sample Pop base, success = positive mean per-task change with permutation p < 0.05 and ran-out/loop rates not
+significantly worse. The 2-sample intermediate evals continue back to back (Pop would otherwise idle) as the regression
+guard only: one below -3.5 pts with p < 0.05 still stops the run. At the 48 h training limit (about 2026-11-18 00:00)
+the run stops, the running intermediate eval is preempted, and the final eval starts. The training treatment is unchanged.
+
+**2026-11-17 00:30, next-pin prep: fork merged, launchers ready (supervisor's prep agent).** The fork branch `natlang`
+already held `natlang-path-handoff` (b6b2319c7). `natlang-conv-bounded` (dbc51ddb72) was one commit on top of it, so
+`natlang` was fast-forwarded to dbc51ddb72 and pushed. The merge ran in a separate clone; the live DGX and Pop
+checkouts stay at 1839b5071, run1's engine. `training/neuralese/sglang-fork.json` now names dbc51ddb72.
+
+Fork tests against dbc51ddb72 on the DGX (sm121, ledgered, from the clone): 39/39, including the bitwise row-block conv
+test. Producer parity did not run, because its SGLang phase takes ~36 GB and ~9 GB was free beside run1-r1. It is a
+launch step, as is the Pop sm89 conv test.
+
+Defect fixed: the fork imports `natlang_neuralese` (capture files, native projection), but
+`check_sglang_producer_parity.py` and `check_sglang_lfm3_parity.py` started their SGLang phase with PYTHONPATH `''`.
+Both now put `training/neuralese` first, as `serve_native_checkpoint.py` does. Every other SGLang launcher already did
+(hybrid-SWA check, `sglang_bench`, adapter and decide parity through `launch_sglang`, `pop_actor_driver`).
+
+Launch prep is in `ops/grpo-v4/` under the data root: PREP.md with the steps, `fork-checks.sh`, `launch-sft.sh` with
+`sft_preflight.py`, `launch-grpo.sh` and `pop-held.sh`. The SFT launcher checks the chains' and checkpoint's sha256,
+the task ids against held-v3/v2 exclusion, size and wall time before the unit starts. SFT and grpo-v4-run1 share one
+pin, so one 4-sample Pop base re-measure pairs with both. The draft SFT decision entry is in PREP.md.
+
+GRPO sizing from run1-r1's measured peak of 107.4 GiB: minus the learner host fix (4.4), the front leak (~4.2) and 4
+fewer slots gives ~97 GiB. Budget 97, slots 28, LPS 4. Open point for the run1 verdict: run1's Pop base
+(`held/step-00000-pop`) has 2 samples per task, not 4.
+
+**2026-11-17 00:40, correction to the 23:30 amendment (supervisor).** run1's Pop base (`held/step-00000-pop`) has 2
+samples per task, not 4 (the amendment misstated it). At the stop, Pop first extends the base to 4 samples (sample-major
+`held_eval measure` resumed with `--samples 4` on the same directory and engine, about 4.5 h), then measures the final
+checkpoint at 4; the verdict pairs 4 vs 4 (SE about 30% below 2 vs 2). The extra Pop time is accepted: the verdict is
+the decision this run exists for.
+
+## 2026-11-17: gpt-6-luna joins the multi-teacher generation (teacher-gen-20261115/pool-v1)
+
+Luna (openai-codex subscription, owner-approved credits) runs as a natlang Pi provider teacher: `teacher_gen.py --teacher
+'{"model_id": "gpt-6-luna", "provider": "openai-codex", "reasoning_effort": "low", "slots": 8}'` (commit aa1bd8467).
+Why the provider path, not a local OpenAI-compatible bridge: the collector, `run_bonsai_queue.py` and the teacher CLI
+already carry `--provider` (the transport natlang programs use: Pi request translation, OAuth credentials, the same
+retry loop and turn records); only teacher_gen assumed endpoint + key. A bridge would add a second translation layer
+between what Luna saw and what the record says. Refused credentials (401/403, failed OAuth refresh, missing
+credentials) now end a request as `provider request retry exhausted` (deferred, not scored), and a teacher's
+consecutive provider failures double its cooldown up to an hour.
+
+Measured: smoke (3 tasks) scored through the exact oracle, records match the other teachers' schema. Live pool, 4 slots
+for 1 h (tgen-multi-14): 170 episodes, 69% success, 0 provider retries. 8 slots (tgen-multi-15, from 00:30; teachers
+paused 00:30-01:42 by the grpo-v3 learner phase's --pause-below-available-gb 25): 378 episodes in 22 min, 70% success,
+0 retries; unit peak 5.5 of 7 GB, so slots stay at 8 for ledger headroom. Codex rejects temperature: Luna samples at its
+provider default; its reasoning is not returned (targets are tool calls/text only).
+
+Credential: natlang's openai-codex store is an access-only copy of the Codex CLI session (no refresh-token duplication,
+as on 10-31); refreshed 2026-11-16 via one `codex exec` and synced, expiring 2026-11-26 ~22:25 UTC. After that Luna's
+episodes defer (no verdicts lost) until it is re-synced, or the owner runs `natlang auth login openai-codex` for an
+independent refreshing session.
+
+**2026-11-17 03:40, SFT-from-base data set built (sft-verified-20261117-v1; data agent).**
+- **What it is:** the input of the next experiment: SFT of 5ff07638, judged by paired held-v3.
+- **Size:** 2,220 trajectories over 1,945 tasks; 47.7M forward and 5.76M target tokens; about 2.4 h per epoch.
+- **Own GRPO successes:** 520 trajectories, 72% of weighted target tokens.
+- **Teacher-pool successes:** 998 trajectories, 14.5% (Luna 671, Nemotron 310, others 17).
+- **October rows:** 702 trajectories, 13.2%; capped at 40% of forward tokens.
+- **Admission:**
+  - Own and teacher episodes enter only on an exact replay of their recorded decisions through the current runtime and
+    oracle (pin aa1bd846).
+  - October rows enter only when rebuilt for today's tool surface with compiled eval actions.
+  - Held-v3/v2 closure excluded.
+  - Per-task caps by base pass rate, with producers taking turns within a task; MinHash near-duplicates removed.
+  - Reasoning-free teacher replies keep the empty think block as zero-weight context.
+- **Gap closed:** `natlang.rollout/1` records now name the code that produced them (`task_rollouts.score`, next pin).
+- **Launch:** the launch build re-extracts the growing teacher pool first.
+- **Details:** sources, every filter's counts, exclusions, and what was not verified: `SFT_SOURCES_20261117.md`.
+
+**2026-11-17 03:50, grpo-v3-run1 held step 7 (Pop, 2 vs 2 samples; supervisor).** Per-task pass rate 47.5% -> 51.4%,
++3.9 pts, permutation p 0.080, CI [-0.2, +8.0]; 49 tasks up, 35 down. Episodes that ran out of model calls fell from
+85 to 56 of 512 (-5.7 pts; see ran_out_paired in compare-vs-step0.json). Series: +4.7 (A/A), +1.2, +2.5, +3.7, +3.9.
+Steps 7-8 had no sentinel (grad_norm 0.82-1.0x the median, KL 5.5-6.2e-4). The run continues; its verdict is the 4 vs 4
+final eval (00:40 entry).
+
+**2026-11-17 08:45, grpo-v3-run1 held step 8 (Pop, 2 vs 2 samples; supervisor).** Per-task pass rate 47.5% -> 51.6%,
++4.1 pts, permutation p 0.080, CI [-0.4, +8.4]; 51 tasks up, 38 down. Episodes that ran out of model calls fell from
+85 to 46 of 512 (McNemar p < 0.001). Series: +4.7 (A/A), +1.2, +2.5, +3.7, +3.9, +4.1. Steps 9-10 had no sentinel
+(grad_norm 0.80-1.02x the median, KL up to 1.4e-3 at LR 3e-6). The memory guard stopped teacher generation in learner
+phases and the ledger relaunched it every 2-4 min; requeues now back off (f208ffa29). The run continues to its 4 vs 4
+final eval; step 10 is on Pop.
+
+**2026-11-17 09:20, plan for the next pin (supervisor).** Run1's clearest held effect is behavioural: episodes
+running out of model calls fell 85 -> 56 -> 46 of 512 at steps 7-8 (paired p 0.002, < 0.001), after flat 73-82
+through step 5. The pass-rate series (+1.2 to +4.1) is within the step-1 A/A (+4.7), so run1's verdict stays its 4 vs
+4 final eval. The binding cost is time: ~3 h per step (collection ~1.5 h; reference forward ~0.3 h; policy
+forward/backward ~1.3 h at ~1,400 learner tokens/s), and ~4.7 h per 2-sample Pop eval. Decisions:
+- **Throughput work for the grpo-v4 pin** (not changing what is trained): learner efficiency, reference forward,
+  collection rate, and collect/learn overlap (GRPO_STEP_THROUGHPUT_20261117.md); Pop held-eval throughput, entering
+  with the base re-measure the pin requires anyway (POP_HELD_THROUGHPUT_20261117.md).
+- **grpo-v4-run1 treatment: peak LR 5e-6** (warmup 10, everything else run1's; `LR=3e-6` opts out). The behaviour
+  change appeared once run1's LR passed ~2e-6; grpo-v2's regression was at 1e-5 with ~24 groups and fresh AdamW. If
+  run1's final eval is a significant regression, v4 launches at 3e-6 and the hunt opens instead.
+- **SFT first** (sft-v3-run1, unchanged plan); GRPO from the SFT checkpoint follows its verdict.
+- **Task supply:** new qualified task families for thinly covered natlang behaviours (TASK_SUPPLY_20261117.md), into
+  the v4 pool when ready by the pin, else the next one.
+
+**2026-11-17 09:50, grpo-v3-run1 ends at step 10; faster verdict (supervisor, before any further result).** The 4 vs
+4 verdict as planned would arrive ~2026-11-18 13:30 (base extension 4.5 h + final eval 9 h, all on Pop after the
+23:53 stop), and run1's remaining ~4 steps at LR 3e-6 inform nothing the next run (grpo-v4: higher LR, faster pin)
+needs. Its own in-run evidence agrees: within-task pass rate on revisited training tasks changed +3.0 +- 3.1 pts over
+6-10 versions (43 tasks), first-visit pool tasks are flat from v1 to v10 (v0's 44% is a start-up artefact: v1 differs
+from it by one step at LR 3e-7). Decisions:
+- **Final checkpoint = step 10** (sha 9cd7aa1a61d6). Run1 stops now; the DGX goes to the verdict and then the next pin.
+- **Verdict design: 4 vs 4 samples per task, engine-balanced.** Samples 0-1 of both arms on Pop (base: done; step 10:
+  the running eval resumes), samples 2-3 of both arms on the DGX's pinned held engine (`held_eval measure --checkpoint
+  ... --samples 2 --seed-base 4200002`, the seeds a 4-sample run gives samples 2-3). Each task has the same engine mix
+  in both arms, so the engine cancels in the paired per-task change; Pop-only and DGX-only 2 vs 2 are reported beside
+  it. Success and failure thresholds as declared (00:40 entry). Expected verdict ~13:30 today instead of tomorrow.
+
+**2026-11-17 14:05, grpo-v3-run1 verdict: pass rate not significantly changed; ran-out halved (supervisor).**
+4 vs 4 (`run1/verdict/compare-4v4.json`, base `verdict/base-merged.json` = Pop s0-1 + DGX s2-3, step 10
+`verdict/step10-merged.json`): per-task pass rate 49.6% -> 51.6%, **+2.0 pts, CI [-1.4, +5.1], p = 0.19**; tasks up/down
+59/56, McNemar p = 0.50. Ran-out (40-call budget stops) 171 -> 73 of 1024, McNemar p < 0.001. Halves: Pop 2 vs 2
++4.3 (p = 0.053, ran-out 85 -> 30), DGX 2 vs 2 +0.4 (p = 0.94, ran-out 86 -> 43). **Neither success nor failure
+criterion met.** The robust effect is shorter, terminating episodes; the pass-rate gain is at most a few points and not
+established. No regression, so grpo-v4 keeps its bundle (LR 5e-6, not the 3e-6 fallback). Reading for v4: at run1's
+step size 10 steps (~30 h) moved termination but not task success measurably; v4's larger step, SFT start, family
+exploration and new task families are the levers that remain, and its held eval every 4 h judges them.
+
+**2026-11-17 10:35, Haiku joins teacher generation (supervisor).** The owner supplied `anthropic.env` (also new:
+`openai.env`, `openrouter-tick.env`). Smoke (`teacher-gen-20261115/haiku-smoke-1`, 12 random pool tasks,
+`claude-haiku-5-5` through the Pi `anthropic` provider, effort medium): 10/12 verified successes, 0 deferrals, 6-56 s
+per task. Its replies carry the model's own visible text between tool calls as `reasoning_content` (not hidden
+reasoning), so it is trained as written. Added to `pool-v1/launch-multi.sh` with 8 slots beside Luna; restarted as
+`tgen-multi-16` (pool-v1 resumes; the pre-change launcher is kept as `launch-multi.sh.pre-haiku-20261117`).
+
+## 2026-11-17: task supply for the next pin: 16 new writing/chat/reasoning families and the tau-bench store tasks (task-supply agent)
+
+- **Gap.** The GRPO pool is 76% document reading and codebase questions. It has 32 writing rows, no chat tasks and no
+  multi-step work against a stateful service, and every authored family is an operations desk.
+- **Authored round 9.** 31 Haiku batches were qualified on the grpo-v3 pin runtime, novelty-gated, blind-solved by
+  Sonnet and admitted: 709 tasks in 16 new families, of which 45 were held back.
+- **Revived source.** The fallow `build-v3` tau-bench store sources (store service, final-state digest oracle) were
+  re-verified: 908 of 908 kept.
+- **The pool source.** `natlang-rl-task-supply-20261117` (1,355 train rows) is registered and added to `grpo.py`
+  `POOLS`; to opt out, pass `--pool` with only the old two. held-v3 verify: 0/0. Custody: 0 related, after leaving out
+  114 rows tied to held worlds through shared invented-domain groups.
+- **Fix.** The held-set closure in `qualify_authored.py` had been broken since 60d2c1209; it now runs from a frozen
+  tree (193a77d4b).
+- **Choice for the grpo-v4 pin.** At 4% of the pool, the row-order explore walk reaches about 8 authored new tasks per
+  600 explores. New `--explore-order family` (default `row`) reaches about 37. Whether v4 uses it is the pin's declared
+  choice.
+- **Not measured.** Base pass rates of the new tasks. Details: `TASK_SUPPLY_20261117.md`.
+
+**2026-11-17 11:10, GRPO step throughput for the grpo-v4 pin (throughput agent; no treatment change).** Run1's ~3.25 h
+step was ~46% collection at 26-32 running and ~54% learner sharing the GB10 with learner-phase decode. The GB10
+time-slices processes (GEMM + decode together 42% + 44% of solo; CUDA MPS the same), so overlap is dropped as a lever.
+Shipped, default on with opt-outs: `--learner-phase-slots` 0 (was 8; run1 ran 4); the AdamW moments on disk between
+optimizer steps (`MomentOffload`, bit-exact, -13.6 GB except during the step, `--keep-moments-resident`); the nucleus
+NLL forward on bf16 logits with linear_nll's kernel (policy pass -4.7% on real run1 chains; the policy and KL reference
+log-probabilities now agree bit for bit at equal weights); page cache of the per-step state save and the offload dropped
+as written. Sizing in `ops/grpo-v4/launch-grpo.sh`: 64 slots, 64 running, LPS 0 (collection is slot-bound: ~1.7k vs
+~1.08k tok/s), estimated peak ~87-92 GiB under 97, fallback `SLOTS=48`. Expected step ~2.6-2.8 h (-15 to -20%).
+`--activation-gb` 4 -> 12 measured only -5.8% of the policy pass for +7.5 GB and stays 4. Next lever: SGLang's overlap
+scheduler (~20-25% of decode time is serial scheduler CPU), blocked on its 2026-11-03 wrong-distribution defect.
+Evidence and what was not checked: `GRPO_STEP_THROUGHPUT_20261117.md`.
+
+**2026-11-17 12:00, grpo-v4 is a bundle (owner: "change everything that makes sense ... an engineering project").**
+AGENTS.md rewritten accordingly (8cfe10b56). Next sequence on the DGX after the run1 verdict's DGX samples: fork move +
+tests, pin, SFT data rebuild with the current teacher pool (incl. Luna and Haiku), **sft-v3-run1** (SFT from the base),
+then immediately **grpo-v4-run1 from the SFT checkpoint** with: peak LR 5e-6; `--explore-order family` over the pool
+incl. natlang-rl-task-supply-20261117; throughput (64 slots, no learner-phase slots, AdamW moments on disk, nucleus
+kernel); memory fixes and fork dbc51ddb72. No separate held eval of the SFT checkpoint: v4's held evals compare against
+the pin's 4-sample Pop base (`--held-base`, e07bf9705; Pop at 20 slots / 20 running if its smoke passes), and a
+regression is bisected with branch states. Success: a positive held change against the base at p < 0.05 on a 4-sample
+read; failure: below -3.5 pts at p < 0.05 (stop and hunt). Not included (unlikely to move held task success now):
+Neuralese variants, memetic guidance, QAT.
+
+**2026-11-17 15:30, grpo-v4 pin and sft-v3-run1 launched (supervisor).** Pin `ops/grpo-v4/pin-783e8e1d8462` (origin/main
+783e8e1d8: throughput changes, task supply, `--explore-order family`, `--held-base`, Pop 20/20 with longest-first
+dispatch and the bounded held-eval stop). Fork dbc51ddb72 on both machines: DGX fork tests 39 passed (after adding
+natlang to `fork-checks.sh`'s PYTHONPATH), producer parity at the BF16 floor and in line with p22 (forced producing
+0.050, decode 0.018, import 0.077), Pop sm89 conv bitwise OK. SFT smoke on the pin: 3 finite steps, checkpoint changed.
+- **SFT data:** `sft-verified-20261117-v2` (manifest published): 6,483 trajectories, 6,206 tasks, 137.4M forward / 9.28M
+  target tokens; weighted target 44% own GRPO successes, 28% teacher (Luna 11%, Haiku 9%, Nemotron 8%), 27% October.
+  Built with `--allow-stale-teacher` (teacher pool extracted 11:32). Template repetition is higher than v1 (4,074 pool
+  tasks: 176 effective instruction texts, top-10 share 0.39 vs v1's 203 and 0.32): the teacher pool covers the same
+  templates more densely. Accepted: one epoch, per-task cap 4, and the extra tasks are distinct instances; the GRPO
+  stage after it explores by family. `held_eval verify` against held-v3: no overlap.
+- **sft-v3-run1:** unit `sft-v3-run1`, 266 optimizer steps of 30k loss tokens, LR 5e-6, warmup 10, ~7 h. grpo-v4-run1
+  launches from its checkpoint when it ends (`launch-grpo.sh`, bundle as decided above).
+- **Pop:** `popheld-base-v4`, the base at 4 samples on the pin and Pop 20/20 into `ops/grpo-v4/held-base-pop`, ~7 h.

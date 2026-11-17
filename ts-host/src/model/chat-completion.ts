@@ -115,6 +115,9 @@ function leakedCallFeedback(text: string, tools: Array<{ function: { name: strin
   return `The tool call in your last reply ${problem}, so nothing ran; send the call again, complete.`;
 }
 
+/** The fields of a streamed tool call that natlang itself assembles; any other field is provider-opaque and kept as sent. */
+const TOOL_CALL_FIELDS = new Set(['index', 'id', 'type', 'function']);
+
 /** Whether a transport answered with streamed chunks rather than one whole body. */
 export function isStream(value: AsyncIterable<Json> | Json): value is AsyncIterable<Json> {
   return typeof (value as AsyncIterable<Json>)[Symbol.asyncIterator] === 'function';
@@ -136,7 +139,7 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
   let final: Json | undefined;
   const parts: ModelContentPart[] = [];
   let partsOnly = true;
-  const calls: Array<{ id?: string; type: string; function: { name: string; arguments: string } }> = [];
+  const calls: Array<{ id?: string; type: string; function: { name: string; arguments: string }; [field: string]: unknown }> = [];
   const extra: Json = {};
   const emit = (delta: ModelTurnDelta) => { try { onDelta?.(delta); } catch { /* observers never affect the turn */ } };
   const addText = (text: string) => {
@@ -188,6 +191,9 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
       const fn = (part.function ?? {}) as Json;
       if (typeof fn.name === 'string') call.function.name += fn.name;
       if (typeof fn.arguments === 'string') call.function.arguments += fn.arguments;
+      // Provider-opaque fields of a call (Gemini's `extra_content.google.thought_signature`) are part of the call: the
+      // provider rejects the next turn when the history sends the call back without them.
+      for (const [key, value] of Object.entries(part)) if (!TOOL_CALL_FIELDS.has(key)) call[key] = value;
       const fragment = { ...(typeof part.id === 'string' ? { id: part.id } : {}),
         ...(typeof fn.name === 'string' && fn.name ? { name: fn.name } : {}),
         ...(typeof fn.arguments === 'string' && fn.arguments ? { arguments: fn.arguments } : {}) };
@@ -259,7 +265,14 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     const messages = structuredClone(request.messages) as Array<Json & { tool_calls?: Array<{ function?: { name?: string } }> }>;
     // This marker is internal provenance used by adapters that need to render host-supplied context differently.
     // It is never part of the chat-completions wire schema.
-    for (const message of messages) delete message.natlang_host_generated;
+    // `x_natlang_host_call_fields` (a collection control) are provider fields for the calls the runtime wrote itself: Gemini
+    // rejects a history whose function calls carry no thought signature, and a call the model never sampled has none.
+    const hostCallFields = options.request?.x_natlang_host_call_fields;
+    for (const message of messages) {
+      if (hostCallFields && message.natlang_host_generated)
+        for (const call of message.tool_calls ?? []) Object.assign(call, structuredClone(hostCallFields));
+      delete message.natlang_host_generated;
+    }
     // Modern vLLM reads `reasoning`; older compatible servers use `reasoning_content`.
     // Carry both exact aliases so interleaved history is retained by either parser.
     for (const message of messages) {
@@ -324,7 +337,11 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         const template = request.template;
         wireRequest.neuralese_template = { ...template, call: forward[template.call] ?? template.call };
       }
-      if (request.seed !== null) wireRequest.seed = request.seed;
+      // Hosted servers that reject a `seed` field (Gemini's OpenAI endpoint) opt out with the x_natlang_omit_seed control.
+      const omitSeed = wireRequest.x_natlang_omit_seed === true;
+      delete wireRequest.x_natlang_omit_seed;
+      delete wireRequest.x_natlang_host_call_fields;
+      if (request.seed !== null && !omitSeed) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.
       const configuredMax = options.request?.max_tokens;

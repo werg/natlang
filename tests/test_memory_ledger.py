@@ -52,6 +52,14 @@ def test_floor_breach_stops_the_lowest_priority_newest_unit():
     assert ledger.victim(live, False, 1.15) == (None, None)
 
 
+def test_floor_breach_never_stops_a_unit_too_small_to_relieve_it():
+    live = {'trainer.service': dict(claim('experiment', 98, 97, 1), priority='high'),
+            'collector.service': dict(claim('service', 0.3, 0.07, 9), priority='medium')}
+    assert ledger.victim(live, True, 1.15) == (None, None)  # the sole real candidate is within budget x overshoot
+    live['gen.service'] = dict(claim('collection', 4.5, 0.9, 5), priority='low')
+    assert ledger.victim(live, True, 1.15)[0] == 'gen.service'
+
+
 def test_outstanding_demand_is_unspent_budget(monkeypatch):
     monkeypatch.setattr(ledger, 'mem_available', lambda: 40 * GIB)
     monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: {'a.service': 2 * GIB, 'b.service': 12 * GIB}[unit])
@@ -497,6 +505,19 @@ def test_a_stopped_resumable_unit_is_requeued_with_its_spec_and_a_service_is_not
     assert not ledger.requeue_spec({'claims': {'old.service': claim('experiment', 1, 0, 0)}, 'events': []}, 'old.service')  # legacy claim: no spec
 
 
+def test_a_unit_stopped_again_soon_after_its_relaunch_backs_off_and_a_settled_one_starts_over():
+    state = {'claims': {'render.service': running('collection', 20, 10, priority='low')}, 'events': []}
+    state['claims']['render.service'].update(admitted=1000.0, requeue_delay=ledger.REQUEUE_DELAY)
+    assert ledger.requeue_spec(state, 'render.service', now=1100.0)
+    assert state['waiting']['render.service']['not_before'] == 1100 + 2 * ledger.REQUEUE_DELAY
+    state['claims']['render.service'].update(requeue_delay=ledger.REQUEUE_DELAY_MAX)
+    ledger.requeue_spec(state, 'render.service', now=1100.0)
+    assert state['waiting']['render.service']['delay'] == ledger.REQUEUE_DELAY_MAX
+    later = 1000.0 + ledger.REQUEUE_SETTLED + 1
+    ledger.requeue_spec(state, 'render.service', now=later)
+    assert state['waiting']['render.service']['not_before'] == later + ledger.REQUEUE_DELAY
+
+
 def test_the_guard_preempts_for_the_queue_head_then_relaunches_when_room_returns(monkeypatch, tmp_path):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'none'))
@@ -777,7 +798,7 @@ def test_a_unit_backfills_only_behind_a_head_that_preemption_cannot_help():
 
 def test_a_backfilled_unit_is_not_preempted_for_the_same_head_within_its_hold():
     now = 10000.0
-    fresh = dict(running('collection', 8, 0, priority='low'), admitted=now - 10, backfilled_behind='bench.service')
+    fresh = dict(running('collection', 8, 2, priority='low'), admitted=now - 10, backfilled_behind='bench.service')
     head = {'priority': 'medium', 'budget': 12 * GIB, 'reserve': 8 * GIB}
     live = {'render.service': fresh}
     assert ledger.preemption_plan(live, 18 * GIB, head, head='bench.service', now=now) == []  # held for its head

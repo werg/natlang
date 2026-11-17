@@ -564,3 +564,26 @@ def test_held_tasks_and_their_group_siblings_are_never_selected(tmp_path):
     with mock.patch.object(curriculum.subprocess,'run',fake):
         chosen=curriculum.select_tasks(rows,[],{'rows':1,'group':4,'offset':0},command=['x'],exclude_ids=excluded)
     assert rows[chosen[0]['row']]['id']==sub[-1]['id']
+
+
+def test_held_merge_continues_the_seed_series_and_pairs_only_the_same_engine_mix():
+    def part(policy,seed_base,rewards,engine):
+        samples=[{'task_id':f't{i}','sample':s,'reward':rewards[i][s],'ran':True,'outcome':'task_success' if rewards[i][s] else 'semantic_mismatch',
+                  'timed_out':False,'model_calls':3,'repeated_actions':0,'completion_tokens':10,'neuralese_exchanges':0,
+                  'graded_reward':rewards[i][s]} for i in range(len(rewards)) for s in (0,1)]
+        return {**held_result(policy,1,{}),'samples':samples,'samples_per_task':2,'seed_base':seed_base,'tasks':len(rewards),
+                'engine':{'engine':engine},'elapsed_seconds':5,'finished_at':2}
+    base=held_eval.SEED_BASE
+    pop_a,dgx_a=part('a',base,[(1.,0.),(0.,0.)],'pop'),part('a',base+2,[(1.,1.),(0.,1.)],'dgx')
+    merged=held_eval.merge([pop_a,dgx_a])
+    assert merged['samples_per_task']==4 and merged['ran']==8 and merged['successes']==4 and merged['complete']
+    assert sorted(s['sample'] for s in merged['samples'] if s['task_id']=='t0')==[0,1,2,3]
+    assert [p['samples'] for p in merged['engine']['engine_parts']]==[[0,2],[2,4]]
+    with pytest.raises(ValueError,match='seeds start'):
+        held_eval.merge([pop_a,part('a',base+4,[(1.,1.),(0.,1.)],'dgx')])
+    with pytest.raises(ValueError,match='policy_id'):
+        held_eval.merge([pop_a,part('b',base+2,[(1.,1.),(0.,1.)],'dgx')])
+    other=held_eval.merge([part('b',base,[(1.,1.),(1.,0.)],'pop'),part('b',base+2,[(1.,1.),(1.,1.)],'dgx')])
+    assert held_eval.compare(merged,other)['primary']['delta']==round(((1-.75)+(.75-.25))/2,4)
+    with pytest.raises(ValueError,match='different engine'):
+        held_eval.compare(merged,held_eval.merge([part('b',base,[(1.,1.),(1.,0.)],'dgx'),part('b',base+2,[(1.,1.),(1.,1.)],'pop')]))

@@ -303,22 +303,24 @@ test('a tuned release\'s soft states load into the in-page model as native state
   const project = api.compileVirtualProject({ files: { 'echo.nl': named('Return value.'), 'main.ts': "import echo from './echo.nl'; export default echo;" } }, api);
   const program = project.manifest.adaptation;
   const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
-  const baseGguf = 'b'.repeat(64), state = 'nzs1_' + 'a'.repeat(52);
+  const baseGguf = 'b'.repeat(64);
   const { tree, bindings } = host.compileScopeTree(program);
-  const files = new Map([[`exports/${state}.state.gguf`, new TextEncoder().encode('span')]]);
-  const gguf = (file, bind = baseGguf) => ({ file, sha256: hexDigest(files.get(file)), baseGgufSha256: bind });
+  const { nativeStateFixture } = await import('./fixtures/native-state.mjs');
+  const { encodeNativeStateWire } = await import('../dist/native/neuralese-store.js');
+  const stateFile = encodeNativeStateWire(nativeStateFixture('lfm2'));
+  const state = stateFile.id;
+  const files = new Map([[`states/${state}.nzs`, stateFile.wire]]);
   const binding = bindings.find(item => item.component.endsWith('echo.nl::instructions'));
   const sealed = bind => host.sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
     artifacts: [], families: [], memberships: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {},
-    softStates: [{ binding: binding.id, kind: 'instructions', target: null, state, textSha256: hexDigest('Return value.\n'), tokens: 3,
-      exports: { gguf: gguf(`exports/${state}.state.gguf`, bind) } }] });
-  let manifest = sealed(baseGguf);
+    softStates: [{ binding: binding.id, kind: 'instructions', target: null, state, textSha256: hexDigest('Return value.\n'), tokens: 3 }] });
+  let manifest = sealed();
   const fetch = async url => { const path = new URL(url).pathname.replace('/release/', '');
     const bytes = path === 'natlang.adapters.json' ? new TextEncoder().encode(JSON.stringify(manifest)) : files.get(path);
     return bytes ? new Response(bytes) : new Response('missing', { status: 404 }); };
   const release = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null });
   assert.deepEqual(release.nativeStates.map(item => item.id), [state]);
-  assert.equal(await release.nativeStates[0].blob.text(), 'span');
+  assert.deepEqual(new Uint8Array(await release.nativeStates[0].blob.arrayBuffer()), stateFile.wire, 'the store file, as fetched');
   assert.equal(release.weights[0].resolve('', binding.component, null).soft.instructions.state, state, 'the binding is served with its state');
 
   let params; const requests = [];
@@ -339,14 +341,13 @@ test('a tuned release\'s soft states load into the in-page model as native state
       tools: [], temperature: 0, seed: null, max_tokens: 4 }), /weights-unavailable: native state/);
   } finally { await model.close(); }
 
-  // A wllama build without native-state import refuses the states; a release whose states bind another base runs degraded.
+  // A wllama build without native-state import refuses the states; a file that does not hold its named state is refused.
   await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
     { engine: { ...engine, engine: { ...fake, capabilities: { loraBlobs: true }, isModelLoaded: () => false } }, gpuLayers: 0, nativeStates: release.nativeStates }),
   /weights-unavailable: this wllama build cannot load native states/);
-  manifest = sealed('d'.repeat(64));
-  const other = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null });
-  assert.equal(other.nativeStates.length, 0);
-  assert.equal(other.weights[0].resolve('', binding.component, null).status, 'degraded');
+  const corrupt = stateFile.wire.slice(); corrupt[corrupt.length - 1] ^= 1; files.set(`states/${state}.nzs`, corrupt);
+  await assert.rejects(api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null }),
+    /content ID mismatch|does not hold/);
 });
 
 test('the in-page model scores decision readouts in one engine request and carries decide on turn', async () => {
@@ -388,6 +389,69 @@ test('the in-page model scores decision readouts in one engine request and carri
   finally { await plain.close(); }
 });
 
+
+test('the in-page model archives the states it produces and puts archived states a request names into the engine', async () => {
+  const api = await browserApi();
+  const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
+  const { encodeNativeStateWire, decodeNativeState } = await import('../dist/native/neuralese-store.js');
+  const { nativeStateFixture } = await import('./fixtures/native-state.mjs');
+  const fixture = text => { const value = nativeStateFixture('lfm3'); value.metadata.text = text; return encodeNativeStateWire(value); };
+  const produced = fixture('produced in the page'), archived = fixture('archived earlier');
+  const held = new Map([[produced.id, produced.wire]]), puts = [], requests = [];
+  let params;
+  const identity = { 'natlang.identity.architecture': 'lfm3', 'natlang.identity.checkpoint_sha256': '2'.repeat(64),
+    'natlang.identity.tokenizer_fingerprint': '1'.repeat(64), 'natlang.identity.embedding_weight_sha256': '3'.repeat(64) };
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => !!params, capabilities: { nativeStates: true, nativeStateStore: true },
+    async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
+    getModelMetadata: () => ({ hparams: {}, meta: identity }),
+    // the fork's PUT/GET /v1/neuralese/native-states/:id: verified, kept as received, read back as stored
+    async putNativeState(state, id) {
+      const bytes = new Uint8Array(state); const decoded = decodeNativeState(bytes);
+      if (id && decoded.id !== id) throw new Error('neuralese-id-mismatch');
+      puts.push(bytes); held.set(decoded.id, bytes); return { mode: 'exact-native-state', meta: { id: decoded.id } };
+    },
+    async getNativeState(id) {
+      if (!held.has(id)) throw new Error(`neuralese-unknown-native-state: ${id}`);
+      return { state: held.get(id).slice(), meta: { id } };
+    },
+    async createChatCompletion(request) {
+      requests.push(request);
+      return requests.length === 1 ?
+        { choices: [{ finish_reason: 'stop', message: { content: [{ type: 'text', text: 'Noted: ' }, { type: 'native_state', id: produced.id }] } }] } :
+        { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] };
+    } };
+  const store = new api.MemoryNeuraleseStore();
+  const engine = { engine: fake, gpuProbe: async () => ({ usable: false, reason: 'test' }) };
+  const { model } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/natlang.gguf' },
+    { engine, gpuLayers: 0, nativeStateStore: store });
+  const ask = content => model.turn({ messages: [{ role: 'user', content }], tools: [], temperature: 0, seed: null, max_tokens: 4 });
+  try {
+    await ask('summarize');
+    assert.deepEqual(await store.getNativeStateWire(produced.id), produced.wire, 'the produced state, archived as the engine stored it');
+    assert.equal(puts.length, 0);
+
+    await store.putNativeStateWire(archived.wire);
+    await ask(`Use ${nativeStateSentinel(archived.id)} and ${nativeStateSentinel(produced.id)}`);
+    assert.deepEqual(puts, [archived.wire], 'only the state the engine lacks is put, as archived');
+    assert.deepEqual(requests[1].messages[0].content.filter(part => part.type === 'native_state').map(part => part.id), [archived.id, produced.id]);
+    await ask(`Again ${nativeStateSentinel(archived.id)}`);
+    assert.equal(puts.length, 1, 'a state put once stays in the engine');
+    await assert.rejects(ask(nativeStateSentinel('nzs1_' + 'b'.repeat(52))), /neuralese-unknown-native-state/);
+
+    assert.deepEqual(model.neuraleseRuntime(), { store, dialect: 'native-state/lfm3', nativeStateConsumer: { architecture: 'lfm3',
+      checkpoint_sha256: '2'.repeat(64), tokenizer_fingerprint: '1'.repeat(64), embedding_weight_sha256: '3'.repeat(64),
+      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization'] } });
+  } finally { await model.close(); }
+
+  // A model without a native identity has no native runtime; a build without the store calls refuses the archive.
+  const { model: stock } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/stock.gguf' },
+    { engine: { ...engine, engine: { ...fake, getModelMetadata: () => ({ hparams: {}, meta: {} }) } }, gpuLayers: 0, nativeStateStore: store });
+  try { assert.equal(stock.neuraleseRuntime(), undefined); } finally { await stock.close(); }
+  params = undefined;
+  await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/natlang.gguf' },
+    { engine: { ...engine, engine: { ...fake, capabilities: { nativeStates: true } } }, gpuLayers: 0, nativeStateStore: store }),
+  /cannot store native states after load/);
+});
 
 test('an in-page model without loaded states refuses native sentinels before inference', async () => {
   const { BrowserLocalModel } = await browserApi();

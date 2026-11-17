@@ -75,6 +75,7 @@ Design: `LEARNED_COMPACTION_OPERATORS.md`, `NEURALESE_SPAN_BASIS_AUDIT_20261103.
 | # | Capability | Built where | Status | Blocker | Impact | Next action |
 |---|---|---|---|---|---|---|
 | 20 | GGUF serving of current LFM3 (local serving) | `natlang setup --native lfm-latest --gguf q8_0` | `nativeSources.lfm-latest` reads `W/ops/pop-behavior-eval/behavioural-parent.json`, which the retired Pop watcher no longer rewrites | `wiring` | L | Point `lfm-latest` at the policy an experiment promotes, then rerun setup through the ledger. |
+| 23 | SGLang overlapped scheduler on the RL/held actors | `serve_native_checkpoint.py --sglang-overlap-schedule` (off by default since the 2026-11-03 one-step wrong-distribution defect) | Unused; measured +8-11% output tok/s (c=32/64, short turns) | `measurement`: at fork dbc51ddb72 the production config showed 0/192 turns over 5 nats with overlap on (control 0/192; 11-03 rate would give 0/192 with p~1%), but the 11-03 config (BF16 KV, full KV layout, 32 running) is not rerun, so fixed vs masked is open (GRPO_STEP_THROUGHPUT_20261117.md, overlap section) | M (~5% of a GRPO step) | In the first DGX gap between experiments (~20 min GPU): an overlap-on arm in the 11-03 config and a ~500-turn overlap-on sample in the production config (`serve/sglang_bench.py all`, rescore with learner arithmetic); if both are clean, overlap on by default at the following pin, with the learner's per-token rho statistics as the guard. |
 
 ## Why these went fallow (patterns)
 

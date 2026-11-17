@@ -6,13 +6,14 @@
  * Adapter files go through the model-file OPFS cache keyed by their SHA-256, verified on every read, so a reload or
  * another release sharing a residual reads them locally.
  */
-import { parseManifest, type WeightManifest } from '../adaptation/weights/manifest.js';
+import { parseManifest, softStateFile, type WeightManifest } from '../adaptation/weights/manifest.js';
+import { decodeNativeState } from '../native/neuralese-store.js';
 import { WeightBinding, type WeightBindingOptions } from '../adaptation/weights/binding.js';
 import { hexDigest } from '../native/hash.js';
 import { cachedModelFile, type ModelFileStorage } from './model-files.js';
 
 export type BrowserRelease = { readonly manifest: WeightManifest; readonly adapters: readonly { readonly id: string; readonly blob: Blob }[];
-  /** Soft states as native state spans (`exports/<state>.state.gguf`), for `loadBrowserLocalModel({ nativeStates })`. */
+  /** Soft states as their store files (`states/<state>.nzs`, Blobs as fetched), for `loadBrowserLocalModel({ nativeStates })`. */
   readonly nativeStates: readonly { readonly id: string; readonly blob: Blob }[];
   readonly weights: readonly WeightBinding[] };
 
@@ -20,8 +21,8 @@ export type BrowserRelease = { readonly manifest: WeightManifest; readonly adapt
  * Fetch `natlang.adapters.json` and every GGUF export under `releaseUrl` (a release directory, e.g. served from
  * `.natlang/tune/releases/<digest>/`). `baseGgufSha256` is the sha256 of the base GGUF the page loads: a release
  * exported for another base file runs untuned as a whole. Residuals without a GGUF export are unavailable and their
- * dependents fall back coherently. Soft states are served when every one has a state export for the same base;
- * otherwise their bindings run degraded, as on a backend without native-state import.
+ * dependents fall back coherently. Soft states are their store files, each verified against its content ID (header and
+ * one pass over the bytes) and handed to the engine as the fetched Blob; the engine checks their identity at load.
  */
 export async function loadBrowserRelease(releaseUrl: string | URL, options: Omit<WeightBindingOptions, 'available' | 'incompatible'> & {
   baseGgufSha256?: string; fetch?: typeof fetch;
@@ -45,9 +46,13 @@ export async function loadBrowserRelease(releaseUrl: string | URL, options: Omit
       verify: async blob => hexDigest(new Uint8Array(await blob.arrayBuffer())) === gguf.sha256 })
     .catch(error => { throw new Error(`tuned release file ${gguf.file}: ${(error as Error).message}`); });
   const adapters = await Promise.all(exported.map(async item => ({ id: item.artifact, blob: await file(item.exports!.gguf!) })));
-  const nativeState = manifest.softStates.length > 0 && manifest.softStates.every(item => item.exports?.gguf &&
-    (!baseGgufSha256 || item.exports.gguf.baseGgufSha256 === baseGgufSha256));
-  const nativeStates = nativeState ? await Promise.all(manifest.softStates.map(async item => ({ id: item.state, blob: await file(item.exports!.gguf!) }))) : [];
+  const nativeState = manifest.softStates.length > 0;
+  const nativeStates = await Promise.all(manifest.softStates.map(async item => {
+    const blob = await (await get(softStateFile(item))).blob();
+    if (decodeNativeState(new Uint8Array(await blob.arrayBuffer())).id !== item.state)
+      throw new Error(`tuned release file ${softStateFile(item)} does not hold its named state`);
+    return { id: item.state, blob };
+  }));
   return { manifest, adapters, nativeStates, weights: [new WeightBinding(manifest, { ...binding, nativeState,
     available: new Set([...adapters, ...nativeStates].map(item => item.id)) })] };
 }

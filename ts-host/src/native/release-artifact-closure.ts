@@ -8,48 +8,6 @@ import { decodeNativeState, decodeNativeTensorArtifact, nativeStateArtifactDepen
 export type NativeInferenceMaterializationReceipt = { readonly sourceState: string; readonly inferenceState: string;
   readonly payloadSha256: string; readonly derivation: unknown };
 
-/** Rewrite only the fixed-size GGUF state identity, after checking the original export's receipt. */
-export function materializeNativeStateGguf(bytes: Uint8Array, expectedSha256: string, sourceId: string, targetId: string):
-    { bytes: Uint8Array; sha256: string } {
-  const hash = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');
-  if (hash(bytes) !== expectedSha256) throw new Error('native state GGUF differs from its export receipt');
-  const source = Buffer.from(sourceId), target = Buffer.from(targetId);
-  if (source.length !== target.length || !/^nzs1_[a-z2-7]{52}$/.test(sourceId) || !/^nzs1_[a-z2-7]{52}$/.test(targetId))
-    throw new Error('invalid native state GGUF identity');
-  const data = Buffer.from(bytes);
-  if (data.length < 24 || data.subarray(0, 4).toString('ascii') !== 'GGUF' || data.readUInt32LE(4) !== 3)
-    throw new Error('invalid native state GGUF header');
-  let offset = 24, found = -1;
-  const take = (count: number) => { if (!Number.isSafeInteger(count) || count < 0 || offset + count > data.length)
-    throw new Error('invalid native state GGUF metadata'); const at = offset; offset += count; return at; };
-  const u64 = () => { const value = data.readBigUInt64LE(take(8));
-    if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('invalid native state GGUF length'); return Number(value); };
-  const string = () => { const size = u64(), at = take(size); return { at, size, value: data.subarray(at, at + size).toString('utf8') }; };
-  const skip = (type: number): void => {
-    const widths: Record<number, number> = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8 };
-    if (type === 8) { string(); return; }
-    if (type === 9) { const element = data.readUInt32LE(take(4)), count = u64();
-      if (element === 9 || count > data.length) throw new Error('invalid native state GGUF array');
-      for (let i = 0; i < count; i++) skip(element); return; }
-    if (!(type in widths)) throw new Error('invalid native state GGUF value type');
-    take(widths[type]!);
-  };
-  const countBig = data.readBigUInt64LE(16);
-  if (countBig > BigInt(data.length)) throw new Error('invalid native state GGUF metadata count');
-  for (let i = 0; i < Number(countBig); i++) {
-    const key = string().value, type = data.readUInt32LE(take(4));
-    if (key === 'natlang.state.id') {
-      if (type !== 8 || found !== -1) throw new Error('native state GGUF identity is missing or ambiguous');
-      const value = string();
-      if (value.value !== sourceId || value.size !== source.length) throw new Error('native state GGUF identity is missing or ambiguous');
-      found = value.at;
-    } else skip(type);
-  }
-  if (found === -1) throw new Error('native state GGUF identity is missing or ambiguous');
-  target.copy(data, found);
-  return { bytes: data, sha256: hash(data) };
-}
-
 /** Install an export atomically and repair a corrupt existing copy. */
 export function installReleaseExport(target: string, bytes: Uint8Array, expectedSha256: string): void {
   const hash = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');

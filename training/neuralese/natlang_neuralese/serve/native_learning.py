@@ -127,7 +127,9 @@ def decision_response(item, sequence, continuations, results):
             'prompt':sequence.native_rl_prompt,'continuations':continuations,
             'native_state_imports':sequence.native_imports,
             **({'actor_export': dict(sequence.native_actor_export)}
-               if getattr(sequence, 'native_actor_export', None) else {})}
+               if getattr(sequence, 'native_actor_export', None) else {}),
+            **({'served_policy': dict(sequence.native_served_policy)}
+               if getattr(sequence, 'native_served_policy', None) else {})}
     return response
 
 

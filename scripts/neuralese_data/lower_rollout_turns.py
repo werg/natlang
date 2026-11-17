@@ -25,9 +25,9 @@ import numpy as np
 
 class NativeStates:
     """Read-only access to an actor's native block store (``serve_native_checkpoint --store-dir``: ``blocks/<id[5:7]>/<id>
-    .safetensors``, content-addressed and never collected during a run). The SGLang actor imports a block by writing these
-    same tensors to its import cache (``sglang_actor._sglang_import_file``), so the store is the exact source of what the
-    model saw. Blocks are decoded and verified against their id on load, cached per instance."""
+    .safetensors``, content-addressed and never collected during a run). The SGLang actor imports a block by handing the
+    fork this very file (``sglang_actor._sglang_import``), so the store is the exact source of what the model saw. Blocks
+    are verified against their id from the file (``read_native_state_file``) and decoded once, cached per instance."""
 
     def __init__(self, directory):
         self.directory = Path(directory)
@@ -41,12 +41,13 @@ class NativeStates:
 
     def __call__(self, block_id):
         if block_id not in self.cache:
-            from natlang_neuralese.serve.store import decode_native_state
-            block, actual = decode_native_state(self.path(block_id).read_bytes())
-            if actual != block_id:
-                raise ValueError(f'{self.path(block_id)} holds {actual}, not {block_id}')
-            self.cache[block_id] = block
+            self.cache[block_id] = self.load(block_id)
         return self.cache[block_id]
+
+    def load(self, block_id):
+        """The decoded, verified block, not cached (a reader that needs each block briefly, e.g. the GRPO learner)."""
+        from natlang_neuralese.serve.store import read_native_state_file
+        return read_native_state_file(self.path(block_id), block_id).load()
 
 
 def prompt_imports(segments, states, stats):
@@ -115,6 +116,8 @@ def episode_turns(row, stats, states=None):
         law = sampling.get('sampling_law') or {}
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
                      'imports': imports, 'policy': sampling['policy']['checkpoint_sha256'],
+                     # the weights actually served: after in-place updates ``policy`` still names the start checkpoint
+                     'served': (sampling.get('actor_export') or {}).get('sha256'),
                      'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance')),
                      # the draw's nucleus (1.0: untruncated); `logp` is the untruncated law either way
                      'top_p': float(law.get('top_p', 1.)), 'probabilities': law.get('probabilities')})

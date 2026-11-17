@@ -5,7 +5,7 @@ import { storage } from './storage.mjs';
 import { examples, exampleCategories } from './examples.mjs';
 import { programFiles, zipFiles } from './program-zip.mjs';
 
-const { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, loadBrowserLocalModel, checkModelStorage, createNatlangRuntime,
+const { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, loadBrowserLocalModel, checkModelStorage, createNatlangRuntime, openBrowserNeuraleseStore,
   probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validProjectPath,
   validatePlaygroundProject, projectSignature, runPlaygroundProject, traceFrame, admitPlaygroundRun } = natlang;
 const $ = id => document.getElementById(id);
@@ -31,13 +31,20 @@ const sameJSON = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let projects = [], project = null, selectedFile = null, runs = [], cases = [], selectedRun = null;
 let diagnostics = [], model = null, modelSpec = null, abort = null, checkTimer = null;
-/** A runtime for one execution; model turns resolve `model` at call time. */
-const runtime = () => createNatlangRuntime({ seed: { mode: 'compatibility' },
-  model: (request, signal) => { if (!model?.loaded) throw new Error('Load a local model to run natural instructions'); return model.turn(request, signal); } });
+/** The page's native-state archive (OPFS, else memory): states the model produces are kept there and put back into the
+ * engine when a later call names them. */
+const nativeStates = openBrowserNeuraleseStore();
+/** A runtime for one execution; model turns resolve `model` at call time. A natlang GGUF (native identity) also gives
+ * the runtime its native values: produced states and their imports go through the page's archive. */
+const runtime = () => {
+  const neuralese = model?.loaded ? model.neuraleseRuntime() : undefined;
+  return createNatlangRuntime({ seed: { mode: 'compatibility' }, ...(neuralese ? { neuralese } : {}),
+    model: (request, signal) => { if (!model?.loaded) throw new Error('Load a local model to run natural instructions'); return model.turn(request, signal); } });
+};
 let cursor = 0, importMode = 'project', busy = false, editingCase = null, caseFromRun = false, playTimer = null;
 let jobToken = null, jobs = [], selectedJobId = null, jobCatalog = null, jobTimer = null;
 let modelCatalog = { defaultId: BROWSER_MODEL_CATALOG[0].id, models: [...BROWSER_MODEL_CATALOG] };
-let modelChoices = [...modelCatalog.models], modelSelectionExplicit = false;
+let modelChoices = [...modelCatalog.models], modelSelectionExplicit = false, contextEdited = false;
 window.natlangPlayground = { get project() { return project; }, get runs() { return runs; },
   get selectedRun() { return selectedRun; }, get model() { return model; } };
 
@@ -372,6 +379,13 @@ function renderModelChoices(selectedId = modelCatalog.defaultId) {
   if (!modelChoices.length) $('modelDialog').querySelector('.model-options').open = true;
   const index = modelChoices.findIndex(spec => spec.id === selectedId);
   $('modelSelect').selectedIndex = index >= 0 ? index : 0;
+  syncModelContext();
+}
+/** The context follows the chosen model's (its catalog `contextTokens`) until the user sets one: a natlang turn may use a
+ * quarter of the window for its reply, so a 4,096-token default overflowed on the first longer program. */
+function syncModelContext() {
+  const spec = modelChoices[Number($('modelSelect').value)];
+  if (!contextEdited && spec?.contextTokens) $('modelContext').value = String(spec.contextTokens);
 }
 function renderJobCatalog() {
   if (!jobCatalog) return;
@@ -610,7 +624,7 @@ async function loadModel() {
     if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
     if (gpuLayers !== undefined && (!Number.isInteger(gpuLayers) || gpuLayers < 0)) throw new Error('GPU layers must be nonnegative');
     const options = { contextTokens,
-      ...(gpuLayers === undefined ? {} : { gpuLayers }),
+      ...(gpuLayers === undefined ? {} : { gpuLayers }), nativeStateStore: await nativeStates,
       onProgress: ({ loaded, total }) => { $('modelProgress').textContent = total ?
         `Downloading ${Math.round(100 * loaded / total)}%` : 'Loading model…'; } };
     await model?.close(); model = null;
@@ -862,7 +876,8 @@ function bind() {
   };
   $('modelButton').onclick = async () => { pendingExecution = null; $('modelDialog').showModal(); await refreshModelDiagnostics(); };
   $('modelDialog').addEventListener('close', () => { pendingExecution = null; });
-  $('modelSelect').onchange = () => { modelSelectionExplicit = true; void refreshModelDiagnostics(); };
+  $('modelSelect').onchange = () => { modelSelectionExplicit = true; syncModelContext(); void refreshModelDiagnostics(); };
+  $('modelContext').oninput = () => { contextEdited = true; };
   $('modelFile').onchange = () => void refreshModelDiagnostics();
   $('loadModel').onclick = loadModel;
   $('closeExamples').onclick = () => $('examplesDialog').close();

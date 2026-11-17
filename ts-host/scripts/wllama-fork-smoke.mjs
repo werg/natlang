@@ -4,10 +4,10 @@
  * (docs/TUNING.md "wllama").
  *
  *   node scripts/wllama-fork-smoke.mjs --wllama <built wllama package dir> --base base.gguf \
- *     --state state.gguf --control control.gguf [--server <llama-server of the fork>]
+ *     --state state.nzs --control control.nzs [--server <llama-server of the fork>]
  *
- * `state` is a native state span that text cannot reproduce (scripts/llama_state_span_parity.py writes a perturbed
- * one as state.gguf); `control` is the unperturbed state of the same text (state-text.gguf there). Headless Chromium
+ * `state` is a native state store file that text cannot reproduce (scripts/llama_state_span_parity.py writes a perturbed
+ * one as state.nzs); `control` is the unperturbed state of the same text (state-text.nzs there). Headless Chromium
  * loads the base and both states as blobs and greedily answers one chat prompt that consumes each state through a
  * `{type: "native_state", id}` content part, the text in plain text, and the state again after other requests, with
  * the log-probability of every answer token. With `--server`, the fork's native llama-server answers the same
@@ -65,7 +65,7 @@ const body = name => ({ messages: name === 'stateAgain' ? requests.state : name 
 const answer = response => ({ text: response.choices[0].message.content,
   logprobs: (response.choices[0].logprobs?.content ?? []).map(item => item.logprob) });
 
-const files = { '/base.gguf': resolve(values.base), '/state.gguf': resolve(values.state), '/control.gguf': resolve(values.control) };
+const files = { '/base.gguf': resolve(values.base), '/state.nzs': resolve(values.state), '/control.nzs': resolve(values.control) };
 const wllamaDir = resolve(values.wllama);
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import { Wllama } from '/wllama/esm/index.js';
@@ -74,7 +74,7 @@ window.run = async ({ bodies, scoring, guided }) => {
   if (!wllama.capabilities?.nativeStates) throw new Error('this wllama build cannot load native states');
   const blob = async path => (await fetch(path)).blob();
   await wllama.loadModel([await blob('/base.gguf')], { n_ctx: 512, n_gpu_layers: 0, n_parallel: 1, cache_type_k: 'f32', cache_type_v: 'f32',
-    native_states: [{ blob: await blob('/state.gguf') }, { blob: await blob('/control.gguf') }] });
+    native_states: [{ blob: await blob('/state.nzs') }, { blob: await blob('/control.nzs') }] });
   const out = {};
   console.log('loaded');
   for (const [name, body] of bodies) {

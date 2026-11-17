@@ -28,7 +28,7 @@ def collector(tmp_path, size=3):
     c.args = SimpleNamespace(actor='http://actor')
     c.work, c.runtime, c.env = tmp_path, tmp_path / 'ts-host', {}
     c.lock, c.stop, c.paused = threading.Lock(), threading.Event(), threading.Event()
-    c.active_slots, c.version, c.outstanding = 1, 0, 2
+    c.active_slots, c.version, c.outstanding, c.running = 1, 0, 2, 0
     for g in (0, 1):
         (tmp_path / f'g{g}').mkdir()
     c.groups = {g: {'dir': tmp_path / f'g{g}', 'size': size, 'done': 0, 'versions': [], 'task_id': f't{g}', 'created': 0}
@@ -64,6 +64,21 @@ def test_finished_episodes_complete_and_score_their_group(tmp_path, monkeypatch)
     c = collector(tmp_path)
     run_slot(c, monkeypatch, [0, 2, 0])   # 2: a budget stop or wall timeout still has its verdict
     assert c.scored == [0] and c.groups[0]['done'] == 3 and c.outstanding == 2
+
+
+def test_episodes_in_flight_are_counted_while_they_run(tmp_path, monkeypatch):
+    """``running`` (logged as ``episodes_in_flight`` when the learner starts) counts an episode while its process runs."""
+    c = collector(tmp_path)
+    seen = []
+
+    def popen(*_args, **_kwargs):
+        return FakeProcess(0 if len(seen) else -9, lambda: seen.append(c.running))
+
+    entries = [c.pending.popleft()]
+    monkeypatch.setattr(grpo.subprocess, 'Popen', popen)
+    monkeypatch.setattr(c, '_take', lambda: entries.pop() if entries else c.stop.set())
+    c.slot()
+    assert seen == [1] and c.running == 0     # also back to 0 after a signal-killed episode
 
 
 def test_a_signal_killed_episode_abandons_its_group(tmp_path, monkeypatch):

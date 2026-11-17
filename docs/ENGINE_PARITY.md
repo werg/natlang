@@ -25,9 +25,28 @@ Mechanical guards:
   `ts-host/test/llama-runtime.test.mjs` fails when the vendored build and the runtime pin come from different releases.
 - `node scripts/wllama_smoke.mjs --model M --server S` compares the page's decision scores with the native server's
   (ranking and a 1-nat tolerance, for the items and for a repeat after a batch); run it on every pin bump. natlang-b12074:
-  same ranking on 3 items, largest gap per item 0.58-0.67 nats from native, a repeat within 0.16 nats.
+  same ranking on 3 items, largest gap per item 0.58-0.67 nats from native, a repeat within 0.16 nats. With a natlang GGUF it
+  also checks native states both ways, and that both engines render and tokenize every item alike (prompt and reply
+  token counts). natlang-b12081 on natlang-lfm3-5ff07638 (Q8_0, CPU, against the release's linux-arm64 server): passes;
+  the server's state put into the page is consumed exactly and a decision on it ranks like the server's (largest gap 0.27
+  nats); the page's grammar-forced state has the server's text, tokens and identity, reads back as stored, and the
+  server accepts it and consumes it exactly. Its default tolerance is 2.5 nats (next section).
 
 ## Numerics: a score is reproducible only under a fixed cache layout
+
+**Q8_0 engines differ by up to ~2 nats per decision score, and that is the int8 rounding of the activations.** On the
+smoke items (LFM3-1.7B Q8_0, 6-7 reply tokens, scores -50 to -71 nats), six configurations (the page; a local
+`-mcpu=native` build; the b12080 release with flash attention auto, off, off with F32 KV, and BF16 KV) deviate from the
+same weights dequantized to F32 (`llama-quantize --allow-requantize ... F32`) by 0.36-0.76 nats RMS per score, 0.58
+pooled, and pairs differ by 0.51-1.75 nats at most over the 9 scores. With the F32 copy, flash attention and the KV type
+move a score by at most 0.03 nats, and thread count changes nothing. The weights are bit-identical between the two
+models, so what remains is the Q8_0 matmul quantizing its activations to int8 blocks: any upstream change (kernels, flash
+attention, KV type, WebAssembly vs NEON) redraws that rounding error. The scatter predicts the gaps (difference sd 0.82,
+expected largest of 9 about 1.7 nats), and it predicts the direction: the rounding noise flattens the distribution, so
+improbable replies score higher than in F32 (mean +0.27 to +0.61 nats in five of the six). The page is not an outlier
+(RMS 0.53, the third closest to F32). The b12074 smoke's 0.58-0.67 and this one's 1.11 are two draws of the same scatter.
+It is not reducible without unquantized activations (an F16/BF16 GGUF); the Python native engine and SGLang serve BF16
+weights and do not have it. `wllama_smoke.mjs` therefore allows 2.5 nats, three sd of the difference.
 
 A score is bit-reproducible when the sequence's KV cells sit in the same order every time. The managed server runs one KV
 stream per slot (no `--kv-unified`), so a prompt always fills its stream from cell 0 in position order and a repeat is
@@ -51,12 +70,33 @@ context between its slots.
 | dc9410950 | RL capture under top-p | row above; native and SGLang already did it |
 | 6d270f086 | top-p RL capture draws on the host (dc9410950's device default overrode it); omitted top_p is no nucleus | row above |
 | cab27bfbe | a context checkpoint that does not load falls back to re-processing the prompt instead of aborting; the in-page build gains slot save/restore (werg/wllama 0095d0f) | page warm openings row; RL capture under top-p (dc9410950, 6d270f086) now released on every engine |
+| 69cba25d9 | native-state put after startup is one main-loop task (`SERVER_TASK_TYPE_NATIVE_STATE_REGISTER` with the bytes: verify, store, register) for the HTTP PUT and embedders; `server_context::get_native_state` | page: werg/wllama 5b0dcd3 `putNativeState` / `getNativeState`; section "Native state" |
+| 623fd10c8 | the release builds werg/wllama 5b0dcd3 | page only |
+| cb03daee7 | a streamed reply's last chunk carries its produced native states (`native_state`, and `x_natlang_message` with each state as a part); before, a stream carried only the placeholder text and lost which state it named | page (it streams; found by the playground native-state smoke) and the managed server's streamed turns; the Python native engine streams parts already; SGLang does not produce in-reply states |
+| 401f8ad5e | the RL actor binding (GGUF and executable hashes) is computed on first use, not at load: a natlang GGUF failed to load in the page (`cannot hash actor executable`), and every load read the whole model file to hash it | managed server: `/v1/neuralese/info` and RL captures unchanged (`check_llama_native_state_protocol.py --expect-rl` passes); Python native and SGLang bind their actors separately |
+| b704a8b2f | native-state files: `--native-state` and the page's `native_states` load natlang's store files (a release's `states/<id>.nzs`) through the PUT path (verified once, stored as read); PUT `{"path"}`; non-finite values refused; GGUF state-span format removed | every engine: section "Native state: one format, handed over as files" |
+
+## Native state: one format, handed over as files
+
+Every engine and store holds a native state as natlang's block-store file (`serve/store.py`: safetensors with the
+`natlang.native_state` header and the content ID), keeps the bytes as received, verifies them once on entry (layout,
+finite values, content ID in one pass) and decodes a state only where it computes on it.
+
+| Engine or store | Produces | Imports | Moves without decoding |
+|---|---|---|---|
+| Managed llama-server (fork cb03daee7, natlang-b12081) | produce spans, encoded once into the store file | PUT body or `{"path": FILE}`, `--native-state FILE` (a release's `states/<id>.nzs`); every put after startup is one main-loop task (verify, store, register); one decode for span registration | GET answers the stored bytes |
+| In-page engine (natlang-b12081 wllama build, werg/wllama 5b0dcd3, vendored) | produce spans of the page's default model, natlang's own GGUF (natlang-lfm3-5ff07638: producer adapter and native identity), through the server's code; `BrowserLocalModel` archives each produced state into the page's store after the turn (`getNativeState`, the bytes as stored) | `native_states` Blobs at load (a release's `states/<id>.nzs`), and after load `putNativeState` (the server's put task): a request naming a state the engine lacks gets it from the page's store (`restoreNativeStates`, as with a server) | the wire moves between the OPFS store and the engine as bytes; only the engine decodes |
+| Python native engine | produce spans (`put_native_state`, `write_native_state_file`) | splices `load()`ed blocks (one copy from a file mapping) | HTTP GET `sendfile`s the stored file, PUT streams to a file and adopts it, metadata from the header (`NativeStateFile`) |
+| SGLang actor (fork b6b2319c7) | the fork writes the store file; the store adopts it by rename | the fork reads the stored file by path (`layers.*` only) | the front never decodes |
+| Python block store / learner `NativeStates` | | `read_native_state_file` + `load()` | adopt by rename, verify from a mapping |
+| ts-host stores (memory, file, OPFS) and the collector archive | | | `putNativeStateWire`/`getNativeStateWire` keep the wire as received; decoded tensors are views of it; files re-verified when read from disk; archive and restore move wires between stores |
 
 ## Open gaps
 
 | Feature | Fork | Page | Python native | SGLang | Next action |
 |---|---|---|---|---|---|
 | Decision: reuse the function's opening across inputs (`cache_messages`, fork e51ca6d68) | yes | yes from natlang-b12074 | equivalent: the prefix cache resumes from any stored grid block | yes, to within 255 tokens (2026-11-14, `sglang_actor._sglang_warm_opening`, on by default, `NATLANG_SGLANG_WARM_OPENINGS=0` opts out): with `extra_buffer` the fork (ace8d6868) snapshots conv state once per prefill, at `prefix + floor(extend / 256) * 256` (`ScheduleBatch._mamba_radix_cache_v2_req_prepare_for_extend`; grid lcm(LFM3 `mamba_chunk_size` 256, page size)), and a finished request inserts its tokens only up to that snapshot (`MambaComponent.prepare_for_caching_req`); a request resumes only from a state on its own path, so each input's state lies inside its own input, the second input re-prefills the opening (only it tracks a branching state there, `finalize_match_result_in_tree_core`), and concurrent items of a batch all do. The actor therefore renders the first `cache_messages` messages, checks they are a token prefix of the prompt, and sends one prefill request of exactly those tokens per distinct opening (concurrent items wait for it; re-sent after 60 s or a weight update) before any option is scored: each input then prefills at most 255 opening tokens plus its own. Exact from the next pin, fork 33230160b (`training/neuralese/sglang-fork.json`): the warm request sets `custom_params.natlang_track_input_end`, the fork's scheduler cuts its prefill so the last extend is a whole number of grids and the state lands on the boundary (`PrefillAdder._natlang_input_end_extend`), and every input prefills only its own messages; the front detects the fork's `NATLANG_TRACK_INPUT_END` marker and keeps the grid-aligned warm against older pins. An opening shorter than 256 tokens stores no state on either | at the next pin on the DGX, read `natlang_sglang_cached_prompt_tokens_total` / `natlang_sglang_prompt_tokens_total` (and `natlang_sglang_opening_warms_total`) over decision calls of one function with different inputs (on fork 33230160b, cached tokens should reach the full opening) |
+| natlang's GGUF as the public playground's model (native states on the public page) | n/a | the local page: yes (`model-default.ts`, natlang-lfm3-5ff07638); the public page: no, it keeps the stock LFM3 Q4_K_M from Hugging Face (`build-playground-site.mjs`) | n/a | n/a | blocked on a host: the GGUF is a GitHub release asset, and neither `github.com/.../releases/download` nor its redirect target sends `Access-Control-Allow-Origin`, so a page on another origin cannot fetch it (the site smoke's `--network` check failed, 2026-11-16). A CORS-capable host (e.g. a Hugging Face model repo, as the stock model uses) is the owner's call; then point `build-playground-site.mjs` at `BROWSER_MODEL_RELEASE` |
 | Decision: score items of one batch concurrently | yes | yes (one engine request) | serial (one execution lock) | yes (2026-11-14) | none |
 | Decision: one prefill shared by all options | yes (parent slot checkpoint) | yes | yes | yes: the first option warms the radix cache, the rest run in parallel (each option once since 2026-11-14) | none |
 | Score turns with generating slots (fork 0da69f720, ff6e734e3) | yes | n/a (one request at a time) | n/a | SGLang's scheduler; unmeasured | measure decision latency under collection load |

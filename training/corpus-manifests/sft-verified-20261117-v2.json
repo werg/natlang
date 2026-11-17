@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-verified-20261117-v2",
+  "owner": "dgx",
+  "path": "runs/sft-verified-20261117-v2",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 54123,
+      "sha256": "8cb943949417f0d95595980b226f63490fd4745a20c48a19fc9f17066a984b8d"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 30039608,
+      "sha256": "5a61acf0e5adc5da9cded7c663c0d7eaa3300edaedde3bc7fb627e86a645fe33",
+      "lines": 4074
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 1732244397,
+      "sha256": "acf6b91ae2debbd2a0cdd0b4f4359b02d4cf2fe1ca31e8efa539a63f4e3b9bbd"
+    },
+    {
+      "path": "repetition.json",
+      "bytes": 2597,
+      "sha256": "990104d5e7382cd2bcf4764e679bb11bec0f6f6b208db8bd8f35a19695880743"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 39434391,
+      "sha256": "f2c84235f05ae27ad81a0dbd607843600eaa38ed761c051cc341614d01a92026"
+    }
+  ],
+  "bytes": 1801775116
+}

@@ -30,7 +30,7 @@ import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, nativeModelIdentityEqual, type NeuraleseBlockMeta,
-  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
+  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore, type NativeArtifactSource } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
@@ -126,11 +126,25 @@ export class HttpNeuraleseStore implements NeuraleseStore {
     return { ...structuredClone(artifact), id };
   }
   async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
+    const wire = await this.getNativeStateWire(id);
+    return wire && decodeNativeState(wire, id);
+  }
+  /** The server's stored bytes, verified once here (header, finite values, content ID); kept as received. */
+  async getNativeStateWire(id: string): Promise<Uint8Array | undefined> {
     const response = await this.request(`/native-states/${id}`);
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error(`native-state fetch failed (${response.status})`);
-    const artifact = decodeNativeState(new Uint8Array(await response.arrayBuffer()));
+    const wire = new Uint8Array(await response.arrayBuffer());
+    const artifact = decodeNativeState(wire);
     if (artifact.id !== id) throw new Error(`native-state identity mismatch: requested ${id}, received ${artifact.id}`);
+    return wire;
+  }
+  /** Upload stored bytes as they are. */
+  async putNativeStateWire(wire: Uint8Array, verifiedId?: string): Promise<NativeStateArtifact> {
+    const artifact = decodeNativeState(wire, verifiedId);
+    const response = await this.request(`/native-states/${artifact.id}`, { method: 'PUT',
+      body: wire as BodyInit, headers: { 'content-type': 'application/octet-stream' } });
+    if (!response.ok) throw new Error(`native-state upload failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
     return artifact;
   }
   async hasNativeState(id: string): Promise<boolean> {
@@ -332,22 +346,31 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
   return value;
 }
 
-export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: NeuraleseStore | undefined,
+/** An engine's native-state store as the restore side sees it: a server's HTTP store or the page's in-page engine. */
+export type NativeStateEngineStore = Pick<NeuraleseStore, 'hasNativeState' | 'putNativeState'> &
+  Required<Pick<NeuraleseStore, 'putNativeStateWire'>> & Partial<NeuraleseStore>;
+
+export async function restoreNativeStates(remote: NativeStateEngineStore, archive: NeuraleseStore | undefined,
     ids: readonly string[], known?: Set<string>, all = false): Promise<void> {
   if (all) for (const id of ids) known?.delete(id);
   const missing: string[] = [];
   for (const id of ids) {
     const local = await archive?.getNativeState?.(id);
-    if (local) {
-      const absent = await restoreNativeArtifacts(remote, archive, nativeStateArtifactDependencies(local));
+    const dependencies = local ? nativeStateArtifactDependencies(local) : [];
+    if (dependencies.length) {
+      // adapter coefficients and bases a state was produced with: a store of named tensor artifacts (a server's)
+      if (!remote.putNativeTensorArtifact || !remote.meta)
+        throw new Error(`neuralese-native-archive-unavailable: native state ${id} depends on adapter artifacts this engine cannot hold`);
+      const absent = await restoreNativeArtifacts(remote as NeuraleseStore, archive, dependencies);
       if (absent.length) throw new Error(`neuralese-unknown-native-artifact: restore source adapter coefficients and bases ${absent.join(', ')}`);
     }
     if (known?.has(id)) continue;
     if (await remote.hasNativeState(id)) { known?.add(id); continue; }
     const artifact = local;
     if (!artifact) { missing.push(id); continue; }
+    const wire = await archive?.getNativeStateWire?.(id);   // the archived bytes as they are
     const { id: _, ...input } = artifact;
-    const restored = await remote.putNativeState(input);
+    const restored = wire ? await remote.putNativeStateWire(wire, id) : await remote.putNativeState(input);
     if (restored.id !== id) throw new Error(`native-state identity mismatch while restoring ${id}`);
     known?.add(id);
   }
@@ -383,7 +406,7 @@ function normalizeReply(body: Json): Json {
 }
 
 /** Archive the same exact reply closure for live turns and saved-turn replay. */
-export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NeuraleseStore,
+export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NativeArtifactSource,
     store: NeuraleseStore | undefined, references: readonly unknown[] = []):
     Promise<{ native: Set<string> }> {
   const projectedBlocks = (reply.neuralese as { blocks?: unknown } | undefined)?.blocks;

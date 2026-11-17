@@ -25,7 +25,7 @@ test('managed model startup can be prepared eagerly and its child is closed with
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12076, commit cab27bfbe)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12081, commit cb03daee7)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -67,7 +67,7 @@ test('a host can grant managed runtime installation at the first semantic turn',
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12076, commit cab27bfbe)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12081, commit cb03daee7)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
@@ -104,7 +104,7 @@ test('tuned soft states load as native state spans and requests carry them as na
     const executable = join(root, 'fake-llama-server'), log = join(root, 'log'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja');
     writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
     writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12076, commit cab27bfbe)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12081, commit cb03daee7)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log(${JSON.stringify(supports ? '--lora-per-sequence\n--native-state FNAME' : '--lora')}); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
@@ -124,12 +124,12 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
       NATLANG_MODEL_START_TIMEOUT_MS: '5000', NATLANG_SHARED_SERVER: 'off' } };
   };
   const fork = fake(true);
-  const session = createManagedModelSession({}, fork.environment, process.stderr, { nativeStates: () => [{ id: state, path: '/release/exports/state.gguf' }] });
+  const session = createManagedModelSession({}, fork.environment, process.stderr, { nativeStates: () => [{ id: state, path: `/release/states/${state}.nzs` }] });
   await session.turn({ messages, tools: [], temperature: 0, seed: 1, max_tokens: 4 });
   await session.close();
   const records = readFileSync(fork.log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   const args = records.find(record => record.args).args;
-  assert.equal(args[args.indexOf('--native-state') + 1], '/release/exports/state.gguf');
+  assert.equal(args[args.indexOf('--native-state') + 1], `/release/states/${state}.nzs`);
   assert.deepEqual(records.find(record => record.body).body.messages[0].content[1], { type: 'native_state', id: state });
   // A server without --native-state cannot serve soft states: the session refuses to start rather than run them as text.
   const upstream = fake(false);
@@ -144,7 +144,7 @@ test('managed sessions share one server per model: started once, kept while leas
   const executable = join(root, 'fake-llama-server'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja'), starts = join(root, 'starts');
   writeFileSync(model, 'fixture weights'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12076, commit cab27bfbe)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12081, commit cb03daee7)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log('--lora-per-sequence --native-state'); process.exit(0); }
 if (process.env.FAKE_FAIL) { console.error('cannot load the model file'); process.exit(3); }
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
@@ -222,7 +222,7 @@ test('a managed stock model is asked for and scored on {"result": VALUE}; a prof
   const template = join(root, 'template.jinja');
   writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
   writeFileSync(executable, `#!${process.execPath}
-if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12076, commit cab27bfbe)'); process.exit(0); }
+if (process.argv.includes('--version')) { console.log('version: 0.8.0 (build 12081, commit cb03daee7)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
 const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
 const server = http.createServer((request, response) => {

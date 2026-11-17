@@ -39,3 +39,37 @@ def test_inference_query_chunks_preserve_exact_finite_history(dtype, bias_enable
     right=torch.autograd.grad(expected,args,g)
     assert torch.equal(actual,expected)
     assert all(torch.equal(x,y) for x,y in zip(left,right))
+
+
+@pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_inference_graph_convolution_gathers_bounded_blocks_bitwise(dtype, device, monkeypatch):
+    """No-grad graph convolution gathers the K-fold histories one row block at a time, bit for bit."""
+    if device == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA unavailable')
+    from types import SimpleNamespace
+    from natlang_neuralese.model import native_weight_carrier as carrier
+    from natlang_neuralese.model import shared_state
+    torch.manual_seed(1116)
+    lengths, width, channels = (6, 1, 13, 4), 7, 29
+    rows = sum(lengths)
+    plan = SimpleNamespace(token_count=rows, slot_stops=False,
+                           invocations=[SimpleNamespace(token_ids=[0] * n) for n in lengths])
+    layer = SimpleNamespace(conv=SimpleNamespace(conv=SimpleNamespace(
+        weight=torch.randn(channels, 1, width, device=device, dtype=dtype),
+        bias=torch.randn(channels, device=device, dtype=dtype))))
+    gated = torch.randn(1, rows, channels, device=device, dtype=dtype)
+    gate = torch.randn(1, rows, channels, device=device, dtype=dtype)
+    # Histories reach back across invocations, repeat sources and pad with the zero row (-1).
+    index = torch.randint(-1, rows, (rows, width), device=device)
+    stops = torch.rand(rows, width, device=device) < 0.3
+    noise = torch.randn(rows, width, channels, device=device, dtype=dtype)
+    for kwargs in ({}, {'index': (index, stops)}, {'noise': noise}):
+        kwargs.setdefault('index', index)
+        with torch.inference_mode():
+            monkeypatch.setattr(carrier, '_FINITE_CONV_INFERENCE_QUERY_CHUNK', 10**9)
+            expected = shared_state._convolve_eager(layer, gated, gate, plan, range(rows), **kwargs)
+            for block in (5, 7, rows - 1):
+                monkeypatch.setattr(carrier, '_FINITE_CONV_INFERENCE_QUERY_CHUNK', block)
+                actual = shared_state._convolve_eager(layer, gated, gate, plan, range(rows), **kwargs)
+                assert torch.equal(actual, expected), (block, sorted(kwargs))

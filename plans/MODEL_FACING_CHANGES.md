@@ -3,6 +3,46 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-16 — the same memory bound for folder `python`, folder `bash` and callable-folder module code
+
+The other in-process hosts of model-written code in the shared collectors now take the eval bound's one setting
+(`NATLANG_EVAL_MEMORY_MB`, default 256 MB, 0: off; `native/eval-memory.ts`):
+- **Folder `python`** (one Pyodide interpreter per process, cells run one at a time): the WASM memory may grow at most
+  the bound during a cell; growth past it is refused, Python raises `MemoryError` in the cell, and the cell fails with
+  "python stopped: its data grew past the 256 MB memory limit of one python run; use a bounded or more memory-efficient
+  approach (prune the search, keep compact state, or process the data in parts)". A cell that catches `MemoryError`
+  keeps its own result; the interpreter serves later cells (`native/folder-python.ts`).
+- **Folder `bash`** (just-bash in-process): its byte limits (`maxLiveBytes`, `maxInputBytes`, `maxOutputSize`,
+  file-system, database and archive bytes) are the bound, strings and heredocs at most 64 MB, `/tmp` holds at most the
+  bound, and the bytes one command adds to the folder are budgeted. When the shell reports a byte limit ("cat: aggregate
+  input size limit exceeded (...)", "total output size exceeded"), "bash stopped: ... of one bash command; ..." follows
+  it in stderr (`native/folder-shell.ts`).
+- **Callable-folder module code** (`evaluateModule`): instrumented like eval code; each synchronous run of module code
+  (up to the next microtask checkpoint) has its own base, failing with "callable-folder code stopped: ... of one
+  synchronous run of callable-folder code; ..." (`segmentGuard`). Growth spread across awaits is not summed.
+The browser eval realm stays unbounded (no synchronous precise heap reading; a runaway ends only the user's own tab);
+the folder `python` and `bash` bounds apply in the browser too. Tests: `ts-host/test/folder-python.test.mjs`,
+`folder-shell.test.mjs`, `environment.test.mjs`. Enters RL at the next pin; changes the held series (ts-host tree).
+
+### 2026-11-16 — one eval's memory is bounded (256 MB), failing that eval alone with a teaching error
+
+Eval code runs in its host's heap (a `node:vm` context of the shared collector process, up to 8 RL/teacher episodes per
+process). Sokoban BFS/A* solvers written in eval grew a teacher-generation collector to 2.4 GB in minutes and OOM-killed
+the generator unit four times, taking every co-hosted episode with it. Compiled eval code now calls a guard at the top of
+every loop iteration and function body (constructors excepted; insertions stay on their lines, so line numbers do not
+move); every 128 calls it reads the heap, and when growth since the eval started passes the bound it runs a full
+collection and, if the growth that survives is still over, throws: "eval stopped: its data grew past the 256 MB memory
+limit of one eval; use a bounded or more memory-efficient approach (prune the search, keep compact state, or process the
+data in parts)". It stays tripped for the rest of that eval (catching it does not help); the environment and sibling
+evals continue. Bound: 256 MB, from 20,582 shared-collector `invocation_end` records (whole-process heap median 147 MB,
+p99 323 MB with up to 8 episodes): an order of magnitude above a legitimate eval, and 8 evals at the bound fit a 4 GB
+collector heap. Setting `NATLANG_EVAL_MEMORY_MB` (0: off) or `TypeScriptEnvironment({ memoryLimitMb })`. The same guard
+bounds the function-effect oracle's calls of a model-repaired function (`teacher/function-effects.ts`). Code:
+`ts-host/src/native/eval-memory.ts`, `native/realm.ts`, `native/eval-compile.ts`, `environment.ts`. Not bounded: the
+browser realm (no synchronous heap reading; a runaway ends only the user's own tab), single built-in calls that allocate
+past the bound before the next check (`new Array(n).fill(0)`), selected semantic drivers. Folder `python`, `bash` and
+callable-folder module code: entry above. Tests: `ts-host/test/environment.test.mjs`. Enters RL at the next pin; changes the held series (ts-host tree).
+
 ### 2026-11-14 — guided replies on the Python engines leave the open reasoning unchecked (fork a6401bbd3 parity)
 
 On the Python native engine and the SGLang actor, guidance (`serve/guidance.py`) no longer checks the reasoning that the
@@ -2454,3 +2494,14 @@ From the held-v2 base episode read (run2 `held/step-00000`, 512 episodes, 1,190 
 Not changed: computed records keep their extra fields (bda8fb9f1, 2026-10-08: a refusal sent executors back to retyping
 provider values); one held episode (101/1) failed with an extra field, too little to reverse that. Tests:
 `ts-host/test/scope-compiler.test.mjs`, `eval-guidance.test.mjs`. Changes the held series (ts-host tree).
+
+## 2026-11-16: natlang GGUF exports no longer ban the produce marker (first principles)
+
+`export/native_gguf.py` wrote `serving.logit_bias = {produce_open: -100}` into every export manifest, with the reason
+"the producer marker would start a span whose adapter llama.cpp does not apply". The fork's llama-server has applied the
+producer adapter carried in the GGUF since its native-state production (`llama_model_has_producer_adapter`,
+`native_production` in `server-context.cpp`), so the ban only erased a sampled action the model was trained to take: a
+managed llama-server or the page serving a natlang export could never produce a native state. An export with the
+producer adapter now serves with `logit_bias {}`; one without it still bans the marker. Applies to the page's new default
+GGUF (natlang-lfm3-5ff07638, `ts-host/src/model-default.ts`) and to every later `natlang setup --native` export.
+The SGLang actor's HF export (`serving.banned_token_ids`) is separate and unchanged, so the held series is not affected.

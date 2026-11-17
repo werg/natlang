@@ -294,9 +294,10 @@ reference server applies the stack through its exact native adapter path.
 
 **Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
 attention keys (after the key norm, before RoPE) and values, and LFM2's short-convolution gated inputs. With
-`tune.softStates: true` on the `managed-local` backend, the build trains soft states and exports each as a llama.cpp
-native state span (`exports/<state>.state.gguf`, bound to the base GGUF). The managed session passes them with
-`--native-state`, and requests carry `{"type": "native_state", "id"}` content parts where the instruction or skill
+`tune.softStates: true` on the `managed-local` backend, the build trains soft states and the release keeps each as its
+store file (`states/<state>.nzs`, the native-state format every engine reads). The managed session passes those files
+with `--native-state` (the fork verifies each file's content ID and refuses a state whose identity differs from a
+natlang GGUF's declared one), the page passes them as `native_states` blobs, and requests carry `{"type": "native_state", "id"}` content parts where the instruction or skill
 text was. The fork imports the stored state exactly for virtual tokens between the consume markers. On the real
 LFM2.5-350M it matches the reference engine as closely as plain text does (max |Δlogit| 0.043 vs 0.075, top-1 1.0;
 `scripts/llama_state_span_parity.py`). A server without `--native-state` (the upstream runtime) refuses to start with

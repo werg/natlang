@@ -23,7 +23,7 @@ function fixtureHost(root, { fetch, spawn } = {}) {
       return spawn?.(command, args, options) ?? { pid: 4242, hasExited: () => false, exited: new Promise(() => {}), kill() {} };
     },
     run(command, args) {
-      if (args.includes('--version')) return { status: 0, stdout: 'version: 0.8.0 (build 12076, commit cab27bfbe)\n', stderr: '' };
+      if (args.includes('--version')) return { status: 0, stdout: 'version: 0.8.0 (build 12081, commit cb03daee7)\n', stderr: '' };
       if (args.includes('--help')) return { status: 0, stdout: '--lora-per-sequence\n--native-state FNAME', stderr: '' };
       return { status: 1, stdout: '', stderr: `unexpected command ${command}` };
     },
@@ -336,5 +336,5 @@ test('the llama entry bundles on its own: its closure is the llama directory and
     format: 'esm', write: false, metafile: true, logLevel: 'silent' });
   const inputs = Object.keys(result.metafile.inputs).filter(file => !file.startsWith('node:')).map(file => file.replace(/^.*?dist\//, ''));
   assert.deepEqual(inputs.filter(file => !file.startsWith('llama/')).sort(),
-    ['llama-fork-source.js', 'llama-runtime-release.js', 'model-catalog.js', 'model/warm-opening.js', 'package/directories.js']);
+    ['llama-fork-source.js', 'llama-runtime-release.js', 'model-catalog.js', 'package/directories.js']);
 });

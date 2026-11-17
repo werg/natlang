@@ -7,11 +7,15 @@ import * as natlang from '@natlang/browser';
 
 const catalog = await natlang.loadBrowserModelCatalog();
 const entry = catalog.models.find(model => model.id === catalog.defaultId)!;
+const nativeStateStore = await natlang.openBrowserNeuraleseStore();
 const { model, status } = await natlang.loadBrowserLocalModel(
-  { kind: 'url', id: entry.id, url: entry.url, templateUrl: entry.templateUrl },
-  { contextTokens: entry.contextTokens });
-const runtime = natlang.createNatlangRuntime({ model: model.turn, services: { board } });
+  { kind: 'url', id: entry.id, url: entry.url, templateUrl: entry.templateUrl, sha256: entry.sha256 },
+  { contextTokens: entry.contextTokens, nativeStateStore });
+const neuralese = model.neuraleseRuntime();
+const runtime = natlang.createNatlangRuntime({ model: model.turn, services: { board }, ...(neuralese ? { neuralese } : {}) });
 ```
+
+The local page's default model is natlang's own GGUF (LFM3-1.7B with the Neuralese producer adapter and native identity), so the page produces and consumes native states; a page on another origin (the public playground) can load a model only from a host that sends CORS headers, and keeps the stock LFM3 until that GGUF has one. With `nativeStateStore` (the page's OPFS archive), states the model produces are archived there after each turn, and states a later call names are put back into the engine from there. `model.neuraleseRuntime()` gives the runtime that archive and the model's native identity; it is undefined for a model without one (a stock GGUF), which then runs on text alone.
 
 `loadBrowserLocalModel` fetches a separately published chat template, runs single-threaded when the page is not cross-origin isolated, and falls back to CPU when an automatic GPU load fails; `status.gpuFallbackReason` reports it. Requested GPU offload is not proof of GPU residency. Do not hard-code a historical checkpoint; use the published catalog or an explicit GGUF with its template.
 

@@ -9,17 +9,19 @@ custody. The former projected-block routes and GradSession API are retired.
 from __future__ import annotations
 
 import json
+import os
 import queue
 import re
 import time
 import traceback
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
 from .native_guidance import REASONING_END
-from .store import decode_native_state, encode_native_state
+from .store import NativeStateFile, NativeStateIdMismatch, decode_native_state, encode_native_state
 
 _NATIVE_STATE = re.compile(r"^/v1/neuralese/native-states/(nzs1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
 _NATIVE_TENSOR = re.compile(r"^/v1/neuralese/native-tensor-artifacts/(nnt1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -80,6 +82,35 @@ def make_handler(engine: Engine):
 
         def log_message(self, format, *args):  # quiet by default
             pass
+
+        def handle_one_request(self):
+            """Each request on a thread that ends with it, not on the connection's thread. torch's CPU allocator on
+            aarch64 is mimalloc, whose heaps are per thread: an idle thread keeps the pages of the tensors it allocated
+            (and those other threads freed) until it allocates again. A keep-alive connection's thread lives as long as
+            its client, and native endpoints (state writes, imports, decisions, gradients, the store's PUT/GET) run on
+            it, so a server with many open connections held up to connections x their largest request's tensors (the
+            same growth as the SGLang front's worker pool, plans/neuralese/ENGINEERING_FINDINGS.md, 2026-11-16)."""
+            failure = []
+
+            def run():
+                try:
+                    BaseHTTPRequestHandler.handle_one_request(self)
+                except BaseException as error:  # re-raised on the connection's thread, which socketserver reports
+                    failure.append(error)
+            thread = threading.Thread(target=run, name='natlang-http-request', daemon=True)
+            thread.start()
+            thread.join()
+            if failure:
+                raise failure[0]
+
+        def _send_file(self, path, content_type: str):
+            with open(path, "rb") as stream:
+                self.send_response(200)
+                self.send_header("content-type", content_type)
+                self.send_header("content-length", str(os.fstat(stream.fileno()).st_size))
+                self.end_headers()
+                self.wfile.flush()
+                self.connection.sendfile(stream)
 
         def _send(self, status: int, body: bytes, content_type: str = "application/json"):
             self.send_response(status)
@@ -159,7 +190,7 @@ def make_handler(engine: Engine):
             native = _NATIVE_STATE.match(self.path)
             if native and native.group(2) in (None, "/meta"):
                 try:
-                    record = engine.store.get_native_state(native.group(1))
+                    record = engine.stored_native_state(native.group(1))
                 except ValueError as error:
                     return self._error(409, "neuralese-native-state-kind", str(error))
                 if record is None:
@@ -167,6 +198,8 @@ def make_handler(engine: Engine):
                 if native.group(2) == "/meta":
                     return self._json(200, record.meta())
                 self._hold(record.id)
+                if isinstance(record, NativeStateFile):   # the stored file is the wire encoding: sent as it is
+                    return self._send_file(record.path, "application/octet-stream")
                 return self._send(200, encode_native_state(record.block), "application/octet-stream")
             tensor = _NATIVE_TENSOR.match(self.path)
             if tensor and tensor.group(2) in (None, "/meta"):
@@ -214,6 +247,8 @@ def make_handler(engine: Engine):
             return self._error(404, "not-found", self.path)
 
         def _put_native_state(self, expected_id):
+            if getattr(engine.store, "directory", None) is not None:
+                return self._put_native_state_file(expected_id)
             try:
                 block, actual_id = decode_native_state(self._body())
             except ValueError as error:
@@ -225,6 +260,30 @@ def make_handler(engine: Engine):
             except ValueError as error:  # a failed derivation check or a content collision with a stored state
                 return self._error(400, "neuralese-bad-native-state", str(error))
             return self._json(201, stored.meta())
+
+        def _put_native_state_file(self, expected_id):
+            """A file store adopts the body as a file: streamed to disk, verified from the file, renamed in."""
+            incoming = engine.store.directory / "incoming"
+            incoming.mkdir(exist_ok=True)
+            path = incoming / f"{uuid.uuid4().hex}.safetensors"
+            try:
+                remaining = int(self.headers.get("content-length") or 0)
+                with open(path, "wb") as stream:
+                    while remaining:
+                        chunk = self.rfile.read(min(remaining, 8 << 20))
+                        if not chunk:
+                            break
+                        stream.write(chunk)
+                        remaining -= len(chunk)
+                try:
+                    stored = engine.store.adopt_native_state_file(path, self._owner, expected_id=expected_id)
+                except NativeStateIdMismatch as error:
+                    return self._error(400, "neuralese-id-mismatch", str(error))
+                except ValueError as error:  # malformed, a failed derivation check or a content collision
+                    return self._error(400, "neuralese-bad-native-state", str(error))
+                return self._json(201, stored.meta())
+            finally:
+                path.unlink(missing_ok=True)
 
         def _put_native_tensor_artifact(self, expected_id):
             from ..model.native_artifact import decode_native_tensor_artifact
@@ -380,7 +439,7 @@ def make_handler(engine: Engine):
                             turn['response']['usage']['completion_tokens'] >= 0 for turn in source_turns)
                         return self._json(200, {'budget_error': str(error), 'source_turns': source_turns, 'window': window,
                                                 **({'budget_usage': budget.usage()} if known else {})})
-                    record = engine.store.get_native_state(block)
+                    record = engine.stored_native_state(block)
                     return self._json(201, {**record.meta(), "parts": parts, "window": window,
                                            "source_turns": source_turns, **({'budget_usage': budget.usage()} if budget else {})})
                 if self.path == "/v1/neuralese/guidance/check":

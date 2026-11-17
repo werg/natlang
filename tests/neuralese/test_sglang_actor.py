@@ -135,19 +135,28 @@ def _span_fixture(tmp_path):
     import threading
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.serve.store import TensorStore
     native = engine_fixture(tmp_path, 'lfm')
     front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
-                               engine_class=SglangEngine)
+                               engine_class=SglangEngine, store=TensorStore(tmp_path / 'front-store'))
+    front.sglang_export = {'architecture': front.model_config.get('architecture'),
+                           'layer_kinds': ['attention' if native.backbone.is_attention(i) else 'finite_convolution'
+                                           for i in range(native.backbone.num_layers)],
+                           'producer_embedding': {'input_id_offset': native.backbone.embedding_weight.shape[0]}}
     front.sglang_banned = []
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons, front.sglang_state_writes, front.sglang_capture_dir = {}, 0, None
     roles = front.role_tokens
     word = lambda text: list(front.tokenizer(text, add_special_tokens=False)['input_ids'])
 
-    def capture(ids, start, end, adapter=None, imports=None):
-        # What the fork exports for ids[start:end]: the native forward of the whole sequence with its producing mask.
+    def capture(ids, start, end, metadata, adapter=None, imports=None):
+        # What the fork exports for ids[start:end]: the native forward of the whole sequence with its producing mask,
+        # written as a native-state file of the front's metadata (the fork's NatlangCapture writer).
+        import os
+        import uuid
         import torch
         from natlang_neuralese.model.shared_state import native_step
+        from natlang_neuralese.serve.store import write_native_state_file
         inside, mask = False, []
         for token in ids:
             mask.append(inside and token not in (roles.produce_open, roles.produce_close))
@@ -155,16 +164,19 @@ def _span_fixture(tmp_path):
         with torch.no_grad():
             out = native_step(native.shared_model, torch.tensor([ids]), producing=torch.tensor([mask]))
         rows = slice(start, end)
-        return {'token_ids': out['token_ids'][rows], 'embeddings': out['embeddings'][rows],
-                'positions': out['positions'][rows],
-                'layers': tuple({key: (value if key == 'kind' else value[rows]) for key, value in layer.items()}
-                                for layer in out['layers'])}
+        tensors = {'token_ids': out['token_ids'][rows], 'embeddings': out['embeddings'][rows],
+                   'positions': out['positions'][rows],
+                   **{f'layers.{index}.{key}': value[rows] for index, layer in enumerate(out['layers'])
+                      for key, value in layer.items() if key != 'kind'}}
+        path = os.path.join(front._sglang_scratch(), f'{uuid.uuid4().hex}.safetensors')
+        write_native_state_file(path, metadata, tensors)
+        return path
     front._sglang_capture = capture
     stored = {'native': [], 'front': []}
     for name, engine in (('native', native), ('front', front)):
         def store(*args, _engine=engine, _name=name, _original=type(engine)._native_store_capture, **kw):
             block, record_ = _original(_engine, *args, **kw)
-            stored[_name].append(block)
+            stored[_name].append(block.load() if hasattr(block, 'load') else block)   # the front stores a file
             return block, record_
         engine._native_store_capture = store
     return native, front, roles, word, stored
@@ -229,6 +241,35 @@ def test_produce_span_follows_the_native_protocol_and_stores_the_same_block(tmp_
     assert _protocol_view(streamed['x_natlang_rl_capture']) == _protocol_view(actual['x_natlang_rl_capture'])
 
 
+def test_produce_span_capture_file_is_adopted_into_the_store_and_refused_when_wrong(tmp_path):
+    """The fork's capture file is the stored block: renamed into the store (nothing left in the capture directory,
+    nothing decoded into the front's resident store); a capture that holds other tokens, another identity or no file
+    is the front's capture error and leaves no file behind."""
+    import os
+    from natlang_neuralese.serve.engine import RequestError
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    tokens = word('t4') + [roles.produce_open] + word('t6 t7') + [roles.produce_close] + [sorted(front.stop_ids)[0]]
+    make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
+                                     rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
+    _, actual = _scripted(native, front, tokens, make)
+    (meta,) = actual['native_state']['blocks']
+    assert front.store._path(meta['id']).exists() and front.store.resident == 0
+    assert not os.listdir(front._sglang_scratch())
+    honest = front._sglang_capture
+    for lie, error in ((lambda m: {**m, 'text': 'other'}, 'metadata differs'),
+                       (lambda m: {**m, 'checkpoint_sha256': 'f' * 64}, 'metadata differs'),
+                       (None, 'did not export')):
+        def capture(ids, start, end, metadata, adapter=None, imports=None, lie=lie):
+            path = honest(ids, start, end, metadata if lie is None else lie(metadata), adapter, imports)
+            if lie is None:
+                os.unlink(path)
+            return path
+        front._sglang_capture = capture
+        with pytest.raises(RequestError, match=error) as raised:
+            _scripted(native, front, tokens, make)
+        assert raised.value.code == 'sglang-actor-capture' and not os.listdir(front._sglang_scratch())
+
+
 @pytest.mark.parametrize('case', ['stop-inside', 'close-without-open', 'nested', 'consume-marker', 'length-inside'])
 def test_protocol_failures_match_the_native_engine(tmp_path, case):
     native, front, roles, word, _ = _span_fixture(tmp_path)
@@ -251,10 +292,6 @@ def test_protocol_failures_match_the_native_engine(tmp_path, case):
 
 def _import_fixture(tmp_path):
     native, front, roles, word, stored = _span_fixture(tmp_path)
-    front.sglang_export = {'architecture': front.model_config.get('architecture'),
-                           'layer_kinds': ['attention' if native.backbone.is_attention(i) else 'finite_convolution'
-                                           for i in range(native.backbone.num_layers)],
-                           'producer_embedding': {'input_id_offset': native.backbone.embedding_weight.shape[0]}}
     tokens = word('t4') + [roles.produce_open] + word('t6 t7') + [roles.produce_close] + [sorted(front.stop_ids)[0]]
     make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
                                      rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
@@ -270,6 +307,7 @@ def _import_fixture(tmp_path):
 def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
     """A turn that imports a produced block: same prompt receipt and imports on both engines; SGLang gets the block's
     positions as placeholders plus the import spec, whose file holds the block's exact tensors."""
+    import os
     import torch
     from safetensors.torch import load_file
     native, front, roles, word, block, messages = _import_fixture(tmp_path)
@@ -292,6 +330,8 @@ def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
     assert ids[spec['start'] + count] == roles.consume_close
     assert all(i >= 2 * native.backbone.embedding_weight.shape[0] for i in ids[spec['start']:spec['start'] + count])
     assert len(ids) == mine['samples'][0]['query_own_position'] + 1 + count  # imported positions are not own positions
+    assert spec['path'] == str(front.store._path(messages[0]['content'][1]['id']))   # the stored file itself, no import copy
+    assert not [name for name in os.listdir(front._sglang_scratch()) if not name.startswith('adapter-')]
     saved = load_file(spec['path'])
     for index, layer in enumerate(block.layers):
         for name, value in layer.items():
@@ -504,8 +544,6 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monk
     rendered = native_learning.decision_items
     monkeypatch.setattr(native_learning, 'decision_items', lambda renderer, messages, tools, options: (
         rendered(renderer, messages, tools, options)[0], [word(option) for option in options]))
-    import concurrent.futures
-    front._pool = concurrent.futures.ThreadPoolExecutor(4)
     body = {'messages': messages, 'options': ['t6', 't7 t8'], 'native_recording': True}
     expected = decide_native(native, body)
     sent = []
@@ -542,7 +580,6 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monk
 def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeypatch):
     """`cache_messages`: one prefill request of exactly the opening's tokens per distinct opening, sent before any item
     scores an option (concurrent items wait for it), skipped without the hint or when opted out; scores unchanged."""
-    import concurrent.futures
     import threading
     import time
     from natlang_neuralese.serve import native_learning
@@ -554,7 +591,6 @@ def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeyp
         prompt = renderer.render_request(messages, tools)
         return _items(renderer, prompt.segments, prompt.blocks, prompt.escape_nonce), [word(o) for o in options]
     monkeypatch.setattr(native_learning, 'decision_items', decision_items)
-    front._pool = concurrent.futures.ThreadPoolExecutor(4)
     front.sglang_state_grid = 4  # the fixture's openings are a few tokens; LFM3's grid is 256
     sent, lock = [], threading.Lock()
 
@@ -961,3 +997,46 @@ def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engi
         assert ''.join(reasoning).strip() == 't10 t11' and content.strip() == 't12'
     else:
         assert not reasoning and content.strip() == 't10 t11 </think> t12'
+
+
+def test_in_place_update_is_named_in_every_capture():
+    # The capture's ``policy`` names the native engine's start checkpoint; an in-place update (grpo.py) is the served policy.
+    import threading
+    front = object.__new__(SglangEngine)
+    front._sglang_lock = threading.Lock()
+    front.sglang_actor_export = {'kind': 'exact', 'format': 'sglang-hf', 'sha256': 'a' * 64}
+    front.rl_policy_binding = {'checkpoint_sha256': 'b' * 64, 'serving_engine': {}, 'actor_export': {}}
+    assert front._served_policy() is None
+    front.rebind_in_place('c' * 64, 'd' * 64, version=3)
+    assert front._served_policy() == {'version': 3, 'policy_id': 'c' * 64, 'weights_sha256': 'd' * 64,
+                                      'native_engine': 'start checkpoint (not updated in place)'}
+    assert front.sglang_actor_export['sha256'] == 'd' * 64 and front.rl_policy_binding['start_checkpoint_sha256'] == 'b' * 64
+
+
+def test_sglang_requests_run_on_threads_that_end_with_them():
+    """No long-lived worker pool: torch's CPU allocator (mimalloc on aarch64) keeps each idle thread's freed tensor pages,
+    so a pool that spread requests over hundreds of idle workers grew the front ~0.8 GB/h. Every request's thread (and a
+    score's fan-out threads) ends with the request; a fan-out failure reaches the caller."""
+    import threading
+    front = object.__new__(SglangEngine)
+    front._ids = iter(range(100))
+    front._prompt_plan = lambda messages, tools: [('tokens', [1, 2])]
+    front._routes_native = lambda request, plan: False
+    front._append_only = lambda request, plan: plan
+    seen = []
+
+    def run(seq):
+        seen.append(threading.current_thread())
+        return {'id': seq.request.request_id}
+    front._sglang_run = run
+    futures = [front.submit(GenerationRequest(messages=[])) for _ in range(8)]
+    assert sorted(future.result(timeout=10)['id'] for future in futures) == sorted(f'chatcmpl-{i}' for i in range(8))
+    assert len(seen) == 8 and threading.main_thread() not in seen
+    for thread in seen:
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+    assert not [t for t in threading.enumerate() if t.name.startswith('sglang-actor')]
+    assert SglangEngine._map_threads(lambda x: x * x, [1, 2, 3]) == [1, 4, 9]
+    with pytest.raises(ValueError, match='bad option'):
+        SglangEngine._map_threads(lambda x: (_ for _ in ()).throw(ValueError('bad option')) if x == 2 else x, [1, 2, 3])
+    assert not [t for t in threading.enumerate() if t.name.startswith('sglang-actor')]

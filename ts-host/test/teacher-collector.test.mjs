@@ -739,6 +739,32 @@ test('exhausted same-request retries do not trigger configured whole-case replay
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
+test('refused credentials end the request as exhausted provider retries without a resend', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-auth-'));
+  let calls = 0;
+  const server = createServer((_request, response) => {
+    calls++; response.writeHead(401, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error: { message: 'token expired' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('auth-refused') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 3,
+      requestRetries: 4, retryDelayMs: 0, execution: { identity: 'request-auth-fixture/1', run: async (_record, driver) => {
+        await driver({ messages: [{ role: 'user', content: 'refused' }],
+          tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
+        return { outcome: { accepted: true }, trace: [] };
+      } } };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.deepEqual(result.missing, [0]);
+    assert.equal(calls, 1, 'no resend and no whole-case replay of refused credentials');
+    const failure = JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8'));
+    assert.equal(failure.code, 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED');
+    assert.match(failure.message ?? JSON.stringify(failure), /provider request retry exhausted/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('request retry backoff honors cancellation and records it before sleeping', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-abort-'));
   let calls = 0;

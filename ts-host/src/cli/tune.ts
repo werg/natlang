@@ -34,6 +34,7 @@ import { buildProject } from '../compiler/node-project.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { createResolvedModelSession, executorIdentityForChoice, loadModelConfiguration, sessionDriver } from '../model/index.js';
 import { activateRelease, currentManifest, currentRelease, readActive, readRelease, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
+import { softStateFile } from '../adaptation/weights/manifest.js';
 import { loadTuneSettings, prepareDerivedStudent } from '../tune/settings.js';
 import { ensureNativeServer } from '../model/native-managed.js';
 import { loadVllmStacks, uploadRelease } from '../tuned-serving.js';
@@ -162,7 +163,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
           const serving = loadModelConfiguration(settings.servingProfile);
           if (serving.choice.kind !== 'managed-local') throw new Error('natlang tune: the default profile must use the managed local model to serve tuned weights');
           // Soft states as exact native state spans on the llama.cpp fork (`--native-state`); refused by other servers.
-          const states = manifest.softStates.filter(item => item.exports?.gguf).map(item => ({ id: item.state, path: join(directory, item.exports!.gguf!.file) }));
+          const states = manifest.softStates.map(item => ({ id: item.state, path: join(directory, softStateFile(item)) }));
           const session = createResolvedModelSession(serving.choice, process.env, process.stderr,
             { loraAdapters: () => adapters, nativeStates: () => states });
           await session.prepare();

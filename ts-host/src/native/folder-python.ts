@@ -4,6 +4,7 @@ import { PYTHON_NATLANG, PYTHON_POLICY } from './python-sources.js';
 import { Folder } from './scoped-fs.js';
 import { folderContents, pathsChangedSince } from './folder-changes.js';
 import type { PythonWatchdog } from './python-watchdog.js';
+import { evalMemoryLimitMb, memoryLimitMessage } from './eval-memory.js';
 
 /** What a Python cell can reach: the platform's watchdog for its timeout, and `nl` and `iterateOn` over the calling task. */
 export type PythonHost = { watchdog?: PythonWatchdog; nl?: (instructions: string, returns: string) => (...args: unknown[]) => Promise<unknown>;
@@ -33,6 +34,27 @@ let currentHost: PythonHost | undefined;
 let currentRefresh: (() => void) | undefined;
 let awaitingChild = false;
 let tail: Promise<void> = Promise.resolve();
+/**
+ * The memory bound of one cell (native/eval-memory.ts, the one setting): the interpreter's WASM memory may grow at
+ * most this much while a cell runs. Growth past it is refused, so Python's allocation fails with MemoryError inside
+ * the cell instead of the shared host growing until it is killed; cells run one at a time, so the bound is the cell's.
+ */
+let growthCap: number | undefined;
+let capped = false;
+let wasm: WebAssembly.Memory | undefined;
+function boundMemoryGrowth(py: any): void {
+  const memory: WebAssembly.Memory | undefined = py._module?.wasmMemory ?? py._module?.memory;
+  if (!memory || typeof memory.grow !== 'function') throw new Error('Pyodide exposes no WASM memory to bound');
+  wasm = memory;
+  const grow = WebAssembly.Memory.prototype.grow;
+  Object.defineProperty(memory, 'grow', { configurable: true, value: (pages: number) => {
+    if (growthCap !== undefined && memory.buffer.byteLength + pages * 65536 > growthCap) {
+      capped = true;
+      throw new RangeError('natlang: the cell reached its memory limit');
+    }
+    return grow.call(memory, pages);
+  } });
+}
 function fromPython(value: any): unknown {
   if (value && typeof value.toJs === 'function') return fromPython(value.toJs({ dict_converter: Object.fromEntries }));
   if (typeof value === 'bigint') return Number.isSafeInteger(Number(value)) ? Number(value) : value.toString();
@@ -74,6 +96,7 @@ async function interpreter(): Promise<any> {
       },
     });
     py.runPython(RUNNER);
+    boundMemoryGrowth(py);
     return py;
   })();
   return singleton;
@@ -120,6 +143,9 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
       watchdog = host.watchdog?.(buffer, timeoutMs);
     }
     let value: any;
+    const limitMb = evalMemoryLimitMb();
+    capped = false;
+    growthCap = limitMb ? wasm!.buffer.byteLength + limitMb * 1024 * 1024 : undefined;
     try {
       try { value = await py.runPythonAsync('await __natlang_run(__natlang_source, globals())', { globals: namespace }); }
       // A last line written without a newline (sys.stdout.write, print(..., end='')) belongs to this cell's output,
@@ -130,9 +156,10 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
     }
     catch (error) {
       if (String(error).includes('KeyboardInterrupt')) throw new Error(`Python timed out after ${timeoutMs} ms`);
+      if (capped) throw new Error(memoryLimitMessage('python', 'python run', limitMb));
       throw error;
     }
-    finally { namespace.destroy(); }
+    finally { growthCap = undefined; namespace.destroy(); }
     const converted = fromPython(value);
     if (converted && typeof converted === 'object' && (converted as Record<string, unknown>).__natlang_timeout__)
       throw new Error(`Python timed out after ${timeoutMs} ms`);

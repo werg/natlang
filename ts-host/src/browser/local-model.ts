@@ -6,6 +6,11 @@ import { perRequestLora } from '../model/lora-scales.js';
 import { nativeStateMessages } from '../model/openai-compatible.js';
 import { coalescingScorer } from '../model/scoring.js';
 import { batchScoreItem, scoresFromBatchResult, type BatchScoreResult } from '../model/decision-scoring.js';
+import { archiveNeuraleseReplyArtifacts, requestNativeStateIds, restoreNativeStates,
+  type NativeStateEngineStore } from '../model/neuralese-server.js';
+import { decodeNativeState, encodeNativeStateWire, type NativeArtifactSource, type NativeStateArtifact,
+  type NeuraleseStore } from '../native/neuralese-store.js';
+import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 import { opfsWarmStateStore, pageWarmOpenings, warmTag, type PageWarmOpening, type WarmSlotEngine, type WarmStateStore } from './warm-openings.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
@@ -30,12 +35,19 @@ export type BrowserInferenceEngine = {
    * `/v1/natlang/score`, in the vendored wllama). */
   createNatlangScore?(request: { items: Record<string, unknown>[] }): Promise<{ results: ({ log_probs: number[]; tokens: number[] } | { error: string })[] }>;
   getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
-  getModelMetadata?(): Record<string, unknown>;
+  /** The GGUF's metadata as strings (`meta`), e.g. `natlang.identity.*`. */
+  getModelMetadata?(): { meta: Record<string, string> };
   getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
+  /** The engine's native-state store after load (llama.cpp fork PUT/GET /v1/neuralese/native-states/:id): a state's
+   * bytes (natlang's store-file format) are verified, kept as received and registered; produced states read back as
+   * stored. */
+  putNativeState?(state: Uint8Array | Blob, id?: string): Promise<{ mode: string; meta: Record<string, unknown> }>;
+  getNativeState?(id: string): Promise<{ state: Uint8Array; meta: Record<string, unknown> }>;
   /** Feature detection of the vendored wllama build (ts-host/vendor/wllama). `slotState`: the slot save/restore calls of
-   * `WarmSlotEngine` (browser/warm-openings.ts) and `id_slot` on completions. */
+   * `WarmSlotEngine` (browser/warm-openings.ts) and `id_slot` on completions; `nativeStateStore`: `putNativeState` and
+   * `getNativeState`. */
   readonly capabilities?: { readonly loraBlobs?: boolean; readonly nativeStates?: boolean; readonly natlangScore?: boolean;
-    readonly slotState?: boolean };
+    readonly slotState?: boolean; readonly nativeStateStore?: boolean };
   exit(): Promise<void>;
 } & Partial<WarmSlotEngine>;
 
@@ -52,9 +64,14 @@ export type BrowserModelLoadOptions = {
   /** Tuned LoRA adapters (a release's GGUF exports, `loadBrowserRelease`), loaded at scale 0 with the model; each
    * request applies only its own call's stack (ts-host/vendor/wllama). */
   loraAdapters?: readonly { readonly id: string; readonly blob: Blob }[];
-  /** Tuned soft instruction/skill states (a release's `.state.gguf` exports, `loadBrowserRelease`): exact native state
+  /** Tuned soft instruction/skill states (a release's `states/<id>.nzs` store files as Blobs, `loadBrowserRelease`): exact native state
    * spans the model consumes wherever a message carries the state's sentinel (ts-host/vendor/wllama). */
   nativeStates?: readonly { readonly id: string; readonly blob: Blob }[];
+  /** The page's native-state archive (the runtime's `neuralese.store`, e.g. `openBrowserNeuraleseStore()`): states the
+   * model produces are archived there after each turn as the engine stored them, and states a request names that the
+   * engine does not hold are put into it from there, as `neuraleseServerModelTurn` does with a server. Needs an
+   * engine with `capabilities.nativeStateStore` and a model that declares a native identity (a natlang GGUF export). */
+  nativeStateStore?: NeuraleseStore;
   /** The model file's SHA-256 (a catalog entry's `sha256`). Warm openings are kept across reloads only for a model
    * known by its content. */
   modelSha256?: string;
@@ -155,8 +172,10 @@ export class BrowserLocalModel {
   private turnQueue: Promise<void> = Promise.resolve();
   /** Loaded tuned adapters: artifact ID -> adapter index (fixed for the loaded model). */
   private readonly loraIndex = new Map<string, number>();
-  /** Loaded native state spans by ID (fixed for the loaded model). */
+  /** Native states the engine holds by ID: loaded with the model, put or produced since. */
   private readonly nativeStates = new Set<string>();
+  /** The page's native-state archive of this load (`BrowserModelLoadOptions.nativeStateStore`). */
+  private nativeStateStore: NeuraleseStore | undefined;
   lastLoadMs: number | null = null;
   lastTurn: { durationMs: number; promptTokens: number | null; cachedTokens: number | null;
     completionTokens: number | null; toolSchemaBytes: number; retries: number; tokensPerSecond: number | null } | null = null;
@@ -216,6 +235,9 @@ export class BrowserLocalModel {
     const started = performance.now();
     this.loraIndex.clear();
     this.nativeStates.clear();
+    if (options.nativeStateStore && !(this.engine.capabilities?.nativeStateStore && this.engine.putNativeState && this.engine.getNativeState))
+      throw new Error('weights-unavailable: this wllama build cannot store native states after load; use the vendored build (ts-host/vendor/wllama)');
+    this.nativeStateStore = options.nativeStateStore;
     await action(params);
     for (const adapter of options.loraAdapters ?? []) this.loraIndex.set(adapter.id, this.loraIndex.size);
     for (const state of options.nativeStates ?? []) this.nativeStates.add(state.id);
@@ -261,6 +283,44 @@ export class BrowserLocalModel {
     await this.load(options, params => this.engine.loadModel(files, params));
   }
 
+  /** The engine's store as the shared restore/archive mechanism sees a server's (model/neuralese-server.ts). */
+  private readonly engineStates: NativeStateEngineStore & NativeArtifactSource = {
+    hasNativeState: async id => this.nativeStates.has(id),
+    putNativeStateWire: async (wire, id) => {
+      const { meta } = await this.engine.putNativeState!(wire, id ?? '');
+      const stored = String(meta.id);
+      this.nativeStates.add(stored);
+      return decodeNativeState(wire, stored);   // verified by the engine: its views, not a copy
+    },
+    putNativeState: async (artifact: Omit<NativeStateArtifact, 'id'>) => {
+      const { id, wire } = encodeNativeStateWire(artifact);
+      return this.engineStates.putNativeStateWire(wire, id);
+    },
+    getNativeStateWire: async id => (await this.engine.getNativeState!(id)).state,
+  };
+
+  /** Put the states a request names that the engine does not hold, from the page's archive. */
+  private async restoreStates(messages: readonly unknown[]): Promise<void> {
+    const ids = requestNativeStateIds(messages);
+    if (ids.length && this.nativeStateStore) await restoreNativeStates(this.engineStates, this.nativeStateStore, ids, this.nativeStates);
+  }
+
+  /**
+   * Runtime settings for native values on this model (`NatlangRuntime({ neuralese })`): the page's archive, the dialect
+   * and the model's native identity as llama-server declares them (GET /v1/neuralese), read from the GGUF's
+   * `natlang.identity.*`. Undefined for a model without one or a load without `nativeStateStore`.
+   */
+  neuraleseRuntime(): NeuraleseRuntimeOptions | undefined {
+    const store = this.nativeStateStore, metadata = this.loaded ? this.engine.getModelMetadata?.().meta : undefined;
+    const identity = Object.fromEntries(['architecture', 'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256']
+      .map(key => [key, metadata?.[`natlang.identity.${key}`]]));
+    if (!store || Object.values(identity).some(value => typeof value !== 'string' || !value)) return undefined;
+    return { store, dialect: `native-state/${identity.architecture}`, nativeStateConsumer: {
+      architecture: identity.architecture as string, checkpoint_sha256: identity.checkpoint_sha256 as string,
+      tokenizer_fingerprint: identity.tokenizer_fingerprint as string, embedding_weight_sha256: identity.embedding_weight_sha256 as string,
+      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization'] } };
+  }
+
   /** Run `work` after the turns and readouts queued before it (the in-page engine serves one request at a time). */
   private async queued<T>(work: () => Promise<T>): Promise<T> {
     const previous = this.turnQueue;
@@ -278,9 +338,10 @@ export class BrowserLocalModel {
       throw new Error('decision-unsupported: this wllama build cannot score replies; use the vendored build (ts-host/vendor/wllama)');
     // The same item and result codec as the managed server's endpoint (model/decision-scoring.ts), so every field the
     // fork's /v1/natlang/score accepts or returns (cache_messages, adapters, prompt_tokens, ...) reaches the page too.
-    const body = { items: items.map(item => batchScoreItem(
-      { ...item, messages: chatMessages(nativeStateMessages(item.messages, this.nativeStates)) }, item.tuned)) };
     const response = await this.queued(async () => {
+      await this.restoreStates(items.map(item => item.messages));
+      const body = { items: items.map(item => batchScoreItem(
+        { ...item, messages: chatMessages(nativeStateMessages(item.messages, this.nativeStates)) }, item.tuned)) };
       for (const item of body.items) await this.warm?.before(item);
       signal?.throwIfAborted();
       return this.engine.createNatlangScore!(body);
@@ -317,6 +378,7 @@ export class BrowserLocalModel {
     return this.queued(async () => {
       const toolSchemaBytes = new TextEncoder().encode(JSON.stringify(modelTools(request.tools))).length;
       let stats: ChatTurnStats | undefined;
+      await this.restoreStates(request.messages);
       const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine, tuned, this.nativeStates,
         this.warm ? request => this.warm!.before(request) : undefined),
         { onTurn: value => { stats = value; } })(request, signal);
@@ -324,6 +386,11 @@ export class BrowserLocalModel {
         this.lastTurn = { ...stats, toolSchemaBytes, tokensPerSecond: stats.completionTokens !== null && stats.durationMs > 0 ?
           Math.round(stats.completionTokens * 1000 / stats.durationMs * 10) / 10 : null };
         this.turnHistory.push(this.lastTurn);
+      }
+      // the states this turn produced (and any it names), archived as the engine stored them
+      if (this.nativeStateStore && turn.raw_response) {
+        const { native } = await archiveNeuraleseReplyArtifacts(turn.raw_response, this.engineStates, this.nativeStateStore);
+        for (const id of native) this.nativeStates.add(id);
       }
       return turn;
     });

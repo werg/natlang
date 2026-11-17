@@ -13,7 +13,7 @@ import { controlledProviderProfile, type ProviderRequestControls } from './provi
 import { createHash, randomUUID } from 'node:crypto';
 import { acquireJournalSpool, type JournalSpool } from './journal-spool.js';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable, underlyingError } from './retry.js';
+import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable, providerAuthFailure, underlyingError } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -1133,6 +1133,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
               entry.status = 'failed';
               await persistProviderExchange(request, undefined, role, requestOrdinal, error);
               const remembered = rememberProviderDeadline(error);
+              // Refused credentials end the request as a provider failure (no model verdict) without a pointless resend.
+              if (remembered === error && !actionSignal?.aborted && providerAuthFailure(error))
+                throw new ProviderRequestRetriesExhaustedError(retryIndex, error);
               if (remembered !== error || actionSignal?.aborted || !providerRequestRetryable(error)) throw remembered;
               if (retryIndex >= retryLimit) {
                 if (retryLimit > 0) throw new ProviderRequestRetriesExhaustedError(retryIndex, error);

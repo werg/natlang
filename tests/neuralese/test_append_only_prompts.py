@@ -108,3 +108,17 @@ def test_samples_sharing_a_prompt_each_keep_their_own_reply():
     h.store([C], [A, B, C, END])                  # the same reply again is one entry, now the newest
     h.store([C], [C, END])
     assert [list(reply[0]) for reply in h.entries[(1, next(iter(h.entries))[1])]] == [[A, B, C, END], [C, END]]
+
+
+def test_the_lru_is_bounded_in_bytes_keeping_the_newest():
+    """A spliced prompt keeps the whole prompt it sent; entries alone did not bound that (Pop front: +40 MB an hour)."""
+    h = TokenHistory(ByteTokenizer(['a', 'b', 'ab', 'c', 'abc', ' a'], ['<|im_end|>']), max_bytes=100)
+    for i in range(8):
+        h.store([C] * (i + 1), [A] * 10)          # 40 bytes of ids each
+    assert len(h.entries) == 2 and h.bytes == 80 and h.bytes == sum(h._size(r) for r in h.entries.values())
+    assert h.splice([C] * 8 + [A] * 10 + [B]) == [C] * 8 + [A] * 10 + [B]    # the newest is kept and found
+    assert h.stats['append_only_continuations'] == 1
+    h.store([C], [A, B, C, END])
+    call1 = h.splice([C, ABC, END, SPACE_A])      # a splice stores the sent prompt beside the reply
+    h.store(call1, [A] * 5)
+    assert h.bytes == sum(h._size(r) for r in h.entries.values()) <= 100

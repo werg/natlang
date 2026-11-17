@@ -50,6 +50,17 @@ export function transportFailure(error: unknown, scope: 'case' | 'request' = 'ca
 export function providerRequestRetryable(error: unknown): boolean {
   return transportFailure(error, 'request');
 }
+/** The provider refused the caller's credentials (an expired or missing subscription OAuth token, a failed token refresh,
+ * HTTP 401/403, an invalid key). Resending cannot help, but the model gave no verdict either: the collector ends the
+ * request as a provider failure (`ProviderRequestRetriesExhaustedError`), never as a model-caused one. */
+export function providerAuthFailure(error: unknown): boolean {
+  error = underlyingError(error);
+  const value = details(error);
+  const code = String(value.providerCode ?? value.provider_code ?? value.code ?? '').toUpperCase();
+  return [401, 403].includes(Number(value.status ?? value.statusCode)) ||
+    ['INVALID_API_KEY', 'UNAUTHORIZED', 'AUTHENTICATION_ERROR', 'TOKEN_EXPIRED'].includes(code) ||
+    /oauth refresh failed|has no credentials|invalid api key|unauthori[sz]ed|authentication error|token (?:has )?expired|\b(?:http|status)\D*40[13]\b/.test(text(error));
+}
 /** Headers may be unavailable after a provider SDK flattens its error. Use only supplied delays. */
 export function retryAfterMs(error: unknown, now = Date.now()): number {
   error = underlyingError(error);

@@ -8,6 +8,7 @@ import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type E
   type EvalResult, type HostEvent } from './evaluator.js';
 import { compileEval, evalRealmBody } from './eval-compile.js';
 import { isNeuraleseRef, neuraleseDisplayText } from './neuralese.js';
+import { MEMORY_CHECK, instrumentMemoryChecks, memoryGuard, segmentGuard, type HeapProbe } from './eval-memory.js';
 
 /** Where compiled eval code runs: a JavaScript realm's global environment. */
 export interface Realm {
@@ -69,6 +70,11 @@ export type RealmEnvironmentOptions = {
   realm?: () => Realm;
   /** Synchronous run time allowed per eval where the realm can interrupt; unlimited unless set. */
   timeoutMs?: number;
+  /**
+   * The memory bound of each eval (native/eval-memory.ts): the heap growth in MB an eval may keep, read through the
+   * platform's `probe`. Absent or a limit of 0: unbounded (a platform that cannot read its heap).
+   */
+  memory?: { limitMb: number; probe: HeapProbe };
   scopeCapabilities?: { allowModules: boolean; allowNetwork: boolean };
   observe?: (event: HostEvent) => void;
   /** Restores the natlang task after each `await` in eval code (platforms whose context store cannot follow promises). */
@@ -99,7 +105,12 @@ export class RealmEnvironment implements EvalEnvironment {
     this.timeoutMs = options.timeoutMs;
     this.scopeCapabilities = options.scopeCapabilities ?? { allowModules: false, allowNetwork: false };
     if (this.timeoutMs !== undefined && (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1)) throw new RangeError('timeoutMs must be positive');
+    const limit = options.memory?.limitMb;
+    if (limit !== undefined && !(Number.isFinite(limit) && limit >= 0)) throw new RangeError('memory limitMb must be a non-negative number');
   }
+
+  /** The eval memory bound in MB, or undefined when evals are unbounded. */
+  get memoryLimitMb(): number | undefined { return this.options.memory?.limitMb || undefined; }
 
   fork(): EvalEnvironment {
     if (!this.options.fork) throw new Error(`${this.authority} cannot fork`);
@@ -145,8 +156,9 @@ export class RealmEnvironment implements EvalEnvironment {
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
     const imports = asyncBody ? this.importer() : undefined;
+    const memory = this.memoryLimitMb ? this.options.memory : undefined;
     const compiled = compileEval(request.code, { body: request.body, asyncBody, imports: imports?.validate.bind(imports),
-      restoreAfterAwait: !!this.options.bindAwait });
+      restoreAfterAwait: !!this.options.bindAwait, memoryChecks: !!memory });
     const realm = this.realm();
     // A Neuralese value prints as one plain line, at any depth, never as its reference JSON.
     const write = consoleWriter(logs, value => {
@@ -160,7 +172,8 @@ export class RealmEnvironment implements EvalEnvironment {
     const bound = { self: snapshot(request.scope), __live: request.live ?? {}, __natlang_import: (specifier: string) => {
       if (!imports) throw new Error(`cannot import ${specifier}: eval has no package imports here`);
       return imports.load(specifier);
-    }, console: logger, ...(this.options.bindAwait ? { __natlang_bindAwait: this.options.bindAwait } : {}), ...this.extraBindings() };
+    }, console: logger, ...(this.options.bindAwait ? { __natlang_bindAwait: this.options.bindAwait } : {}),
+      ...(memory ? { [MEMORY_CHECK]: memoryGuard(memory.limitMb, memory.probe) } : {}), ...this.extraBindings() };
     return realm.call(evalRealmBody(compiled, request.body), Object.keys(bound), Object.values(bound),
       { timeoutMs: request.timeoutMs ?? this.timeoutMs });
   }
@@ -187,6 +200,9 @@ export class RealmEnvironment implements EvalEnvironment {
   /** Evaluate a callable-folder module body; bindings are passed by reference. */
   evaluateModule(code: string, bindings: Record<string, unknown>): unknown {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
+    // Module functions run for many callers at unknown times: each synchronous run of them is bounded (segmentGuard).
+    const memory = this.memoryLimitMb ? this.options.memory : undefined;
+    if (memory) { code = instrumentMemoryChecks(code, MEMORY_CHECK, 'js'); bindings = { ...bindings, [MEMORY_CHECK]: segmentGuard(memory.limitMb, memory.probe) }; }
     return this.moduleRealm().call(code, Object.keys(bindings), Object.values(bindings));
   }
 

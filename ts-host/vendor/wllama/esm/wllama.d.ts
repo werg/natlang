@@ -142,12 +142,13 @@ export interface WllamaCompat {
 export declare class Wllama {
     cacheManager: CacheManager;
     modelManager: ModelManager;
-    /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs, `nativeStates` means `native_states` loads natlang native state spans, `natlangScore` means `createNatlangScore` is available, `slotState` means `saveSlot` / `restoreSlot` / `eraseSlot` / `applyTemplate` are available and completions accept `id_slot`. */
+    /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs, `nativeStates` means `native_states` loads natlang native state spans, `natlangScore` means `createNatlangScore` is available, `slotState` means `saveSlot` / `restoreSlot` / `eraseSlot` / `applyTemplate` are available and completions accept `id_slot`, `nativeStateStore` means `putNativeState` / `getNativeState` are available. */
     readonly capabilities: {
         readonly loraBlobs: true;
         readonly nativeStates: true;
         readonly natlangScore: true;
         readonly slotState: true;
+        readonly nativeStateStore: true;
     };
     private slotFileId;
     private compat;
@@ -381,6 +382,28 @@ export declare class Wllama {
         n_erased: number;
     }>;
     private slotAction;
+    /**
+     * Store a natlang native state (natlang's store-file format, natlang.native-state/1) after the model is loaded, as the
+     * server's PUT /v1/neuralese/native-states/:id does: the bytes are verified (layout, finite values, content ID), kept as
+     * received and, for a state of this model's identity, registered so prompts consume it exactly.
+     * @param state The state's bytes
+     * @param id The ID the state must have (its content ID); omit to accept any
+     * @returns The consumption mode and the state's metadata ({id, ...metadata})
+     */
+    putNativeState(state: Uint8Array | Blob, id?: string): Promise<{
+        mode: string;
+        meta: Record<string, unknown>;
+    }>;
+    /**
+     * Read a stored native state (one this engine produced, or one put or loaded), as the server's
+     * GET /v1/neuralese/native-states/:id does: its bytes exactly as stored, natlang's store-file format.
+     * @param id The state's ID
+     * @returns The state's bytes and its metadata ({id, ...metadata})
+     */
+    getNativeState(id: string): Promise<{
+        state: Uint8Array;
+        meta: Record<string, unknown>;
+    }>;
     /**
      * Make chat completion for a given chat messages.
      * @param options OAI-compatible chat completion options

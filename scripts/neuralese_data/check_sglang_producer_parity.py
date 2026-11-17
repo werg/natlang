@@ -29,6 +29,11 @@ SEED = 20261030
 CLOSE_BIAS = (10.0, 14.0, 18.0, 22.0)  # an untrained close row is far below; one of these lands mid-range
 
 
+
+# The fork writes a capture as a native-state file of the metadata it is given (natlang_capture.native_state); a
+# probe reads only the tensors.
+PROBE_STATE = {'schema': 'neuralese.native-state/1', 'text': 'parity probe capture (never stored)'}
+
 def producing_mask(ids, opening, closing):
     inside, mask = False, []
     for token in ids:
@@ -127,7 +132,8 @@ def sglang_phase(a):
                 os.unlink(path)
             eng.generate(input_ids=ids[:max(hi, lo)], return_logprob=True, logprob_start_len=lo - 1,
                          sampling_params={'temperature': 0.0, 'max_new_tokens': 1,
-                                          'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi}}})
+                                          'custom_params': {'natlang_capture': {'path': path, 'start': lo, 'end': hi,
+                                                                                'native_state': PROBE_STATE}}})
     decode = []
     prompts = [case['prompt'] for case in cases['decode']]
     outs = [] if a.import_only else eng.generate(input_ids=prompts, sampling_params=[{'temperature': 1.0, 'max_new_tokens': a.gen,
@@ -428,7 +434,10 @@ if __name__ == '__main__':
         python = fork['python']
         cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
         path = os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')])
+        # The fork imports natlang_neuralese (capture files: serve.store; native projection: model.shared_state), as
+        # serve_native_checkpoint.py's backend path has it: natlang first, then the fork worktree under test.
+        pythonpath = os.pathsep.join(filter(None, [str(ROOT / 'training/neuralese'), a.sglang_pythonpath]))
         subprocess.run([python, __file__, '--phase', 'sglang', '--work', a.work, *argv], check=True,
-                       env={**os.environ, 'PYTHONPATH': a.sglang_pythonpath, 'PATH': path, 'CUDA_HOME': cuda})
+                       env={**os.environ, 'PYTHONPATH': pythonpath, 'PATH': path, 'CUDA_HOME': cuda})
     if a.phase in ('all', 'reference'):
         sys.exit(1 if reference_phase(a)['failures'] else 0)

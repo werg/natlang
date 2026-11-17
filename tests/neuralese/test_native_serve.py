@@ -471,3 +471,37 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         server.server_close()
         server_thread.join(timeout=5)
         engine.stop()
+
+
+def test_each_http_request_runs_on_a_thread_that_ends_with_it():
+    """torch's CPU allocator (mimalloc on aarch64) keeps an idle thread's freed tensor pages, so a keep-alive connection's
+    thread must not run the requests: every request (several on one connection here) gets its own thread, which has ended
+    when the next request on that connection is read."""
+    import http.client
+
+    class Engine:
+        seen = []
+
+        def progress_metrics(self):
+            self.seen.append(threading.current_thread())
+            return {'requests': len(self.seen)}
+    engine = Engine()
+    server = serve(engine, '127.0.0.1', 0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        connection = http.client.HTTPConnection(*server.server_address, timeout=10)
+        for count in (1, 2, 3):
+            connection.request('GET', '/metrics')
+            response = connection.getresponse()
+            assert response.read() == f'requests {count}\n'.encode() and response.status == 200
+        connection.request('GET', '/nowhere')                         # an error answer on the same connection
+        response = connection.getresponse()
+        assert response.status == 404 and json.loads(response.read())['error']['code'] == 'not-found'
+        connection.close()
+        assert len(set(engine.seen)) == 3 and threading.main_thread() not in engine.seen
+        for thread in engine.seen:
+            thread.join(timeout=10)
+            assert not thread.is_alive() and thread.name == 'natlang-http-request'
+    finally:
+        server.shutdown()
+        server.server_close()

@@ -5,7 +5,6 @@ import pytest
 
 from natlang_neuralese.export.native_gguf import ARCHITECTURES, convert_hf, converter_registers
 from natlang_neuralese.tune import TuneMathError
-from natlang_neuralese.tune.soft_export import STATE_ARCHITECTURES
 from natlang_neuralese.tune.targets import classify, module_map, student_family
 
 LFM3_NAMES = [f'port.hf.model.layers.{layer}.{name}.weight' for layer, names in (
@@ -44,4 +43,4 @@ def test_converter_coverage_is_checked_before_converting(tmp_path):
 
 
 def test_lfm3_is_exportable_and_its_states_import():
-    assert 'lfm3' in ARCHITECTURES and 'lfm3' in STATE_ARCHITECTURES
+    assert 'lfm3' in ARCHITECTURES

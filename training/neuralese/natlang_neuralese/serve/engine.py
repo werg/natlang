@@ -155,6 +155,9 @@ class Sequence:
     # A non-native sampler of the same weights (serve/sglang_actor.py) binds its export in the capture
     # (rl.actors ``actor_export``); the learner then guards the engine mismatch instead of the exact native gate.
     native_actor_export: dict | None = None
+    # The policy the trainer loaded into that sampler in place (sglang_actor.rebind_in_place: policy id, version, weights);
+    # ``policy`` keeps naming the native engine's start checkpoint, which in-place updates do not change.
+    native_served_policy: dict | None = None
     cuda_memory_start_allocated_bytes: int | None = None
     cuda_memory_measurement_scope: str | None = None
 
@@ -395,7 +398,7 @@ class Engine:
             if kind == 'tokens':
                 positions += len(value)
             else:
-                record = self.store.get_native_state(value['id'] if isinstance(value,dict) else value)
+                record = self.stored_native_state(value['id'] if isinstance(value,dict) else value)
                 if record is None:
                     raise RequestError('neuralese-unknown-native-state', f'{value} is not in this server store; restore it first')
                 positions += 2 + (len(record.block.token_ids) if self._native_exact(record.block)
@@ -574,6 +577,14 @@ class Engine:
                                    **({'state_derivation':block.derivation} if block.derivation is not None else {}),
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
+
+    def stored_native_state(self, block_id):
+        """A stored native state for its identity, text and token ids: the verified store file (`NativeStateFile`, no
+        payload decoded) when the store keeps files, else the in-memory record. Code that computes on the tensors uses
+        `store.get_native_state`."""
+        files = getattr(self.store, 'native_state_file', None)
+        found = files(block_id) if files is not None else None
+        return found if found is not None else self.store.get_native_state(block_id)
 
     @staticmethod
     def _native_block_identity(block):
@@ -1016,7 +1027,7 @@ class Engine:
                 validate_provider_teacher_source(source, forced['assistant'], opening, tools, forced.get('native_text_spans'),
                     source_opening=forced.get('source_opening'), native_text_bindings=forced.get('native_text_bindings'))
                 for binding in forced.get('native_text_bindings') or []:
-                    native = self.store.get_native_state(binding['native_block_id'])
+                    native = self.stored_native_state(binding['native_block_id'])
                     if native is None:
                         raise ValueError('provider teacher native encoder state is not in this checkpoint store')
                     block = native.block
@@ -1208,7 +1219,7 @@ class Engine:
             raise RequestError("neuralese-native-state-unavailable", "native body initialization requires shared-state serving")
         if not isinstance(placeholder, str) or not placeholder.startswith("nzs1_") or not isinstance(text, str):
             raise RequestError("neuralese-native-state-text", "native body initialization needs a native placeholder and text")
-        if self.store.get_native_state(placeholder) is None:
+        if self.stored_native_state(placeholder) is None:
             raise RequestError("neuralese-unknown-native-state", f"{placeholder} is not in this server's store; write it first")
         marker = f"\ue000NATIVE_BODY_{hashlib.sha256((placeholder + text).encode()).hexdigest()}\ue001"
         if placeholder_occurrence is not None and (type(placeholder_occurrence) is not int or placeholder_occurrence < 0):
@@ -1631,6 +1642,7 @@ class Engine:
                 **({'privileged': seq.native_guidance_receipt} if seq.native_guidance_receipt is not None else {}),
                 **({'guidance_policy': seq.request.guidance_policy} if seq.request.guidance_policy is not None else {}),
                 **({'actor_export': dict(seq.native_actor_export)} if seq.native_actor_export else {}),
+                **({'served_policy': dict(seq.native_served_policy)} if seq.native_served_policy else {}),
                 "prompt": seq.native_rl_prompt, "samples": seq.rl_samples,
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,

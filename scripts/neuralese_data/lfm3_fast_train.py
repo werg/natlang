@@ -289,7 +289,7 @@ def _rope_tables(model, pos, dtype):
 def import_tensors(model, spans, device=None):
     """Imported native state of one (packed) sequence for ``hidden``: ``spans`` [(row start, NativeStateBlock)] ->
     {'rows': int64 (n,), 'layers': [per layer (k, v) for attention, (bx,) for conv, in the model's dtype]}, or None when
-    nothing is imported. The block's tensors are what the SGLang actor imports (``sglang_actor._sglang_import_file``)."""
+    nothing is imported. The block's file is what the SGLang actor imports (``sglang_actor._sglang_import``)."""
     layers = model.model.layers
     device = device or model.model.embed_tokens.weight.device
     dtype = model.model.embed_tokens.weight.dtype
@@ -562,13 +562,13 @@ def _nucleus_cut_lse(lf, lse, top_p, top_k, wide_k=None):
     128k sort costs ~10x a top-k and a masked full-vocab log-sum-exp ~2x (GB10, 2026-11-13), so both run only on rows
     that need them."""
     vocab = lf.shape[-1]
-    values = lf.topk(min(top_k, vocab), dim=-1).values
+    values = lf.topk(min(top_k, vocab), dim=-1).values.float()   # bf16 logits: the same values, exact in fp32
     cut = _cut_of(values, lse, top_p)
     inside = torch.logsumexp(values.masked_fill(values < cut[:, None], float('-inf')), dim=-1)
     if values.shape[-1] < vocab:
         wide = (cut <= values[:, -1]).nonzero()[:, 0]       # the nucleus (or a tie at its edge) may reach past top_k
         if wide.numel():
-            rows, row_lse = lf[wide], lse[wide]
+            rows, row_lse = lf[wide].float(), lse[wide]
             more = rows.topk(min(wide_k or NUCLEUS_WIDE_K, vocab), dim=-1).values
             wide_cut = _cut_of(more, row_lse, top_p)
             if more.shape[-1] < vocab:
@@ -585,12 +585,16 @@ def _nucleus_cut(lf, lse, top_p, top_k):
     return _nucleus_cut_lse(lf, lse, top_p, top_k)[0]
 
 
-def _nucleus_logit_grad(lf, target, lse, set_lse, cut, grad, grad_nucleus):
-    """d loss / d logits of one chunk: grad * (softmax - onehot) + grad_nucleus * (softmax over the set - onehot)."""
+def _nucleus_logit_grad(logits, target, lse, set_lse, cut, grad, grad_nucleus):
+    """d loss / d logits of one chunk: grad * (softmax - onehot) + grad_nucleus * (softmax over the set - onehot), in fp32
+    from the upcast logits and returned in the logits' dtype. Upcast and downcast are inside the (compiled) kernel: done
+    outside, a chunk's fp32 logits and fp32 gradient (1 GB each at 2048 rows of a 128k vocabulary) were both live at the
+    learner's activation peak (grpo-v2-run2, 2026-11-15). The values are the same: both casts are exact or round once."""
+    lf = logits.float()
     onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[:, None]
     kept = (lf >= cut[:, None]) | onehot
     d = torch.exp(lf - lse[:, None]) * grad[:, None] + torch.where(kept, torch.exp(lf - set_lse[:, None]), 0.) * grad_nucleus[:, None]
-    return d - onehot * (grad + grad_nucleus)[:, None]
+    return (d - onehot * (grad + grad_nucleus)[:, None]).to(logits.dtype)
 
 
 _NUCLEUS_GRAD = {}
@@ -617,15 +621,19 @@ class _LinearNLLNucleus(torch.autograd.Function):
         rows = h.shape[0]
         nll, lse, set_lse, cut = (torch.empty(rows, dtype=torch.float32, device=h.device) for _ in range(4))
         outside = torch.empty(rows, dtype=torch.bool, device=h.device)
+        forward_ce = _ce('forward') if h.is_cuda else _ce_forward
         for start in range(0, rows, chunk):
             stop = min(rows, start + chunk)
-            lf = F.linear(h[start:stop], weight).float()
-            own = lf.gather(-1, target[start:stop, None])[:, 0]
-            lse[start:stop] = torch.logsumexp(lf, dim=-1)
-            cut[start:stop], inside = _nucleus_cut_lse(lf, lse[start:stop], top_p, top_k)
+            # The log-sum-exp and NLL are linear_nll's own kernel on the bf16 logits (the KL reference pass computes its
+            # log-probabilities with it, so at equal weights the two agree bit for bit); the nucleus reads the bf16 logits
+            # (their fp32 values are exact). No fp32 copy of the chunk's logits is written: that copy and the eager
+            # passes over it cost ~3x the head matmul (GB10, 2026-11-17).
+            logits = F.linear(h[start:stop], weight)
+            own = logits.gather(-1, target[start:stop, None])[:, 0].float()
+            lse[start:stop], nll[start:stop] = forward_ce(logits, target[start:stop])
+            cut[start:stop], inside = _nucleus_cut_lse(logits, lse[start:stop], top_p, top_k)
             outside[start:stop] = own < cut[start:stop]
             set_lse[start:stop] = torch.where(outside[start:stop], torch.logaddexp(inside, own), inside)
-            nll[start:stop] = lse[start:stop] - own
         ctx.save_for_backward(h, weight, target, lse, set_lse, cut)
         ctx.chunk = chunk
         ctx.mark_non_differentiable(outside)
@@ -643,10 +651,9 @@ class _LinearNLLNucleus(torch.autograd.Function):
         for start in range(0, h.shape[0], ctx.chunk):
             stop = min(h.shape[0], start + ctx.chunk)
             rows = h[start:stop]
-            lf = F.linear(rows, weight).float()
-            d = _nucleus_grad_kernel(lf.device.type)(lf, target[start:stop], lse[start:stop], set_lse[start:stop],
-                                                     cut[start:stop], grad[start:stop], grad_nucleus[start:stop])
-            d = d.to(rows.dtype)
+            d = _nucleus_grad_kernel(rows.device.type)(F.linear(rows, weight), target[start:stop], lse[start:stop],
+                                                       set_lse[start:stop], cut[start:stop], grad[start:stop],
+                                                       grad_nucleus[start:stop])
             if need_h:
                 dh[start:stop] = d @ weight
             if need_w:

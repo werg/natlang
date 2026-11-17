@@ -11,6 +11,10 @@ top-k, and produce spans: the fork applies the producer adapter inside a span (t
 the front follows the native marker protocol token by token (`_sglang_token`, the native engine's decode step) and,
 when a span closes, has SGLang recompute the span with a capture request (`custom_params.natlang_capture`: pre-RoPE
 keys, values and conv inputs of the span positions) that becomes the same `NativeStateBlock` the native engine stores.
+Native state crosses between the front and the fork only as files of the store's own format: the fork writes a
+capture as a native-state file (`serve.store.write_native_state_file`, the front's metadata), the store adopts that
+file by renaming it in after verifying it from the file, and an import hands the fork the stored file's path. The front
+never decodes a state's tensors.
 No marker is banned when the export's `serving.banned_token_ids` is empty (the native law); protocol violations are
 the native engine's errors and recoverable failures. Streamed requests stream text and native-state deltas. Every
 other request (imported native state, templated writes/decodes, guided generation, forced teacher replay, native
@@ -29,7 +33,7 @@ import time
 import uuid
 import urllib.error
 import urllib.request
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future
 
 import numpy as np
 
@@ -80,7 +84,6 @@ class SglangEngine(Engine):
     native identity) the first time a native turn or endpoint needs it."""
 
     sglang_url: str = ''
-    sglang_workers: int = 512
 
     @property
     def shared_model(self):
@@ -155,10 +158,10 @@ class SglangEngine(Engine):
             self.__dict__['_native_training_state'] = _state.get('training') or _state.get('shared_training') or {}
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
 
-    def bind_sglang(self, url, *, export_manifest, fork, workers=512, adapter_slots=0, adapter_rank=32,
+    def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
-                    warm_openings=None, track_input_end=False):
-        self.sglang_url, self.sglang_workers = url.rstrip('/'), workers
+                    max_running=None, warm_openings=None, track_input_end=False):
+        self.sglang_url = url.rstrip('/')
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
         self.sglang_adapter_slots, self.sglang_adapter_rank = int(adapter_slots), int(adapter_rank)
@@ -214,6 +217,9 @@ class SglangEngine(Engine):
                 'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
                 'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'), 'projection': projection,
                 'overlap_schedule': bool(overlap_schedule), 'kv_cache_dtype': kv_cache_dtype, 'kv_layout': kv_layout,
+                # SGLang's running-sequence cap (and its decode CUDA-graph batch sizes): batch composition changes the
+                # kernels' batch shapes, so held results pair only within one cap (held_eval.ENGINE_FIELDS)
+                'max_running': None if max_running is None else int(max_running),
                 'banned_token_ids': list(self.sglang_banned)}
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self
@@ -238,6 +244,11 @@ class SglangEngine(Engine):
             # New weights: the radix cache holds none of the old policy's openings (update_weights_from_disk flushes it).
             self.__dict__.pop('_sglang_openings', None)
         return dict(binding['in_place_update'])
+
+    def _served_policy(self):
+        """The in-place update this sampler serves (``rebind_in_place``), else None (the start checkpoint)."""
+        update = (getattr(self, 'rl_policy_binding', None) or {}).get('in_place_update')
+        return None if update is None else dict(update)
 
     def progress_metrics(self):
         return {**super().progress_metrics(), 'natlang_sglang_requests_total': self.sglang_requests,
@@ -300,8 +311,7 @@ class SglangEngine(Engine):
         if len(ids) + 2 >= self.context:
             raise RequestError('context-length', 'forced native text and producer markers exceed this model context')
         opened = [int(self.role_tokens.produce_open)] + [int(token) for token in ids]
-        chunk = self._sglang_capture(opened, 1, len(opened))
-        block, record = self._native_store_capture(ids, [chunk], text=text)
+        block, record = self._native_store_capture(ids, [{'ids': opened, 'start': 1, 'end': len(opened)}], text=text)
         meta = record.meta()
         if value_type is not None:
             meta['type'] = value_type
@@ -319,15 +329,37 @@ class SglangEngine(Engine):
         return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
             messages, tools, placeholder, text, **kwargs))
 
-    def start(self):
-        super().start()
-        self._pool = ThreadPoolExecutor(max_workers=self.sglang_workers, thread_name_prefix='sglang-actor')
+    # Each SGLang-served request runs on its own thread, which ends with the request (`_spawn`), never on a long-lived
+    # pool. torch's CPU allocator on aarch64 is mimalloc (linked into libc10), whose heaps are per thread: an idle thread
+    # keeps the pages of the tensors it allocated (native-state imports, produce-span captures) until it allocates again,
+    # including those another thread freed (the store's LRU evicts blocks on other threads). The 512-worker pool had
+    # ~180 workers for 32 open connections half an hour into grpo-v3-run1-r1 (work spreads over every idle worker), and
+    # 85% of the front's host growth was torch's arena (front RSS +0.8 GB/h, 2026-11-16). A thread that exits hands its
+    # heap back: 128 round-robin workers kept > 3.7 GB for a 0.25 GB tensor LRU, a thread per task 0.7 GB.
+    @staticmethod
+    def _spawn(work, name='sglang-actor'):
+        thread = threading.Thread(target=work, name=name, daemon=True)
+        thread.start()
+        return thread
 
-    def stop(self):
-        pool = getattr(self, '_pool', None)
-        if pool is not None:
-            pool.shutdown(wait=False, cancel_futures=True)
-        super().stop()
+    @classmethod
+    def _map_threads(cls, function, items):
+        """`[function(item) for item in items]`, each on its own short-lived thread (`_spawn`)."""
+        results, errors = [None] * len(items), [None] * len(items)
+
+        def run(index, item):
+            try:
+                results[index] = function(item)
+            except BaseException as error:  # re-raised on the caller's thread, as Executor.map does
+                errors[index] = error
+        threads = [cls._spawn(lambda index=index, item=item: run(index, item), 'sglang-actor-map')
+                   for index, item in enumerate(items)]
+        for thread in threads:
+            thread.join()
+        for error in errors:
+            if error is not None:
+                raise error
+        return results
 
     @staticmethod
     def sglang_unsupported(request, plan):
@@ -469,7 +501,7 @@ class SglangEngine(Engine):
                 future.set_result(self._sglang_run(sequence))
             except Exception as error:
                 future.set_exception(error)
-        self._pool.submit(run)
+        self._spawn(run)
         return future
 
     def generate(self, request):
@@ -603,6 +635,7 @@ class SglangEngine(Engine):
     def _sglang_run_bound(self, seq, adapter):
         request = seq.request
         seq.native_actor_export = getattr(self, 'sglang_actor_export', None)
+        seq.native_served_policy = self._served_policy()
         ids = self._sglang_prompt(seq)
         template_prefix, template_suffix = self._native_template_plan(seq)
         open_position = (self._sglang_template_prefix(seq, ids, template_prefix, template_suffix)
@@ -899,6 +932,7 @@ class SglangEngine(Engine):
         from .native_learning import decision_response
         seq = Sequence(request, None, prompt_plan=plan)
         seq.native_actor_export = getattr(self, 'sglang_actor_export', None)  # option scores come from the export
+        seq.native_served_policy = self._served_policy()
         ids = self._sglang_prompt(seq)
         custom = {**({IMPORT_KEY: seq.sglang_imports} if seq.sglang_imports else {}), **({ADAPTER_KEY: adapter} if adapter else {})}
         params = {'temperature': 0.0, 'max_new_tokens': 1, **({'custom_params': custom} if custom else {})}
@@ -917,7 +951,7 @@ class SglangEngine(Engine):
                 raise RequestError('sglang-actor-backend', 'SGLang returned the wrong number of continuation logprobs')
             return float(sum(logps)), len(continuation)
         # The first option puts the shared prompt into the radix cache; the others then score from it in parallel.
-        results = [score(continuations[0]), *self._pool.map(score, continuations[1:])] if continuations else []
+        results = [score(continuations[0]), *self._map_threads(score, continuations[1:])] if continuations else []
         with self._sglang_lock:
             self.sglang_requests += 1
         return decision_response(item, seq, continuations, results)
@@ -1005,13 +1039,12 @@ class SglangEngine(Engine):
         Exact state: consume_open, the block's positions as content-hashed placeholder ids whose KV and conv inputs the
         fork replaces by the stored ones (`custom_params.natlang_import`), consume_close. Imported positions occupy
         cache positions but not own positions. State of another model is re-encoded from its text, as natively."""
-        record = self.store.get_native_state(block_id)
-        if record is None:
+        block = self._sglang_store().native_state_file(block_id)   # header and token ids, never the payload
+        if block is None:
             raise RequestError('neuralese-unknown-native-state', f'{block_id} is not in this server\'s store; PUT it first')
-        block = record.block
         if block.derivation is not None:
             from ..model.native_state_derivation import verify_state_derivation
-            verify_state_derivation(self.store, block)
+            verify_state_derivation(self.store, block.load())
         use = {**({'stop_gradient': True} if stop_gradient else {}),
                **({'source_occurrence': source_occurrence} if source_occurrence else {})}
         derivation = {'state_derivation': block.derivation} if block.derivation is not None else {}
@@ -1030,15 +1063,14 @@ class SglangEngine(Engine):
                 raise RequestError('neuralese-native-state-mode',
                                    'use same-base-adapter-state only for exact-base raw native state exchange')
             try:
-                receipt = adapter_state_input_receipt(self, block, block_id, target_position_start=len(ids),
+                receipt = adapter_state_input_receipt(self, block.load(), block_id, target_position_start=len(ids),
                                                       layout=self._sglang_layout)
             except (ValueError, NativeAdapterError) as error:
                 raise RequestError('neuralese-native-state-mode', str(error)) from error
         if receipt is not None or self._sglang_exact(block):
             count = len(block.token_ids)
             if count:   # an empty state imports nothing; a count-0 span made the scheduler raise and die (2026-11-10)
-                seq.sglang_imports.append({'path': self._sglang_import_file(block_id, block), 'start': len(ids),
-                                           'count': count})
+                seq.sglang_imports.append({'path': str(block.path), 'start': len(ids), 'count': count})
             base = 2 * int(self.sglang_export['producer_embedding']['input_id_offset'])
             import hashlib
             for index in range(count):
@@ -1072,7 +1104,7 @@ class SglangEngine(Engine):
         block.validate()
         if block.architecture != self.sglang_export['architecture']:
             raise ValueError('native state architecture differs from the consumer')
-        if tuple(layer['kind'] for layer in block.layers) != tuple(self.sglang_export['layer_kinds']):
+        if tuple(block.metadata()['layer_kinds']) != tuple(self.sglang_export['layer_kinds']):
             raise ValueError('native state layer kinds disagree with the consumer')
         if bool((block.token_ids >= int(self.sglang_export['producer_embedding']['input_id_offset'])).any()):
             raise ValueError('native state token IDs are outside the target vocabulary')
@@ -1089,57 +1121,32 @@ class SglangEngine(Engine):
         except ValueError:
             return False
 
-    def _sglang_import_file(self, block_id, block):
-        """The block's tensors in the fork's import format (written once per block, content-addressed by its id)."""
-        from safetensors.torch import save_file
-        path = os.path.join(self._sglang_scratch(), f'import-{block_id}.safetensors')
-        if os.path.exists(path):
-            os.utime(path)   # recency for _sglang_prune_imports
-        else:
-            self._sglang_prune_imports()
-            tensors = {'token_ids': block.token_ids.detach().cpu().contiguous()}
-            for index, layer in enumerate(block.layers):
-                for name, value in layer.items():
-                    if name != 'kind':
-                        tensors[f'layers.{index}.{name}'] = value.detach().cpu().contiguous()
-            tmp = f'{path}.{uuid.uuid4().hex}.partial'
-            save_file(tensors, tmp)
-            os.replace(tmp, path)
-        return path
+    def _sglang_store(self):
+        """The block store, which must keep files: the fork reads imported state from the stored files and writes
+        captures into the store's capture directory, from which the store adopts them by rename."""
+        if getattr(self.store, 'directory', None) is None:
+            raise RequestError('neuralese-native-state-unavailable',
+                               'the SGLang front exchanges native state as store files: serve it with --store-dir')
+        return self.store
 
     def _sglang_scratch(self):
+        """Capture files and adapter files for the fork (inside the store, so a capture is adopted by rename)."""
         if self.sglang_capture_dir is None:
-            import tempfile
             directory = getattr(self.store, 'directory', None)
             if directory is not None:
                 self.sglang_capture_dir = os.path.join(directory, 'sglang-capture')
                 os.makedirs(self.sglang_capture_dir, exist_ok=True)
                 # Captures and partial writes left by a front that died mid-request (nothing reads them again).
                 for name in os.listdir(self.sglang_capture_dir):
-                    if name.endswith('.partial') or (name.endswith('.safetensors') and not name.startswith(('import-', 'adapter-'))):
+                    if not name.startswith('adapter-'):
                         try:
                             os.unlink(os.path.join(self.sglang_capture_dir, name))
                         except FileNotFoundError:
                             pass
             else:
+                import tempfile
                 self.sglang_capture_dir = tempfile.mkdtemp(prefix='sglang-capture-')
         return self.sglang_capture_dir
-
-    def _sglang_prune_imports(self, idle_seconds=6 * 3600):
-        """Import files are a cache of store blocks (rewritten on demand): drop those unused for `idle_seconds` (Pop's
-        actor gathered 1.2 GB of them in 17 h). At most every 10 minutes; an episode reuses its imports within its hour."""
-        now = time.time()
-        if now - getattr(self, '_sglang_imports_pruned', 0) < 600:
-            return
-        self._sglang_imports_pruned = now
-        directory = self._sglang_scratch()
-        for name in os.listdir(directory):
-            path = os.path.join(directory, name)
-            try:
-                if name.startswith('import-') and name.endswith('.safetensors') and now - os.stat(path).st_mtime > idle_seconds:
-                    os.unlink(path)
-            except FileNotFoundError:
-                pass
 
     def _sglang_finish_block(self, seq, state):
         """Store the span that just closed: SGLang recomputes it once and exports its native state."""
@@ -1150,46 +1157,66 @@ class SglangEngine(Engine):
         end = start + len(seq.native_capture_ids)
         if end != len(ids) or ids[start:end] != seq.native_capture_ids:
             raise RequestError('sglang-actor-capture', 'produce span positions disagree with the generated tokens')
-        seq.native_capture_chunks = [self._sglang_capture(ids, start, end, state['adapter'], seq.sglang_imports)]
+        # `_native_store_capture` runs the capture once the block's text is known (`_native_finish_block`).
+        seq.native_capture_chunks = [{'ids': ids, 'start': start, 'end': end, 'adapter': state['adapter'],
+                                      'imports': seq.sglang_imports}]
         self._native_finish_block(seq)
         with self._sglang_lock:
             self.sglang_state_writes += 1
         state['run'], state['text'] = len(seq.items), ''
 
-    def _sglang_capture(self, ids, start, end, adapter=None, imports=None):
-        """The native capture chunk (`native_step`'s token_ids/embeddings/positions/layers) of ids[start:end].
+    def _native_store_capture(self, token_ids, chunks, *, text, owner=None):
+        """`Engine._native_store_capture` on SGLang. `chunks` is the one capture request of the span (ids, start, end,
+        adapter, imports). The fork writes the span's state as a native-state file with the metadata the native
+        engine would give the block; the store adopts that file (renamed in, verified from the file: layout, finite
+        values, content id, and that it holds this metadata and these token ids). Returns the stored file as block
+        and record (`NativeStateFile`)."""
+        from ..model.native_adapters import execution_binding, SCHEMA as ADAPTER_SCHEMA
+        from ..model.state_block import native_state_metadata
+        (capture,) = chunks
+        store = self._sglang_store()
+        bindings = execution_binding(self)
+        metadata = native_state_metadata(
+            text=text, architecture=self.model_config.get('architecture') or self.sglang_export['architecture'],
+            tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
+            checkpoint_sha256=self.execution_native_identity['checkpoint_sha256'],
+            embedding_weight_sha256=self.embedding_weight_sha256, layer_kinds=self.sglang_export['layer_kinds'],
+            adapter_binding=({'schema': ADAPTER_SCHEMA, 'base_native_identity': self.native_identity,
+                              'adapters': bindings} if bindings else None))
+        path = self._sglang_capture(capture['ids'], capture['start'], capture['end'], metadata,
+                                    capture.get('adapter'), capture.get('imports'))
+        try:
+            stored = store.adopt_native_state_file(path, owner, metadata=metadata, token_ids=token_ids)
+        except FileNotFoundError:
+            raise RequestError('sglang-actor-capture', 'SGLang did not export the produce span') from None
+        except ValueError as error:
+            raise RequestError('sglang-actor-capture', f'SGLang exported an invalid produce span: {error}') from error
+        finally:
+            try:
+                os.unlink(path)   # a refused capture (an adopted one has been renamed away)
+            except FileNotFoundError:
+                pass
+        dtype = getattr(self, 'native_dtype', None) or str(self.backbone.embedding_weight.dtype).replace('torch.', '')
+        if str(stored.dtype('embeddings')).replace('torch.', '') != dtype:
+            raise RequestError('sglang-actor-capture', f'SGLang exported {stored.dtype("embeddings")} embeddings, '
+                               f'the native engine stores {dtype}')
+        return stored, stored
+
+    def _sglang_capture(self, ids, start, end, metadata, adapter=None, imports=None):
+        """The path of the native-state file the fork writes for ids[start:end] (`custom_params.natlang_capture`).
 
         One SGLang request recomputes the sequence with the radix match capped below the span (logprob_start_len), so
-        the span runs through the model and the fork writes its pre-RoPE keys, values and conv inputs."""
-        import torch
-        from safetensors.torch import load_file
+        the span runs through the model and the fork writes its pre-RoPE keys, values, conv inputs and input
+        embeddings as a native-state file of `metadata` (the store's format)."""
         path = os.path.join(self._sglang_scratch(), f'{uuid.uuid4().hex}.safetensors')
         body = {'input_ids': ids, 'return_logprob': True, 'logprob_start_len': max(start - 1, 0),
                 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1,
-                                    'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end},
+                                    'custom_params': {CAPTURE_KEY: {'path': path, 'start': start, 'end': end,
+                                                                    'native_state': metadata},
                                                       **({IMPORT_KEY: imports} if imports else {}),
                                                       **({ADAPTER_KEY: adapter} if adapter else {})}}}
         self._sglang_generate(body)
-        try:
-            tensors = load_file(path)
-        except FileNotFoundError:
-            raise RequestError('sglang-actor-capture', 'SGLang did not export the produce span') from None
-        finally:
-            try:
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
-        dtype = getattr(torch, getattr(self, 'native_dtype', None)
-                        or str(self.backbone.embedding_weight.dtype).replace('torch.', ''))
-        layers = []
-        for index in range(sum(1 for name in tensors if name.startswith('layers.') and name.endswith(('.v', '.gated_inputs')))):
-            if f'layers.{index}.raw_k' in tensors:
-                layers.append({'kind': 'attention', 'raw_k': tensors[f'layers.{index}.raw_k'],
-                               'v': tensors[f'layers.{index}.v']})
-            else:
-                layers.append({'kind': 'finite_convolution', 'gated_inputs': tensors[f'layers.{index}.gated_inputs']})
-        return {'token_ids': tensors['token_ids'], 'embeddings': tensors['embeddings'].to(dtype),
-                'positions': tensors['positions'], 'layers': tuple(layers)}
+        return path
 
     def _sglang_emit(self, seq, state, final=False):
         """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes."""

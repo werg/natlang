@@ -56,3 +56,21 @@ def test_training_and_held_eval_share_one_episode_budget(monkeypatch):
 def test_reward_defaults_to_graded_with_a_binary_opt_out(monkeypatch):
     assert parsed(monkeypatch).reward == 'graded'
     assert parsed(monkeypatch, '--reward', 'binary').reward == 'binary'
+
+
+def test_explore_order_defaults_to_rows_and_family_round_robin_visits_families_in_turn(monkeypatch):
+    import random
+    assert parsed(monkeypatch).explore_order == 'row'
+    assert parsed(monkeypatch, '--explore-order', 'family').explore_order == 'family'
+    rows = [{'id': f'big-{i}', 'family': 'big'} for i in range(20)] + [{'id': 's-0', 'family': 'small'},
+                                                                        {'id': 's-1', 'family': 'small'},
+                                                                        {'id': 't-0', 'family': 'tiny'}]
+    random.Random(0).shuffle(rows)
+    order = grpo.family_round_robin(rows, random.Random(0))
+    assert sorted(r['id'] for r in order) == sorted(r['id'] for r in rows)
+    assert {r['family'] for r in order[:3]} == {'big', 'small', 'tiny'}         # every family in the first round
+    assert {r['family'] for r in order[3:5]} == {'big', 'small'}
+    assert [r['family'] for r in order[5:]] == ['big'] * 18
+    big = [r['id'] for r in rows if r['family'] == 'big']
+    assert [r['id'] for r in order if r['family'] == 'big'] == big              # each family keeps its shuffled order
+    assert order == grpo.family_round_robin(rows, random.Random(0))             # deterministic in the seed

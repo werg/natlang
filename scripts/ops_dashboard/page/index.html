@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>natlang ops</title>
+<link rel="stylesheet" href="style.css">
+<script>/* apply a saved theme before first paint */
+try { const t = JSON.parse(localStorage.getItem('ops.theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+</script>
+</head>
+<body>
+<a class="skip" href="#view">Skip to content</a>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true"></span><h1>natlang ops</h1></div>
+  <button id="health" class="pill" type="button" aria-controls="view"><span class="ic" aria-hidden="true">…</span><span id="health-text">Connecting…</span></button>
+  <nav id="tabs" class="tabs" role="tablist" aria-label="Sections"></nav>
+  <div class="meta"><span id="fresh" class="live" role="status"><i></i><span id="fresh-text">no data yet</span></span><button id="theme" class="ghost" type="button">Auto</button></div>
+</header>
+<main id="view" tabindex="-1"></main>
+<footer class="foot"><span id="notices"></span></footer>
+
+<dialog id="ask">
+  <form method="dialog" id="ask-form">
+    <h2 id="ask-title">Ask</h2>
+    <p id="ask-sub" class="muted"></p>
+    <label for="ask-text" id="ask-label">Your message</label>
+    <textarea id="ask-text" rows="4" maxlength="2000" required></textarea>
+    <p id="ask-note" class="muted small"></p>
+    <div class="row end">
+      <span id="ask-status" role="status" class="muted small"></span>
+      <button type="button" id="ask-cancel" class="btn">Cancel</button>
+      <button type="submit" id="ask-send" class="btn primary">Send</button>
+    </div>
+  </form>
+</dialog>
+<script type="module" src="app.mjs"></script>
+</body>
+</html>

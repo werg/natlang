@@ -86,3 +86,24 @@ test('decoder applies the same semantic checks even when a malformed body has a 
   new DataView(wire.buffer).setBigUint64(0, BigInt(aligned.length), true); wire.set(aligned, 8); wire.set(payload, 8 + aligned.length);
   assert.throws(() => decodeNativeState(wire), /positions/);
 });
+
+test('native state moves between stores as its wire, kept as received, verified once', async () => {
+  const { MemoryNeuraleseStore, archiveNativeArtifactFrom } = await import('../dist/native/neuralese-store.js');
+  const wire = encodeNativeState({ metadata, tensors });
+  const id = 'nzs1_zqbj3ixi4kqxyhv5ofcpuhabvqd76bwigo4z6wq42ujoq6lbpewq';
+  const remote = new MemoryNeuraleseStore();
+  assert.equal((await remote.putNativeStateWire(wire)).id, id);
+  assert.equal(await remote.getNativeStateWire(id), wire);   // the very bytes, no re-encode
+  const directory = await mkdtemp(join(tmpdir(), 'native-wire-'));
+  try {
+    const archive = await FileNeuraleseStore.open(directory);
+    const archived = await archiveNativeArtifactFrom(remote, archive, id);
+    assert.equal(archived.id, id);
+    assert.deepEqual([...(await archive.getNativeStateWire(id))], [...wire]);
+    const view = await archive.getNativeState(id);
+    assert.equal(view.tensors.embeddings.data.buffer, (await archive.getNativeStateWire(id)).buffer);   // views of the stored bytes
+  } finally { await rm(directory, { recursive: true, force: true }); }
+  const nan = { ...tensors, 'layers.1.gated_inputs': { ...tensors['layers.1.gated_inputs'],
+    data: bytes('0000c07f0000803f0000803f0000803f0000803f0000803f') } };
+  assert.throws(() => decodeNativeState(encodeNativeState({ metadata, tensors: nan })), /non-finite/);
+});

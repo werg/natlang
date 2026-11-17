@@ -31,6 +31,10 @@ for (const path of [...Object.keys(stamp.outputs), ...Object.keys(stamp.assets)]
 const play = resolve(site, 'play');
 rmSync(play, { recursive: true, force: true });
 cpSync(resolve(root, 'playground'), play, { recursive: true, filter: path => !path.endsWith('README.md') });
+// The public page loads its model cross-origin, so only from a host that answers with CORS headers: the stock LFM3 from
+// Hugging Face. natlang's own GGUF (ts-host/src/model-default.ts, the local page's default) is published as a GitHub
+// release asset, which browsers cannot fetch from another origin (no Access-Control-Allow-Origin on the release download
+// or its redirect target), so the public page keeps the stock model until that GGUF has a CORS-capable host.
 const { STOCK_MODELS } = await import(pathToFileURL(resolve(root, 'dist/model-catalog.js')).href);
 const model = STOCK_MODELS.find(item => item.quant === 'Q4_K_M');
 mkdirSync(resolve(play, 'models/templates'), { recursive: true });
