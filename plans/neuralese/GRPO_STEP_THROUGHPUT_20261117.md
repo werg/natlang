@@ -118,6 +118,29 @@ at 32 running. Expected: collection 5,400 s -> ~3,700-4,000 s per 48 groups (-1,
 Fallback if the step-1/2 ledger peak passes 97 GiB: `SLOTS=48` (sizing only). `episodes_in_flight` and
 `moment_offload.cuda_reserved_after_put_gb` in `train.jsonl` show what the peak is made of.
 
+### 6. Learner kernel profile (torch.profiler, kernel classes)
+
+One real run1 group (g521: 24 chains, 494k chain tokens, 424k computed, 100k loss tokens, 10 chains with imported
+state), reference + policy pass at `--activation-gb 4`, new nucleus code, GPU shared with the verdict eval actor (so
+kernel durations include time-slice preemption; shares, not rates, are the reading):
+
+| class | GPU s | share |
+|---|---|---|
+| GEMMs (nvjet sm121 tiles; cutlass sm80 fp32-out dW of the head ~9 s) | 146.3 | 59% |
+| flash attention (FA2 varlen fwd 22.2 + bwd 18.4) | 40.6 | 17% |
+| inductor Triton (norms, SwiGLU, RoPE, gates, the width-7 conv, CE/nucleus) | 50.5 | 21% |
+| eager aten elementwise (grad adds into the masters, etc.) | 7.1 | 3% |
+| top-k (nucleus) | 0.8 | 0.3% |
+| wall - GPU busy (Python, launches, syncs) | 6.3 of 252 s | 2.5% |
+
+Reading: the learner is kernel-bound with almost no host gaps, so CUDA graphs and larger micro-batches have nothing to
+win; the GPU's time is ~59% GEMM, ~21% fused elementwise (2026-11-12: inductor's kernels already run at ~85% of the
+GB10's bandwidth; fusing them into the GEMMs is not available on sm_121) and ~17% attention. The low tok/s per model
+FLOP in run1 is mostly the shared GPU (the actor's time slices), not kernel inefficiency; a solo measurement of the
+same 3 groups is queued for when the GPU is free. Candidates left: a faster attention kernel for the 6 full-attention
+layers on sm_121 (FA2 is what `torch.nn.attention.varlen` offers here), and fewer recomputed layers (measured above:
+small).
+
 ## Expected step (run1's 48 groups, ~6.1M generated tokens)
 
 | | run1 | grpo-v4 (expected) |
