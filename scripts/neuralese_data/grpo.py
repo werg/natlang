@@ -2371,14 +2371,16 @@ def train(args):
     if probes:
         log_probe(step, 'learner')
         log_probe(step, 'actor')
+    strict_series = ['--strict-series'] if args.held_strict_series else []   # held_eval compare
     step0 = work / 'held' / 'step-00000'
     if (step0 / 'result.json').exists() and not args.held_baseline:
-        # A resume on a pin whose harness differs (another held series) cannot compare with the old step 0: that result
-        # moves aside (it stays the record of its series) and the start policy is measured again on this pin below.
+        # A resume under another sampling law (--top-p) cannot compare with the old step 0: that result moves aside (it
+        # stays the record of its law) and the start policy is measured again below. Another held series (a pin whose
+        # harness differs) pairs with a warning (held_eval compare); --held-strict-series re-measures it as well.
         measured = json.loads((step0 / 'result.json').read_text())
         old = (measured.get('series') or {}).get('key')
-        law = measured.get('sampling') or LEGACY_SAMPLING     # the same for another sampling law (--top-p)
-        if old != run['series']['key'] or law != sampling_law_of(args.top_p):
+        law = measured.get('sampling') or LEGACY_SAMPLING
+        if (args.held_strict_series and old != run['series']['key']) or law != sampling_law_of(args.top_p):
             aside = work / 'held' / (f'step-00000-series-{old}' if old != run['series']['key'] else
                                      f'step-00000-top-p-{law["top_p"]}')
             step0.rename(aside)
@@ -2464,7 +2466,7 @@ def train(args):
                 base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
                 if (step_number or name) and code == 0 and base.exists():
                     subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
-                                    str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT)
+                                    str(out / 'compare-vs-step0.json'), *strict_series], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT)
         finally:
             if resume_collection:
                 collector.paused.clear()
@@ -2544,15 +2546,17 @@ def train(args):
 
         def base_engine_matches():
             """False when held/step-00000-pop (finished or partial) was measured on another Pop engine: it moves to
-            step-00000-pop-<time>-other-engine and the start policy is measured again (its steps would not pair with it)."""
+            step-00000-pop-<time>-other-engine and the start policy is measured again (its steps would not pair with it).
+            Another engine is another export format (weight and KV precision) or sampling law (--top-p); with
+            --held-strict-series also another running-sequence cap (attested max_running). A fork commit or series
+            difference pairs with a warning (held_eval compare)."""
             for name in ('result.json', 'run.json'):
                 if (base_out / name).exists():
                     record = json.loads((base_out / name).read_text())
                     measured = (record.get('engine') or {}).get('export_format')
-                    # ... or with another running-sequence cap (attested max_running; compare refuses such pairs) or
-                    # under another sampling law (--top-p)
                     cap = (record.get('engine') or {}).get('max_running', args.pop_max_running)
-                    return measured in (None, pop_format) and cap == args.pop_max_running and \
+                    return measured in (None, pop_format) and \
+                        (cap == args.pop_max_running or not args.held_strict_series) and \
                         (record.get('sampling') or LEGACY_SAMPLING) == sampling_law_of(args.top_p)
             return True
 
@@ -2589,7 +2593,7 @@ def train(args):
                                       stderr=subprocess.STDOUT).returncode
                 if step_number and code == 0 and held_complete(base_out):
                     subprocess.run([*python, 'compare', str(base_out / 'result.json'), str(out / 'result.json'), '--out',
-                                    str(out / 'compare-vs-step0.json')], cwd=REPO, env=pinned_env(), stdout=handle,
+                                    str(out / 'compare-vs-step0.json'), *strict_series], cwd=REPO, env=pinned_env(), stdout=handle,
                                    stderr=subprocess.STDOUT)
             summary = {}
             if (out / 'result.json').exists():
@@ -3383,7 +3387,11 @@ def main():
     t.add_argument('--held-every-hours', type=float, default=4.)
     t.add_argument('--skip-base-held', action='store_true')
     t.add_argument('--held-baseline', help="a start-policy held result.json to compare with (e.g. held-v2's base run) instead "
-                   'of measuring step 0 (compare refuses another engine or series)')
+                   'of measuring step 0 (compare refuses another engine kind, precision or sampling law; another series '
+                   'pairs with a warning)')
+    t.add_argument('--held-strict-series', action='store_true',
+                   help='held comparisons pair only one scoring series and one attested engine (held_eval compare '
+                        '--strict-series): a step 0 or Pop base of another series or running cap is re-measured')
     t.add_argument('--held-samples', type=int, default=2, help='samples per held task at the periodic measurements')
     t.add_argument('--held-samples-start', type=int, default=4, help='samples per held task for the start policy (step 0)')
     t.add_argument('--held-extra', help='comma-separated native checkpoints measured on the actor in place after step 0, '
