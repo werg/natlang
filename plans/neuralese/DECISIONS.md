@@ -3244,3 +3244,12 @@ Defaults `--memetic-share 0.02` (~18 ordinary groups of rollouts per memetic gro
 `--memetic-max-staleness 8` (memetic episodes run tens of minutes; 2 would drop them all); grpo-v4 `launch-grpo.sh`
 FEATURES carries them (`MEMETIC_SHARE=0` opts out) for its next resume on a pin containing 5d6a3ad29. The 301-world
 measurement and `resmoke.sh` are dropped.
+
+## 2026-11-18 00:40, forward-progress review: work that would otherwise wait for DGX windows
+
+grpo-v4 holds the DGX continuously from ~01:00 on pin 21dbc20c5 (memetic, JOLT+, hindsight, SD with teacher
+demonstrations, dynamic sampling, construct-weighted exploration), and training never waits for other work (AGENTS.md
+304ba0d9d). So: (1) the operator rows and the whole-graph Neuralese chains are to train inside grpo-v4's learner,
+entering at a resume, instead of in a separate SFT stage; (2) LoRA fits run beside grpo-v4 or on Pop between held evals
+instead of waiting for a free window; (3) task authoring is continuous again (the last batch was 2026-11-17), with new
+batches entering at resumes.
