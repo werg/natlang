@@ -94,6 +94,7 @@ from natlang_neuralese.common.sampling import RL_TOP_P, check_top_p, sampling_la
 from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS, LEGACY_SAMPLING  # noqa: E402
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+MEMETIC_TASKS = resolve_str('data_nvme', 'memetic-tasks-20261118', 'cases.jsonl')
 POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl'),
          # fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json)
          resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl'),
@@ -587,7 +588,7 @@ class Collector:
                           'plan': result.get('plan')}), flush=True)
         return len(teachers)
 
-    def reuse_scored(self, step, max_staleness):
+    def reuse_scored(self, step, max_staleness, memetic_max_staleness=None):
         """Offer again the scored groups a stop left untrained (rollouts and versions on disk, not ``retired``) whose
         episodes were all sampled by policies this resumed run has served (versions <= ``step``) within the staleness
         the learner accepts. A group sampled by a version past the saved state (a policy that is gone) or too stale is
@@ -605,7 +606,9 @@ class Collector:
             except (OSError, ValueError, KeyError, IndexError):
                 skipped.append(directory.name)
                 continue
-            if not versions or max(versions) > step or step - min(versions) > max_staleness:
+            limit = (memetic_max_staleness if memetic_max_staleness is not None and (directory / 'memetic-spec.json').exists()
+                     else max_staleness)
+            if not versions or max(versions) > step or step - min(versions) > limit:
                 (directory / RETIRED).touch()
                 skipped.append(directory.name)
                 continue
@@ -749,10 +752,56 @@ def load_group(collector, group, stats):
         memetic = reward.get('memetic') or {}
         episodes.append({'reward': quality if binary or graded is None else float(graded),
                          **({'anchor': float(memetic['anchor'])} if 'anchor' in memetic else {}),
+                         **({'memetic': memetic} if memetic else {}),
                          'quality': quality, 'rows': rows, 'decisions': decisions,
                          'task_id': row['task_id'], 'round': group,
                          'outcome': row.get('outcome'), 'role': role})
     return info['task_id'], episodes, info['versions']
+
+
+def memetic_group_record(group, task_id, episodes):
+    """Per memetic group (train.jsonl ``memetic_groups``): confirmation success on the group's query worlds with each
+    sample's learned guidance (``with_guidance``, mean over samples whose workspace scored) against the same worlds
+    and seeds with no guidance (``without``, the group's shared preparation), and ``gap`` = with - without. Telemetry
+    to watch over a run, never a gate (owner 2026-11-18). None for an ordinary group."""
+    memetic = [e['memetic'] for e in episodes if e.get('memetic')]
+    if not memetic:
+        return None
+    scored = [m for m in memetic if not m.get('unscored_workspace')]
+    without = next((m['without'] for m in scored if m.get('without') is not None), None)
+    with_guidance = sum(m['query_success'] for m in scored) / len(scored) if scored else None
+    return {'group': group, 'task_id': task_id, 'samples': len(memetic), 'scored': len(scored),
+            'committed': sum(1 for m in scored if m.get('committed')),
+            'with_guidance': None if with_guidance is None else round(with_guidance, 4),
+            'without': without, 'default': next((m['default'] for m in scored if m.get('default') is not None), None),
+            'gap': None if with_guidance is None or without is None else round(with_guidance - without, 4)}
+
+
+def memetic_gap_history(path):
+    """(sum, count) of the per-group gaps a run already logged (a resume continues the running mean)."""
+    total = count = 0
+    if Path(path).exists():
+        for line in Path(path).read_text().splitlines():
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            for item in record.get('memetic_groups') or ():
+                if item.get('gap') is not None:
+                    total, count = total + item['gap'], count + 1
+    return total, count
+
+
+def memetic_step_record(groups, history):
+    """Step-level summary of this step's memetic groups and the run's running mean gap (``history`` is the mutable
+    [sum, count] over every group so far, updated here)."""
+    gaps = [g['gap'] for g in groups if g['gap'] is not None]
+    history[0] += sum(gaps)
+    history[1] += len(gaps)
+    return {'groups': len(groups), 'groups_with_gap': len(gaps),
+            'gap_mean': round(sum(gaps) / len(gaps), 4) if gaps else None,
+            'gap_running_mean': round(history[0] / history[1], 4) if history[1] else None,
+            'gap_running_groups': history[1]}
 
 
 def episode_advantages(episodes, stats=None):
@@ -2320,7 +2369,7 @@ def train(args):
                                      args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r))
     collector.version = step
     if args.resume and not args.replay:      # a replay offers archived groups, never this run's own
-        reused, left_out = collector.reuse_scored(step, args.max_staleness)
+        reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
         if reused or left_out:
             log_line(log, {'event': 'reused groups', 'reused': len(reused), 'left_out': left_out[:50],
                            'left_out_count': len(left_out)})
@@ -2652,6 +2701,7 @@ def train(args):
     phase_totals = collections.Counter()
     phase_mark = {'time': time.time(), 'tokens': actor_generated(args.actor)}
     sd_buffer = []   # self-distillation replay of recent rare successes (``sd_add``/``sd_take``; --sd-weight)
+    memetic_history = list(memetic_gap_history(work / 'train.jsonl'))   # [sum, count] of per-group guided gaps
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
         phase = collections.OrderedDict()
         t = time.time()
@@ -2665,6 +2715,7 @@ def train(args):
         chains, decisions, rewards, spread, dropped_stale, staleness, task_rewards = [], [], [], 0, 0, [], []
         episode_units = {}   # trained episode -> [sampled tokens, calls, decisions] (loss_scales)
         episode_advantage = {}
+        memetic_groups = []
         for group in groups:
             try:
                 task_id, episodes, versions = load_group(collector, group, stats)
@@ -2682,7 +2733,11 @@ def train(args):
                     episode['reward'] = synthetic_reward(args.synthetic_reward, episode)
             stale = step - min(versions) if versions else 0
             rewards += [e['reward'] for e in episodes if e.get('role') != 'teacher']   # the students' own reward
-            if stale > args.max_staleness:
+            memetic_record = memetic_group_record(group, task_id, episodes)
+            if memetic_record is not None:
+                memetic_groups.append({**memetic_record, 'stale': stale})
+            # a memetic episode runs its program on many worlds (tens of minutes): its own staleness bound
+            if stale > (args.memetic_max_staleness if memetic_record is not None else args.max_staleness):
                 dropped_stale += 1
                 continue
             staleness.append(stale)
@@ -2771,6 +2826,8 @@ def train(args):
                   'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1),
                   'neuralese_passthrough': not args.no_neuralese_passthrough,
                   'producer_document_tokens': sum(exp0_sft.source_tokens(c) for c in chains),
+                  **({'memetic_groups': memetic_groups, 'memetic': memetic_step_record(memetic_groups, memetic_history)}
+                     if memetic_groups or args.memetic_share > 0 else {}),
                   'dynamic_sampling': dict(getattr(collector, 'dynamic', {})) or None,   # cumulative since this process started
                   **restore_telemetry(stats, args)}
         style = reasoning_style(chains, think_close)
@@ -3280,10 +3337,17 @@ def main():
     t.add_argument('--sd-teacher-source', action='append', default=None,
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
                         'default SD_TEACHER_SOURCES)')
-    t.add_argument('--memetic-tasks', help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks '
-                   'build: DIR/cases.jsonl); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3')
-    t.add_argument('--memetic-share', type=float, default=0.,
-                   help='fraction of new groups that are memetic episodes (each about 13 ordinary groups of rollouts)')
+    t.add_argument('--memetic-tasks', default=MEMETIC_TASKS,
+                   help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks build: '
+                        'DIR/cases.jsonl; default: every program, support 4); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md '
+                        'section 3')
+    t.add_argument('--memetic-share', type=float, default=0.02,
+                   help='fraction of new groups that are memetic episodes (0 opts out; each group runs about 140 nested '
+                        'rollouts, ~18 ordinary groups, so 0.02 is ~1/4 of actor rollouts); on by default, owner '
+                        '2026-11-18: memetic pays off over time and keeps training, the guided-vs-unguided gap in '
+                        'train.jsonl is telemetry, never a stop')
+    t.add_argument('--memetic-max-staleness', type=int, default=8,
+                   help='staleness bound of a memetic group (its episodes run tens of minutes; --max-staleness for others)')
     t.add_argument('--memetic-group', type=int, default=4)
     t.add_argument('--memetic-model-requests', type=int, default=64)
     t.add_argument('--reward', choices=('graded', 'binary'), default='graded',

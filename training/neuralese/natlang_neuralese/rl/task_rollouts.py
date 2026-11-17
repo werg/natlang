@@ -689,8 +689,13 @@ def memetic_outcome(task: dict[str, Any], result: dict[str, Any] | None) -> dict
 
 def memetic_reward_record(memetic: dict[str, Any]) -> dict[str, Any]:
     """The reward fields the learner reads (grpo.py ``episode_advantages``): the trivial-improvement anchor and the
-    measured gain, cost and query success, with where the committed set and its query runs are."""
+    measured gain, cost and query success, with where the committed set and its query runs are. ``without`` and
+    ``default`` are the same query worlds and seeds with no guidance and with the mechanical default (paired; None when
+    preparation did not run)."""
+    baselines = memetic.get("baselines") or {}
+    arm = lambda name: (baselines.get(name) or {}).get("success")
     return {"anchor": float(memetic["anchor"]), "gain": float(memetic["gain"]), "cost": float(memetic["cost"]),
+            "without": arm("none"), "default": arm("default"),
             "query_success": float(memetic["query_success"]), "query_dir": memetic.get("query_dir"),
             "committed": memetic.get("committed"), "unscored_workspace": bool(memetic.get("unscored_workspace")),
             "score_path": memetic.get("score_path")}
