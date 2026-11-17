@@ -2801,3 +2801,26 @@ capture of `native.init-body`), recorded as a `block_write` with `source_capture
 lowers. compact-value and compact-params are `view` at the runtime's sites (one summarizer family, 2026-10-09);
 compact-history is the model's own `compact_history` note captured in context; the arm is the model-facing variant
 `learned-compaction` (enters the held series key). The v1 slot smoke's null (actual ≈ shuffled): two independent investigators found no implementation bug in capture, import or ablation. The cause is v1's design: the slots held one constant phrase, about 95% of the slot state is row-invariant (CPU probe), and the design is already gone. Cases (about 118k train, text port records) render byte-identically today but were never filtered against held-v3; the row lowering filters them. Next: cases -> exp0_sft rows, the v3 write on every engine, ablation, then SFT and GRPO on the pass-through.
+
+**2026-11-17 18:30, Neuralese pass-through in the learners (pass-through agent; NEURALESE_PASSTHROUGH_20261117.md).**
+- **What every state is today.** It is a text write: the producer returns text, and the host runs `[produce_open] +
+  text` from position 0 through the actor. Each rollout's `execution_graph` `block_write` keeps that exact
+  `source_capture`.
+- **Decision: the learners compute the imported state in-graph** from that document, on by default with an opt-out.
+  The document joins the consumer's packed forward, and every layer gathers its own K/V/B*x at the span rows into the
+  import rows. The consumer's loss then trains the weights that computed the state, and the actor store is no longer
+  needed.
+  - Commits: 993df3f3d (exp0_sft + grpo, `--no-neuralese-passthrough`).
+- **Actor fix:** the actor's producer table now follows the trained embedding (cdb97e649, `--frozen-producer-table`).
+  It had been frozen at the start values, while embed_tokens trained, in every run from grpo-v1 on.
+- **Why on by default.** It is first principles: the actor builds the state from the same weights, so the gradient
+  through it is the true gradient of the consumer's loss.
+  - Measured on real grpo-v3/run1 blocks: in-graph vs stored-state consumer log-probabilities agree to mean |dlogp|
+    0.013-0.019, below the learner-actor gap of 0.03-0.04, which is the same with either state.
+  - Cost: none measurable (2,206 vs 2,204 tok/s, +0.03 GB peak).
+- **Open.**
+  - From layer 3 on, the actor's captured state deviates from FP32 about 3x more than the learner's BF16 state.
+    Hypothesis: the actor's FP8 KV. Unverified.
+  - The compiled `lfm3_fast_train` path differs from eager on chains without imports (side finding, reported to the
+    supervisor).
+  - The FALLOW-22 graphs are stale and not wired.
