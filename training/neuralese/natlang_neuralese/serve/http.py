@@ -43,7 +43,7 @@ def block_ids(value) -> set[str]:
 # paths by this list and fail a request that needs an unlisted capability before sending it
 # (`neuralese-<capability>-unavailable`); this server serves every capability it lists.
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "native.capture", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
+    "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "native.capture", "adapters.create", "guidance", "guidance.check", "training-guidance", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view", "view.budget/1"])
 
 

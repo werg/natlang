@@ -263,6 +263,11 @@ test('native server capability gaps fail before sending unsupported guidance or 
   await assert.rejects(() => driver({ messages, tools: [], guidance: true }), /neuralese-guidance-unavailable/);
   await assert.rejects(() => driver({ messages, tools: [], template: { call: 'return_result', value: 'write', value_type: 'string' } }),
     /neuralese-template-unavailable/);
+  // Training guidance is never dropped by a server that does not render it (the managed llama-server).
+  await assert.rejects(() => driver({ messages, tools: [], privileged_context: { schema: 'natlang.guidance-request/1' } }),
+    /training-guidance-unavailable/);
+  await assert.rejects(() => driver({ messages, tools: [], guidance_policy: { function: 'writeGuidance', sha256: 'x' } }),
+    /training-guidance-unavailable/);
   assert.equal(chatRequests, 0);
 });
 
