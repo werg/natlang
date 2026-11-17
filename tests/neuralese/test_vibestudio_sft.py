@@ -34,7 +34,8 @@ def episode(case_id='one', split='train', group='world-one'):
 
 
 def manifest(*episodes):
-    return {'schema': v.MANIFEST_SCHEMA, 'cases': [
+    return {'schema': v.MANIFEST_SCHEMA, 'suite': episodes[0]['suite'],
+            'source': episodes[0]['source'], 'teacher': episodes[0]['teacher'], 'cases': [
         {**e['case'], 'suite': e['suite'], **{key: e[key] for key in ('source_ids', 'source_groups', 'source_revisions')}}
         for e in episodes]}
 
@@ -257,3 +258,24 @@ def test_registration_uses_shared_publisher_without_exposing_test_data(tmp_path,
     assert options['links'] == {'runs/pilot-v1': str(args.out)}
     with pytest.raises(ValueError, match='actual data owner'):
         v.registration_entry(args.out, 'pilot-v1', 'tick')
+
+
+@pytest.mark.parametrize('field,change', [
+    ('source', lambda value: value.update(program_sha256='9' * 64)),
+    ('source', lambda value: value.update(template_commit='9' * 40)),
+    ('teacher', lambda value: value.update(model_id='different-teacher')),
+    ('teacher', lambda value: value.update(identity='different-authenticated-model')),
+    ('suite', lambda value: value.update(hash='9' * 64)),
+])
+def test_collection_binds_each_episode_source_teacher_and_suite(tmp_path, field, change):
+    args = build_inputs(tmp_path)
+    row = json.loads(args.episodes.read_text())
+    change(row[field])
+    args.episodes.write_text(json.dumps(row) + '\n')
+    # A file hash is necessary but not sufficient: a resume can accidentally
+    # rehash a foreign episode. It must still belong to this collection.
+    collection = json.loads(args.manifest.read_text())
+    collection['episodes']['sha256'] = v.sha256_file(args.episodes)
+    args.manifest.write_text(json.dumps(collection))
+    with pytest.raises(ValueError, match=f'episode {field} identity does not match'):
+        v.load_collections(args)

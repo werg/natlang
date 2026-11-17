@@ -25,6 +25,9 @@ the exact episode file (`episodes.path`, relative to the manifest, and
 `episodes.sha256`) and lists **all** suite cases, including validation and test.
 Each case carries `id`, `group`, `split`, `input_sha256`, `suite: {id, hash}` and
 the three source-lineage arrays.
+The manifest's top-level `suite`, `source` and `teacher` identities bind every
+episode, including its program hash and model identity; a rehashed episode file
+cannot silently mix another program revision or teacher into the collection.
 
 A `vibestudio.teacher-episode/1` episode carries the matching case, suite and
 lineage, the pinned clean template/natlang/Vibestudio commits, program SHA256 and
@@ -41,6 +44,8 @@ check the outcome again, and attest `verified: true`. Its `request_hashes` are t
 ordered SHA256 digests of canonical compact JSON `{messages, tools}` for each
 recorded call (object keys sorted recursively, UTF-8 Unicode). A flag alone does
 not pass admission: hashes must equal the episode's actual requests.
+These are trusted collector-code attestations and file-integrity checks, not
+cryptographic signatures or a claim of proof against an adversarial producer.
 When `turn.request_canonical` is present its parsed content must match the exact
 messages/tools, and its UTF-8 bytes are hashed directly, preserving JS numeric
 spellings that Python's JSON serializer would otherwise change.

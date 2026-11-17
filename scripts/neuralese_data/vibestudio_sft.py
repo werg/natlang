@@ -217,7 +217,15 @@ def load_collections(args):
         # Validate each inventory before de-duplicating repeated suites across
         # independent collection attempts. A case's protected split never changes.
         known, _, _ = inventory(manifest)
+        declared_suite = manifest.get('suite') or {}
+        suite_identity = {field: declared_suite.get(field) for field in ('id', 'hash')}
+        if (not suite_identity['id'] or not SHA256.fullmatch(suite_identity.get('hash') or '') or
+                not isinstance(manifest.get('source'), dict) or not manifest['source'] or
+                not isinstance(manifest.get('teacher'), dict) or not manifest['teacher']):
+            raise ValueError('collection manifest needs suite, source and teacher identity bindings')
         for key, case in known.items():
+            if case['suite'] != suite_identity:
+                raise ValueError('case inventory suite does not match collection manifest')
             if key in inventories and digest(inventories[key]) != digest(case):
                 raise ValueError(f'case inventory changed between collections: {key}')
             inventories[key] = case
@@ -232,7 +240,19 @@ def load_collections(args):
             raise ValueError('collection manifest binds a different episode path')
         if binding.get('sha256') != sha256_file(episodes_path):
             raise ValueError('episode file does not match collection manifest')
-        episodes.extend(json.loads(line) for line in zstd_lines(episodes_path) if line.strip())
+        for line in zstd_lines(episodes_path):
+            if not line.strip():
+                continue
+            episode = json.loads(line)
+            # The clean commit and program/model identities are collection-wide
+            # attestations, not merely syntactically valid labels on each row.
+            # This catches a mixed/copied episode even if the new file SHA was
+            # accidentally written into the manifest during a resume.
+            for field, expected in (('suite', suite_identity), ('source', manifest['source']),
+                                    ('teacher', manifest['teacher'])):
+                if digest(episode.get(field)) != digest(expected):
+                    raise ValueError(f'episode {field} identity does not match collection manifest')
+            episodes.append(episode)
         bindings.append({'episodes': str(episodes_path.resolve()), 'episodes_sha256': sha256_file(episodes_path),
                          'manifest': str(manifest_path.resolve()), 'manifest_sha256': sha256_file(manifest_path)})
     return episodes, {'schema': MANIFEST_SCHEMA, 'cases': list(inventories.values())}, bindings
