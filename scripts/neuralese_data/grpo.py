@@ -1813,7 +1813,7 @@ def train(args):
         base_out = held_root / 'step-00000-pop'
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
         # Pop's engine settings: the KV dtype is part of the attested engine (export format), so the start policy's
-        # result is kept only if it was measured with the same one; max running sequences are capacity only.
+        # result is kept only if it was measured with the same one and the same attested max running sequences.
         pop_engine = ['--kv-cache-dtype', args.pop_kv_cache_dtype, '--max-running', str(args.pop_max_running)]
         pop_format = pop_sglang(args.pop_kv_cache_dtype, args.pop_max_running)[1]
 
@@ -1824,8 +1824,10 @@ def train(args):
                 if (base_out / name).exists():
                     record = json.loads((base_out / name).read_text())
                     measured = (record.get('engine') or {}).get('export_format')
-                    # ... or under another sampling law (--top-p): compare refuses such pairs
-                    return measured in (None, pop_format) and \
+                    # ... or with another running-sequence cap (attested max_running; compare refuses such pairs) or
+                    # under another sampling law (--top-p)
+                    cap = (record.get('engine') or {}).get('max_running', args.pop_max_running)
+                    return measured in (None, pop_format) and cap == args.pop_max_running and \
                         (record.get('sampling') or LEGACY_SAMPLING) == sampling_law_of(args.top_p)
             return True
 
@@ -1851,7 +1853,10 @@ def train(args):
                 if endpoint is None:
                     raise RuntimeError(f'Pop does not serve {policy[:12]} (see {work}/held-pop.log)')
                 serving = time.time() - started
-                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
+                # the start policy's per-task wall times order this measurement's first sample (held_eval.Dispatch)
+                prior = (['--duration-prior', str(base_out / 'result.json')] if step_number and held_complete(base_out)
+                         else [])
+                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, *prior, '--endpoint',
                                        f'{endpoint}={args.held_remote_slots}', '--policy-id', policy, '--top-p', str(args.top_p), '--samples',
                                        str(args.held_samples), '--out', str(out), '--label', f'grpo-pop-step-{step_number}',
                                        '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)],

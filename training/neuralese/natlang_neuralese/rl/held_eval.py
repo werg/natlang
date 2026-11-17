@@ -18,6 +18,7 @@ bootstrap; a wall-clock timeout counts as a failure, dropping them is reported b
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import math
@@ -346,15 +347,86 @@ def _finished(journal):
     return journal.exists() and any(row.get('event') == 'finish' for row in read_jsonl(journal))
 
 
-def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None):
+def _finish_seconds(journal):
+    """The episode's wall seconds from its journal's finish row (None while unfinished)."""
+    if not journal.exists():
+        return None
+    finishes = [row for row in read_jsonl(journal) if row.get('event') == 'finish']
+    return finishes[-1].get('elapsed_seconds') if finishes else None
+
+
+def duration_prior(paths):
+    """task_id -> mean episode wall seconds over earlier ``result.json`` files (any policy, same held tasks): the
+    dispatch order's estimate before this run has seen the task."""
+    seconds = collections.defaultdict(list)
+    for path in paths:
+        for sample in json.loads(Path(path).read_text()).get('samples') or ():
+            if sample.get('ran') and isinstance(sample.get('elapsed_seconds'), (int, float)):
+                seconds[sample['task_id']].append(float(sample['elapsed_seconds']))
+    return {task: sum(values) / len(values) for task, values in seconds.items()}
+
+
+class Dispatch:
+    """Which entry a free slot runs next: sample-major (sample s+1 starts only when every sample-s entry has started, so a
+    partly finished run stays balanced), and within a sample the task expected to run longest first, so the last
+    minutes are not spent waiting for one long episode that started late (longest-processing-time-first; run1's six
+    Pop evals replayed: 500-1150 s of 16-18.5k saved). The estimate of a task is the longest of its episodes in this run
+    (finished: their wall time; running: their time so far), else ``prior`` (``duration_prior``), else 0; ties keep the
+    sealed order. ``order='sealed'`` opts out (the sealed queue's order). Order changes only which episodes share a
+    batch, never an episode's task, seed or budget."""
+
+    def __init__(self, entries, *, prior=None, order='longest-first', observed=None):
+        if order not in ('longest-first', 'sealed'):
+            raise ValueError(f'unknown dispatch order {order!r}')
+        self.pending = list(entries)
+        self.order, self.prior = order, dict(prior or {})
+        self.finished = collections.defaultdict(float)   # task_id -> longest finished episode (s)
+        for task, seconds in (observed or {}).items():
+            self.finished[task] = max(self.finished[task], float(seconds))
+        self.running = {}   # key -> (task_id, start time)
+
+    def estimate(self, task, now):
+        seen = [self.finished[task]] if task in self.finished else []
+        seen += [now - start for running_task, start in self.running.values() if running_task == task]
+        return max(seen) if seen else self.prior.get(task, 0.)
+
+    def take(self, now=None):
+        if not self.pending:
+            return None
+        if self.order == 'sealed':
+            entry = self.pending.pop(0)
+        else:
+            now = time.time() if now is None else now
+            sample = min(entry['sample'] for entry in self.pending)
+            best = max(((self.estimate(entry['task_id'], now), -position), position)
+                       for position, entry in enumerate(self.pending) if entry['sample'] == sample)[1]
+            entry = self.pending.pop(best)
+        self.running[entry['key']] = (entry['task_id'], time.time() if now is None else now)
+        return entry
+
+    def done(self, entry, seconds):
+        self.running.pop(entry['key'], None)
+        if isinstance(seconds, (int, float)):
+            self.finished[entry['task_id']] = max(self.finished.get(entry['task_id'], 0.), float(seconds))
+
+
+def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None, prior=None, order='longest-first'):
     """Work-stealing slots (``endpoints``: [(url, slots)]) over the sealed ``entries``, one ``run_bonsai_queue`` process per
     episode under ``directory/workers`` (a slow episode never holds a shard of others back). Entries with a finished journal
-    are skipped (resume). Returns once every entry ran or ``stop`` is set (its running episodes are terminated)."""
+    are skipped (resume). The next entry is ``Dispatch``'s choice (``prior``, ``order``). Returns once every entry ran or
+    ``stop`` is set (its running episodes are terminated)."""
     directory, repo = Path(directory), Path(repo)
     work = directory / 'workers'
     work.mkdir(exist_ok=True)
-    todo = [entry for entry in entries if not _finished(work / f"{entry['key']}.journal.jsonl")]
-    lock, cursor, children, done = threading.Lock(), [0], set(), [0]
+    todo, observed = [], {}
+    for entry in entries:
+        seconds = _finish_seconds(work / f"{entry['key']}.journal.jsonl")
+        if seconds is None:
+            todo.append(entry)
+        elif isinstance(seconds, (int, float)):
+            observed[entry['task_id']] = max(observed.get(entry['task_id'], 0.), float(seconds))
+    dispatch = Dispatch(todo, prior=prior, order=order, observed=observed)
+    lock, children, done = threading.Lock(), set(), [0]
     started = time.time()
 
     def serving(url):
@@ -375,10 +447,9 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
                 stop.set()
                 return
             with lock:
-                if cursor[0] >= len(todo):
+                entry = dispatch.take()
+                if entry is None:
                     return
-                entry = todo[cursor[0]]
-                cursor[0] += 1
             key = entry['key']
             queue, journal = work / f'{key}.queue.jsonl', work / f'{key}.journal.jsonl'
             journal.unlink(missing_ok=True)   # an unfinished attempt restarts whole
@@ -395,6 +466,7 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
                 children.add(child)
             child.wait()
             with lock:
+                dispatch.done(entry, _finish_seconds(journal))
                 children.discard(child)
                 done[0] += 1
                 if log and done[0] % 16 == 0:
@@ -437,8 +509,10 @@ def run(directory):
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     endpoints = spec.get('endpoints') or [[spec['endpoint'], spec['workers']]]
     env = {**os.environ, 'NATLANG_MODEL_FACING': spec['series']['model_facing']}
+    dispatch = spec.get('dispatch') or {}
     collect(directory, entries, endpoints, repo=spec['repo'], runtime=spec['runtime'], env=env, stop=stop,
-            log=lambda line: print(line, flush=True))
+            log=lambda line: print(line, flush=True), order=dispatch.get('order', 'longest-first'),
+            prior=duration_prior(dispatch.get('prior') or ()))
     try:
         result = finalize(directory, spec, started, complete=not stop.is_set())
     except BaseException as error:   # never leave a run without a verdict
@@ -782,12 +856,15 @@ BASE_SNAPSHOT = Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7
 ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', 'fp8_e4m3',
               '--sglang-kv-gb', '16', '--sglang-max-running', '128', '--sglang-context', '131072')
 ACTOR_BUDGET_GB = 40   # --sglang-kv-gb + 24 (measured 2026-11-12: SGLang 23 GB at 16 GB KV, front 14 GB once a write_text reloads the native model)
-ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction')
+# max_running: SGLang's running-sequence cap (decode batch shapes and CUDA graphs; Pop 14 -> 20 slots at the
+# grpo-v4 pin, plans/neuralese/POP_HELD_THROUGHPUT_20261117.md). Results of actors that did not attest it read None.
+ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction', 'max_running')
 
 
 def engine_of(binding):
     """The arithmetic-relevant serving settings an actor attests (``rl_policy_binding.serving_engine``): engine, fork
-    commit, dtype, projection, KV dtype, overlap, reduction, and the actor export format; None when not attested."""
+    commit, dtype, projection, KV dtype, overlap, reduction, running-sequence cap, and the actor export format; None when not
+    attested."""
     engine = (binding or {}).get('serving_engine')
     if not isinstance(engine, dict):
         return None
@@ -871,11 +948,12 @@ def serve(checkpoint, sha256, store, *, unit, budget_gb, extra=(), base=BASE_SNA
 
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
             max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
-            top_p=None):
+            top_p=None, order='longest-first', duration_priors=()):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into
     ``out/result.json`` (resumable: an existing ``run.json`` must name the same manifest, policy and sampling).
     ``top_p``: the nucleus of the sampling law (default ``common.sampling.RL_TOP_P``; 1.0: untruncated), recorded as
-    the result's ``sampling``; ``compare`` refuses results of different laws."""
+    the result's ``sampling``; ``compare`` refuses results of different laws. ``order``/``duration_priors``: the dispatch
+    order (``Dispatch``; earlier result.json files of the same tasks seed its estimates), recorded as ``dispatch``."""
     from ..common.sampling import RL_TOP_P, sampling_law_of
     from .actor_client import NativeActorClient
     from ..common.code_provenance import code_provenance, repository_root
@@ -895,7 +973,8 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
             'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')},
             'engine': engine_of(info.get('rl_policy_binding')),
-            'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p)}
+            'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p),
+            'dispatch': {'order': order, 'prior': [str(Path(p).resolve()) for p in duration_priors]}}
     pin = pinned_engine(manifest)
     if pin and not allow_other_engine:
         attested = spec['engine'] or {}
@@ -926,7 +1005,7 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
             raise ValueError(f'{out} holds a run measured on another engine: {previous["engine"]!r}, '
                              f'the endpoint attests {spec["engine"]!r}')
         spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
-                'resumed_code': spec['code']}
+                'dispatch': spec['dispatch'], 'resumed_code': spec['code']}
     (out / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')
     (out / 'result.json').unlink(missing_ok=True)
     return run(out)
@@ -985,6 +1064,12 @@ def main(argv=None):
     m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
     m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
     m.add_argument('--keep-actor', action='store_true')
+    m.add_argument('--dispatch', choices=('longest-first', 'sealed'), default='longest-first',
+                   help='episode order within a sample: the task expected to run longest first (its episodes in this run, '
+                        'else --duration-prior), or the sealed queue order; never changes what is measured')
+    m.add_argument('--duration-prior', type=Path, action='append', default=[],
+                   help='an earlier result.json of the same held tasks (any policy): per-task wall seconds that order the '
+                        'first sample (repeatable)')
     v = sub.add_parser('serve', help='serve a checkpoint as a ledger actor unit (or reuse it) and print its URL')
     v.add_argument('--checkpoint', type=Path, required=True)
     v.add_argument('--checkpoint-sha256')
@@ -1049,7 +1134,7 @@ def main(argv=None):
             measure(args.out, args.manifest, endpoints, policy, samples=args.samples, seed_base=args.seed_base,
                     case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=args.max_turns,
                     context_tokens=args.context_tokens, label=args.label, allow_other_engine=args.allow_other_engine,
-                    top_p=args.top_p)
+                    top_p=args.top_p, order=args.dispatch, duration_priors=args.duration_prior)
         finally:
             if unit and not args.keep_actor:
                 subprocess.run(['systemctl', '--user', 'stop', unit])

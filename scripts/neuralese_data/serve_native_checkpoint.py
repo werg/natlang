@@ -486,7 +486,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
                        kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout,
-                       track_input_end=bool(source.get('track_input_end')))
+                       max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')))
     return process
 
 
