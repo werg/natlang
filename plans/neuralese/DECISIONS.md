@@ -2642,3 +2642,21 @@ from it by one step at LR 3e-7). Decisions:
 per task. Its replies carry the model's own visible text between tool calls as `reasoning_content` (not hidden
 reasoning), so it is trained as written. Added to `pool-v1/launch-multi.sh` with 8 slots beside Luna; restarted as
 `tgen-multi-16` (pool-v1 resumes; the pre-change launcher is kept as `launch-multi.sh.pre-haiku-20261117`).
+
+## 2026-11-17: task supply for the next pin: 16 new writing/chat/reasoning families and the tau-bench store tasks (task-supply agent)
+
+- **Gap.** The GRPO pool is 76% document reading and codebase questions. It has 32 writing rows, no chat tasks and no
+  multi-step work against a stateful service, and every authored family is an operations desk.
+- **Authored round 9.** 31 Haiku batches were qualified on the grpo-v3 pin runtime, novelty-gated, blind-solved by
+  Sonnet and admitted: 709 tasks in 16 new families, of which 45 were held back.
+- **Revived source.** The fallow `build-v3` tau-bench store sources (store service, final-state digest oracle) were
+  re-verified: 908 of 908 kept.
+- **The pool source.** `natlang-rl-task-supply-20261117` (1,355 train rows) is registered and added to `grpo.py`
+  `POOLS`; to opt out, pass `--pool` with only the old two. held-v3 verify: 0/0. Custody: 0 related, after leaving out
+  114 rows tied to held worlds through shared invented-domain groups.
+- **Fix.** The held-set closure in `qualify_authored.py` had been broken since 60d2c1209; it now runs from a frozen
+  tree (193a77d4b).
+- **Choice for the grpo-v4 pin.** At 4% of the pool, the row-order explore walk reaches about 8 authored new tasks per
+  600 explores. New `--explore-order family` (default `row`) reaches about 37. Whether v4 uses it is the pin's declared
+  choice.
+- **Not measured.** Base pass rates of the new tasks. Details: `TASK_SUPPLY_20261117.md`.

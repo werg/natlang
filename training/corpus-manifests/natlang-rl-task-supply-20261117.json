@@ -1,0 +1,85 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-task-supply-20261117",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-task-supply-20261117",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 31308474,
+      "sha256": "32a42eff93a4e7cc73358a7b6e392f09bb01c44dc14284c9c823c32e0ca1fc8b",
+      "lines": 1355
+    },
+    {
+      "path": "custody-agentic.json",
+      "bytes": 235,
+      "sha256": "d592cb03d26ca1c7301b3b660d1ed02b3577b0e7785b237eeee437003ae9444c"
+    },
+    {
+      "path": "custody.json",
+      "bytes": 220,
+      "sha256": "bd29e30ac9b553b9b9e809c041ce797f93953c21dbc581c162b67d5c1f21b1ab"
+    },
+    {
+      "path": "exposure.json",
+      "bytes": 869,
+      "sha256": "c79e06a05b7c315abf35fded0dc66091013711a37f0e6618676c203192a00f67"
+    },
+    {
+      "path": "held-verify/groups.json",
+      "bytes": 95588,
+      "sha256": "80bdfcb66292f103edd13f558d90de28f5e3046c287dbdd5976be0f2fc4ca2ec"
+    },
+    {
+      "path": "held-verify/ids.json",
+      "bytes": 93884,
+      "sha256": "abd04eaeb96c59cc80fe4124fe094172ae9d09eda85efd9161f87bf096963430"
+    },
+    {
+      "path": "held-verify/verify-new.json",
+      "bytes": 182,
+      "sha256": "a6352014ac8b43b3c64cfd80b9dcb24cc5ae6a2703bcdcc89da05ed778cdc79e"
+    },
+    {
+      "path": "held-verify/verify-with-exposure.json",
+      "bytes": 183,
+      "sha256": "69b6fc3a09beb8dbec64b968cf4bf6bd722da395838d3fc63e5f9151fd892bb4"
+    },
+    {
+      "path": "protection-union-agentic.json",
+      "bytes": 2125,
+      "sha256": "79c4cbafe25fea7069a4f4b8ec6b43968daf3b28668539920b06c7b6e6bd42a0"
+    },
+    {
+      "path": "protection-union.json",
+      "bytes": 2126,
+      "sha256": "6314002918091a843e5fc105d3cbdde433c7adce7fb6ba8cfbe80cd28c994203"
+    },
+    {
+      "path": "repetition.json",
+      "bytes": 2505,
+      "sha256": "987661f5671cb80121afcb839487ecc4c1014523d5e8ba6341b6aaf8673ec729"
+    },
+    {
+      "path": "selection.json",
+      "bytes": 9482,
+      "sha256": "57df3673378df80b4fc6315c01ca4e49963d11072ec900f63758999b83e51d71"
+    },
+    {
+      "path": "verification-agentic-s0.json",
+      "bytes": 127544,
+      "sha256": "88bfb1b4f361b58a5eef5dfb658424f930ef6c3dc56d7633be3b8a88623568db"
+    },
+    {
+      "path": "verification-agentic-s1.json",
+      "bytes": 127988,
+      "sha256": "f21eca615c0fbf72d93b5e6e0266c14dfb0aa12ea3e1b69d8272ed1ce4b2872d"
+    },
+    {
+      "path": "verification-agentic-s2.json",
+      "bytes": 127343,
+      "sha256": "8a4969b106a4ab8058cee44a8e88bf1aa626d22aec061b2572b541ba16e9dbc5"
+    }
+  ],
+  "bytes": 31898748
+}
