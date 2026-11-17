@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""SFT data set from verified trajectories: GRPO successes and teacher successes on the GRPO pool, replayed through the
-current runtime and oracle, capped, deduplicated, held-excluded and rendered with the LFM3 chat template
+"""SFT data set from verified trajectories: portable GRPO/teacher successes replayed through the runtime and oracle,
+and observed-live executor calls with scoped effect verification, capped, deduplicated, held-excluded and rendered with the LFM3 chat template
 (plans/neuralese/SFT_SOURCES_20261117.md).
 
 Stages (each reads the previous stage's output under WORK; read-only on every source):
@@ -209,13 +209,18 @@ def extract(args):
                                             'manifest_record': record, 'pool': str(Path(pool).resolve())}}
                               if admission else {}),
                            'execution_graph_events': len(row.get('execution_graph') or [])})
+    for path in getattr(args, 'live_run', []) or []:
+        from live_teacher_sources import load_episode
+        episode = load_episode(path)
+        out.write(episode)
+        census.setdefault('observed-live', collections.Counter())['admitted_tasks'] += 1
     out.close()
     if args.rl:
         rates = {k: {'successes': s, 'scored': n} for k, (s, n) in sorted(group_rates.items())}
         (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
     summary = {k: dict(v) for k, v in census.items()}
     (work / f'{args.out_name}-extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
-                                                    'rl': args.rl, 'teacher': args.teacher}, indent=1) + '\n')
+                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': getattr(args, 'live_run', [])}, indent=1) + '\n')
     print(json.dumps(summary, indent=1))
 
 
@@ -530,6 +535,9 @@ def replay_episode(args, server, episode, env):
     import shutil
     import subprocess
     import time
+    if episode.get('verification_mode') == 'observed-live':
+        return {'key': episode['key'], 'outcome': 'observed_live_not_portable', 'exact': False,
+                'detail': 'Live workspace/CDP effects require a test-owned live rerun; no portable replay claimed.'}
     from types import SimpleNamespace
     from natlang_neuralese.common.jsonio import read_jsonl
     from natlang_neuralese.rl import task_rollouts
@@ -772,7 +780,8 @@ def verified_episodes(work, funnel, extracted=None, sources=None):
     ``extracted`` (a set) collects every extracted key."""
     work = Path(work)
     replays = {}
-    for line in (work / 'replay.jsonl').open():
+    replay_path = work / 'replay.jsonl'
+    for line in replay_path.open() if replay_path.exists() else []:
         if line.strip():
             record = json.loads(line)
             if 'key' in record:
@@ -786,6 +795,17 @@ def verified_episodes(work, funnel, extracted=None, sources=None):
             continue
         f = funnel[source]
         f['successes'] += 1
+        if episode.get('verification_mode') == 'observed-live':
+            from live_teacher_sources import load_episode
+            binding = episode.get('live_source') or {}
+            if not binding.get('path') or sha256_file(binding['path']) != binding.get('sha256'):
+                raise ValueError('observed live source changed after extraction')
+            current = load_episode(binding['path'])
+            if current != episode:
+                raise ValueError('extracted live episode differs from its original captured records')
+            f['observed_live_verified'] += 1
+            yield episode, {'name': None, 'verification_mode': 'observed-live', 'live_source': binding}
+            continue
         from teacher_admission import check_record, fixture_task
         if fixture_task(episode['task']):
             admission = episode.get('admission') or {}
@@ -839,7 +859,10 @@ def core_candidates(args, work, funnel, held):
                            'task_id': episode['task_id'], 'family': episode.get('family') or task.get('family'),
                            'domain': (task.get('curriculum') or {}).get('domain'),
                            'teacher': (episode.get('teacher') or {}).get('model_id'), 'policy': episode.get('policy'),
-                           'name': record['name'], 'signature': minhash(shingles(action_text(episode['turns'])))})
+                           'name': record['name'],
+                           **({'live_source': record['live_source'], 'world': episode['world'], 'verification_mode': 'observed-live'}
+                              if record.get('verification_mode') == 'observed-live' else {}),
+                           'signature': minhash(shingles(action_text(episode['turns'])))})
     total, missing = teacher_coverage(args.teacher_pool, extracted)
     funnel['teacher']['manifest_successes_now'] = total
     funnel['teacher']['manifest_successes_not_extracted'] = len(missing)
@@ -1085,7 +1108,10 @@ def build(args):
                             'invocation_role': turn.get('invocation_role') or 'unknown',
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': context,
-                            'too_long': len(prompt) + len(target) > MAX_LEN})
+                            'too_long': len(prompt) + len(target) > MAX_LEN,
+                            **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
+                                'world': c['world'], 'live_exchange': turn['live_exchange']}
+                               if c.get('verification_mode') == 'observed-live' else {})})
         if not rows:
             return False
         for row in written:
@@ -1116,7 +1142,12 @@ def build(args):
         return True
 
     for c in core:
-        if not admit(c, replayed_turns(work, c['name'])):
+        if c.get('verification_mode') == 'observed-live':
+            from live_teacher_sources import load_episode
+            turns = load_episode(c['live_source']['path'])['turns']
+        else:
+            turns = replayed_turns(work, c['name'])
+        if not admit(c, turns):
             funnel[c['source']]['render_error'] += 1
     core_forward = sum(stats[s]['forward_tokens'] for s in ('rl-own', 'teacher'))
 
@@ -1209,7 +1240,9 @@ def build(args):
     report = {
         'schema': 'natlang.sft-sources-build/1', 'code': code_provenance(), 'argv': sys.argv,
         'inputs': {'episodes': {str(p): sha256_file(p) for p in episode_files(work)}, 'teacher_pools': args.teacher_pool,
-                   'replay': str(work / 'replay.jsonl'), 'replay_sha256': sha256_file(work / 'replay.jsonl'),
+                   'replay': str(work / 'replay.jsonl') if (work / 'replay.jsonl').exists() else None,
+                   'replay_sha256': sha256_file(work / 'replay.jsonl') if (work / 'replay.jsonl').exists() else None,
+                   'observed_live': [c['live_source'] for c in core if c.get('verification_mode') == 'observed-live'],
                    'october': args.october, 'held_manifest': args.held_manifest,
                    'held_manifest_sha256': sha256_file(args.held_manifest), 'base_rates': args.base_rates,
                    'renderer': renderer.identity},
@@ -1339,7 +1372,10 @@ def neuralese_text(args):
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': 0,
-                            'too_long': len(prompt) + len(target) > MAX_LEN})
+                            'too_long': len(prompt) + len(target) > MAX_LEN,
+                            **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
+                                'world': c['world'], 'live_exchange': turn['live_exchange']}
+                               if c.get('verification_mode') == 'observed-live' else {})})
             s['calls'] += 1
             s['target_tokens'] += len(target)
             s['call_tokens'] += len(prompt) + len(target)
@@ -1532,6 +1568,8 @@ def main():
     e.add_argument('--work', required=True)
     e.add_argument('--rl', action='append', default=[], metavar='RUN_DIR:ARCHIVE_DIR')
     e.add_argument('--teacher', action='append', default=[], metavar='POOL_DIR')
+    e.add_argument('--live-run', action='append', default=[], metavar='MANIFEST',
+                   help='verified observed workspace/CDP task; captured contexts only, no portable replay claim')
     e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')
     r = sub.add_parser('replay')
     r.add_argument('--work', required=True)
@@ -1549,6 +1587,8 @@ def main():
     b.add_argument('--out', required=True)
     b.add_argument('--tokenizer', required=True)
     b.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    b.add_argument('--no-default-teacher-pool', action='store_true',
+                   help='live-only build: do not require coverage of the historical default teacher pool')
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))
     b.add_argument('--max-per-task', type=int, default=4,
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')
@@ -1586,7 +1626,7 @@ def main():
     g.add_argument('--seed', type=int, default=20261117)
     args = p.parse_args()
     if args.command == 'build' and args.teacher_pool is None:
-        args.teacher_pool = [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
+        args.teacher_pool = [] if args.no_default_teacher_pool else [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
     {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build,
      'neuralese-text': neuralese_text, 'neuralese-graph': neuralese_graph}[args.command](args)
 
