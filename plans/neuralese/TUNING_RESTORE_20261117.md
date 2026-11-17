@@ -243,6 +243,13 @@ standard tooling, minimal code). The product `natlang tune` stays the user-facin
   `pop_rl_actor.py start|serve-checkpoint --adapter-release DIR` copies the fit to Pop and serves it on one SGLang
   adapter slot of its rank; attestation and the reuse check include the release's result.json digest.
 
+- **Support rows (2026-11-17 21:30):** teacher pool 636/640 tasks (4 provider-deferred, stopped), 373 successes; replay
+  369 exact (after the decision-readout replay fix, 89ddedce7); `program_tune.py rows` (068085501: nested calls'
+  last turns count as final) -> route 480 rows / 147 tasks, verdict 352 / 51, tally 1,182 / 121, bgkit 955 / 60.
+- **Fits ready, not run:** `fit/plan.json` per program (all targets, rank 16, lr 2e-3, 60 steps x 8 rows);
+  `fit-all.sh [PROGRAM ...]` in the programs root runs them one ledger unit at a time (medium, 15 GB) in a GPU window.
+  The attention+conv exact-path fit3 (18/30 steps) is retired under `retired/`.
+
 ## 5. Not checked in this inventory
 
 Nothing was run beyond imports: no pytest, no model load, no CLI `--help`. Not read in detail: `tune/trainer.py`

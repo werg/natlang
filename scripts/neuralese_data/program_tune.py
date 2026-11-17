@@ -531,8 +531,7 @@ def main(argv=None):
     p.add_argument('--store-scratch')
     p.add_argument('--rank', type=int, default=16)
     p.add_argument('--targets', nargs='+', choices=('attention', 'conv-projection', 'mlp'),
-                   help='target classes (default: all). The native engine applies an adapter by substituting each '
-                        'target\'s full effective weight (FP32 delta + its gradient), so memory grows with the targets')
+                   help='target classes (default: all; training applies the adapter factored, NATLANG_FACTORED_LORA)')
     p.add_argument('--lr', type=float, default=2e-3)
     p.add_argument('--batch-rows', type=int, default=8)
     p.add_argument('--epochs', type=float)

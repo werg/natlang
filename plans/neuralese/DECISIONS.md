@@ -2952,3 +2952,15 @@ GPQA-D 0.429 -> 0.465, IFEval strict 0.725 -> 0.721, loose 0.778 -> 0.756.
 - **The real fit** (`progtune-fit3`, attention+conv, exact path) reached step 18/30 before the coordinator stopped it
   (time-slicing slowed SFT 47 -> 74 s/step); its state is resumable but the rerun will be a fresh all-target factored
   fit in a GPU window.
+
+**2026-11-17 21:30, tuning: teacher support rows replayed; replay bug that also hit the SFT v3 corpus (tuning agent).**
+- `sft_sources.py replay` answered a decision readout's scoring requests (`prompt_logprobs`, finite-typed calls with
+  `readout: decision`) with "missing", so the episode failed although the API teacher had declined the readout and run
+  the tool loop. Program-tuning pool: 134 of 372 successes lost (Luna 91/109). Fixed in 89ddedce7 (no
+  `prompt_logprobs` -> decision-unsupported, as the teacher saw); rerun: 369/373 exact.
+- **The same bug likely cut the SFT v3 corpus** (`/home/werg/data/sft-sources-20261117`): 1,603 unresolved replays,
+  of which 1,169 design-brief-gates (every one `missing` x6 on the first request, recorded 1 turn: the shape of a
+  root readout over 6 options) and 223 decisions. Not re-replayed (another strand's data, SFT running); the next
+  corpus build should rerun `replay` on those keys with 89ddedce7.
+- Rows: a nested call's last turn now counts as final (068085501); tally went from 257 to 1,182 rows. Fits for the
+  four programs are planned (all targets, factored) and wait for a GPU window (`fit-all.sh`).
