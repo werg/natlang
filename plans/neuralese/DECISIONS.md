@@ -2694,3 +2694,18 @@ the pin's 4-sample Pop base (`--held-base`, e07bf9705; Pop at 20 slots / 20 runn
 regression is bisected with branch states. Success: a positive held change against the base at p < 0.05 on a 4-sample
 read; failure: below -3.5 pts at p < 0.05 (stop and hunt). Not included (unlikely to move held task success now):
 Neuralese variants, memetic guidance, QAT.
+
+**2026-11-17 15:30, grpo-v4 pin and sft-v3-run1 launched (supervisor).** Pin `ops/grpo-v4/pin-783e8e1d8462` (origin/main
+783e8e1d8: throughput changes, task supply, `--explore-order family`, `--held-base`, Pop 20/20 with longest-first
+dispatch and the bounded held-eval stop). Fork dbc51ddb72 on both machines: DGX fork tests 39 passed (after adding
+natlang to `fork-checks.sh`'s PYTHONPATH), producer parity at the BF16 floor and in line with p22 (forced producing
+0.050, decode 0.018, import 0.077), Pop sm89 conv bitwise OK. SFT smoke on the pin: 3 finite steps, checkpoint changed.
+- **SFT data:** `sft-verified-20261117-v2` (manifest published): 6,483 trajectories, 6,206 tasks, 137.4M forward / 9.28M
+  target tokens; weighted target 44% own GRPO successes, 28% teacher (Luna 11%, Haiku 9%, Nemotron 8%), 27% October.
+  Built with `--allow-stale-teacher` (teacher pool extracted 11:32). Template repetition is higher than v1 (4,074 pool
+  tasks: 176 effective instruction texts, top-10 share 0.39 vs v1's 203 and 0.32): the teacher pool covers the same
+  templates more densely. Accepted: one epoch, per-task cap 4, and the extra tasks are distinct instances; the GRPO
+  stage after it explores by family. `held_eval verify` against held-v3: no overlap.
+- **sft-v3-run1:** unit `sft-v3-run1`, 266 optimizer steps of 30k loss tokens, LR 5e-6, warmup 10, ~7 h. grpo-v4-run1
+  launches from its checkpoint when it ends (`launch-grpo.sh`, bundle as decided above).
+- **Pop:** `popheld-base-v4`, the base at 4 samples on the pin and Pop 20/20 into `ops/grpo-v4/held-base-pop`, ~7 h.

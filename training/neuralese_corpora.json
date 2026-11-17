@@ -741311,6 +741311,21 @@
       "admission": "sft-experiment-input",
       "license_provenance": "Own LFM3 GRPO rollouts (project-generated); teacher episodes of nvidia/nemotron-3-ultra-550b-a55b (free and paid NVIDIA API), gpt-6-luna (openai-codex), gemini-3.5/3.7-flash, glm-4.7-flash on the project's GRPO pool; October corpora rows keep their registered sources' license provenance (Luna/Qwen/Bonsai teacher curricula; SWE-rebench OpenHands Qwen3-Coder trajectories, OpenResearcher web sessions, CooperBench) as recorded per row in rows.jsonl.zst provenance.",
       "note": "SFT set for the base-checkpoint (5ff07638) SFT experiment: 2,220 trajectories over 1,945 tasks, 6,226 exp0_sft --chains sequences, 47.7M forward / 5.76M target tokens (one epoch ~2.4 h at 5.5k tok/s). GRPO own successes (grpo-v2 run1/run2, grpo-v3 run1) and teacher-generation successes (teacher-gen-20261115/pool-v1, as of 2026-11-17 02:40), each replayed through the current runtime and oracle (pin aa1bd846) and admitted only on an exact replay with task success; October teacher/acquired rows rebuilt for the current surface with compiled eval actions, 40% of forward tokens. Held-v3/v2 closure excluded; per-task caps by base pass rate, near-duplicates removed, producers alternate within a task; reasoning-free teacher replies keep the empty think block as zero-weight context. Built by scripts/neuralese_data/sft_sources.py build; plans/neuralese/SFT_SOURCES_20261117.md."
+    },
+    {
+      "id": "sft-verified-20261117-v2",
+      "owner": "dgx",
+      "path": "runs/sft-verified-20261117-v2",
+      "include": [
+        "build.json",
+        "cases.jsonl",
+        "chains.pkl",
+        "rows.jsonl.zst",
+        "repetition.json"
+      ],
+      "admission": "sft-experiment-input",
+      "license_provenance": "Own LFM3 GRPO rollouts (project-generated); teacher episodes of nvidia/nemotron-3-ultra-550b-a55b (free and paid NVIDIA API), gpt-6-luna (openai-codex), gemini-3.5/3.7-flash, glm-4.7-flash, claude-haiku-5-5 (Anthropic API) on the project's GRPO pool; October corpora rows keep their registered sources' license provenance (Luna/Qwen/Bonsai teacher curricula; SWE-rebench OpenHands Qwen3-Coder trajectories, OpenResearcher web sessions, CooperBench) as recorded per row in rows.jsonl.zst provenance.",
+      "note": "SFT set for sft-v3-run1 (base 5ff07638 -> grpo-v4 start policy): 6,483 trajectories over 6,206 tasks, 19,399 exp0_sft --chains sequences, 137.4M forward / 9.28M target tokens (one epoch ~6.9 h at 5.5k tok/s). As v1, with teacher-gen-20261115/pool-v1 re-extracted 2026-11-17 11:32 (Luna, Haiku, Nemotron, Gemini, GLM; 3,852 teacher episodes admitted on exact replay with task success, pin aa1bd846) and built with --allow-stale-teacher (pool grew during replay). Own GRPO successes 44% of weighted target, teacher 28%, October 27%. repetition.json: 4,074 GRPO-pool tasks, 87 families, 176 effective instruction texts, top-10 share 0.39. Built by scripts/neuralese_data/sft_sources.py build; plans/neuralese/SFT_SOURCES_20261117.md."
     }
   ],
   "coverage_backlog": [
