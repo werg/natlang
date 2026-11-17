@@ -1,11 +1,13 @@
-"""Usage: check_tuned_lora_llama_parity.py CHECKPOINT OUT_DIR LLAMA_SERVER
+"""Usage: check_tuned_lora_llama_parity.py CHECKPOINT OUT_DIR LLAMA_SERVER [RELEASE] [--base HF_DIR] [--ngl N]
 
 Tuned LoRA on llama.cpp equals the native adapted model: PEFT -> GGUF LoRA on our merged native GGUF export.
 
-Random free-LoRA factors on real LFM2 targets (attention, conv projection, MLP) of the pinned checkpoint. Reference:
+Without RELEASE: random free-LoRA factors on one real target per class (attention, conv projection, MLP) of the pinned
+checkpoint (LFM2 or LFM3). With RELEASE (a `tune.build` output: result.json, artifacts/): the fit's own adapter stack,
+every target it trains (on LFM3 the attention gate_proj and o_proj included), through the tuner's exact export. Reference:
 the native model with the PEFT's dense deltas added to its weights. Candidate: llama-server on the f32 native export
-with the converted GGUF LoRA. Compares greedy continuations and top-token probabilities; base runs show the adapter
-changes the output.
+with the converted GGUF LoRA (--ngl 0 runs it on the CPU). Compares greedy continuations and top-token probabilities;
+base runs show the adapter changes the output.
 """
 import json, subprocess, sys, time, urllib.request
 from pathlib import Path
@@ -19,27 +21,46 @@ from natlang_neuralese.tune.parameterization import FreeLoRADelta
 from natlang_neuralese.tune.stack import StackMember, stack_factors
 from natlang_neuralese.tune.export import export_peft, export_gguf, load_peft_dense
 
-checkpoint, out, server = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('checkpoint', type=Path)
+parser.add_argument('out', type=Path)
+parser.add_argument('server')
+parser.add_argument('release', type=Path, nargs='?')
+parser.add_argument('--base', help='HF base directory (LFM3: the pinned snapshot)')
+parser.add_argument('--ngl', default='99', help='llama-server GPU layers (0: CPU)')
+cli = parser.parse_args()
+checkpoint, out, server = cli.checkpoint, cli.out, cli.server
 out.mkdir(parents=True, exist_ok=True)
 manifest = None if (out / 'base' / 'model-f32.gguf').exists() and (out / 'base' / 'hf-config').exists() else export_native_gguf(checkpoint, out / 'base', outtypes=('f32',))
-engine = load_native_engine(str(checkpoint), device='cuda', dtype=torch.float32)
+engine = load_native_engine(str(checkpoint), base=cli.base, device='cuda', dtype=torch.float32)
 params = target_parameters(engine.shared_model)
 targets, kinds = module_map(sorted(params))
-chosen = {}
-for kind in ('attention', 'conv-projection', 'mlp'):
-    name = next(n for n in sorted(targets) if kinds[n] == kind)
-    chosen[name] = tuple(params[name].shape)
-g = torch.Generator().manual_seed(7)
-deltas = {}
-for name, (rows, cols) in chosen.items():
-    scale = 0.5 * params[name].float().std().item()
-    deltas[name] = FreeLoRADelta(torch.randn(rows, 4, generator=g) * scale, torch.randn(4, cols, generator=g), 4.)
-stack = stack_factors([StackMember('lambda:parity', 'lambda', 1., deltas)], {}, chosen)
+if cli.release:
+    from natlang_neuralese.tune.build import import_archive
+    from natlang_neuralese.tune.trainer import artifact_member
+    import_archive(engine, [cli.release / 'artifacts'], [])
+    bases, members = {}, []
+    for item in json.loads((cli.release / 'result.json').read_text())['artifacts']:
+        members.append(artifact_member(engine, item['artifact'], item['node'], 'lambda', 1., bases))
+    chosen = {name: tuple(params[name].shape) for member in members for name in member.deltas}
+    stack = stack_factors(members, bases, chosen)
+else:
+    chosen = {}
+    for kind in ('attention', 'conv-projection', 'mlp'):
+        name = next(n for n in sorted(targets) if kinds[n] == kind)
+        chosen[name] = tuple(params[name].shape)
+    g = torch.Generator().manual_seed(7)
+    deltas = {}
+    for name, (rows, cols) in chosen.items():
+        scale = 0.5 * params[name].float().std().item()
+        deltas[name] = FreeLoRADelta(torch.randn(rows, 4, generator=g) * scale, torch.randn(4, cols, generator=g), 4.)
+    stack = stack_factors([StackMember('lambda:parity', 'lambda', 1., deltas)], {}, chosen)
 peft = out / 'lora.peft'
 export_peft(stack, {n: targets[n] for n in chosen}, peft, base_identity=dict(engine.native_identity),
             base_model_name_or_path=str(out / 'base' / 'hf-config'))
 export_gguf(peft, out / 'base' / 'hf-config', out / 'lora.gguf')
-print('targets', {n: kinds[n] for n in chosen}, flush=True)
+print('targets', {kind: sum(1 for n in chosen if kinds[n] == kind) for kind in sorted(set(kinds.values()))}, flush=True)
 
 tokenizer = engine.tokenizer
 prompt = tokenizer.encode('Write one sentence about the sea and ships:', add_special_tokens=False)
@@ -67,7 +88,7 @@ tuned_native = native_greedy()
 
 def llama(lora):
     port = 18977
-    args = [server, '-m', str(out / 'base' / 'model-f32.gguf'), '--port', str(port), '-c', '1024', '-ngl', '99', '--no-warmup']
+    args = [server, '-m', str(out / 'base' / 'model-f32.gguf'), '--port', str(port), '-c', '1024', '-ngl', cli.ngl, '--no-warmup']
     if lora: args += ['--lora', str(out / 'lora.gguf')]
     process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

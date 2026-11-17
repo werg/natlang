@@ -7,15 +7,27 @@ verified successes of support tasks and judged by task outcomes on dev (held_eva
 
 Stages (each reads the previous stage's output in DIR):
 
-  split  pool rows of --family -> DIR/split.json (ids per split, pool digests) and two held_eval manifests,
-         DIR/dev/manifest.json and DIR/confirm/manifest.json, with the held set's engine pin (engine.json).
-  rows   replay-verified successes of support tasks (an `sft_sources.py` work directory: episodes*.jsonl.zst,
-         replay.jsonl and replay/<name>/rollouts.jsonl, the current runtime's record of each episode) -> one
-         natlang.tune-turn/v1 row per model call in DIR/rows.jsonl. A tool call whose result is a runtime error is not a
+  split  pool rows of --family -> DIR/split.json (ids per split, pool digests) and one held_eval manifest per split,
+         DIR/{support,dev,confirm}/manifest.json, with the held set's engine pin (engine.json): dev and confirmation
+         are measured, support is sampled on-policy (held_eval measure) for fit data.
+  rows   verified successes of support tasks -> one
+         natlang.tune-turn/v1 row per model call in DIR/rows.jsonl. Sources: --rollouts, on-policy samples of the
+         support split (`held_eval measure --manifest DIR/support/manifest.json`; the start policy's own verified
+         successes), and --sources, an `sft_sources.py` work directory (recorded GRPO/teacher successes replayed
+         under the current runtime and oracle). A tool call whose result is a runtime error is not a
          target (`rejected`): its turn is dropped and later turns keep it as failed history (prompt weight 0 anyway).
   plan   DIR/fit/plan.json for `python -m natlang_neuralese.tune.build --plan DIR/fit/plan.json --out DIR/fit/build`:
          one scope node (the whole program), free LoRA of --rank over the LFM3 target table, frozen base in BF16 with
          FP32 adapter parameters, optional GGUF export (--gguf-base-sha256, --hf-config).
+
+  bank   bank meta-learning (tune/learned/meta_bank.py) over several programs' own fits: the basis and components
+         come from the fits (PCA), Meta-SGD outer steps on their support worlds; each --held program is adapted by
+         the bank's inner fit on its support rows into OUT/adapt/<family>/, a release served and measured like a fit.
+
+Measure: serve the start policy twice with the held engine pin (`serve_native_checkpoint.py`, the second with
+`--adapter-release DIR/fit/build`) and run `held_eval measure --manifest DIR/dev/manifest.json` against each, then
+`held_eval compare` (paired per task; the adapted actor's policy id is CHECKPOINT+stack digest). Confirmation once,
+for the selected release.
 
 The fitter, export and serving are the tuner's (`tune.build`, `tune.export`, the engines' adapter paths): this driver
 only selects data and writes the plan.
@@ -67,10 +79,33 @@ def split_group(row):
     return (row.get('curriculum') or {}).get('split_group') or row['id']
 
 
+def split_manifest(directory, family, name, items, held):
+    """A held_eval manifest of one split's tasks (``items``: (pool, row index, row)) with the held set's engine pin:
+    dev and confirmation are measured with it, support is sampled with it (on-policy fit data)."""
+    from natlang_neuralese.rl.held_eval import write_manifest, MANIFEST_SCHEMA
+    from natlang_neuralese.rl.curriculum import metadata
+    if not items:
+        raise SystemExit(f'the {name} split is empty')
+    pool = items[0][0]
+    manifest = {'schema': MANIFEST_SCHEMA, 'seed': f'program-split:{family}', 'included': 0,
+                'program': {'family': family, 'split': name},
+                'tasks': [{'id': row['id'], 'pool_row': index, 'family': metadata(row)['family'],
+                           'level': metadata(row)['level'], 'split_group': split_group(row),
+                           'row_sha256': hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()}
+                          for _, index, row in items],
+                'excluded_split_groups': sorted({split_group(row) for _, _, row in items}),
+                # held_eval.exclusion_ids reads one pool: a family's rows come from one pool file
+                'pool': {'path': str(pool), 'sha256': sha256_file(pool), 'rows': sum(1 for _ in open(pool))}}
+    write_manifest(directory, manifest, [row for _, _, row in items])
+    engine = Path(held).parent / 'engine.json'
+    if engine.exists():
+        shutil.copyfile(engine, directory / 'engine.json')
+    return {'path': str(directory / 'manifest.json'), 'tasks': len(items)}
+
+
 # ---- split -----------------------------------------------------------------------------------------------------------
 def split(args):
-    from natlang_neuralese.rl.held_eval import exclusion_ids, write_manifest, MANIFEST_SCHEMA
-    from natlang_neuralese.rl.curriculum import metadata
+    from natlang_neuralese.rl.held_eval import exclusion_ids
     import grpo
     out = Path(args.out)
     if (out / 'split.json').exists():
@@ -109,25 +144,9 @@ def split(args):
               'counts': {name: len(items) for name, items in parts.items()},
               'groups': {name: len({split_group(r) for _, _, r in items}) for name, items in parts.items()},
               'ids': {name: sorted(r['id'] for _, _, r in items) for name, items in parts.items()}}
-    engine = Path(held).parent / 'engine.json'
-    for name in ('dev', 'confirm'):
-        items = parts[name][:args.max_tasks] if args.max_tasks else parts[name]
-        if not items:
-            raise SystemExit(f'the {name} split is empty')
-        manifest = {'schema': MANIFEST_SCHEMA, 'seed': f'program-split:{args.family}', 'included': 0,
-                    'program': {'family': args.family, 'split': name},
-                    'tasks': [{'id': row['id'], 'pool_row': index, 'family': metadata(row)['family'],
-                               'level': metadata(row)['level'], 'split_group': split_group(row),
-                               'row_sha256': hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()}
-                              for _, index, row in items],
-                    'excluded_split_groups': sorted({split_group(row) for _, _, row in items}),
-                    # held_eval.exclusion_ids reads one pool: the family's rows all come from these pools
-                    'pool': {'path': str(items[0][0]), 'sha256': sha256_file(items[0][0]),
-                             'rows': sum(1 for _ in open(items[0][0]))}}
-        write_manifest(out / name, manifest, [row for _, _, row in items])
-        if engine.exists():
-            shutil.copyfile(engine, out / name / 'engine.json')
-        record[f'{name}_manifest'] = {'path': str(out / name / 'manifest.json'), 'tasks': len(items)}
+    for name in SPLITS:
+        items = parts[name][:args.max_tasks] if args.max_tasks and name != 'support' else parts[name]
+        record[f'{name}_manifest'] = split_manifest(out / name, args.family, name, items, held)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'split.json').write_text(json.dumps(record, indent=1) + '\n')
     print(json.dumps({k: record[k] for k in ('family', 'counts', 'groups', 'excluded')}))
@@ -200,30 +219,37 @@ def episode_turns(task_id, key, turns):
     return rows, dispositions
 
 
-def rows(args):
+def sampled_episodes(directory):
+    """(key, task id, source, turns) of the successful episodes of an on-policy sample of the support split (a
+    `held_eval measure` directory of DIR/support/manifest.json): its rollouts as natlang.rollout/1 records
+    (`task_rollouts.score` emits them once), scored by the current runtime and oracle that ran them."""
+    from natlang_neuralese.rl import task_rollouts
+    directory = Path(directory)
+    emitted = directory / 'rollouts.jsonl'
+    if not emitted.exists():
+        task_rollouts.score(directory, emitted, neuralese_bonus=0., efficiency_weight=0.)
+    label = 'sample:' + '/'.join(directory.parts[-2:])
+    for row in read_jsonl(emitted):
+        if row.get('outcome') == 'task_success' and float((row.get('reward') or {}).get('quality') or 0) >= 1:
+            yield f"{label}:{row['group']}:{row['sample']}", row['task_id'], 'sampled', row['turns']
+
+
+def replayed_episodes(work, family, stats):
+    """(key, task id, source, turns) of replay-verified successes in an `sft_sources.py` work directory: the current
+    runtime's replay of each recorded success (replay/<name>/rollouts.jsonl)."""
     from sft_sources import zstd_lines
-    directory = Path(args.dir)
-    record = json.loads((directory / 'split.json').read_text())
-    support = set(record['ids']['support'])
-    work = Path(args.sources)
+    work = Path(work)
     replays = {}
     for line in (work / 'replay.jsonl').open():
         if line.strip():
             item = json.loads(line)
             if 'key' in item:
                 replays[item['key']] = item
-    stats = {'episodes': 0, 'not_support': 0, 'not_replayed': 0, 'replay_failed': 0, 'turns': 0, 'rows': 0,
-             'rejected_turns': 0, 'unverified_turns': 0, 'tasks': set(), 'by_source': {}}
-    out = []
-    paths = sorted(work.glob('episodes*.jsonl.zst'))
-    for path in paths:
+    for path in sorted(work.glob('episodes*.jsonl.zst')):
+        stats['sources'].append({'path': str(path), 'sha256': sha256_file(path)})
         for line in zstd_lines(path):
             episode = json.loads(line)
-            if episode.get('family') != record['family']:
-                continue
-            stats['episodes'] += 1
-            if episode['task_id'] not in support:
-                stats['not_support'] += 1
+            if episode.get('family') != family:
                 continue
             replay = replays.get(episode['key'])
             if replay is None:
@@ -233,17 +259,43 @@ def rows(args):
                 stats['replay_failed'] += 1
                 continue
             replayed = read_jsonl(work / 'replay' / replay['name'] / 'rollouts.jsonl')[0]
-            made, dispositions = episode_turns(episode['task_id'], episode['key'], replayed['turns'])
+            yield episode['key'], episode['task_id'], episode['source'], replayed['turns']
+
+
+def rows(args):
+    directory = Path(args.dir)
+    record = json.loads((directory / 'split.json').read_text())
+    support = set(record['ids']['support'])
+    stats = {'episodes': 0, 'not_support': 0, 'not_replayed': 0, 'replay_failed': 0, 'turns': 0, 'rows': 0,
+             'rejected_turns': 0, 'unverified_turns': 0, 'tasks': set(), 'by_source': {}, 'sources': []}
+    episodes = []
+    for work in args.sources or ():
+        episodes.append(replayed_episodes(work, record['family'], stats))
+    for sample in args.rollouts or ():
+        stats['sources'].append({'path': str(Path(sample).resolve()), 'kind': 'support sample'})
+        episodes.append(sampled_episodes(sample))
+    if not episodes:
+        raise SystemExit('give --sources and/or --rollouts')
+    out, keys = [], set()
+    for stream in episodes:
+        for key, task_id, source, turns in stream:
+            stats['episodes'] += 1
+            if task_id not in support:
+                stats['not_support'] += 1
+                continue
+            if key in keys:
+                continue
+            keys.add(key)
+            made, dispositions = episode_turns(task_id, key, turns)
             stats['turns'] += len(dispositions)
             stats['rejected_turns'] += dispositions.count('rejected')
             stats['unverified_turns'] += dispositions.count('unverified')
             stats['rows'] += len(made)
-            stats['tasks'].add(episode['task_id'])
-            stats['by_source'][episode['source']] = stats['by_source'].get(episode['source'], 0) + 1
+            stats['tasks'].add(task_id)
+            stats['by_source'][source] = stats['by_source'].get(source, 0) + 1
             out.extend(made)
     stats['tasks'] = len(stats['tasks'])
     stats['support_tasks'] = len(support)
-    stats['sources'] = [{'path': str(p), 'sha256': sha256_file(p)} for p in paths]
     if not out:
         raise SystemExit(f'no verified support successes of {record["family"]}: {stats}')
     with open(directory / 'rows.jsonl', 'w', encoding='utf-8') as handle:
@@ -293,6 +345,125 @@ def plan(args):
     print(json.dumps({'plan': str(fit / 'plan.json'), 'recipe': recipe, 'exports': exports}))
 
 
+# ---- bank ------------------------------------------------------------------------------------------------------------
+def program_rows(engine, directory, *, sha):
+    """Pool rows of one program (meta_bank.build_pool input): its support rows lowered with the engine's template,
+    one world per support task."""
+    from natlang_neuralese.tune.rows import lower_rows
+    directory = Path(directory)
+    family = json.loads((directory / 'split.json').read_text())['family']
+    turns = read_jsonl(directory / 'rows.jsonl')
+    lowered = lower_rows(engine, turns, prompt_weight=0.)
+    return [{'family': family, 'world': turn['component'], 'actor': {'checkpoint_sha256': sha}, 'graph': row['graph']}
+            for turn, row in zip(turns, lowered)], family
+
+
+def program_fit(engine, directory):
+    """``{name: (B, A)}`` (``Delta W = B A``) of a program's own fit (DIR/fit/build): the actual per-program LoRA fit
+    the bank is built from and its mixture labels are projections of."""
+    from natlang_neuralese.tune.build import import_archive
+    from natlang_neuralese.tune.trainer import adapter_factors
+    build = Path(directory) / 'fit' / 'build'
+    result = json.loads((build / 'result.json').read_text())
+    import_archive(engine, [build / 'artifacts'], [])
+    factors = {}
+    for item in result['artifacts']:
+        for name, (factor_b, factor_a) in adapter_factors(engine, item['artifact']).items():
+            factors[name] = (factor_b.detach().float().cpu(), factor_a.detach().float().cpu())
+    return factors
+
+
+def write_release(engine, record_id, directory, provenance):
+    """A servable adapter release (`serve_native_checkpoint.py --adapter-release`): the composed adapter and its
+    dependency closure (the bank basis) as store files, and the result fragment naming it."""
+    from natlang_neuralese.tune.build import persist_artifacts, _write
+    directory = Path(directory)
+    persist_artifacts(engine, [record_id], directory / 'artifacts', directory / 'states')
+    _write(directory / 'result.json', {'schema': 'natlang.tune.build-result/1', 'memberships': [],
+                                        'artifacts': [{'node': 'tree:', 'artifact': record_id, 'requires': []}],
+                                        'receipt': provenance})
+
+
+def bank(args):
+    """Bank meta-learning over program fits: the shared basis is the SVD of the meta-training programs' own LoRA fits,
+    the components their principal directions (meta_bank PCA initialization), then Meta-SGD outer steps on the
+    programs' support worlds; held programs are adapted by the bank's inner fit on their support rows and written as
+    servable releases (OUT/adapt/<family>/) for the task-outcome gate (held_eval on each held program's dev split)."""
+    import torch
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.tune.build import fit_store_context, _write
+    from natlang_neuralese.tune.learned import meta_bank as MB
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    sha = args.checkpoint_sha256 or sha256_file(args.checkpoint)
+    recipe = MB.MetaRecipe.from_json({'target_pattern': args.target_pattern, 'seed': args.seed,
+                                      **json.loads(args.recipe or '{}')})
+    operation = {'checkpoint_sha256': sha, 'recipe': recipe.as_json(),
+                 'programs': [str(Path(p).resolve()) for p in args.programs],
+                 'held': [str(Path(p).resolve()) for p in args.held]}
+    if (out / 'operation.json').exists() and json.loads((out / 'operation.json').read_text()) != operation:
+        raise SystemExit(f'{out} is bound to another checkpoint, recipe or program set')
+    _write(out / 'operation.json', operation)
+    config = {'store_scratch': args.store_scratch} if args.store_scratch else {}
+    with fit_store_context(config) as store:
+        engine = load_native_engine(str(args.checkpoint), base=args.base, device=args.device,
+                                    dtype=getattr(torch, args.dtype) if args.dtype else None, store=store)
+        rows, fits, held_dirs = [], {}, {}
+        for directory in args.programs:
+            made, family = program_rows(engine, directory, sha=sha)
+            rows.append((made, family, 'meta-train'))
+            fits[family] = program_fit(engine, directory)
+        for directory in args.held:
+            made, family = program_rows(engine, directory, sha=sha)
+            rows.append((made, family, 'held'))
+            held_dirs[family] = Path(directory)
+        pool = {'families': {}}
+        for made, family, role in rows:
+            # build_pool's role draw is replaced by the declared role (held programs are the gate's families)
+            part = MB.build_pool(made, held_fraction=1. if role == 'held' else 0., rows_per_world=args.rows_per_world,
+                                 support_worlds=recipe.support_worlds, query_worlds=recipe.query_worlds, seed=recipe.seed)
+            if family not in part['families']:
+                print(json.dumps({'event': 'program skipped', 'family': family, 'role': role,
+                                  'worlds': len({r['world'] for r in made})}), flush=True)
+                continue
+            pool = {**part, 'families': {**pool['families'], family: part['families'][family]}}
+        if not any(f['role'] == 'meta-train' for f in pool['families'].values()):
+            raise SystemExit('no meta-training program has enough support worlds')
+        receipt = MB.write_pool(pool, out / 'pool')
+        meta_fits = {family: fits[family] for family, f in pool['families'].items() if f['role'] == 'meta-train'}
+        learner = MB.BankMetaLearner(engine, pool, recipe, out / 'learner', parent_sha256=sha, fits=meta_fits)
+        print(json.dumps({'event': 'start', 'pool': receipt, 'step': learner.state['step'],
+                          'targets': learner.state['targets'], 'components': learner.state['components'],
+                          'spectrum': learner.state.get('spectrum')}), flush=True)
+        while learner.state['step'] < args.steps:
+            entry = learner.step()
+            learner.save()
+            print(json.dumps({'event': 'outer', 'step': entry['step'], 'seconds': entry['seconds'],
+                              'grad': entry['grad_norm'], 'query': [round(r['query_fitted'], 4) for r in entry['families']]}),
+                  flush=True)
+        if any(f['role'] == 'held' for f in pool['families'].values()):
+            evaluation = learner.evaluate('dev')
+            learner.save()
+            print(json.dumps({'event': 'teacher-forced dev', 'mean': evaluation['mean'],
+                              'meta_wins': evaluation['meta_wins']}), flush=True)
+        manifest = learner.publish()
+        learner.save()
+        for family, directory in held_dirs.items():
+            made = [r for made, f, _ in rows if f == family for r in made]
+            bank_ = learner.bank_of('meta')
+            fitted = learner.fit(made, 'meta')
+            cores = bank_.composed_cores(list(range(len(bank_.components))), fitted['coefficients'])
+            record = bank_.compose_adapter(engine, cores, provenance={'bank_adaptation': 'meta', 'family': family,
+                                                                      'support': [r['graph']['id'] for r in made]})
+            write_release(engine, record.id, out / 'adapt' / family,
+                          {'bank': manifest['snapshot'], 'family': family, 'support_rows': len(made),
+                           'support_loss': fitted['history'][-1], 'program': str(directory.resolve())})
+            print(json.dumps({'event': 'adapted', 'family': family, 'release': str(out / 'adapt' / family),
+                              'support_loss': [round(fitted['history'][0], 4), round(fitted['history'][-1], 4)]}),
+                  flush=True)
+        _write(out / 'bank-manifest.json', manifest)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
@@ -308,7 +479,9 @@ def main(argv=None):
     s.add_argument('--max-tasks', type=int, help='cap dev/confirmation manifests at this many tasks (in pool order)')
     r = sub.add_parser('rows')
     r.add_argument('--dir', required=True)
-    r.add_argument('--sources', required=True, help='an sft_sources.py work directory (extracted and replayed)')
+    r.add_argument('--sources', action='append', help='an sft_sources.py work directory (extracted and replayed)')
+    r.add_argument('--rollouts', action='append',
+                   help='a held_eval measure directory of DIR/support/manifest.json (on-policy support samples)')
     p = sub.add_parser('plan')
     p.add_argument('--dir', required=True)
     p.add_argument('--checkpoint', required=True, help='the start policy (native checkpoint)')
@@ -328,8 +501,24 @@ def main(argv=None):
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--gguf-base-sha256', help='sha256 of the base GGUF the LoRA exports bind to')
     p.add_argument('--hf-config', help='HF config directory of the base for the GGUF LoRA converter')
+    b = sub.add_parser('bank', help='bank meta-learning over program fits; held programs adapted for the outcome gate')
+    b.add_argument('--programs', nargs='+', required=True, help='meta-training program directories (fit/build done)')
+    b.add_argument('--held', nargs='*', default=[], help='held program directories (their own fits are references)')
+    b.add_argument('--out', required=True)
+    b.add_argument('--checkpoint', required=True)
+    b.add_argument('--checkpoint-sha256')
+    b.add_argument('--base')
+    b.add_argument('--device', default='cuda')
+    b.add_argument('--dtype', help='frozen base precision (default: the checkpoint\'s)')
+    b.add_argument('--store-scratch')
+    b.add_argument('--steps', type=int, default=0, help='outer meta-training steps (0: the PCA bank alone)')
+    b.add_argument('--rows-per-world', type=int, default=8)
+    b.add_argument('--target-pattern', default=r'self_attn\.(q_proj|k_proj|v_proj|o_proj)|conv\.(in_proj|out_proj)',
+                   help='bank target matrices (default: the program fits\' attention and conv projections)')
+    b.add_argument('--recipe', help='JSON overrides of meta_bank.MetaRecipe')
+    b.add_argument('--seed', type=int, default=0)
     args = parser.parse_args(argv)
-    {'split': split, 'rows': rows, 'plan': plan}[args.command](args)
+    {'split': split, 'rows': rows, 'plan': plan, 'bank': bank}[args.command](args)
 
 
 if __name__ == '__main__':

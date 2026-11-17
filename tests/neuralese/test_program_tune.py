@@ -120,3 +120,55 @@ def test_a_served_release_is_the_default_stack_and_a_distinct_policy(tmp_path):
     model = served.shared_model
     run = lambda adapters: served._native_run(lambda: model.logits(model(plan)['h_final']).detach(), adapters)
     assert not torch.equal(run(None), run([]))   # the default stack applies; an explicit empty stack is the base
+
+
+def toy_program(engine, root, family, tasks, seed):
+    """A program directory with `tasks` one-turn support successes and its own 2-step free-LoRA fit."""
+    from natlang_neuralese.tune.build import persist_artifacts
+    from natlang_neuralese.tune.rows import lower_rows
+    from natlang_neuralese.tune.trainer import JointTrainer, Recipe
+    directory = root / family
+    directory.mkdir(parents=True)
+    ids = [f'{family}:task-{i}' for i in range(tasks)]
+    (directory / 'split.json').write_text(json.dumps({'family': family, 'ids': {'support': ids, 'dev': [], 'confirm': []}}))
+    turns = []
+    for i, task in enumerate(ids):
+        target = {'role': 'assistant', 'content': f't{5 + i % 5} t{5 + (i // 5) % 5} t{5 + seed % 5}'}
+        made, _ = P.episode_turns(task, f'sample:{task}', [{'messages': [{'role': 'system', 'content': 'sys'},
+                                  {'role': 'user', 'content': f't4 t{5 + i % 5}'}], 'tools': [], 'target': target}])
+        turns += made
+    (directory / 'rows.jsonl').write_text(''.join(json.dumps(t) + '\n' for t in turns))
+    recipe = Recipe.from_json({'parameterization': 'free-lora', 'ranks': {'tree': 2, 'folder': 0, 'lambda': 0},
+                               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.}, 'steps': 2, 'batch_rows': 3,
+                               'seed': seed, 'optimizer': {'name': 'adam', 'learning_rate': 5e-2}})
+    trainer = JointTrainer(engine, P.manifest(family, {}), lower_rows(engine, turns, prompt_weight=0.), recipe)
+    trainer.step(); trainer.step()
+    build = directory / 'fit' / 'build'
+    persist_artifacts(engine, list(trainer.state['node_artifacts'].values()), build / 'artifacts', build / 'states')
+    (build / 'result.json').write_text(json.dumps(trainer.manifest_fragment()))
+    return directory
+
+
+def test_bank_from_program_fits_adapts_a_held_program_into_a_servable_release(tmp_path):
+    import argparse
+    from natlang_neuralese.serve import load_native_engine
+    from serve_native_checkpoint import bind_adapter_release
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    programs = [toy_program(engine, tmp_path / 'programs', f'fam{k}', 6, k) for k in range(3)]
+    held = toy_program(engine, tmp_path / 'programs', 'held', 7, 9)
+    recipe = {'rank': 4, 'components': 4, 'component_rank': 2, 'inner_steps': 2, 'layer_groups': 1, 'meta_batch': 1,
+              'aux_families': 1, 'init_families': 3, 'lora_rank': 2, 'reference_passes': [1]}
+    args = argparse.Namespace(programs=[str(p) for p in programs], held=[str(held)], out=str(tmp_path / 'bank'),
+                              checkpoint=str(tmp_path / 'native.pt'), checkpoint_sha256=None, base=None, device=engine.device,
+                              dtype=None, store_scratch=None, steps=1, rows_per_world=8, seed=0, recipe=json.dumps(recipe),
+                              target_pattern=r'self_attn\.(q_proj|k_proj|v_proj|out_proj)|conv\.(in_proj|out_proj)')
+    P.bank(args)
+    bank = tmp_path / 'bank'
+    pool = json.loads((bank / 'pool' / 'pool.json').read_text())
+    assert {name: f['role'] for name, f in pool['families'].items()} == {'fam0': 'meta-train', 'fam1': 'meta-train',
+                                                                         'fam2': 'meta-train', 'held': 'held'}
+    assert json.loads((bank / 'learner' / 'state.json').read_text())['step'] == 1
+    assert (bank / 'bank-manifest.json').exists()
+    served = load_native_engine(str(tmp_path / 'native.pt'), device=engine.device)
+    entries = bind_adapter_release(served, bank / 'adapt' / 'held')
+    assert served.rl_policy_binding['adapters']['stack'] == entries
