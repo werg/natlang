@@ -2864,3 +2864,15 @@ stages; `tune/` and `tune/learned/` themselves import and run. Rebuilt on today'
   manifest) before a capability claim.
 - **Not yet measured:** no task-outcome comparison (dev, base vs adapter) has run; no LFM3 GGUF LoRA has been served by
   llama-server or wllama; SGLang adapter-slot parity was not rerun on a real fit.
+
+**2026-11-17 19:00, operators v3 built on main (operators agent).** Approved by the coordinator; details in
+OPERATORS_RESTORE_20261117.md §6.
+- **Built:**
+  - compact-value and compact-params are `view` at the runtime's sites (registry v3);
+  - `native.capture` on the Python engine and the SGLang actor;
+  - the ts-host operator call plus capture, behind the model-facing variant `learned-compaction`;
+  - case rows with a mandatory held-v3/v2 filter (name-level groups, ids, shingles net of held boilerplate);
+  - the use ablation.
+- **compact-history cases are not lowered:** v3's history state is the model's own note captured in context.
+- **Fork/page capture is open** and recorded in ENGINE_PARITY.
+- **Next:** rows build (queued) -> step-0 ablation -> SFT -> held on/off -> GRPO at a resume.
