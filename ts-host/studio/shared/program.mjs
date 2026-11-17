@@ -14,7 +14,7 @@ export function fixtureTurn(spec, getState, getEvent, modelTurnsSoFar) {
     return turn => {
         const prompt = String(turn.messages.find(row => row.role === 'user')?.content ?? '');
         if (modelTurnsSoFar(turn.messages) > 0)
-            return { text: 'done' };
+            return { calls: [['return_result', { status: 'success' }]] };
         const evaluate = code => ({ calls: [['eval', { code }]], completion_tokens: 1 });
         if (prompt.includes(`Drive the ${spec.title} interaction to completion.`))
             return evaluate('const decision = await choose(state, event); const step = await perform(state, event, decision); return await finish(step)');

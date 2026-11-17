@@ -102,7 +102,7 @@ test('lost-ack service is readable and rejects changed commands without addition
       if (!changedRejected) throw new Error("changed retry accepted");
       for (const reminder of reminders) mail.send({ key: reminder.id, to: reminder.to, text: reminder.text });
       return reminders.map(item => item.id);` }]] };
-    return { text: 'done' };
+    return { calls: [['return_result', { status: 'success' }]] };
   };
   const run = await executeProgram(record, driver, { rootSeed: 7, systemPrompt: TOOLS_PROMPT, contextTokens: 16384, maxTurns: 4 });
   assert.equal(run.outcome.accepted, true, JSON.stringify(run.outcome.checks));

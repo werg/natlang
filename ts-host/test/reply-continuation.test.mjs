@@ -40,6 +40,10 @@ test('a reply cut off before any tool call is continued as the same turn, with t
   assert.equal(requests[2].tool_choice, undefined);
   assert.deepEqual(events.filter(event => event.kind === 'model_request' && event.phase === 'start').map(event => event.turn), [1, 1, 1]);
   assert.deepEqual(events.filter(event => event.kind === 'continuation').map(event => event.message_tokens), [100, 200]);
+  const nodes = events.filter(event => event.kind === 'model_turn');
+  assert.equal(nodes.length, 3);
+  assert.equal(new Set(nodes.map(node => node.node)).size, 3, 'each request keeps its own graph identity');
+  assert.deepEqual(nodes.map(node => node.seed), requests.map(request => request.seed));
 });
 
 test('the call token budget bounds continuations', async () => {
@@ -115,4 +119,18 @@ test('edit_code and diff_code are offered only to a call that can change code', 
   const names = requests[0].tools.map(tool => tool.function.name);
   assert.ok(names.includes('read_code'));
   assert.ok(!names.includes('edit_code') && !names.includes('diff_code'));
+});
+
+test('a truncated tool call preserves reasoning but cannot prefill lost structured arguments', async () => {
+  const raw = [{ id: 'call_partial', type: 'function', function: { name: 'eval', arguments: '{"code":' } }];
+  const driver = chatCompletionModelTurn(async () => ({ choices: [{ finish_reason: 'length', message: {
+    role: 'assistant', content: '', reasoning_content: 'I should compute it.', tool_calls: raw,
+  } }], usage: { prompt_tokens: 1000, completion_tokens: 100 } }), { continuesReplies: true });
+  const partial = await driver({ messages: [], tools: [], seed: null, max_tokens: 100 });
+  assert.equal(partial.truncated, true);
+  assert.equal(partial.reasoning, 'I should compute it.');
+  assert.deepEqual(partial.raw_calls, raw);
+  const { requests, result } = await run(index => index === 1 ? partial : answer('Done.'), { maxTurns: 4, turnTokens: 100 });
+  assert.equal(result.value, 1);
+  assert.equal(requests[1].continue, undefined);
 });

@@ -42,7 +42,7 @@ test('a browser model sees a failed eval and repairs the function', async () => 
   let turns = 0;
   const runtime = browser.createNatlangRuntime({ model: { driver: request => {
     if (turns === 1) assert.match(request.messages.at(-1).content, /Nothing else from this eval was kept/);
-    return turns < script.length ? { calls: [script[turns++]], completion_tokens: 1 } : (turns++, { text: 'done', completion_tokens: 1 });
+    return turns < script.length ? { calls: [script[turns++]], completion_tokens: 1 } : (turns++, { calls: [['return_result', { status: 'success' }]], completion_tokens: 1 });
   } } });
   const project = browser.newPlaygroundProject('Next', 'next.nl', { 'next.nl': '---\nargs:\n  value: number\nreturns: number\n---\nReturn the next number.\n' }, { value: 4 }, 5);
   const run = await browser.runPlaygroundProject(runtime, project);

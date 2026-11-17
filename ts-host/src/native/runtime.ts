@@ -41,7 +41,6 @@ import { returnErrorText, returnValueRejection, type ReturnErrorText } from './r
 import { literalText } from './pseudo-call.js';
 import { STAGED_RESULT_NOTICE } from './staged-result.js';
 import { modelFacing } from '../runtime/model-facing.js';
-import { TOOL_MARKUP } from './tool-markup.js';
 import type { Platform } from '../runtime/platform.js';
 import ts from 'typescript';
 
@@ -1467,7 +1466,7 @@ export class NativeSession {
     return this.callableCache.tree;
   }
 
-  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish' | 'assistant-text-return',
+  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish',
     sourceKind: 'typed-text-result' | 'typed-json-result' | 'typed-text-result-field', resultPath?: (string | number)[]): Promise<Value> {
     const callId = this.runtime.currentCallId ?? this.runtime.options.runId;
     const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
@@ -1484,7 +1483,7 @@ export class NativeSession {
   }
 
   /** Materialize plain text or validated JSON only when the declared Neuralese element type makes that representation exact. */
-  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish' | 'assistant-text-return',
+  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish',
     parseJsonFallback = false): Promise<Value> {
     const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'));
     const element = wanted.kind === 'neuralese' ? this.env.resolve(wanted.element) : undefined;

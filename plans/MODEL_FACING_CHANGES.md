@@ -2505,3 +2505,22 @@ managed llama-server or the page serving a natlang export could never produce a 
 producer adapter now serves with `logit_bias {}`; one without it still bans the marker. Applies to the page's new default
 GGUF (natlang-lfm3-5ff07638, `ts-host/src/model-default.ts`) and to every later `natlang setup --native` export.
 The SGLang actor's HF export (`serving.banned_token_ids`) is separate and unchanged, so the held series is not affected.
+
+## 2026-11-17: complete the pending explicit-result and reply-continuation changes
+
+Reviewed and integrated the local runtime changes from 2026-11-13 with current main. A plain assistant reply no
+longer completes an invocation: `return_result` supplies or confirms its typed result, and `eval {finish:true}`
+still completes a computed result. This prevents a model's deliberation from becoming a string answer. Recovery
+feedback and staged-value notices explain the required tool call. Scripted test drivers and the specification use
+the same protocol; preserved trajectory notices remain readable.
+
+A managed llama.cpp reply cut at a request's token limit before a tool call continues through assistant prefill,
+including reasoning, as the same turn while the total token and context budgets permit. The adapter requests a
+whole nonstreamed response and validates its preserved prefix. Drivers carry this capability across sessions and
+worker threads. Continued requests retain distinct graph identities and their actual seeds; malformed cut-off tool
+arguments keep the reasoning and cannot resume a structured argument prefix the server did not return. Backends
+without the capability keep the cut-off note and a new turn. Small records that fit their
+preview allowance retain their values, code edit tools are offered only to editable calls, and an oversized initial
+prompt does not claim that nonexistent history was moved to transcript. These change the ts-host held series;
+existing pinned experiments retain their own code. Scripted authoring, corpus replay and application fixtures now
+confirm staged results with `return_result`; archived reference-only `reply` directives replay as that confirmation.

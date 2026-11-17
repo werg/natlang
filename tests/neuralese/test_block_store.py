@@ -12,6 +12,7 @@ import torch
 from natlang_neuralese.model.native_artifact import NativeTensorArtifact, encode_native_tensor_artifact
 from natlang_neuralese.model.state_block import NativeStateBlock
 from natlang_neuralese.serve.store import TensorStore, encode_native_state, native_state_id
+from natlang_neuralese.serve.engine import Engine
 
 IDENTITY = {
     "checkpoint_sha256": "2" * 64,
@@ -118,6 +119,8 @@ def test_rl_archive_id_scanner_rejects_flat_projected_references():
 
 
 class _FakeEngine:
+    stored_native_state = Engine.stored_native_state
+
     def __init__(self, store):
         self.store = store
 

@@ -98,7 +98,7 @@ function scriptedDriver(record) {
   return async () => turn++ === 0 ? { calls: [['eval', { code:
     `const n = (v: any): number => typeof v === 'number' ? 1 : v && typeof v === 'object' ? Object.values(v).reduce((s: number, x: any) => s + n(x), 0) : 0;\n` +
     `const count = (p: any): number => 1 + (p.reports ?? []).reduce((s: number, c: any) => s + count(c), 0);\n` +
-    `return ${task.name === 'json_numbers' ? `n(${key})` : task.name === 'org_size' ? `count(${key})` : 'null'};` }]] } : { text: 'done' };
+    `return ${task.name === 'json_numbers' ? `n(${key})` : task.name === 'org_size' ? `count(${key})` : 'null'};` }]] } : { calls: [['return_result', { status: 'success' }]] };
 }
 
 const trials = Number(values.trials), out = values.out && resolve(values.out);

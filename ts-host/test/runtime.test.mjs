@@ -414,7 +414,7 @@ test('a child loaded directly retains its owning function and folder type scopes
  const outer=loadVirtualNatlang(files,'outer.nl');
  const child=loadVirtualNatlang(files,'outer/nested/child.nl');
  const requests=[];
- const runtime=createNatlangRuntime({model:async request=>{requests.push(request);return {text:'prefix-x'};}});
+ const runtime=createNatlangRuntime({model:async request=>{requests.push(request);return {calls:[['return_result',{status:'success',value:'prefix-x'}]]};}});
  assert.equal(await runtime.run(()=>child('x','prefix-')),'prefix-x');
  assert.equal(await runtime.run(()=>outer.nested.child('x','prefix-')),'prefix-x');
  assert.deepEqual(requests[0].messages,requests[1].messages);

@@ -929,10 +929,12 @@ export class NativeToolAgent {
    * `model_turn` with its sampling settings and the tool calls it chose.
    */
   private async modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number, readout?: 'decision',
-    actor = this.options.actor, extraInputs: { node: string; port: string }[] = [], temperature = this.options.temperature): Promise<string | undefined> {
+    actor = this.options.actor, extraInputs: { node: string; port: string }[] = [], temperature = this.options.temperature,
+    request?: { ordinal: number; continuation?: number }): Promise<string | undefined> {
     const trace = session.runtime.trace;
     const callId = session.runtime.options.runId;
-    const turnId = `${callId}#turn${turn}`;
+    // Graph identities count requests, including continuations; the visible turn still counts actions.
+    const turnId = `${callId}#turn${request?.ordinal ?? turn}`;
     const resolveReadSource = (block: string, declared?: string): string => {
       // A producer may live in a child or parent invocation's local trace. The
       // active episode recorder has already authenticated those actual graph
@@ -1101,10 +1103,11 @@ export class NativeToolAgent {
       if (remaining.length)
         throw new Error('neuralese-native-grad-invalid: request graph contains native reads absent from the captured model prompt');
     }
-    return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(readout?{readout}:{}), ...(actor ? { actor } : {}),
+    return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(request?.continuation ? { continuation: request.continuation } : {}), ...(readout?{readout}:{}), ...(actor ? { actor } : {}),
       ...(this.options.actor ? { initial_actor: this.options.actor } : {}), temperature: readout?null:temperature ?? null,
       seed: readout || session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
-        runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
+        runSeedKey(session.runtime.options), session.lam.attempts,
+        request?.continuation ? `model-turn-continuation-${request.continuation}` : 'model-turn', turn - 1),
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
       [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads.map(({node,port})=>({node,port})), ...extraInputs], turnId);
@@ -1639,6 +1642,8 @@ export class NativeToolAgent {
     let streamed = false;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
+    let requests = 0;
+    let lastModelTurn: string | undefined;
     let tokens = 0, turns = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
     let fallbackIndex = 0;
     let currentDriver = this.driver;
@@ -1673,7 +1678,7 @@ export class NativeToolAgent {
       handoffNode = graphNode(session.runtime.trace, 'combinator', { call_id: session.runtime.options.runId,
         operation: 'model-escalation', from, to: currentActor.id, actor: currentActor, profile: next.name, report },
         [{ node: invocationNodeId(session.runtime.options.runId), port: 'invocation' },
-          ...(turns ? [{ node: `${session.runtime.options.runId}#turn${turns}`, port: 'handoff-request' }] : [])]);
+          ...(lastModelTurn ? [{ node: lastModelTurn, port: 'handoff-request' }] : [])]);
       return undefined;
     };
     let consecutiveEmptyEosWithoutResult = 0;
@@ -1935,7 +1940,9 @@ export class NativeToolAgent {
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
       const turnNode = await this.modelTurnNode(session, graphMessages, response, turn, undefined, currentActor,
-        [...reencodedInputs, ...(handoffNode ? [{ node: handoffNode, port: 'handoff' }] : [])], currentTemperature);
+        [...reencodedInputs, ...(handoffNode ? [{ node: handoffNode, port: 'handoff' }] : [])], currentTemperature,
+        { ordinal: ++requests, ...(continued ? { continuation: continued.requests } : {}) });
+      lastModelTurn = turnNode;
       if (turnNode && guidancePolicy?.function === 'writeGuidance' && callId) trainingGuidance!.noteWriterTurn(callId, turnNode,
         [...(session.runtime.frame?.chain ?? []), ...(session.runtime.options.parentCallId ? [session.runtime.options.parentCallId] : [])]);
       const recorder = activeRecorder();
@@ -2017,7 +2024,7 @@ export class NativeToolAgent {
       // and the next request's reply room fit in the window. A turn that had to compact or return, or a templated
       // readout, ends as before.
       const messageTokens = (continued?.tokens ?? 0) + generated;
-      if (response.truncated && !response.calls?.length && currentDriver.continuesReplies && availableTools === allTools &&
+      if (response.truncated && !response.calls?.length && !response.raw_calls?.length && currentDriver.continuesReplies && availableTools === allTools &&
           !lastTurn && !templated && budget !== null && !exhausted()) {
         const nextReply = Math.min(allowance() ?? budget, Math.floor(budget / 4));
         const nextPrompt = response.prompt_tokens !== undefined ? response.prompt_tokens + generated :

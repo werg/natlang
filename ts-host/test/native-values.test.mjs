@@ -96,7 +96,7 @@ test('a record that fits its budget is shown whole, however small the budget', (
 });
 
 test('a record that does not fit a small budget is still shown by its keys', () => {
-  const row = { first: 'a'.repeat(60), second: 'b'.repeat(60), third: 'c'.repeat(60) };
+  const row = { first: 'a'.repeat(160), second: 'b'.repeat(160), third: 'c'.repeat(160) };
   assert.equal(renderValue(row, { holder: 'row', budget: 100 }),
-    '{ <<fields: first, second, third; values not shown; row holds all of it>> }');
+    '{ <<fields: first, second, third; values not shown; only this display is shortened, row holds the complete value>> }');
 });

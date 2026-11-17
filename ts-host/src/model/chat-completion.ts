@@ -412,8 +412,11 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {
         // A reply cut off mid tool call is a truncated turn, not a transport failure.
-        if (truncated) return finish({ calls: [], text: contentText(message?.content), truncated: true,
-          ...counts(), raw_response: body });
+        if (truncated) {
+          const reasoning = message?.reasoning_content ?? message?.reasoning;
+          return finish({ calls: [], text: contentText(message?.content), truncated: true, raw_calls: rawCalls,
+            ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}), ...counts(), raw_response: body });
+        }
         // Tool-call markup that is no call: the turn carries the reply as sampled and what was wrong with it, so the
         // caller keeps it in the history. `malformed_call` marks it: the markup must never read as the answer.
         if (error instanceof LeakedCall) {

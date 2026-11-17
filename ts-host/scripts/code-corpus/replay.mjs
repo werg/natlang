@@ -124,11 +124,11 @@ export async function replayCase(record, index = 0, options = {}) {
   const driver = async request => {
     if (trajectory.length >= 2) throw new Error('replay exceeded two model turns');
     const lastAction = runtime.trace.events.filter(e => e.kind === 'action').at(-1);
-    // The captured body runs as one eval; a second turn says done, or reports the replay failure.
+    // The captured body runs as one eval; a second turn confirms the staged result, or reports the replay failure.
     const calls = trajectory.length ? (lastAction && lastAction.outcome !== 'ok'
       ? [['return_result', { status: 'failed', reason: `Captured implementation failed during replay: ${lastAction.result_text}` }]]
-      : []) : [['eval', { code }]];
-    const text = calls.length ? '' : 'done';
+      : [['return_result', { status: 'success' }]]) : [['eval', { code }]];
+    const text = '';
     trajectory.push({ phase: 'action', context: structuredClone(request.messages), tools_offered: request.tools,
       assistant: { content: text, reasoning: null, calls: calls.map(([tool, args]) => ({tool, source_tool: tool, arguments: args, call_id: null})) }, raw_response_sha256: null });
     return { calls, text };
