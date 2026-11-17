@@ -2636,6 +2636,16 @@ from it by one step at LR 3e-7). Decisions:
   in both arms, so the engine cancels in the paired per-task change; Pop-only and DGX-only 2 vs 2 are reported beside
   it. Success and failure thresholds as declared (00:40 entry). Expected verdict ~13:30 today instead of tomorrow.
 
+**2026-11-17 14:05, grpo-v3-run1 verdict: pass rate not significantly changed; ran-out halved (supervisor).**
+4 vs 4 (`run1/verdict/compare-4v4.json`, base `verdict/base-merged.json` = Pop s0-1 + DGX s2-3, step 10
+`verdict/step10-merged.json`): per-task pass rate 49.6% -> 51.6%, **+2.0 pts, CI [-1.4, +5.1], p = 0.19**; tasks up/down
+59/56, McNemar p = 0.50. Ran-out (40-call budget stops) 171 -> 73 of 1024, McNemar p < 0.001. Halves: Pop 2 vs 2
++4.3 (p = 0.053, ran-out 85 -> 30), DGX 2 vs 2 +0.4 (p = 0.94, ran-out 86 -> 43). **Neither success nor failure
+criterion met.** The robust effect is shorter, terminating episodes; the pass-rate gain is at most a few points and not
+established. No regression, so grpo-v4 keeps its bundle (LR 5e-6, not the 3e-6 fallback). Reading for v4: at run1's
+step size 10 steps (~30 h) moved termination but not task success measurably; v4's larger step, SFT start, family
+exploration and new task families are the levers that remain, and its held eval every 4 h judges them.
+
 **2026-11-17 10:35, Haiku joins teacher generation (supervisor).** The owner supplied `anthropic.env` (also new:
 `openai.env`, `openrouter-tick.env`). Smoke (`teacher-gen-20261115/haiku-smoke-1`, 12 random pool tasks,
 `claude-haiku-5-5` through the Pi `anthropic` provider, effort medium): 10/12 verified successes, 0 deferrals, 6-56 s
