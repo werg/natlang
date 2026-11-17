@@ -475,3 +475,58 @@ def test_reference_tensors_hold_no_mapping_of_the_file(tmp_path):
     path.write_bytes(path.read_bytes()[:-2])                                # a truncated file is refused
     with pytest.raises(ValueError, match='ends inside tensor'):
         list(reference.tensors())
+
+
+def test_moment_offload_round_trips_bit_exactly_and_frees_the_moments(tmp_path):
+    """MomentOffload: after ``put`` the moments hold no storage; ``get`` restores the same tensor objects bit for bit, after
+    an in-flight saver that reads them has finished."""
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
+    generator = torch.Generator(device='cuda').manual_seed(0)
+    tensors = [torch.randn(shape, device='cuda', generator=generator) for shape in ((300, 7), (5,), (1 << 20,))]
+    tensors[1][0] = float('nan')                        # bit-exact means bit-exact
+    expected = [t.clone() for t in tensors]
+    ids = [id(t) for t in tensors]
+    order = []
+
+    class Saver:                                         # a background state save that reads the moments
+        def wait(self):
+            order.append(('saver', all(t.untyped_storage().nbytes() > 0 for t in tensors)))
+
+    offload = grpo.MomentOffload(tmp_path / 'moments.offload', staging_mb=1)   # several staging chunks per tensor
+    offload.put(tensors, after=Saver())
+    offload.wait()
+    assert order == [('saver', True)]
+    assert all(t.untyped_storage().nbytes() == 0 for t in tensors)
+    assert (tmp_path / 'moments.offload').stat().st_size == sum(t.numel() * 4 for t in expected)
+    assert offload.get() >= 0 and offload.get() < 1 and not offload.out   # a second get is a no-op
+    assert [id(t) for t in tensors] == ids
+    for t, e in zip(tensors, expected):
+        assert torch.equal(t.view(torch.int32), e.view(torch.int32))
+
+
+def test_a_failed_moment_offload_write_keeps_the_moments_resident(tmp_path):
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
+    (tmp_path / 'file').write_text('')
+    tensors = [torch.arange(10., device='cuda')]
+    offload = grpo.MomentOffload(tmp_path / 'file' / 'moments.offload', staging_mb=1)   # a parent that is a file
+    offload.put(tensors)
+    assert offload.get() < 1 and not offload.out and "put_error" in offload.last
+    assert torch.equal(tensors[0], torch.arange(10., device='cuda'))
+
+
+def test_state_saver_writes_a_safetensors_file_that_loads_back_exactly(tmp_path, monkeypatch):
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('StateSaver stages through pinned memory and a CUDA stream')
+    from safetensors.torch import load_file
+    monkeypatch.setattr(grpo, 'CACHE_DROP_BYTES', 1 << 20)   # several flush-and-drop rounds
+    tensors = {'master/a': torch.randn(700, 1000, device='cuda'), 'exp_avg/b': torch.randn(3, device='cuda')}
+    saver = grpo.StateSaver(staging_mb=1)
+    saver.save(tmp_path / 'state.safetensors', tensors, {'step': '3'})
+    saver.wait()
+    loaded = load_file(str(tmp_path / 'state.safetensors'))
+    assert set(loaded) == set(tensors) and all(torch.equal(loaded[k], tensors[k].cpu()) for k in tensors)

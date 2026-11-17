@@ -221,6 +221,7 @@ class Collector:
         self.stop = threading.Event()
         self.paused = threading.Event()             # set during a held measurement on the training actor
         self.active_slots = args.slots
+        self.running = 0                            # episodes in flight (their node work and KV stay live)
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
         self.env = pinned_env()
@@ -347,11 +348,17 @@ class Collector:
             with (workers / f'{key}.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
-                while process.poll() is None:
-                    if self.stop.wait(2):
-                        os.killpg(process.pid, signal.SIGTERM)
-                        process.wait()
-                        return
+                with self.lock:
+                    self.running += 1
+                try:
+                    while process.poll() is None:
+                        if self.stop.wait(2):
+                            os.killpg(process.pid, signal.SIGTERM)
+                            process.wait()
+                            return
+                finally:
+                    with self.lock:
+                        self.running -= 1
             if process.returncode < 0 or self.stop.is_set():
                 self._abandon(group, key, process.returncode)
                 if self.stop.is_set():
@@ -474,7 +481,7 @@ class ReplayCollector:
         self.schedule = json.loads(Path(schedule).read_text()) if schedule else None
         self.groups, self.lock, self.stop, self.paused = {}, threading.Lock(), threading.Event(), threading.Event()
         self.version = self.generated = self.episodes = self.outstanding = self.cursor = self.next_group = 0
-        self.active_slots, self.variants = 0, {}
+        self.active_slots, self.variants, self.running = 0, {}, 0
         self.states = NativeStates(args.actor_store)
 
     def take_groups(self, minimum, maximum, stop=None):
@@ -813,6 +820,36 @@ class WeightSync:
         self.thread.start()
 
 
+CACHE_DROP_BYTES = 512 << 20
+
+
+def stream_tensors_to_file(handle, tensors, staging, stream):
+    """Write CUDA ``tensors``' bytes in order to the open binary ``handle``: GPU -> pinned ``staging`` -> file on ``stream``.
+    Every ``CACHE_DROP_BYTES`` the written range is flushed and its page cache dropped: the cache is charged to the
+    unit's cgroup, and on the GB10 a CUDA allocation does not reclaim it, so a 13-21 GB write left as many GB of
+    cache beside the run (``StateSaver``, ``MomentOffload``)."""
+    import torch
+    chunk, written, dropped = staging.numel(), 0, 0
+    fd = handle.fileno()
+    with torch.cuda.stream(stream):
+        for t in tensors:
+            flat = t.detach().reshape(-1).view(torch.uint8)
+            for start in range(0, flat.numel(), chunk):
+                piece = flat[start:start + chunk]
+                staging[:piece.numel()].copy_(piece, non_blocking=True)
+                stream.synchronize()
+                handle.write(memoryview(staging[:piece.numel()].numpy()))
+                written += piece.numel()
+                if written - dropped >= CACHE_DROP_BYTES:
+                    handle.flush()
+                    os.fdatasync(fd)
+                    os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+                    dropped = written
+    handle.flush()
+    os.fdatasync(fd)
+    os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+
+
 class StateSaver:
     """FP32 masters and AdamW moments streamed GPU -> pinned staging -> file in a background thread. The caller waits
     (``wait``) before the next optimizer step changes them."""
@@ -841,20 +878,100 @@ class StateSaver:
             started = time.time()
             path.parent.mkdir(parents=True, exist_ok=True)
             partial = path.with_suffix('.partial')
-            chunk = self.staging.numel()
-            with partial.open('wb') as handle, torch.cuda.stream(self.stream):
+            with partial.open('wb') as handle:
                 handle.write(header)
-                for name in names:
-                    flat = tensors[name].detach().reshape(-1).view(torch.uint8)
-                    for start in range(0, flat.numel(), chunk):
-                        piece = flat[start:start + chunk]
-                        self.staging[:piece.numel()].copy_(piece, non_blocking=True)
-                        self.stream.synchronize()
-                        handle.write(memoryview(self.staging[:piece.numel()].numpy()))
+                stream_tensors_to_file(handle, [tensors[name] for name in names], self.staging, self.stream)
             os.replace(partial, path)
             self.last = {'path': str(path), 'seconds': round(time.time() - started, 1)}
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
+
+
+class MomentOffload:
+    """AdamW's moments (exp_avg, exp_avg_sq: 13.6 GB FP32 for LFM3-1.7B) on disk between optimizer steps. They are read
+    only by ``optimizer.step`` (and ``moment_cosine`` just before it), yet stayed resident through collection and the
+    learner's reference and policy passes, where they were 13.6 of the unit's peak (grpo-v3-run1: learner policy phase
+    48 GB reserved). ``put`` streams them GPU -> pinned staging -> file in a background thread (after an in-flight state
+    save, which reads them) and then frees their storage; ``get`` reallocates and reads them back, bit for bit, before
+    the next step. The tensors keep their identity (only the storage is resized), so the optimizer and the state saver
+    see the same objects. Page cache of the file is dropped after each write and read."""
+
+    def __init__(self, path, staging_mb=64):
+        import torch
+        self.path = Path(path)
+        self.staging = torch.empty(staging_mb << 20, dtype=torch.uint8, pin_memory=True)
+        self.stream = torch.cuda.Stream()
+        self.thread, self.tensors, self.out, self.error, self.last = None, [], False, None, {}
+
+    def wait(self):
+        """The write in flight finished. A failed write leaves the moments resident (``out`` stays False; the error is in
+        ``last``): the step continues exactly as without offload."""
+        if self.thread is not None:
+            self.thread.join()
+            self.thread = None
+        if self.error is not None:
+            self.last = {'put_error': repr(self.error)[:300]}
+            self.error = None
+
+    def put(self, tensors, after=None):
+        """Write ``tensors`` (CUDA, contiguous) to the file and free them, in the background; ``after``: a thread-backed
+        saver whose ``wait`` must return first (it reads the same tensors)."""
+        import torch
+        self.wait()
+        torch.cuda.synchronize()
+        self.tensors = list(tensors)
+
+        def run():
+            try:
+                started = time.time()
+                if after is not None:
+                    after.wait()
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open('wb') as handle:
+                    stream_tensors_to_file(handle, self.tensors, self.staging, self.stream)
+                self.out = True                 # the file is complete: from here on ``get`` restores from it
+                self.last = {'put_s': round(time.time() - started, 1)}
+                for t in self.tensors:
+                    t.untyped_storage().resize_(0)
+                torch.cuda.empty_cache()
+                self.last['cuda_reserved_after_put_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
+            except BaseException as error:      # freed only after a complete write: the tensors stay resident
+                self.error = error
+        self.thread = threading.Thread(target=run, daemon=True)
+        self.thread.start()
+
+    def get(self):
+        """The moments back in place (a no-op when they are resident). Returns the seconds it took."""
+        import torch
+        started = time.time()
+        self.wait()                         # a write still in flight (steps shorter than the write) is waited for here
+        if not self.out:
+            return time.time() - started
+        self.last['get_wait_s'] = round(time.time() - started, 1)
+        chunk = self.staging.numel()
+        with self.path.open('rb', buffering=0) as handle, torch.cuda.stream(self.stream):
+            for t in self.tensors:
+                nbytes = t.numel() * t.element_size()
+                t.untyped_storage().resize_(nbytes)
+                flat = t.detach().reshape(-1).view(torch.uint8)
+                for start in range(0, nbytes, chunk):
+                    n = min(chunk, nbytes - start)
+                    view = memoryview(self.staging[:n].numpy())
+                    got = 0
+                    while got < n:
+                        read = handle.readinto(view[got:])
+                        if not read:
+                            raise RuntimeError(f'{self.path}: short read')
+                        got += read
+                    flat[start:start + n].copy_(self.staging[:n], non_blocking=True)
+                    self.stream.synchronize()
+                    if (start // chunk) % max(1, CACHE_DROP_BYTES // chunk) == 0:
+                        os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+        torch.cuda.current_stream().wait_stream(self.stream)
+        drop_cache([self.path])
+        self.out = False
+        self.last['get_s'] = round(time.time() - started, 1)
+        return time.time() - started
 
 
 class ReferenceWeights:
@@ -1614,6 +1731,8 @@ def train(args):
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     saver = StateSaver()
+    # AdamW moments on disk outside the optimizer step (MomentOffload; --keep-moments-resident opts out)
+    offload = None if args.keep_moments_resident else MomentOffload(work / 'adam-moments.offload')
     if args.replay:
         collector = ReplayCollector(args, work, first_group=first_group)
     else:
@@ -2051,6 +2170,9 @@ def train(args):
                                 'reserved': round(torch.cuda.max_memory_reserved() / 2**30, 1), **process_memory_gb()}
             torch.cuda.reset_peak_memory_stats()
         collector.active_slots = args.learner_phase_slots
+        # episodes still running when the learner starts (they finish while it computes: their collectors and KV are the
+        # memory the learner phase shares with them)
+        record['episodes_in_flight'] = {'learner_start': collector.running}
         learn_started, learn_tokens0 = time.time(), actor_generated(args.actor)
         swap0, mem0 = vmstat(), meminfo()
         progress_mark = time.time()
@@ -2147,6 +2269,7 @@ def train(args):
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
             phase_peak('reference')
         allocate_grads()
+        record['episodes_in_flight']['policy_start'] = collector.running
         policy_started = time.time()
 
         def train_chain(index, start, past):
@@ -2264,6 +2387,8 @@ def train(args):
         t = time.time()
         saver.wait()                      # a state save in flight must finish before the masters change
         phase['wait_state_save'] = time.time() - t
+        if offload is not None:
+            phase['moments_in'] = offload.get()   # bit-exact read back of the moments the last step wrote out
         t = time.time()
         embedding_master.grad[special_index] = 0
         grad_norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
@@ -2346,6 +2471,10 @@ def train(args):
             adam_step = optimizer.state[parameters[0]]['step'].item()
             saver.save(branch or state_path, tensors, {'step': step, 'adam_step': adam_step, 'cursor': collector.cursor,
                                              'next_group': collector.next_group, 'source_sha256': source_sha})
+        if offload is not None:
+            record['moment_offload'] = dict(offload.last) or None   # the previous step's put and this step's get
+            offload.put([optimizer.state[masters[name]][key] for name in live for key in ('exp_avg', 'exp_avg_sq')],
+                        after=saver)
         learner_seconds = sum(v for k, v in phase.items()
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
         n_dec = max(1, len(decisions))
@@ -2402,6 +2531,8 @@ def train(args):
             phase_mark.update(time=time.time(), tokens=actor_generated(args.actor))   # the measurement is neither phase
     sync.wait()
     saver.wait()
+    if offload is not None:
+        offload.wait()
     collector.stop.set()
     log_line(log, {'event': 'stopped', 'step': step})
 
@@ -2431,9 +2562,15 @@ def main():
     t.add_argument('--min-groups', type=int, default=24,
                    help='groups per step at least (run2 at 12: about 75 episodes with a nonzero advantage per step, '
                         'consecutive updates did not add up; DECISIONS 2026-11-13)')
-    t.add_argument('--learner-phase-slots', type=int, default=8,
-                   help='collector slots that take new episodes while the learner computes (actor decode and the learner '
-                        'share the GB10; in-flight episodes always finish)')
+    t.add_argument('--keep-moments-resident', action='store_true',
+                   help='keep the AdamW moments in memory between steps (default: written to WORK/'
+                        'adam-moments.offload, NVMe, after each step and read back bit for bit before the next optimizer step: '
+                        '-13.6 GB at the learner peak; MomentOffload)')
+    t.add_argument('--learner-phase-slots', type=int, default=0,
+                   help='collector slots that take new episodes while the learner computes (in-flight episodes always '
+                        'finish). 0: none. The GB10 time-slices the actor and the learner, and a few-sequence decode costs '
+                        'nearly a full batch\'s GPU time: run1\'s 4 learner-phase slots decoded at 16 tok/s per sequence '
+                        '(34 alone) and slowed the learner (GRPO_STEP_THROUGHPUT_20261117.md)')
     t.add_argument('--max-groups', type=int, default=48,
                    help='groups per step at most: about 27k forward tokens per episode (smoke), so 48 groups is ~60-90 min of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')

@@ -213,11 +213,13 @@ is the plan this approach came from.
   FP32-master AdamW, `--lr 1e-5` (under review), `--warmup 2`, `--clip 1.0`, LR scaled by groups-with-spread / 12
   (`lr_data_scale`). The KL reference runs the policy's own graph from a reference-weights file.
 - **Compute.** `lfm3_fast_train`; layers beyond `--activation-gb 12` recompute; shared prompt prefixes (>= 256 tokens)
-  run once as a prefix tree; `--learner-phase-slots 8` episodes start while the learner runs.
+  run once as a prefix tree; no new episodes start while the learner runs (`--learner-phase-slots 0`; the GB10
+  time-slices the two, so overlap buys nothing: GRPO_STEP_THROUGHPUT_20261117.md).
 - **Sync and state.** Each step's BF16 weights go to the actor's safetensors on /dev/shm and SGLang reloads them in
   place; the front attests the served sha. Native checkpoints every 2 steps (last 2 plus held-evaluated ones kept), the
   FP32 state every 4 to `/mnt/external/natlang-grpo-v1`. `--branch-states N` keeps the last N FP32 states (~21 GB
-  each), `--keep-checkpoints-until N` every early checkpoint; `--resume [--resume-state FILE]`.
+  each), `--keep-checkpoints-until N` every early checkpoint; `--resume [--resume-state FILE]`. Between optimizer
+  steps the AdamW moments (13.6 GB) live in `WORK/adam-moments.offload` (`--keep-moments-resident` opts out).
 - **Held evals.** By default on the training actor (collection pauses): the start policy at 4 samples, then a
   checkpoint at 2 samples every 4 h, compared with step 0 in `WORK/held/step-N/`. `--held-remote pop` keeps the DGX
   training: the start policy is measured once on Pop's engine, then the newest checkpoint back to back

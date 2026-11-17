@@ -971,6 +971,18 @@ learner phase's CUDA peak with this process's host memory. The actor's
 weight file lives on /dev/shm (the shared NVMe wrote at 60-230 MB/s under load); pruned checkpoints go to /mnt/external
 (last 2 plus held-evaluated ones), the single FP32 training state (20.7 GB, temp file renamed over the previous) to NVMe.
 
+### GRPO step time on the GB10: no overlap, full batches, less resident state (engineering, 2026-11-17)
+
+grpo-v3-run1's ~3.25 h step was ~46% collection at 26-32 running and ~54% learner. The GB10 time-slices processes:
+a GEMM loop and a decode-like loop together reach 42% + 44% of their solo rates, and CUDA MPS gives the same split (SM
+caps make it worse), so overlapping collection and learning only moves GPU time around. Collection is slot-bound
+(KV 15-19% used at 32 running; the same engine decodes ~1.78k tok/s at 64 vs ~1.08k at 32), and a few-sequence decode
+costs nearly a full batch's GPU time. Hence `--learner-phase-slots` 0, the AdamW moments on disk between optimizer
+steps (`MomentOffload`, bit-exact, -13.6 GB at every phase but the step) paying for more collection slots, and the
+nucleus NLL forward on bf16 logits with linear_nll's kernel (policy pass -4.7%; policy and KL reference log-probability
+now equal bit for bit at equal weights). `--activation-gb` 4 -> 12 bought only -5.8% of the policy pass for +7.5 GB.
+Details and what was not checked: `GRPO_STEP_THROUGHPUT_20261117.md`.
+
 ### Held-v3: the experiments' held-out set for experiments pinned after grpo-v2-run1 (engineering, 2026-11-13)
 
 `ops/held-v3/manifest.json` (sha 45471060; `plans/neuralese/HELD_V3_20261113.md`) is held-v2 with 14 tasks replaced:

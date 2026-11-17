@@ -2660,3 +2660,16 @@ reasoning), so it is trained as written. Added to `pool-v1/launch-multi.sh` with
   600 explores. New `--explore-order family` (default `row`) reaches about 37. Whether v4 uses it is the pin's declared
   choice.
 - **Not measured.** Base pass rates of the new tasks. Details: `TASK_SUPPLY_20261117.md`.
+
+**2026-11-17 11:10, GRPO step throughput for the grpo-v4 pin (throughput agent; no treatment change).** Run1's ~3.25 h
+step was ~46% collection at 26-32 running and ~54% learner sharing the GB10 with learner-phase decode. The GB10
+time-slices processes (GEMM + decode together 42% + 44% of solo; CUDA MPS the same), so overlap is dropped as a lever.
+Shipped, default on with opt-outs: `--learner-phase-slots` 0 (was 8; run1 ran 4); the AdamW moments on disk between
+optimizer steps (`MomentOffload`, bit-exact, -13.6 GB except during the step, `--keep-moments-resident`); the nucleus
+NLL forward on bf16 logits with linear_nll's kernel (policy pass -4.7% on real run1 chains; the policy and KL reference
+log-probabilities now agree bit for bit at equal weights); page cache of the per-step state save and the offload dropped
+as written. Sizing in `ops/grpo-v4/launch-grpo.sh`: 64 slots, 64 running, LPS 0 (collection is slot-bound: ~1.7k vs
+~1.08k tok/s), estimated peak ~87-92 GiB under 97, fallback `SLOTS=48`. Expected step ~2.6-2.8 h (-15 to -20%).
+`--activation-gb` 4 -> 12 measured only -5.8% of the policy pass for +7.5 GB and stays 4. Next lever: SGLang's overlap
+scheduler (~20-25% of decode time is serial scheduler CPU), blocked on its 2026-11-03 wrong-distribution defect.
+Evidence and what was not checked: `GRPO_STEP_THROUGHPUT_20261117.md`.
