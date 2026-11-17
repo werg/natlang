@@ -109,3 +109,25 @@ def test_capped_keeps_preferred_members_per_task_then_caps_families():
     assert all(c['pref'] == 0 for c in kept)          # the preferred member of each task
     assert sum(c['family'] == 'f' for c in kept) <= len([c for c in candidates if c['pref'] == 0]) // 2
     assert funnel['x']['over_task_cap'] == 40
+
+
+def test_round_robin_alternates_producers_so_one_teacher_never_fills_a_task():
+    import random
+    members = ([{'source': 'teacher', 'teacher': 'luna', 'n': i} for i in range(5)]
+               + [{'source': 'teacher', 'teacher': 'nemotron', 'n': 9}] + [{'source': 'rl-own', 'n': 7}])
+    order = s.round_robin(members, random.Random(0), lambda c: 0 if c['source'] == 'teacher' else 1)
+    first = {(c['source'], c.get('teacher')) for c in order[:3]}
+    assert first == {('teacher', 'luna'), ('teacher', 'nemotron'), ('rl-own', None)}
+    assert order[2]['source'] == 'rl-own' and len(order) == 7
+
+
+def test_teacher_coverage_names_manifest_successes_not_extracted(tmp_path):
+    pool = tmp_path / 'teacher-gen' / 'pool-v1'
+    pool.mkdir(parents=True)
+    rows = [{'rollouts': str(pool / 'episodes/t000001/rollouts.jsonl'),
+             'episodes': [{'sample': 0, 'outcome': 'task_success'}]},
+            {'rollouts': str(pool / 'episodes/t000002/rollouts.jsonl'),
+             'episodes': [{'sample': 0, 'outcome': 'semantic_mismatch'}]}]
+    (pool / 'manifest.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    assert s.teacher_coverage([pool], set()) == (1, ['teacher:teacher-gen/pool-v1:t000001:0'])
+    assert s.teacher_coverage([pool], {'teacher:teacher-gen/pool-v1:t000001:0'}) == (1, [])

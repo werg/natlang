@@ -6,7 +6,9 @@ current runtime and oracle, capped, deduplicated, held-excluded and rendered wit
 Stages (each reads the previous stage's output under WORK; read-only on every source):
 
   extract  every `task_success` episode of the GRPO rollout archives (`--rl RUN_DIR:ARCHIVE_DIR`, the run's live
-           group directories included) and of teacher-generation pools (`--teacher POOL_DIR`) -> WORK/episodes.jsonl.zst:
+           group directories included) and of teacher-generation pools (`--teacher POOL_DIR`) -> WORK/episodes.jsonl.zst
+           (`--out-name`: a growing teacher pool is re-extracted alone as WORK/episodes-teacher.jsonl.zst before a build;
+           the build refuses manifest successes that no extraction covers):
            the task row (natlang.program/2, from the group's cases.jsonl), the semantic turns ({messages, tools, target})
            and, for student episodes, the exact actor prompt/sample token ids of each call (renderer check only).
   replay   each episode's task runs again under this checkout's runtime (`task_rollouts.prepare`, `run_bonsai_queue.py`,
@@ -118,7 +120,7 @@ def rl_rollout_files(run_dir, archive_dir):
 def extract(args):
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
-    out = ZstdWriter(work / 'episodes.jsonl.zst')
+    out = ZstdWriter(work / f'{args.out_name}.jsonl.zst')
     census = collections.OrderedDict()
     group_rates = collections.defaultdict(lambda: [0, 0])     # task -> [successes, scored] over all student groups
     for spec in args.rl:
@@ -181,12 +183,50 @@ def extract(args):
                            'turns': [semantic_turn(t, False) for t in row['turns']],
                            'execution_graph_events': len(row.get('execution_graph') or [])})
     out.close()
-    rates = {k: {'successes': s, 'scored': n} for k, (s, n) in sorted(group_rates.items())}
-    (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
+    if args.rl:
+        rates = {k: {'successes': s, 'scored': n} for k, (s, n) in sorted(group_rates.items())}
+        (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
     summary = {k: dict(v) for k, v in census.items()}
-    (work / 'extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
+    (work / f'{args.out_name}-extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
                                                     'rl': args.rl, 'teacher': args.teacher}, indent=1) + '\n')
     print(json.dumps(summary, indent=1))
+
+
+def episode_files(work):
+    """Every extraction of WORK: `episodes.jsonl.zst` and `episodes-*.jsonl.zst` (e.g. a teacher pool re-extracted at
+    build time as `--out-name episodes-teacher`)."""
+    return sorted(Path(work).glob('episodes*.jsonl.zst'))
+
+
+def all_episodes(work):
+    """The extracted episodes of WORK, each key once (a later extraction of the same episode is the same record)."""
+    seen = set()
+    for path in episode_files(work):
+        for line in zstd_lines(path):
+            if line.strip():
+                episode = json.loads(line)
+                if episode['key'] not in seen:
+                    seen.add(episode['key'])
+                    yield episode
+
+
+def teacher_coverage(pools, extracted):
+    """(successes in the pools' manifests now, those not extracted yet): the build refuses a stale teacher snapshot."""
+    total, missing = 0, []
+    for pool in pools:
+        label = 'teacher:' + '/'.join(Path(pool).parts[-2:])
+        for line in Path(pool, 'manifest.jsonl').open():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            directory = Path(record['rollouts']).parent.name
+            for episode in record.get('episodes') or ():
+                if episode.get('outcome') == SUCCESS:
+                    total += 1
+                    key = f"{label}:{directory}:{episode['sample']}"
+                    if key not in extracted:
+                        missing.append(key)
+    return total, missing
 
 
 # ---- rendering -------------------------------------------------------------------------------------------------------
@@ -243,8 +283,7 @@ def check_render(args):
     renderer = TemplateRenderer(args.tokenizer)
     counts = collections.Counter()
     examples = []
-    for line in zstd_lines(Path(args.work) / 'episodes.jsonl.zst'):
-        episode = json.loads(line)
+    for episode in all_episodes(args.work):
         if episode['source'] != 'rl-own':
             continue
         for turn in episode['turns']:
@@ -503,7 +542,7 @@ def replay(args):
            'PYTHONPATH': f'{args.runtime_repo}/training/neuralese:{args.runtime_repo}',
            'NATLANG_MODEL_FACING': series()['model_facing'], 'NATLANG_COLLECTOR_SHARED': '0'}
     server = ReplayServer()
-    episodes = (json.loads(line) for line in zstd_lines(work / 'episodes.jsonl.zst') if line.strip())
+    episodes = all_episodes(work)
     if args.limit:
         import itertools
         episodes = itertools.islice(episodes, args.limit)
@@ -668,10 +707,9 @@ def core_candidates(args, work, funnel, held):
             if 'key' in record:
                 replays[record['key']] = record
     candidates, tasks = [], {}
-    for line in zstd_lines(work / 'episodes.jsonl.zst'):
-        if not line.strip():
-            continue
-        episode = json.loads(line)
+    extracted = set()
+    for episode in all_episodes(work):
+        extracted.add(episode['key'])
         source = episode['source']
         f = funnel[source]
         f['successes'] += 1
@@ -696,6 +734,12 @@ def core_candidates(args, work, funnel, held):
                            'domain': (task.get('curriculum') or {}).get('domain'),
                            'teacher': (episode.get('teacher') or {}).get('model_id'), 'policy': episode.get('policy'),
                            'name': record['name'], 'signature': minhash(shingles(action_text(episode['turns'])))})
+    total, missing = teacher_coverage(args.teacher_pool, extracted)
+    funnel['teacher']['manifest_successes_now'] = total
+    funnel['teacher']['manifest_successes_not_extracted'] = len(missing)
+    if missing and not args.allow_stale_teacher:
+        raise SystemExit(f'{len(missing)} of {total} teacher successes in the pool manifests are not extracted yet '
+                         f'(e.g. {missing[0]}): run extract --teacher POOL --out-name episodes-teacher and replay first')
     excluded = exclusion_ids(args.held_manifest, list(tasks.values()))
     kept = []
     for c in candidates:
@@ -758,14 +802,31 @@ def october_candidates(args, funnel, held, weights):
     return list(trajectories.values())
 
 
+def round_robin(members, rng, order):
+    """A task's episodes taking turns by producer (source and teacher model), the producers in `order`: a cap keeps
+    different producers' solutions before a second one of any producer (no single teacher fills a task)."""
+    producers = collections.defaultdict(list)
+    for c in members:
+        producers[(order(c), c['source'], c.get('teacher') or '')].append(c)
+    queues = [producers[k] for k in sorted(producers, key=lambda k: (k[0], rng.random()))]
+    for queue in queues:
+        rng.shuffle(queue)
+    out = []
+    while any(queues):
+        for queue in queues:
+            if queue:
+                out.append(queue.pop())
+    return out
+
+
 def capped(candidates, rng, funnel, cap_of, family_share, order):
-    """Per-task caps (`cap_of(task_id)`), then a per-family cap of `family_share` of what remains."""
+    """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest."""
     by_task = collections.defaultdict(list)
     for c in candidates:
         by_task[c['task_id']].append(c)
     selected = []
     for task_id, members in sorted(by_task.items(), key=lambda item: str(item[0])):
-        members.sort(key=lambda c: (order(c), rng.random()))
+        members = round_robin(members, rng, order)
         cap = cap_of(task_id)
         selected += members[:cap]
         for c in members[cap:]:
@@ -826,6 +887,7 @@ def build(args):
     sft_episodes = []
     stats = collections.defaultdict(collections.Counter)
     families, domains = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
+    producers = collections.defaultdict(collections.Counter)
 
     def admit(c, turns):
         """Render one trajectory's calls; write its rows; keep its token rows for the chains."""
@@ -861,6 +923,11 @@ def build(args):
         s['too_long_calls'] += sum(len(r['prompt']) + len(r['sample']) > MAX_LEN for r in rows)
         families[source][c['family']] += 1
         domains[source][c['domain']] += 1
+        producer = f"{source}:{c.get('teacher') or c.get('run') or ''}"
+        producers[producer]['episodes'] += 1
+        producers[producer]['target_tokens'] += sum(len(r['sample']) for r in rows)
+        producers[producer]['reasoning_free_calls'] += sum(not (t['target'].get('reasoning_content') or '').strip()
+                                                           for t in turns)
         episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows}
         s['forward_tokens'] += sum(len(chain['ids']) for chain in chains_of([episode]))
         sft_episodes.append(episode)
@@ -932,7 +999,7 @@ def build(args):
     forward = int(sum(len(c['ids']) for c in chains))
     report = {
         'schema': 'natlang.sft-sources-build/1', 'code': code_provenance(), 'argv': sys.argv,
-        'inputs': {'episodes': str(work / 'episodes.jsonl.zst'), 'episodes_sha256': sha256_file(work / 'episodes.jsonl.zst'),
+        'inputs': {'episodes': {str(p): sha256_file(p) for p in episode_files(work)}, 'teacher_pools': args.teacher_pool,
                    'replay': str(work / 'replay.jsonl'), 'replay_sha256': sha256_file(work / 'replay.jsonl'),
                    'october': args.october, 'held_manifest': args.held_manifest,
                    'held_manifest_sha256': sha256_file(args.held_manifest), 'base_rates': args.base_rates,
@@ -950,6 +1017,8 @@ def build(args):
         'chains': len(chains), 'forward_tokens': forward,
         'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
         'epoch_hours_at_5500_tokens_per_second': round(forward / 5500 / 3600, 2),
+        'producers': {k: {**dict(v), 'target_token_share': round(v['target_tokens'] / max(1, sum(
+            p['target_tokens'] for p in producers.values())), 4)} for k, v in sorted(producers.items())},
         'families': {k: len(v) for k, v in families.items()},
         'family_counts': {k: dict(v.most_common()) for k, v in families.items()},
         'domain_counts': {k: dict(v.most_common()) for k, v in domains.items()},
@@ -970,6 +1039,7 @@ def main():
     e.add_argument('--work', required=True)
     e.add_argument('--rl', action='append', default=[], metavar='RUN_DIR:ARCHIVE_DIR')
     e.add_argument('--teacher', action='append', default=[], metavar='POOL_DIR')
+    e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')
     r = sub.add_parser('replay')
     r.add_argument('--work', required=True)
     r.add_argument('--runtime-repo', help='checkout (a pin) whose runtime, collector and oracle replay (default: this one)')
@@ -992,6 +1062,9 @@ def main():
     b.add_argument('--max-family-share', type=float, default=0.05)
     b.add_argument('--dup-threshold', type=float, default=0.8)
     b.add_argument('--seed', type=int, default=20261117)
+    b.add_argument('--teacher-pool', action='append', default=None,
+                   help='teacher pools whose current manifests the extraction must cover (default: teacher-gen pool-v1)')
+    b.add_argument('--allow-stale-teacher', action='store_true')
     b.add_argument('--october', help='directory of October candidate rows (GROUP.jsonl.zst, eval-check/GROUP.jsonl)')
     b.add_argument('--october-group', action='append', metavar='GROUP=WEIGHT',
                    help='October groups taken and their budget weights (default: %s)' % ', '.join(DEFAULT_OCTOBER_GROUPS))
@@ -1000,6 +1073,8 @@ def main():
     b.add_argument('--october-max-per-task', type=int, default=1)
     b.add_argument('--october-family-share', type=float, default=0.05)
     args = p.parse_args()
+    if args.command == 'build' and args.teacher_pool is None:
+        args.teacher_pool = [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
     {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build}[args.command](args)
 
 
