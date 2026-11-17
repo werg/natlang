@@ -2555,3 +2555,25 @@ samples per task, not 4 (the amendment misstated it). At the stop, Pop first ext
 `held_eval measure` resumed with `--samples 4` on the same directory and engine, about 4.5 h), then measures the final
 checkpoint at 4; the verdict pairs 4 vs 4 (SE about 30% below 2 vs 2). The extra Pop time is accepted: the verdict is
 the decision this run exists for.
+
+## 2026-11-17: gpt-6-luna joins the multi-teacher generation (teacher-gen-20261115/pool-v1)
+
+Luna (openai-codex subscription, owner-approved credits) runs as a natlang Pi provider teacher: `teacher_gen.py --teacher
+'{"model_id": "gpt-6-luna", "provider": "openai-codex", "reasoning_effort": "low", "slots": 8}'` (commit aa1bd8467).
+Why the provider path, not a local OpenAI-compatible bridge: the collector, `run_bonsai_queue.py` and the teacher CLI
+already carry `--provider` (the transport natlang programs use: Pi request translation, OAuth credentials, the same
+retry loop and turn records); only teacher_gen assumed endpoint + key. A bridge would add a second translation layer
+between what Luna saw and what the record says. Refused credentials (401/403, failed OAuth refresh, missing
+credentials) now end a request as `provider request retry exhausted` (deferred, not scored), and a teacher's
+consecutive provider failures double its cooldown up to an hour.
+
+Measured: smoke (3 tasks) scored through the exact oracle, records match the other teachers' schema. Live pool, 4 slots
+for 1 h (tgen-multi-14): 170 episodes, 69% success, 0 provider retries. 8 slots (tgen-multi-15, from 00:30; teachers
+paused 00:30-01:42 by the grpo-v3 learner phase's --pause-below-available-gb 25): 378 episodes in 22 min, 70% success,
+0 retries; unit peak 5.5 of 7 GB, so slots stay at 8 for ledger headroom. Codex rejects temperature: Luna samples at its
+provider default; its reasoning is not returned (targets are tool calls/text only).
+
+Credential: natlang's openai-codex store is an access-only copy of the Codex CLI session (no refresh-token duplication,
+as on 10-31); refreshed 2026-11-16 via one `codex exec` and synced, expiring 2026-11-26 ~22:25 UTC. After that Luna's
+episodes defer (no verdicts lost) until it is re-synced, or the owner runs `natlang auth login openai-codex` for an
+independent refreshing session.
