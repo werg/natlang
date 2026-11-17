@@ -127,6 +127,17 @@ def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | Non
     return 1.0 if outcome == "task_success" else 0.0
 
 
+def entry_outcome(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None) -> tuple[str, float | None, float | None]:
+    """(outcome class, binary reward, graded reward) of one finished queue entry, classified as ``score`` classifies it
+    (memetic improvement tasks aside): read before its group is complete (grpo.py dynamic sampling)."""
+    output = Path(entry["output"])
+    results = read_jsonl(output) if output.is_file() else []
+    result = results[0] if results else None
+    outcome = classify_case(result, finish)
+    reward = reward_of(outcome, finish)
+    return outcome, reward, graded_reward(outcome, reward, result, task.get("semantics"))
+
+
 # Checks that a graded reward may give partial credit for; any other failed check (status, honest stop, stop evidence,
 # world, required actions, ...) leaves the episode at 0.
 GRADED_CHECKS = frozenset({"answer", "files"})

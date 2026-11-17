@@ -2,6 +2,13 @@
 """Simulate the RL task selector over a pool and measure the mixture it actually samples.
 
   simulate_selection.py --cases POOL/cases.jsonl [--rounds 400] [--rows 16] [--group 8] [--compare-without-quota] -o report.json
+  simulate_selection.py --grpo [--cases POOL ...] [--groups 2000] [--explore-order family] -o report.json
+
+``--grpo``: the GRPO collector's own selection (``grpo.Collector._pick``: ``--explore`` of groups from the unmeasured-task
+walk ``grpo.ExploreWalk``, the rest cycling tasks in the pass band, each task's latest group replacing its rate) over the
+GRPO pool minus the held closure (``grpo.load_tasks``; ``--cases`` replaces ``grpo.POOLS``), with the latent outcome model,
+once with the construct weighting off (wrapper share 1, held weight 1) and once with grpo's defaults; it reports the
+held constructs' shares among explored and among all groups.
 
 Runs ``curriculum.select_tasks`` (policy ``natlang.rl-task-curriculum/2`` with its
 default ``class_quota``) for many rounds against synthetic outcomes: a task's pass probability falls with its level and each
@@ -136,9 +143,82 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level')
             'max_visits_one_row': max(picked.values())}
 
 
+def simulate_grpo(tasks, *, groups, group, wrapper_share, held_weight, explore, band=(0.1, 0.9), seed=1103):
+    """``grpo.Collector._pick`` on a bare collector (no actor): synthetic outcomes, the real selection code."""
+    import threading
+    from types import SimpleNamespace
+    import grpo
+    from natlang_neuralese.rl.curriculum import metadata
+    c = grpo.Collector.__new__(grpo.Collector)
+    c.args = SimpleNamespace(pass_rates=None, pass_band=band, pass_min_scored=2, explore=explore)
+    c.tasks, c.by_id, c.lock = tasks, {row['id']: row for row in tasks}, threading.Lock()
+    c.learnable_ids, c.learnable_order, c.measured, c.rates_read = [], [], set(), 0.
+    c.base_rates, c.own, c.rates_changed, c.prior_stale = {}, {}, True, True
+    c.rng, c.cursor = random.Random(seed), 0
+    c.walk = grpo.ExploreWalk(tasks, wrapper_share, held_weight)
+    features = c.walk.features or grpo.task_features(tasks)
+    model, rng = OutcomeModel('latent', random.Random(seed + 1)), random.Random(seed + 2)
+    shares = {'explored': collections.Counter(), 'all': collections.Counter()}
+    spread = 0
+    for _ in range(groups):
+        taken = c.walk.counts['taken']
+        row = c._pick()
+        explored = c.walk.counts['taken'] > taken
+        held, wrapper = features[row['id']]
+        meta = metadata(row)
+        p = model.probability(row['id'], meta['level'], meta['family'])
+        wins = sum(rng.random() < p for _ in range(group))
+        spread += 0 < wins < group
+        model.learned(meta['family'])
+        c.own[row['id']] = (wins, group)
+        c.rates_changed = True
+        for kind in ('explored', 'all') if explored else ('all',):
+            counter = shares[kind]
+            counter['groups'] += 1
+            counter['dataset_wrapper'] += wrapper
+            counter['declaring_held_construct'] += bool(set(held) - grpo.ExploreWalk.COMMON)
+            for name in held:
+                counter[name] += 1
+    out = {kind: {'groups': counter['groups'], **{name: round(v / max(1, counter['groups']), 4)
+                                                   for name, v in sorted(counter.items()) if name != 'groups'}}
+           for kind, counter in shares.items()}
+    out['groups_with_spread'] = round(spread / groups, 4)
+    out['learnable_tasks_at_end'] = len(c.learnable_ids)
+    return out
+
+
+def grpo_report(args):
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'neuralese_data'))
+    import grpo
+    tasks, excluded = grpo.load_tasks(SimpleNamespace(
+        pool=args.cases or grpo.POOLS, held_manifest=grpo.HELD, exclude_manifest=[], task_ids=None,
+        exclude_family_regex=args.exclude_family_regex, exclude_ids=[], no_default_errata=False, seed=args.seed,
+        explore_order=args.explore_order))
+    pool = grpo.ExploreWalk(tasks, args.wrapper_share, args.held_weight)
+    report = {'schema': 'natlang.grpo-selection-simulation/1', 'pools': args.cases or grpo.POOLS, 'eligible': len(tasks),
+              'held_excluded': excluded, 'explore_order': args.explore_order, 'explore': args.explore, 'groups': args.groups,
+              'pool': pool.pool_report(), 'outcomes': 'latent (OutcomeModel)'}
+    for name, share, weight in (('before', 1., 1.), ('after', args.wrapper_share, args.held_weight)):
+        report[name] = {'wrapper_share': share, 'held_weight': weight,
+                        **simulate_grpo(tasks, groups=args.groups, group=args.group, wrapper_share=share,
+                                        held_weight=weight, explore=args.explore)}
+    Path(args.output).write_text(json.dumps(report, indent=1) + '\n')
+    print(json.dumps(report, indent=1))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--cases', required=True)
+    parser.add_argument('--cases', action='append', help='pool cases.jsonl (repeatable with --grpo)')
+    parser.add_argument('--grpo', action='store_true', help="simulate grpo.py's collector selection instead")
+    parser.add_argument('--groups', type=int, default=2000, help='--grpo: groups to select')
+    parser.add_argument('--explore', type=float, default=0.4)
+    parser.add_argument('--explore-order', choices=('row', 'family'), default='family')
+    parser.add_argument('--exclude-family-regex', default='(?!)')
+    parser.add_argument('--wrapper-share', type=float, default=0.15)
+    parser.add_argument('--held-weight', type=float, default=3.)
+    parser.add_argument('--seed', type=int, default=20261112)
     parser.add_argument('--rounds', type=int, default=400)
     parser.add_argument('--rows', type=int, default=16)
     parser.add_argument('--group', type=int, default=8)
@@ -152,6 +232,11 @@ def main(argv=None):
                         help='synthetic outcome model: per-level pass rate, or per-task latent rates with family learning')
     parser.add_argument('-o', '--output', required=True)
     args = parser.parse_args(argv)
+    if args.grpo:
+        return grpo_report(args)
+    if not args.cases or len(args.cases) != 1:
+        parser.error('--cases POOL/cases.jsonl (once) without --grpo')
+    args.cases = args.cases[0]
     from natlang_neuralese.rl.curriculum import DEFAULT
     cases = [json.loads(line) for line in open(args.cases) if line.strip()]
     base = {**DEFAULT, 'visit_penalty': 0, 'visit_cap': 0} if args.no_visit_decay else DEFAULT
