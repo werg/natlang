@@ -3846,3 +3846,11 @@ falling to ~3 by step 10) beyond noting they coincide with the teacher-only batc
 **Running work.** grpo-v4-run3 started from this checkpoint on a pin without these fixes; they reach it at its next
 resume (operators replay corpus: the separator mask). The SFT checkpoint's behaviour probe (`sft-v4-probe`, 16 GB) waits
 for ledger headroom beside run3's 99 GB claim; its `</think>` hazard is the check on defect 1's generalization.
+
+**2026-11-18 16:50, sft-v4-run1 not used as a start; grpo-v4-run3 stopped at launch, run2 resumed (supervisor).**
+run3's start probe measured the warm-up checkpoint at a `</think>` hazard of 1.03/1k against the base's 0.55, the same
+signature as the sft-v3 checkpoint that cost 16 held pts (1.02). Training does not wait on that: run2 resumes from its
+step-3 state on pin a0981794b (reasoning RL walk/rewrite, guidance-leak fix 503839cab, SFT masking fixes a0981794b incl.
+the operators newline after `<|im_end|>`). The SFT checkpoint's own held eval is skipped (the probe already decides
+against it; Pop finishes the base on the new answer protocol). The val-own investigator now hunts the hazard; a rebuilt
+warm-up runs only once its cause is fixed.
