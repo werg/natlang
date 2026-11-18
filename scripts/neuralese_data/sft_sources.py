@@ -862,9 +862,11 @@ BACKEND_WORKAROUND = 'neuralese-unsupported-backend'
 
 
 def backend_workaround(turns):
-    """Whether a recorded episode ran into the text-only backend's Neuralese refusal (teacher_gen serves teachers
-    through text endpoints): its later actions work around an error the student's actor (which serves Neuralese) never
-    raises, so they teach a detour off the student's surface (8% of v4's teacher episodes)."""
+    """Whether recorded turns ran into the text-only backend's Neuralese refusal (teacher_gen serves teachers through
+    text endpoints): the actions after it work around an error the student's actor (which serves Neuralese) never
+    raises, a detour off the student's surface (8% of v4's teacher episodes; 92% of composed-Neuralese and 70% of bgkit
+    teacher successes of pool-v1 + pool-v2-rich). The action that met it (e.g. a producer's return_result) is the
+    student's own surface."""
     for turn in turns:
         for message in turn.get('messages') or ():
             content = message.get('content')
@@ -1220,7 +1222,7 @@ def build(args):
             funnel[c['source']]['excluded_run'] += 1
         elif c['source'] in OWN_SOURCES and c.get('guided') and args.guided == 'exclude':
             funnel[c['source']]['guided_excluded'] += 1
-        elif c['source'] not in OWN_SOURCES and c.get('backend_workaround') and not args.keep_backend_workarounds:
+        elif c['source'] not in OWN_SOURCES and c.get('backend_workaround') and args.backend_workarounds == 'exclude':
             funnel[c['source']]['backend_workaround'] += 1
         else:
             kept.append(c)
@@ -1270,6 +1272,10 @@ def build(args):
                 if c['source'] in ('rl-own', 'teacher'):
                     return False   # a verified episode is admitted whole or not at all
                 continue
+            if (source not in OWN_SOURCES and args.backend_workarounds == 'context'
+                    and backend_workaround([turn])):
+                row['weight'] = np.zeros(len(row['sample']), np.float32)   # the detour after the refusal: context
+                stats[source]['backend_detour_calls'] += 1
             prompt, target = row['prompt'], row['sample']
             rows.append(row)
             written.append({'id': row['id'], 'episode': c['key'], 'source': source, 'run': c['run'],
@@ -1332,13 +1338,19 @@ def build(args):
     episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, args.teacher_think, args.teacher_lead_in)
 
     def breadth_first(pool, key):
-        """A pool in selection order: every task's first episode before any task's second (``key`` orders within a
-        round: held constructs first, then low base pass rates)."""
+        """A pool in selection order: every task's first episode before any task's second, and within a round the
+        families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key``
+        orders within a family's turn: held constructs first, then low base pass rates."""
         rank, seen = {}, collections.Counter()
         for c in pool:
             rank[c['key']] = seen[c['task_id']]
             seen[c['task_id']] += 1
-        return sorted(pool, key=lambda c: (rank[c['key']], key(c)))
+        ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
+        turn, taken = {}, collections.Counter()
+        for c in ordered:
+            turn[c['key']] = taken[(rank[c['key']], c['family'])]
+            taken[(rank[c['key']], c['family'])] += 1
+        return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
 
     def priority(c):
         p = base_rate(c['task_id'])
@@ -1567,7 +1579,7 @@ def build(args):
                    'october_family_share': args.october_family_share,
                    'teacher_think': args.teacher_think, 'teacher_lead_in': args.teacher_lead_in,
                    'exclude_run': args.exclude_run, 'guided': args.guided,
-                   'keep_backend_workarounds': args.keep_backend_workarounds,
+                   'backend_workarounds': args.backend_workarounds,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
                    'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
                    'order': 'teacher: breadth-first over tasks (every task once before any twice), held constructs '
@@ -1937,8 +1949,10 @@ def main():
     b.add_argument('--guided', choices=('train', 'exclude'), default='exclude',
                    help='JOLT+ guided attempts (own, student form): exclude (default: grpo-v4-run1 guided successes '
                         'refer to the removed guidance in 4 of 11 and 6 of 11 had the answer in it) or train')
-    b.add_argument('--keep-backend-workarounds', action='store_true',
-                   help='keep teacher episodes that hit the text backend\'s Neuralese refusal (default: left out)')
+    b.add_argument('--backend-workarounds', choices=('context', 'exclude', 'train'), default='context',
+                   help="teacher episodes that met the text backend's Neuralese refusal: context (default: every call "
+                        "whose prompt holds the refusal is zero weight; the calls before it, e.g. the producer's own "
+                        "return, train), exclude (the whole episode) or train")
     b.add_argument('--teacher-forward-budget', type=int, default=0,
                    help='forward tokens of teacher episodes, taken breadth-first over tasks (0: every capped episode)')
     b.add_argument('--own-loss-share', type=float, default=0.25,
