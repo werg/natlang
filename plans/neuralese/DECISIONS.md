@@ -3486,6 +3486,15 @@ Steps 2-3 (06:36-08:25, 48 groups, 109 min) from `train.jsonl`, `actor.log` per-
   (Pop `pop_actor_driver`, `held_eval serve`), the managed llama-server, wllama and the Python native engine share no
   machine with a learner and call no release; memory release is engine control for colocation, not a serving-protocol
   feature, so no ENGINE_PARITY row.
+- **Smoke (`check_sglang_release.py`, fork dbc51ddb72):** Pop (RTX 4060; the DGX ledger had no room beside
+  grpo-v4-run1/run2), held-actor export 2c64220bb866, tags `kv_cache,weights,cuda_graph`, two cycles: release 0.1 s
+  frees 4.1 of 5.1 GB (weights 3.8 + 16k-token pool + graphs; ~1 GB context stays), a 1,500-token request in flight
+  waits through the release and finishes, resume 0.02 s + weight reload 0.4-4.9 s, greedy ids and logprobs after the
+  cycle bitwise equal to before (max |dlogp| 0.0). Two launch defects found and fixed on the way: torch_memory_saver
+  refuses `expandable_segments:True`, which memory_ledger sets for every unit (the actor env now drops it), and its
+  preload hook needs libcudart at exec (Pop: exit 127; the venv's CUDA wheel lib goes first on LD_LIBRARY_PATH).
+  **Not run on the GB10:** the memory saver's VMM path on unified memory; the first resume on this code is that check
+  (`actor_release_freed_gb` should read ~10-11 at KV 6; `--no-actor-release` if the actor fails to start or reload).
 - **Next resume (spend it):** the actor's ~12 GB (KV 6 + weights 3.8 + graphs) is free during the learner phase and
   the optimizer's carried reserve (~13-40 GB above allocated) is gone: ACT 12, SLOTS 64, RUNNING 64, KV 12 (KV costs
   only the collect phase now, which ran with ~45 GB free), budget unchanged.

@@ -58,15 +58,27 @@ def main():
     p.add_argument('--tags', default='kv_cache,weights,cuda_graph')
     p.add_argument('--port', type=int, default=9611)
     p.add_argument('--max-total-tokens', type=int, default=65536)
-    p.add_argument('--mem-fraction', type=float, default=0.08)
+    p.add_argument('--engine-gb', type=float, default=5.5,
+                   help='weights + pool the engine may take; SGLang --mem-fraction-static is relative to the memory free '
+                        'at launch, read here from MemAvailable (unified memory)')
     p.add_argument('--hold-s', type=float, default=20., help='seconds the engine stays released')
+    p.add_argument('--mem-fraction', type=float, help='SGLang --mem-fraction-static as given (a discrete GPU)')
     args = p.parse_args()
     fork = json.loads((ROOT / 'training/neuralese/sglang-fork.json').read_text())
     python = fork['python']
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
+    if not (Path(cuda) / 'bin/nvcc').exists():     # as serve_native_checkpoint.launch_sglang: the venv's wheel toolkit
+        wheel = sorted(Path(python).parent.parent.glob('lib/python3*/site-packages/nvidia/cu1*/bin/nvcc'))
+        cuda = str(wheel[-1].parent.parent) if wheel else cuda
     env = {**os.environ, 'PYTHONPATH': str(ROOT / 'training/neuralese'), 'CUDA_HOME': cuda,
            'PATH': os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')]),
            'NATLANG_SGLANG_PROJECTION': 'vendor', 'NATLANG_ADAPTER_SLOTS': '0', 'NATLANG_ADAPTER_RANK': '32'}
+    available = next(int(line.split()[1]) * 1024 for line in open('/proc/meminfo') if line.startswith('MemAvailable'))
+    args.mem_fraction = args.mem_fraction or round(min(0.9, args.engine_gb * 2**30 / available), 4)
+    env.pop('PYTORCH_CUDA_ALLOC_CONF', None)
+    sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
+    from serve_native_checkpoint import memory_saver_library_path
+    env['LD_LIBRARY_PATH'] = memory_saver_library_path(python, env.get('LD_LIBRARY_PATH', ''))   # as serve_native_checkpoint --sglang-memory-saver: no expandable segments
     url = f'http://127.0.0.1:{args.port}'
     command = [python, '-m', 'sglang.launch_server', '--model-path', args.export, '--host', '127.0.0.1',
                '--port', str(args.port), '--dtype', 'bfloat16', '--mem-fraction-static', str(args.mem_fraction),
