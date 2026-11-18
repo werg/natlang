@@ -64,7 +64,11 @@ for (const [key, list] of chosen) for (const row of list) {
       const hit = value.$match.find(entry => [entry.match].flat().every(text => opening.includes(text)));
       value = hit ? hit.value : undefined;
     }
-    if (value === undefined) return { calls: [['return_result', { status: 'failed', reason: 'no smoke answer for ' + name }]] };
+    if (value === undefined) {
+      // Named in the result: on a readout the failed return_result surfaces only as decision-generation-invalid.
+      errors.push('no smoke answer for ' + name);
+      return { calls: [['return_result', { status: 'failed', reason: 'no smoke answer for ' + name }]] };
+    }
     // {"$turns": [[tool, args], ...]}: a child that acts (calls its own children in eval) before returning; turns are
     // counted per child invocation (its opening).
     if (value && typeof value === 'object' && Array.isArray(value.$turns)) {
@@ -75,6 +79,9 @@ for (const [key, list] of chosen) for (const row of list) {
       return { calls: [value.$turns[turn] ?? ['return_result', { status: 'failed', reason: 'smoke turns ended' }]] };
     }
     childCalls[name] = (childCalls[name] ?? 0) + 1;
+    // A decision readout without a scoring driver generates its choice as JSON text on a tool-free request
+    // (native/agent.ts generatedDecision, since 61c6c3614); a return_result call there is rejected as invalid.
+    if (Array.isArray(request.tools) && request.tools.length === 0) return { text: JSON.stringify(value), calls: [] };
     return { calls: [['return_result', { status: 'success', value }]] };
   };
   const arity_errors = scriptArityProblems(row, smoke);

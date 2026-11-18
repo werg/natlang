@@ -941,7 +941,8 @@ ACTOR_ARGS = ('--engine', 'sglang', '--sglang-projection', 'vendor', '--sglang-k
 ACTOR_BUDGET_GB = 40   # --sglang-kv-gb + 24 (measured 2026-11-12: SGLang 23 GB at 16 GB KV, front 14 GB once a write_text reloads the native model)
 # max_running: SGLang's running-sequence cap (decode batch shapes and CUDA graphs; Pop 14 -> 20 slots at the
 # grpo-v4 pin, plans/neuralese/POP_HELD_THROUGHPUT_20261117.md). Results of actors that did not attest it read None.
-ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction', 'max_running')
+ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction', 'max_running',
+                 'speculative')
 
 
 def engine_of(binding):

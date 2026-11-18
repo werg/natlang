@@ -3244,3 +3244,59 @@ Defaults `--memetic-share 0.02` (~18 ordinary groups of rollouts per memetic gro
 `--memetic-max-staleness 8` (memetic episodes run tens of minutes; 2 would drop them all); grpo-v4 `launch-grpo.sh`
 FEATURES carries them (`MEMETIC_SHARE=0` opts out) for its next resume on a pin containing 5d6a3ad29. The 301-world
 measurement and `resmoke.sh` are dropped.
+
+## 2026-11-18 00:40, forward-progress review: work that would otherwise wait for DGX windows
+
+grpo-v4 holds the DGX continuously from ~01:00 on pin 21dbc20c5 (memetic, JOLT+, hindsight, SD with teacher
+demonstrations, dynamic sampling, construct-weighted exploration), and training never waits for other work (AGENTS.md
+304ba0d9d). So: (1) the operator rows and the whole-graph Neuralese chains are to train inside grpo-v4's learner,
+entering at a resume, instead of in a separate SFT stage; (2) LoRA fits run beside grpo-v4 or on Pop between held evals
+instead of waiting for a free window; (3) task authoring is continuous again (the last batch was 2026-11-17), with new
+batches entering at resumes.
+
+## 2026-11-18: operator rows and whole-graph Neuralese chains train inside the GRPO learner (operators agent)
+
+- grpo-v4 holds the DGX continuously, so a separate operator SFT stage would rarely get a window. The fixed corpora
+  now train in every GRPO step instead (supervisor-approved design).
+- **Flag.** `grpo.py --replay-corpus NAME=PKL[,weight=W][,units=K]` (repeatable, off by default):
+  - K units per step, where a unit is all chains of one `task` key: an operator case, i.e. its operator calls plus
+    the consumer reading their states through pass-through producer documents, or one Neuralese episode;
+  - the units come from seeded per-epoch shuffles indexed by step, so a resume continues without saved state;
+  - held tasks are dropped.
+- **Training term.** The chains are ratio-free (role `replay`, rho = 1) at weight W. Rows' own weights apply, and the
+  KL term applies as to every chain. There is no tail floor: a corpus target is data, so its unlikely tokens are
+  what it teaches. Each unit counts as one episode under the loss normalization.
+- **Telemetry and sentinels.** `train.jsonl` records `replay_corpora` (units, chains, imports, tokens) and
+  `replay_mean_logp` per corpus, the learning curve to watch. Replay chains are excluded from the reasoning-style
+  sentinel. The flag is refused with `--no-neuralese-passthrough`.
+- **Entry.** It enters grpo-v4 at a resume as a learner-only change:
+  - `operators=ops/operators-v1/merged/chains.pkl,weight=0.05,units=8`
+  - `neuralese-graph=…/sft-neuralese-graph-20261117-v1/chains.pkl,weight=0.05,units=2`
+- **The variant.** `learned-compaction` switches on at a later resume, once operators have trained for a while: when
+  `replay_mean_logp` for `operators` has flattened, or after about 50 steps. Held comparison pairs across series
+  with a warning (4d47aeb36).
+- **Not run.** A GPU learner bench of the replay path: the ledger had no headroom beside grpo-v4. The pass-through on
+  these chains was checked by the 2026-11-17 SFT smoke.
+
+## 2026-11-18: task supply round 10, 185 authored tasks on the held-v3 constructs (task-supply agent)
+
+- **Decision.** `natlang-rl-task-supply-20261118` (185 train rows, 12 new families) joins `grpo.py` POOLS; it enters
+  grpo-v4 at its next resume on a pin from this commit. `--pool` without it opts out. Plan and numbers:
+  `plans/neuralese/TASK_SUPPLY_20261118.md`.
+- **Why.** grpo-v4's construct-weighted exploration takes every task declaring a held construct, but the pool is thin
+  exactly where held-v3 is heavy: folder reducers 8% vs 30%, decide 2.5% vs 11%. The 11-17 supply had 0 depth-3
+  programs. The new rows are folder reducers 78%, decide 69%, depth 3 66%, iterateOn 56% and Neuralese results 32%,
+  and 173 of 185 carry two or more held constructs.
+- **Process.** Haiku authors w205-w218 qualified on the grpo-v4 pin runtime. Each batch passed the novelty gate and an
+  independent Sonnet blind solve. Flagged tasks were held back even when they agreed (19). w209, seeded from Qasper,
+  was rejected whole (3/23 agreement on free-text spans). w210 is still qualifying and comes in a later source. Held
+  worlds are registered as `natlang-rl-authored-{dev,confirmation}-20261118r10`.
+- **Separation.** held_eval verify vs held-v3: 0 shared ids and 0 shared groups, also with the recorded exposure.
+  Custody: 0 related, after dropping 2 rows bound to a held sibling. The LFM3 closure passed.
+- **Harness defect fixed (7f199b2fb).** Since 61c6c3614, scripted drivers (structure smoke, reference replay,
+  authoring oracle) answered a decision readout's JSON-text request with `return_result`. On the grpo-v4 pins every
+  authored task whose smoke or reference called `decide` therefore failed qualification. `scriptedSuccess` now answers
+  that request with the value's JSON text. The pin's own reference replay predates the fix, so round-10 references
+  inline the decided values; the smoke still runs `decide`.
+- **Not checked.** Base pass rates of the new tasks were not measured, because grpo-v4 holds the DGX; the explore walk
+  measures them.

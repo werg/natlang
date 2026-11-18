@@ -14,6 +14,9 @@ from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.serve import load_native_engine
 from natlang_neuralese.serve.http import serve
 
+# n-gram speculative chain length (--sglang-spec-draft; the fork's NATLANG_FORK.md, sglang_bench speculative).
+SPEC_DRAFT = 4
+
 
 def bound_host_heap(arenas=2, trim_seconds=60.0):
     """Keep the front's freed host heap from accumulating.
@@ -133,6 +136,12 @@ def main() -> None:
     parser.add_argument('--sglang-full-kv', action='store_true',
                         help='opt out of hybrid SWA KV: every attention layer keeps full-length KV '
                              '(--disable-hybrid-swa-memory)')
+    # Speculative decoding (fork NATLANG_SPECULATIVE_NGRAM): each request's next tokens are drafted from n-grams of its
+    # own context and recent replies (agentic replies copy files, tool output and code) and verified in one forward;
+    # standard speculative sampling, so the sampled law and the natlang records are the plain decode's.
+    parser.add_argument('--sglang-spec-draft', type=int, default=SPEC_DRAFT,
+                        help='n-gram speculative chain length per decode step (0 opts out; a fork without '
+                             'NATLANG_SPECULATIVE_NGRAM serves without it)')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
     args = parser.parse_args()
@@ -375,7 +384,9 @@ def attest_sglang_source(python, fork, pythonpath=''):
               # custom_params.natlang_track_input_end: the scheduler stores a request's conv state at its input end
               'track_input_end': params.is_file() and 'NATLANG_TRACK_INPUT_END = True' in params.read_text(),
               # natlang_capture writes / natlang_import reads native-state files of the store's format (path handoff)
-              'native_state_files': params.is_file() and 'NATLANG_NATIVE_STATE_FILES = True' in params.read_text()}
+              'native_state_files': params.is_file() and 'NATLANG_NATIVE_STATE_FILES = True' in params.read_text(),
+              # LFM3 serves n-gram speculative chains with exact rollback and the natlang records of the verify pass
+              'speculative_ngram': params.is_file() and 'NATLANG_SPECULATIVE_NGRAM = True' in params.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
@@ -476,6 +487,8 @@ def launch_sglang(engine, args, checkpoint, release=None):
     engine.context = context
     layout = kv_layout(export_dir, args, source)
     total, fraction = sglang_pool(export_dir, args, context, layout)
+    speculative = ({'algorithm': 'ngram', 'draft_tokens': args.sglang_spec_draft}
+                   if args.sglang_spec_draft > 0 and source.get('speculative_ngram') else None)
     swa = (['--swa-full-tokens-ratio', str(args.sglang_swa_ratio)] if layout == 'hybrid-swa'
            else ['--disable-hybrid-swa-memory'] if args.sglang_full_kv else [])
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
@@ -488,7 +501,10 @@ def launch_sglang(engine, args, checkpoint, release=None):
                '--cuda-graph-max-bs-decode', str(args.sglang_max_running),
                '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *swa,
-               *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']), *args.sglang_arg]
+               *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']),
+               *(['--speculative-algorithm', 'NGRAM', '--speculative-num-draft-tokens', str(speculative['draft_tokens']),
+                  '--speculative-ngram-max-bfs-breadth', '1', '--speculative-ngram-min-bfs-breadth', '1']
+                 if speculative else []), *args.sglang_arg]
     print(json.dumps({'event': 'sglang_launch', 'command': command, 'export': manifest, 'source': source}), flush=True)
     # FlashInfer and SGLang JIT-compile kernels: the fork venv's ninja and a CUDA toolkit's nvcc on PATH. Without a system
     # toolkit (Pop: /usr/bin/nvcc is CUDA 11.5, which rejects -std=c++20) the venv's own nvidia/cu13 wheel toolkit serves.
@@ -510,7 +526,8 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
                        kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout,
-                       max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')))
+                       max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')),
+                       speculative=speculative)
     return process
 
 

@@ -59,9 +59,46 @@ def _write(path, value):
     print(json.dumps({k: v for k, v in value.items() if k not in ('per_turn',)})[:4000], flush=True)
 
 
+def _grpo_turns(path):
+    """(prompt ids, sampled ids) of each ordinary-token call in a GRPO collector's results.jsonl (rl_sampling/2: a
+    call's prompt is an earlier call's prompt kept up to ``keep`` plus its delta)."""
+    for line in open(path):
+        try:
+            result = json.loads(line)
+        except ValueError:
+            continue
+        prompts = {}
+        for index, step in enumerate(result.get('trajectory') or []):
+            capture = (step.get('model_response') or {}).get('rl_sampling')
+            if not capture:
+                continue
+            prompt = []
+            for segment in capture['prompt']:
+                if segment['kind'] == 'tokens':
+                    prompt += segment['token_ids']
+                elif segment['kind'] == 'tokens_delta' and segment['turn'] in prompts:
+                    prompt += prompts[segment['turn']][:segment['keep']] + segment['token_ids']
+                else:
+                    prompt = None
+                    break
+            if prompt is None:
+                continue
+            prompts[len(prompts)] = prompt
+            if capture.get('writes'):
+                continue
+            columns = capture.get('samples_columns') or {'token_id': [s['token_id'] for s in capture.get('samples') or []]}
+            yield prompt, list(columns['token_id']), capture['policy']['checkpoint_sha256']
+
+
 def build_workload(roots, out):
     rows, seen = [], set()
     for root in roots:
+        for path in sorted(glob.glob(os.path.join(root, '**/results.jsonl'), recursive=True)):
+            for prompt, tokens, policy in _grpo_turns(path):
+                key = hashlib.sha256(json.dumps([prompt, tokens]).encode()).hexdigest()
+                if key not in seen and tokens:
+                    seen.add(key)
+                    rows.append({'source': path, 'policy': policy, 'prompt': prompt, 'tokens': tokens})
         for path in sorted(glob.glob(os.path.join(root, '**/jobs/*.json'), recursive=True)):
             try:
                 data = json.load(open(path))
@@ -92,7 +129,7 @@ def build_workload(roots, out):
     Path(out).write_text(''.join(json.dumps(row) + '\n' for row in rows))
     return {'turns': len(rows), 'policies': sorted({r['policy'] for r in rows}),
             'prompt_tokens': sum(len(r['prompt']) for r in rows), 'sampled_tokens': sum(len(r['tokens']) for r in rows),
-            'stop_ids': sorted({r['tokens'][i] for r in rows for i, t in enumerate(r['terminal']) if t})}
+            'stop_ids': sorted({r['tokens'][i] for r in rows for i, t in enumerate(r.get('terminal', [])) if t})}
 
 
 def serve(args):
@@ -103,7 +140,7 @@ def serve(args):
     export_dir = Path(args.export_dir)
     if not (export_dir / 'natlang-export.json').is_file():
         subprocess.run([sys.executable, '-m', 'natlang_neuralese.export.native_hf', str(args.checkpoint),
-                        str(export_dir), '--base', str(args.base)], check=True)
+                        str(export_dir), *(['--base', str(args.base)] if args.base else [])], check=True)
     run = args.max_running
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
                '--port', str(args.port), '--dtype', 'bfloat16', '--mem-fraction-static', str(args.mem_fraction),
@@ -112,7 +149,9 @@ def serve(args):
                '--cuda-graph-max-bs-decode', str(run), '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *args.sglang_arg]
     cuda = os.environ.get('CUDA_HOME', '/usr/local/cuda')
-    env = {**os.environ, 'PYTHONPATH': str(root / 'training/neuralese'), 'CUDA_HOME': cuda,
+    # NATLANG_SGLANG_PYTHONPATH: a fork worktree under test instead of the pinned checkout's editable install.
+    pythonpath = os.pathsep.join(filter(None, [os.environ.get('NATLANG_SGLANG_PYTHONPATH'), str(root / 'training/neuralese')]))
+    env = {**os.environ, 'PYTHONPATH': pythonpath, 'CUDA_HOME': cuda,
            'PATH': os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')]),
            'NATLANG_ADAPTER_SLOTS': '4', 'NATLANG_ADAPTER_RANK': '32'}
     log = open(Path(args.out) / 'sglang-server.log', 'ab')
@@ -199,6 +238,68 @@ def sample(url, rows, concurrency, requests, *, max_tokens, min_tokens, stop_ids
             'cached_prompt_tokens': sum(int(r['meta'].get('cached_tokens', 0)) for r in results),
             'per_request_tok_s_median': float(np.median([len(r['tokens']) / r['seconds'] for r in results])),
             'records_cover_tokens': all(len(r['logps']) == len(r['tokens']) for r in results)}
+
+
+def speculative(args, rows):
+    """Plain decode against n-gram speculative decoding (``--spec-arms``: 'off' or a draft length D) on one wave of
+    real GRPO calls at each concurrency: T=1 top-p 0.95 with the actor's natlang record (k=1), output tok/s, the mean
+    accepted length (output tokens per verify step) and the server's memory lines. Each arm runs its own server."""
+    import random
+    rows = [r for r in rows if len(r['prompt']) + args.max_tokens < 32000]
+    picked = random.Random(0).sample(rows, min(len(rows), 4 * max(args.concurrency)))
+    report = {'step': 'speculative', 'arms': {}}
+    base_args = list(args.sglang_arg)
+    for arm in args.spec_arms:
+        args.sglang_arg = base_args + ([] if arm == 'off' else [
+            '--speculative-algorithm', 'NGRAM', '--speculative-num-draft-tokens', str(arm),
+            '--speculative-ngram-max-bfs-breadth', '1', '--speculative-ngram-min-bfs-breadth', '1'])
+        out = Path(args.out) / f'spec-{arm}'
+        out.mkdir(parents=True, exist_ok=True)
+        saved, args.out = args.out, out
+        process, url = serve(args)
+        args.out = saved
+        try:
+            for c in args.concurrency:
+                work = picked[:c]
+
+                def one(row):
+                    limit = max(args.min_tokens, min(args.max_tokens, len(row['tokens'])))
+                    body = {'input_ids': row['prompt'], 'sampling_params': {
+                        'temperature': 1.0, 'top_p': 0.95, 'max_new_tokens': limit, 'stop_token_ids': args.stop_ids,
+                        'skip_special_tokens': False, 'no_stop_trim': True,
+                        'custom_params': {'natlang_top_k': 1}}}
+                    started = time.monotonic()
+                    result = _post(url, body)
+                    meta = result['meta_info']
+                    return {'tokens': len(result['output_ids']), 'records': len(meta.get('natlang_top_k') or []),
+                            'verify': meta.get('spec_verify_ct'), 'seconds': time.monotonic() - started}
+                # Prefill (and the n-gram corpus) first, then the measured decode wave on the cached prompts.
+                with ThreadPoolExecutor(c) as pool:
+                    list(pool.map(lambda r: _post(url, {'input_ids': r['prompt'], 'sampling_params': {
+                        'temperature': 0.0, 'max_new_tokens': 1}}), work))
+                started = time.monotonic()
+                with ThreadPoolExecutor(c) as pool:
+                    results = list(pool.map(one, work))
+                wall = time.monotonic() - started
+                tokens = sum(r['tokens'] for r in results)
+                verify = sum(r['verify'] or 0 for r in results)
+                report['arms'].setdefault(str(arm), {})[str(c)] = {
+                    'requests': len(results), 'wall_seconds': wall, 'output_tokens': tokens,
+                    'output_tok_s': tokens / wall, 'mean_accept_length': tokens / verify if verify else None,
+                    'records_cover_tokens': all(r['records'] == r['tokens'] for r in results),
+                    'prompt_tokens_mean': float(np.mean([len(r['prompt']) for r in work]))}
+                print(json.dumps({arm: report['arms'][str(arm)][str(c)]}), flush=True)
+        finally:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+        log = (out / 'sglang-server.log').read_text(errors='replace').splitlines()
+        report['arms'][str(arm)]['memory_lines'] = [line[-300:] for line in log
+            if 'is allocated' in line or 'avail mem' in line or 'Capture cuda graph end' in line][:12]
+    args.sglang_arg = base_args
+    return report
 
 
 def rescore(args, sample_files):
@@ -289,7 +390,8 @@ def native_throughput(args, rows, lanes_list, steps=96):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('step', choices=('workload', 'serve-measure', 'rescore', 'native', 'all'))
+    p.add_argument('step', choices=('workload', 'serve-measure', 'speculative', 'rescore', 'native', 'all'))
+    p.add_argument('--spec-arms', nargs='*', default=['off', '4', '8'])
     p.add_argument('--native-lanes', type=int, nargs='*', default=[1, 4, 8])
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--workload', type=Path)
@@ -310,6 +412,10 @@ def main(argv=None):
     args.out.mkdir(parents=True, exist_ok=True)
     if args.step == 'workload':
         _write(args.out / 'workload.json', build_workload(args.roots, args.workload))
+        return
+    if args.step == 'speculative':
+        rows = [json.loads(line) for line in open(args.workload)]
+        _write(args.out / 'speculative.json', speculative(args, rows))
         return
     if args.step in ('serve-measure', 'all'):
         rows = [json.loads(line) for line in open(args.workload)]

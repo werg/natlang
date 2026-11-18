@@ -49,6 +49,17 @@ export function decisionScorer(driver: { decide?: DecisionScorer } | null | unde
 }
 
 /**
+ * A scripted (non-model) driver's successful answer to one call. A decision readout run without a scoring driver
+ * generates its choice on a tool-free request and reads it as JSON text (agent.ts `generatedDecision`), so a scripted
+ * answer there is the value's JSON text; every other call returns through `return_result`.
+ */
+export function scriptedSuccess(request: { tools?: readonly unknown[] }, value: unknown):
+    { text: string; calls: [] } | { calls: [string, Record<string, unknown>][] } {
+  return Array.isArray(request.tools) && request.tools.length === 0 ? { text: JSON.stringify(value), calls: [] } :
+    { calls: [['return_result', { status: 'success', value }]] };
+}
+
+/**
  * Score several decision requests at once. A scorer with its own `scoreMany` (batched on the server, or coalescing
  * the readouts of concurrent calls) is used; otherwise the items are issued concurrently, so the model scheduler and
  * the server see them together. One entry per item; an item that fails does so alone.
