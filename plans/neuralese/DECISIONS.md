@@ -3401,3 +3401,15 @@ the think block itself is never a target, most replies are short natlang actions
 replay. Reasoning-bearing teacher output (Haiku extended thinking, Nemotron reasoning) is preferred where it is cheap.
 grpo-v4-run1 steps 2-3 `reasoning_shift` (1.9x/1.8x step 1) is completion order, not the policy: LR <= 1.4e-6, probe
 logp change <= 2e-4, step 1 trained on the first-finishing (short) groups; the sentinel's baseline moves past step 1.
+
+## 2026-11-18: task supply round 11, `natlang-rl-task-supply-20261118b` (205 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 205 train rows in 12 families. These are round-11 authored tasks (w219-w232) plus w210's rows
+  that were admitted late.
+- **Constructs:** folder reducers 70%, decide 59%, depth 3 63%, iterateOn 48%, typed Neuralese 52%.
+- **Repetition:** 0 program texts are shared with the pool, and the top structure is 12%.
+- **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 10 rows, closure passed.
+- **When it enters:** grpo-v4-run1 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+- **Memory:** authoring ledger units now pass through a 3-slot gate (`round11/gated.py`, `--wait 36000`). grpo-v4 needs
+  about 106 GB, so supply runs at the rate that fits beside it.
+- Details: TASK_SUPPLY_20261118.md section 6.

@@ -86,3 +86,29 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
   an author raised but the solver did not were admitted.
 - **Construct tags.** w211 P8 claims typed_neuralese on a `Neuralese<string>` result; the sampler reads programs, not
   tags.
+
+## 6. Round 11: `natlang-rl-task-supply-20261118b` (205 rows)
+
+- **Batches.** Haiku authors w219-w232 worked from `AUTHOR_BRIEF_ROUND11.md`, which raised the targets for typed
+  Neuralese and depth 3 and folded in the round-10 lessons.
+- **Admitted to `natlang-rl-authoring/admitted`:** 278 tasks in 11 families from w219-w222 and w226-w232. Three tasks
+  were held back as ambiguous (w229 forfeit x2, w232 one gender-dependent relation).
+- **Not in this source:** w223-w225 were still qualifying when it was built and go into the next source.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r11`.
+- **Source rows.** The source holds the train rows of those batches plus w210's 22 train rows. It drops 10 rows that
+  custody ties to held sibling worlds: 7 CLUTRR rows whose stories recur in held worlds, the 2 w214 late-penalty rows,
+  and 1 w228 row. **Result: 205 rows in 12 families.**
+- **Constructs** (explore-walk detection):
+  - folder reducers 70%
+  - decide 59%
+  - call depth >= 3 63%
+  - iterateOn 48%
+  - typed Neuralese results 52%
+  - 195 of 205 rows carry two or more held constructs
+- **Repetition** (`repetition.json`, against all four earlier POOLS, 35,007 rows):
+  - 90 distinct programs and instruction texts (82.8 effective);
+  - 32 structures (23.7 effective), with the top structure at 12%;
+  - 0 program or instruction texts and 0 functional programs shared with the pool.
+- **Checks.** held-v3 verify found 0 shared ids and 0 shared groups, also with exposure. Custody found 0 related rows.
+  The closure passed.
+- **Memory.** Authoring units run at most 3 at a time beside training, through `round11/gated.py`.
