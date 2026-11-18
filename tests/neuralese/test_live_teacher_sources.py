@@ -32,7 +32,7 @@ def fixture(root):
                 'reply': {'text': '', 'raw_calls': [{'id': 'actual-tool-id', 'type': 'function', 'function':
                     {'name': 'eval', 'arguments': json.dumps({'code': 'workspace.write("draft", "hello")'})}}], 'calls': [['eval', {'code': 'workspace.write("draft", "hello")'}]],
                           'raw_response': {'vibestudio': gateway}}}
-    summary = {'call_id': 'call-one', 'parent_call_id': None, 'task_id': 'internal-task', 'owner_kind': 'eval',
+    summary = {'call_id': 'call-one', 'parent_call_id': None, 'definition_id': 'definition-one', 'owner_kind': 'eval',
                'owner_key': 'eval-owner', 'run_id': 'actual-eval-run'}
     detail = {'callId': 'call-one', 'summary': summary,
               'record': {'version': 'natlang.calls/1', 'call_id': 'call-one', 'parent_call_id': None, 'outcome': 'done', 'task_id': 'internal-task',
@@ -79,11 +79,13 @@ def test_actual_context_and_tool_ids_are_preserved_without_score_targets(tmp_pat
     assert s.replay_episode(None, None, episode, None)['exact'] is False
 
 
-@pytest.mark.parametrize('mutation', ['owner', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage', 'instance'])
+@pytest.mark.parametrize('mutation', ['owner', 'definition', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage', 'instance'])
 def test_rehashed_wrong_scope_effect_or_target_is_rejected(tmp_path, mutation):
     path, spec, detail, verification = fixture(tmp_path)
     if mutation == 'owner':
         detail['summary']['owner_key'] = 'foreign-owner'
+    elif mutation == 'definition':
+        detail['summary']['definition_id'] = 'different-definition'
     elif mutation == 'eval-run':
         detail['summary']['run_id'] = 'outer-world-run'
     elif mutation == 'outer-run':

@@ -89,7 +89,8 @@ def load_episode(path):
         if call_id in seen or call_id not in scopes or detail.get('callId') != call_id:
             raise ValueError('live call is duplicate or outside the verified workflow')
         seen.add(call_id)
-        if summary.get('call_id') != call_id or summary.get('task_id') != record.get('task_id'):
+        if (summary.get('call_id') != call_id or not summary.get('definition_id') or
+                summary['definition_id'] != (record.get('definition') or {}).get('id')):
             raise ValueError('exported call identity differs from original record')
         if any(summary.get(k) != scopes[call_id].get(k) for k in ('owner_kind', 'owner_key', 'run_id')):
             raise ValueError('live call owner/eval run differs from verified scope')

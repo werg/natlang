@@ -82,3 +82,12 @@ Read-only metadata qualification on the retained panel C failure snapshot (SHA-2
 `f5709cad3166be3840ff671729cf0682e94ed7434fa8895265d406f5a1d2c177`) found seven raw calls and three exact failed-action
 joins at generation ordinals3,9,10 of calls[6]. Its root and that call were `quiesced`; no part of the blocked run was
 admitted. This proves the event/response join on actual capture data, not a successful workflow or training exposure.
+
+## Live integration smoke on Tick
+
+Luna passed `workspace-integration-theme-locale` in managed run
+`st_66ad94aafdfe468eb06b578fd91c31c6`. The independent oracle verified both requested edits,
+the untouched setting, and the merge decision at the resulting workspace head. The EvalDO retained 13 completed
+invocations. Held-v3 and held-v2 exposure checks found no overlapping task IDs or source groups.
+The standard LFM3 student build produced 37 supervised model turns and 16 chains with 4,284 target tokens
+and zero over-length turns. These files qualify the pipeline with one live workflow.
