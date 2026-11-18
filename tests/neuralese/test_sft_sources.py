@@ -373,3 +373,17 @@ def test_extract_takes_teacher_successes_in_student_form(tmp_path):
     assert teacher['turns'][0]['exact']['prompt_ids'] == [1, 2]                  # the guidance turn is gone
     census = json.loads((work / 'episodes-extract.json').read_text())['sources']
     assert list(census.values())[0]['teacher_attempt_successes'] == 1
+
+
+def test_replay_skips_keys_with_a_verdict(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    writer = s.ZstdWriter(tmp_path / 'episodes-teacher.jsonl.zst')
+    for key in ('a', 'b', 'c'):
+        writer.write({'key': key})
+    writer.close()
+    (tmp_path / 'replay.jsonl').write_text(json.dumps({'key': 'a', 'outcome': 'task_success'}) + '\n'
+                                           + json.dumps({'outcome': 'replay_error: x'}) + '\n')
+    seen = []
+    monkeypatch.setattr(s, 'replay_episodes', lambda args, episodes: seen.extend(e['key'] for e in episodes))
+    s.replay(SimpleNamespace(work=str(tmp_path)))
+    assert seen == ['b', 'c']
