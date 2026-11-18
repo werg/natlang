@@ -179,3 +179,62 @@ def test_parent_closure_and_verified_root_attribution_are_required(tmp_path, mut
     path.write_text(json.dumps(spec))
     with pytest.raises(ValueError, match='parent|roots'):
         live.load_episode(path)
+
+
+def recovery_fixture(root):
+    path, spec, detail, verification = fixture(root)
+    failed = detail['record']['model_turns'][0]
+    recovery = copy.deepcopy(failed)
+    recovery['reply']['raw_calls'][0]['id'] = 'actual-recovery-id'
+    recovery['reply']['raw_response']['vibestudio']['response']['content'][0]['id'] = 'actual-recovery-id'
+    recovery['request']['messages'] += [{'role': 'assistant', 'content': failed['reply']['text'],
+                                          'tool_calls': copy.deepcopy(failed['reply']['raw_calls'])},
+                                        {'role': 'tool', 'tool_call_id': 'actual-tool-id', 'content': 'write failed'}]
+    detail['record']['model_turns'] = [failed, recovery]
+    detail['events'] = [{'kind': 'action', 'outcome': 'error', 'tool_call_id': 'actual-tool-id'}]
+    rewrite(root, spec, detail, verification)
+    return path, spec, detail, verification
+
+
+@pytest.mark.parametrize('multiple_actions', [False, True])
+def test_recovered_error_is_context_evidence_and_never_supervised_target(tmp_path, multiple_actions):
+    path, spec, detail, verification = recovery_fixture(tmp_path)
+    if multiple_actions:
+        failed = detail['record']['model_turns'][0]['reply']
+        extra = copy.deepcopy(failed['raw_calls'][0])
+        extra['id'] = 'co-emitted-successful-action'
+        failed['raw_calls'].append(extra)
+        failed['calls'].append(copy.deepcopy(failed['calls'][0]))
+        block = copy.deepcopy(failed['raw_response']['vibestudio']['response']['content'][0])
+        block['id'] = extra['id']
+        failed['raw_response']['vibestudio']['response']['content'].append(block)
+        detail['record']['model_turns'][1]['request']['messages'][-2]['tool_calls'] = copy.deepcopy(failed['raw_calls'])
+        rewrite(tmp_path, spec, detail, verification)
+    before = copy.deepcopy(detail)
+    episode = live.load_episode(path)
+    assert len(episode['turns']) == 1
+    turn = episode['turns'][0]
+    assert turn['target']['tool_calls'][0]['id'] == 'actual-recovery-id'
+    assert turn['messages'] == detail['record']['model_turns'][1]['request']['messages']
+    assert turn['messages'][-1]['content'] == 'write failed'
+    assert turn['live_exchange']['ordinal'] == 1
+    assert episode['call_tree'][0]['excluded_failed_action_turns'] == {'0': ['actual-tool-id']}
+    assert detail == before
+    writer = s.ZstdWriter(tmp_path / 'episodes-live.jsonl.zst')
+    writer.write(episode)
+    writer.close()
+    assert len(list(s.verified_episodes(tmp_path, collections.defaultdict(collections.Counter)))) == 1
+
+
+@pytest.mark.parametrize('mutation', ['missing-id', 'unmatched-id', 'ambiguous-id'])
+def test_failed_action_needs_exact_original_generation_attribution(tmp_path, mutation):
+    path, spec, detail, verification = recovery_fixture(tmp_path)
+    if mutation == 'missing-id':
+        del detail['events'][0]['tool_call_id']
+    elif mutation == 'unmatched-id':
+        detail['events'][0]['tool_call_id'] = 'foreign-call'
+    else:
+        detail['record']['model_turns'].append(copy.deepcopy(detail['record']['model_turns'][0]))
+    rewrite(tmp_path, spec, detail, verification)
+    with pytest.raises(ValueError, match='failed live action'):
+        live.load_episode(path)
