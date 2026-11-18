@@ -4010,3 +4010,13 @@ ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's
   (`rl/native_replay.token_action_logps`: temperature and the sampler's allowed set). Nothing produces own turns for
   its full-softmax `sft` rows.
 - **When it enters.** grpo-v4-run2 takes this at its next resume.
+
+## 2026-11-18: task supply round 16, `natlang-rl-task-supply-20261118g` (88 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 88 train rows in 6 new families (round 16, w269-w274).
+- **Constructs:** folder reducers 88%, decide 51%, depth 3 65%, iterateOn 42%, typed Neuralese 41%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related on the first build, closure passed.
+  Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r16`.
+- **Finding confirmed:** giving every world distinct root inputs removed the custody `inputs:` binding (0 rows lost,
+  against 15-16 in each of the two previous rounds).
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.

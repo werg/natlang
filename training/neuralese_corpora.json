@@ -734441,6 +734441,26 @@
       "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source."
     },
     {
+      "id": "natlang-rl-authored-dev-20261118r16",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261118r16",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 18 verified cases in 17 worlds (split dev), registered 20261118r16. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261118r16",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261118r16",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 29 verified cases in 27 worlds (split confirmation), registered 20261118r16. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
       "id": "natlang-rl-authored-dev-20261118r15",
       "owner": "dgx",
       "path": "runs/natlang-rl-authored-dev-20261118r15",
@@ -734723,6 +734743,23 @@
       "source_class": "immutable-RL-task-source",
       "split": "Train-only 121-row RL task source for grpo.py POOLS: authored round-15 rows (w259-w266, 8 new families incl. WikiSQL train-split table desk with SQL-executed answers); folder reducers 84%, decide 69%, call depth >= 3 62%, iterateOn 62%, typed Neuralese results 49%.",
       "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 10. Qualified on the grpo-v4 pin runtime a0981794b, novelty-gated, Sonnet blind-solved (196/196 admitted, none held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r15. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (16 w260/w265 rows whose root inputs equal a held sibling's, and 40 earlier custody rows, left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 259 --max-worker 266 --drop-related round15/custody-drop.json. Data on /mnt/external (runs/ entry is a symlink)."
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118g",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-task-supply-20261118g",
+      "include": [
+        "cases.jsonl",
+        "selection.json",
+        "repetition.json",
+        "constructs.json",
+        "custody.json",
+        "protection-union.json",
+        "held-verify/*.json"
+      ],
+      "source_class": "immutable-RL-task-source",
+      "split": "Train-only 88-row RL task source for grpo.py POOLS: authored round-16 rows (w269-w274, 6 new families); folder reducers 88%, decide 51%, call depth >= 3 65%, iterateOn 42%, typed Neuralese results 41%.",
+      "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 11. Qualified on grpo-v4 pin runtimes ec7982265 / a0981794b, novelty-gated, Sonnet blind-solved (6 flagged or over-budget tasks held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r16. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related on first build (world-specific root inputs per the round-16 custody addendum); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 269 --max-worker 274 --drop-related round15/custody-drop.json. w267 and w268 were still in progress and go into the next source. Data on /mnt/external (runs/ entry is a symlink)."
     },
     {
       "id": "natlang-rl-authored-dev-20261104r7",

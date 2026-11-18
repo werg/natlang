@@ -186,3 +186,20 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Repetition** (against all eight earlier POOLS, 35,679 rows): 56 distinct programs (52.3 effective), 26 structures
   (19.2 effective), top structure 12%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+
+## 11. Round 16: `natlang-rl-task-supply-20261118g` (88 rows)
+
+- **Batches.** Haiku authors w269-w274 (`AUTHOR_BRIEF_ROUND16.md`, with the custody addendum requiring world-specific
+  root inputs). w267 (bAbI) and w268 were still generating or qualifying and go into the next source.
+- **Admitted:** 135 tasks in 6 families. Held back 6: w270 x2 (a "not a complaint" note containing the cue word;
+  one medical note naming two members), w271/w273 x1 each (ambiguous scope of a helper sentence), w274 irv-c (about
+  36 model calls, near the 40-call episode budget).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r16`.
+- **Source rows.** Train rows of w269-w274. Custody found 0 related rows on the first build: the world-specific root
+  inputs removed the `inputs:` binding that cost 15-16 rows in each of rounds 14 and 15. **Result: 88 rows in 6
+  families.**
+- **Constructs:** folder reducers 88%, decide 51%, call depth >= 3 65%, iterateOn 42%, typed Neuralese results 41%;
+  86 of 88 rows carry two or more held constructs.
+- **Repetition** (against all nine earlier POOLS, 35,800 rows): 44 distinct programs (41.0 effective), 24 structures
+  (20.3 effective), top structure 10%, top-10 instructions 34%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
