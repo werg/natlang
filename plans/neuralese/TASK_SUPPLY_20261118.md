@@ -134,3 +134,22 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Checks.** held-v3 verify 0 shared ids and 0 shared groups, also with exposure; custody 0 related; closure passed.
 - **Next.** w224 (round-11 leftover, requalified) and round 13 (w243-w250, `AUTHOR_BRIEF_ROUND13.md` with the
   round-12 cue-word lessons) go into the next source.
+
+## 8. Round 13: `natlang-rl-task-supply-20261118d` (130 rows)
+
+- **Batches.** Haiku authors w244-w250 worked from `AUTHOR_BRIEF_ROUND13.md` (round-12 cue-word lessons). w224
+  (round-11 leftover) was finished by a replacement author after its first author went idle.
+- **Admitted:** 191 tasks in 8 families. The Sonnet blind solve held back 3 ambiguous tasks (w246 duplicate
+  replacement reviewer, w247 "Outdoor seat" not an outdoor cue, w250 hyphenated whole-word match).
+- **Not in this source:** w243 (GSM8K worksheet grader) was still qualifying; it goes into the next source
+  (coordinator: build without waiting).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r13`.
+- **Source rows.** Train rows of w224 and w244-w250, minus 10 w249 rows custody binds to held sibling worlds and the
+  15 earlier custody rows. **Result: 130 rows in 8 families.**
+- **Constructs:** folder reducers 76%, decide 66%, call depth >= 3 60%, iterateOn 45%, typed Neuralese results 31%;
+  124 of 130 rows carry two or more held constructs.
+- **Repetition** (against all six earlier POOLS, 35,422 rows): 57 distinct programs (53.2 effective), 28 structures
+  (19.9 effective), top structure 14%, top-10 instructions 24%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+- **Next.** Round 14 (w251-w258, `AUTHOR_BRIEF_ROUND14.md`: smoke fragment keys, per-batch construct planning,
+  hyphen word splits, per-world data to avoid custody binding) and w243 go into the next source.

@@ -3854,3 +3854,13 @@ step-3 state on pin a0981794b (reasoning RL walk/rewrite, guidance-leak fix 5038
 the operators newline after `<|im_end|>`). The SFT checkpoint's own held eval is skipped (the probe already decides
 against it; Pop finishes the base on the new answer protocol). The val-own investigator now hunts the hazard; a rebuilt
 warm-up runs only once its cause is fixed.
+
+## 2026-11-18: task supply round 13, `natlang-rl-task-supply-20261118d` (130 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 130 train rows in 8 new families (round 13, w244-w250, and the round-11 leftover w224). Built
+  on the coordinator's request without waiting for w243, which goes into the next source.
+- **Constructs:** folder reducers 76%, decide 66%, depth 3 60%, iterateOn 45%, typed Neuralese 31%.
+- **Repetition:** 0 program texts or functional programs shared with the 35,422-row pool; top structure 14%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 25 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r13`.
+- **When it enters:** grpo-v4-run2 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
