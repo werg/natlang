@@ -3413,3 +3413,35 @@ logp change <= 2e-4, step 1 trained on the first-finishing (short) groups; the s
 - **Memory:** authoring ledger units now pass through a 3-slot gate (`round11/gated.py`, `--wait 36000`). grpo-v4 needs
   about 106 GB, so supply runs at the rate that fits beside it.
 - Details: TASK_SUPPLY_20261118.md section 6.
+
+## 2026-11-18 09:20, grpo-v4-run1 step time: where it goes; shared collectors failed 12% of episodes (fixed, ac8d55d91)
+
+Steps 2-3 (06:36-08:25, 48 groups, 109 min) from `train.jsonl`, `actor.log` per-minute decode and the journal:
+- **Learner phase ~54% of wall time** (step 2 07:22-08:00, step 3 08:04-08:25): reference + policy passes at
+  1.2-1.5k computed tok/s. The in-flight episodes drain through the whole phase (LPS 0): 41 -> 3 running at ~10-14
+  decode steps/s, ~20-35% of the GPU for 100-350 tok/s.
+- **Collection at full speed ~1.0-1.1k tok/s at 46 running** (09:xx contexts ~9-10k tokens/sequence; KV pool 0.5-0.6
+  used): in line with grpo-v3. The logged 766-791 averages include the two losses below.
+- **progtune-fit-route-2 (GPU SFT, 06:35-07:08) halved the actor for 33 min** (10-12 vs 22-23 decode steps/s at 47
+  running): ~13 min of step 2's collection. check-main `--python` on CUDA ran 07:59-08:42 beside step 3's learner.
+  The ledger has no GPU-time notion; GB10 time-slicing conserves GPU work, so this is a priority question, not waste.
+- **Defect: shared collector stalls failed episodes.** A node collector server whose event loop was blocked still
+  completed connects; `SharedChild` waited 60 s for its reply, then raised `TimeoutError` (not caught as the
+  `RuntimeError` fallback) and the episode ended unresolved with no model call. Every new invocation tries s000
+  first, so one stalled server failed all of them: 08:00-08:05 every episode died after 60 s (groups 212-231 all or
+  mostly unresolved), step 3 trained 93 episodes instead of ~187 and the actor ran ~7 sequences. Over the run 182 of
+  1,545 episodes (12%) ended this way, also sporadically in groups 0-211. Fix (protocol /3, default; ac8d55d91): the
+  server greets each connection, the client sends nothing to a server that does not greet within 10 s and moves on
+  (no double run when it wakes), full servers are skipped from the greeting; servers log `loop_stall` (>= 5 s lag) and
+  timestamp `invocation_end`. `NATLANG_COLLECTOR_SHARED=0` opts out. Tests: stalled-listener skip, existing
+  shared/recycle tests (3 passed). The pin's runtime is /2, so it enters at the next resume on a new pin.
+- **Telemetry:** `moment_offload.put_s` was the state save's 330-350 s plus the write; now `put_wait_s` is reported apart
+  (`put_s` is the write alone). Neither is on the critical path (`get_wait_s` 0, `wait_state_save` 0).
+- **Not a limiter:** swap during step 2's learner was 2 GB out / 1.4 GB in (4 KB pages); the SGLang scheduler stays on
+  an X925 core; persistence fsyncs in the collectors are async (p50 30 ms, p99 1.7 s).
+- **Not determined:** what blocked the stalled server for ~5 min (candidates: swap-in of idle node heaps after the
+  learner phase under the post-step writes, or an episode's synchronous work); the new `loop_stall` lines will show it.
+- **Levers not taken:** `--activation-gb 4` with `--prefix-retained-gb 8` leaves the leaves 0 GB (`leaf_gb` 0.0 every
+  step), so every layer recomputes; ACT 12 measured -5.8% policy pass on 11-17 for +7.5 GB. Holding in-flight
+  episodes' calls during the learner phase would return the drain's GPU share (est. 4-5% of a step) but needs the
+  episode wall clock and client timeouts paused with it.
