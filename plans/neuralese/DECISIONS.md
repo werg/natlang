@@ -3792,3 +3792,57 @@ results with no derivation. Fix, shaped toward a hint about where the solution g
   stats. `--guidance-leaks train` opts out. `sft_sources extract` applies the same check
   (`teacher_attempt_guidance_leak`).
 The GRPO run after the SFT warm-up starts from main with this on.
+
+## 2026-11-18 16:30, sft-v4-run1 val-own: cause found; four row defects fixed (SFT-row investigation)
+
+**Observation.** val-own NLL (held-out own GRPO successes, every token trained) 0.532 at step 0, 0.587 at step 10, then
+down to 0.5495 at step 86; val-teacher 0.650 -> 0.304.
+
+**Cause of the val-own curve: batch composition, not a row defect.** `--batch-order random` shuffled 16,271 chains, of
+which 92 are own chains of ~6k loss tokens (19% of the loss). Reproducing `step_groups` (seed 20261111): own share of
+the loss per step was 4% over steps 1-11 (only step 8 had any), i.e. the warm-up peak LR (steps 6-10) ran on
+teacher-only batches; steps 11-20 held 34% own, 21-60 about 20%. val-own rose exactly while the anchor was missing and
+fell once it came (0.587 -> 0.563 over steps 11-20, then slowly). Forward-only decomposition, base vs final
+checkpoint, on val-own (`scratchpad valdecomp`, reproduces the trainer's 0.5319/0.5495): reasoning tokens +0.016 nats
+(80% of the +0.018), reasoning entropy 0.654 -> 0.601 (sharper), own tool-call tokens +0.034 (the student's own action
+style vs the teachers'), first 32 reasoning tokens +0.057; reasoned `</think>` 0.321 -> 0.287 nats (mean; median 0.044
+-> 0.038). val-teacher's drop is tool tokens 0.68 -> 0.33.
+- **Fix (default):** `exp0_sft --batch-order stratified` (and `auto` now means stratified): each source's episodes are
+  spread evenly over the epoch by their share of its loss tokens, so every step carries about the whole mix
+  (`stratified_epoch`; `random`/`grouped` opt out). Test: `test_exp0_stratified_steps_carry_the_whole_sets_source_mix`.
+
+**Defects found (two independent passes: forward decomposition here, a static audit agent) and fixed, default on
+with opt-outs and tests:**
+1. **Own decision readouts trained as sampled replies, `</think>` at position 0.** 18 train rows (8 in val-own): the
+   actor scored a decide readout (empty `sample_ids`), the build rendered the chosen option as `<think></think>"opt"`
+   and trained every token (`think_context` returned 0 for every own row). The scorer never evaluates the shared
+   `</think>`. Measured on val-own: that `</think>` went from 21.0 to 3.8 nats (p 2e-9 -> 2.3%) on decide prompts.
+   Fix: `sft_sources.think_context` makes an own reply without reasoning keep its empty think block as context
+   (`--own-empty-think train` opts out); `exp0_sft` applies `context_masks` to every train/val chain at load
+   (`--context-masks off`). GRPO's lowering already routes readouts to the decision term (no sample stream).
+2. **Wrapped backend refusals trained (1,070 teacher calls, 91k tokens, 3.2% of the loss).** `backend_workaround`
+   matched only a tool message starting with the refusal; a child's refusal wrapped in the parent's error text was
+   missed. Now any tool message containing it.
+3. **val-teacher scored detours that training masked (103 of 361 rows, 39% of its mass).** The zeroing lived in the
+   build loop only. It now lives in `call_row`, so training, validation and `EpisodeSizes` share it (the size cache key
+   changes, so sizes are re-measured once). val-teacher of this run therefore overstates transfer.
+4. **A target token after `<|im_end|>`.** `serve.chat.assistant_reply_segments` returned the template's separator
+   (`<|im_end|>\n`) as part of the reply: all 535 operator chains (and grpo's operators replay corpus) trained `\n`
+   after the end token. Fixed at the source (`_without_turn_separator`, reply targets only; `assistant_reply` keeps the
+   template text for boundary matching) and at load (`exp0_sft.mask_after_end` in `context_masks`, `grpo.ReplayCorpus`,
+   `sft_sources.load_aux`). The forced-message path (engine) now ends a forced reply at the end token like a sampled one.
+
+**Not defects / ruled out:** generation prompt ends in `<think>` (context everywhere); own target text equals the sampled
+text in 553/553 rows (110 rows differ only in BPE split, 365 of 570k tokens, re-tokenized from text; not fixed);
+template writes no newline after `</think>` and own samples match; weighted loss and val use the same
+sum(w*nll)/sum(w); shared prefixes stop before each chain's first target; grpo-v4-run2 own prompts text-identical to
+the actor's. **Known, not changed:** 35/40 val-own and 50/55 trained own episodes are grpo-v3-run1 replies re-scored
+under today's system prompt (507/525 calls differ in the system message from what the actor showed); teachers end with
+`eval {finish: true}` 10.6k times vs 16 in own data and 695 `return_result {status: "failed"}` calls train; live rows
+show the retired system prompt; 19 own calls over 32k tokens are dropped by `chains_of`. **Not checked:** the operator
+site prompts against today's ts-host; the 5 own rows with two `</think>`; the early grad norms (17-18 at steps 1-2,
+falling to ~3 by step 10) beyond noting they coincide with the teacher-only batches.
+
+**Running work.** grpo-v4-run3 started from this checkpoint on a pin without these fixes; they reach it at its next
+resume (operators replay corpus: the separator mask). The SFT checkpoint's behaviour probe (`sft-v4-probe`, 16 GB) waits
+for ledger headroom beside run3's 99 GB claim; its `</think>` hazard is the check on defect 1's generalization.

@@ -246,6 +246,52 @@ def mask_empty_think(chains, tokenizer):
     return changed
 
 
+def vocabulary_ids(tokenizer, tokens):
+    """Ids of those ``tokens`` the vocabulary has (never the unknown-token id a tokenizer gives for a missing one)."""
+    vocab = tokenizer.get_vocab() if hasattr(tokenizer, 'get_vocab') else None
+    ids = set()
+    for token in tokens:
+        if vocab is not None:
+            if token in vocab:
+                ids.add(int(vocab[token]))
+            continue
+        try:
+            index = tokenizer.convert_tokens_to_ids(token)
+        except (ValueError, KeyError):
+            continue
+        if isinstance(index, int) and index >= 0:
+            ids.add(index)
+    return ids
+
+
+def mask_after_end(chains, tokenizer):
+    """Zero the loss weight of every target after a row's first end-of-turn token (in place); returns the rows changed.
+
+    The actor stops at the end token; what a chat template writes after it (LFM3: the newline before the next turn) is
+    never sampled. ``serve.chat.assistant_reply`` returned that separator as part of the reply, so all 535 operator
+    chains of sft-warmup-20261118-v1 trained ``<|im_end|>`` followed by ``\n``."""
+    ends = vocabulary_ids(tokenizer, ('<|im_end|>', '<|endoftext|>'))
+    changed = 0
+    for chain in chains:
+        for _, length, row in chain['segs']:
+            hits = np.flatnonzero(np.isin(row['sample'], list(ends)))
+            if not len(hits) or hits[0] + 1 >= length:
+                continue
+            weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+            if weight[hits[0] + 1:].any():
+                weight[hits[0] + 1:] = 0
+                row['weight'] = weight
+                changed += 1
+    return changed
+
+
+def context_masks(chains, tokenizer):
+    """The load-time target rules every learner applies to prebuilt chains, whatever built them (in place): a leading
+    empty think block is context (``mask_empty_think``) and nothing after the end of turn trains (``mask_after_end``).
+    Returns the rows each changed."""
+    return {'empty_think_rows': mask_empty_think(chains, tokenizer), 'after_end_rows': mask_after_end(chains, tokenizer)}
+
+
 def packed_rows(chains, max_tokens):
     """Greedy, order-preserving packing of ``chains`` into rows of at most ``max_tokens`` tokens (a longer chain is a row
     alone; ``max_tokens`` 0: one chain per row). Returns lists of chains."""
@@ -311,11 +357,40 @@ def chain_loss_tokens(chain):
     return sum(length for _, length, _ in chain['segs'])
 
 
-def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
+def chain_source(chain):
+    """The source a chain came from: its round's prefix (``rl``, ``teacher``, ``rl-neuralese-graph``, ...)."""
+    return str(chain.get('round')).split(':')[0]
+
+
+def stratified_epoch(chains, rng):
+    """One epoch's chain order with every source spread evenly over it: episodes (task, round; their chains stay in
+    order and together) shuffled within each source, each placed at the midpoint of its share of its source's
+    weighted tokens (``chain_mass``), all sources merged by that position. A cut into steps then gives every step about
+    the source mix of the whole set. sft-v4-run1 (random order) drew 92 own chains of ~6k loss tokens among 16k: by
+    chance steps 1-11 held 4% own tokens against 19% overall, at peak LR, and val-own NLL rose 0.532 -> 0.587; it fell
+    back once own-rich steps came (steps 11-20: 34%)."""
+    by_source = collections.defaultdict(lambda: collections.defaultdict(list))
+    for index, chain in enumerate(chains):
+        by_source[chain_source(chain)][(chain['task'], chain['round'])].append(index)
+    placed = []
+    for source in sorted(by_source):
+        episodes = list(by_source[source].values())
+        rng.shuffle(episodes)
+        masses = [sum(chain_mass(chains[i]) for i in members) for members in episodes]
+        total = sum(masses) or 1.
+        done = 0.
+        for members, mass in zip(episodes, masses):
+            placed.append(((done + mass / 2) / total, rng.random(), members))
+            done += mass
+    placed.sort(key=lambda item: item[:2])
+    return [index for _, _, members in placed for index in members]
+
+
+def step_groups(chains, epochs, batch_loss_tokens, seed, grouped, stratified=False):
     """Optimizer steps (lists of chain indices) of at least ``batch_loss_tokens`` loss tokens each, counted as the loss
     counts them (``chain_mass``: zero-weight context tokens such as a teacher's think block do not fill a batch).
     Random order (``grouped`` False): one shuffled list over all epochs, cut in order; a last group under half a batch
-    is dropped. Grouped: per epoch, episodes (task, round) in lexicographic order of their first chain's tokens (so the
+    is dropped. Stratified (``grouped`` False, ``stratified``): the same cut over ``stratified_epoch`` orders. Grouped: per epoch, episodes (task, round) in lexicographic order of their first chain's tokens (so the
     chains that share a system prompt, task prompt or earlier calls are neighbours; ties and the cut offset random) with
     each episode's chains in order, cut into steps (a remainder under half a batch joins the epoch's last step) whose
     order is then shuffled: every chain exactly once per epoch, reproducible from ``seed``."""
@@ -323,6 +398,9 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
     if not grouped:
         order = []
         for _ in range(epochs):
+            if stratified:
+                order += stratified_epoch(chains, rng)
+                continue
             epoch = list(range(len(chains)))
             rng.shuffle(epoch)
             order += epoch
@@ -538,6 +616,12 @@ def train(args):
     chains = load_chains(args.chains) if args.chains else chains_of(episodes)
     loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
     val_sets = {Path(path).stem: load_chains(path) for path in args.val_chains}
+    if args.context_masks == 'on':
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(args.base)
+        print(json.dumps({'context_masks': context_masks(chains, tokenizer),
+                          **{f'context_masks:{name}': context_masks(c, tokenizer) for name, c in val_sets.items()}}),
+              flush=True)
     print(json.dumps({'episodes': len(episodes), 'sequences': len(chains), 'sequence_tokens': int(sum(len(c['ids']) for c in chains)),
                       'loss_tokens': int(loss_tokens), 'epochs': args.epochs}), flush=True)
     model, state, special = load_model(args.checkpoint, args.base)
@@ -586,13 +670,14 @@ def train(args):
         # the producer documents embed their span with the producer table, which is the embedding only without an adapter
         raise SystemExit(f'{importing} chains import Neuralese state: needs the fast path and a checkpoint without a '
                          f'producer adapter (has {adapter})')
-    grouped = args.batch_order == 'grouped' or (args.batch_order == 'auto' and share_prefix_tokens > 0)
-    steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, grouped)
+    order = 'stratified' if args.batch_order == 'auto' else args.batch_order
+    grouped = order == 'grouped'
+    steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, grouped, stratified=order == 'stratified')
     total = len(steps)
     if args.max_steps:
         steps = steps[:args.max_steps]
     print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens,
-                      'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': 'grouped' if grouped else 'random'}),
+                      'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': order}),
           flush=True)
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     if val_sets:
@@ -788,9 +873,11 @@ def main():
     p.add_argument('--no-neuralese-passthrough', action='store_true',
                    help='imported Neuralese state as fixed context: the same in-graph state from the producer document, '
                    'detached (default: the consumer\'s loss reaches the producer\'s state, NEURALESE_PASSTHROUGH_20261117)')
-    p.add_argument('--batch-order', choices=('auto', 'grouped', 'random'), default='auto',
-                   help='grouped: steps from neighbouring episodes in token order (shared prefixes in one step), step order '
-                   'shuffled; random: chains shuffled; auto: grouped when --share-prefix-tokens > 0')
+    p.add_argument('--batch-order', choices=('auto', 'stratified', 'grouped', 'random'), default='auto',
+                   help='stratified: every step carries about the whole set\'s source mix (own, teacher, graph, operator '
+                   'rows; exp0_sft.stratified_epoch), episodes kept together; grouped: steps from neighbouring episodes '
+                   'in token order (shared prefixes in one step), step order shuffled; random: chains shuffled; auto '
+                   '(default): stratified')
     p.add_argument('--out-dir', required=True)
     p.add_argument('--epochs', type=int, default=3)
     p.add_argument('--lr', type=float, default=1e-5)
@@ -805,6 +892,10 @@ def main():
     p.add_argument('--val-chains', action='append', default=[],
                    help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
     p.add_argument('--val-every', type=int, default=50)
+    p.add_argument('--context-masks', choices=('on', 'off'), default='on',
+                   help='on (default): at load, a target row\'s leading empty think block and anything after its end '
+                        'token are context in the training and validation chains (exp0_sft.context_masks); off: the '
+                        'chains\' own weights')
     p.add_argument('--save-best', action='store_true', help='with --keep-best-val: write checkpoint.pt at every new best validation step')
     p.add_argument('--stop-file', help='stop before the next optimizer step when this file exists (the best-validation checkpoint is written)')
     p.add_argument('--keep-best-val', help='name (file stem) of a --val-chains set: write the checkpoint of the step with its lowest NLL (step 0 counts)')

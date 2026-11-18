@@ -328,20 +328,28 @@ TEACHER_THINK = ('context', 'train')
 TEACHER_LEAD_IN = ('context', 'train')
 
 
-def think_context(renderer, source, target_message, target_ids, teacher_think='context', lead_in='context'):
+def think_context(renderer, source, target_message, target_ids, teacher_think='context', lead_in='context',
+                  own_empty_think='context'):
     """Leading target tokens that are context, not loss: for a reply the student did not sample, its think block and
     (``lead_in`` 'context') the text it writes before its first tool call (``serve.targets.non_student_context``, the
     one rule the program-tune rows share). sft-v3-run1 trained teacher think blocks: held-v3 reasoning p50 fell
     1,747 -> 336 characters, Luna's "So far ... Next," style appeared and ran-out rose 16.6% -> 29.6% (DECISIONS
     2026-11-18). Lead-in text is narration: Claude 28% of its tool calls, OpenHands 54%, the student 1.7%; held after
-    sft-v3 12% vs 2%. The student's own replies keep every token as sampled."""
+    sft-v3 12% vs 2%. The student's own replies keep every token as sampled, except (``own_empty_think`` 'context') the
+    template's empty think block of an own reply without reasoning: a decision readout the actor scored, not sampled
+    (its option is the scored continuation after the prefix all options share, so ``</think>`` at the first target
+    position is never the student's choice; the base gives it ~20 nats). sft-v4-run1 trained it in 18 own rows."""
     from natlang_neuralese.serve.targets import non_student_context
     if teacher_think not in TEACHER_THINK:
         raise ValueError(f'teacher_think {teacher_think!r} not in {TEACHER_THINK}')
     if lead_in not in TEACHER_LEAD_IN:
         raise ValueError(f'lead_in {lead_in!r} not in {TEACHER_LEAD_IN}')
+    if own_empty_think not in TEACHER_THINK:
+        raise ValueError(f'own_empty_think {own_empty_think!r} not in {TEACHER_THINK}')
     if source in OWN_SOURCES:
-        return 0
+        if own_empty_think == 'train' or (target_message.get('reasoning_content') or '').strip():
+            return 0
+        return non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in='train')
     return non_student_context(renderer.tokenizer, target_message, target_ids, think=teacher_think, lead_in=lead_in)
 
 
@@ -871,11 +879,13 @@ def backend_workaround(turns):
     text endpoints): the actions after it work around an error the student's actor (which serves Neuralese) never
     raises, a detour off the student's surface (8% of v4's teacher episodes; 92% of composed-Neuralese and 70% of bgkit
     teacher successes of pool-v1 + pool-v2-rich). The action that met it (e.g. a producer's return_result) is the
-    student's own surface."""
+    student's own surface. The refusal counts anywhere in a tool message: a child's refusal reaches its parent wrapped
+    in the error text (\"... failed with \"neuralese-unsupported-backend: ...\"\"); matching only a message that starts
+    with it left 1,070 parent detour calls (3.2% of sft-warmup-20261118-v1's loss) trained."""
     for turn in turns:
         for message in turn.get('messages') or ():
             content = message.get('content')
-            if message.get('role') == 'tool' and isinstance(content, str) and content.startswith(BACKEND_WORKAROUND):
+            if message.get('role') == 'tool' and isinstance(content, str) and BACKEND_WORKAROUND in content:
                 return True
     return False
 
@@ -1035,18 +1045,23 @@ def task_constructs(task):
     return tuple(k for k in HELD_CONSTRUCTS if features.get(k)), bool(features.get('dataset_wrapper'))
 
 
-def call_row(renderer, source, key, index, turn, teacher_think='context', lead_in='context'):
+def call_row(renderer, source, key, index, turn, teacher_think='context', lead_in='context',
+             backend_workarounds='context', own_empty_think='context'):
     """One verified call as a learner row: {'id', 'invocation', 'index', 'prompt', 'sample'[, 'weight']} (int32 token ids
-    from the chat template; a reply the student did not sample has its think block at weight 0, ``think_context``).
-    Raises on a render error. Also returns (prompt length, target length, zero-weight lead)."""
+    from the chat template; a reply the student did not sample has its think block at weight 0, ``think_context``; with
+    ``backend_workarounds`` 'context' a non-student call whose prompt holds the text backend's Neuralese refusal is all
+    context, ``backend_workaround``). Training, validation and size measurement all render through here. Raises on a
+    render error. Also returns (prompt length, target length, zero-weight lead)."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
     row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
     row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
            'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
-    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in)
+    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
     if context:
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
+    if source not in OWN_SOURCES and backend_workarounds == 'context' and backend_workaround([turn]):
+        row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
     return row, context
 
 
@@ -1083,10 +1098,11 @@ class EpisodeSizes:
     """(forward tokens, weighted target tokens) of a verified episode as `build` renders it, cached in WORK/sizes.jsonl
     per (episode, renderer identity, think and lead-in policy): budgets and loss shares choose on actual sizes."""
 
-    def __init__(self, path, renderer, teacher_think, lead_in):
+    def __init__(self, path, renderer, teacher_think, lead_in, backend_workarounds='context', own_empty_think='context'):
         self.path, self.renderer, self.teacher_think, self.lead_in = Path(path), renderer, teacher_think, lead_in
-        self.policy = hashlib.sha256(json.dumps([renderer.identity, teacher_think, lead_in], sort_keys=True,
-                                                default=str).encode()).hexdigest()[:16]
+        self.backend_workarounds, self.own_empty_think = backend_workarounds, own_empty_think
+        policy = [renderer.identity, teacher_think, lead_in, backend_workarounds, own_empty_think, 'wrapped-refusal']
+        self.policy = hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()[:16]
         self.cache, self.new = {}, []
         if self.path.exists():
             for line in self.path.open():
@@ -1103,7 +1119,7 @@ class EpisodeSizes:
         try:
             for index, turn in enumerate(turns_of(c)):
                 rows.append(call_row(self.renderer, c['source'], c['key'], index, turn, self.teacher_think,
-                                     self.lead_in)[0])
+                                     self.lead_in, self.backend_workarounds, self.own_empty_think)[0])
         except Exception:
             return None, None
         forward = sum(len(chain['ids']) for chain in chains_of([{'task_id': c['task_id'], 'round': c['key'],
@@ -1147,11 +1163,12 @@ def load_aux(part, tokenizer, held):
     """A prebuilt part's chains grouped into units (one episode: the chains sharing task and round), held rows dropped,
     empty think blocks masked (``part['think']`` context). Returns [{'task', 'chains', 'weighted'}]."""
     import pickle
-    from exp0_sft import chain_weights, mask_empty_think
+    from exp0_sft import chain_weights, mask_after_end, mask_empty_think
     with open(part['path'], 'rb') as handle:
         chains = pickle.load(handle)['chains']
     if part['think'] == 'context':
         part['think_masked_rows'] = mask_empty_think(chains, tokenizer)
+    part['after_end_masked_rows'] = mask_after_end(chains, tokenizer)   # the template's separator after <|im_end|>
     units = collections.defaultdict(list)
     for chain in chains:
         task = chain.get('task')
@@ -1269,7 +1286,8 @@ def build(args):
         source, rows, written = c['source'], [], []
         for index, turn in enumerate(turns):
             try:
-                row, context = call_row(renderer, source, c['key'], index, turn, args.teacher_think, args.teacher_lead_in)
+                row, context = call_row(renderer, source, c['key'], index, turn, args.teacher_think, args.teacher_lead_in,
+                                        args.backend_workarounds, args.own_empty_think)
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
@@ -1279,8 +1297,9 @@ def build(args):
                 continue
             if (source not in OWN_SOURCES and args.backend_workarounds == 'context'
                     and backend_workaround([turn])):
-                row['weight'] = np.zeros(len(row['sample']), np.float32)   # the detour after the refusal: context
-                stats[source]['backend_detour_calls'] += 1
+                stats[source]['backend_detour_calls'] += 1   # call_row weighted the detour as context
+            if source in OWN_SOURCES and context:
+                stats[source]['own_unsampled_think_calls'] += 1
             prompt, target = row['prompt'], row['sample']
             rows.append(row)
             written.append({'id': row['id'], 'episode': c['key'], 'source': source, 'run': c['run'],
@@ -1340,7 +1359,8 @@ def build(args):
             return load_episode(c['live_source']['path'])['turns']
         return replayed_turns(work, c['name'])
 
-    episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, args.teacher_think, args.teacher_lead_in)
+    episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, args.teacher_think, args.teacher_lead_in,
+                                 args.backend_workarounds, args.own_empty_think)
 
     def breadth_first(pool, key):
         """A pool in selection order: every task's first episode before any task's second, and within a round the
@@ -1550,7 +1570,8 @@ def build(args):
                 continue
             try:
                 rows = [call_row(renderer, c['source'], c['key'], index, turn, args.teacher_think,
-                                 args.teacher_lead_in)[0] for index, turn in enumerate(turns_of(c))]
+                                 args.teacher_lead_in, args.backend_workarounds, args.own_empty_think)[0]
+                        for index, turn in enumerate(turns_of(c))]
             except Exception:
                 continue
             val_chains += chains_of([{'task_id': c['task_id'], 'round': c['key'], 'rows': rows}])
@@ -1584,7 +1605,7 @@ def build(args):
                    'october_family_share': args.october_family_share,
                    'teacher_think': args.teacher_think, 'teacher_lead_in': args.teacher_lead_in,
                    'exclude_run': args.exclude_run, 'guided': args.guided,
-                   'backend_workarounds': args.backend_workarounds,
+                   'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
                    'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
                    'order': 'teacher: breadth-first over tasks (every task once before any twice), held constructs '
@@ -1958,6 +1979,9 @@ def main():
                    help="teacher episodes that met the text backend's Neuralese refusal: context (default: every call "
                         "whose prompt holds the refusal is zero weight; the calls before it, e.g. the producer's own "
                         "return, train), exclude (the whole episode) or train")
+    b.add_argument('--own-empty-think', choices=('context', 'train'), default='context',
+                   help="an own reply without reasoning (a decision readout the actor scored, not sampled): its "
+                        "template empty think block is context (default) or trains")
     b.add_argument('--teacher-forward-budget', type=int, default=0,
                    help='forward tokens of teacher episodes, taken breadth-first over tasks (0: every capped episode)')
     b.add_argument('--own-loss-share', type=float, default=0.25,

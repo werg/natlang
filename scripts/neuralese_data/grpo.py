@@ -2425,6 +2425,8 @@ class ReplayCorpus:
         import exp0_sft
         self.think_masked = (exp0_sft.mask_empty_think(chains, tokenizer)
                              if tokenizer is not None and self.think == 'context' else 0)
+        # nothing after the end of turn trains (operators-v1 rows end in the template's separator after <|im_end|>)
+        self.after_end_masked = exp0_sft.mask_after_end(chains, tokenizer) if tokenizer is not None else 0
         self.sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
         groups = collections.defaultdict(list)
         for chain in chains:
@@ -2440,7 +2442,7 @@ class ReplayCorpus:
         log({'event': 'replay corpus', 'name': name, 'path': path, 'sha256': self.sha256, 'units': len(self.keys),
              'chains': sum(len(v) for v in groups.values()), 'held_dropped': len(dropped), 'weight': self.weight,
              'units_per_step': self.units, 'think': self.think if tokenizer is not None else 'train (no tokenizer)',
-             'think_masked_rows': self.think_masked})
+             'think_masked_rows': self.think_masked, 'after_end_masked_rows': self.after_end_masked})
 
     def take(self, step):
         """The units of ``step``: [(key, [chains])], each chain a fresh copy of its corpus chain's fields."""

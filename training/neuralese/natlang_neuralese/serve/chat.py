@@ -657,6 +657,18 @@ def assistant_reply(apply_template, message: dict, opening=None) -> str | None:
     return full[len(prompt):] if full.startswith(prompt) else None
 
 
+_TURN_ENDS = ("<|im_end|>", "<|eot_id|>", "<end_of_turn>", "<|end|>", "<|endoftext|>", "</s>")
+
+
+def _without_turn_separator(reply: str) -> str:
+    """``reply`` without the whitespace a template writes after its end-of-turn token (LFM3: ``<|im_end|>\\n``). The
+    model stops at that token and never generates the separator; operators-v1 trained it as a target in every row.
+    Applied to reply targets (``assistant_reply_segments``); ``assistant_reply`` keeps the template text for boundary
+    matching against rendered history."""
+    stripped = reply.rstrip()
+    return stripped if stripped != reply and stripped.endswith(_TURN_ENDS) else reply
+
+
 def assistant_reply_segments(apply_template, message: dict, specials=(), opening=None, *,
                              call_format: str | None = None, tools=None, target_types: bool = True) -> list[tuple[str, bool]] | None:
     """Render an assistant reply after its serving generation prompt.
@@ -710,7 +722,7 @@ def assistant_reply_segments(apply_template, message: dict, specials=(), opening
         prepared["tool_calls"] = calls
 
     reply = assistant_reply(apply_template, prepared, opening)
-    return None if reply is None else split_escaped(reply, nonce)
+    return None if reply is None else split_escaped(_without_turn_separator(reply), nonce)
 
 
 def _at_value_path(value, path):
