@@ -4052,3 +4052,27 @@ ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's
   - `ReferenceWeights`: written once at startup and re-read every step, so moving it would put every read on the HDD.
 - **When it enters.** grpo-v4-run2 takes this at its next resume on a pin from this commit. Its explicit 900 s
   `--stop-seconds` can then drop to the measured grace if the step-boundary wait allows.
+
+## 2026-11-19: teacher gap campaign `teacher-gen-20261119/gap-v1` (teacher demonstrations keep flowing)
+
+- **Why.** `teacher-gen-20261115/pool-v2-rich` ran out of tasks (17,184 of 17,184 with a verdict); relaunches only
+  retried deferred tasks. Tasks added since (supply rounds 20261117..20261118g, 2,421 eligible) and the
+  `ext_codebase-*` families grpo-v4-run2 trains on (`--exclude-family-regex "(?!)"`; teacher_gen still hard-coded their
+  exclusion) had no teacher episode at all. Reasoning RL and `TeacherDemos` only use tasks with a verified success.
+- **Selection (`teacher_gen.py --covered-by`, new).** Every eligible pool task (grpo.POOLS, held-v3/v2 closure, errata;
+  ext_codebase included) without a teacher success in pool-v1, pool-v2-rich or pool-progtune-decisions, in tiers:
+  (0) the student rarely solves it (pass rate <= 0.25 over the base rates plus every grpo-v2..v4 group's student
+  samples, `--student-groups`, `--rare-rate`); (1) supply rounds (`--priority-pool`); (2) no teacher tried it;
+  (3) a teacher failed it. Tasks the student solves more often than 0.25 and that are not supply are left out. A task an
+  earlier teacher failed goes to a different teacher first (`failed_by`). Tier counts: see `gap-v1/inputs.json`.
+- **Teachers (probed 2026-11-19).** Haiku 5.5 (anthropic, effort medium: extended thinking, `reasoning_content` kept),
+  Luna (openai-codex; token expires ~11-26, after which its episodes defer and it backs off), Nemotron 3 Ultra on the
+  NVIDIA endpoint (2 slots, reasoning kept), Gemini 3.5 Flash-Lite (1 slot). Left out: OpenRouter's free Nemotron
+  (429 `free-models-per-day`: the 1,000-request daily quota is spent, ~25 episodes/day) and Gemini 3.7 Flash
+  (requests time out).
+- **Running.** Ledger unit `tgen-gap-v1` (low, 7 GB, resumable: a preempted unit is requeued and relaunched; `run.sh`).
+  `launch.sh` loops teacher_gen passes (each retries its deferred tasks) while a pass adds verdicts.
+- **Into grpo.** `sft-teacher-demos-20261119` (ledger unit `tdemos-refresh-20261119`, `refresh.sh`) re-extracts the
+  campaign's successes and replays them under pin 72e4874d0 every 2 h; `sft_sources replay` now takes only keys without
+  a verdict. `grpo.SD_TEACHER_SOURCES` lists it third: grpo-v4-run2 takes it at its next resume on a pin from
+  72e4874d0 or later (TeacherDemos reads the sources at start). A future SFT build reads the same WORK.
