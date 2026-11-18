@@ -170,3 +170,19 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
   (20.1 effective), top structure 12%, top-10 instructions 24%; 0 program texts and 0 functional programs shared.
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
 - **Next.** Round 15 (w259-w266, closed answers only; WikiSQL train seed with SQL-executed answers).
+
+## 10. Round 15: `natlang-rl-task-supply-20261118f` (121 rows)
+
+- **Batches.** Haiku authors w259-w266 (`AUTHOR_BRIEF_ROUND15.md`: closed-set answers only, after free-span dataset
+  seeds lost most tasks in round 14). WikiSQL train tables seed w259, with answers computed by executing each item's SQL.
+- **Admitted:** all 196 tasks in 8 families; the Sonnet blind solve agreed on every task and flagged none, the first
+  clean round.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r15`.
+- **Source rows.** Train rows of w259-w266 minus 16 rows (w260 x8, w265 x8) whose root `inputs` equal a held sibling
+  world's (custody `inputs:` binding) and the 40 earlier custody rows. **Result: 121 rows in 8 families.**
+  Round 16's brief now requires world-specific root inputs (`common/custody.py world_bindings`).
+- **Constructs:** folder reducers 84%, decide 69%, call depth >= 3 62%, iterateOn 62%, typed Neuralese results 49%;
+  118 of 121 rows carry two or more held constructs.
+- **Repetition** (against all eight earlier POOLS, 35,679 rows): 56 distinct programs (52.3 effective), 26 structures
+  (19.2 effective), top structure 12%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.

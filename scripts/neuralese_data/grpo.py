@@ -121,7 +121,9 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
          # 2026-11-18 round 13 (TASK_SUPPLY_20261118.md section 8): 130 authored tasks, 8 new families
          resolve_str('data_hdd', 'natlang-rl-task-supply-20261118d', 'cases.jsonl'),
          # 2026-11-18 round 14 (TASK_SUPPLY_20261118.md section 9): 127 authored tasks, 9 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118e', 'cases.jsonl')]
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118e', 'cases.jsonl'),
+         # 2026-11-18 round 15 (TASK_SUPPLY_20261118.md section 10): 121 authored tasks, 8 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118f', 'cases.jsonl')]
 # held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
 # replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')

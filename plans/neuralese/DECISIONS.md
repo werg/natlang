@@ -3875,3 +3875,14 @@ warm-up runs only once its cause is fixed.
 - **Finding:** dataset seeds with free-text span answers (Qasper, MuSiQue) lose most tasks to the blind solve; GSM8K
   loses a third to wording. Round 15 authors only closed-set answers.
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: task supply round 15, `natlang-rl-task-supply-20261118f` (121 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 121 train rows in 8 new families (round 15, w259-w266, incl. WikiSQL train tables).
+- **Constructs:** folder reducers 84%, decide 69%, depth 3 62%, iterateOn 62%, typed Neuralese 49%.
+- **Audit:** closed-set answers only; the blind solve agreed on all 196 admitted tasks.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 56 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r15`.
+- **Finding:** custody's `inputs:` binding ties sibling worlds that share identical root inputs; 31 train rows were lost
+  this way over rounds 14-15. Round 16 authors make every world's root inputs distinct.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
