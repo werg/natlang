@@ -3555,3 +3555,10 @@ predicts the direction and size of the ran-out and loop increases. Fix: non-stud
 text/graph sets carried 38% of SFT loss on ~94 tasks (padding by repetition; a `loss_concentration` report is added to
 the preflight; per-task capping is the fix for the next SFT build). The rollout investigation continues. grpo-v4-run2
 keeps `--sd-teacher-weight 0` until a resume on a pin with 250723952.
+
+**2026-11-18 10:13, grpo-v4-run2 relaunched before its first step on pin 5aa7c62c0 (supervisor).** Picks up both
+think-block fixes (250723952: non-student think blocks are context; d88e4618f: the operators replay corpus no longer
+trains `</think>` at the first target position, which run2's first launch still did) and the actor memory hand-off
+(d77465ec9, 5aa7c62c0: SGLang releases KV/weights/graphs during the learner phase; first use on the GB10). Teacher
+demonstrations in SD back on (default 0.05). 64 slots, 64 running, activation 12 GB, KV 12 GB, budget 99
+(owner: more memory, faster). If the actor fails to resume, relaunch with `--no-actor-release`.
