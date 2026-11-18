@@ -734441,6 +734441,26 @@
       "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source."
     },
     {
+      "id": "natlang-rl-authored-dev-20261118r10",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261118r10",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 47 verified cases in 47 worlds (split dev), registered 20261118r10. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261118r10",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261118r10",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 42 verified cases in 42 worlds (split confirmation), registered 20261118r10. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
       "id": "natlang-rl-authored-dev-20261117r9",
       "owner": "dgx",
       "path": "runs/natlang-rl-authored-dev-20261117r9",
@@ -734481,6 +734501,23 @@
       "source_class": "immutable-RL-task-source",
       "split": "Train-only 1,355-row RL task source for grpo.py POOLS: 447 authored rows (382 round-9 rows in 16 new writing/chat/reasoning families, 65 round-8 rows admitted after the last pool build) and 908 tau-bench retail train tasks / APIGen-MT-5k retail and airline trajectories (store service, final-state digest oracle, at most one per customer).",
       "note": "plans/neuralese/TASK_SUPPLY_20261117.md. Authored rows: qualified (reference/negative/alias replay, smoke, custody, lint) on the grpo-v3 pin runtime 7e929f2ea, novelty-gated, blind-solved by an independent Sonnet solver and admitted to natlang-rl-authoring/admitted (held dev/confirmation worlds registered as natlang-rl-authored-{dev,confirmation}-20261117r9). Store rows: build-v3 verified rows re-verified on the same runtime (908/908 kept, 2,694 wrong controls rejected). held_eval verify vs held-v3: 0 shared ids or split/source groups (also with the recorded exposure); ProtectedWorlds: 0 related (114 authored rows related through shared invented-domain groups were left out); LFM3 held-set group closure: passed. Builder: /mnt/external/natlang-rl-authoring/round9/build_supply.py --drop-related. Data on /mnt/external (runs/ entry is a symlink)."
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-task-supply-20261118",
+      "include": [
+        "cases.jsonl",
+        "selection.json",
+        "repetition.json",
+        "constructs.json",
+        "custody.json",
+        "protection-union.json",
+        "held-verify/*.json"
+      ],
+      "source_class": "immutable-RL-task-source",
+      "split": "Train-only 185-row RL task source for grpo.py POOLS: authored round-10 rows in 12 new families whose programs combine the constructs held-v3 tests (folder reducers 78%, decide readouts 69%, call depth >= 3 66%, iterateOn 56%, Neuralese results 32%).",
+      "note": "plans/neuralese/TASK_SUPPLY_20261118.md. Qualified (reference/negative/alias replay, smoke, custody, lint) on the grpo-v4 pin runtime 21dbc20c5, novelty-gated, blind-solved by an independent Sonnet solver (flagged tasks held back) and admitted to natlang-rl-authoring/admitted; held dev/confirmation worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r10. held_eval verify vs held-v3: 0 shared ids or split/source groups (also with the recorded exposure); ProtectedWorlds: 0 related (2 rows bound to a held sibling world left out); LFM3 held-set group closure: passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 205 --drop-related. Data on /mnt/external (runs/ entry is a symlink)."
     },
     {
       "id": "natlang-rl-authored-dev-20261104r7",

@@ -100,7 +100,10 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
          resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl'),
          # 2026-11-17 task supply (TASK_SUPPLY_20261117.md): 447 authored tasks (21 families, 16 new) and
          # 908 tau-bench/APIGen-MT store-service tasks; --pool with only the two pools above opts out
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261117', 'cases.jsonl')]
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261117', 'cases.jsonl'),
+         # 2026-11-18 task supply round 10 (TASK_SUPPLY_20261118.md): authored families built on the held-v3 constructs
+         # (folder reducers, decide readouts, call depth 3, iterateOn, typed Neuralese); --pool without it opts out
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118', 'cases.jsonl')]
 # held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
 # replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')

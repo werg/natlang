@@ -64,7 +64,11 @@ for (const [key, list] of chosen) for (const row of list) {
       const hit = value.$match.find(entry => [entry.match].flat().every(text => opening.includes(text)));
       value = hit ? hit.value : undefined;
     }
-    if (value === undefined) return { calls: [['return_result', { status: 'failed', reason: 'no smoke answer for ' + name }]] };
+    if (value === undefined) {
+      // Named in the result: on a readout the failed return_result surfaces only as decision-generation-invalid.
+      errors.push('no smoke answer for ' + name);
+      return { calls: [['return_result', { status: 'failed', reason: 'no smoke answer for ' + name }]] };
+    }
     // {"$turns": [[tool, args], ...]}: a child that acts (calls its own children in eval) before returning; turns are
     // counted per child invocation (its opening).
     if (value && typeof value === 'object' && Array.isArray(value.$turns)) {

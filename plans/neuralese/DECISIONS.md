@@ -3277,3 +3277,26 @@ batches entering at resumes.
   with a warning (4d47aeb36).
 - **Not run.** A GPU learner bench of the replay path: the ledger had no headroom beside grpo-v4. The pass-through on
   these chains was checked by the 2026-11-17 SFT smoke.
+
+## 2026-11-18: task supply round 10, 185 authored tasks on the held-v3 constructs (task-supply agent)
+
+- **Decision.** `natlang-rl-task-supply-20261118` (185 train rows, 12 new families) joins `grpo.py` POOLS; it enters
+  grpo-v4 at its next resume on a pin from this commit. `--pool` without it opts out. Plan and numbers:
+  `plans/neuralese/TASK_SUPPLY_20261118.md`.
+- **Why.** grpo-v4's construct-weighted exploration takes every task declaring a held construct, but the pool is thin
+  exactly where held-v3 is heavy: folder reducers 8% vs 30%, decide 2.5% vs 11%. The 11-17 supply had 0 depth-3
+  programs. The new rows are folder reducers 78%, decide 69%, depth 3 66%, iterateOn 56% and Neuralese results 32%,
+  and 173 of 185 carry two or more held constructs.
+- **Process.** Haiku authors w205-w218 qualified on the grpo-v4 pin runtime. Each batch passed the novelty gate and an
+  independent Sonnet blind solve. Flagged tasks were held back even when they agreed (19). w209, seeded from Qasper,
+  was rejected whole (3/23 agreement on free-text spans). w210 is still qualifying and comes in a later source. Held
+  worlds are registered as `natlang-rl-authored-{dev,confirmation}-20261118r10`.
+- **Separation.** held_eval verify vs held-v3: 0 shared ids and 0 shared groups, also with the recorded exposure.
+  Custody: 0 related, after dropping 2 rows bound to a held sibling. The LFM3 closure passed.
+- **Harness defect fixed (7f199b2fb).** Since 61c6c3614, scripted drivers (structure smoke, reference replay,
+  authoring oracle) answered a decision readout's JSON-text request with `return_result`. On the grpo-v4 pins every
+  authored task whose smoke or reference called `decide` therefore failed qualification. `scriptedSuccess` now answers
+  that request with the value's JSON text. The pin's own reference replay predates the fix, so round-10 references
+  inline the decided values; the smoke still runs `decide`.
+- **Not checked.** Base pass rates of the new tasks were not measured, because grpo-v4 holds the DGX; the explore walk
+  measures them.
