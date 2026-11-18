@@ -39,3 +39,15 @@ test('a true cycle among siblings names its path', () => {
   assert.throws(() => loadNatlang(join(root, 'top.nl')), /top\/a\.nl -> top\/b\.nl -> top\/a\.nl|top\/b\.nl -> top\/a\.nl -> top\/b\.nl/);
   assert.throws(() => loadNatlang(join(root, 'top/a.nl')), /cannot reach itself/);
 });
+
+test('uses inside a mounted package keeps that package as its lexical root', () => {
+  const root = layout({
+    'top.nl': fn(),
+    'top/domains/team/natlang.json': '{}',
+    'top/domains/team/inspect.nl': fn('helpers/explain'),
+    'top/domains/team/helpers/explain.nl': fn(),
+  });
+  const top = loadNatlang(join(root, 'top.nl'));
+  assert.equal(typeof top.domains.team.inspect.explain, 'function');
+  assert.equal(checkProject(root).ok, true);
+});

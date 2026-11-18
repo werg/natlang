@@ -640,7 +640,9 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
   // A child loaded by its own path has the same lexical types as when reached through its owner.
   const names = [files.basename(path, '.nl')];
   let ancestor = dir;
+  const lexicalRoot = packageRoot(dir, files);
   while (true) {
+    if (ancestor === lexicalRoot) break;
     const parent = files.dirname(ancestor);
     if (parent === ancestor) break;
     const owner = files.join(parent, files.basename(ancestor) + '.nl');
