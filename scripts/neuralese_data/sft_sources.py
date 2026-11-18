@@ -329,11 +329,27 @@ class TemplateRenderer:
         return [i for _, i in before], [i for _, i in rest]
 
 
-def reasoning_free_context(renderer, source, target_message, target_ids):
-    """Leading target tokens that are context, not loss: a teacher's or October reply without reasoning renders the
-    template's empty think block, and training it would teach the student to close its reasoning at once (no verified
-    outcome selects that). The student's own replies keep every token as sampled."""
-    if source == 'rl-own' or (target_message.get('reasoning_content') or '').strip():
+OWN_SOURCES = ('rl-own',)
+TEACHER_THINK = ('context', 'train')
+
+
+def think_context(renderer, source, target_message, target_ids, teacher_think='context'):
+    """Leading target tokens that are context, not loss: the think block of a reply the student did not sample.
+
+    A teacher's, October or live reply renders either the template's empty think block (no visible reasoning) or the
+    provider's visible reasoning, which for Luna and Claude is a summary of hidden reasoning ("So far ... Next, ...")
+    and for the open models a stronger model's short reasoning (p50 ~250 characters against the student's ~1,700).
+    Training it teaches the student where to close its own reasoning and in what style; no verified outcome of the
+    student selects either. sft-v3-run1 did exactly that: held-v3 reasoning p50 fell 1,747 -> 336 characters, Luna's
+    "So far ... Next," style appeared and ran-out rose 16.6% -> 29.6% (DECISIONS 2026-11-18). So by default
+    (``teacher_think`` 'context') the whole think block through ``</think>`` is zero-weight context and only the action
+    after it is the target; 'train' keeps visible teacher reasoning as target (an empty think block stays context).
+    The student's own replies keep every token as sampled."""
+    if teacher_think not in TEACHER_THINK:
+        raise ValueError(f'teacher_think {teacher_think!r} not in {TEACHER_THINK}')
+    if source in OWN_SOURCES:
+        return 0
+    if teacher_think == 'train' and (target_message.get('reasoning_content') or '').strip():
         return 0
     return renderer.think_context_end(target_ids)
 
@@ -987,16 +1003,16 @@ def task_constructs(task):
     return tuple(k for k in HELD_CONSTRUCTS if features.get(k)), bool(features.get('dataset_wrapper'))
 
 
-def call_row(renderer, source, key, index, turn):
+def call_row(renderer, source, key, index, turn, teacher_think='context'):
     """One verified call as a learner row: {'id', 'invocation', 'index', 'prompt', 'sample'[, 'weight']} (int32 token ids
-    from the chat template; a teacher reply without reasoning has its empty think block at weight 0). Raises on a
-    render error. Also returns (prompt length, target length, zero-weight lead)."""
+    from the chat template; a reply the student did not sample has its think block at weight 0, ``think_context``).
+    Raises on a render error. Also returns (prompt length, target length, zero-weight lead)."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
     row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
     row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
            'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
-    context = reasoning_free_context(renderer, source, turn['target'], target)
+    context = think_context(renderer, source, turn['target'], target, teacher_think)
     if context:
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
     return row, context
@@ -1089,7 +1105,7 @@ def build(args):
         source, rows, written = c['source'], [], []
         for index, turn in enumerate(turns):
             try:
-                row, context = call_row(renderer, source, c['key'], index, turn)
+                row, context = call_row(renderer, source, c['key'], index, turn, args.teacher_think)
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
@@ -1253,9 +1269,11 @@ def build(args):
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
                    'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
-                   'loss': 'per-call rows: prompt (system, task, history, tool output) zero weight; the assistant reply '
-                           '(reasoning, text, tool calls, end token) weight 1; a teacher reply without reasoning: the '
-                           'empty think block (through </think>) zero weight, the action after it weight 1 (row weight)'},
+                   'teacher_think': args.teacher_think,
+                   'loss': 'per-call rows: prompt (system, task, history, tool output) zero weight; the own reply '
+                           '(reasoning, text, tool calls, end token) weight 1; a reply the student did not sample '
+                           '(teacher, October, live): its think block through </think> zero weight (teacher_think '
+                           'context; train: only an empty think block), the action after it weight 1 (row weight)'},
         'october': october_report,
         'funnel': {k: dict(v) for k, v in funnel.items()},
         'stats': {k: dict(v) for k, v in stats.items()},
@@ -1372,10 +1390,7 @@ def neuralese_text(args):
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': 0,
-                            'too_long': len(prompt) + len(target) > MAX_LEN,
-                            **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
-                                'world': c['world'], 'live_exchange': turn['live_exchange']}
-                               if c.get('verification_mode') == 'observed-live' else {})})
+                            'too_long': len(prompt) + len(target) > MAX_LEN})
             s['calls'] += 1
             s['target_tokens'] += len(target)
             s['call_tokens'] += len(prompt) + len(target)
@@ -1611,6 +1626,10 @@ def main():
     b.add_argument('--october-passes', type=int, default=4,
                    help='selection passes: each renders, measures actual forward tokens and refills toward the budget')
     b.add_argument('--october-family-share', type=float, default=0.05)
+    b.add_argument('--teacher-think', choices=TEACHER_THINK, default='context',
+                   help='think block of replies the student did not sample (teacher, October, live): context (default: '
+                   'zero weight through </think>, the action is the target) or train (visible reasoning is target; '
+                   'an empty think block stays context). think_context has the evidence')
     n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')
     n.add_argument('--work', required=True)
     n.add_argument('--out', required=True)

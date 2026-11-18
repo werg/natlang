@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
 import sft_sources as s  # noqa: E402
@@ -162,7 +163,7 @@ def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empt
     renderer.tokenizer = _Tokens()
     target = [1, 2, 3, 4, 5, 6]          # </think> \n\n <tool_call> eval </tool_call> <|im_end|>
     no_reasoning = {'role': 'assistant', 'content': '', 'tool_calls': [{'function': {'name': 'eval'}}]}
-    context = s.reasoning_free_context(renderer, 'teacher', no_reasoning, target)
+    context = s.think_context(renderer, 'teacher', no_reasoning, target)
     assert context == 2                  # </think> and the whitespace after it are context
     weight = (np.arange(len(target)) >= context).astype(np.float32)
     assert weight.tolist() == [0, 0, 1, 1, 1, 1]
@@ -172,11 +173,25 @@ def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empt
            'invocation': 'i', 'index': 0}
     chain = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])[0]
     assert exp0_sft.chain_weights(chain, 'cpu').tolist() == [0, 0, 1, 1, 1, 1]
-    # October rows too; a reply with reasoning and the student's own replies keep every token as a target
-    assert s.reasoning_free_context(renderer, 'october:luna-curricula', no_reasoning, target) == 2
-    assert s.reasoning_free_context(renderer, 'teacher', {**no_reasoning, 'reasoning_content': 'plan'},
-                                    [7, 1, 3, 4, 5, 6]) == 0
-    assert s.reasoning_free_context(renderer, 'rl-own', no_reasoning, target) == 0
+    # October rows too; the student's own replies keep every token as a target
+    assert s.think_context(renderer, 'october:luna-curricula', no_reasoning, target) == 2
+    assert s.think_context(renderer, 'rl-own', no_reasoning, target) == 0
+    assert s.think_context(renderer, 'rl-own', {**no_reasoning, 'reasoning_content': 'plan'}, [7, 1, 3, 4, 5, 6]) == 0
+
+
+def test_a_teacher_reasoning_block_is_context_by_default_and_a_target_with_train():
+    renderer = s.TemplateRenderer.__new__(s.TemplateRenderer)
+    renderer.tokenizer = _Tokens()
+    reasoning = {'role': 'assistant', 'content': '', 'reasoning_content': 'plan',
+                 'tool_calls': [{'function': {'name': 'eval'}}]}
+    target = [7, 7, 1, 2, 3, 4, 5, 6]    # plan plan </think> \n\n <tool_call> eval </tool_call> <|im_end|>
+    for source in ('teacher', 'october:luna-curricula', 'live'):
+        assert s.think_context(renderer, source, reasoning, target) == 4      # the summary and </think> are context
+        assert s.think_context(renderer, source, reasoning, target, 'train') == 0
+    # train still keeps an empty think block as context
+    assert s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ''}, [1, 2, 3, 6], 'train') == 2
+    with pytest.raises(ValueError):
+        s.think_context(renderer, 'teacher', reasoning, target, 'drop')
 
 
 def test_wrapper_cap_keeps_dataset_wrappers_to_their_share_of_the_selection():
