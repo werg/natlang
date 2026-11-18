@@ -51,6 +51,22 @@ def test_replay_marks_a_different_tool_output_as_drift():
     assert episode.log[-1]['kind'] == 'drifted' and episode.log[-1]['first_difference'] == 2
 
 
+def test_replay_serves_a_call_whose_opening_message_the_runtime_reworded():
+    opening = {'role': 'user', 'content': 'You are inside this call: f(x: string): string\n\nold call notes'}
+    reworded = {'role': 'user', 'content': 'You are inside this call: f(x: string): string\n\nnew call notes'}
+    other = {'role': 'user', 'content': 'You are inside this call: g(x: string): string\n\nnew call notes'}
+    call = {'role': 'assistant', 'content': '', 'tool_calls': [
+        {'id': 'a', 'type': 'function', 'function': {'name': 'eval', 'arguments': '{"code":"1"}'}}]}
+    first = turn([SYSTEM, opening], calls=[('eval', '{"code":"1"}')])
+    second = turn([SYSTEM, opening, call, {'role': 'tool', 'content': '1'}], calls=[('return_result', '{}')])
+    episode = s.ReplayEpisode([first, second])
+    assert episode.answer({'messages': [SYSTEM, other]}) is None            # another signature is another call
+    assert episode.answer({'messages': [SYSTEM, reworded]}) is not None
+    assert episode.answer({'messages': [SYSTEM, reworded, call, {'role': 'tool', 'content': '2'}]}) is None or \
+        episode.log[-1]['kind'] == 'drifted'                                 # a different tool output is never reworded
+    assert [e['kind'] for e in episode.log][:2] == ['missing', 'reworded']
+
+
 def test_replay_declines_a_decision_readout_as_the_recorded_teacher_did():
     """A teacher that cannot score replies ran the tool loop; the replay answers the readout's scoring requests with no
     prompt_logprobs (decision-unsupported) and serves the recorded tool-loop turns after it."""
@@ -149,7 +165,7 @@ def test_teacher_coverage_names_manifest_successes_not_extracted(tmp_path):
 
 class _Tokens:
     """A tokenizer stand-in: ids index a fixed vocabulary."""
-    vocab = ['<think>', '</think>', '\n\n', '<tool_call>', 'eval', '</tool_call>', '<|im_end|>', 'plan']
+    vocab = ['<think>', '</think>', '\n\n', '<tool_call>', 'eval', '</tool_call>', '<|im_end|>', 'plan', 'note']
 
     def convert_tokens_to_ids(self, token):
         return self.vocab.index(token)
@@ -192,6 +208,71 @@ def test_a_teacher_reasoning_block_is_context_by_default_and_a_target_with_train
     assert s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ''}, [1, 2, 3, 6], 'train') == 2
     with pytest.raises(ValueError):
         s.think_context(renderer, 'teacher', reasoning, target, 'drop')
+
+
+def test_text_a_teacher_writes_before_its_tool_call_is_context_and_a_final_answer_trains_whole():
+    renderer = s.TemplateRenderer.__new__(s.TemplateRenderer)
+    renderer.tokenizer = _Tokens()
+    narrated = {'role': 'assistant', 'content': 'note', 'tool_calls': [{'function': {'name': 'eval'}}]}
+    target = [1, 8, 3, 4, 5, 6]          # </think> note <tool_call> eval </tool_call> <|im_end|>
+    for source in ('teacher', 'october:qwen-s72', 'live'):
+        assert s.think_context(renderer, source, narrated, target) == 2          # the action trains from <tool_call>
+        assert s.think_context(renderer, source, narrated, target, lead_in='train') == 1
+    reasoned = {**narrated, 'reasoning_content': 'plan'}
+    assert s.think_context(renderer, 'teacher', reasoned, [7, 1, 8, 3, 4, 5, 6]) == 3
+    assert s.think_context(renderer, 'teacher', reasoned, [7, 1, 8, 3, 4, 5, 6], 'train') == 0
+    # a final answer (no tool call) keeps its text as the target; the student's own text stays a target
+    answer = {'role': 'assistant', 'content': 'note'}
+    assert s.think_context(renderer, 'teacher', answer, [1, 8, 6]) == 1
+    assert s.think_context(renderer, 'rl-own', narrated, target) == 0
+    with pytest.raises(ValueError):
+        s.think_context(renderer, 'teacher', narrated, target, lead_in='drop')
+
+
+def test_backend_workaround_marks_episodes_that_met_the_text_backends_neuralese_refusal():
+    refused = {'role': 'tool', 'content': 'neuralese-unsupported-backend: plain-text Neuralese<string> results ...'}
+    assert s.backend_workaround([turn([SYSTEM, USER]), turn([SYSTEM, USER, refused])])
+    assert not s.backend_workaround([turn([SYSTEM, USER, {'role': 'tool', 'content': 'ok'}])])
+
+
+def test_parse_aux_reads_share_task_cap_and_think_policy():
+    part = s.parse_aux('operators=/x/chains.pkl,share=0.03,task_tokens=4000')
+    assert part == {'name': 'operators', 'path': '/x/chains.pkl', 'share': 0.03, 'task_tokens': 4000,
+                    'think': 'context'}
+    assert s.parse_aux('live=/y.pkl')['share'] == 'all'
+    assert s.parse_aux('g=/z.pkl,think=train')['think'] == 'train'
+    with pytest.raises(ValueError):
+        s.parse_aux('g=/z.pkl,weight=2')
+
+
+def test_load_aux_masks_empty_think_drops_held_tasks_and_groups_units(tmp_path):
+    import pickle
+
+    def chain(task, rnd, sample):
+        row = {'sample': np.array(sample, np.int32), 'invocation': 'i', 'index': 0}
+        return {'ids': np.array([0] + sample, np.int32), 'segs': [(1, len(sample), row)], 'task': task, 'round': rnd}
+    chains = [chain('a', 'r1', [1, 2, 3, 6]), chain('a', 'r1', [7, 1, 3, 6]), chain('a', 'r2', [3, 6]),
+              chain('held', 'r3', [3, 6])]
+    path = tmp_path / 'chains.pkl'
+    path.write_bytes(pickle.dumps({'chains': chains}))
+    part = s.parse_aux(f'x={path}')
+    units = s.load_aux(part, _Tokens(), ({'held'}, set(), set()))
+    assert part['think_masked_rows'] == 1 and part['held_dropped'] == 1
+    by_round = {u['chains'][0]['round']: u for u in units}
+    assert set(by_round) == {'r1', 'r2'}
+    assert by_round['r1']['weighted'] == 2 + 4          # </think> \n\n masked in the first chain
+    assert by_round['r2']['weighted'] == 2
+
+
+def test_mix_report_gives_part_shares_and_task_concentration():
+    def chain(task, part, n):
+        row = {'sample': np.zeros(n, np.int32)}
+        return {'ids': np.zeros(n + 10, np.int32), 'segs': [(10, n, row)], 'task': task, 'part': part}
+    report = s.mix_report([chain('a', 'teacher', 30), chain('b', 'rl-own', 10), chain('a', 'ops', 60)], [], {})
+    assert report['parts']['teacher']['loss_share'] == 0.3
+    assert report['parts']['ops']['forward_tokens'] == 70
+    assert report['loss_concentration']['max_task_tokens'] == 90
+    assert report['tasks'] == 2
 
 
 def test_wrapper_cap_keeps_dataset_wrappers_to_their_share_of_the_selection():
