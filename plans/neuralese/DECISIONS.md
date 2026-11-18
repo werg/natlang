@@ -3318,3 +3318,12 @@ finished. Relaunched as a resume (the scored groups are offered again) on pin 55
 BUDGET=106 (only ~25 of 64 slots were generating anyway), and with the operator and Neuralese-graph replay corpora
 (48f516398) at half size (units 4 and 1) until the step peak is known. voltron's measure resumed with a 4 GB claim (it
 uses ~2.3 GB; `MEASURE_GB` in pop-held.sh).
+
+## 2026-11-18 03:00, voltron-1-mini: not adopted (neither replacement base nor merge)
+
+Held-v3 on Pop, 2 samples, voltron (a19c8c9b, pin 6e56280aa, fork dbc51ddb) vs the base 5ff07638 (grpo-v3's Pop step 0,
+pin 7e929f2ea, fork 1839b507; paired across series with warnings, 4d47aeb36): per-task pass rate 45.9% vs 47.5%,
+delta -1.6 pts, CI [-6.5, +2.9], permutation p 0.51; McNemar p 0.54 (69 base-only vs 61 voltron-only successes); tasks
+up 47, down 57. Ran-out rate 6.3% vs 16.6% (p < 0.001), but the runtimes differ (hermetic episodes and other ts-host
+changes since 7e929f2ea), so part of that may be the runtime rather than the weights. No pass-rate gain, so voltron is
+not taken as the base, and a task-arithmetic merge is not indicated. Result: ops/grpo-v4/held-voltron-pop/compare-vs-base.json.
