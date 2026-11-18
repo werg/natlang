@@ -3393,3 +3393,11 @@ breakdown (anon/file/shmem) and per-process CUDA every 2 min to find what fills 
   is latency, not throughput: those are all-fail groups whose students carry no advantage; slots keep working.
   Next resume on a pin with this fix: back to SLOTS/RUNNING 48 and read the step-1 ledger peak (`cuda_peak_by_phase_gb`,
   `prefix_tree.parts`).
+
+**2026-11-18 09:00, teacher traces without visible reasoning stay in SFT and in-loop SD (owner).** Rejection-sampled
+teacher replies whose reasoning the provider hides (Luna, some Nemotron) keep the empty think block as zero-weight
+context and train only the reply. The risk (answers learned without the reasoning that leads to them) is judged mild:
+the think block itself is never a target, most replies are short natlang actions, and every trace is a verified exact
+replay. Reasoning-bearing teacher output (Haiku extended thinking, Nemotron reasoning) is preferred where it is cheap.
+grpo-v4-run1 steps 2-3 `reasoning_shift` (1.9x/1.8x step 1) is completion order, not the policy: LR <= 1.4e-6, probe
+logp change <= 2e-4, step 1 trained on the first-finishing (short) groups; the sentinel's baseline moves past step 1.
