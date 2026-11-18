@@ -59,6 +59,11 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   rest never start (``wave_plan``, ``PassRatePrior``, ``Collector._after_wave``) and the slots go to other groups.
 * self-distillation: ``--sd-weight`` replays the run's own rare verified successes; ``--sd-teacher-weight`` adds verified
   teacher-pool successes of tasks in the pass band or all-fail as a ratio-free term (``TeacherDemos``).
+* reasoning RL against fixed teacher actions (``--reasoning-rl-weight``, default on; 0 opts out): a search along
+  teacher trajectory segments (JOLT+ teacher successes, ``TeacherDemos``) samples the student's own think blocks before
+  each teacher action, more where the action is hard to predict, carries the best forward as history and rewards each
+  by the teacher actions' likelihood after it (return-to-go); the teacher actions train as a ratio-free cross-entropy
+  and the carried chains join the SD replay (``ReasoningRL``, ``rrl_episodes``; the comment above ``RRL_ROLE``).
 
 * pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
   then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
@@ -1634,6 +1639,7 @@ class TeacherDemos:
         import random as _random
         from sft_sources import TemplateRenderer, held_closure, held_excluded_ids, verified_episodes
         self.renderer = TemplateRenderer(tokenizer)
+        self.lock = threading.Lock()
         self.funnel = collections.defaultdict(collections.Counter)
         self.rng = _random.Random(seed)
         found, tasks = {}, {}
@@ -1676,14 +1682,16 @@ class TeacherDemos:
         log({'event': 'sd teacher demonstrations', 'tasks': len(self.by_task), 'episodes': self.episodes,
              'funnel': {k: dict(v) for k, v in self.funnel.items()}, 'renderer': self.renderer.identity})
 
-    def take(self, eligible, count, stats):
-        """Up to ``count`` lowered teacher episodes of the ``eligible`` task ids, one per task, least replayed first
-        (ties at random); a render error drops that episode for the run."""
+    def take(self, eligible, count, stats, use='uses', prefix='sd_teacher'):
+        """Up to ``count`` lowered teacher episodes of the ``eligible`` task ids, one per task, least used first (ties at
+        random; ``use`` names the counter: the SD replay and the reasoning RL term (``ReasoningRL``) keep their own); a
+        render error drops that episode for the run. Thread-safe (the reasoning RL workers take from it too)."""
         from sft_sources import call_row, replayed_turns
-        candidates = [item for task_id in eligible for item in self.by_task.get(task_id, ())]
-        stats['sd_teacher_candidates'] = len(candidates)
-        self.rng.shuffle(candidates)
-        candidates.sort(key=lambda item: item['uses'])
+        with self.lock:
+            candidates = [item for task_id in eligible for item in self.by_task.get(task_id, ())]
+            stats[f'{prefix}_candidates'] = len(candidates)
+            self.rng.shuffle(candidates)
+            candidates.sort(key=lambda item: item.get(use, 0))
         out, tasks = [], set()
         for item in candidates:
             if len(out) >= count:
@@ -1694,17 +1702,20 @@ class TeacherDemos:
                 rows = [call_row(self.renderer, 'teacher', item['key'], index, turn)[0]
                         for index, turn in enumerate(replayed_turns(item['work'], item['name']))]
             except Exception as error:
-                stats['sd_teacher_render_error'] += 1
+                stats[f'{prefix}_render_error'] += 1
                 print(json.dumps({'event': 'sd teacher render error', 'key': item['key'], 'error': repr(error)[:300]}),
                       flush=True)
-                self.by_task[item['task_id']].remove(item)
+                with self.lock:
+                    if item in self.by_task[item['task_id']]:
+                        self.by_task[item['task_id']].remove(item)
                 continue
             for row in rows:
                 row['teacher'] = True            # no actor log-probabilities: a ratio-free term (train loop)
-            item['uses'] += 1
+            with self.lock:
+                item[use] = item.get(use, 0) + 1
             tasks.add(item['task_id'])
             out.append({'task_id': item['task_id'], 'round': item['key'], 'rows': rows, 'decisions': [],
-                        'reward': 1., 'quality': 1., 'role': 'sd_teacher'})
+                        'reward': 1., 'quality': 1., 'role': 'sd_teacher', 'teacher_model': item['teacher']})
         return out
 
 
@@ -1715,6 +1726,500 @@ def sd_teacher_tasks(collector, band):
     rates.update(collector.own)
     low, high = band
     return sorted(k for k, (s, n) in rates.items() if n and (s == 0 or low <= s / n <= high))
+
+
+# Reasoning RL against fixed teacher actions (``--reasoning-rl-weight``; owner 2026-11-18). A teacher call's reply is
+# (think block, action). Training teacher think blocks taught the student short summary-style reasoning (SFT held
+# -16 pts, DECISIONS 2026-11-18), so they are context and teacher trajectories teach only actions. This term trains the
+# student's own reasoning from them, as a search along a teacher trajectory segment (up to ``--reasoning-rl-calls``
+# consecutive calls of one invocation; tool outputs come from the trajectory, nothing executes):
+#   1. one teacher-forced pass with empty think blocks scores every step's action at once: ``r0_t``, the action's mean
+#      token log-probability without reasoning (the step's difficulty);
+#   2. at step t the actor draws think blocks z on the carried history in waves of ``--reasoning-rl-wave`` until one
+#      scores high (its action at least ``--reasoning-rl-high-logp`` nats per token) or the step's budget is spent
+#      (``--reasoning-rl-samples``; ``--reasoning-rl-max-samples`` where r0_t is below ``--reasoning-rl-hard-logp``);
+#   3. each z is scored by one forward of the rest of the segment (z, the teacher action, its tool output, then the
+#      later actions after empty think blocks): its immediate reward r_t (the action's mean token log-probability)
+#      and the later actions' rewards, so its return is r_t + sum_s gamma^(s-t) r_s (``--reasoning-rl-gamma``):
+#      reasoning that helps later actions gets credit too. The best return(s) carry forward as history, as the
+#      template keeps reasoning (preserve_thinking): greedy, or a beam of ``--reasoning-rl-beam``;
+#   4. every step's samples form a group: z's tokens at its group-normalized return (on-policy, truncated IS against
+#      the actor's own sampling log-probabilities), the teacher action after each closed z as a ratio-free
+#      cross-entropy at ``--reasoning-rl-action-weight``; the reasoning term with it is the gradient of
+#      E_z[log pi(action | prompt, z)] (LaTRO, VeriFree, RLPR, JEPO; Google's SRL decomposes expert trajectories
+#      into steps). A group whose returns spread less than ``--reasoning-rl-min-std`` trains only its actions;
+#   5. the carried chain (student reasoning that leads to the teacher's actions; a step whose best z did not score
+#      high keeps it as context) joins the self-distillation replay (``--sd-weight``) as source ``search``.
+# Within a group the action is fixed, so mean and summed log-probability rank alike and a no-reasoning baseline cancels.
+RRL_ROLE = 'reasoning_rl'
+RRL_SOURCES = ('jolt', 'demos')
+
+
+def split_reply(sample, close_id):
+    """Where a reply's action starts: after its first ``</think>`` (the reasoning runs through it); None when the reply
+    has no close or nothing after it."""
+    found = np.flatnonzero(np.asarray(sample) == close_id) if close_id is not None else []
+    if not len(found) or found[0] + 1 >= len(sample):
+        return None
+    return int(found[0]) + 1
+
+
+def teacher_call(row, close_id, markers):
+    """One teacher call as a reasoning RL step: {'prompt', 'reply', 'action'[, 'action_weight']} (int32 ids) or the
+    reason it is left out. The prompt is the call's exact student-form prompt (it ends where the student reasons); the
+    action is the teacher reply after its ``</think>``, its row weights kept (template whitespace a demonstration holds
+    as context stays at 0). A call importing Neuralese state is left out (the backend request carries no state)."""
+    if row.get('imports'):
+        return 'imports'
+    sample = np.asarray(row['sample'])
+    cut = split_reply(sample, close_id)
+    if cut is None:
+        return 'no_action'
+    action = sample[cut:]
+    if markers and np.isin(action, list(markers)).any():
+        return 'role_markers'
+    call = {'prompt': np.asarray(row['prompt'], np.int32), 'reply': sample.astype(np.int32),
+            'action': action.astype(np.int32), 'index': int(row.get('index', 0))}
+    if 'weight' in row:
+        call['action_weight'] = np.asarray(row['weight'], np.float32)[cut:]
+    return call
+
+
+def teacher_segments(rows, close_id, markers, counts=None):
+    """Runs of consecutive usable calls of one invocation whose prompts extend the previous call's full text (the
+    calls ``exp0_sft.chains_of`` chains). Each call after the first records the previous call's ``suffix``: the tokens
+    between its reply and the next generation prompt's end (the tool output and the next turn's opening)."""
+    by_invocation = collections.defaultdict(list)
+    for row in rows:
+        by_invocation[row.get('invocation', '')].append(row)
+    runs = []
+    for group in by_invocation.values():
+        group.sort(key=lambda row: row.get('index', 0))
+        current = []
+        for row in group:
+            call = teacher_call(row, close_id, markers)
+            if isinstance(call, str):
+                if counts is not None:
+                    counts[f'call_skip_{call}'] += 1
+                if current:
+                    runs.append(current)
+                current = []
+                continue
+            if current:
+                last = current[-1]
+                full = np.concatenate([last['prompt'], last['reply']])
+                if len(call['prompt']) >= len(full) and np.array_equal(call['prompt'][:len(full)], full):
+                    last['suffix'] = call['prompt'][len(full):]
+                    current.append(call)
+                    continue
+                runs.append(current)
+            current = [call]
+        if current:
+            runs.append(current)
+    return runs
+
+
+def future_ids(context, calls, t, close_id):
+    """(ids, action spans [(start, length)]) of the segment's rest after ``context`` (which ends with step t's closed
+    think block): action t, its suffix, then each later step after an empty think block (``</think>``)."""
+    ids, spans = list(context), []
+    for s in range(t, len(calls)):
+        if s > t:
+            ids.append(close_id)
+        spans.append((len(ids), len(calls[s]['action'])))
+        ids += [int(i) for i in calls[s]['action']]
+        if s + 1 < len(calls):
+            ids += [int(i) for i in calls[s]['suffix']]
+    return ids, spans
+
+
+def discounted(rewards, gamma):
+    """r_0 + gamma r_1 + gamma^2 r_2 ... (a missing reward counts 0)."""
+    return sum((gamma ** i) * (r or 0.) for i, r in enumerate(rewards))
+
+
+def rrl_advantages(returns, closed, min_std):
+    """Advantages of one group's samples (None: the group's reasoning does not train) and the reason. A sample that
+    never closed its reasoning produced no action: it ties with the group's worst closed sample. A group whose returns
+    spread less than ``min_std`` nats per token has nothing to rank: the normalization would turn noise-sized
+    differences into full-size advantages."""
+    scored = [r for r, c in zip(returns, closed) if c]
+    if not scored:
+        return None, 'none_closed'
+    floor = min(scored)
+    values = [r if c else floor for r, c in zip(returns, closed)]
+    mean = sum(values) / len(values)
+    std = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+    if len(values) < 2 or std < max(min_std, 1e-6):
+        return None, 'low_spread'
+    return [(v - mean) / std for v in values], None
+
+
+def rrl_rows(name, context, sample, action, action_weight, reasoning_advantage, action_advantage):
+    """One step's learner rows: the sampled think block (actor log-probabilities) and, after a closed one, the teacher
+    action (no log-probabilities: ratio-free). ``advantage`` per row; a row ``weight`` 0 keeps tokens as context."""
+    rows = [{'id': name, 'invocation': name, 'index': 0, 'prompt': np.asarray(context, np.int32),
+             'sample': np.asarray(sample['ids'], np.int32), 'logp': np.asarray(sample['logp'], np.float32),
+             'advantage': reasoning_advantage, 'rrl': 'reasoning'}]
+    if sample['closed'] and action_advantage:
+        row = {'id': name + '-a', 'invocation': name, 'index': 1,
+               'prompt': np.concatenate([np.asarray(context, np.int32), rows[0]['sample']]),
+               'sample': np.asarray(action, np.int32), 'advantage': action_advantage, 'rrl': 'action'}
+        if action_weight is not None:
+            row['weight'] = np.asarray(action_weight, np.float32)
+        rows.append(row)
+    return rows
+
+
+def rrl_episodes(groups, reasoning_weight, action_weight):
+    """The learner items of the step's reasoning RL groups: [(episode, role)] (one episode per sample: its think block
+    at ``reasoning_weight * A`` and the teacher action at ``action_weight``; a group without spread trains its actions
+    only) and the telemetry counters."""
+    items, stats, lengths, centred = [], collections.Counter(), [], []
+    for group in groups:
+        samples = group['samples']
+        advantages, reason = rrl_advantages([s['return'] for s in samples], [s['closed'] for s in samples],
+                                            group['min_std'])
+        stats['groups'] += 1
+        stats['samples'] += len(samples)
+        stats['unclosed'] += sum(not s['closed'] for s in samples)
+        stats['high'] += int(any(s.get('high') for s in samples))
+        stats[f"source_{group['source']}"] += 1
+        stats[f"hard_{bool(group.get('hard'))}"] += 1
+        closed = [s for s in samples if s['closed']]
+        stats['reward_sum'] += sum(s['reward'] for s in closed)
+        stats['reward_count'] += len(closed)
+        stats['r0_sum'] += group.get('r0') or 0.
+        stats['r0_count'] += group.get('r0') is not None
+        if len(closed) >= 2:
+            r = [s['return'] for s in closed]
+            m = sum(r) / len(r)
+            stats['return_std_sum'] += math.sqrt(sum((x - m) ** 2 for x in r) / len(r))
+            stats['return_std_groups'] += 1
+            lengths += [len(s['ids']) for s in closed]
+            centred += [x - m for x in r]
+        if advantages is None:
+            stats[f'groups_{reason}'] += 1
+            if not action_weight or not closed:
+                continue
+            advantages = [0.] * len(samples)
+        else:
+            stats['groups_trained'] += 1
+        for k, (sample, advantage) in enumerate(zip(samples, advantages)):
+            name = f"rrl-{group['id']}-{k}"
+            rows = rrl_rows(name, group['context'], sample, group['action'], group.get('action_weight'),
+                            reasoning_weight * advantage, action_weight)
+            if not advantage and len(rows) == 1:
+                continue
+            items.append(({'task_id': group['task_id'], 'round': name, 'rows': rows, 'decisions': []}, RRL_ROLE))
+            stats['reasoning_tokens'] += len(sample['ids'])
+            stats['action_tokens'] += len(group['action']) if len(rows) > 1 else 0
+    if len(lengths) >= 3 and np.std(lengths) > 0 and np.std(centred) > 0:
+        # within-group return against reasoning length: a length pressure the term would put on reasoning shows here
+        stats['length_return_corr'] = float(np.corrcoef(lengths, centred)[0, 1])
+    return items, stats
+
+
+def rrl_record(stats, worker_counts, ready):
+    """train.jsonl ``reasoning_rl``: groups taken / trained / without spread / none closed / stale, hard groups,
+    groups with a high-scoring sample, samples, unclosed, the mean immediate reward and no-reasoning reward r0 (nats
+    per action token), the mean within-group return std, reasoning and action tokens, the within-group length-return
+    correlation, sources, the worker's cumulative counters and its ready queue."""
+    out = {k: int(v) for k, v in stats.items() if k.startswith(('groups', 'source_', 'samples', 'unclosed', 'high',
+                                                                'hard_')) or k.endswith('_tokens')}
+    if stats.get('reward_count'):
+        out['reward_mean'] = round(stats['reward_sum'] / stats['reward_count'], 4)
+    if stats.get('r0_count'):
+        out['r0_mean'] = round(stats['r0_sum'] / stats['r0_count'], 4)
+    if stats.get('return_std_groups'):
+        out['return_std_mean'] = round(stats['return_std_sum'] / stats['return_std_groups'], 4)
+    if 'length_return_corr' in stats:
+        out['length_return_corr'] = round(stats['length_return_corr'], 3)
+    if stats.get('samples'):
+        out['reasoning_tokens_per_sample'] = round(stats.get('reasoning_tokens', 0) / stats['samples'], 1)
+    out['worker'] = dict(worker_counts)
+    out['ready'] = ready
+    return out
+
+
+def rrl_task_ids(collector, band, candidates):
+    """Teacher-demonstration tasks for the reasoning RL term: every task with demonstrations except those the policy
+    already solves (current pass rate above the band: the run's latest group, else the measured base rate)."""
+    rates = {k: (v['successes'], v['scored']) for k, v in dict(collector.base_rates).items() if v.get('scored')}
+    rates.update(dict(collector.own))
+    high = band[1]
+    return [k for k in candidates if not (k in rates and rates[k][1] and rates[k][0] / rates[k][1] > high)]
+
+
+class ReasoningRL:
+    """The reasoning RL term's search (the comment above ``RRL_ROLE``). ``--reasoning-rl-workers`` threads run while
+    collection runs (never during a held measurement on the training actor or the learner phase, when the actor is
+    released) and keep up to twice ``--reasoning-rl-groups`` finished groups ready. A segment comes from this run's
+    JOLT+ teacher successes first (``offer``: the guided run's actions under the unguided prompt), else from verified
+    teacher demonstrations (``TeacherDemos``: tasks the policy does not already solve, least used first). Think blocks
+    are drawn on SGLang at the run's sampling law (temperature 1, ``--top-p``, the export's banned tokens) with the
+    fork's untruncated per-token log-probabilities (``natlang_top_k`` records, as the front captures rollouts), stopped
+    at ``</think>``, the reply end or ``--reasoning-rl-max-tokens``; rewards are SGLang input logprobs. The segment's
+    first prompt is prefilled once before its samples (SGLang's radix cache keeps LFM3's conv state only at track
+    points, so concurrent copies would each prefill it), and each scoring forward leaves the next step's history
+    (z, action, tool output) in the radix cache for the draws that continue from it."""
+
+    def __init__(self, args, sglang_url, close_id, stop_ids, banned, markers, collector, demos, log=print):
+        self.args, self.url, self.close_id, self.collector, self.demos, self.log = (
+            args, sglang_url, close_id, collector, demos, log)
+        self.stops = sorted({close_id, *stop_ids})
+        self.stop_ids = set(stop_ids)
+        self.banned, self.markers = sorted(banned), set(markers)   # Neuralese role markers: the front's protocol
+        self.sources = [s for s in args.reasoning_rl_sources.split(',') if s]
+        self.ready, self.sd_ready = [], []
+        self.jolt, self.queued = collections.deque(maxlen=256), collections.deque()
+        self.lock = threading.Lock()
+        self.counts = collections.Counter()
+        self.rng = random.Random(f'{args.seed}:reasoning-rl')
+        self.ids = 0
+        self.demo_tasks = sorted(demos.by_task) if demos is not None else []
+
+    def start(self, stop):
+        for index in range(self.args.reasoning_rl_workers):
+            threading.Thread(target=self._loop, args=(stop,), daemon=True, name=f'reasoning-rl-{index}').start()
+
+    def segment(self, episode, source):
+        """One segment of a teacher episode: a random run (``teacher_segments``), from a random call, at most
+        ``--reasoning-rl-calls`` calls that fit ``--max-sequence-tokens``; None when the episode has none."""
+        runs = teacher_segments(episode['rows'], self.close_id, self.markers, self.counts)
+        if not runs:
+            self.counts['episode_no_segment'] += 1
+            return None
+        run = self.rng.choice(runs)
+        first = self.rng.randrange(len(run))
+        calls = []
+        for call in run[first:first + self.args.reasoning_rl_calls]:
+            end = len(call['prompt']) + len(call['reply'])
+            if end + self.args.reasoning_rl_max_tokens > self.args.max_sequence_tokens:
+                break
+            calls.append(call)
+        if not calls:
+            self.counts['segment_too_long'] += 1
+            return None
+        return {'calls': calls, 'source': source, 'task_id': episode['task_id'], 'key': episode.get('round')}
+
+    def offer(self, episodes):
+        """A scored group's JOLT+ teacher successes become segments of this term (newest first)."""
+        if 'jolt' not in self.sources:
+            return
+        for episode in episodes:
+            if episode.get('role') == 'teacher' and episode.get('quality') == 1.0:
+                segment = self.segment(episode, 'jolt')
+                if segment is not None:
+                    with self.lock:
+                        self.jolt.append(segment)
+                        self.counts['jolt_offered'] += 1
+
+    def _next(self):
+        with self.lock:
+            if self.jolt:
+                return self.jolt.pop()
+        if self.demos is None or 'demos' not in self.sources:
+            return None
+        tasks = rrl_task_ids(self.collector, self.collector.args.pass_band, self.demo_tasks)
+        if not tasks:
+            return None
+        stats = collections.Counter()
+        episodes = self.demos.take(self.rng.sample(tasks, min(len(tasks), 64)), 1, stats, use='rrl_uses',
+                                   prefix='rrl_demo')
+        self.counts['demo_render_error'] += stats.get('rrl_demo_render_error', 0)
+        return self.segment(episodes[0], 'demos') if episodes else None
+
+    def _idle(self):
+        c = self.collector
+        return (c.paused.is_set() or c.active_slots <= 0 or c.stop.is_set()
+                or len(self.ready) >= 2 * self.args.reasoning_rl_groups)
+
+    def _loop(self, stop):
+        while not stop.is_set():
+            if self._idle():
+                stop.wait(2)
+                continue
+            segment = self._next()
+            if segment is None:
+                stop.wait(10)
+                continue
+            version = self.collector.version
+            started = time.time()
+            try:
+                groups, carried = self.run(segment)
+            except Exception as error:   # a failed request loses this segment only
+                self.counts['failures'] += 1
+                if self.counts['failures'] <= 20 or self.counts['failures'] % 100 == 0:
+                    self.log({'event': 'reasoning rl request failed', 'failures': self.counts['failures'],
+                              'error': repr(error)[:400]})
+                stop.wait(5)
+                continue
+            with self.lock:
+                for group in groups:
+                    self.ids += 1
+                    group.update(id=self.ids, version=version, min_std=self.args.reasoning_rl_min_std)
+                    self.ready.append(group)
+                if carried is not None:
+                    self.sd_ready.append(carried)
+                self.counts['segments'] += 1
+                self.counts['groups'] += len(groups)
+                self.counts['actor_s'] += round(time.time() - started)
+
+    def _post(self, body):
+        request = urllib.request.Request(self.url + '/generate', data=json.dumps(body).encode(),
+                                         headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(request, timeout=7200) as response:   # waits through a learner phase, as episodes do
+            return json.loads(response.read())
+
+    def _draw(self, context, room, seed):
+        """One think block on ``context``: (ids, actor log-probabilities)."""
+        from natlang_neuralese.serve.sglang_actor import TOP_K_KEY, decode_record
+        params = {'temperature': 1.0, 'max_new_tokens': room, 'stop_token_ids': self.stops, 'skip_special_tokens': False,
+                  'no_stop_trim': True, 'sampling_seed': seed, 'custom_params': {TOP_K_KEY: 1}}
+        if self.args.top_p < 1:
+            params['top_p'] = float(self.args.top_p)
+        if self.banned:
+            params['logit_bias'] = {str(t): -1e30 for t in self.banned}
+        result = self._post({'input_ids': list(context), 'sampling_params': params})
+        ids, records = result.get('output_ids'), (result.get('meta_info') or {}).get(TOP_K_KEY)
+        if not isinstance(ids, list) or not isinstance(records, list) or len(ids) != len(records):
+            raise RuntimeError('SGLang returned no per-token natlang_top_k records')
+        return [int(i) for i in ids], [decode_record(r, 1)[0] for r in records]
+
+    def _score(self, ids, spans):
+        """Mean token log-probability of each action span of ``ids`` (one forward: SGLang input logprobs)."""
+        start = spans[0][0] - 1
+        result = self._post({'input_ids': ids, 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1},
+                             'return_logprob': True, 'logprob_start_len': start})
+        logps = [lp for lp, _, _ in result['meta_info']['input_token_logprobs']]
+        if len(logps) != len(ids) - start:
+            raise RuntimeError('SGLang returned the wrong number of input logprobs')
+        out = []
+        for position, length in spans:
+            values = logps[position - start:position - start + length]
+            if len(values) != length or any(v is None for v in values):
+                raise RuntimeError('SGLang returned no logprob for an action token')
+            out.append(float(sum(values) / length))
+        return out
+
+    def closed_form(self, ids):
+        """A think block as later history: as sampled when it closed; else without a trailing stop token and closed
+        with ``</think>`` (context, never a sample)."""
+        if ids and ids[-1] == self.close_id:
+            return list(ids)
+        return (list(ids[:-1]) if ids and ids[-1] in self.stop_ids else list(ids)) + [self.close_id]
+
+    def _samples(self, context, calls, t, count, room):
+        """``count`` think blocks drawn on ``context`` and scored with the segment's rest (``future_ids``)."""
+        from concurrent.futures import ThreadPoolExecutor
+        seeds = [self.rng.randrange(1, 2**31) for _ in range(count)]
+        with ThreadPoolExecutor(count) as pool:
+            drawn = list(pool.map(lambda seed: self._draw(context, room, seed), seeds))
+        samples = []
+        for ids, logp in drawn:
+            self.counts['generated_tokens'] += len(ids)
+            if not ids:
+                self.counts['empty_samples'] += 1
+            elif self.markers & set(ids):   # a Neuralese marker in reasoning: the front's protocol, not this term's
+                self.counts['marker_samples'] += 1
+            elif not np.isfinite(logp).all():
+                self.counts['nonfinite_samples'] += 1
+            else:
+                samples.append({'ids': ids, 'logp': logp, 'closed': ids[-1] == self.close_id})
+
+        def score(sample):
+            ids, spans = future_ids(context + self.closed_form(sample['ids']), calls, t, self.close_id)
+            return self._score(ids, spans)
+        with ThreadPoolExecutor(max(1, len(samples))) as pool:
+            for sample, rewards in zip(samples, pool.map(score, samples)):
+                sample['reward'] = rewards[0]
+                sample['return'] = discounted(rewards, self.args.reasoning_rl_gamma)
+                sample['high'] = sample['closed'] and rewards[0] >= self.args.reasoning_rl_high_logp
+        self.counts['samples'] += len(samples)
+        self.counts['closed'] += sum(s['closed'] for s in samples)
+        return samples
+
+    def run(self, segment):
+        """Search one segment (blocking): (learner groups, the carried chain as an SD episode or None)."""
+        a, calls = self.args, segment['calls']
+        prompt = [int(i) for i in calls[0]['prompt']]
+        ids, spans = future_ids(prompt + [self.close_id], calls, 0, self.close_id)
+        r0 = self._score(ids, spans)      # the teacher-forced pass without reasoning: every step's difficulty at once
+        beams = [{'context': prompt, 'path': [], 'return': 0.}]
+        groups = []
+        for t, call in enumerate(calls):
+            hard = r0[t] < a.reasoning_rl_hard_logp
+            budget = a.reasoning_rl_max_samples if hard else a.reasoning_rl_samples
+            candidates = []
+            for beam in beams:
+                room = min(a.reasoning_rl_max_tokens, a.max_sequence_tokens - len(beam['context']) - len(call['reply']))
+                if room <= 0:
+                    continue
+                samples, drawn = [], 0
+                while drawn < budget:   # waves until one scores high (stop early) or the budget is spent
+                    wave = min(a.reasoning_rl_wave, budget - drawn)
+                    samples += self._samples(beam['context'], calls, t, wave, room)
+                    drawn += wave
+                    if any(s['high'] for s in samples):
+                        break
+                if not samples:
+                    continue
+                self.counts['hard_samples' if hard else 'samples_ordinary'] += len(samples)
+                groups.append({'task_id': segment['task_id'], 'key': segment['key'], 'source': segment['source'],
+                               'step': t, 'hard': hard, 'r0': r0[t], 'context': np.asarray(beam['context'], np.int32),
+                               'action': call['action'], 'action_weight': call.get('action_weight'),
+                               'samples': samples})
+                candidates += [(beam, s) for s in samples]
+            if not candidates:
+                break
+            # carry the best: closed first, then by return; the history the next step reasons on
+            candidates.sort(key=lambda item: (item[1]['closed'], item[1]['return']), reverse=True)
+            beams = []
+            for beam, sample in candidates[:max(1, a.reasoning_rl_beam)]:
+                context = beam['context'] + self.closed_form(sample['ids']) + [int(i) for i in call['action']]
+                if t + 1 < len(calls):
+                    context += [int(i) for i in call['suffix']]
+                beams.append({'context': context, 'path': beam['path'] + [(beam['context'], sample)],
+                              'return': beam['return'] + sample['reward']})
+        carried = self.carried(segment, max(beams, key=lambda b: b['return'])['path']) if beams and groups else None
+        return groups, carried
+
+    def carried(self, segment, path):
+        """The best chain as an SD episode: each step's think block (trained when it closed and scored high, else
+        context) and the teacher action after it (trained). None without a high-scoring step."""
+        if not any(sample['high'] for _, sample in path):
+            return None
+        rows = []
+        name = f"rrl-carried-{segment['key']}-{self.rng.randrange(2**31)}"
+        for t, ((context, sample), call) in enumerate(zip(path, segment['calls'])):
+            z = self.closed_form(sample['ids'])
+            reasoning = {'id': f'{name}-{t}', 'invocation': name, 'index': 2 * t,
+                         'prompt': np.asarray(context, np.int32), 'sample': np.asarray(z, np.int32),
+                         'logp': np.asarray(list(sample['logp'][:len(z) - 1]) + [sample['logp'][-1] if sample['closed']
+                                                                                 else 0.], np.float32)}
+            if not sample['high']:   # (an unclosed block is never high: its forced close is never trained)
+                reasoning['weight'] = np.zeros(len(z), np.float32)
+            action = {'id': f'{name}-{t}-a', 'invocation': name, 'index': 2 * t + 1,
+                      'prompt': np.concatenate([reasoning['prompt'], reasoning['sample']]),
+                      'sample': np.asarray(call['action'], np.int32), 'teacher': True}
+            if call.get('action_weight') is not None:
+                action['weight'] = np.asarray(call['action_weight'], np.float32)
+            rows += [reasoning, action]
+        self.counts['carried_chains'] += 1
+        return {'task_id': segment['task_id'], 'round': name, 'rows': rows, 'decisions': [], 'reward': 1.,
+                'quality': 1., 'role': 'sd', 'sd_source': 'search'}
+
+    def take(self, step, count, max_staleness):
+        """The step's groups: the oldest ready ones within ``max_staleness`` policy versions, at most ``count``; staler
+        ones are dropped. Also the carried chains finished since (for the SD buffer). Returns (groups, dropped, chains)."""
+        with self.lock:
+            fresh = [g for g in self.ready if step - g['version'] <= max_staleness]
+            dropped = len(self.ready) - len(fresh)
+            taken, self.ready = fresh[:count], fresh[count:]
+            chains, self.sd_ready = self.sd_ready, []
+            self.counts['stale_dropped'] += dropped
+        return taken, dropped, chains
 
 
 class ReplayCorpus:
@@ -1784,7 +2289,8 @@ class ReplayCorpus:
 
 TEACHER_FIELDS = ('groups', 'episodes', 'successes', 'episodes_trained', 'calls_student_form',
                   'privileged_tokens_removed', 'policy_calls_removed')
-SD_FIELDS = ('added', 'episodes', 'tokens', 'buffer', 'skip_imports', 'own_episodes', 'own_tokens', 'teacher_episodes',
+SD_FIELDS = ('added', 'episodes', 'tokens', 'buffer', 'skip_imports', 'own_episodes', 'own_tokens', 'search_added',
+             'search_episodes', 'search_tokens', 'teacher_episodes',
              'teacher_tokens', 'teacher_candidates', 'teacher_render_error')
 
 
@@ -1970,9 +2476,15 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
     (its sampling logp below ``tail_floor``) in an episode with a positive advantage. Untruncated T=1 sampling draws
     such tokens about once in 200 (p < e^-7: 0.5% of sampled tokens); raising them is the largest-norm part of a
     positive episode's gradient and never the reason it succeeded. The token stays context and keeps its KL term; a
-    negative advantage still pushes it down. ``tail_floor`` 0 or None: no mask."""
+    negative advantage still pushes it down. ``tail_floor`` 0 or None: no mask. ``advantage``: a number or a per-token
+    tensor (``token_advantage``)."""
     import torch
     weight = rho.clamp(max=rho_cap)
+    if torch.is_tensor(advantage):
+        if not tail_floor:
+            return weight, torch.zeros_like(weight, dtype=torch.bool)
+        masked = (actor_logp < tail_floor) & (advantage > 0)
+        return weight.masked_fill(masked, 0.), masked
     if not tail_floor or advantage <= 0:
         return weight, torch.zeros_like(weight, dtype=torch.bool)
     masked = actor_logp < tail_floor
@@ -1982,15 +2494,37 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
 RATIO_FREE_ROLES = ('sd_teacher', 'replay')   # chains without actor log-probabilities (rho = 1)
 
 
+def token_advantage(chain, device):
+    """The chain's advantage per token: its ``advantage``, times a row's own ``advantage`` where rows carry one (the
+    reasoning RL term: a think block at its group-normalized return, the teacher action after it at the action weight;
+    ``--advantage-control`` still acts on the chain's factor). A plain number when no row carries one."""
+    import torch
+    if not any('advantage' in row for _, _, row in chain['segs']):
+        return chain['advantage']
+    return torch.from_numpy(np.concatenate([np.full(length, row.get('advantage', 1.), np.float32)
+                                            for _, length, row in chain['segs']])).to(device) * chain['advantage']
+
+
 def behaviour_logp(chain, logp):
     """(log-probabilities of the law that produced the chain's tokens, per-token row weights or None) for the policy
     term. An actor sample: the actor's recorded logp. A teacher demonstration (role ``sd_teacher``) has none: the
     learner's own (detached) logp stands in, so rho = 1 (a ratio-free cross-entropy at its advantage) and the tail floor
-    reads the learner's probability; its rows' weights (an empty think block at 0) multiply the term."""
+    reads the learner's probability; its rows' weights (an empty think block at 0) multiply the term. A chain mixing
+    the two (the reasoning RL term and its carried chains: sampled think blocks, then teacher actions without logp)
+    takes each row's own law, and its rows' weights."""
     import torch
-    if chain.get('role') not in RATIO_FREE_ROLES:
-        return torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).to(logp.device).float(), None
+    rows = [(length, row) for _, length, row in chain['segs']]
+    if chain.get('role') not in RATIO_FREE_ROLES and all('logp' in row for _, row in rows):
+        return torch.from_numpy(np.concatenate([row['logp'] for _, row in rows])).to(logp.device).float(), None
     import exp0_sft
+    if chain.get('role') not in RATIO_FREE_ROLES:
+        parts, start, learner = [], 0, logp.detach().float()
+        for length, row in rows:
+            parts.append(torch.from_numpy(np.asarray(row['logp'], np.float32)).to(logp.device) if 'logp' in row
+                         else learner[start:start + length])
+            start += length
+        weights = exp0_sft.chain_weights(chain, logp.device) if any('weight' in row for _, row in rows) else None
+        return torch.cat(parts), weights
     weights = (exp0_sft.chain_weights(chain, logp.device) if any('weight' in row for _, _, row in chain['segs'])
                else None)
     return logp.detach().float(), weights
@@ -2497,7 +3031,9 @@ def train(args):
         collector = Collector(args, tasks, work, source_sha, runtime, first_group=first_group, cursor=cursor)
         collector.variants = load_variants(args, tasks, work)
     teacher_demos = None
-    if args.sd_teacher_weight > 0 and args.sd_teacher_episodes > 0 and not args.replay:
+    sd_teacher_on = args.sd_teacher_weight > 0 and args.sd_teacher_episodes > 0
+    reasoning_rl_on = args.reasoning_rl_weight > 0 and args.reasoning_rl_groups > 0 and not args.replay
+    if not args.replay and (sd_teacher_on or (reasoning_rl_on and 'demos' in args.reasoning_rl_sources.split(','))):
         teacher_demos = TeacherDemos(args.sd_teacher_source or SD_TEACHER_SOURCES, collector.by_id, args.held_manifest,
                                      renderer_tokenizer(args.actor_export, work / 'sd-teacher-tokenizer'),
                                      args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r))
@@ -2617,6 +3153,24 @@ def train(args):
     # (each would fail in seconds on 'fetch failed' and burn its whole group as infrastructure errors, 97 episodes in
     # the two run2 restarts of 2026-11-13); the learner finishes the step it is in.
     signal.signal(signal.SIGTERM, lambda *_: (stop.set(), collector.stop.set()))
+    reasoning_rl = None
+    if reasoning_rl_on:
+        if think_close is None:
+            raise SystemExit('--reasoning-rl-weight needs the </think> id (see the log); --reasoning-rl-weight 0 opts out')
+        from tokenizers import Tokenizer
+        served = Tokenizer.from_file(str(Path(args.actor_export) / 'tokenizer.json'))
+        stop_ids = [i for i in (served.token_to_id('<|im_end|>'), served.token_to_id('<|endoftext|>')) if i is not None]
+        export_manifest = Path(args.actor_export) / 'natlang-export.json'
+        banned = (json.loads(export_manifest.read_text()).get('serving') or {}).get('banned_token_ids', []) \
+            if export_manifest.exists() else []
+        from natlang_neuralese.model.shared_state import ROLE_MARKERS
+        markers = [i for i in (served.token_to_id(m) for m in ROLE_MARKERS) if i is not None]   # Neuralese role markers
+        reasoning_rl = ReasoningRL(args, sglang_url, think_close, stop_ids, banned, markers, collector, teacher_demos,
+                                   log=lambda r: log_line(log, r))
+        reasoning_rl.start(stop)
+        log_line(log, {'event': 'reasoning rl', 'sources': reasoning_rl.sources, 'demo_tasks': len(reasoning_rl.demo_tasks),
+                       'stop_ids': reasoning_rl.stops, 'banned': banned, 'markers': markers,
+                       **{k: v for k, v in vars(args).items() if k.startswith('reasoning_rl_')}})
 
     def write_native(step_number):
         directory = checkpoint_root / f'step-{step_number:05d}'
@@ -2871,6 +3425,8 @@ def train(args):
             prune_group(collector, group, keep=args.keep_rollouts, archive=rollouts_archive, stats=stats)
             if not episodes:
                 continue
+            if reasoning_rl is not None:   # JOLT+ teacher successes: their actions are reasoning RL targets
+                reasoning_rl.offer(episodes)
             if args.synthetic_reward:
                 task_rewards += [e['reward'] for e in episodes]
                 for episode in episodes:
@@ -2920,8 +3476,9 @@ def train(args):
         if args.sd_weight > 0:
             # self-distillation: verified rare successes of the last --sd-window steps again, as a positive-advantage
             # (truncated-IS cross-entropy) term of weight --sd-weight on their own exact actor calls
-            replays += [(episode, args.sd_weight, 'sd', 'own') for episode in sd_take(sd_buffer, step, args, stats)]
-        if teacher_demos is not None:
+            replays += [(episode, args.sd_weight, 'sd', episode.get('sd_source', 'own'))
+                        for episode in sd_take(sd_buffer, step, args, stats)]
+        if teacher_demos is not None and sd_teacher_on:
             # verified teacher-pool successes of tasks in the pass band or all-fail, in student form; no actor
             # log-probabilities, so a ratio-free cross-entropy of weight --sd-teacher-weight (rho = 1: the learner's
             # own log-probability stands in for the actor's)
@@ -2941,6 +3498,28 @@ def train(args):
             for chain in kept:
                 chain.update(advantage=weight, episode=key, role=role)
                 chains.append(chain)
+        rrl_stats = None
+        if reasoning_rl is not None:
+            # reasoning RL against fixed teacher actions (ReasoningRL): each sample's reasoning at its group-normalized
+            # action likelihood, the teacher action after it as a ratio-free cross-entropy
+            rrl_groups, rrl_dropped, carried = reasoning_rl.take(step, args.reasoning_rl_groups, args.max_staleness)
+            rrl_items, rrl_stats = rrl_episodes(rrl_groups, args.reasoning_rl_weight, args.reasoning_rl_action_weight)
+            rrl_stats['groups_stale'] = rrl_dropped
+            rrl_stats['carried_chains'] = len(carried)
+            for episode, role in rrl_items:
+                kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
+                if not kept:
+                    rrl_stats['too_long'] += 1
+                    continue
+                key = len(episode_units)
+                episode_advantage[key] = 1.          # the rows carry their own advantages (token_advantage)
+                episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
+                for chain in kept:
+                    chain.update(advantage=1., episode=key, role=role)
+                    chains.append(chain)
+            if args.sd_weight > 0:   # the searches' carried chains join the self-distillation replay (source search)
+                sd_buffer += [{'episode': episode, 'version': step, 'uses': 0} for episode in carried]
+                stats['sd_search_added'] += len(carried)
         replay_record = {}
         for corpus in replay_corpora:
             entry = replay_record.setdefault(corpus.name, collections.Counter())
@@ -2996,7 +3575,11 @@ def train(args):
                      if memetic_groups or args.memetic_share > 0 else {}),
                   'dynamic_sampling': dict(getattr(collector, 'dynamic', {})) or None,   # cumulative since this process started
                   **restore_telemetry(stats, args)}
-        style = reasoning_style([c for c in chains if c.get('role') != 'replay'], think_close)   # rollouts only: replay chains are fixed data
+        if rrl_stats is not None:
+            record['reasoning_rl'] = rrl_record(rrl_stats, reasoning_rl.counts, len(reasoning_rl.ready))
+        # rollouts only: replay chains are fixed data, and the reasoning RL samples are drawn on teacher prompts
+        style = reasoning_style([c for c in chains if c.get('role') not in ('replay', RRL_ROLE)],
+                                think_close)
         record.update(style, **({} if args.replay else style_shift(work, style)))   # replayed reasoning is not the policy's
         if record.get('reasoning_shift'):
             print(f"reasoning shift: {style['reasoning_tokens_per_call']} reasoning tokens per call, "
@@ -3162,24 +3745,38 @@ def train(args):
                     log_rho = logp.detach() - actor
                     rho = log_rho.clamp(max=20).exp()
                     # A corpus target is data, not a sampled tail: its unlikely tokens are what it teaches (no tail floor).
-                    weight, tail = policy_weight(rho, actor, chain['advantage'], args.rho_cap,
+                    advantage = token_advantage(chain, logp.device)
+                    weight, tail = policy_weight(rho, actor, advantage, args.rho_cap,
                                                  None if chain.get('role') == 'replay' else args.tail_logp_floor)
                     if row_weight is not None:
                         weight = weight * row_weight
                     # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
                     # split into reasoning and post-</think> tokens
-                    mass = token_scale * abs(chain['advantage']) * weight * (1 - policy_logp.detach().exp())
+                    mass = token_scale * abs(advantage) * weight * (1 - policy_logp.detach().exp())
                     thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
                                                                 for _, _, row in chain['segs']])).cuda()
                     sums['mass_think'] += mass[thinking].sum().item()
                     sums['mass_post_think'] += mass[~thinking].sum().item()
                     sums['tail_masked'] += int(tail.sum())
-                loss_terms = -(weight * chain['advantage'] * policy_logp)
+                loss_terms = -(weight * advantage * policy_logp)
                 if ref is not None:
                     d = ref - logp
                     loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
                     kl_stats(sums, d)
                 loss = loss + loss_terms.sum() * token_scale
+                if chain.get('role') == RRL_ROLE:
+                    # the teacher actions' likelihood after the student's reasoning, and learner-actor agreement on the
+                    # term's own samples
+                    start = 0
+                    for _, length, row in chain['segs']:
+                        part = slice(start, start + length)
+                        start += length
+                        if row.get('rrl') == 'action':
+                            sums['rrl_action_logp'] += logp[part].detach().sum().item()
+                            sums['rrl_action_tokens'] += length
+                        elif row.get('rrl') == 'reasoning':
+                            sums['rrl_reasoning_abs_log_rho'] += log_rho[part].abs().sum().item()
+                            sums['rrl_reasoning_tokens'] += length
                 if chain.get('role') == 'replay':   # the corpus's learning curve: its mean target logp
                     sums[f"replay_logp:{chain['replay_corpus']}"] += logp.detach().sum().item()
                     sums[f"replay_tokens:{chain['replay_corpus']}"] += logp.numel()
@@ -3381,6 +3978,11 @@ def train(args):
             decision_mean_logpi=round(sums['decision_logpi'] / n_dec, 4),
             decision_abs_dscore_mean=round(sums['decision_abs_dscore'] / n_dec, 4),
             teacher_rho=teacher_rho_summary(teacher_log_rho, args.rho_cap),
+            **({'reasoning_rl': {**record['reasoning_rl'],
+                                 'learner_action_logp': round(sums['rrl_action_logp'] / max(1, sums['rrl_action_tokens']), 4),
+                                 'reasoning_abs_log_rho': round(sums['rrl_reasoning_abs_log_rho']
+                                                                / max(1, sums['rrl_reasoning_tokens']), 5)}}
+               if 'reasoning_rl' in record else {}),
             replay_mean_logp={key.split(':', 1)[1]: round(sums[key] / max(1, sums['replay_tokens:' + key.split(':', 1)[1]]), 4)
                               for key in list(sums) if key.startswith('replay_logp:')} or None,
             rho_mean=round(sums['rho'] / max(1, loss_tokens), 4), rho_pre_cap_max=round(rho_pre_max, 3),
@@ -3540,6 +4142,37 @@ def main():
     t.add_argument('--sd-teacher-source', action='append', default=None,
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
                         'default SD_TEACHER_SOURCES)')
+    t.add_argument('--reasoning-rl-weight', type=float, default=1.0,
+                   help='reasoning RL against fixed teacher actions (ReasoningRL): a search along teacher trajectory '
+                        'segments samples the student\'s own think blocks, rewarded by the teacher actions\' mean token '
+                        'log-probability after them (return-to-go); this scales their group-normalized advantage (0: off)')
+    t.add_argument('--reasoning-rl-action-weight', type=float, default=0.05,
+                   help='the teacher action after each closed sampled think block as a ratio-free cross-entropy (0: the '
+                        'reasoning term alone)')
+    t.add_argument('--reasoning-rl-calls', type=int, default=4,
+                   help='consecutive calls of one teacher invocation per search segment (1: single decisions)')
+    t.add_argument('--reasoning-rl-wave', type=int, default=2,
+                   help='think blocks drawn at once; a step stops drawing once one scores high')
+    t.add_argument('--reasoning-rl-samples', type=int, default=4, help='think blocks per step at most (ordinary step)')
+    t.add_argument('--reasoning-rl-max-samples', type=int, default=12,
+                   help='think blocks per step at most where the action without reasoning is unlikely (hard step)')
+    t.add_argument('--reasoning-rl-high-logp', type=float, default=-0.1,
+                   help='a think block scores high when its action\'s mean token log-probability is at least this')
+    t.add_argument('--reasoning-rl-hard-logp', type=float, default=-1.0,
+                   help='a step is hard when its action\'s mean token log-probability without reasoning is below this')
+    t.add_argument('--reasoning-rl-gamma', type=float, default=1.0,
+                   help='discount of later actions\' rewards in a think block\'s return (0: the next action only)')
+    t.add_argument('--reasoning-rl-beam', type=int, default=1,
+                   help='best think blocks carried forward as history per step (1: greedy)')
+    t.add_argument('--reasoning-rl-groups', type=int, default=12, help='step groups trained per learner step at most')
+    t.add_argument('--reasoning-rl-max-tokens', type=int, default=8192,
+                   help='reasoning tokens per sample at most (a sample that has not closed by then ties with its '
+                        'group\'s worst)')
+    t.add_argument('--reasoning-rl-min-std', type=float, default=0.01,
+                   help='a group whose returns (nats per action token) spread less trains only its actions')
+    t.add_argument('--reasoning-rl-workers', type=int, default=2, help='search threads (each one segment at a time)')
+    t.add_argument('--reasoning-rl-sources', default='jolt,demos',
+                   help='teacher trajectories: jolt (this run\'s JOLT+ teacher successes), demos (TeacherDemos)')
     t.add_argument('--replay-corpus', action='append', default=None, metavar='NAME=PKL[,weight=W][,units=K]',
                    help='a fixed corpus of per-call chains (exp0_sft format: operator rows from operator_rows.py merge, '
                         'whole-graph Neuralese episodes from sft_sources neuralese-graph) trained in every step as a '

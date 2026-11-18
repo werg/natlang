@@ -3562,3 +3562,46 @@ trains `</think>` at the first target position, which run2's first launch still 
 (d77465ec9, 5aa7c62c0: SGLang releases KV/weights/graphs during the learner phase; first use on the GB10). Teacher
 demonstrations in SD back on (default 0.05). 64 slots, 64 running, activation 12 GB, KV 12 GB, budget 99
 (owner: more memory, faster). If the actor fails to resume, relaunch with `--no-actor-release`.
+
+## 2026-11-18: reasoning RL against fixed teacher actions, as a search along teacher trajectories (`--reasoning-rl-weight`, default on)
+
+- **Owner's idea:** RL on the reasoning only, the next action fixed from the teacher trajectory; reward = likelihood of
+  the teacher's action given the student's sampled reasoning. Additions: optimize whole trajectories (return-to-go,
+  earlier reasoning kept in history as preserve_thinking renders it); spend samples by difficulty (a search: a few
+  samples until one scores high, more where the action is hard; never skip a step); carry the best reasoning forward
+  (greedy or a small beam); the best chains are self-distillation data.
+- **Why:** training teacher think blocks taught short summary-style reasoning (SFT -16 pts held, entries above); since
+  250723952 teacher think blocks are context and teacher trajectories teach only actions. This term trains the
+  student's own reasoning from them on-policy. Related: Quiet-STaR, LaTRO, VeriFree, RLPR, JEPO (reference-answer
+  likelihood under the model's own reasoning as the reward), Google's SRL (expert trajectories as step-wise actions).
+- **Mechanism (grpo.py `ReasoningRL`, `rrl_episodes`; the comment above `RRL_ROLE`):** sources are this run's JOLT+
+  teacher successes (`offer`; the hindsight index reaches the term through them) and `TeacherDemos` (sft_sources'
+  verified teacher rows; tasks the policy does not already solve). A segment is up to `--reasoning-rl-calls` 4
+  consecutive calls of one invocation whose prompts extend each other; tool outputs come from the trajectory, nothing
+  executes. (1) One teacher-forced forward with empty think blocks scores every step's action (`r0`, difficulty).
+  (2) At each step the actor (the run's SGLang backend, the run's sampling law, the fork's untruncated `natlang_top_k`
+  records as the front captures rollouts) draws think blocks in waves of 2 until one scores high (action mean token
+  logp >= -0.1), up to 4 (12 where r0 < -1.0). (3) Each block is scored by one forward over the rest of the segment
+  (its action, then the later actions after empty think blocks): return = r_t + sum gamma^k r_{t+k} (gamma 1); that
+  forward also leaves the carried history in the radix cache for the next step's draws. (4) The best return carries
+  forward (beam 1). (5) Each step's samples are a group: think-block tokens at the group-normalized return (truncated
+  IS against the actor's logp, tail floor, KL as for rollouts), the teacher action after each closed block as a
+  ratio-free cross-entropy at 0.05 (together: the gradient of E_z[log pi(a | x, z)]); a group spreading < 0.01 nats
+  per token trains its actions only. (6) The carried chain joins the SD replay (`--sd-weight`, source `search`), its
+  low-scoring think blocks as context. Learner change: rows may carry their own `advantage` (`token_advantage`) and a
+  chain may mix actor-sampled rows with teacher rows without logp (`behaviour_logp`); every other chain is unchanged.
+  Telemetry: `reasoning_rl` in train.jsonl (groups trained / low spread / stale, hard groups, high-scoring groups,
+  reward and r0 means, return std, length-return correlation, learner action logp, reasoning |log rho|, worker
+  counters), `sd.search_*`.
+- **Inventory (fix the mechanism everywhere):** learners consuming teacher trajectories: grpo.py (this term,
+  TeacherDemos SD, JOLT+ attempts: all covered); exp0_sft.py `train` (l. 528-) trains fixed chains with no sampler,
+  so an on-policy reasoning term has nothing to sample with (the teacher-think-as-context rule already applies there);
+  program tuning (`tune/trainer.py`) fits adapters on recorded episodes, no in-loop actor. Serving: only existing
+  SGLang `/generate` features the front already uses (sampling_seed, natlang_top_k records, input logprobs with
+  logprob_start_len); no protocol change, so no ENGINE_PARITY row; the other engines are not training actors.
+- **Live check (run2's actor, no restart):** a sampled block's fork record vs SGLang's own input logprob of the same
+  tokens: mean |d| 0.013-0.021, mean d -0.002 (no truncation bias; the rollouts' learner-actor |log rho| is 0.025).
+  Single-call form: 4 of 8 samples unclosed at 2,048 tokens on game-of-life (default cap 8,192), within-group reward
+  std ~0.02 nats/token, length-return correlation 0.14.
+- **Opt-out:** `--reasoning-rl-weight 0` (single decisions: `--reasoning-rl-calls 1`; no carried SD: `--sd-weight 0`
+  or `--reasoning-rl-sources`). Enters grpo-v4-run2 at its next resume on a pin with this commit.
