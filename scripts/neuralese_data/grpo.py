@@ -2231,7 +2231,7 @@ def train(args):
            'checkpoint_sha256': source_sha, 'pool': args.pool, 'held_manifest': args.held_manifest,
            'excluded_ids': excluded, 'eligible_tasks': len(tasks), 'args': vars(args)}
     with (work / 'runs.jsonl').open('a') as handle:
-        handle.write(json.dumps(run) + '\n')
+        handle.write(json.dumps(run, default=str) + '\n')
     log_line(log, {'event': 'start', 'code': run['code'], 'eligible_tasks': len(tasks), 'excluded_ids': excluded})
 
     t0 = time.time()
