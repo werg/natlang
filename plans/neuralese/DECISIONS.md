@@ -3619,3 +3619,45 @@ invocation in later prompts with an empty think block (`</think>` and its action
 opening turn before the invocation's first call is kept. JOLT+ and TeacherDemos alike. Opt-out:
 `--reasoning-rl-teacher-history keep`. Tests: `test_teacher_history_renders_empty_think_blocks`,
 `test_segment_starting_later_reasons_without_teacher_reasoning`. Enters at the next resume with the term.
+
+**2026-11-18, reasoning RL: whole trajectories and segments, half each by default (owner via coordinator).** The
+owner's mental model is a walk over the whole trajectory, step by step; they also want the teacher traces kept.
+Both modes now exist. A teacher invocation is searched **whole** with probability `--reasoning-rl-whole-share` (default
+0.5): it starts at the first call, every step reasons on the student's own carried best reasoning, and it runs to the
+end (`--reasoning-rl-whole-calls N` caps it, opt-in). Otherwise it is a **segment**: up to `--reasoning-rl-calls` 4
+calls from a random call, after the teacher's recorded trace. `--reasoning-rl-teacher-history keep` is the default
+again (`empty` opts in). Also shipped:
+- Each step's group goes to the learner as soon as that step is done, tagged with the policy version its draws
+  started on (`_emit`).
+- `--reasoning-rl-horizon` 4 bounds the later actions in a return.
+- The room left for reasoning shrinks as the carried history grows; a step without `MIN_REASONING_ROOM` (256) ends
+  the trajectory (`context_full`).
+- `--reasoning-rl-workers` 8, `--reasoning-rl-groups` 32 per step.
+- Telemetry: `mode_whole` / `mode_segment` groups.
+
+Why half and half, from first principles (no measurement campaign):
+- **Actor concurrency:** a trajectory is sequential (step t+1 reasons on step t's carried block), so concurrency
+  comes from searches running in parallel, not from the mode. With 8 workers and waves of 2 there are about 16
+  sequences in flight next to 64 episode slots, either way.
+- **Wall time per group:** about the same per step in both modes (1-3 min under collection load). Whole trajectories
+  were the staleness risk: a 20-call walk takes about one 35-min learner step. That is gone now that groups are
+  emitted per step with their own version, so neither mode loses groups to `--max-staleness` 2. The carried history
+  is context, not a trained sample. The carried SD chain's think blocks keep their actor logp, so truncated IS covers
+  their age.
+- **Cost per trained group:** equal. In whole mode the earlier steps are not overhead, because each is itself a
+  trained group. A segment gets its history for free from the teacher.
+- **Learning signal, whole mode:** it trains every step under the history the deployed student has (its own
+  reasoning, preserve_thinking).
+- **Learning signal, segment mode:** it trains under the teacher's trace. That context is off-distribution, but it
+  carries the teacher's reasoning, which the owner wants in and which may help the student find the action. It also
+  spreads the group budget over more tasks per step, where whole mode concentrates groups on fewer, long trajectories.
+- **Return-to-go:** the credit beyond a few actions comes from later actions after *empty* think blocks, a weak and
+  increasingly confounded signal. So the horizon is capped at 4 in both modes, and segments of 4 calls lose little
+  credit against whole walks.
+- **Conclusion:** neither mode dominates on first principles. The mix gets both, and the per-mode telemetry (groups
+  trained, return spread, high-scoring share, per mode) shows which carries more learning signal. `1` or `0`
+  switches to one mode.
+
+Tests: `test_whole_trajectories_and_segments`, `test_teacher_history_keeps_the_trace_or_renders_empty_think_blocks`,
+`test_future_ids_horizon_and_length`, `test_groups_are_emitted_per_step_with_their_version`. Not run live on the
+actor in this form; the first resumed steps' `reasoning_rl` block is that check.

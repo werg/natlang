@@ -68,30 +68,67 @@ def test_teacher_segments_chain_calls_with_suffixes():
     assert sorted(len(r) for r in grpo.teacher_segments(rows, CLOSE, set())) == [1, 1, 1]
 
 
-def test_teacher_history_renders_empty_think_blocks():
-    """The teacher's earlier calls appear in later prompts with empty think blocks (default); 'keep' opts out."""
+def test_teacher_history_keeps_the_trace_or_renders_empty_think_blocks():
+    """By default later prompts keep the teacher's recorded reasoning; 'empty' renders empty think blocks."""
     rows = trajectory()
-    calls = sorted(grpo.teacher_segments(rows, CLOSE, set()), key=len)[1]
+    default = sorted(grpo.teacher_segments(rows, CLOSE, set()), key=len)[1]
+    assert [c['prompt'].tolist() for c in default] == [r['prompt'].tolist() for r in rows[:3]]
+    calls = sorted(grpo.teacher_segments(rows, CLOSE, set(), history='empty'), key=len)[1]
     assert calls[0]['prompt'].tolist() == [1, 2, 3]
     assert calls[1]['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3]            # teacher think [20] gone
     assert calls[2]['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 31, END, 42, 3]
     assert all(20 not in c['prompt'] and 21 not in c['prompt'] for c in calls)
-    kept = sorted(grpo.teacher_segments(rows, CLOSE, set(), history='keep'), key=len)[1]
-    assert [c['prompt'].tolist() for c in kept] == [r['prompt'].tolist() for r in rows[:3]]
     # an unusable call in the middle (a Neuralese marker in its action) still renders empty in the history after it
     rows[1] = {**rows[1], 'sample': np.array([21, 21, CLOSE, 100, END], np.int32)}
     rows[2] = {**rows[2], 'prompt': np.concatenate([rows[1]['prompt'], rows[1]['sample'], [42, 3]]).astype(np.int32)}
-    runs = sorted(grpo.teacher_segments(rows, CLOSE, {100}), key=lambda r: r[0]['index'])
+    runs = sorted(grpo.teacher_segments(rows, CLOSE, {100}, history='empty'), key=lambda r: r[0]['index'])
     last = [r for r in runs if r[0]['index'] == 2][0][0]
     assert last['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 100, END, 42, 3]
 
 
-def test_segment_starting_later_reasons_without_teacher_reasoning(monkeypatch):
+def test_whole_trajectories_and_segments(monkeypatch):
     rrl = sampler()
-    monkeypatch.setattr(rrl.rng, 'choice', lambda runs: max(runs, key=len))
-    monkeypatch.setattr(rrl.rng, 'randrange', lambda n: n - 1)                          # start at the last call
-    segment = rrl.segment({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
-    assert segment['calls'][0]['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 31, END, 42, 3]
+    segments = rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
+    assert sorted(len(seg['calls']) for seg in segments) == [1, 3]          # both invocations, whole
+    whole = max(segments, key=lambda seg: len(seg['calls']))
+    assert whole['calls'][0]['prompt'].tolist() == [1, 2, 3]                # from the first call: no teacher reasoning
+    assert {seg['mode'] for seg in segments} == {'whole'}
+    rrl.args.reasoning_rl_whole_calls = 2                                   # the cap is opt-in
+    capped = rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
+    assert sorted(len(seg['calls']) for seg in capped) == [1, 2]
+    rrl.args.reasoning_rl_whole_calls = 0
+    rrl.args.reasoning_rl_whole_share, rrl.args.reasoning_rl_calls = 0.0, 2   # segments: from a random call
+    monkeypatch.setattr(rrl.rng, 'randrange', lambda n: n - 1)
+    segs = rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
+    last = max(segs, key=lambda seg: len(seg['calls'][0]['prompt']))
+    assert last['mode'] == 'segment' and len(last['calls']) == 1
+    assert last['calls'][0]['prompt'].tolist() == trajectory()[2]['prompt'].tolist()   # after the teacher's trace
+    rrl.args.reasoning_rl_whole_share = 1.0
+    rrl.args.max_sequence_tokens = 6 + grpo.MIN_REASONING_ROOM              # a first call with no room to reason
+    assert [len(seg['calls']) for seg in rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'x')] \
+        == [1]
+
+
+def test_future_ids_horizon_and_length():
+    calls = sorted(grpo.teacher_segments(trajectory(), CLOSE, set()), key=len)[1]
+    ids, spans = grpo.future_ids([1, 2, 3, 77, CLOSE], calls, 0, CLOSE, horizon=1)
+    assert ids == [1, 2, 3, 77, CLOSE, 30, END, 40, 41, 3, CLOSE, 31, END] and len(spans) == 2
+    ids, spans = grpo.future_ids([1, 2, 3, 77, CLOSE], calls, 0, CLOSE, max_len=12)
+    assert len(spans) == 1 and ids == [1, 2, 3, 77, CLOSE, 30, END, 40, 41, 3]   # the next action did not fit
+
+
+def test_groups_are_emitted_per_step_with_their_version(monkeypatch):
+    rrl = sampler()
+    calls = sorted(grpo.teacher_segments(trajectory(), CLOSE, set()), key=len)[1][:2]
+    fake = FakeSGLang([[50, CLOSE], [61, CLOSE], [50, 51, CLOSE], [63, CLOSE]])
+    monkeypatch.setattr(rrl, '_post', fake)
+    emitted = []
+
+    def emit(group):
+        emitted.append((group['step'], group['version']))
+        rrl.collector.version += 1                 # a learner step lands while the trajectory continues
+    groups, _ = rrl.run({'calls': calls, 'source': 'demos', 'task_id': 't', 'key': 'k'}, emit=emit)
+    assert emitted == [(0, 3), (1, 4)] and [g['version'] for g in groups] == [3, 4]
 
 
 def test_future_ids_and_discount():
@@ -176,11 +213,12 @@ def test_learner_mixed_rows():
 
 
 def sampler(**overrides):
-    args = SimpleNamespace(reasoning_rl_sources='jolt,demos', seed=1, reasoning_rl_calls=4, max_sequence_tokens=65536,
+    args = SimpleNamespace(reasoning_rl_sources='jolt,demos', seed=1, reasoning_rl_calls=4, reasoning_rl_horizon=4,
+                           reasoning_rl_whole_share=1.0, reasoning_rl_whole_calls=0, max_sequence_tokens=65536,
                            reasoning_rl_max_tokens=64, reasoning_rl_samples=4, reasoning_rl_max_samples=8,
                            reasoning_rl_wave=2, reasoning_rl_high_logp=-0.1, reasoning_rl_hard_logp=-1.0,
                            reasoning_rl_gamma=1.0, reasoning_rl_beam=1, top_p=0.95, reasoning_rl_groups=2,
-                           reasoning_rl_workers=1, reasoning_rl_min_std=0.01, reasoning_rl_teacher_history='empty')
+                           reasoning_rl_workers=1, reasoning_rl_min_std=0.01, reasoning_rl_teacher_history='keep')
     for key, value in overrides.items():
         setattr(args, key, value)
     collector = SimpleNamespace(version=3, paused=threading.Event(), active_slots=1, stop=threading.Event(),
@@ -266,7 +304,7 @@ def test_sampler_queue_offer_take_and_idle():
     rrl.offer([{'role': 'teacher', 'quality': 1.0, 'task_id': 't', 'round': 1, 'rows': trajectory()},
                {'role': 'teacher', 'quality': 0.0, 'task_id': 't', 'round': 2, 'rows': trajectory()},
                {'role': 'student', 'quality': 1.0, 'task_id': 't', 'round': 3, 'rows': trajectory()}])
-    assert len(rrl.jolt) == 1 and rrl.counts['jolt_offered'] == 1
+    assert len(rrl.jolt) == 2 and rrl.counts['jolt_offered'] == 2     # both invocations of the one success
     assert rrl._next()['source'] == 'jolt'
     rrl.ready = [{'version': v} for v in (0, 1, 2, 3)]
     rrl.sd_ready = ['chain']

@@ -1731,17 +1731,22 @@ def sd_teacher_tasks(collector, band):
 # Reasoning RL against fixed teacher actions (``--reasoning-rl-weight``; owner 2026-11-18). A teacher call's reply is
 # (think block, action). Training teacher think blocks taught the student short summary-style reasoning (SFT held
 # -16 pts, DECISIONS 2026-11-18), so they are context and teacher trajectories teach only actions. This term trains the
-# student's own reasoning from them, as a search along a teacher trajectory segment (up to ``--reasoning-rl-calls``
-# consecutive calls of one invocation; tool outputs come from the trajectory, nothing executes):
+# student's own reasoning from them, as a search along teacher trajectories, in two modes (``--reasoning-rl-whole-share``
+# 0.5 of invocations whole): whole, each invocation walked from its first call to its end with the student's own best
+# reasoning carried at every step (its history holds no teacher reasoning: the deployed situation); segment, up to
+# ``--reasoning-rl-calls`` 4 calls from a random call, after the teacher's own trace as recorded. Tool outputs come
+# from the trajectory, nothing executes; ``--reasoning-rl-workers`` searches run in parallel and each step's group is
+# ready (with the policy version its draws started on) as soon as that step is done:
 #   1. one teacher-forced pass with empty think blocks scores every step's action at once: ``r0_t``, the action's mean
 #      token log-probability without reasoning (the step's difficulty);
 #   2. at step t the actor draws think blocks z on the carried history in waves of ``--reasoning-rl-wave`` until one
 #      scores high (its action at least ``--reasoning-rl-high-logp`` nats per token) or the step's budget is spent
 #      (``--reasoning-rl-samples``; ``--reasoning-rl-max-samples`` where r0_t is below ``--reasoning-rl-hard-logp``);
-#   3. each z is scored by one forward of the rest of the segment (z, the teacher action, its tool output, then the
-#      later actions after empty think blocks): its immediate reward r_t (the action's mean token log-probability)
-#      and the later actions' rewards, so its return is r_t + sum_s gamma^(s-t) r_s (``--reasoning-rl-gamma``):
-#      reasoning that helps later actions gets credit too. The best return(s) carry forward as history, as the
+#   3. each z is scored by one forward of the trajectory's next steps (z, the teacher action, its tool output, then up
+#      to ``--reasoning-rl-horizon`` later actions after empty think blocks): its immediate reward r_t (the action's
+#      mean token log-probability) and the later actions' rewards, so its return is r_t + sum_s gamma^(s-t) r_s
+#      (``--reasoning-rl-gamma``). The reasoning room shrinks as the history grows (``--max-sequence-tokens``); below
+#      ``MIN_REASONING_ROOM`` the trajectory ends. Reasoning that helps later actions gets credit too. The best return(s) carry forward as history, as the
 #      template keeps reasoning (preserve_thinking): greedy, or a beam of ``--reasoning-rl-beam``;
 #   4. every step's samples form a group: z's tokens at its group-normalized return (on-policy, truncated IS against
 #      the actor's own sampling log-probabilities), the teacher action after each closed z as a ratio-free
@@ -1752,6 +1757,7 @@ def sd_teacher_tasks(collector, band):
 #      high keeps it as context) joins the self-distillation replay (``--sd-weight``) as source ``search``.
 # Within a group the action is fixed, so mean and summed log-probability rank alike and a no-reasoning baseline cancels.
 RRL_ROLE = 'reasoning_rl'
+MIN_REASONING_ROOM = 256   # reasoning tokens a step must have room for, or the trajectory ends there
 RRL_SOURCES = ('jolt', 'demos')
 
 
@@ -1785,15 +1791,15 @@ def teacher_call(row, close_id, markers):
     return call
 
 
-def teacher_segments(rows, close_id, markers, counts=None, history='empty'):
+def teacher_segments(rows, close_id, markers, counts=None, history='keep'):
     """Runs of consecutive usable calls of one invocation whose prompts extend the previous call's full text (the
     calls ``exp0_sft.chains_of`` chains). Each call before the last of a run records its ``suffix``: the tokens between
     its reply and the next generation prompt's end (the tool output and the next turn's opening).
 
-    ``history`` 'empty' (the default): every earlier call of the invocation (usable or not) appears in a later call's
-    prompt with an empty think block (``</think>`` and its action), so this term's student never reasons on top of
-    teacher-style reasoning; the history the template renders before the invocation's first call (the runtime's
-    opening turn) is kept. 'keep': the recorded prompts, teacher reasoning included."""
+    ``history`` 'keep' (the default): the recorded prompts, the teacher's earlier reasoning included (a segment that
+    starts mid-invocation reasons after the teacher's trace). 'empty': every earlier call of the invocation (usable or
+    not) appears in a later call's prompt with an empty think block (``</think>`` and its action); the history the
+    template renders before the invocation's first call (the runtime's opening turn) is kept either way."""
     by_invocation = collections.defaultdict(list)
     for row in rows:
         by_invocation[row.get('invocation', '')].append(row)
@@ -1841,16 +1847,21 @@ def teacher_segments(rows, close_id, markers, counts=None, history='empty'):
     return runs
 
 
-def future_ids(context, calls, t, close_id):
+def future_ids(context, calls, t, close_id, horizon=None, max_len=None):
     """(ids, action spans [(start, length)]) of the segment's rest after ``context`` (which ends with step t's closed
-    think block): action t, its suffix, then each later step after an empty think block (``</think>``)."""
+    think block): action t, its suffix, then each later step after an empty think block (``</think>``), at most
+    ``horizon`` later steps (None: all) and only while the ids fit ``max_len`` (action t always)."""
     ids, spans = list(context), []
-    for s in range(t, len(calls)):
+    last = len(calls) if horizon is None else min(len(calls), t + 1 + horizon)
+    for s in range(t, last):
+        part = ([close_id] if s > t else []) + [int(i) for i in calls[s]['action']]
+        if s > t and max_len is not None and len(ids) + len(part) > max_len:
+            break
         if s > t:
             ids.append(close_id)
         spans.append((len(ids), len(calls[s]['action'])))
         ids += [int(i) for i in calls[s]['action']]
-        if s + 1 < len(calls):
+        if s + 1 < last:
             ids += [int(i) for i in calls[s]['suffix']]
     return ids, spans
 
@@ -1907,6 +1918,7 @@ def rrl_episodes(groups, reasoning_weight, action_weight):
         stats['unclosed'] += sum(not s['closed'] for s in samples)
         stats['high'] += int(any(s.get('high') for s in samples))
         stats[f"source_{group['source']}"] += 1
+        stats[f"mode_{group.get('mode', 'segment')}"] += 1
         stats[f"hard_{bool(group.get('hard'))}"] += 1
         closed = [s for s in samples if s['closed']]
         stats['reward_sum'] += sum(s['reward'] for s in closed)
@@ -1947,8 +1959,8 @@ def rrl_record(stats, worker_counts, ready):
     groups with a high-scoring sample, samples, unclosed, the mean immediate reward and no-reasoning reward r0 (nats
     per action token), the mean within-group return std, reasoning and action tokens, the within-group length-return
     correlation, sources, the worker's cumulative counters and its ready queue."""
-    out = {k: int(v) for k, v in stats.items() if k.startswith(('groups', 'source_', 'samples', 'unclosed', 'high',
-                                                                'hard_')) or k.endswith('_tokens')}
+    out = {k: int(v) for k, v in stats.items() if k.startswith(('groups', 'source_', 'mode_', 'samples', 'unclosed',
+                                                                'high', 'hard_')) or k.endswith('_tokens')}
     if stats.get('reward_count'):
         out['reward_mean'] = round(stats['reward_sum'] / stats['reward_count'], 4)
     if stats.get('r0_count'):
@@ -1976,7 +1988,7 @@ def rrl_task_ids(collector, band, candidates):
 class ReasoningRL:
     """The reasoning RL term's search (the comment above ``RRL_ROLE``). ``--reasoning-rl-workers`` threads run while
     collection runs (never during a held measurement on the training actor or the learner phase, when the actor is
-    released) and keep up to twice ``--reasoning-rl-groups`` finished groups ready. A segment comes from this run's
+    released) and keep up to twice ``--reasoning-rl-groups`` finished groups ready. A trajectory comes from this run's
     JOLT+ teacher successes first (``offer``: the guided run's actions under the unguided prompt), else from verified
     teacher demonstrations (``TeacherDemos``: tasks the policy does not already solve, least used first). Think blocks
     are drawn on SGLang at the run's sampling law (temperature 1, ``--top-p``, the export's banned tokens) with the
@@ -2005,26 +2017,32 @@ class ReasoningRL:
         for index in range(self.args.reasoning_rl_workers):
             threading.Thread(target=self._loop, args=(stop,), daemon=True, name=f'reasoning-rl-{index}').start()
 
-    def segment(self, episode, source):
-        """One segment of a teacher episode: a random run (``teacher_segments``), from a random call, at most
-        ``--reasoning-rl-calls`` calls that fit ``--max-sequence-tokens``; None when the episode has none."""
+    def segments(self, episode, source):
+        """A teacher episode's searches, one per run of usable calls (``teacher_segments``: one per invocation, split
+        only where a call cannot be a step). With probability ``--reasoning-rl-whole-share`` a run is walked whole, from
+        its first call to its end (``--reasoning-rl-whole-calls`` N > 0 caps it, opt-in): every step reasons on the
+        student's own carried reasoning. Otherwise it is a segment: up to ``--reasoning-rl-calls`` calls from a random
+        call, after the teacher's own trace (``--reasoning-rl-teacher-history`` keep). The search itself stops a
+        trajectory whose history no longer leaves room to reason (``run``)."""
         runs = teacher_segments(episode['rows'], self.close_id, self.markers, self.counts,
                                 self.args.reasoning_rl_teacher_history)
-        if not runs:
+        out = []
+        for run in runs:
+            if self.rng.random() < self.args.reasoning_rl_whole_share:
+                mode, cap = 'whole', self.args.reasoning_rl_whole_calls
+                calls = run[:cap] if cap > 0 else run
+            else:
+                mode, first = 'segment', self.rng.randrange(len(run))
+                calls = run[first:first + max(1, self.args.reasoning_rl_calls)]
+            if len(calls[0]['prompt']) + len(calls[0]['reply']) + MIN_REASONING_ROOM > self.args.max_sequence_tokens:
+                self.counts['segment_too_long'] += 1
+                continue
+            out.append({'calls': calls, 'source': source, 'task_id': episode['task_id'], 'key': episode.get('round'),
+                        'mode': mode})
+        if not out:
             self.counts['episode_no_segment'] += 1
-            return None
-        run = self.rng.choice(runs)
-        first = self.rng.randrange(len(run))
-        calls = []
-        for call in run[first:first + self.args.reasoning_rl_calls]:
-            end = len(call['prompt']) + len(call['reply'])
-            if end + self.args.reasoning_rl_max_tokens > self.args.max_sequence_tokens:
-                break
-            calls.append(call)
-        if not calls:
-            self.counts['segment_too_long'] += 1
-            return None
-        return {'calls': calls, 'source': source, 'task_id': episode['task_id'], 'key': episode.get('round')}
+        self.counts['segment_calls'] += sum(len(seg['calls']) for seg in out)
+        return out
 
     def offer(self, episodes):
         """A scored group's JOLT+ teacher successes become segments of this term (newest first)."""
@@ -2032,16 +2050,17 @@ class ReasoningRL:
             return
         for episode in episodes:
             if episode.get('role') == 'teacher' and episode.get('quality') == 1.0:
-                segment = self.segment(episode, 'jolt')
-                if segment is not None:
-                    with self.lock:
-                        self.jolt.append(segment)
-                        self.counts['jolt_offered'] += 1
+                segments = self.segments(episode, 'jolt')
+                with self.lock:
+                    self.jolt.extend(segments)
+                    self.counts['jolt_offered'] += len(segments)
 
     def _next(self):
         with self.lock:
             if self.jolt:
                 return self.jolt.pop()
+            if self.queued:
+                return self.queued.popleft()
         if self.demos is None or 'demos' not in self.sources:
             return None
         tasks = rrl_task_ids(self.collector, self.collector.args.pass_band, self.demo_tasks)
@@ -2051,7 +2070,11 @@ class ReasoningRL:
         episodes = self.demos.take(self.rng.sample(tasks, min(len(tasks), 64)), 1, stats, use='rrl_uses',
                                    prefix='rrl_demo')
         self.counts['demo_render_error'] += stats.get('rrl_demo_render_error', 0)
-        return self.segment(episodes[0], 'demos') if episodes else None
+        segments = self.segments(episodes[0], 'demos') if episodes else []
+        if len(segments) > 1:
+            with self.lock:
+                self.queued.extend(segments[1:])   # the episode's other invocations come next, after any JOLT+ one
+        return segments[0] if segments else None
 
     def _idle(self):
         c = self.collector
@@ -2067,11 +2090,10 @@ class ReasoningRL:
             if segment is None:
                 stop.wait(10)
                 continue
-            version = self.collector.version
             started = time.time()
             try:
-                groups, carried = self.run(segment)
-            except Exception as error:   # a failed request loses this segment only
+                groups, carried = self.run(segment, emit=self._emit)
+            except Exception as error:   # a failed request loses the rest of this trajectory only
                 self.counts['failures'] += 1
                 if self.counts['failures'] <= 20 or self.counts['failures'] % 100 == 0:
                     self.log({'event': 'reasoning rl request failed', 'failures': self.counts['failures'],
@@ -2079,15 +2101,18 @@ class ReasoningRL:
                 stop.wait(5)
                 continue
             with self.lock:
-                for group in groups:
-                    self.ids += 1
-                    group.update(id=self.ids, version=version, min_std=self.args.reasoning_rl_min_std)
-                    self.ready.append(group)
                 if carried is not None:
                     self.sd_ready.append(carried)
                 self.counts['segments'] += 1
                 self.counts['groups'] += len(groups)
                 self.counts['actor_s'] += round(time.time() - started)
+
+    def _emit(self, group):
+        """A finished step's group is ready for the learner at once (a whole trajectory spans learner steps)."""
+        with self.lock:
+            self.ids += 1
+            group.update(id=self.ids, min_std=self.args.reasoning_rl_min_std)
+            self.ready.append(group)
 
     def _post(self, body):
         request = urllib.request.Request(self.url + '/generate', data=json.dumps(body).encode(),
@@ -2152,7 +2177,8 @@ class ReasoningRL:
                 samples.append({'ids': ids, 'logp': logp, 'closed': ids[-1] == self.close_id})
 
         def score(sample):
-            ids, spans = future_ids(context + self.closed_form(sample['ids']), calls, t, self.close_id)
+            ids, spans = future_ids(context + self.closed_form(sample['ids']), calls, t, self.close_id,
+                                    self.args.reasoning_rl_horizon or None, self.args.max_sequence_tokens)
             return self._score(ids, spans)
         with ThreadPoolExecutor(max(1, len(samples))) as pool:
             for sample, rewards in zip(samples, pool.map(score, samples)):
@@ -2163,12 +2189,14 @@ class ReasoningRL:
         self.counts['closed'] += sum(s['closed'] for s in samples)
         return samples
 
-    def run(self, segment):
-        """Search one segment (blocking): (learner groups, the carried chain as an SD episode or None)."""
+    def run(self, segment, emit=None):
+        """Search one trajectory (blocking): (learner groups, the carried chain as an SD episode or None). Each group
+        records the policy version its draws started on, and goes to ``emit`` as soon as its step is done."""
         a, calls = self.args, segment['calls']
         prompt = [int(i) for i in calls[0]['prompt']]
-        ids, spans = future_ids(prompt + [self.close_id], calls, 0, self.close_id)
+        ids, spans = future_ids(prompt + [self.close_id], calls, 0, self.close_id, None, self.args.max_sequence_tokens)
         r0 = self._score(ids, spans)      # the teacher-forced pass without reasoning: every step's difficulty at once
+        calls = calls[:len(r0)]           # steps past the context limit even without reasoning never fit
         beams = [{'context': prompt, 'path': [], 'return': 0.}]
         groups = []
         for t, call in enumerate(calls):
@@ -2176,9 +2204,12 @@ class ReasoningRL:
             budget = a.reasoning_rl_max_samples if hard else a.reasoning_rl_samples
             candidates = []
             for beam in beams:
-                room = min(a.reasoning_rl_max_tokens, a.max_sequence_tokens - len(beam['context']) - len(call['reply']))
-                if room <= 0:
+                # the reasoning room shrinks as the carried history grows; below MIN_REASONING_ROOM the trajectory ends
+                room = min(a.reasoning_rl_max_tokens, a.max_sequence_tokens - len(beam['context']) - len(call['action']) - 1)
+                if room < min(MIN_REASONING_ROOM, a.reasoning_rl_max_tokens):
+                    self.counts['context_full'] += 1
                     continue
+                version = self.collector.version
                 samples, drawn = [], 0
                 while drawn < budget:   # waves until one scores high (stop early) or the budget is spent
                     wave = min(a.reasoning_rl_wave, budget - drawn)
@@ -2190,9 +2221,12 @@ class ReasoningRL:
                     continue
                 self.counts['hard_samples' if hard else 'samples_ordinary'] += len(samples)
                 groups.append({'task_id': segment['task_id'], 'key': segment['key'], 'source': segment['source'],
+                               'mode': segment.get('mode', 'segment'),
                                'step': t, 'hard': hard, 'r0': r0[t], 'context': np.asarray(beam['context'], np.int32),
                                'action': call['action'], 'action_weight': call.get('action_weight'),
-                               'samples': samples})
+                               'samples': samples, 'version': version})
+                if emit is not None:
+                    emit(groups[-1])
                 candidates += [(beam, s) for s in samples]
             if not candidates:
                 break
@@ -4180,8 +4214,16 @@ def main():
     t.add_argument('--reasoning-rl-action-weight', type=float, default=0.05,
                    help='the teacher action after each closed sampled think block as a ratio-free cross-entropy (0: the '
                         'reasoning term alone)')
+    t.add_argument('--reasoning-rl-whole-share', type=float, default=0.5,
+                   help='share of teacher invocations searched whole, from the first call on the student\'s own carried '
+                        'reasoning; the rest are segments from a random call after the teacher\'s trace (1: whole only, '
+                        '0: segments only)')
+    t.add_argument('--reasoning-rl-whole-calls', type=int, default=0,
+                   help='steps of a whole trajectory at most (0: to its end)')
     t.add_argument('--reasoning-rl-calls', type=int, default=4,
-                   help='consecutive calls of one teacher invocation per search segment (1: single decisions)')
+                   help='steps of a segment at most (1: single decisions)')
+    t.add_argument('--reasoning-rl-horizon', type=int, default=4,
+                   help='later actions in a think block\'s return (scored in its one forward; 0: all of the rest)')
     t.add_argument('--reasoning-rl-wave', type=int, default=2,
                    help='think blocks drawn at once; a step stops drawing once one scores high')
     t.add_argument('--reasoning-rl-samples', type=int, default=4, help='think blocks per step at most (ordinary step)')
@@ -4195,16 +4237,17 @@ def main():
                    help='discount of later actions\' rewards in a think block\'s return (0: the next action only)')
     t.add_argument('--reasoning-rl-beam', type=int, default=1,
                    help='best think blocks carried forward as history per step (1: greedy)')
-    t.add_argument('--reasoning-rl-groups', type=int, default=12, help='step groups trained per learner step at most')
+    t.add_argument('--reasoning-rl-groups', type=int, default=32, help='step groups trained per learner step at most')
     t.add_argument('--reasoning-rl-max-tokens', type=int, default=8192,
                    help='reasoning tokens per sample at most (a sample that has not closed by then ties with its '
                         'group\'s worst)')
     t.add_argument('--reasoning-rl-min-std', type=float, default=0.01,
                    help='a group whose returns (nats per action token) spread less trains only its actions')
-    t.add_argument('--reasoning-rl-workers', type=int, default=2, help='search threads (each one segment at a time)')
-    t.add_argument('--reasoning-rl-teacher-history', choices=('empty', 'keep'), default='empty',
-                   help='the teacher\'s earlier calls in a segment\'s history: empty think blocks (default), or keep the '
-                        'recorded teacher reasoning')
+    t.add_argument('--reasoning-rl-workers', type=int, default=8,
+                   help='trajectories searched in parallel (each a thread; their draws batch on the actor)')
+    t.add_argument('--reasoning-rl-teacher-history', choices=('keep', 'empty'), default='keep',
+                   help='the teacher\'s earlier calls in a segment\'s history: the recorded teacher reasoning (default), '
+                        'or empty think blocks')
     t.add_argument('--reasoning-rl-sources', default='jolt,demos',
                    help='teacher trajectories: jolt (this run\'s JOLT+ teacher successes), demos (TeacherDemos)')
     t.add_argument('--replay-corpus', action='append', default=None, metavar='NAME=PKL[,weight=W][,units=K]',
