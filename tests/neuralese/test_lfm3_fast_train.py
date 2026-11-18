@@ -620,6 +620,24 @@ def test_exp0_stratified_steps_carry_the_whole_sets_source_mix():
     assert max(abs(share - own_share) for share in shares(random_steps)) > 0.17
 
 
+def test_exp0_student_sampled_chains_take_the_nucleus_nll_and_others_the_full_softmax(monkeypatch):
+    import exp0_sft
+    import numpy as np
+
+    def chain(round_name, **extra):
+        return {'ids': np.zeros(4, np.int32), 'segs': [(1, 2, {'sample': np.zeros(2, np.int32)})], 'task': 't',
+                'round': round_name, **extra}
+    own, graph, teacher, ops = chain('rl:x'), chain('rl-neuralese-graph:y'), chain('teacher:z'), chain('0')
+    assert [exp0_sft.student_sampled(c) for c in (own, graph, teacher, ops)] == [True, True, False, False]
+    assert not exp0_sft.student_sampled(chain('rl:x', sampled=False))
+    mask = exp0_sft.sampled_mask([teacher, own], 'cpu')
+    assert mask.tolist() == [False, False, True, True]
+    monkeypatch.setattr(exp0_sft, 'token_nll', lambda m, h, p, t: torch.full((4,), 1.))
+    monkeypatch.setattr(exp0_sft, 'token_nll_nucleus', lambda m, h, p, t, top_p: (torch.full((4,), 1.), torch.full((4,), .5), None))
+    assert exp0_sft.targets_nll(None, None, None, None, mask, 0.95).tolist() == [1., 1., .5, .5]
+    assert exp0_sft.targets_nll(None, None, None, None, mask, 1.).tolist() == [1.] * 4
+    assert exp0_sft.targets_nll(None, None, None, None, exp0_sft.sampled_mask([teacher, ops], 'cpu'), 0.95).tolist() == [1.] * 4
+
 def test_exp0_context_masks_zero_an_empty_think_lead_and_targets_after_the_end_token():
     import exp0_sft
     import numpy as np

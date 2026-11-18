@@ -192,6 +192,34 @@ def token_nll_nucleus(model, h, positions, targets, top_p):
     return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p)
 
 
+STUDENT_SOURCES = ('rl', 'rl-neuralese-graph')
+
+
+def student_sampled(chain):
+    """Whether a chain's targets are the student's own top-p samples (own GRPO successes, own Neuralese graph rows):
+    a chain's ``sampled`` flag, else its source (``chain_source``)."""
+    return bool(chain.get('sampled', chain_source(chain) in STUDENT_SOURCES))
+
+
+def targets_nll(model, h, positions, targets, sampled, top_p):
+    """Per-target NLL: under each row's top-p nucleus (``token_nll_nucleus``) where ``sampled`` (bool per target), the
+    full softmax elsewhere. The student sampled its own replies at top-p ``top_p``, so their likelihood is the
+    nucleus-renormalized one; the full-softmax NLL of such samples is not zero in expectation on the student's own
+    distribution: it drains the tail into the nucleus and so raises every token that sits inside it, ``</think>`` at
+    the points where reasoning may end among them (sft-v4-run1's behaviour probe: hazard 0.546 -> 1.03; one fresh-Adam
+    step on the base's own samples raised it 5x under the full NLL and lowered it under the nucleus NLL)."""
+    if top_p >= 1. or sampled is None or not bool(sampled.any()):
+        return token_nll(model, h, positions, targets)
+    nll, nucleus, _ = token_nll_nucleus(model, h, positions, targets, top_p)
+    return torch.where(sampled, nucleus, nll)
+
+
+def sampled_mask(chains, device):
+    """Per-target ``student_sampled`` flags of chains packed back to back (``row_tensors`` order)."""
+    return torch.cat([torch.full((sum(length for _, length, _ in chain['segs']),), student_sampled(chain),
+                                 dtype=torch.bool, device=device) for chain in chains])
+
+
 def chain_tensors(chain, device):
     ids = torch.from_numpy(chain['ids'].astype(np.int64)).to(device)
     positions = np.concatenate([np.arange(start - 1, start + length - 1) for start, length, _ in chain['segs']])
@@ -474,13 +502,14 @@ def prefix_tree_settings(args):
 
 
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
-                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None):
+                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None, student_top_p=1.):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
     least ``share_prefix_tokens`` tokens that several chains share are computed once and every batch is packed into
     varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree` in ``mode``, exact gradients); 0: every chain
     whole, packed.
     Chains that import Neuralese state stay whole and carry their producer documents in the same forward (``row_inputs``:
-    the consumer's loss reaches the producer's state; ``passthrough`` False: detached).
+    the consumer's loss reaches the producer's state; ``passthrough`` False: detached). ``student_top_p`` < 1: the
+    student's own sampled chains take the nucleus NLL (``targets_nll``).
     Returns (sum of weighted nll, tokens computed)."""
     mark = mark or (lambda name, since: time.time())
     total_nll = 0.
@@ -493,7 +522,7 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
                 raise ValueError('imported Neuralese state needs the fast path (lfm3_fast_train)')
             h = forward(model, ids)
             t = mark('forward', t)
-            nll = token_nll(model, h, positions, targets) * weights
+            nll = targets_nll(model, h, positions, targets, sampled_mask([chain], device), student_top_p) * weights
             (nll.sum() / denominator).backward()
             mark('loss_backward', t)
             total_nll += nll.sum().item()
@@ -521,7 +550,8 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
             [chains[index] for index, _ in items], device, passthrough, starts=[start for _, start in items])
         h = run(ids, lengths, imports)
         t = mark('forward', t)
-        nll = token_nll(model, h, positions, targets) * weights
+        sampled = sampled_mask([chains[index] for index, _ in items], device)
+        nll = targets_nll(model, h, positions, targets, sampled, student_top_p) * weights
         (nll.sum() / denominator).backward()
         clock['end'] = mark('loss_backward', t)
         total_nll += nll.sum().item()
@@ -539,14 +569,15 @@ def load_chains(path):
         return pickle.load(handle)['chains']
 
 
-def validation_loss(model, forward, chains, pack_tokens=0):
-    """Weighted mean NLL over prebuilt validation chains (no gradient; packed rows on the fast path)."""
+def validation_loss(model, forward, chains, pack_tokens=0, student_top_p=1.):
+    """Weighted mean NLL over prebuilt validation chains (no gradient; packed rows on the fast path), under the
+    training objective (``targets_nll``)."""
     total, mass = 0., 0.
     with torch.no_grad():
         for row in packed_rows(chains, pack_tokens):
             ids, positions, targets, weights, lengths, imports = row_inputs(row, 'cuda')
             h = forward(model, ids, lengths, imports) if imports is not None or len(lengths) > 1 else forward(model, ids)
-            nll = token_nll(model, h, positions, targets)
+            nll = targets_nll(model, h, positions, targets, sampled_mask(row, 'cuda'), student_top_p)
             total += (nll * weights).sum().item()
             mass += weights.sum().item()
     return total / max(mass, 1e-9)
@@ -616,6 +647,7 @@ def train(args):
     chains = load_chains(args.chains) if args.chains else chains_of(episodes)
     loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
     val_sets = {Path(path).stem: load_chains(path) for path in args.val_chains}
+    student_top_p = 1. if args.stock_model else args.student_top_p
     if args.context_masks == 'on':
         from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.base)
@@ -682,7 +714,7 @@ def train(args):
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     if val_sets:
         model.eval()
-        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens) for name, c in val_sets.items()}}
+        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()}}
         model.train()
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
@@ -717,7 +749,7 @@ def train(args):
                                             args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
                                             mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
                                             tree_batch_tokens=args.tree_batch_tokens,
-                                            retained_gb=args.prefix_retained_gb)
+                                            retained_gb=args.prefix_retained_gb, student_top_p=student_top_p)
         forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -737,7 +769,7 @@ def train(args):
                   'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
         if val_sets and ((step + 1) % args.val_every == 0 or step + 1 == len(steps)):
             model.eval()
-            record.update({f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens) for name, c in val_sets.items()})
+            record.update({f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()})
             model.train()
             if args.keep_best_val:
                 # the checkpoint written is the FP32 master state at the lowest validation NLL of the named set
@@ -766,7 +798,7 @@ def train(args):
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
-    if args.max_steps:
+    if args.max_steps and not args.checkpoint_at_max_steps:
         return
     out_path = Path(args.out_dir) / 'checkpoint.pt'
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -892,6 +924,12 @@ def main():
     p.add_argument('--val-chains', action='append', default=[],
                    help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
     p.add_argument('--val-every', type=int, default=50)
+    p.add_argument('--checkpoint-at-max-steps', action='store_true',
+                   help='with --max-steps: write checkpoint.pt after the last step (short ablations; smokes write none)')
+    p.add_argument('--student-top-p', type=float, default=0.95,
+                   help='the student\'s own sampled chains (own successes, own Neuralese graph rows; exp0_sft.student_sampled) '
+                        'train the NLL under each row\'s top-p nucleus, the law they were sampled with (default 0.95, the '
+                        'actor\'s; exp0_sft.targets_nll); 1: the full-softmax NLL for every chain')
     p.add_argument('--context-masks', choices=('on', 'off'), default='on',
                    help='on (default): at load, a target row\'s leading empty think block and anything after its end '
                         'token are context in the training and validation chains (exp0_sft.context_masks); off: the '

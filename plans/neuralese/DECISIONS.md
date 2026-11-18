@@ -3886,3 +3886,98 @@ warm-up runs only once its cause is fixed.
 - **Finding:** custody's `inputs:` binding ties sibling worlds that share identical root inputs; 31 train rows were lost
   this way over rounds 14-15. Round 16 authors make every world's root inputs distinct.
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18 19:00, sft-v4-run1 `</think>` hazard 1.03 vs 0.55: where it comes from (SFT-row investigation)
+
+**Observation.** run3's start probe: the warm-up checkpoint's hazard 1.032/1k vs the base's 0.546, close_logp -0.210 vs
+-0.268, sampled_logp -0.633 vs -0.569, entropy 0.649 vs 0.661. Reproduced forward-only (1.019 vs 0.543).
+
+**Where the hazard rose.** It is not spread out. The top 200 of 32,560 probe positions carry 100% of the increase, and
+the top 20 carry 81%. They are the points where the student has just named its next action: "Let's search. I",
+"Let me try calling read_code for ... Use", "Let's do that. Use". At those points p(`</think>`) went from 0.1-0.6 to
+0.25-0.84. The median logit shift elsewhere is +1.2, on probabilities around 1e-7, which adds nothing to the mean.
+The checkpoint closes its reasoning as soon as it has picked an action.
+
+**Mechanical check of the trainer (pin d7d7b0a38 code, real rows, fast path, prefix tree `levels`, packing at the run's
+8,134 tokens):**
+- Rows tested: 25 chains (teacher with masked reasoning, own, graph with imports, operators, readout rows), 10 packed
+  leaf rows.
+- Label shift: every target equals the next input token in its own document, and no target crosses a document or
+  prefix boundary.
+- Weights: per target they equal the chains' intended weights. No chain is missing or computed twice.
+- Masked `</think>`: 21 present in teacher rows and 6 in operator rows, 0 trained. Own and graph closes are trained, as
+  intended.
+- Gradient: zero-weight rows get exactly zero gradient through the fused NLL, and its gradient matches an fp32
+  cross-entropy reference (1% relative error, bf16).
+- `</think>` (124902) is one of the interface's special ids, so its embedding row is frozen; grafting the base row
+  into the checkpoint changes nothing.
+- Result: no mechanical defect found in this scope.
+
+**Every trained `</think>` in sft-warmup-20261118-v1 (offline):**
+- Own successes: 576 closes, of which 18 are readout rows at position 0 and 6 are second closes in one reply. Reasoning
+  before them p10/p25/p50/p75 = 83 / 408 / 1,750 / 4,460 characters; 109 under 200 characters.
+- Graph rows: 165 closes, p50 2,194 characters, 12 under 200.
+- Teacher, operators and live rows: 0 trained closes and no trained token inside a think block.
+- Own and graph lengths are near the base's held p50 of 1,919. They were sampled by policies whose probe hazard equals
+  the base's (grpo-v3-run1 steps 1-10: 0.52-0.55). No source trains a systematically early close.
+
+**Which sources push the hazard (forward/backward at the base, small units beside run2):**
+- First-order effect of one epoch, -<grad H, grad L_source>, per unit LR:
+  - teacher actions +28.0
+  - own +4.85 (reasoning tokens +3.4, own `</think>` +1.7, after-close -0.3)
+  - graph +1.6
+  - readout rows +0.055
+  - operators -0.13
+
+  Teacher actions dominate because of their mass, although their per-token alignment is the weakest (cos -0.010).
+  This is against the prior that masked reasoning gives `</think>` no direction: through shared weights it does.
+- On-policy null, H on 24 probe calls and SFT on the other 24 base samples: +98 per token. Own +21, teacher +27,
+  graph +106.
+- The direction is generic: full-softmax NLL on the base's own samples raises the hazard as much as anything in the
+  warm-up.
+- Fresh-AdamW first step, lr·sign(g) at 1e-4 per source (forward probe after it):
+  - teacher 3.03, operators 1.62, readout rows 11.0
+  - base on-policy samples: full NLL 2.59, nucleus NLL 0.03
+- At 3e-4:
+  - base samples: full 4.0, nucleus 0.0004
+  - own: full 21.1, nucleus 0.24
+  - graph: full 22.2, nucleus 0.45
+- A sign step removes magnitude, so the readout rows' 11.0 says their direction is steep. In the mix they carry about
+  0.2% of the first-order effect.
+
+**Reading.**
+- The 18 readout rows and the batch order do not account for the doubling.
+- No row defect or trainer bug was found that does.
+- The hazard is a fragile statistic, a mean of probabilities dominated by about 200 decision points. Every SFT
+  direction tested raises it, the student's own samples included, as long as they are trained with the full-softmax
+  NLL.
+- First principles fit this: the student sampled its replies at top-p 0.95. Their likelihood is the
+  nucleus-renormalized one, and the full NLL of such samples is not zero in expectation on the student's own
+  distribution. It drains the tail into the nucleus and so raises every candidate inside it, `</think>` at decision
+  points among them.
+- GRPO's policy term already uses the nucleus NLL. exp0_sft did not.
+
+**Fix (default, opt-out):** `exp0_sft --student-top-p 0.95`. Own successes and own graph rows (`student_sampled`:
+source `rl` / `rl-neuralese-graph`, or a chain's `sampled` flag) train the NLL under each row's top-p nucleus
+(`targets_nll`, one pass of `linear_nll_nucleus`); validation uses the same objective. `--student-top-p 1` restores the
+full softmax. Also `--checkpoint-at-max-steps` for short ablations. Test:
+`test_exp0_student_sampled_chains_take_the_nucleus_nll_and_others_the_full_softmax`.
+
+**What this does not settle.** The teacher-action share is the largest first-order contributor, and the nucleus objective
+does not touch it. A rebuilt warm-up therefore still needs a guard on the student's reasoning distribution, either
+with a KL term to the base on the student's own reasoning positions (exp0_sft has no reference pass) or by reading the
+probe during training. Measurements cut short: the first-order nucleus-vs-full dot (the ledger preempted the unit
+three times behind a queued 40 GB job), the teacher-with-reasoning vs empty-think comparison (`teachervar.py`, written,
+not run) and real per-source short trainings.
+
+**Ready to run (the supervisor decides when):** `ops/sft-v4/ablation/run.sh PIN [ARMS]`. Each arm is 10 exp0_sft steps from
+the base on the full run's schedule (peak LR reached), then probe v1, about 15 min at ~80 GB. Arms:
+- full-old (the run's objective)
+- full-new (nucleus, masks, stratified)
+- teacher
+- own
+- own-nucleus
+- graph
+- operators
+
+Per-source chain files are in the same directory. This is the causal test the gradient numbers stand in for.
