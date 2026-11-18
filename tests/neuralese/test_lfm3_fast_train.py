@@ -596,6 +596,55 @@ def test_exp0_step_groups_fill_a_batch_with_weighted_loss_tokens():
     assert [len(step) for step in steps] == [2] * 5              # 4 weighted tokens a step, not 4 raw ones
 
 
+def test_exp0_stratified_steps_carry_the_whole_sets_source_mix():
+    import exp0_sft
+    import numpy as np
+
+    def chain(source, i, n):
+        row = {'sample': np.zeros(n, np.int32)}
+        return {'ids': np.zeros(n + 1, np.int32), 'segs': [(1, n, row)], 'task': f'{source}{i}', 'round': f'{source}:{i}'}
+    # a few large own chains among many small teacher chains (sft-v4-run1: 92 own of 16k chains, 19% of the tokens)
+    chains = [chain('rl', i, 20) for i in range(24)] + [chain('teacher', i, 4) for i in range(500)]
+    own_share = 24 * 20 / (24 * 20 + 500 * 4)
+
+    def shares(steps):
+        return [sum(exp0_sft.chain_mass(chains[i]) for i in step if chains[i]['round'].startswith('rl:'))
+                / sum(exp0_sft.chain_mass(chains[i]) for i in step) for step in steps]
+    steps = exp0_sft.step_groups(chains, 1, 124, 3, False, stratified=True)
+    assert sorted(i for step in steps for i in step) == list(range(len(chains)))
+    # every step carries own tokens near the overall share (one own chain is 16% of a step)
+    assert all(abs(share - own_share) < 0.17 for share in shares(steps)) and min(shares(steps)) > 0
+    assert steps == exp0_sft.step_groups(chains, 1, 124, 3, False, stratified=True)
+    # a plain shuffle of the same chains leaves some steps without own tokens and piles them up in others
+    random_steps = exp0_sft.step_groups(chains, 1, 124, 3, False)
+    assert max(abs(share - own_share) for share in shares(random_steps)) > 0.17
+
+
+def test_exp0_context_masks_zero_an_empty_think_lead_and_targets_after_the_end_token():
+    import exp0_sft
+    import numpy as np
+
+    class Tok:
+        vocab = ['</think>', '\n', '"A"', '<|im_end|>', 'plan', '<|endoftext|>']
+
+        def convert_tokens_to_ids(self, tokens):
+            if isinstance(tokens, list):
+                return [self.vocab.index(t) for t in tokens]
+            return self.vocab.index(tokens)
+
+        def decode(self, ids):
+            return ''.join(self.vocab[i] for i in ids)
+    readout = {'sample': np.array([0, 2, 3], np.int32)}                       # </think> "A" <|im_end|> (a scored option)
+    operator = {'sample': np.array([0, 2, 3, 1], np.int32)}                   # ... <|im_end|> \n (template separator)
+    sampled = {'sample': np.array([4, 0, 2, 3], np.int32)}                    # plan </think> "A" <|im_end|>
+    chains = [{'ids': np.zeros(5, np.int32), 'segs': [(1, len(r['sample']), r)], 'task': 't', 'round': 'r'}
+              for r in (readout, operator, sampled)]
+    assert exp0_sft.context_masks(chains, Tok()) == {'empty_think_rows': 2, 'after_end_rows': 1}
+    assert readout['weight'].tolist() == [0, 1, 1]
+    assert operator['weight'].tolist() == [0, 1, 1, 0]
+    assert 'weight' not in sampled
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
 def test_nucleus_nll_on_bf16_logits_matches_the_reference_pass_bitwise():
     """The nucleus NLL's log-probability is linear_nll's own kernel (what the KL reference pass computes): at equal weights

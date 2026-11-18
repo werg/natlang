@@ -191,8 +191,12 @@ def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empt
     assert exp0_sft.chain_weights(chain, 'cpu').tolist() == [0, 0, 1, 1, 1, 1]
     # October rows too; the student's own replies keep every token as a target
     assert s.think_context(renderer, 'october:luna-curricula', no_reasoning, target) == 2
-    assert s.think_context(renderer, 'rl-own', no_reasoning, target) == 0
     assert s.think_context(renderer, 'rl-own', {**no_reasoning, 'reasoning_content': 'plan'}, [7, 1, 3, 4, 5, 6]) == 0
+    # except an own reply without reasoning (a decision readout the actor scored, never sampled): its empty think
+    # block is context and the option trains; own_empty_think='train' opts out
+    readout = {'role': 'assistant', 'content': '"ENTY"'}
+    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6]) == 2
+    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6], own_empty_think='train') == 0
 
 
 def test_a_teacher_reasoning_block_is_context_by_default_and_a_target_with_train():
@@ -224,7 +228,7 @@ def test_text_a_teacher_writes_before_its_tool_call_is_context_and_a_final_answe
     # a final answer (no tool call) keeps its text as the target; the student's own text stays a target
     answer = {'role': 'assistant', 'content': 'note'}
     assert s.think_context(renderer, 'teacher', answer, [1, 8, 6]) == 1
-    assert s.think_context(renderer, 'rl-own', narrated, target) == 0
+    assert s.think_context(renderer, 'rl-own', {**narrated, 'reasoning_content': 'plan'}, [7, 1, 8, 3, 4, 5, 6]) == 0
     with pytest.raises(ValueError):
         s.think_context(renderer, 'teacher', narrated, target, lead_in='drop')
 
@@ -244,6 +248,25 @@ def test_backend_workaround_marks_episodes_that_met_the_text_backends_neuralese_
     refused = {'role': 'tool', 'content': 'neuralese-unsupported-backend: plain-text Neuralese<string> results ...'}
     assert s.backend_workaround([turn([SYSTEM, USER]), turn([SYSTEM, USER, refused])])
     assert not s.backend_workaround([turn([SYSTEM, USER, {'role': 'tool', 'content': 'ok'}])])
+    # a child's refusal reaches the parent wrapped in the child's error text: still the refusal
+    wrapped = {'role': 'tool', 'content': 'rejected\nproduce failed with "neuralese-unsupported-backend: needs a port"'}
+    assert s.backend_workaround([turn([SYSTEM, USER, wrapped])])
+
+
+def test_call_row_weights_a_teacher_detour_after_the_refusal_as_context_for_training_and_validation():
+    class Renderer:
+        tokenizer = _Tokens()
+
+        def render(self, messages, tools, target):
+            return [0], [3, 4, 5, 6]
+    refused = {'role': 'tool', 'content': 'x failed: neuralese-unsupported-backend: no write port'}
+    detour = {**turn([SYSTEM, USER, refused]), 'target': {'role': 'assistant', 'content': ''}, 'tools': None}
+    row, _ = s.call_row(Renderer(), 'teacher', 'k', 0, detour)
+    assert row['weight'].tolist() == [0, 0, 0, 0]
+    row, _ = s.call_row(Renderer(), 'teacher', 'k', 0, detour, backend_workarounds='train')
+    assert 'weight' not in row
+    before = {**turn([SYSTEM, USER]), 'target': {'role': 'assistant', 'content': ''}, 'tools': None}
+    assert 'weight' not in s.call_row(Renderer(), 'teacher', 'k', 0, before)[0]
 
 
 def test_parse_aux_reads_share_task_cap_and_think_policy():
