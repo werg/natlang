@@ -312,7 +312,8 @@ def chain_loss_tokens(chain):
 
 
 def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
-    """Optimizer steps (lists of chain indices) of at least ``batch_loss_tokens`` loss tokens each.
+    """Optimizer steps (lists of chain indices) of at least ``batch_loss_tokens`` loss tokens each, counted as the loss
+    counts them (``chain_mass``: zero-weight context tokens such as a teacher's think block do not fill a batch).
     Random order (``grouped`` False): one shuffled list over all epochs, cut in order; a last group under half a batch
     is dropped. Grouped: per epoch, episodes (task, round) in lexicographic order of their first chain's tokens (so the
     chains that share a system prompt, task prompt or earlier calls are neighbours; ties and the cut offset random) with
@@ -328,7 +329,7 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
         steps, group, tokens = [], [], 0
         for index in order:
             group.append(index)
-            tokens += chain_loss_tokens(chains[index])
+            tokens += chain_mass(chains[index])
             if tokens >= batch_loss_tokens:
                 steps.append(group)
                 group, tokens = [], 0
@@ -350,7 +351,7 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
         for key in keys:
             for index in episodes[key]:
                 group.append(index)
-                tokens += chain_loss_tokens(chains[index])
+                tokens += chain_mass(chains[index])
                 if tokens >= batch_loss_tokens:
                     epoch.append(group)
                     group, tokens = [], 0

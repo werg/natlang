@@ -3703,3 +3703,66 @@ The owner asked for a parallel rewrite mode and a defended default instead of th
   seed (+0.071 nats per action token in total) and became SD rows of 772 and 851 student tokens, prompt-side teacher
   prefixes 28-370 tokens. That is 13,380 actor tokens for 1,623 trained tokens (12%). Continuations average ~670
   tokens, not "short": the student reasons long.
+
+## 2026-11-18: SFT warm-up mix `sft-warmup-20261118-v1` built; launch ready (SFT-mix agent)
+
+**Plan:** `plans/neuralese/SFT_WARMUP_MIX_20261118.md`, one section per facet.
+
+**Brief (owner):** a cheap pure-SFT warm-up from the base on teacher actions and responses, with the reasoning that
+precedes them masked. The reasoning-likelihood term and GRPO follow it.
+
+**Data:** `runs/sft-warmup-20261118-v1`. 3,961 teacher and 55 own verified episodes over 4,000 tasks, plus prebuilt parts. 16,271 chains, 95.3M chain tokens, 2.84M weighted target tokens.
+- Loss shares: teacher actions 72.4%, own successes (reasoning included, grpo-v3-run1 and grpo-v4-run2) 19.4%, Neuralese graph rows 4.9%, operator rows 3.0%, live rows 0.2%.
+- Teacher selection: breadth-first over tasks, with families taking turns, under a 90M forward budget.
+- Manifest: `training/corpus-manifests/sft-warmup-20261118-v1.json`. Validation sets: val-own and val-teacher, 40 episodes each.
+- Also fixed: `exp0_sft.step_groups` now cuts steps on weighted loss tokens. Masked think tokens had filled about a third of each nominal batch.
+
+**Defects found while building, and fixed (default, with opt-out):**
+- **Narration was trained.** The text a non-student reply writes before its first tool call is now context, like its
+  think block. Claude narrates 28% of its tool calls and OpenHands 54%; held episodes after sft-v3 put text beside 12%
+  of their actions. The rule is one function, `serve.targets.non_student_context`, used by `sft_sources.think_context`,
+  by `call_row` (grpo `TeacherDemos`, from their next pin) and by the program-tune fit rows (`tune/rows.turn_graph`).
+  The fit rows trained Haiku's reasoning summaries at full weight. Opt-outs: `--teacher-lead-in train`,
+  `--teacher-think train`. Commits 884b1693e, 892073ab3.
+- **Earlier SFT sources predate the answer protocol.** On 2026-11-17 (1cb19e291) a plain reply stopped answering an
+  invocation: `return_result` is required, and the system prompt and call notes changed with it. grpo-v2/v3 own
+  successes, teacher pool-v1, October and every sft-v3 set were recorded before the change. They carry the retired
+  system prompt and, in some episodes, final plain-text answers.
+  - Now every episode is replayed under a runtime with the change, and rows come from that replay.
+  - The replay matcher accepts a call whose invocation opening the runtime reworded (same signature line, identical
+    actions and outputs; `reworded_key`).
+  - Plain-text endings fail the replay and drop out.
+  - October rows (not replayable) are out.
+- **Backend detours.** teacher_gen serves text endpoints, so a producer's Neuralese return is refused there. The calls
+  after the refusal (`neuralese-unsupported-backend`) are a detour and are now zero-weight context; the producer's own
+  return before it trains (`--backend-workarounds context`). Excluding these episodes would drop 92% of the
+  composed-Neuralese and 70% of the bgkit teacher successes.
+- **Operators file.** The operators-v1 file on disk still trains `</think>` at target 0 on all 11,558 rows. The build
+  masks it at load. GRPO's `ReplayCorpus` already did.
+
+**Hinted self-distillation audit.**
+- **What exists:** JOLT+ teacher attempts (the policy writes guidance; student form drops it from the prompt).
+- **The owner's form:** a hint about where the solution goes, then train the unhinted success.
+- **What the archive shows:** grpo-v4-run1's 11 guided successes are the only ones (v2/v3 had none; run2 none yet).
+  - 4 quote the guidance (5-gram overlap), and 2 name it ("Guidance for this call ...").
+  - In 6 the guidance contained the answer: `writeGuidance.nl` asks the writer to "say what a correct result of
+    consumer is", and the `reference_solution` fact includes the reference's final `return_result`.
+  - Nothing filters for this. `teacher_rho` discounts almost no token (median log rho 0).
+  - GRPO keeps the writer calls in the trained chain. Their prompts hold the reference solution or the hindsight run.
+- **What changed:** the SFT build excludes guided attempts (`--guided exclude`, default).
+- **What did not change:** grpo's JOLT+ path is unchanged here. It needs the hint restricted to where the solution
+  goes (an exact check on every guidance path, as `checkHint` is for `writeHint`) and a filter on trained replies that
+  quote it. This is open for the supervisor; the audit scripts are in the session scratchpad.
+
+**Recipe and criteria:** see the plan's "Recipe" section.
+- exp0_sft, 1 epoch, 32k weighted target tokens per step (about 89 steps, about 180 sequences each), LR 5e-6 peak with
+  6 warm-up steps, cosine to 10%. About 3 h.
+- val-own and val-teacher every 10 steps.
+- Behaviour probe bounds as `behaviour_probe.shifted`.
+- Held-v3 at 2 samples against the base measured on the same pin. No post-protocol Pop base exists.
+- Failure: below base - 4 pts at p < 0.05.
+
+**Launch:** `ops/sft-v4/launch.sh` (owner decides when). It needs grpo-v4-run2's DGX claim and Pop free.
+
+**Ledger:** sft-build-v5-1794992846 was cancelled; this build supersedes it. Not checked: see the plan's "Not checked"
+section.

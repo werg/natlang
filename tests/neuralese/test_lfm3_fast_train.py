@@ -584,6 +584,18 @@ def test_exp0_step_groups_cover_every_chain_once_per_epoch():
                     assert sorted(flat[:seen]) == sorted(list(range(len(chains))) * (seen // len(chains)))
             assert all(sum(exp0_sft.chain_loss_tokens(chains[i]) for i in step) >= 9 // 2 for step in steps)
 
+def test_exp0_step_groups_fill_a_batch_with_weighted_loss_tokens():
+    import exp0_sft
+    import numpy as np
+
+    def chain(n, masked):
+        row = {'sample': np.zeros(n, np.int32), 'weight': (np.arange(n) >= masked).astype(np.float32)}
+        return {'ids': np.zeros(n + 1, np.int32), 'segs': [(1, n, row)], 'task': 't', 'round': 'r'}
+    chains = [chain(10, 8) for _ in range(10)]                  # 10 target tokens, 2 of them weighted
+    steps = exp0_sft.step_groups(chains, 1, 4, 0, False)
+    assert [len(step) for step in steps] == [2] * 5              # 4 weighted tokens a step, not 4 raw ones
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
 def test_nucleus_nll_on_bf16_logits_matches_the_reference_pass_bitwise():
     """The nucleus NLL's log-probability is linear_nll's own kernel (what the KL reference pass computes): at equal weights
