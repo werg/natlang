@@ -112,3 +112,25 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Checks.** held-v3 verify found 0 shared ids and 0 shared groups, also with exposure. Custody found 0 related rows.
   The closure passed.
 - **Memory.** Authoring units run at most 3 at a time beside training, through `round11/gated.py`.
+
+## 7. Round 12: `natlang-rl-task-supply-20261118c` (210 rows)
+
+- **Batches.** Haiku authors w233-w242 worked from `AUTHOR_BRIEF_ROUND12.md` (round-11 lessons). The round-11 leftovers
+  w223 and w225 were finished and admitted alongside them; their authors had gone idle after qualify, so the supervisor
+  ran their novelty gates.
+- **Admitted:** 312 tasks in 12 families. The Sonnet blind solve held back 7 tasks: w237 triage a-c were wrong as
+  written (a "case-sensitive" cue rule against capitalised notes), and 4 were ambiguous because a cue word sat inside
+  a phrase meaning the opposite (w237 team-cover-b, w240 queue-b and walk-b). w242's first blind solve ran on a stale
+  packet (tasks regenerated after the packet was built) and was redone; `round11/ready.sh` now skips a batch whose
+  tasks.jsonl is newer than its passing qualify report.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r12`.
+- **Source rows.** Train rows of w223, w225 and w233-w242, minus 5 rows custody ties to held sibling worlds (w239 x2,
+  w242 bAbI x3) and the 10 rows round 11 already left out. **Result: 210 rows in 12 families.**
+- **Constructs:** folder reducers 83%, decide 62%, call depth >= 3 61%, iterateOn 50%, typed Neuralese results 59%;
+  205 of 210 rows carry two or more held constructs.
+- **Repetition** (against all five earlier POOLS, 35,212 rows): 91 distinct programs (84.9 effective), 35 structures
+  (25.1 effective), top structure 9%, top-10 instructions 17%; 0 program texts and 0 functional programs shared with
+  the pool.
+- **Checks.** held-v3 verify 0 shared ids and 0 shared groups, also with exposure; custody 0 related; closure passed.
+- **Next.** w224 (round-11 leftover, requalified) and round 13 (w243-w250, `AUTHOR_BRIEF_ROUND13.md` with the
+  round-12 cue-word lessons) go into the next source.

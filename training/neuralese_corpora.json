@@ -734441,6 +734441,26 @@
       "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source."
     },
     {
+      "id": "natlang-rl-authored-dev-20261118r12",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261118r12",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 33 verified cases in 33 worlds (split dev), registered 20261118r12. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261118r12",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261118r12",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 43 verified cases in 43 worlds (split confirmation), registered 20261118r12. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
       "id": "natlang-rl-authored-dev-20261118r11",
       "owner": "dgx",
       "path": "runs/natlang-rl-authored-dev-20261118r11",
@@ -734575,6 +734595,23 @@
       "source_class": "immutable-RL-task-source",
       "split": "Train-only 205-row RL task source for grpo.py POOLS: authored round-11 rows (11 new families, w219-w232) and the round-10 w210 rows admitted after the 20261118 build; folder reducers 70%, decide 59%, call depth >= 3 63%, iterateOn 48%, typed Neuralese results 52%.",
       "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 6. Qualified on the grpo-v4 pin runtime 21dbc20c5, novelty-gated, Sonnet blind-solved (flagged tasks held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r10b and -20261118r11. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (10 rows bound to held sibling worlds left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 210 --max-worker 232 --drop-related. CLUTRR rows seeded from the train split only. Data on /mnt/external (runs/ entry is a symlink)."
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118c",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-task-supply-20261118c",
+      "include": [
+        "cases.jsonl",
+        "selection.json",
+        "repetition.json",
+        "constructs.json",
+        "custody.json",
+        "protection-union.json",
+        "held-verify/*.json"
+      ],
+      "source_class": "immutable-RL-task-source",
+      "split": "Train-only 210-row RL task source for grpo.py POOLS: authored round-12 rows (w233-w242, 10 new families incl. bAbI train-split world-state tracking) and the round-11 leftovers w223 and w225; folder reducers 83%, decide 62%, call depth >= 3 61%, iterateOn 50%, typed Neuralese results 59%.",
+      "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 7. Qualified on the grpo-v4 pin runtime 21dbc20c5, novelty-gated, Sonnet blind-solved (flagged and author-wrong tasks held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r12. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (5 rows bound to held sibling worlds and the 10 round-11 custody rows left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 223 --max-worker 242 --drop-related round12/custody-drop.json. bAbI rows seeded from the train split only. Data on /mnt/external (runs/ entry is a symlink)."
     },
     {
       "id": "natlang-rl-authored-dev-20261104r7",

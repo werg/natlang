@@ -3445,3 +3445,15 @@ Steps 2-3 (06:36-08:25, 48 groups, 109 min) from `train.jsonl`, `actor.log` per-
   step), so every layer recomputes; ACT 12 measured -5.8% policy pass on 11-17 for +7.5 GB. Holding in-flight
   episodes' calls during the learner phase would return the drain's GPU share (est. 4-5% of a step) but needs the
   episode wall clock and client timeouts paused with it.
+
+## 2026-11-18: task supply round 12, `natlang-rl-task-supply-20261118c` (210 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 210 train rows in 12 new families (round 12, w233-w242, including bAbI train-split world-state
+  tracking, and the round-11 leftovers w223 and w225).
+- **Constructs:** folder reducers 83%, decide 62%, depth 3 61%, iterateOn 50%, typed Neuralese 59%.
+- **Repetition:** 0 program texts or functional programs shared with the 35,212-row pool; top structure 9%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 15 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r12`.
+- **Audit:** the Sonnet blind solve held back 7 tasks (3 wrong as written, 4 ambiguous cue readings); the cue-word
+  lessons are in `AUTHOR_BRIEF_ROUND13.md`.
+- **When it enters:** grpo-v4-run1 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
