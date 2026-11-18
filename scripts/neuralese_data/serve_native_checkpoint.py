@@ -14,8 +14,8 @@ from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.serve import load_native_engine
 from natlang_neuralese.serve.http import serve
 
-# n-gram speculative chain length (--sglang-spec-draft; the fork's NATLANG_FORK.md, sglang_bench speculative).
-SPEC_DRAFT = 4
+# n-gram speculative chain length (--sglang-spec-draft; 0 = off). Off: on Pop at 16 running, D=8 accepted 1.87 tokens a step and gained ~4% (noise), DECISIONS 2026-11-18.
+SPEC_DRAFT = 0
 
 
 def bound_host_heap(arenas=2, trim_seconds=60.0):

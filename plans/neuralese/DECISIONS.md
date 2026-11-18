@@ -3340,3 +3340,17 @@ delta -1.6 pts, CI [-6.5, +2.9], permutation p 0.51; McNemar p 0.54 (69 base-onl
 up 47, down 57. Ran-out rate 6.3% vs 16.6% (p < 0.001), but the runtimes differ (hermetic episodes and other ts-host
 changes since 7e929f2ea), so part of that may be the runtime rather than the weights. No pass-rate gain, so voltron is
 not taken as the base, and a task-arithmetic merge is not indicated. Result: ops/grpo-v4/held-voltron-pop/compare-vs-base.json.
+
+## 2026-11-18 03:40, speculative decoding: SGLang actor off (no gain), branch kept unmerged
+
+N-gram speculative decoding with an exact law (standard speculative sampling, natlang records from the verify logits,
+LFM3 conv/producer-span rollback tapes) is built on SGLang fork branch `natlang-spec` (3edeccd6b, dac0448f8; not merged
+into `natlang`, pin unchanged), the Python native engine (cea57bbab) and local llama.cpp/wllama branches (RL slots
+speculate; drafts never feed role markers). Bench on Pop (RTX 4060, 16 running, real grpo-v3 calls of ~5.1k prompt
+tokens, T=1 top-p 0.95, FP8 KV): plain 415 and 399 tok/s, D=8 432 tok/s with 1.87 accepted tokens per step (D=4: 1.67).
+A verify step costs about two decode steps at this batch, so the gain (~4%) is noise; the DGX's larger batches make
+verify relatively dearer. `serve_native_checkpoint.SPEC_DRAFT` is 0 (`--sglang-spec-draft N` opts in on a fork with
+NATLANG_SPECULATIVE_NGRAM). Not checked on SGLang: the law (chi-square) and capture-equality test
+(`scripts/neuralese_data/check_speculative_law.py`, `--arm`/`--report` for one-server GPUs). The llama-server
+capture check passed (CPU, Q8: |dlogp| mean 0.015, p99 0.12 vs the plain floor 0.020/0.13). Single-stream engines are
+decided by their own benches below.

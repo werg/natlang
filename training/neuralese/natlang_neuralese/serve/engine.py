@@ -1541,14 +1541,14 @@ class Engine:
                 index[tuple(history[-3:])] = len(history)
 
     def _native_drafts(self, seq, token):
-        """Up to NATLANG_NATIVE_SPEC_DRAFT (default 4; 0 opts out) tokens that followed the latest earlier occurrence of
+        """Up to NATLANG_NATIVE_SPEC_DRAFT (default 0 = off; N opts in) tokens that followed the latest earlier occurrence of
         the last three tokens in the prompt or reply (prompt lookup), when the next forward may verify a chain: an
         ordinary sampled reply token, no guidance, forced text, open produce span or role marker, inference only, and a
         model whose every layer state can be cut back (truncate_step_cache)."""
         limit = getattr(self, 'native_spec_draft', None)
         if limit is None:
             import os
-            limit = self.native_spec_draft = int(os.environ.get('NATLANG_NATIVE_SPEC_DRAFT', '4'))
+            limit = self.native_spec_draft = int(os.environ.get('NATLANG_NATIVE_SPEC_DRAFT', '0'))
             self.native_spec_layers_ok = not any(
                 self.backbone.layer_types[index] == 'linear_attention' for index in range(self.backbone.num_layers))
         marker = self.role_tokens
