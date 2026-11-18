@@ -3602,6 +3602,12 @@ demonstrations in SD back on (default 0.05). 64 slots, 64 running, activation 12
 - **Live check (run2's actor, no restart):** a sampled block's fork record vs SGLang's own input logprob of the same
   tokens: mean |d| 0.013-0.021, mean d -0.002 (no truncation bias; the rollouts' learner-actor |log rho| is 0.025).
   Single-call form: 4 of 8 samples unclosed at 2,048 tokens on game-of-life (default cap 8,192), within-group reward
-  std ~0.02 nats/token, length-return correlation 0.14.
+  std ~0.02 nats/token, length-return correlation 0.14. Search form (eb91915c6 code, 2 JOLT-style segments of 3 calls
+  from TeacherDemos, while run2 collected with 64 slots): 179 s and 522 s per segment; 30 samples, 29 closed, 6 groups
+  (5 trained, 1 below the spread floor), hard steps drew 8 samples, the one step that hit the high bar stopped at 2;
+  within-group return std 0.10 nats/token; length-return correlation +0.44 (longer reasoning scored better here: watch
+  `reasoning_rl.length_return_corr` and the rollouts' `reasoning_tokens_per_call` for a drift toward length); on one
+  spider step the action was near-certain without reasoning (r0 -0.006) and every sampled block lowered it (-0.17 to
+  -0.34), so no carried SD chain there; the other segment carried one 6-row chain (8,321 tokens) into SD.
 - **Opt-out:** `--reasoning-rl-weight 0` (single decisions: `--reasoning-rl-calls 1`; no carried SD: `--sd-weight 0`
   or `--reasoning-rl-sources`). Enters grpo-v4-run2 at its next resume on a pin with this commit.
