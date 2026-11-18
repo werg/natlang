@@ -12,6 +12,7 @@ import { createNatlangRuntime } from '../runtime/node.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import type { ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { openingText, type Message } from '../runtime/conversation.js';
+import { scriptedSuccess } from '../native/decision.js';
 
 export type AuthoringSpec = {
   /** The authored module, a path in the folder (for example "app.ts"), and the export to call ("default": the module itself). */
@@ -204,7 +205,7 @@ async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, 
       const answer = matches[0];
       if (spec.argument_aliases && answer && matches.some(item => !isDeepStrictEqual(item.value, answer.value)))
         return { calls: [['return_result', { status: 'failed', reason: 'Conflicting source argument oracle answers.' }]] };
-      return answer ? { calls: [['return_result', { status: 'success', value: answer.value }]] } :
+      return answer ? scriptedSuccess(request, answer.value) :
         { calls: [['return_result', { status: 'failed', reason: 'The authoring oracle has no answer for this call.' }]] };
     }, { requiresResultContract: true });
     const runtime = createNatlangRuntime({ model: model as never, seed: { mode: 'backend' } });

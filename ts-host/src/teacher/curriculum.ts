@@ -14,6 +14,7 @@ import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
 import { trainingQualityReason, runtimeFailureReason, RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
 import { sourceConversionProblems } from './source-conversion.js';
 import { delegatedDecisionObserved } from './delegated-decision.js';
+import { scriptedSuccess } from '../native/decision.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
 export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/2';
@@ -455,8 +456,12 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       const turn = childTurns.get(opening) ?? 0;
       childTurns.set(opening, turn + 1);
       const scripted = answer?.calls?.[turn];
-      calls = [scripted ? [scripted[0], scripted[1]] :
-        answer ? (answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { status: 'success', value: answer.value }]) :
+      if (!scripted && answer && !answer.call) {
+        // A value answer: JSON text on a decision readout's tool-free request, else return_result (scriptedSuccess).
+        const reply = scriptedSuccess(request, answer.value);
+        if ('text' in reply) return reply;
+        calls = reply.calls;
+      } else calls = [scripted ? [scripted[0], scripted[1]] : answer?.call ? [answer.call[0], answer.call[1]] :
         ['return_result', { status: 'failed', reason: `The reference has no answer for the child call ${name}.` }]];
     }
     return { calls, reasoning: reasoningFor?.(context, calls) ?? actionNote(calls) };

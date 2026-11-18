@@ -1,0 +1,183 @@
+{
+ "version": "natlang.program/2",
+ "id": "auth:mini-decide-test:mini-decide-0001:0e2ebc43",
+ "kind": "lambda_source",
+ "family": "auth_mini_decide_test",
+ "source": "authored-rl:test",
+ "split": "train",
+ "source_ids": [
+  "authored:mini-decide-0001"
+ ],
+ "source_groups": [
+  "authored:mini-1"
+ ],
+ "source_revisions": [
+  "natlang.rl-authored-tasks/1"
+ ],
+ "license": "authored",
+ "gold_sources": [
+  "authored-exact-oracle"
+ ],
+ "generation": {
+  "generator": "natlang.rl-authored-tasks/1",
+  "teacher_generation": true,
+  "author": {
+   "model": "test",
+   "worker": "t"
+  },
+  "method": "program, inputs, exact expected result and controls authored by a model worker; qualified by reference, negative and alias replay; no sampled trajectory"
+ },
+ "curriculum": {
+  "version": "natlang.inline_curriculum/1",
+  "family": "auth_mini_decide_test",
+  "family_version": 1,
+  "shape": "folder-decide",
+  "variant": "base",
+  "pair_group": null,
+  "split_group": "authored:mini-1",
+  "slice": "nested_scoped",
+  "domain": "other",
+  "mode": "single_call",
+  "inline": "optional",
+  "evidence": {
+   "world": [],
+   "retrieved": [],
+   "background": []
+  },
+  "assumptions": [],
+  "decisive": [],
+  "plausible_actions": [],
+  "minimum_sequence": [],
+  "reference": {
+   "root": [
+    [
+     "eval",
+     {
+      "code": "const counts = { keep: 0, toss: 0 };\nfor (const file of await folder.files(\"in/*.md\")) {\n  const d = await decide(judge, (await file.readText()).trim());\n  await file.moveTo(d.value + \"/\");\n  counts[d.value] += 1;\n}\nreturn counts;",
+      "finish": true
+     }
+    ]
+   ],
+   "children": [
+    {
+     "match": [
+      "Cup, intact."
+     ],
+     "value": "keep"
+    },
+    {
+     "match": [
+      "Plate, broken."
+     ],
+     "value": "toss"
+    }
+   ]
+  },
+  "rl": {
+   "level": 0,
+   "family": "auth_mini_decide_test",
+   "basis": "authored-exact-oracle-reference-verified"
+  },
+  "named": "required",
+  "external": {
+   "source": "authored",
+   "upstream": "authored:test",
+   "upstream_id": "mini-decide-0001",
+   "upstream_split": "train-carve",
+   "unit": "authored:mini-1",
+   "shape": "folder-decide",
+   "instruction_sha256": "b148d4d045ae4c49",
+   "instruction_id": "b148d4d045ae",
+   "neuralese_room": "",
+   "framing": "authored",
+   "constructs": [
+    "decision_readout",
+    "effect_state",
+    "folder_reducer"
+   ],
+   "subject_domain": "test",
+   "oracle_depth": "effect-state",
+   "checks": {
+    "wrong_answers": [
+     {
+      "keep": 2,
+      "toss": 0
+     },
+     {
+      "keep": 0,
+      "toss": 2
+     }
+    ],
+    "alias_answers": []
+   },
+   "structure": {
+    "name": "auth_mini_decide_test",
+    "constructs": [
+     "decision_readout",
+     "effect_state",
+     "folder_reducer"
+    ],
+    "smoke": {
+     "root": [
+      [
+       "eval",
+       {
+        "code": "const counts = { keep: 0, toss: 0 };\nfor (const file of await folder.files(\"in/*.md\")) {\n  const d = await decide(judge, (await file.readText()).trim());\n  await file.moveTo(d.value + \"/\");\n  counts[d.value] += 1;\n}\nreturn counts;"
+       }
+      ],
+      [
+       "return_result",
+       {
+        "status": "success",
+        "value": {
+         "keep": 1,
+         "toss": 1
+        }
+       }
+      ]
+     ],
+     "replay": false,
+     "children": {
+      "judge": {
+       "$match": [
+        {
+         "match": "Cup",
+         "value": "keep"
+        },
+        {
+         "match": "Plate",
+         "value": "toss"
+        }
+       ]
+      }
+     }
+    }
+   }
+  }
+ },
+ "semantics": {
+  "root": "sort.nl",
+  "files": {
+   "sort.nl": "---\nkind: directory-reducer\nargs: {}\nreturns: \"{ keep: number; toss: number }\"\n---\nFor each file in in/, let judge decide keep or toss and move the file to <decision>/. Return the counts.\n",
+   "sort/judge.nl": "---\nreadout: decision\nargs:\n  note: \"string\"\nreturns: \"\\\"keep\\\" | \\\"toss\\\"\"\n---\nKeep an item whose note says intact; toss one whose note says broken.\n"
+  },
+  "inputs": {},
+  "expected": {
+   "keep": 1,
+   "toss": 1
+  },
+  "oracle": "exact",
+  "folder_files": {
+   "in/a.md": "Cup, intact.\n",
+   "in/b.md": "Plate, broken.\n"
+  },
+  "expected_files": {
+   "keep/a.md": "Cup, intact.\n",
+   "toss/b.md": "Plate, broken.\n"
+  },
+  "files_oracle": {
+   "compare": "content",
+   "threshold": 1
+  }
+ }
+}

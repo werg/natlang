@@ -75,6 +75,9 @@ for (const [key, list] of chosen) for (const row of list) {
       return { calls: [value.$turns[turn] ?? ['return_result', { status: 'failed', reason: 'smoke turns ended' }]] };
     }
     childCalls[name] = (childCalls[name] ?? 0) + 1;
+    // A decision readout without a scoring driver generates its choice as JSON text on a tool-free request
+    // (native/agent.ts generatedDecision, since 61c6c3614); a return_result call there is rejected as invalid.
+    if (Array.isArray(request.tools) && request.tools.length === 0) return { text: JSON.stringify(value), calls: [] };
     return { calls: [['return_result', { status: 'success', value }]] };
   };
   const arity_errors = scriptArityProblems(row, smoke);
