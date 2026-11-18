@@ -3308,3 +3308,13 @@ or launcher referenced them): grpo-v2 run1/run2 checkpoints, the grpo-v2 hunt's 
 replay-controls/keep (the LR hunt is closed), and grpo-v3 run1 checkpoints (its verdict is recorded and its steps were
 affected by the WeightSync bug). Rollouts are kept. /mnt/external is at 269 GB free. Unused pins 2734e2c4, 383bd4ed and
 c57e7be2 were removed on the DGX root.
+
+## 2026-11-18 02:20, grpo-v4-run1 relaunched smaller after the ledger guard stopped it in step 1
+
+At 02:06 the ledger guard stopped grpo-v4-run1 ("free memory below floor"): during step 1's policy pass its cgroup used
+110.8 GB against a 97 GB budget (64 slots, teacher/hindsight and memetic episodes still running through the learner
+phase, plus the learner peak). The guard also stopped voltron's DGX-side held measure and tgen-rich-1. No step had
+finished. Relaunched as a resume (the scored groups are offered again) on pin 551e5e8ba with SLOTS=32 RUNNING=32
+BUDGET=106 (only ~25 of 64 slots were generating anyway), and with the operator and Neuralese-graph replay corpora
+(48f516398) at half size (units 4 and 1) until the step peak is known. voltron's measure resumed with a 4 GB claim (it
+uses ~2.3 GB; `MEASURE_GB` in pop-held.sh).

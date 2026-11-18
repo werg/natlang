@@ -158,6 +158,11 @@ class Sequence:
     # The policy the trainer loaded into that sampler in place (sglang_actor.rebind_in_place: policy id, version, weights);
     # ``policy`` keeps naming the native engine's start checkpoint, which in-place updates do not change.
     native_served_policy: dict | None = None
+    # Speculative decoding (Engine._native_feed): the reply's token history and its 3-gram index for drafting from the
+    # prompt and the reply, and the verified rows of the last drafted chain (draft token, logits, cache after it).
+    native_spec_history: list[int] = field(default_factory=list)
+    native_spec_index: dict = field(default_factory=dict)
+    native_spec: list = field(default_factory=list)
     cuda_memory_start_allocated_bytes: int | None = None
     cuda_memory_measurement_scope: str | None = None
 
@@ -785,6 +790,7 @@ class Engine:
                                                  "producing": [False] * len(value),
                                                  **({'privileged': True} if privileged else {})})
                 seq.native_own_position += len(value)
+                self._native_spec_extend(seq, value)
                 if value:
                     output = self._native_prefill_forward(value, seq.cache)
                     seq.cache = output["cache"]
@@ -1366,20 +1372,27 @@ class Engine:
                 step.close()
                 self._native_protocol_fail(seq, error)
         if not pending: return
-        if len(pending) == 1:
-            _, _, (ids, cache, producing) = pending[0]
-            outputs = [self._native_forward(ids, cache, producing=producing)]
-        else:
-            ids = torch.tensor([request[0] for _, _, request in pending], dtype=torch.long,
+        # A speculative chain (several tokens of one sequence, _native_feed) runs as its own forward; the
+        # single-token steps batch.
+        chains = [entry for entry in pending if len(entry[2][0]) > 1]
+        singles = [entry for entry in pending if len(entry[2][0]) == 1]
+        outputs = {id(entry): self._native_forward(*entry[2][:2], producing=entry[2][2]) for entry in chains}
+        if len(singles) == 1:
+            _, _, (ids, cache, producing) = singles[0]
+            outputs[id(singles[0])] = self._native_forward(ids, cache, producing=producing)
+        elif singles:
+            ids = torch.tensor([request[0] for _, _, request in singles], dtype=torch.long,
                                device=self.backbone.embedding_weight.device)
-            outputs = native_step_batch(self.shared_model, ids,
-                [request[1] for _, _, request in pending],
-                producing=[request[2] for _, _, request in pending])
-            logits = self.shared_model.logits(torch.cat([out['h_final'][:, -1] for out in outputs], dim=0))
-            for index, output in enumerate(outputs): output['logits'] = logits[index:index+1]
+            batch = native_step_batch(self.shared_model, ids,
+                [request[1] for _, _, request in singles],
+                producing=[request[2] for _, _, request in singles])
+            logits = self.shared_model.logits(torch.cat([out['h_final'][:, -1] for out in batch], dim=0))
+            for index, (entry, output) in enumerate(zip(singles, batch)):
+                output['logits'] = logits[index:index+1]
+                outputs[id(entry)] = output
             self._native_batched_decode_rounds = getattr(self, '_native_batched_decode_rounds', 0) + 1
-            self._native_batched_decode_tokens = getattr(self, '_native_batched_decode_tokens', 0) + len(pending)
-        for (seq, step, _), output in zip(pending, outputs):
+            self._native_batched_decode_tokens = getattr(self, '_native_batched_decode_tokens', 0) + len(singles)
+        for (seq, step, _), output in ((entry[:3], outputs[id(entry)]) for entry in pending):
             try:
                 step.send(output)
             except StopIteration:
@@ -1445,6 +1458,7 @@ class Engine:
                 self._finish(seq, "length")
                 return
             forced=seq.native_forced_replay
+            pending, seq.native_spec = seq.native_spec, []
             seq.native_sample_top_k = None
             token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
             top_k_receipt = None
@@ -1495,7 +1509,7 @@ class Engine:
             if token == marker.produce_open:
                 seq.native_write_start_own = seq.native_own_position
                 seq.native_write_open_sample = sample_index
-            output = yield ([token], seq.cache, producing)
+            output = yield from self._native_feed(seq, token, producing, pending)
             seq.cache, seq.logits = output["cache"], self._native_step_logits(output)
             seq.generated_positions += 1
             self._native_decoded_tokens += 1
@@ -1517,6 +1531,72 @@ class Engine:
                     self._emit(seq, token=token)
         except Exception as error:  # one malformed sequence must not stop other requests
             self._native_protocol_fail(seq, error)
+
+    def _native_spec_extend(self, seq, tokens):
+        """Append fed tokens to the reply's drafting history and its 3-gram index (3-gram -> the position after it)."""
+        history, index = seq.native_spec_history, seq.native_spec_index
+        for token in tokens:
+            history.append(int(token))
+            if len(history) >= 3:
+                index[tuple(history[-3:])] = len(history)
+
+    def _native_drafts(self, seq, token):
+        """Up to NATLANG_NATIVE_SPEC_DRAFT (default 4; 0 opts out) tokens that followed the latest earlier occurrence of
+        the last three tokens in the prompt or reply (prompt lookup), when the next forward may verify a chain: an
+        ordinary sampled reply token, no guidance, forced text, open produce span or role marker, inference only, and a
+        model whose every layer state can be cut back (truncate_step_cache)."""
+        limit = getattr(self, 'native_spec_draft', None)
+        if limit is None:
+            import os
+            limit = self.native_spec_draft = int(os.environ.get('NATLANG_NATIVE_SPEC_DRAFT', '4'))
+            self.native_spec_layers_ok = not any(
+                self.backbone.layer_types[index] == 'linear_attention' for index in range(self.backbone.num_layers))
+        marker = self.role_tokens
+        markers = {marker.produce_open, marker.produce_close, marker.consume_open, marker.consume_close}
+        room = min(seq.request.max_tokens - seq.generated_positions - 1,
+                   self.context - seq.cache.lengths[0] - 2) if seq.cache is not None else 0
+        if (limit <= 0 or room <= 0 or not self.native_spec_layers_ok or torch.is_grad_enabled()
+                or seq.guide is not None or seq.native_forced_replay or seq.native_forced_tokens
+                or seq.native_capture_open or token in markers or token in self.stop_ids):
+            return []
+        history = seq.native_spec_history
+        key = tuple(history[-2:] + [token]) if len(history) >= 2 else None
+        start = seq.native_spec_index.get(key) if key is not None else None
+        if start is None:
+            return []
+        drafts = []
+        for draft in history[start:start + min(limit, room)]:
+            if draft in markers:
+                break
+            drafts.append(draft)
+        return drafts
+
+    def _native_feed(self, seq, token, producing, pending):
+        """Feed one drawn token (a generator step: it yields at most one model forward). A token that matches the next
+        draft of a verified chain takes that chain's row (logits and cache after it) without a forward; otherwise the
+        token goes forward with the drafts that follow it (_native_drafts), and the rows of the drafts wait for the
+        next draws. The draws themselves stay one per token from seq.rng under the same law, so the reply's tokens and
+        capture are the plain decode's (the rows differ from single-token forwards at the floating-point floor)."""
+        from ..model.shared_state import adopt_step_cache, truncate_step_cache
+        if pending and not producing and pending[0][0] == token:
+            _, logits, cache = pending[0]
+            seq.native_spec = pending[1:]
+            self._native_spec_extend(seq, [token])
+            return {'cache': adopt_step_cache(cache), 'logits': logits}
+        drafts = [] if producing else self._native_drafts(seq, token)
+        if not producing:
+            self._native_spec_extend(seq, [token])
+        if not drafts:
+            return (yield ([token], seq.cache, producing))
+        base = seq.cache
+        output = yield ([token, *drafts], base, False)
+        rows = self._native_run(lambda: self.shared_model.logits(output['h_final'][0]))
+        caches = [truncate_step_cache(base, output, keep) for keep in range(1, len(drafts) + 2)]
+        if any(cache is None for cache in caches):
+            raise RuntimeError('speculative native decode needs layer states that can be cut back')
+        seq.native_spec = [(draft, rows[i + 1:i + 2], caches[i + 1]) for i, draft in enumerate(drafts)]
+        self._native_spec_drafted = getattr(self, '_native_spec_drafted', 0) + len(drafts)
+        return {'cache': adopt_step_cache(caches[0]), 'logits': rows[0:1]}
 
     def _round(self, sequences):
         self._native_round(sequences)

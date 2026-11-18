@@ -155,6 +155,7 @@ def main(argv=None):
     p.add_argument('--law-samples', type=int, default=300)
     p.add_argument('--law-tokens', type=int, default=8)
     p.add_argument('--max-prompt', type=int, default=16000)
+    p.add_argument('--parts', nargs='*', default=['capture', 'law'], choices=('capture', 'law'))
     p.add_argument('--prompt-tail', type=int, help='use only the last N tokens of each prompt (a CPU engine)')
     args = p.parse_args(argv)
     engine = Sglang() if args.engine == 'sglang' else Llama()
@@ -163,13 +164,15 @@ def main(argv=None):
     if args.prompt_tail:
         rows = [{**r, 'prompt': r['prompt'][-args.prompt_tail:]} for r in rows]
     random.Random(1).shuffle(rows)
-    report = {'engine': args.engine, 'law': LAW,
-              'capture_spec': capture(engine, args.spec, rows[:args.capture_replies], args),
-              'capture_plain_floor': capture(engine, args.plain, rows[:args.capture_replies], args)}
-    print(json.dumps(report), flush=True)
-    report['law_test'] = law(engine, args.plain, args.spec, rows[args.capture_replies:][:args.law_prompts], args)
+    report = {'engine': args.engine, 'law': LAW}
+    if 'capture' in args.parts:
+        report['capture_spec'] = capture(engine, args.spec, rows[:args.capture_replies], args)
+        report['capture_plain_floor'] = capture(engine, args.plain, rows[:args.capture_replies], args)
+        print(json.dumps(report), flush=True)
+    if 'law' in args.parts:
+        report['law_test'] = law(engine, args.plain, args.spec, rows[args.capture_replies:][:args.law_prompts], args)
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / f'speculative-law-{args.engine}.json').write_text(json.dumps(report, indent=1) + '\n')
+    (args.out / f'speculative-law-{args.engine}-{"-".join(args.parts)}.json').write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps({k: (v if k != 'law_test' else {kk: vv for kk, vv in v.items() if kk != 'per_test'})
                       for k, v in report.items()}), flush=True)
 
