@@ -118,19 +118,24 @@ def capture(engine, url, rows, args):
             'abs_delta_max': deltas[-1] if deltas else None}
 
 
-def law(engine, plain, spec, rows, args):
-    report = []
+def law_replies(engine, url, rows, args):
+    """Per prompt, ``--law-samples`` short replies (token lists) from one server."""
+    out = []
     for row in rows:
-        counts = {}
-        for name, url in (('plain', plain), ('spec', spec)):
-            with ThreadPoolExecutor(args.concurrency) as pool:
-                replies = list(pool.map(lambda _: engine.generate(url, row['prompt'], args.law_tokens, args.stop_ids)[0],
-                                        range(args.law_samples)))
-            counts[name] = [Counter(r[t] for r in replies if len(r) > t) for t in range(args.law_tokens)]
-        for t in range(args.law_tokens):
-            statistic, dof, p = two_sample_chi2(counts['plain'][t], counts['spec'][t])
+        with ThreadPoolExecutor(args.concurrency) as pool:
+            out.append(list(pool.map(lambda _: engine.generate(url, row['prompt'], args.law_tokens, args.stop_ids)[0],
+                                     range(args.law_samples))))
+    return out
+
+
+def law_compare(rows, plain, spec, positions):
+    report = []
+    for row, a, b in zip(rows, plain, spec):
+        for t in range(positions):
+            ca, cb = Counter(r[t] for r in a if len(r) > t), Counter(r[t] for r in b if len(r) > t)
+            statistic, dof, p = two_sample_chi2(ca, cb)
             report.append({'prompt_tokens': len(row['prompt']), 'position': t, 'chi2': statistic, 'dof': dof, 'p': p,
-                           'top_plain': counts['plain'][t].most_common(3), 'top_spec': counts['spec'][t].most_common(3)})
+                           'top_plain': ca.most_common(3), 'top_spec': cb.most_common(3)})
     tests = [r for r in report if r['dof'] > 0]
     ps = sorted(r['p'] for r in tests)
     import math
@@ -143,8 +148,10 @@ def law(engine, plain, spec, rows, args):
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--engine', choices=('sglang', 'llama'), required=True)
-    p.add_argument('--plain', required=True)
-    p.add_argument('--spec', required=True)
+    p.add_argument('--plain', help='the plain server (or the one server of --arm)')
+    p.add_argument('--spec')
+    p.add_argument('--arm', choices=('plain', 'spec'), help='collect one arm from one server into OUT/arm-ARM.json')
+    p.add_argument('--report', action='store_true', help='combine OUT/arm-plain.json and OUT/arm-spec.json')
     p.add_argument('--workload', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--stop-ids', type=int, nargs='*', default=[124900])
@@ -165,12 +172,32 @@ def main(argv=None):
         rows = [{**r, 'prompt': r['prompt'][-args.prompt_tail:]} for r in rows]
     random.Random(1).shuffle(rows)
     report = {'engine': args.engine, 'law': LAW}
+    law_rows = rows[args.capture_replies:][:args.law_prompts]
+    if args.arm:
+        # One server at a time (a GPU that holds one): collect this arm; --report combines the two arms' files.
+        url = args.plain or args.spec
+        arm = {'capture': capture(engine, url, rows[:args.capture_replies], args) if 'capture' in args.parts else None,
+               'law_replies': law_replies(engine, url, law_rows, args) if 'law' in args.parts else None}
+        args.out.mkdir(parents=True, exist_ok=True)
+        (args.out / f'arm-{args.arm}.json').write_text(json.dumps(arm) + '\n')
+        print(json.dumps({'arm': args.arm, 'capture': arm['capture']}), flush=True)
+        return
+    if args.report:
+        plain, spec = (json.loads((args.out / f'arm-{name}.json').read_text()) for name in ('plain', 'spec'))
+        report.update({'capture_spec': spec['capture'], 'capture_plain_floor': plain['capture']})
+        if plain['law_replies'] and spec['law_replies']:
+            report['law_test'] = law_compare(law_rows, plain['law_replies'], spec['law_replies'], args.law_tokens)
+        (args.out / f'speculative-law-{args.engine}.json').write_text(json.dumps(report, indent=1) + '\n')
+        print(json.dumps({k: (v if k != 'law_test' else {kk: vv for kk, vv in v.items() if kk != 'per_test'})
+                          for k, v in report.items()}), flush=True)
+        return
     if 'capture' in args.parts:
         report['capture_spec'] = capture(engine, args.spec, rows[:args.capture_replies], args)
         report['capture_plain_floor'] = capture(engine, args.plain, rows[:args.capture_replies], args)
         print(json.dumps(report), flush=True)
     if 'law' in args.parts:
-        report['law_test'] = law(engine, args.plain, args.spec, rows[args.capture_replies:][:args.law_prompts], args)
+        report['law_test'] = law_compare(law_rows, law_replies(engine, args.plain, law_rows, args),
+                                         law_replies(engine, args.spec, law_rows, args), args.law_tokens)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / f'speculative-law-{args.engine}-{"-".join(args.parts)}.json').write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps({k: (v if k != 'law_test' else {kk: vv for kk, vv in v.items() if kk != 'per_test'})
