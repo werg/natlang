@@ -123,6 +123,11 @@ def main() -> None:
     parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='vendor',
                         help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
                              'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
+    parser.add_argument('--sglang-memory-saver', action='store_true',
+                        help="SGLang --enable-memory-saver (torch_memory_saver): the engine's KV cache, weights and "
+                             'CUDA graphs can be released and resumed (/release_memory_occupation, '
+                             '/resume_memory_occupation). The colocated GRPO actor uses it to give the GB10 its memory '
+                             'for each learner phase (grpo.py --actor-release); allocation only, no numerics change')
     parser.add_argument('--sglang-overlap-schedule', action='store_true',
                         help="SGLang's overlapped scheduler. Off by default: on DGX GB10 with CUDA graphs it put "
                              'tokens of a wrong distribution into 2-6%% of real RL turns (up to 24 nats from the '
@@ -502,6 +507,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *swa,
                *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']),
+               *(['--enable-memory-saver'] if args.sglang_memory_saver else []),
                *(['--speculative-algorithm', 'NGRAM', '--speculative-num-draft-tokens', str(speculative['draft_tokens']),
                   '--speculative-ngram-max-bfs-breadth', '1', '--speculative-ngram-min-bfs-breadth', '1']
                  if speculative else []), *args.sglang_arg]

@@ -37,7 +37,12 @@ One process runs the whole loop; nothing else (no controller, custody or transit
 * memory (the unit's budget covers GPU and host alike on the GB10): the KL reference is a file loaded into the policy's
   own parameters for the reference pass (``ReferenceWeights``), the FP32 gradients exist only from the policy pass to the
   optimizer step, imported states are read per sequence, and ``train.jsonl`` logs each learner phase's CUDA peak and
-  this process's host memory (``cuda_peak_by_phase_gb``).
+  this process's host memory (``cuda_peak_by_phase_gb``). The two phases trade the GB10's unified memory
+  (``--actor-release``, default on): at the start of each learner phase the actor is paused (retract) and SGLang
+  releases its KV cache, weights and CUDA graphs (``WeightSync.release``, the actor runs with ``--sglang-memory-saver``);
+  the step's publish resumes them and reloads the weights before generation continues. The learner empties PyTorch's
+  cache after the reference pass, before the AdamW moments are read back and after the optimizer step, and its moments
+  live on disk between steps (``MomentOffload``), so the collect phase holds only its weights and masters.
 * held evaluation: the start policy first, then every ``--held-every-hours`` the newest native checkpoint is measured on
   the held set (``python -m natlang_neuralese.rl.held_eval measure`` on the training actor, collection paused) and
   compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``). With ``--held-remote pop``
@@ -1012,6 +1017,7 @@ class WeightSync:
         self.params = params
         self.thread = None
         self.last = {}
+        self.released = None    # the tags of a ``release`` not yet undone by ``publish``/``restore``
 
     def snapshot(self):
         import torch
@@ -1065,6 +1071,45 @@ class WeightSync:
         cloning them put another 4 GB on the unit during every checkpoint write."""
         return {name: view for name, view in self.views.items() if self.sources[name] == name}
 
+    def release(self, tags):
+        """Hand the actor's GPU memory back for the learner phase (the colocated pattern of verl/slime): retract what it is
+        running (the paused engine holds those requests and any new ones in its queues), then SGLang
+        ``release_memory_occupation`` of ``tags`` (``kv_cache``, ``weights``, ``cuda_graph``; the actor must run with
+        ``--sglang-memory-saver``). The next ``publish`` (or ``restore``) resumes the memory, reloads the weights from the
+        mapped file (released weights come back with undefined contents; the module buffers SGLang restores itself) and
+        continues generation. Returns the seconds it took."""
+        started = time.time()
+        self.wait()                       # the previous publish (its continue_generation) must not land after this
+        if self.sglang_url is None or not tags:
+            return 0.
+        post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
+        try:
+            post(self.sglang_url + '/release_memory_occupation', {'tags': list(tags)})
+        except Exception:
+            post(self.sglang_url + '/continue_generation', {})
+            raise
+        self.released = list(tags)
+        return time.time() - started
+
+    def _resume(self):
+        """Undo ``release``: the memory back (the engine stays paused until the caller's continue_generation)."""
+        if self.released:
+            post(self.sglang_url + '/resume_memory_occupation', {'tags': self.released})
+            self.released = None
+
+    def restore(self, version):
+        """Undo ``release`` without new weights (a skipped update): resume, reload the served weights from the unchanged
+        mapped file, continue. Synchronous."""
+        self.wait()
+        if self.sglang_url is None or not self.released:
+            return
+        self._resume()
+        answer = post(self.sglang_url + '/update_weights_from_disk',
+                      {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
+        post(self.sglang_url + '/continue_generation', {})
+        if not json.loads(answer).get('success', False):
+            raise RuntimeError(f'actor weight reload after release failed: {answer[:400]}')
+
     def publish(self, version, on_done, also=None, policy=None):
         def run():
             # An exception here used to end the thread silently: ``last`` kept the previous step's ok, so the loop went
@@ -1082,6 +1127,10 @@ class WeightSync:
                 answer, ok = 'no actor sync', True
             else:
               try:
+                resumed = self.released is not None
+                self._resume()                # a released actor gets its memory back first (weights reloaded below)
+                if resumed:
+                    timing['actor_resume_s'] = round(time.time() - t, 2)
                 post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
                 answer = post(self.sglang_url + '/update_weights_from_disk',
                               {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
@@ -2259,7 +2308,8 @@ def train(args):
             command = [sys.executable, str(HERE / 'serve_native_checkpoint.py'), '--store-dir', str(store),
                        '--checkpoint', args.checkpoint, '--checkpoint-sha256', source_sha, '--base', args.base,
                        '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
-                       '--hf-export-dir', str(store / 'sglang-hf'), *args.actor_arg]
+                       '--hf-export-dir', str(store / 'sglang-hf'),
+                       *(['--sglang-memory-saver'] if args.actor_release else []), *args.actor_arg]
             with (work / 'actor.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
@@ -2419,6 +2469,10 @@ def train(args):
     if not args.frozen_producer_table and producer_adapter_keys(state['interface_state']):
         raise SystemExit(f'the checkpoint has a producer adapter {producer_adapter_keys(state["interface_state"])}: '
                          'the producer table is not the embedding (use --frozen-producer-table)')
+    # The actor's memory is released during each learner phase only when this run launched it (with the memory saver);
+    # a shared actor (--actor) or a replay keeps its memory.
+    release_tags = [t for t in args.actor_release_tags.split(',') if t] if (
+        args.actor_release and actor_thread is not None and not args.no_actor_sync) else []
     sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
                       front_url=None if args.no_actor_sync else args.actor,
                       producer_from_embedding=not args.frozen_producer_table)
@@ -2956,6 +3010,12 @@ def train(args):
         # memory the learner phase shares with them)
         record['episodes_in_flight'] = {'learner_start': collector.running}
         learn_started, learn_tokens0 = time.time(), actor_generated(args.actor)
+        if release_tags:
+            # the actor's KV, weights and CUDA graphs go back to the system for this phase; episodes in flight wait in its
+            # queues (case_seconds counts the wait) and continue after the step's weight update (WeightSync.publish)
+            free0 = torch.cuda.mem_get_info()[0]
+            phase['actor_release'] = sync.release(release_tags)
+            record['actor_release_freed_gb'] = round((torch.cuda.mem_get_info()[0] - free0) / 2**30, 1)
         swap0, mem0 = vmstat(), meminfo()
         progress_mark = time.time()
         if phase_mark['tokens'] is not None and learn_tokens0 is not None:
@@ -3058,6 +3118,8 @@ def train(args):
             torch.cuda.synchronize()
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
             phase_peak('reference')
+            if not args.keep_learner_cache:
+                torch.cuda.empty_cache()  # the reference pass's cached blocks: the FP32 gradients would stack on them
         allocate_grads()
         record['episodes_in_flight']['policy_start'] = collector.running
         policy_started = time.time()
@@ -3189,6 +3251,11 @@ def train(args):
         saver.wait()                      # a state save in flight must finish before the masters change
         phase['wait_state_save'] = time.time() - t
         if offload is not None:
+            # the forward/backward's cached activation blocks go back before the moments are read in: kept, they were
+            # reused by nothing the optimizer allocates and stacked the moments on top (grpo-v4-run1 step 2: optimizer
+            # reserved 74 GB with 31.5 allocated)
+            if not args.keep_learner_cache:
+                torch.cuda.empty_cache()
             phase['moments_in'] = offload.get()   # bit-exact read back of the moments the last step wrote out
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -3197,6 +3264,8 @@ def train(args):
             # a NaN/inf gradient would make every FP32 master and AdamW moment NaN, and the next state save would
             # overwrite the only training state with it: drop this step's update, keep the weights
             release_grads()
+            torch.cuda.empty_cache()
+            sync.restore(step)            # a released actor resumes on the weights it served
             collector.active_slots = args.slots
             log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
                            'loss_sums': {k: v for k, v in sums.items() if isinstance(v, float)}})
@@ -3226,6 +3295,7 @@ def train(args):
         torch.cuda.empty_cache()
         release_host_memory()
         record['cuda_reserved_collect_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
+        torch.cuda.reset_peak_memory_stats()   # the behaviour probe's peak is its own, not the optimizer's carried reserve
         elements = sum(p.numel() for p in live.values())
         record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
                       bf16_changed_vs_start_fraction=round(changed_start / elements, 6) if reference is not None else None)
@@ -3370,6 +3440,18 @@ def main():
                    help='keep the AdamW moments in memory between steps (default: written to WORK/'
                         'adam-moments.offload, NVMe, after each step and read back bit for bit before the next optimizer step: '
                         '-13.6 GB at the learner peak; MomentOffload)')
+    t.add_argument('--actor-release', action=argparse.BooleanOptionalAction, default=True,
+                   help='release the actor\'s GPU memory (SGLang release_memory_occupation of --actor-release-tags) for '
+                        'each learner phase and resume it with the step\'s weight update: the GB10\'s unified memory goes '
+                        'to the learner while it computes, to the actor while it collects. The run\'s own actor runs '
+                        'with --sglang-memory-saver. Episodes in flight wait in the paused actor (--case-seconds counts '
+                        'the wait). --no-actor-release keeps the actor resident')
+    t.add_argument('--actor-release-tags', default='kv_cache,weights,cuda_graph',
+                   help='SGLang memory types released (the weights are reloaded from the mapped file on resume)')
+    t.add_argument('--keep-learner-cache', action='store_true',
+                   help='keep PyTorch\'s cached blocks across learner phases (default: empty the cache after the reference '
+                        'pass and before the AdamW moments are read back, so the gradients and the moments do not stack '
+                        'on the previous pass\'s reserve: grpo-v4-run1 step 2 optimizer 74 GB reserved, 31.5 allocated)')
     t.add_argument('--learner-phase-slots', type=int, default=0,
                    help='collector slots that take new episodes while the learner computes (in-flight episodes always '
                         'finish). 0: none. The GB10 time-slices the actor and the learner, and a few-sequence decode costs '
@@ -3379,7 +3461,9 @@ def main():
                    help='groups per step at most: about 27k forward tokens per episode (smoke), so 48 groups is ~60-90 min of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
-    t.add_argument('--case-seconds', type=int, default=3600, help='wall-clock safety net only (a wall stop is unscored)')
+    t.add_argument('--case-seconds', type=int, default=7200,
+                   help='wall-clock safety net only (a wall stop is unscored); it includes the time an episode waits in a '
+                        'released actor during learner phases (--actor-release: up to ~40 min per step), hence 2 h')
     t.add_argument('--max-model-requests', type=int, default=EPISODE_MODEL_CALLS,
                    help='episode budget in model calls for training and the held evals alike; a budget stop scores as a '
                         'failure (EPISODE_COST_20261112)')
