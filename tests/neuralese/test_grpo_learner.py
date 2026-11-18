@@ -346,6 +346,9 @@ def test_reasoning_style_sentinel_flags_a_halved_reasoning_length(tmp_path):
     assert style == {'reasoning_tokens_per_call': 3.0, 'reply_tokens_per_call': 1.5}
     assert grpo.style_shift(tmp_path, style) == {}                       # no first step logged yet
     (tmp_path / 'train.jsonl').write_text('{"event": "x"}\n{"step": 1, "reasoning_tokens_per_call": 6.0}\n')
+    assert grpo.style_shift(tmp_path, style) == {}                       # launch-order steps are no baseline
+    (tmp_path / 'train.jsonl').write_text('{"step": 1, "reasoning_tokens_per_call": 1.0}\n'
+                                          '{"step": 4, "reasoning_tokens_per_call": 6.0}\n')
     assert grpo.style_shift(tmp_path, style) == {'reasoning_vs_first_step': 0.5, 'reasoning_shift': True}
     assert grpo.style_shift(tmp_path, {'reasoning_tokens_per_call': 5.0})['reasoning_shift'] is False
 

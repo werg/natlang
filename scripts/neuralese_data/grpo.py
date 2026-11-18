@@ -1946,16 +1946,20 @@ def reasoning_style(chains, close_id):
             'reply_tokens_per_call': round((tokens - think) / max(1, calls), 1)}
 
 
-def style_shift(work, style, ratio=0.75):
-    """The ratio of this step's reasoning tokens per call to the run's first logged step, and whether it is outside
-    [ratio, 1/ratio]. A logged flag, never a stop."""
+def style_shift(work, style, ratio=0.75, from_step=4):
+    """The ratio of this step's reasoning tokens per call to the run's first logged step at or after `from_step`, and
+    whether it is outside [ratio, 1/ratio]. A logged flag, never a stop. The first steps train on the groups that finish
+    first after launch (short tasks, little reasoning), so they are no baseline (grpo-v4-run1 steps 2-3 flagged 1.9x
+    with the policy unchanged)."""
     first = None
     path = work / 'train.jsonl'
     if path.exists():
         for line in path.read_text().splitlines():
             if '"reasoning_tokens_per_call"' in line:
-                first = json.loads(line).get('reasoning_tokens_per_call')
-                break
+                row = json.loads(line)
+                if (row.get('step') or 0) >= from_step:
+                    first = row.get('reasoning_tokens_per_call')
+                    break
     if not first:
         return {}
     r = style['reasoning_tokens_per_call'] / first
