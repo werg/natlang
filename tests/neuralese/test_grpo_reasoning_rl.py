@@ -86,27 +86,53 @@ def test_teacher_history_keeps_the_trace_or_renders_empty_think_blocks():
     assert last['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 100, END, 42, 3]
 
 
-def test_whole_trajectories_and_segments(monkeypatch):
+def test_trajectories_from_the_first_call_and_modes():
     rrl = sampler()
     segments = rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
     assert sorted(len(seg['calls']) for seg in segments) == [1, 3]          # both invocations, whole
-    whole = max(segments, key=lambda seg: len(seg['calls']))
-    assert whole['calls'][0]['prompt'].tolist() == [1, 2, 3]                # from the first call: no teacher reasoning
     assert {seg['mode'] for seg in segments} == {'whole'}
-    rrl.args.reasoning_rl_whole_calls = 2                                   # the cap is opt-in
+    whole = max(segments, key=lambda seg: len(seg['calls']))
+    assert whole['calls'][0]['prompt'].tolist() == [1, 2, 3]                # from the first call
+    rrl.args.reasoning_rl_calls = 2                                         # the cap is opt-in
     capped = rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
     assert sorted(len(seg['calls']) for seg in capped) == [1, 2]
-    rrl.args.reasoning_rl_whole_calls = 0
-    rrl.args.reasoning_rl_whole_share, rrl.args.reasoning_rl_calls = 0.0, 2   # segments: from a random call
-    monkeypatch.setattr(rrl.rng, 'randrange', lambda n: n - 1)
-    segs = rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
-    last = max(segs, key=lambda seg: len(seg['calls'][0]['prompt']))
-    assert last['mode'] == 'segment' and len(last['calls']) == 1
-    assert last['calls'][0]['prompt'].tolist() == trajectory()[2]['prompt'].tolist()   # after the teacher's trace
-    rrl.args.reasoning_rl_whole_share = 1.0
+    rrl.args.reasoning_rl_calls, rrl.args.reasoning_rl_rewrite_share = 0, 1.0
+    assert {seg['mode'] for seg in rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'x')} \
+        == {'rewrite'}
+    rrl.args.reasoning_rl_rewrite_share = 0.0
     rrl.args.max_sequence_tokens = 6 + grpo.MIN_REASONING_ROOM              # a first call with no room to reason
     assert [len(seg['calls']) for seg in rrl.segments({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'x')] \
         == [1]
+
+
+def test_rewrite_keeps_teacher_tokens_out_of_the_target(monkeypatch):
+    """Every position's teacher think block is rewritten from a random cut; an improved block trains only the
+    student's tokens (the surviving teacher prefix is prompt), with the log-probabilities they were drawn with."""
+    rrl = sampler()
+    calls = sorted(grpo.teacher_segments(trajectory(), CLOSE, set()), key=len)[1]
+    assert [c['think'].tolist() for c in calls] == [[20, CLOSE], [21, 21, CLOSE], [CLOSE]]
+    monkeypatch.setattr(rrl, '_post', FakeSGLang([[50, CLOSE], [50, CLOSE], [50, CLOSE]]))
+    episode = rrl.rewrite({'calls': calls, 'source': 'demos', 'task_id': 't', 'key': 'k', 'mode': 'rewrite'})
+    assert episode['sd_source'] == 'rewrite' and len(episode['rows']) == 3
+    for call, row in zip(calls, episode['rows']):
+        assert row['sample'].tolist() == [50, CLOSE] and np.allclose(row['logp'], -0.25)
+        prompt = row['prompt'].tolist()
+        assert prompt[:len(call['prompt'])] == call['prompt'].tolist()
+        teacher = prompt[len(call['prompt']):]                         # the surviving teacher prefix, as context
+        assert teacher == call['think'].tolist()[:len(teacher)] and CLOSE not in teacher
+    assert rrl.counts['rewrite_improved'] == 3 and rrl.counts['generated_tokens_rewrite'] == 6
+    import exp0_sft
+    assert len(exp0_sft.chains_of([episode])) == 3                       # positions are independent sequences
+
+
+def test_rewrite_rejects_worse_and_unclosed_candidates(monkeypatch):
+    rrl = sampler()
+    calls = sorted(grpo.teacher_segments(trajectory(), CLOSE, set()), key=len)[1]
+    monkeypatch.setattr(rrl, '_post', FakeSGLang([[60, END], [60, END], [60, END]]))
+    assert rrl.rewrite({'calls': calls, 'source': 'demos', 'task_id': 't', 'key': 'k'}) is None
+    assert rrl.counts['rewrite_unclosed'] == 3
+    monkeypatch.setattr(rrl, '_post', FakeSGLang([[60, CLOSE]] * 3))     # closed but no better than the teacher's
+    assert rrl.rewrite({'calls': calls[:2], 'source': 'demos', 'task_id': 't', 'key': 'k'}) is None
 
 
 def test_future_ids_horizon_and_length():
@@ -213,8 +239,10 @@ def test_learner_mixed_rows():
 
 
 def sampler(**overrides):
-    args = SimpleNamespace(reasoning_rl_sources='jolt,demos', seed=1, reasoning_rl_calls=4, reasoning_rl_horizon=4,
-                           reasoning_rl_whole_share=1.0, reasoning_rl_whole_calls=0, max_sequence_tokens=65536,
+    args = SimpleNamespace(reasoning_rl_sources='jolt,demos', seed=1, reasoning_rl_calls=0, reasoning_rl_horizon=4,
+                           reasoning_rl_rewrite_share=0.0, reasoning_rl_rewrite_rounds=1,
+                           reasoning_rl_rewrite_tokens=64, reasoning_rl_rewrite_accept='best',
+                           reasoning_rl_rewrite_temperature=0.05, max_sequence_tokens=65536,
                            reasoning_rl_max_tokens=64, reasoning_rl_samples=4, reasoning_rl_max_samples=8,
                            reasoning_rl_wave=2, reasoning_rl_high_logp=-0.1, reasoning_rl_hard_logp=-1.0,
                            reasoning_rl_gamma=1.0, reasoning_rl_beam=1, top_p=0.95, reasoning_rl_groups=2,
@@ -265,6 +293,7 @@ def test_search_waves_carry_and_sd_chain(monkeypatch):
     fake = FakeSGLang([[60, CLOSE], [61, CLOSE], [50, CLOSE], [62, END], [50, 51, CLOSE], [63, CLOSE]])
     monkeypatch.setattr(rrl, '_post', fake)
     groups, carried = rrl.run({'calls': calls, 'source': 'demos', 'task_id': 't', 'key': 'k'})
+    assert all(g['mode'] == 'whole' for g in groups)
     assert [g['step'] for g in groups] == [0, 1] and groups[0]['hard'] and not groups[1]['hard']
     assert groups[0]['r0'] == -1.5 and groups[1]['r0'] == -0.05
     assert len(groups[0]['samples']) == 4 and len(groups[1]['samples']) == 2

@@ -3661,3 +3661,45 @@ Why half and half, from first principles (no measurement campaign):
 Tests: `test_whole_trajectories_and_segments`, `test_teacher_history_keeps_the_trace_or_renders_empty_think_blocks`,
 `test_future_ids_horizon_and_length`, `test_groups_are_emitted_per_step_with_their_version`. Not run live on the
 actor in this form; the first resumed steps' `reasoning_rl` block is that check.
+
+**2026-11-18, reasoning RL: two modes, walk 0.7 and parallel rewrite 0.3; segments removed (owner via coordinator).**
+The owner asked for a parallel rewrite mode and a defended default instead of three modes side by side.
+- **Rewrite** (`ReasoningRL.rewrite`; TRICE's MCMC-EM over rationales, STaR rationalization):
+  - Every position keeps the teacher's recorded history, so the positions are independent and are rewritten
+    together.
+  - Each position starts from the teacher's own think block. Each of 4 rounds cuts every position's block at a
+    random point (just before `</think>` is an extension) and draws the student's continuation, up to 1,024 tokens
+    and required to close; all positions are batched.
+  - Each candidate is scored by one teacher-forced forward over its action and up to 4 later actions. The better one
+    is kept (`--reasoning-rl-rewrite-accept best`; `metropolis` at temperature 0.05 opts in).
+  - A cut only keeps a prefix, so a block ends up as the teacher's first tokens followed by the student's, each
+    student token drawn on exactly the tokens before it.
+  - Positions that now score above their teacher seed go to the SD replay (source `rewrite`). Only the student's
+    tokens are the target, trained with their actor log-probabilities; the surviving teacher prefix is prompt, never
+    trained.
+- **Segments are removed.** Their one distinct property was RL under the teacher's trace. Rewrite uses the teacher's
+  trace better: it starts from the trace and its search finds student reasoning that makes the action likely even
+  where fresh samples rarely do, fully in parallel and with short continuations. The walk gives RL under the right
+  context. Every search now starts at an invocation's first call (`--reasoning-rl-calls N` caps it, opt-in).
+- **Allocation, from what we know:**
+  - **Walk 0.7, the main share.** It trains under the history the deployed student actually has. It gives
+    contrastive on-policy signal (negative advantages too), the kind GRPO already trains well on. It is the owner's
+    model.
+  - **Rewrite 0.3.** It is cheaper per trained token: positions run in parallel, continuations are short and good
+    blocks are refined rather than resampled. It keeps the teacher traces in. But its signal is positive-only SD,
+    under an off-distribution history, and the student continues after teacher prefixes. That is the style channel
+    behind the -16 pts SFT result, now only in context, but in-context imitation can still leak into the trained
+    tokens. So it gets the minority share.
+  - **Fixed share, no auto-shift.** The signals per actor token of the two modes are not commensurable (normalized
+    RL advantages vs SD cross-entropy), so a share moved by them would follow a scale, not value.
+  - **Watch:** `reasoning_rl.worker` `generated_tokens_whole` / `generated_tokens_rewrite`, `rewrite_improved`,
+    `rewrite_gain_milli`, `sd.rewrite_*`, and the rollouts' `reasoning_tokens_per_call` and style sentinels.
+  - **Rule:** if the style sentinels move while rewrite chains are being replayed, set
+    `--reasoning-rl-rewrite-share 0` at a resume.
+- **Tests:** `test_trajectories_from_the_first_call_and_modes`, `test_rewrite_keeps_teacher_tokens_out_of_the_target`,
+  `test_rewrite_rejects_worse_and_unclosed_candidates`.
+- **Live check (run2's actor, no restart):** 2 TeacherDemos episodes, 3 positions each, 4 rounds took 160-180 s each.
+  There were 20 proposals: 4 did not close within 1,024 tokens and 3 were accepted. 2 of 6 positions beat their teacher
+  seed (+0.071 nats per action token in total) and became SD rows of 772 and 851 student tokens, prompt-side teacher
+  prefixes 28-370 tokens. That is 13,380 actor tokens for 1,623 trained tokens (12%). Continuations average ~670
+  tokens, not "short": the student reasons long.

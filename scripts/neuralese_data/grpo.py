@@ -1731,12 +1731,14 @@ def sd_teacher_tasks(collector, band):
 # Reasoning RL against fixed teacher actions (``--reasoning-rl-weight``; owner 2026-11-18). A teacher call's reply is
 # (think block, action). Training teacher think blocks taught the student short summary-style reasoning (SFT held
 # -16 pts, DECISIONS 2026-11-18), so they are context and teacher trajectories teach only actions. This term trains the
-# student's own reasoning from them, as a search along teacher trajectories, in two modes (``--reasoning-rl-whole-share``
-# 0.5 of invocations whole): whole, each invocation walked from its first call to its end with the student's own best
-# reasoning carried at every step (its history holds no teacher reasoning: the deployed situation); segment, up to
-# ``--reasoning-rl-calls`` 4 calls from a random call, after the teacher's own trace as recorded. Tool outputs come
-# from the trajectory, nothing executes; ``--reasoning-rl-workers`` searches run in parallel and each step's group is
-# ready (with the policy version its draws started on) as soon as that step is done:
+# student's own reasoning from them, searching along each teacher invocation from its first call (``--reasoning-rl-calls``
+# N caps it, opt-in); tool outputs come from the trajectory, nothing executes; ``--reasoning-rl-workers`` searches run
+# in parallel. Two modes (DECISIONS 2026-11-18 for the allocation): a walk (``run``, 1 - ``--reasoning-rl-rewrite-share``
+# 0.3 of invocations) steps through the trajectory with the student's own best reasoning carried at every step, its
+# history the deployed situation (preserve_thinking), each step's group ready (with the policy version its draws started
+# on) as soon as it is done; a parallel rewrite (``rewrite``) keeps the teacher's recorded history, rewrites every
+# position's teacher think block into the student's own by cut-and-continue rounds scored by the teacher actions'
+# likelihood, and feeds the self-distillation replay. The walk:
 #   1. one teacher-forced pass with empty think blocks scores every step's action at once: ``r0_t``, the action's mean
 #      token log-probability without reasoning (the step's difficulty);
 #   2. at step t the actor draws think blocks z on the carried history in waves of ``--reasoning-rl-wave`` until one
@@ -1746,8 +1748,9 @@ def sd_teacher_tasks(collector, band):
 #      to ``--reasoning-rl-horizon`` later actions after empty think blocks): its immediate reward r_t (the action's
 #      mean token log-probability) and the later actions' rewards, so its return is r_t + sum_s gamma^(s-t) r_s
 #      (``--reasoning-rl-gamma``). The reasoning room shrinks as the history grows (``--max-sequence-tokens``); below
-#      ``MIN_REASONING_ROOM`` the trajectory ends. Reasoning that helps later actions gets credit too. The best return(s) carry forward as history, as the
-#      template keeps reasoning (preserve_thinking): greedy, or a beam of ``--reasoning-rl-beam``;
+#      ``MIN_REASONING_ROOM`` the trajectory ends. Reasoning that helps later actions gets credit too. The best
+#      return(s) carry forward as history, as the template keeps reasoning (preserve_thinking): greedy, or a beam of
+#      ``--reasoning-rl-beam``;
 #   4. every step's samples form a group: z's tokens at its group-normalized return (on-policy, truncated IS against
 #      the actor's own sampling log-probabilities), the teacher action after each closed z as a ratio-free
 #      cross-entropy at ``--reasoning-rl-action-weight``; the reasoning term with it is the gradient of
@@ -1785,7 +1788,7 @@ def teacher_call(row, close_id, markers):
     if markers and np.isin(action, list(markers)).any():
         return 'role_markers'
     call = {'prompt': np.asarray(row['prompt'], np.int32), 'reply': sample.astype(np.int32),
-            'action': action.astype(np.int32), 'index': int(row.get('index', 0))}
+            'action': action.astype(np.int32), 'think': sample[:cut].astype(np.int32), 'index': int(row.get('index', 0))}
     if 'weight' in row:
         call['action_weight'] = np.asarray(row['weight'], np.float32)[cut:]
     return call
@@ -1918,7 +1921,7 @@ def rrl_episodes(groups, reasoning_weight, action_weight):
         stats['unclosed'] += sum(not s['closed'] for s in samples)
         stats['high'] += int(any(s.get('high') for s in samples))
         stats[f"source_{group['source']}"] += 1
-        stats[f"mode_{group.get('mode', 'segment')}"] += 1
+        stats[f"mode_{group.get('mode', 'whole')}"] += 1
         stats[f"hard_{bool(group.get('hard'))}"] += 1
         closed = [s for s in samples if s['closed']]
         stats['reward_sum'] += sum(s['reward'] for s in closed)
@@ -2019,21 +2022,16 @@ class ReasoningRL:
 
     def segments(self, episode, source):
         """A teacher episode's searches, one per run of usable calls (``teacher_segments``: one per invocation, split
-        only where a call cannot be a step). With probability ``--reasoning-rl-whole-share`` a run is walked whole, from
-        its first call to its end (``--reasoning-rl-whole-calls`` N > 0 caps it, opt-in): every step reasons on the
-        student's own carried reasoning. Otherwise it is a segment: up to ``--reasoning-rl-calls`` calls from a random
-        call, after the teacher's own trace (``--reasoning-rl-teacher-history`` keep). The search itself stops a
-        trajectory whose history no longer leaves room to reason (``run``)."""
+        only where a call cannot be a step), each from its first call to its end (``--reasoning-rl-calls`` N > 0 caps
+        it, opt-in). With probability ``--reasoning-rl-rewrite-share`` a run is rewritten in parallel (``rewrite``),
+        else walked step by step (``run``: mode whole). The search itself stops a walk whose history no longer leaves
+        room to reason."""
         runs = teacher_segments(episode['rows'], self.close_id, self.markers, self.counts,
                                 self.args.reasoning_rl_teacher_history)
         out = []
         for run in runs:
-            if self.rng.random() < self.args.reasoning_rl_whole_share:
-                mode, cap = 'whole', self.args.reasoning_rl_whole_calls
-                calls = run[:cap] if cap > 0 else run
-            else:
-                mode, first = 'segment', self.rng.randrange(len(run))
-                calls = run[first:first + max(1, self.args.reasoning_rl_calls)]
+            calls = run[:self.args.reasoning_rl_calls] if self.args.reasoning_rl_calls > 0 else run
+            mode = 'rewrite' if self.rng.random() < self.args.reasoning_rl_rewrite_share else 'whole'
             if len(calls[0]['prompt']) + len(calls[0]['reply']) + MIN_REASONING_ROOM > self.args.max_sequence_tokens:
                 self.counts['segment_too_long'] += 1
                 continue
@@ -2092,7 +2090,10 @@ class ReasoningRL:
                 continue
             started = time.time()
             try:
-                groups, carried = self.run(segment, emit=self._emit)
+                if segment.get('mode') == 'rewrite':
+                    groups, carried = [], self.rewrite(segment)
+                else:
+                    groups, carried = self.run(segment, emit=self._emit)
             except Exception as error:   # a failed request loses the rest of this trajectory only
                 self.counts['failures'] += 1
                 if self.counts['failures'] <= 20 or self.counts['failures'] % 100 == 0:
@@ -2103,7 +2104,7 @@ class ReasoningRL:
             with self.lock:
                 if carried is not None:
                     self.sd_ready.append(carried)
-                self.counts['segments'] += 1
+                self.counts[f"segments_{segment.get('mode', 'whole')}"] += 1
                 self.counts['groups'] += len(groups)
                 self.counts['actor_s'] += round(time.time() - started)
 
@@ -2166,7 +2167,7 @@ class ReasoningRL:
             drawn = list(pool.map(lambda seed: self._draw(context, room, seed), seeds))
         samples = []
         for ids, logp in drawn:
-            self.counts['generated_tokens'] += len(ids)
+            self.counts['generated_tokens_whole'] += len(ids)
             if not ids:
                 self.counts['empty_samples'] += 1
             elif self.markers & set(ids):   # a Neuralese marker in reasoning: the front's protocol, not this term's
@@ -2221,7 +2222,7 @@ class ReasoningRL:
                     continue
                 self.counts['hard_samples' if hard else 'samples_ordinary'] += len(samples)
                 groups.append({'task_id': segment['task_id'], 'key': segment['key'], 'source': segment['source'],
-                               'mode': segment.get('mode', 'segment'),
+                               'mode': segment.get('mode', 'whole'),
                                'step': t, 'hard': hard, 'r0': r0[t], 'context': np.asarray(beam['context'], np.int32),
                                'action': call['action'], 'action_weight': call.get('action_weight'),
                                'samples': samples, 'version': version})
@@ -2266,6 +2267,80 @@ class ReasoningRL:
         self.counts['carried_chains'] += 1
         return {'task_id': segment['task_id'], 'round': name, 'rows': rows, 'decisions': [], 'reward': 1.,
                 'quality': 1., 'role': 'sd', 'sd_source': 'search'}
+
+    def _rewrite_score(self, calls, t, think):
+        ids, spans = future_ids([int(i) for i in calls[t]['prompt']] + list(think), calls, t, self.close_id,
+                                self.args.reasoning_rl_horizon or None, self.args.max_sequence_tokens)
+        return discounted(self._score(ids, spans), self.args.reasoning_rl_gamma)
+
+    def rewrite(self, segment):
+        """Parallel rewrite (TRICE's MCMC-EM over rationales, STaR rationalization): every position keeps its recorded
+        history, so the think blocks of all positions are independent and are rewritten together. Seeded with the
+        teacher's own think block at each position; each of ``--reasoning-rl-rewrite-rounds`` rounds cuts every
+        position's block at a random point (just before its ``</think>``: an extension) and draws the student's
+        continuation (at most ``--reasoning-rl-rewrite-tokens``; one that does not close is no candidate), all
+        positions batched; each candidate is scored by one teacher-forced forward (its action, then up to
+        ``--reasoning-rl-horizon`` later actions after empty think blocks, ``--reasoning-rl-gamma``) and kept when it
+        scores better (``--reasoning-rl-rewrite-accept`` best) or by a Metropolis step at
+        ``--reasoning-rl-rewrite-temperature``. A cut only ever keeps a prefix, so a block is the teacher's first tokens
+        then the student's, each student token drawn on exactly the tokens before it. The result is an SD episode
+        (source ``rewrite``): per position whose block now scores better than the teacher's seed, the student's tokens
+        are the target, with the actor log-probabilities they were drawn with, and the surviving teacher prefix is
+        prompt (never trained: training teacher reasoning cut held-v3 by 16 points). None when no position improved."""
+        from concurrent.futures import ThreadPoolExecutor
+        a, calls = self.args, segment['calls']
+        pool_size = max(1, min(len(calls), 16))
+        with ThreadPoolExecutor(pool_size) as pool:
+            current = [list(int(i) for i in c['think']) for c in calls]
+            logps = [[None] * len(think) for think in current]          # None: a teacher token
+            seed = list(pool.map(lambda t: self._rewrite_score(calls, t, current[t]), range(len(calls))))
+            score = list(seed)
+
+            def propose(t):
+                prompt, think = [int(i) for i in calls[t]['prompt']], current[t]
+                cut = self.rng.randrange(len(think))                    # think ends with </think>: cut before it at most
+                room = min(a.reasoning_rl_rewrite_tokens,
+                           a.max_sequence_tokens - len(prompt) - cut - len(calls[t]['action']) - 1)
+                if room < 1:
+                    return None
+                ids, logp = self._draw(prompt + think[:cut], room, self.rng.randrange(1, 2**31))
+                self.counts['generated_tokens_rewrite'] += len(ids)
+                if not ids or ids[-1] != self.close_id or self.markers & set(ids) or not np.isfinite(logp).all():
+                    self.counts['rewrite_unclosed' if ids and ids[-1] != self.close_id else 'rewrite_invalid'] += 1
+                    return None
+                candidate = think[:cut] + ids
+                return candidate, logps[t][:cut] + list(logp), self._rewrite_score(calls, t, candidate)
+            for _ in range(a.reasoning_rl_rewrite_rounds):
+                for t, proposal in enumerate(pool.map(propose, range(len(calls)))):
+                    if proposal is None:
+                        continue
+                    candidate, logp, value = proposal
+                    self.counts['rewrite_proposals'] += 1
+                    if a.reasoning_rl_rewrite_accept == 'metropolis':
+                        accept = math.log(max(self.rng.random(), 1e-300)) < (value - score[t]) / max(
+                            a.reasoning_rl_rewrite_temperature, 1e-9)
+                    else:
+                        accept = value > score[t]
+                    if accept:
+                        current[t], logps[t], score[t] = candidate, logp, value
+                        self.counts['rewrite_accepted'] += 1
+        rows = []
+        name = f"rrl-rewrite-{segment['key']}-{self.rng.randrange(2**31)}"
+        for t, call in enumerate(calls):
+            teacher = next((i for i, lp in enumerate(logps[t]) if lp is not None), len(logps[t]))
+            if score[t] <= seed[t] or teacher == len(current[t]):
+                continue
+            self.counts['rewrite_improved'] += 1
+            self.counts['rewrite_gain_milli'] += round(1000 * (score[t] - seed[t]))
+            self.counts['rewrite_student_tokens'] += len(current[t]) - teacher
+            rows.append({'id': f'{name}-{t}', 'invocation': f'{name}-{t}', 'index': 0,
+                         'prompt': np.asarray([int(i) for i in call['prompt']] + current[t][:teacher], np.int32),
+                         'sample': np.asarray(current[t][teacher:], np.int32),
+                         'logp': np.asarray(logps[t][teacher:], np.float32)})
+        if not rows:
+            return None
+        return {'task_id': segment['task_id'], 'round': name, 'rows': rows, 'decisions': [], 'reward': 1.,
+                'quality': 1., 'role': 'sd', 'sd_source': 'rewrite'}
 
     def take(self, step, count, max_staleness):
         """The step's groups: the oldest ready ones within ``max_staleness`` policy versions, at most ``count``; staler
@@ -2347,7 +2422,7 @@ class ReplayCorpus:
 TEACHER_FIELDS = ('groups', 'episodes', 'successes', 'episodes_trained', 'calls_student_form',
                   'privileged_tokens_removed', 'policy_calls_removed')
 SD_FIELDS = ('added', 'episodes', 'tokens', 'buffer', 'skip_imports', 'own_episodes', 'own_tokens', 'search_added',
-             'search_episodes', 'search_tokens', 'teacher_episodes',
+             'search_episodes', 'search_tokens', 'rewrite_added', 'rewrite_episodes', 'rewrite_tokens', 'teacher_episodes',
              'teacher_tokens', 'teacher_candidates', 'teacher_render_error')
 
 
@@ -3584,7 +3659,8 @@ def train(args):
                     chains.append(chain)
             if args.sd_weight > 0:   # the searches' carried chains join the self-distillation replay (source search)
                 sd_buffer += [{'episode': episode, 'version': step, 'uses': 0} for episode in carried]
-                stats['sd_search_added'] += len(carried)
+                for episode in carried:
+                    stats[f"sd_{episode['sd_source']}_added"] += 1
         replay_record = {}
         for corpus in replay_corpora:
             entry = replay_record.setdefault(corpus.name, collections.Counter())
@@ -4214,14 +4290,18 @@ def main():
     t.add_argument('--reasoning-rl-action-weight', type=float, default=0.05,
                    help='the teacher action after each closed sampled think block as a ratio-free cross-entropy (0: the '
                         'reasoning term alone)')
-    t.add_argument('--reasoning-rl-whole-share', type=float, default=0.5,
-                   help='share of teacher invocations searched whole, from the first call on the student\'s own carried '
-                        'reasoning; the rest are segments from a random call after the teacher\'s trace (1: whole only, '
-                        '0: segments only)')
-    t.add_argument('--reasoning-rl-whole-calls', type=int, default=0,
-                   help='steps of a whole trajectory at most (0: to its end)')
-    t.add_argument('--reasoning-rl-calls', type=int, default=4,
-                   help='steps of a segment at most (1: single decisions)')
+    t.add_argument('--reasoning-rl-rewrite-share', type=float, default=0.3,
+                   help='share of teacher invocations rewritten in parallel (ReasoningRL.rewrite: SD data); the rest '
+                        'are walked step by step on the student\'s own carried reasoning (RL groups and an SD chain)')
+    t.add_argument('--reasoning-rl-rewrite-rounds', type=int, default=4, help='rewrite rounds')
+    t.add_argument('--reasoning-rl-rewrite-tokens', type=int, default=1024,
+                   help='tokens of one rewrite continuation at most (it must close its think block)')
+    t.add_argument('--reasoning-rl-rewrite-accept', choices=('best', 'metropolis'), default='best',
+                   help='a rewrite candidate is kept when it scores better (best) or by a Metropolis step')
+    t.add_argument('--reasoning-rl-rewrite-temperature', type=float, default=0.05,
+                   help='the Metropolis step\'s temperature (nats per action token)')
+    t.add_argument('--reasoning-rl-calls', type=int, default=0,
+                   help='steps of a teacher invocation searched at most (0: all, from its first call; 1: single decisions)')
     t.add_argument('--reasoning-rl-horizon', type=int, default=4,
                    help='later actions in a think block\'s return (scored in its one forward; 0: all of the rest)')
     t.add_argument('--reasoning-rl-wave', type=int, default=2,
