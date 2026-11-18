@@ -3300,3 +3300,11 @@ batches entering at resumes.
   inline the decided values; the smoke still runs `decide`.
 - **Not checked.** Base pass rates of the new tasks were not measured, because grpo-v4 holds the DGX; the explore walk
   measures them.
+
+## 2026-11-18 01:55, storage: discarded GRPO checkpoints deleted
+
+grpo-v4 checkpoints go to /mnt/external (70 GB free, floor 50), so the discarded runs' weights were deleted (no process
+or launcher referenced them): grpo-v2 run1/run2 checkpoints, the grpo-v2 hunt's bisA branch states and
+replay-controls/keep (the LR hunt is closed), and grpo-v3 run1 checkpoints (its verdict is recorded and its steps were
+affected by the WeightSync bug). Rollouts are kept. /mnt/external is at 269 GB free. Unused pins 2734e2c4, 383bd4ed and
+c57e7be2 were removed on the DGX root.
