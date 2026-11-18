@@ -3362,3 +3362,12 @@ prompts (last 2048 tokens, 256 new tokens, Q8, ngram-map-k n=4) on a host with l
 requests that were paired before preemption, speculation was faster every time: 1.54/1.26/1.18/1.16 vs
 1.16/1.11/0.98/1.06 tok/s (+10 to +33%), with 13-29% of drafted tokens accepted. That is suggestive, not decisive;
 a GPU single-stream bench decides. Nothing is released, and the pins are unchanged.
+
+## 2026-11-18 05:30, grpo-v4-run1 stopped twice by the memory guard; relaunched at 24 slots with a memory sampler
+
+The 02:30 relaunch (32 slots, 106 GB) was stopped by the guard at 03:54 ("free memory below floor", 110.7 GB) while
+still collecting, before its first learner step, and the requeue was then OOM-killed at 04:17 next to a native-engine
+speculative bench. So the ~110 GB is collection-time use, not the learner peak. Relaunched at 05:30 on pin 551e5e8ba
+with SLOTS=24 RUNNING=24, ledger learned peak reset to 92 GB, `--min-groups 24 --max-groups 48` (AGENTS.md default;
+48-96 meant a step every 1.5-2 h), and Pop held evals on against grpo-v3's Pop base. A sampler logs the unit's cgroup
+breakdown (anon/file/shmem) and per-process CUDA every 2 min to find what fills memory during collection.
