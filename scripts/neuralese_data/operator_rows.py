@@ -10,7 +10,7 @@ compact-params and extract cases are string arguments of the call that answers t
 
 * **operator chain** (one per compacted source): the runtime's operator call with its generation prompt, then the
   seed as the assistant reply (gold / checked / mechanical, `data/operator_seeds.py`, clipped to the operator's span
-  cap). The reply is the only target; its weight is `--seed-weight`.
+  cap). The reply is the only target; its weight is `--seed-weight`, its empty think block's 0 (`--think`).
 * **consumer chain**: the case's consumer conversation (data) with each source's runtime block before its first user
   message, the state imported (`consume_open`, the span, `consume_close`) where the runtime places it; the target
   reply is the only target. `imports` [(row, key)] and `sources` {key: {ids, start, stop}} are the pass-through's
@@ -144,8 +144,10 @@ class RowBuilder:
     """Per-call rows of one case under one tokenizer (the renderer's exact site, seed and consumer rendering)."""
 
     def __init__(self, tokenizer, role_ids, fingerprint, *, max_tokens=32000, seed_weight=1.0, sites=None,
-                 context_tokens=131072):
-        self.context_tokens = context_tokens
+                 context_tokens=131072, think='context'):
+        if think not in ('context', 'train'):
+            raise ValueError(f'think {think!r}: context or train')
+        self.context_tokens, self.think = context_tokens, think
         self.renderer = TokenRenderer(tokenizer, role_ids=role_ids)
         self.sites = sites or RuntimeSites()
         self.tokenizer, self.role_ids, self.fingerprint = tokenizer, tuple(role_ids), fingerprint
@@ -222,6 +224,10 @@ class RowBuilder:
             raise OperatorCaseError(f'over-token-cap: {total} > {self.max_tokens}')
         cut_context, _ = self.renderer._render(consumer_messages(record, cut_parts), tools, {}, generation=True)
         text_cut = _chain(cut_context, target, key, {'kind': 'text-cut', 'operator': name})
+        if self.think == 'context':
+            # seeds and exact answers carry no reasoning: their empty think block is context (exp0_sft.mask_empty_think)
+            import exp0_sft
+            exp0_sft.mask_empty_think([*operators, consumer, text_cut], self.tokenizer)
         return {'operators': operators, 'consumer': consumer, 'text_cut': text_cut,
                 'meta': {'seeds': seeds, 'target_tokens': len(target), 'consumer_tokens': len(consumer['ids'])}}
 
@@ -316,7 +322,7 @@ def case_files(paths, operators=None):
 def build(args):
     tokenizer, roles, fingerprint = load_tokenizer(args.base)
     builder = RowBuilder(tokenizer, roles, fingerprint, max_tokens=args.max_tokens, seed_weight=args.seed_weight,
-                         context_tokens=args.context_tokens)
+                         context_tokens=args.context_tokens, think=args.think)
     held = HeldClosure.from_cases(args.held)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -325,7 +331,7 @@ def build(args):
                'held_sets': {str(p): hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in args.held},
                'held_closure': {'groups': len(held.groups), 'ids': len(held.ids), 'shingles': len(held.owner),
                                 'shingle_words': SHINGLE, 'text_min': TEXT_MIN},
-               'seed_weight': args.seed_weight, 'max_tokens': args.max_tokens, 'splits': args.splits,
+               'seed_weight': args.seed_weight, 'think': args.think, 'max_tokens': args.max_tokens, 'splits': args.splits,
                'context_tokens': args.context_tokens, 'runtime_code': code_provenance(), 'sources': {}}
     for path in case_files(args.cases, operators):
         name, source_name = path.parent.name, path.name.removesuffix('.port-records.jsonl')
@@ -431,6 +437,9 @@ def main():
     p.add_argument('--limit', type=int, default=0, help='cases read per source file (smoke)')
     p.add_argument('--max-tokens', type=int, default=32000)
     p.add_argument('--seed-weight', type=float, default=1.0)
+    p.add_argument('--think', choices=('context', 'train'), default='context',
+                   help="the empty think block that opens every seed and exact-answer target: context (default: zero "
+                        "weight; training it teaches closing reasoning at once) or train")
     p.add_argument('--splits', nargs='+', default=['train', 'test'], choices=['train', 'test'])
     p.add_argument('--context-tokens', type=int, default=131072,
                    help="the call's context budget the runtime sizes its shown page from (GRPO's; with the learned-compaction "

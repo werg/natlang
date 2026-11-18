@@ -1724,25 +1724,34 @@ class ReplayCorpus:
     importing them through pass-through producer documents; or one Neuralese episode). Step ``n`` takes units
     ``[n*K, n*K+K)`` of an endless sequence of seeded per-epoch shuffles, so a resume continues without saved state.
     The chains are ratio-free (role ``replay``: no actor log-probabilities, rho = 1) at the corpus weight; their rows'
-    own weights (the operator seed weight) multiply the term, and the KL term applies as to every chain."""
+    own weights (the operator seed weight) multiply the term, and the KL term applies as to every chain.
 
-    def __init__(self, spec, held, seed, log=print):
+    With a ``tokenizer`` and ``think=context`` (the default), a row whose target opens with the template's empty think
+    block (a seed or exact answer written without reasoning) has that block at weight 0 (``exp0_sft.mask_empty_think``):
+    operators-v1 trained ``</think>`` at the first position of all its 11,558 rows. ``think=train`` opts out."""
+
+    def __init__(self, spec, held, seed, log=print, tokenizer=None):
         import pickle
         name, _, rest = spec.partition('=')
         path, *options = rest.split(',')
         if not name or not path:
-            raise SystemExit(f'--replay-corpus is NAME=PKL[,weight=W][,units=K], not {spec!r}')
-        self.name, self.path, self.weight, self.units = name, path, 0.05, 8
+            raise SystemExit(f'--replay-corpus is NAME=PKL[,weight=W][,units=K][,think=context|train], not {spec!r}')
+        self.name, self.path, self.weight, self.units, self.think = name, path, 0.05, 8, 'context'
         for option in options:
             key, _, value = option.partition('=')
             if key == 'weight':
                 self.weight = float(value)
             elif key == 'units':
                 self.units = int(value)
+            elif key == 'think' and value in ('context', 'train'):
+                self.think = value
             else:
-                raise SystemExit(f'--replay-corpus option {key!r}: weight or units')
+                raise SystemExit(f'--replay-corpus option {option!r}: weight=W, units=K or think=context|train')
         with open(path, 'rb') as handle:
             chains = pickle.load(handle)['chains']
+        import exp0_sft
+        self.think_masked = (exp0_sft.mask_empty_think(chains, tokenizer)
+                             if tokenizer is not None and self.think == 'context' else 0)
         self.sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
         groups = collections.defaultdict(list)
         for chain in chains:
@@ -1757,7 +1766,8 @@ class ReplayCorpus:
             raise SystemExit(f'--replay-corpus {name}: no units, or weight/units not positive')
         log({'event': 'replay corpus', 'name': name, 'path': path, 'sha256': self.sha256, 'units': len(self.keys),
              'chains': sum(len(v) for v in groups.values()), 'held_dropped': len(dropped), 'weight': self.weight,
-             'units_per_step': self.units})
+             'units_per_step': self.units, 'think': self.think if tokenizer is not None else 'train (no tokenizer)',
+             'think_masked_rows': self.think_masked})
 
     def take(self, step):
         """The units of ``step``: [(key, [chains])], each chain a fresh copy of its corpus chain's fields."""
@@ -2497,7 +2507,10 @@ def train(args):
     if args.replay_corpus:
         from natlang_neuralese.rl.held_eval import exclusion_ids
         held = set(exclusion_ids(args.held_manifest))
-        replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r)) for spec in args.replay_corpus]
+        from transformers import AutoTokenizer
+        corpus_tokenizer = AutoTokenizer.from_pretrained(args.base)   # the served vocabulary (empty think block)
+        replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r), tokenizer=corpus_tokenizer)
+                          for spec in args.replay_corpus]
     collector.version = step
     if args.resume and not args.replay:      # a replay offers archived groups, never this run's own
         reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
@@ -3532,7 +3545,8 @@ def main():
                         'whole-graph Neuralese episodes from sft_sources neuralese-graph) trained in every step as a '
                         'ratio-free cross-entropy term of weight W (default 0.05), K units per step (default 8; a unit '
                         'is the chains of one task key, consumers with their pass-through producer documents); '
-                        'repeatable; held tasks are dropped')
+                        'repeatable; held tasks are dropped; think=train keeps a target\'s leading empty think block as '
+                        'loss (default context: weight 0, ReplayCorpus)')
     t.add_argument('--memetic-tasks', default=MEMETIC_TASKS,
                    help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks build: '
                         'DIR/cases.jsonl; default: every program, support 4); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md '

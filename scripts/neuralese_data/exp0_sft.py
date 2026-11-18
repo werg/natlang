@@ -206,6 +206,46 @@ def chain_weights(chain, device):
     return torch.from_numpy(weights.astype(np.float32)).to(device)
 
 
+def empty_think_lead(sample, close_id, blank):
+    """Leading tokens of ``sample`` that are the template's empty think block: ``</think>`` as the first token (the
+    generation prompt opens the block) and the whitespace tokens after it (``blank(id)``); 0 when the reply reasons."""
+    if not len(sample) or int(sample[0]) != close_id:
+        return 0
+    end = 1
+    while end < len(sample) and blank(int(sample[end])):
+        end += 1
+    return end
+
+
+def mask_empty_think(chains, tokenizer):
+    """Zero the loss weight of every row's leading empty think block in ``chains`` (in place); returns the rows changed.
+
+    A reply that was not sampled by the student and carries no reasoning (a written or dataset target: operator seeds,
+    operator consumers' exact answers) renders the template's empty think block, ``</think>`` at the first target
+    position. Training it teaches the student to close its reasoning at once on ordinary calls; no verified outcome
+    selects that (the same rule as ``sft_sources.think_context`` for teacher replies). The action after it trains."""
+    close_id = tokenizer.convert_tokens_to_ids('</think>')
+    cache = {}
+
+    def blank(token):
+        if token not in cache:
+            cache[token] = not tokenizer.decode([token]).strip()
+        return cache[token]
+
+    changed = 0
+    for chain in chains:
+        for _, length, row in chain['segs']:
+            lead = empty_think_lead(row['sample'], close_id, blank)
+            if not lead:
+                continue
+            weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+            if weight[:lead].any():
+                weight[:lead] = 0
+                row['weight'] = weight
+                changed += 1
+    return changed
+
+
 def packed_rows(chains, max_tokens):
     """Greedy, order-preserving packing of ``chains`` into rows of at most ``max_tokens`` tokens (a longer chain is a row
     alone; ``max_tokens`` 0: one chain per row). Returns lists of chains."""

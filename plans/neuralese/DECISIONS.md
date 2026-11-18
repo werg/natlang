@@ -3501,3 +3501,48 @@ scored 45.9%. Cause unknown, so the run stops (AGENTS.md); its states and checkp
   until the SFT hunt clears teacher-trace rendering; own-success SD, JOLT+, hindsight, memetic and replay stay on.
 - **Hunt:** two independently briefed investigators (archived held rollouts and forward checks; static review of the
   SFT path). The SFT lineage (sft-v3/run1, run1-cont) is not a start policy until the cause is found and fixed.
+
+**2026-11-18 ~11:30, SFT held regression: cause found in archived held rollouts, teacher think blocks trained
+(investigator A, archived rollouts and forward probe).**
+- **Observation (held-v3, Pop, 2 samples; base on grpo-v3's Pop step 0):** the SFT model reasons 4-5x less. Per call,
+  reasoning p50 1,919 -> 350 characters, completion p50 557 -> 215 tokens (ran-out episodes: 1,837 -> 320 chars,
+  522 -> 203 tokens); compile/runtime errors per episode 1.61 -> 3.22; text beside actions in 12% of calls (2%).
+  Teacher phrasing appears in its reasoning: "Next,/Next step" 13.5% of calls (base 0.3%), "So far/Evidence so far"
+  2.7% (0.1%), Claude's "I'm settling/confirming/working" 2.6% (0.0%), first-turn "I have ..." claims about unseen
+  state. Ran-out episodes are not exact loops (unique-action share 0.90 vs 0.82): many short-reasoning steps.
+- **Forward check (already measured):** the behaviour probe on the 48 start-policy calls puts the SFT checkpoint's
+  `</think>` hazard at 1.02 per 1k tokens against the base's 0.54-0.55 (grpo-v4-run1 vs grpo-v3-run1/v4-run2
+  `behaviour probe start`); step-1 `reasoning_tokens_per_call` 236 vs grpo-v3's 952.
+- **Mechanism (predicts direction and size):** sft-verified-v3 trained the think block of every teacher/October
+  reply that had visible reasoning: ~15k such calls against 5.7k own calls, so ~70% of the trained `</think>`
+  decisions sit at the teachers' length (p50 140-300 chars: Haiku's summarized thinking, Luna-era October
+  rationales "Evidence so far ... Next step", Nemotron/Qwen short reasoning) against the student's 1,600. Only
+  reasoning-free replies had their (empty) block masked. The student's reasoning p50 moved to 350 chars and took the
+  summary style; on held tasks the base solves with long reasoning it now acts after a summary.
+- **Fix (250723952, the static-review agent; agrees independently):** `sft_sources.think_context`,
+  `--teacher-think context` default: the whole think block of a reply the student did not sample is context; covers
+  `TeacherDemos` (in-loop SD) through `call_row`.
+- **Second defect, same mechanism, shipped here:** operators-v1 (`--replay-corpus operators=...`, on in grpo-v4-run1
+  and run2) trains `</think>` at target position 0 in all 11,558 rows (6,427 operator seeds, 5,131 consumer exact
+  answers), i.e. "close reasoning at once" on ordinary consumer calls. Not the SFT cause (run1 trained it for 4 steps
+  at weight 0.05, after the SFT). Fix: `exp0_sft.mask_empty_think` (a target's leading empty think block at weight 0),
+  applied by `grpo.ReplayCorpus` at load (default `think=context`, `think=train` opts out; `think_masked_rows` in the
+  `replay corpus` log) and by `operator_rows.RowBuilder` at build (`--think`). Enters run2 at its next resume.
+- **Ruled out:** checkpoint export/serving (run1 step 1 rho_mean 0.9999, abs log rho 0.017: learner and actor agree);
+  runtime/harness (base on pin c57e7be28: 52.2% on 251 episodes, ran-out 10%; voltron on 6e56280aa 45.9%; a62037db8
+  vs 6e56280aa ts-host changes are guidance-message only, unused in held). Not checked: the SFT trainer's numerics at
+  pin 2734e2c44 (old node-by-node prefix tree, pre-757ffe5d1 Inductor; loss 0.70 -> 0.54, grad norms normal), the
+  sft-v3-run1 checkpoint alone (never held-evaluated: run1 vs run1-cont attribution), the history-reasoning binding of
+  the LFM3 template in teacher rows, October text-only replies (35% of OpenHands, 20% OpenResearcher calls) as a source
+  of the 12% text-beside-action calls.
+
+**2026-11-18 ~11:20, SFT regression: teacher think blocks were trained (static review; fixed 250723952).** Only empty
+teacher think blocks were masked; visible teacher/October reasoning (p50 ~230-250 chars, often a progress-note summary,
+vs ~1,600 for own successes) was trained through `</think>`: 65% of run1's and 74% of run1-cont's trained `</think>`
+decisions came from replies the student never sampled. Held episodes after SFT: reasoning p50 1,747 -> 336 chars,
+completion tokens per call 1,145 -> 644, calls per episode 13.7 -> 16.2, budget exhaustion 85 -> 146. The mechanism
+predicts the direction and size of the ran-out and loop increases. Fix: non-student think blocks are zero-weight context
+(`--teacher-think train` opts out); in-loop teacher demonstrations take the same default. Also found: the Neuralese
+text/graph sets carried 38% of SFT loss on ~94 tasks (padding by repetition; a `loss_concentration` report is added to
+the preflight; per-task capping is the fix for the next SFT build). The rollout investigation continues. grpo-v4-run2
+keeps `--sd-teacher-weight 0` until a resume on a pin with 250723952.
