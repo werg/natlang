@@ -3420,7 +3420,7 @@ Steps 2-3 (06:36-08:25, 48 groups, 109 min) from `train.jsonl`, `actor.log` per-
 - **Learner phase ~54% of wall time** (step 2 07:22-08:00, step 3 08:04-08:25): reference + policy passes at
   1.2-1.5k computed tok/s. The in-flight episodes drain through the whole phase (LPS 0): 41 -> 3 running at ~10-14
   decode steps/s, ~20-35% of the GPU for 100-350 tok/s.
-- **Collection at full speed ~1.0-1.1k tok/s at 46 running** (09:xx contexts ~9-10k tokens/sequence; KV pool 0.5-0.6
+- **Collection at full speed ~1.0-1.1k tok/s at 46 running** (contexts ~9-10k tokens/sequence; KV pool 0.5-0.6
   used): in line with grpo-v3. The logged 766-791 averages include the two losses below.
 - **progtune-fit-route-2 (GPU SFT, 06:35-07:08) halved the actor for 33 min** (10-12 vs 22-23 decode steps/s at 47
   running): ~13 min of step 2's collection. check-main `--python` on CUDA ran 07:59-08:42 beside step 3's learner.
