@@ -19,7 +19,7 @@ build_supply.py, final_checks.sh).
 | w207 | shipment_exception_tracker | 24 (17/4/3) | none |
 | w208 | systematic_review_screening | 21 (15/2/4) | 3 merge-exports (subtitle identity rule direction unstated) |
 | w209 | qasper_section_dossiers (Qasper train) | 0 | whole batch rejected: blind solve 3/23 (free-text span boundaries unstated; two author answers wrong) |
-| w210 | agent_run_log_audit | not yet | still qualifying when this source was built |
+| w210 | agent_run_log_audit | 28 (22/3/3), after the build | none; its train rows enter the next source (held worlds registered as `...-20261118r10b`) |
 | w211 | lab_sample_custody_desk | 21 (17/2/2) | 3 fold_corrections (count wording reads two ways) |
 | w212 | email_thread_filing | 24 (17/3/4) | none (one solver slip) |
 | w213 | course_prerequisite_planner | 27 (17/7/3) | crs-sweep-c (a note names both the given and another term) |
