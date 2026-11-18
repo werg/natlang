@@ -692,16 +692,25 @@ class SharedChild:
     and the TypeScript library costs ~150 MB before any episode, an episode itself tens of MB, so a collection of 128
     slots held ~36 GB in its own processes. Servers are per supervising unit (INVOCATION_ID), runtime and model-facing
     variants, started on demand (``cli.js --serve``) and exit when idle. ``terminate``/``kill`` close the connection,
-    which aborts that invocation only. Same interface as the ``subprocess.Popen`` it replaces in ``run_queue``."""
+    which aborts that invocation only. Same interface as the ``subprocess.Popen`` it replaces in ``run_queue``.
+
+    A server greets each connection before the request is sent (protocol /3). One whose greeting does not come within
+    ``GREETING_SECONDS`` is stalled (an invocation's synchronous work or a swap-in blocks its whole event loop, while the
+    kernel still completes the connect): the request is never sent to it and the next socket is tried, so a stalled
+    server neither fails the episode nor runs it twice when it wakes. Under /2 every new episode waited 60 s on a stalled
+    first server and then failed with no model call (grpo-v4-run1 2026-11-18: 182 of 1,545 episodes, all of groups
+    212-231)."""
 
     ROOT = '/tmp'
+    GREETING_SECONDS = 10      # a live server greets within milliseconds; GC pauses are far below this
+    ACCEPT_SECONDS = 600       # after its greeting the server answers the request within one event-loop turn
 
     @staticmethod
     def supported(cli):
-        """Whether the runtime's collector has the server mode at protocol /2 (pinned older trees have none, or /1, whose
-        server died with EPIPE when a peer left and leaked capacity to probes)."""
+        """Whether the runtime's collector has the server mode at protocol /3 (pinned older trees have none, /1, whose
+        server died with EPIPE when a peer left and leaked capacity to probes, or /2, which did not greet)."""
         try:
-            return 'natlang-collector-serve/2' in Path(cli).read_text()
+            return 'natlang-collector-serve/3' in Path(cli).read_text()
         except OSError:
             return False
 
@@ -735,8 +744,23 @@ class SharedChild:
                         if not path.exists():
                             raise RuntimeError(f'shared collector did not start ({root / f"s{index:03d}.log"})')
                     continue
+                self._buffer = b''
+                try:
+                    greeting = self._line(connection, self.GREETING_SECONDS)
+                    hello = json.loads(greeting) if greeting else {}
+                except (OSError, ValueError):   # TimeoutError included: stalled, nothing was sent to it
+                    greeting, hello = None, {}
+                if not hello.get('ready'):
+                    connection.close()
+                    log.write(json.dumps({'event': 'shared_collector_unresponsive', 'socket': str(path),
+                                          'reason': 'no greeting' if greeting is None else 'closed'}) + '\n')
+                    log.flush()
+                    break
+                if hello.get('active', 0) >= hello.get('capacity', 1) or hello.get('listening') is False:
+                    connection.close()
+                    break   # full: the next socket
                 connection.sendall(request)
-                line = self._line(connection, 60)
+                line = self._line(connection, self.ACCEPT_SECONDS)
                 reply = json.loads(line) if line else {}
                 if reply.get('accepted'):
                     self.connection, self.server_pid = connection, reply.get('pid')
