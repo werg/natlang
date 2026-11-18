@@ -631,7 +631,10 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step, train
                optimizer_pruned_keys=['training'],
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
                                  'training_checkpoint_bytes': 0, 'step': int(state['step'])})
-    torch.save(out, out_path)
+    # atomic; a target on the external disk is written to the NVMe and moved in the background (staged_write)
+    from natlang_neuralese.train.checkpoint_offload import staged_write
+    with staged_write(out_path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
+        torch.save(out, target.path)
     return changed
 
 

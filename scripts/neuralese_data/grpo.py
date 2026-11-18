@@ -1252,7 +1252,9 @@ def stream_tensors_to_file(handle, tensors, staging, stream):
 
 class StateSaver:
     """FP32 masters and AdamW moments streamed GPU -> pinned staging -> file in a background thread. The caller waits
-    (``wait``) before the next optimizer step changes them."""
+    (``wait``) before the next optimizer step changes them. A target on the external disk is written to the NVMe and
+    moved in the background (checkpoint_offload.staged_write: the HDD write took 330-350 s for 21 GB, and a stop in that
+    window lost the step); the write is logged for the memory ledger's stop grace."""
 
     def __init__(self, staging_mb=64):     # the file write, not the copy, bounds the save: 512 MB staging bought nothing
         import torch
@@ -1273,16 +1275,15 @@ class StateSaver:
         names = list(tensors)
         layout = [(name, 'F32', tuple(tensors[name].shape), tensors[name].numel() * 4) for name in names]
         header, _, _ = safetensors_header(layout, metadata)
+        from natlang_neuralese.train.checkpoint_offload import staged_write
 
         def run():
             started = time.time()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            partial = path.with_suffix('.partial')
-            with partial.open('wb') as handle:
-                handle.write(header)
-                stream_tensors_to_file(handle, [tensors[name] for name in names], self.staging, self.stream)
-            os.replace(partial, path)
-            self.last = {'path': str(path), 'seconds': round(time.time() - started, 1)}
+            with staged_write(path, expected_bytes=len(header) + sum(item[3] for item in layout)) as target:
+                with target.path.open('wb') as handle:
+                    handle.write(header)
+                    stream_tensors_to_file(handle, [tensors[name] for name in names], self.staging, self.stream)
+            self.last = {'path': str(path), 'seconds': round(time.time() - started, 1), **target.record()}
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
 
@@ -1517,7 +1518,9 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
                optimizer_pruned_keys=['training'],
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
                                  'training_checkpoint_bytes': 0, 'step': int(state['step'])})
-    torch.save(out, path)
+    from natlang_neuralese.train.checkpoint_offload import staged_write   # NVMe first, then moved (StateSaver)
+    with staged_write(path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
+        torch.save(out, target.path)
     return None
 
 
@@ -3148,7 +3151,11 @@ def train(args):
     branch_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')
     resume_path = Path(args.resume_state) if args.resume_state else state_path
     if args.resume and not args.resume_state and not resume_path.exists() and args.branch_states:
-        resume_path = max(branch_root.glob('state-step-*.safetensors'), default=resume_path)
+        # a state still on the NVMe is a link there (staged_write); one whose NVMe copy was lost is skipped
+        resume_path = max((p for p in branch_root.glob('state-step-*.safetensors') if p.exists()), default=resume_path)
+    if args.resume and resume_path.is_symlink() and not resume_path.exists():
+        raise SystemExit(f'{resume_path} links to {os.readlink(resume_path)}, which is gone (a staged NVMe copy lost before '
+                         'its move): pass --resume-state with another state rather than starting fresh')
     if args.resume and resume_path.exists():
         from safetensors import safe_open
         with safe_open(str(resume_path), 'pt', device='cuda') as handle:
@@ -3334,6 +3341,7 @@ def train(args):
         thread.start()
 
     checkpoint_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')   # off the busy NVMe by default
+    from natlang_neuralese.train.checkpoint_offload import discard
     # every trained episode is kept (compressed) beside the checkpoints: the w5 lesson (AGENTS.md: pruned bundles lost 85
     # successful episodes); '-' keeps none
     rollouts_archive = None if args.rollouts_dir == '-' else Path(args.rollouts_dir or checkpoint_root.parent / 'rollouts')
@@ -3377,7 +3385,7 @@ def train(args):
         for old in checkpoints[:-2]:
             number = int(old.name.split('-')[1])
             if number not in held_steps and number > args.keep_checkpoints_until and old.exists():
-                shutil.rmtree(old)
+                discard(old)          # the directory and the NVMe copy of a checkpoint not yet moved
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
@@ -4149,7 +4157,7 @@ def train(args):
             if branch is not None:     # each step's state, the last N kept: controls branch from any of them
                 saver.wait()
                 for old in sorted(branch_root.glob('state-step-*.safetensors'))[:-(args.branch_states - 1) or None]:
-                    old.unlink()
+                    discard(old)      # the file, or the link and its NVMe copy while the move is pending
             tensors = {}
             for name in live:
                 st = optimizer.state[masters[name]]
@@ -4509,7 +4517,9 @@ def main():
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
-    t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints)')
+    t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints). Native checkpoints '
+                   'and FP32 states aimed at the external disk are written to the NVMe and moved in the background '
+                   '(checkpoint_offload.staged_write; NATLANG_EXTERNAL_STAGING=0 writes them directly)')
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true', help='keep group directories (and every actor store block)')
     t.add_argument('--rollouts-dir', help="each lowered group's rollouts.jsonl, zstd-compressed, before its directory is "

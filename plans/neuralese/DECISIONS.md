@@ -4020,3 +4020,35 @@ ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's
 - **Finding confirmed:** giving every world distinct root inputs removed the custody `inputs:` binding (0 rows lost,
   against 15-16 in each of the two previous rounds).
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: large writes aimed at the external disk go to the NVMe first, then move (owner request; default on)
+
+- **Why.** grpo's `StateSaver` streamed each ~21 GB FP32 state straight to `/mnt/external` (HDD, 330-350 s). A stop
+  in that window lost the step twice today; the 900 s stop grace was a stopgap. grpo also never logged its state
+  writes, so the ledger gave its family the unmeasured 90 s grace.
+- **Mechanism (`train/checkpoint_offload.staged_write`, the existing offload's queue, verified copy and ledger
+  owner).** The file is written and fsynced on the NVMe, then published at its target path as a symlink to that
+  copy. A move job is queued on its own queue (`<offload queue>/moves`) with its own owner unit, so older-code owners
+  never see it. The owner copies the pinned inode to the HDD and re-reads it to verify the SHA-256. Under a
+  cross-process lock, and only while the target still links to that NVMe generation, it replaces the link and
+  deletes the NVMe copy. Readers (resume glob, Pop held eval, probes) see the same path throughout. A stop or resume
+  depends only on the NVMe write. Smoke on the DGX: 2 GB written in 3.8 s and moved in 45 s with the SHA checked; a
+  21 GB state now takes ~40 s instead of ~340 s.
+- **Retention and resume.** `--branch-states` and native-checkpoint pruning call `discard`, which removes the link
+  and its NVMe copy. A newer generation supersedes a pending or running move. The resume lookup skips a dangling
+  state link. Every staged write sweeps crash leftovers: partials of dead writers, staged files nothing links to
+  (never while the HDD is unmounted), and linked files that were never queued.
+- **Bounds and opt-out.** At most 2 staged files and at least 40 GB free on the NVMe, else the write goes direct
+  (atomic). `NATLANG_EXTERNAL_STAGING=0` opts out.
+- **Stop grace.** Every staged write is logged to `CHECKPOINT_WRITES`. The ledger's grace now uses the family's own
+  last 5 large writes (`family_write_throughput`), falling back to the all-writer median.
+- **Covered:** grpo FP32 states (branch and `training-state`), grpo native checkpoints, exp0_sft checkpoints.
+- **Left out, with reasons:**
+  - rollout archives: ~1-2 MB per group;
+  - held-eval outputs: small JSON under the NVMe work dir;
+  - `MomentOffload`: work dir on the NVMe;
+  - trajectory_state checkpoints: already written on the NVMe and mirrored by the offload;
+  - data-build sinks (`neuralese_data/common.py` Sink): streamed over hours, paced by conversion, no stop dependency;
+  - `ReferenceWeights`: written once at startup and re-read every step, so moving it would put every read on the HDD.
+- **When it enters.** grpo-v4-run2 takes this at its next resume on a pin from this commit. Its explicit 900 s
+  `--stop-seconds` can then drop to the measured grace if the step-boundary wait allows.

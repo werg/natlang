@@ -57,6 +57,15 @@ last verified useful recovery state until its replacement is durable. Offload
 cold useful state with length/SHA verification before removing its local copy;
 protect active readers and maintain logical-path custody where required.
 
+Large files aimed at the external HDD (~60 MB/s) are written to the NVMe first
+(`train/checkpoint_offload.staged_write`: GRPO FP32 states and native
+checkpoints, exp0_sft checkpoints). The target path is a symlink to the NVMe
+copy until a separate ledger-owned mover lands a SHA-verified copy in its
+place and deletes the NVMe copy. Retention uses `checkpoint_offload.discard`.
+The NVMe holds at most `NATLANG_EXTERNAL_STAGING_MAX_FILES` (2) staged files
+above `NATLANG_EXTERNAL_STAGING_FLOOR_GB` (40), else the write goes direct;
+`NATLANG_EXTERNAL_STAGING=0` opts out.
+
 ## Delete waste; preserve unique useful work
 
 Delete discarded runs and obsolete infrastructure once actual live recovery

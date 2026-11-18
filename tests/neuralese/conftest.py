@@ -16,6 +16,9 @@ os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
 os.environ.setdefault("NATLANG_CHECKPOINT_WRITES", os.path.join(os.environ.get("TMPDIR", "/tmp"), "natlang-test-checkpoint-writes.jsonl"))
 # Trainer tests never mirror their checkpoints to the machine's external disk (tests of the offload enable it).
 os.environ.setdefault("NATLANG_CHECKPOINT_OFFLOAD", "0")
+# Trainer tests never stage to, sweep or queue moves from the machine's NVMe staging root (tests of staging set theirs).
+os.environ.setdefault("NATLANG_EXTERNAL_STAGING_ROOT", os.path.join(os.environ.get("TMPDIR", "/tmp"), f"natlang-test-external-staging-{os.getpid()}"))
+os.environ.setdefault("NATLANG_CHECKPOINT_MOVE_QUEUE", os.path.join(os.environ.get("TMPDIR", "/tmp"), f"natlang-test-move-queue-{os.getpid()}"))
 # Parity tests compare execution paths at FP32 tolerances to catch logic bugs; production uses TF32 tensor cores.
 os.environ.setdefault("NATLANG_STOCK_ARITHMETIC", "ieee")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))

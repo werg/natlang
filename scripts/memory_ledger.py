@@ -729,7 +729,7 @@ def launch(spec):
     else:
         writes = checkpoint_writes()
         stop_seconds = max(30.0, grace_seconds(unit, claim_for(spec), family_state_bytes(writes),
-                                               write_throughput(writes)))
+                                               family_write_throughput(writes)))
     command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
                 '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} ' + ' '.join(
                     dict.fromkeys([container, *spec.get('containers', ())]))]
@@ -1175,12 +1175,32 @@ def write_throughput(writes):
     return rates[len(rates) // 2] if rates else DEFAULT_THROUGHPUT
 
 
+FAMILY_RATE_WINDOW = 5   # a family's own most recent large writes: its device and write path as they are now
+
+
+def family_write_throughput(writes):
+    """{family: median rate of its last FAMILY_RATE_WINDOW large writes, None: the all-writer median}. A family's own
+    writes say where its state actually goes (2026-11-18: GRPO states moved from the HDD, ~60 MB/s, to the NVMe first,
+    checkpoint_offload.staged_write); the all-writer median is the fallback for a family that never wrote one."""
+    rates = {}
+    for row in writes:
+        if row.get('unit') and row.get('bytes', 0) >= 256 << 20 and row.get('seconds', 0) > 0:
+            name = family(row['unit'] if row['unit'].endswith('.service') else row['unit'] + '.service')
+            rates.setdefault(name, []).append(row['bytes'] / row['seconds'])
+    out = {name: sorted(values[-FAMILY_RATE_WINDOW:])[len(values[-FAMILY_RATE_WINDOW:]) // 2]
+           for name, values in rates.items()}
+    out[None] = write_throughput(writes)
+    return out
+
+
 def grace_seconds(unit, claim, sizes, throughput):
     """Seconds a stopping unit gets to write its full state: explicit ``stop_seconds``, else its family's measured
-    checkpoint size over the measured throughput."""
+    checkpoint size over the measured throughput (``throughput``: bytes/s, or ``family_write_throughput``'s map)."""
     if claim.get('stop_seconds_explicit'):
         return float(claim['stop_seconds'])
     state = sizes.get(family(unit), 0)
+    if isinstance(throughput, dict):
+        throughput = throughput.get(family(unit)) or throughput[None]
     if state:
         return max(GRACE_MIN, GRACE_SLACK + GRACE_MARGIN * state / throughput)
     if claim.get('class') == 'experiment' and priority_of(claim) >= PRIORITIES['high']:
@@ -1238,7 +1258,7 @@ def guard(args):
             free = available - sum(outstanding(c) for c in all_live.values())
             cuda_free = cuda_headroom(all_live, gpu)
             writes = checkpoint_writes()
-            sizes, throughput = family_state_bytes(writes), write_throughput(writes)
+            sizes, throughput = family_state_bytes(writes), family_write_throughput(writes)
             graces = {name: grace_seconds(name, state['claims'].get(name, {}), sizes, throughput) for name in live}
             unit, reason = victim(live, available < floor, args.overshoot, pressure=available < 2 * floor, grace=graces,
                                   emergency=available < emergency)
