@@ -158,8 +158,13 @@ def extract(args):
                 role = row.get('jolt_role', 'student')
                 if role == 'teacher':
                     # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
-                    # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4)
-                    from natlang_neuralese.rl.jolt import student_episode
+                    # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
+                    # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
+                    from natlang_neuralese.rl.jolt import guidance_leak, student_episode
+                    from natlang_neuralese.rl.privileged_context import answer_leaves
+                    if guidance_leak(row, answers=answer_leaves(task)):
+                        c['teacher_attempt_guidance_leak'] += 1
+                        continue
                     row = student_episode(row, c)
                     c['teacher_attempt_successes'] += 1
                 out.write({'key': f"{label}:{name}:{row['sample']}", 'source': 'rl-own', 'run': label, 'group': name,

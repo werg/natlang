@@ -3774,3 +3774,21 @@ SFT_WARMUP_MIX_20261118.md: teacher actions with reasoning and narration masked,
 grpo-v4-run3 starts from it on a fresh pin of origin/main (reasoning RL walk/rewrite, all of run2's bundle) without
 waiting for the SFT checkpoint's own held eval (drive.sh, Pop). run3's held evals begin at a resume once Pop is free.
 If the SFT checkpoint's held result falls below base - 4 pts at p < 0.05, run3 stops and run2 resumes from its state.
+
+### 2026-11-18: JOLT+ hinted self-distillation no longer leaks its guidance (default on)
+
+Audit of grpo-v4-run1's 11 guided (JOLT+ teacher) successes: 6 had the answer in the guidance (writeGuidance asked for
+"a correct result"; the reference-solution and trajectory facts included the final `return_result` value), 4 quoted
+the guidance in their reasoning (5-word overlap absent from the visible prompt) and 2 named it ("Guidance for this
+call (training only)"). In student form the guidance is removed, so those replies train text the call never saw and
+results with no derivation. Fix, shaped toward a hint about where the solution goes, removed when training:
+- the guidance never carries the answer: writeGuidance.nl rewritten (MODEL_FACING_CHANGES 2026-11-18), procedure facts
+  withhold returned values and drop facts holding an answer leaf (`privileged_context.answer_leaves`, same leaf rule as
+  hintCheck.ts), and the runtime rejects written guidance containing a withheld value (`checkGuidance`, writer retries
+  on the tool error). `--guidance-answers show` opts out.
+- a guided attempt that quotes or names its guidance, or whose guidance carried an answer the prompt does not show
+  (`jolt.guidance_leak`), trains nowhere: grpo `load_group` drops it before the episode term, so SD replay (`sd_add`)
+  and reasoning RL (`ReasoningRL.offer`, JOLT+ successes first) never see it; counted as `teacher_guidance_leak*` in
+  stats. `--guidance-leaks train` opts out. `sft_sources extract` applies the same check
+  (`teacher_attempt_guidance_leak`).
+The GRPO run after the SFT warm-up starts from main with this on.

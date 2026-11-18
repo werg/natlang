@@ -106,14 +106,15 @@ test('training guidance travels on the wire only to a native server', async () =
  * One episode: the root calls helper("child-question") in its first turn and returns in its second; helper answers in
  * one turn. The fake driver answers the guidance policy's calls by their `guidance_policy`.
  */
-async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting, trajectory, hints = [HINT_TEXT] } = {}) {
+async function episode({ role = 'teacher', selection, select = ids => ids, writer = 'write', writerSetting, trajectory, hints = [HINT_TEXT],
+  guidances = [GUIDANCE_TEXT], withheld } = {}) {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
   const writes = [];
   const fixturePort = createNativeStateFixturePort(store);
   const port = { dialect: fixturePort.dialect, async write(text, options) { writes.push({ text, options }); return fixturePort.write(text, options); } };
   const neuralese = { store, dialect: 'native-state/fixture', port };
   const requests = [];
-  let hintTurns = 0;
+  let hintTurns = 0, guidanceTurns = 0;
   const driver = Object.assign(async request => {
     requests.push(structuredClone(request));
     const policy = request.guidance_policy?.function;
@@ -125,7 +126,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
     if (policy === 'writeHint') return { calls: [['return_result', { status: 'success', value: hints[Math.min(hintTurns++, hints.length - 1)] }]] };
     if (policy === 'writeGuidance') {
       if (writer === 'fail') return { calls: [['return_result', { status: 'failed', reason: 'The writer could not write.' }]] };
-      return { calls: [['return_result', { status: 'success', value: GUIDANCE_TEXT }]] };
+      return { calls: [['return_result', { status: 'success', value: guidances[Math.min(guidanceTurns++, guidances.length - 1)] }]] };
     }
     const opening = String(request.messages[1]?.content ?? '');
     if (opening.includes('Answer q.')) return { calls: [['return_result', { status: 'success', value: '7' }]] };
@@ -134,7 +135,7 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
     return { calls: [['return_result', { status: 'success', value: '7' }]] };
   }, { neuralese: true });
   const run = { schema: 'natlang.guidance-run/1', role, custody, facts: FACTS, ...(selection ? { selection } : {}),
-    ...(writerSetting ? { writer: writerSetting } : {}), ...(trajectory ? { trajectory } : {}) };
+    ...(writerSetting ? { writer: writerSetting } : {}), ...(trajectory ? { trajectory } : {}), ...(withheld ? { withheld } : {}) };
   const guidance = new TrainingGuidance(run, pkg);
   const agent = new NativeToolAgent(driver, { maxTurns: 6, neuralese, trainingGuidance: guidance });
   const recorder = new ModelTurnRecorder();
@@ -197,6 +198,25 @@ test('a hint that copies a produced value, echoes the signature or overruns its 
   assert.equal(turns.length, 2);
   assert.ok(requestText(turns[1].messages).includes('hint-rejected: The hint gives 7, which execution produced'));
   assert.equal(writes.filter(write => write.text === HINT_TEXT).length, 1, 'the accepted hint is the state');
+});
+
+test('written guidance that gives a withheld answer value is sent back with one sentence', async () => {
+  const { checkGuidance } = pkg;
+  assert.equal(checkGuidance('Ask helper("child-question") and return what it says.', ['7']), undefined);
+  assert.match(checkGuidance('Return "7": ask the helper.', ['7']), /gives 1 value of the call's result/);
+  assert.match(checkGuidance('The draft contradicts the claim. Return FAIL.', ['fail']), /gives 1 value/);
+  assert.equal(checkGuidance('Note each failure.', ['fail']), undefined, 'a whole word, not a part of one');
+  assert.equal(checkGuidance('1. Read a.md\n2. Count rows.', ['2']), undefined, 'list markers are not values');
+  assert.equal(checkGuidance('Return "7".', []), undefined, 'nothing withheld: no check');
+  const accepted = 'Ask helper("child-question") and return its answer as given.';
+  const { result, requests, writes } = await episode({ withheld: ['7'], guidances: [GUIDANCE_TEXT, accepted] });
+  assert.equal(result.outcome.kind, 'done', result.outcome.detail);
+  const turns = policyTurns(requests, 'writeGuidance');
+  assert.ok(turns.length >= 2);
+  assert.ok(requestText(turns[1].messages).includes('hint-rejected: The guidance gives 1 value'));
+  assert.ok(writes.some(write => write.text === accepted) && !writes.some(write => write.text === GUIDANCE_TEXT));
+  const run = { schema: 'natlang.guidance-run/1', role: 'teacher', custody, facts: FACTS };
+  assert.throws(() => new TrainingGuidance({ ...run, withheld: [''] }, pkg), /withheld is a list of nonempty strings/);
 });
 
 test('a hindsight trajectory is refused for students and in the wrong shape', () => {

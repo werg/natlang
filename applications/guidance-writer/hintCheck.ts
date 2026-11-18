@@ -76,3 +76,21 @@ export function checkHint(hint: unknown, execution: TrajectoryCall, budgetTokens
       'its own results, so name how to find them and the evidence to read instead.';
   return undefined;
 }
+
+/**
+ * Crisp check of any written guidance (writeGuidance's or writeHint's result) against the values the run withholds
+ * (rl/privileged_context.py `answer_leaves`: the world's expected result, reference return values and child values;
+ * the writer never sees them). Guidance says where a call's result comes from; the call computes it. A number counts
+ * as a whole number token, a string as a case-insensitive whole word or phrase. One sentence, or undefined.
+ */
+export function checkGuidance(guidance: unknown, withheld: readonly string[]): string | undefined {
+  if (typeof guidance !== 'string' || !withheld.length) return undefined;
+  const numbers = new Set(numbersIn(guidance));
+  const lower = guidance.toLowerCase();
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const given = withheld.filter(value => NUMBER.test(value.trim()) ? numbers.has(Number(value)) :
+    new RegExp(`(?<![\\p{L}\\p{N}_])${escape(value.toLowerCase())}(?![\\p{L}\\p{N}_])`, 'u').test(lower));
+  if (!given.length) return undefined;
+  return `The guidance gives ${given.length} value${given.length === 1 ? '' : 's'} of the call's result; say where the ` +
+    'result comes from (which input, file, function or step) and let the call compute it, without stating it.';
+}

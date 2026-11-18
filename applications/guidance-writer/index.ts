@@ -8,9 +8,9 @@
 import { visible, visibleFacts } from './visibility.js';
 import { CRISP_SELECTION_IDENTITY, crispSelection } from './crispSelection.js';
 import { trajectoryOverview } from './trajectoryOverview.js';
-import { checkHint, HINT_BUDGET_TOKENS } from './hintCheck.js';
+import { checkGuidance, checkHint, HINT_BUDGET_TOKENS } from './hintCheck.js';
 import type { GuidanceConsumer, GuidanceFact, TeacherAttempts, TeacherGroup, TrajectoryCall, TrajectoryOverview,
   TrajectoryStep } from './types.js';
 
 export type { GuidanceConsumer, GuidanceFact, TeacherAttempts, TeacherGroup, TrajectoryCall, TrajectoryOverview, TrajectoryStep };
-export { visible, visibleFacts, CRISP_SELECTION_IDENTITY, crispSelection, trajectoryOverview, checkHint, HINT_BUDGET_TOKENS };
+export { visible, visibleFacts, CRISP_SELECTION_IDENTITY, crispSelection, trajectoryOverview, checkGuidance, checkHint, HINT_BUDGET_TOKENS };

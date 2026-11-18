@@ -587,7 +587,8 @@ class Collector:
             entries, scored, cases=directory / 'packet.jsonl', config=self.work / 'sampling-config.json', out=directory,
             attempts=a.teacher_attempts, seed_base=a.seed_base + 100 * group, custody=self.custody,
             selection=a.teacher_selection, writer='native', fact_kinds=jolt.teacher_fact_kinds(a.teacher_fact_kinds),
-            plan_command=jolt.plan_command(a.actor) if a.teacher_plan == 'nl' else None, trajectories=self.trajectories)
+            plan_command=jolt.plan_command(a.actor) if a.teacher_plan == 'nl' else None, trajectories=self.trajectories,
+            answers=getattr(a, 'guidance_answers', 'withhold'))
         teachers = result['entries']
         if not teachers:
             print(json.dumps({'event': 'no teacher attempts', 'group': group, 'refusal': result.get('refusal')}), flush=True)
@@ -742,6 +743,33 @@ def trainable_rows(rows, stats, top_p=1.):
     return kept
 
 
+def teacher_guidance_leak(collector, info, row):
+    """``rl/jolt.py guidance_leak`` of one JOLT+ teacher attempt (its reasons, [] when it may train), or [] with
+    ``--guidance-leaks train``. The world's answer values come from the group's cases.jsonl; text-fallback guidance is
+    read from the privileged prompt tokens with the served tokenizer (loaded once)."""
+    args = getattr(collector, 'args', None)
+    if getattr(args, 'guidance_leaks', 'drop') != 'drop':
+        return []
+    from natlang_neuralese.rl.jolt import guidance_leak
+    from natlang_neuralese.rl.privileged_context import answer_leaves
+    answers = []
+    cases = info['dir'] / 'cases.jsonl'
+    if cases.exists():
+        for line in cases.read_text().splitlines():
+            case = json.loads(line) if line.strip() else {}
+            if case.get('id') == row.get('task_id'):
+                answers = answer_leaves(case)
+    decode = getattr(collector, 'guidance_decode', None)
+    if decode is None and getattr(args, 'base', None):
+        try:
+            from transformers import AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained(args.base)
+            decode = collector.guidance_decode = lambda ids: tokenizer.decode(ids)
+        except Exception:   # no tokenizer: writer texts alone are checked
+            decode = collector.guidance_decode = None
+    return guidance_leak(row, answers=answers, decode=decode)
+
+
 def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.common.jsonio import read_jsonl
@@ -752,6 +780,14 @@ def load_group(collector, group, stats):
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
         role = row.get('jolt_role', 'student')
         if role == 'teacher':   # JOLT+: the guided run's actions under the unguided prompt (rl/jolt.py student_form)
+            leak = teacher_guidance_leak(collector, info, row)
+            if leak:
+                # its replies quote or name the guidance, or the guidance carried the answer: in student form they would
+                # train text the call never saw; it trains nowhere (episode term, SD replay, reasoning RL)
+                stats['teacher_guidance_leak'] += 1
+                for reason in leak:
+                    stats['teacher_guidance_leak_' + reason] += 1
+                continue
             row = student_form(row, stats)
         reward = row.get('reward')
         rows = (trainable_rows(episode_turns(row, stats, collector.states), stats, collector.args.top_p)
@@ -4260,6 +4296,14 @@ def main():
     t.add_argument('--teacher-max-successes', type=int, default=0)
     t.add_argument('--teacher-fact-kinds', default=None, help='comma list of fact kinds that guide a teacher (default: rl/jolt.py '
                    'TEACHER_FACT_KINDS, no answers); "all" keeps every kind')
+    t.add_argument('--guidance-answers', choices=('withhold', 'show'), default='withhold',
+                   help="JOLT+ guidance never carries the result (default withhold: reference/trajectory facts show no "
+                        "returned value, facts holding an answer value are left out, the runtime rejects written guidance "
+                        "that gives one; rl/privileged_context.py case_facts); show opts out")
+    t.add_argument('--guidance-leaks', choices=('drop', 'train'), default='drop',
+                   help='a JOLT+ teacher attempt whose replies quote or name its guidance, or whose guidance carried the '
+                        'answer, trains nowhere (default drop: episode term, SD, reasoning RL; rl/jolt.py guidance_leak); '
+                        'train opts out')
     t.add_argument('--teacher-selection', choices=('crisp', 'nl'), default='crisp',
                    help='selectGuidanceFacts implementation (crisp: no extra model call)')
     t.add_argument('--teacher-plan', choices=('crisp', 'nl'), default='crisp',
