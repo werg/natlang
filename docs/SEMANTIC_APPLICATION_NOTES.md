@@ -10,6 +10,11 @@ callable-folder placement, services for the outside world) are in `skills/natlan
 
 ## Designing independent applications for a diverse corpus
 
+Exact call records preserve plain JSON from the runtime's confined JavaScript
+realm. The recorder uses the same JSON and SHA-256 representation for local
+and cross-realm values. This keeps a parent call's assigned input comparable
+with the input its child actually received in Workerd, browser, and Node hosts.
+
 Start each application from its own users, decisions, persistent domain records, events, and failure modes. Choose its public operations and typed intermediate structures before designing helper functions. A shared request envelope, a fixed number of stages, or identical prepare/decide/construct/audit children across unrelated programs creates repeated architecture even when domain nouns change. Do not use one generator or common semantic scaffold to stand in for those individual designs.
 
 Depth must represent real work. A dependency ledger may need interval-scoped edge traversal; a scheduler may need a finite candidate frontier; a tutoring application may need competing diagnostic hypotheses and an interrupted-session checkpoint. Give each distinct judgment its own typed child when the parent needs that child's result. Reference actual calls with their supplied inputs, pass returned values to downstream decisions, and preserve unresolved outcomes. More files and unused helpers do not establish deeper execution.

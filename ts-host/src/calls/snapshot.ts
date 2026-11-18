@@ -16,6 +16,18 @@ const typeLabel = (value: unknown): string => {
   return name && name !== 'Object' ? name : 'object';
 };
 
+const objectConstructorSource = Function.prototype.toString.call(Object);
+
+function plainPrototype(prototype: object | null): boolean {
+  if (prototype === null || prototype === Object.prototype) return true;
+  // Workerd, browser, and Node compartments can supply their own Object.prototype.
+  if (Object.getPrototypeOf(prototype) !== null) return false;
+  const constructor = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+  return typeof constructor === 'function' &&
+    Object.getOwnPropertyDescriptor(constructor, 'prototype')?.value === prototype &&
+    Function.prototype.toString.call(constructor) === objectConstructorSource;
+}
+
 /** Plain JSON data only: no class instances, functions, cycles, non-finite numbers or undefined fields. */
 function portable(value: unknown, seen: Set<object>, depth: number): boolean {
   if (depth > 64) return false;
@@ -25,8 +37,7 @@ function portable(value: unknown, seen: Set<object>, depth: number): boolean {
   seen.add(value);
   try {
     if (Array.isArray(value)) return value.every(item => portable(item, seen, depth + 1));
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return false;
+    if (!plainPrototype(Object.getPrototypeOf(value))) return false;
     return Object.entries(value).every(([, item]) => item !== undefined && portable(item, seen, depth + 1));
   } finally { seen.delete(value); }
 }
