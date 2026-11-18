@@ -3981,3 +3981,13 @@ the base on the full run's schedule (peak LR reached), then probe v1, about 15 m
 - operators
 
 Per-source chain files are in the same directory. This is the causal test the gradient numbers stand in for.
+
+**2026-11-18 19:30, SFT warm-up parked; teacher actions enter on-policy (supervisor).** The hazard hunt (19:00 entry)
+found no trainer defect. The doubled `</think>` hazard comes from the objective: full-vocabulary CE on the student's
+own nucleus-sampled tokens sharpens toward likely tokens, `</think>` among them at decision points (fixed: exp0_sft
+`--student-top-p 0.95`, 160f62715), and teacher actions push it through shared weights by sheer mass (no fix yet).
+A separate warm-up would need the per-source ablation (about 80 GB, so run2 pauses about 2 h) and a reasoning guard
+before it is safe. Meanwhile the warm-up's content, teacher actions, already trains on-policy in grpo-v4-run2: reasoning
+RL puts the student's own reasoning before each teacher action (action CE 0.05) and feeds its best chains to SD, while
+the per-step behaviour probe guards the hazard (0.54-0.55 through step 3). So run2 continues, and the warm-up and its
+ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's held results stall.
