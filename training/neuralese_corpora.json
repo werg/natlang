@@ -741454,10 +741454,55 @@
       "note": "Text rows of the 449 verified own GRPO successes that sft_sources build skips for imported Neuralese state (has_native_state): every call whose messages hold no native_state part, i.e. the Neuralese producer invocations (the prompted extraction/summary calls whose returned value span is what the actor captures as the state) and the consumer's calls before its first import; calls after an import are counted, not written. 263 episodes over 94 tasks (115 episodes on bgkit KR reader tasks), 3,806 calls, 1,115 exp0_sft --chains sequences, 11.7M forward / 4.82M target tokens; held-v3/v2 closure 0 hits; every call's system prompt and tool schemas equal ones the current runtime rendered in an exact replay (pin aa1bd846); per-task cap 4. Not replayed (states lived only in the actor store). Merge with sft-verified-20261117-v2/v3 chains (same row format). Built by scripts/neuralese_data/sft_sources.py neuralese-text; plans/neuralese/SFT_SOURCES_20261117.md."
     },
     {
-      "id": "vibestudio-live-workflow-seed-20261118-v2",
-      "owner": "dgx",
-      "path": "runs/vibestudio-live-workflow-seed-20261118-v2",
+      "id": "vibestudio-live-workflow-seed-20261118-v3",
+      "owner": "pop",
+      "path": "runs/vibestudio-live-workflow-seed-20261118-v3",
       "include": [
+        "content-project-release-runbook/source.json",
+        "content-project-release-runbook/summary.json",
+        "content-project-release-runbook/trajectory-content-project-release-runbook-full.json.gz",
+        "content-project-release-runbook/verified.review.json",
+        "content-project-release-runbook/verified/call-0.json",
+        "content-project-release-runbook/verified/call-1.json",
+        "content-project-release-runbook/verified/call-2.json",
+        "content-project-release-runbook/verified/call-3.json",
+        "content-project-release-runbook/verified/call-4.json",
+        "content-project-release-runbook/verified/call-5.json",
+        "content-project-release-runbook/verified/call-6.json",
+        "content-project-release-runbook/verified/call-7.json",
+        "content-project-release-runbook/verified/content-project-oracle.ts",
+        "content-project-release-runbook/verified/manifest.json",
+        "content-project-release-runbook/verified/verification.json",
+        "content-project-release-runbook/verified/workspace.json",
+        "owned-operations-release-audit-continuation/source.json",
+        "owned-operations-release-audit-continuation/summary.json",
+        "owned-operations-release-audit-continuation/trajectory-owned-operations-release-audit-continuation-full.json.gz",
+        "owned-operations-release-audit-continuation/verified/call-0.json",
+        "owned-operations-release-audit-continuation/verified/call-1.json",
+        "owned-operations-release-audit-continuation/verified/call-2.json",
+        "owned-operations-release-audit-continuation/verified/call-3.json",
+        "owned-operations-release-audit-continuation/verified/call-4.json",
+        "owned-operations-release-audit-continuation/verified/manifest.json",
+        "owned-operations-release-audit-continuation/verified/ownedOperationsOracle.ts",
+        "owned-operations-release-audit-continuation/verified/verification.json",
+        "owned-operations-release-audit-continuation/verified/workspace.json",
+        "panel-draft-unmount/source.json",
+        "panel-draft-unmount/summary.json",
+        "panel-draft-unmount/trajectory-panel-draft-unmount-full.json.gz",
+        "panel-draft-unmount/verified/call-0.json",
+        "panel-draft-unmount/verified/call-1.json",
+        "panel-draft-unmount/verified/call-2.json",
+        "panel-draft-unmount/verified/call-3.json",
+        "panel-draft-unmount/verified/call-4.json",
+        "panel-draft-unmount/verified/call-5.json",
+        "panel-draft-unmount/verified/call-6.json",
+        "panel-draft-unmount/verified/call-7.json",
+        "panel-draft-unmount/verified/call-8.json",
+        "panel-draft-unmount/verified/cdp.json",
+        "panel-draft-unmount/verified/manifest.json",
+        "panel-draft-unmount/verified/panel-repair-oracle.ts",
+        "panel-draft-unmount/verified/verification.json",
+        "panel-draft-unmount/verified/workspace.json",
         "sft/build/build.json",
         "sft/build/cases.jsonl",
         "sft/build/chains.pkl",
@@ -741507,9 +741552,163 @@
         "workspace-integration-theme-locale/verified/workspace.json"
       ],
       "admission": "verified-live-trajectory-sft-qualification",
-      "license_provenance": "Project-generated Luna executions against project-authored Vibestudio scenarios and source. Exact repositories and clean pins are retained. No model weights are included.",
+      "license_provenance": "Project-generated model executions against project-authored Vibestudio scenarios. Source pins and actual reviewer provenance are retained with each closed workflow. No model weights are included.",
       "source_provenance": {
         "captures": [
+          {
+            "scenario": "content-project-release-runbook",
+            "outer_run": "st_5d8a96f5d8bd427cb0ba66533b9b98a4",
+            "teacher": "openai-codex:gpt-6-luna",
+            "repositories": {
+              "vibestudio": {
+                "git_commit": "8636b7c8aa48ffcb956ddf53c88c2fe91be4769d",
+                "dirty": false
+              },
+              "natlang": {
+                "git_commit": "5b79c0fda510cb7a4e3adadf1fcb74060bffc014",
+                "dirty": false
+              },
+              "base": {
+                "git_commit": "6bb41fe4f2413c42972e7e326e344df5c5435d5c",
+                "dirty": false
+              },
+              "personal": {
+                "git_commit": "2d3524a71f29f8604b495aa5749576876eaf2994",
+                "dirty": false
+              },
+              "system": {
+                "git_commit": "ff584b7d2ff6ba0cb82f11c149d69ee6210773d2",
+                "dirty": false
+              },
+              "system-testing": {
+                "git_commit": "a5dc88ab1915b7a6782e12f6b177663cf1781dfd",
+                "dirty": false
+              },
+              "examples": {
+                "git_commit": "f3bbbe8050a05011372aa6eb57a9cf69a8d2a2e8",
+                "dirty": false
+              },
+              "google-workspace": {
+                "git_commit": "0b43a0f171070916889b3c05fc5b894cc316cf57",
+                "dirty": false
+              },
+              "news": {
+                "git_commit": "554068a39b314efc753d2f7880761be6dcdf4ba4",
+                "dirty": false
+              },
+              "spectrolite": {
+                "git_commit": "32c4475d2bd4f16dd27874656add55abb5b3def6",
+                "dirty": false
+              }
+            },
+            "recorded_invocations": 8,
+            "effects": [
+              "workspace"
+            ]
+          },
+          {
+            "scenario": "owned-operations-release-audit-continuation",
+            "outer_run": "st_d8c9743b7fb1427e8e6c1fb8d215ef96",
+            "teacher": "openai-codex:gpt-6-luna",
+            "repositories": {
+              "vibestudio": {
+                "git_commit": "8636b7c8aa48ffcb956ddf53c88c2fe91be4769d",
+                "dirty": false
+              },
+              "natlang": {
+                "git_commit": "5b79c0fda510cb7a4e3adadf1fcb74060bffc014",
+                "dirty": false
+              },
+              "base": {
+                "git_commit": "49a5d0931f3528767ce06a6941acf80e72ff9151",
+                "dirty": false
+              },
+              "personal": {
+                "git_commit": "2d3524a71f29f8604b495aa5749576876eaf2994",
+                "dirty": false
+              },
+              "system": {
+                "git_commit": "ff584b7d2ff6ba0cb82f11c149d69ee6210773d2",
+                "dirty": false
+              },
+              "system-testing": {
+                "git_commit": "a5dc88ab1915b7a6782e12f6b177663cf1781dfd",
+                "dirty": false
+              },
+              "examples": {
+                "git_commit": "f3bbbe8050a05011372aa6eb57a9cf69a8d2a2e8",
+                "dirty": false
+              },
+              "google-workspace": {
+                "git_commit": "0b43a0f171070916889b3c05fc5b894cc316cf57",
+                "dirty": false
+              },
+              "news": {
+                "git_commit": "554068a39b314efc753d2f7880761be6dcdf4ba4",
+                "dirty": false
+              },
+              "spectrolite": {
+                "git_commit": "32c4475d2bd4f16dd27874656add55abb5b3def6",
+                "dirty": false
+              }
+            },
+            "recorded_invocations": 5,
+            "effects": [
+              "workspace"
+            ]
+          },
+          {
+            "scenario": "panel-draft-unmount",
+            "outer_run": "st_ac4440ab0927446c8f13744ef7beaba6",
+            "teacher": "openai-codex:gpt-6-luna",
+            "repositories": {
+              "vibestudio": {
+                "git_commit": "8636b7c8aa48ffcb956ddf53c88c2fe91be4769d",
+                "dirty": false
+              },
+              "natlang": {
+                "git_commit": "5b79c0fda510cb7a4e3adadf1fcb74060bffc014",
+                "dirty": false
+              },
+              "base": {
+                "git_commit": "49a5d0931f3528767ce06a6941acf80e72ff9151",
+                "dirty": false
+              },
+              "personal": {
+                "git_commit": "2d3524a71f29f8604b495aa5749576876eaf2994",
+                "dirty": false
+              },
+              "system": {
+                "git_commit": "ff584b7d2ff6ba0cb82f11c149d69ee6210773d2",
+                "dirty": false
+              },
+              "system-testing": {
+                "git_commit": "a5dc88ab1915b7a6782e12f6b177663cf1781dfd",
+                "dirty": false
+              },
+              "examples": {
+                "git_commit": "f3bbbe8050a05011372aa6eb57a9cf69a8d2a2e8",
+                "dirty": false
+              },
+              "google-workspace": {
+                "git_commit": "0b43a0f171070916889b3c05fc5b894cc316cf57",
+                "dirty": false
+              },
+              "news": {
+                "git_commit": "554068a39b314efc753d2f7880761be6dcdf4ba4",
+                "dirty": false
+              },
+              "spectrolite": {
+                "git_commit": "32c4475d2bd4f16dd27874656add55abb5b3def6",
+                "dirty": false
+              }
+            },
+            "recorded_invocations": 9,
+            "effects": [
+              "workspace",
+              "cdp"
+            ]
+          },
           {
             "scenario": "worker-label-repair-missing-helper",
             "outer_run": "st_f1bdde21993349ee9520df16d2d7029e",
@@ -741556,7 +741755,10 @@
                 "dirty": false
               }
             },
-            "completed_call_records": 10
+            "recorded_invocations": 10,
+            "effects": [
+              "workspace"
+            ]
           },
           {
             "scenario": "workspace-integration-theme-locale",
@@ -741604,12 +741806,15 @@
                 "dirty": false
               }
             },
-            "completed_call_records": 13
+            "recorded_invocations": 13,
+            "effects": [
+              "workspace"
+            ]
           }
         ],
         "sft_builder_code": {
           "schema": "natlang.code-provenance/1",
-          "git_commit": "b599c705523559e74df72e62c171b761dc7bd1b2",
+          "git_commit": "81e1be87ba4ba34f5749d737a64b985042d24efd",
           "dirty": false
         },
         "renderer": {
@@ -741628,30 +741833,30 @@
         "held_manifest_sha256": "4547106069df540d32b250782651143eb3e7ae60fc64e2b4ffef4e2b30fc3d11",
         "trajectory_contract": "natlang.live-teacher-task/1",
         "learner_input": "sft/build/chains.pkl",
-        "sft_build_receipt_sha256": "f565477f5b99f7ce068c3a6b638e0e47f7738cc7432157376918381f39fd4cff"
+        "sft_build_receipt_sha256": "efaab737c8556f89ab8effb8316ccaed526d25a89a9aed8bb4726a8dea394022"
       },
       "stages": {
         "collection": {
-          "verified_live_runs": 2
+          "verified_live_runs": 5
         },
         "admission": {
-          "accepted_roots": 2,
+          "accepted_roots": 5,
           "held_id_overlaps": 0,
           "held_group_overlaps": 0
         },
         "rendering": {
-          "tasks": 2,
-          "episodes": 2,
-          "chains": 26,
-          "target_tokens": 6848,
-          "forward_tokens": 256979,
-          "supervised_model_turns": 58
+          "tasks": 5,
+          "episodes": 5,
+          "chains": 48,
+          "target_tokens": 15177,
+          "forward_tokens": 426277,
+          "supervised_model_turns": 125
         },
         "learner_exposure": {
           "performed": false
         }
       },
-      "notes": "Verified live workspace integration on Tick and real worker build/test repair on Pop. This snapshot supersedes seed-v1, includes its workspace integration episode once, and qualifies the pipeline with two workflows. Full source-corpus coverage and learner evaluation are pending."
+      "notes": "One verified smoke episode per included workflow family. Supersedes the two-workflow seed and includes its episodes once. Full source conversion and learner evaluation are separate work."
     }
   ],
   "coverage_backlog": [

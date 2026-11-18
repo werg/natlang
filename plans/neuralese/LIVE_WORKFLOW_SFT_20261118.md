@@ -103,3 +103,21 @@ The published `vibestudio-live-workflow-seed-20261118-v2` contains this trajecto
 trajectory. The held-v2 and held-v3 checks found zero ID or source-group overlaps. Together the episodes produced
 58 supervised model turns, 26 chains and 6,848 target tokens. The DGX verified all 47 immutable artifacts.
 The earlier one-episode seed is superseded and its data remains archived. The seed has had no learner exposure.
+
+## Active replacement seed
+
+`vibestudio-live-workflow-seed-20261118-v3` includes one verified live Luna trajectory per authored family.
+The five roots cover workspace integration, workerd source repair, browser repair, durable operations, and
+content-project delivery. Tick ran the browser and durable operations smokes. Pop ran the workerd repair and
+content delivery. The browser run passed all five independent CDP checks. The operations run verified the real
+worker restart, retained checkpoints, and owned cleanup. Sol independently accepted the actual committed content
+on Pop. The judge evidence is stored with the verification receipt and excluded from executor targets.
+
+The combined render admitted five episodes and produced 125 supervised turns, 48 learner chains, and 15,177 target
+tokens. The original captured call trees remain bound evidence. Held-v2 and held-v3 had zero task-ID and source-group
+overlap. Pop verified all 92 artifact hashes and owns this snapshot. The learner input is
+`runs/vibestudio-live-workflow-seed-20261118-v3/sft/build/chains.pkl` on Pop and Tick. DGX SSH was unavailable during
+this publication. The earlier seed and fixture pilot remain archival. No collection campaign or learner run was launched.
+
+The managed collector lists ten authored cases across these five live families. Each family has one end-to-end
+qualification. Coverage of the wider Vibestudio skill and system-test catalog remains incomplete.
