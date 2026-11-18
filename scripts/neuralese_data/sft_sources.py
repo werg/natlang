@@ -309,24 +309,6 @@ class TemplateRenderer:
     def specials(self):
         return self._engine.specials.fget(self)
 
-    def think_context_end(self, target_ids):
-        """For a reply with no reasoning: the number of leading target tokens that are the template's empty think block
-        (through `</think>` and the whitespace after it), to be zero-weight context; the action after it is the target."""
-        close = self.tokenizer.convert_tokens_to_ids('</think>')
-        ids = list(target_ids)
-        if close not in ids:
-            return 0
-        end = ids.index(close) + 1
-        while end < len(ids) and not self.tokenizer.decode([ids[end]]).strip():
-            end += 1
-        return end
-
-    def tool_call_start(self, target_ids):
-        """Index of the first tool-call opening token of a rendered reply (None for a reply without tool calls)."""
-        start = self.tokenizer.convert_tokens_to_ids('<tool_call>')
-        ids = list(target_ids)
-        return ids.index(start) if start in ids else None
-
     def render(self, messages, tools, target):
         from natlang_neuralese.serve.targets import target_items
         target = {k: v for k, v in target.items() if v is not None}
@@ -342,37 +324,20 @@ TEACHER_LEAD_IN = ('context', 'train')
 
 
 def think_context(renderer, source, target_message, target_ids, teacher_think='context', lead_in='context'):
-    """Leading target tokens that are context, not loss: the think block of a reply the student did not sample, and
-    (``lead_in`` 'context') the text it writes between its reasoning and its first tool call.
-
-    A teacher's, October or live reply renders either the template's empty think block (no visible reasoning) or the
-    provider's visible reasoning, which for Luna and Claude is a summary of hidden reasoning ("So far ... Next, ...")
-    and for the open models a stronger model's short reasoning (p50 ~250 characters against the student's ~1,700).
-    Training it teaches the student where to close its own reasoning and in what style; no verified outcome of the
-    student selects either. sft-v3-run1 did exactly that: held-v3 reasoning p50 fell 1,747 -> 336 characters, Luna's
-    "So far ... Next," style appeared and ran-out rose 16.6% -> 29.6% (DECISIONS 2026-11-18). So by default
-    (``teacher_think`` 'context') the whole think block through ``</think>`` is zero-weight context and only the action
-    after it is the target; 'train' keeps visible teacher reasoning as target (an empty think block stays context).
-
-    The lead-in is the same kind of text outside the think block: Claude narrates 28% of its tool calls ("I'll add 2 L
-    to each hive ...", sft-verified-v4 rows), the open models 3-5%, OpenHands 54%, the student itself 1.7%; held
-    episodes after sft-v3 put text beside 12% of their actions (base 2%). It is not an action and no outcome selects
-    it, so the action trains from its tool-call token on; a reply without tool calls (a final answer) trains whole.
-    The student's own replies keep every token as sampled."""
+    """Leading target tokens that are context, not loss: for a reply the student did not sample, its think block and
+    (``lead_in`` 'context') the text it writes before its first tool call (``serve.targets.non_student_context``, the
+    one rule the program-tune rows share). sft-v3-run1 trained teacher think blocks: held-v3 reasoning p50 fell
+    1,747 -> 336 characters, Luna's "So far ... Next," style appeared and ran-out rose 16.6% -> 29.6% (DECISIONS
+    2026-11-18). Lead-in text is narration: Claude 28% of its tool calls, OpenHands 54%, the student 1.7%; held after
+    sft-v3 12% vs 2%. The student's own replies keep every token as sampled."""
+    from natlang_neuralese.serve.targets import non_student_context
     if teacher_think not in TEACHER_THINK:
         raise ValueError(f'teacher_think {teacher_think!r} not in {TEACHER_THINK}')
     if lead_in not in TEACHER_LEAD_IN:
         raise ValueError(f'lead_in {lead_in!r} not in {TEACHER_LEAD_IN}')
     if source in OWN_SOURCES:
         return 0
-    if teacher_think == 'train' and (target_message.get('reasoning_content') or '').strip():
-        return 0   # the context is a prefix: trained reasoning keeps the lead-in after it as target too
-    context = renderer.think_context_end(target_ids)
-    if lead_in == 'context' and target_message.get('tool_calls') and (target_message.get('content') or '').strip():
-        start = renderer.tool_call_start(target_ids)
-        if start is not None:
-            context = max(context, start)
-    return context
+    return non_student_context(renderer.tokenizer, target_message, target_ids, think=teacher_think, lead_in=lead_in)
 
 
 def check_render(args):

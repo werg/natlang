@@ -168,7 +168,7 @@ class _Tokens:
     vocab = ['<think>', '</think>', '\n\n', '<tool_call>', 'eval', '</tool_call>', '<|im_end|>', 'plan', 'note']
 
     def convert_tokens_to_ids(self, token):
-        return self.vocab.index(token)
+        return self.vocab.index(token) if token in self.vocab else None
 
     def decode(self, ids):
         return ''.join(self.vocab[i] for i in ids)
@@ -227,6 +227,17 @@ def test_text_a_teacher_writes_before_its_tool_call_is_context_and_a_final_answe
     assert s.think_context(renderer, 'rl-own', narrated, target) == 0
     with pytest.raises(ValueError):
         s.think_context(renderer, 'teacher', narrated, target, lead_in='drop')
+
+
+def test_non_student_context_is_one_rule_for_sft_rows_and_program_tune_rows():
+    from natlang_neuralese.serve.targets import non_student_context
+
+    class Lfm25(_Tokens):   # a template whose tool calls open with <|tool_call_start|> and that has no </think>
+        vocab = ['note', '<|tool_call_start|>', 'eval', '<|tool_call_end|>', '<|im_end|>']
+    narrated = {'role': 'assistant', 'content': 'note', 'tool_calls': [{'function': {'name': 'eval'}}]}
+    assert non_student_context(Lfm25(), narrated, [0, 1, 2, 3, 4]) == 1
+    assert non_student_context(Lfm25(), {'role': 'assistant', 'content': 'note'}, [0, 4]) == 0
+    assert non_student_context(_Tokens(), narrated, [1, 8, 3, 4, 5, 6]) == 2
 
 
 def test_backend_workaround_marks_episodes_that_met_the_text_backends_neuralese_refusal():

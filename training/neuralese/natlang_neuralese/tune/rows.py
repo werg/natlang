@@ -63,6 +63,10 @@ def reply_message(reply):
     return message
 
 
+# Own replies (sft_sources' own episodes, key prefix 'rl'): every sampled token is a target.
+OWN_TEACHERS = ('rl',)
+
+
 def turn_graph(engine, turn, *, prompt_weight, soft=None):
     """One collected turn as a single-node native graph row bound to its program binding.
 
@@ -138,6 +142,12 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
     if not names and any(item[0] != 'tok' for item in [*prompt, *target]):
         raise TuneMathError('a teacher text turn rendered native-state items; it is not a text trajectory')
     ids, weights, imports, external = soft_items_to_node(engine, prompt, target, prompt_weight=prompt_weight, state_names=names)
+    if turn.get('teacher') not in OWN_TEACHERS:
+        # a reply the student did not sample: its think block and the text before its first tool call are context
+        from ..serve.targets import non_student_context
+        lead = non_student_context(engine.tokenizer, reply_message(turn['reply']), [value for _, value in target])
+        for position in range(len(ids) - len(target), len(ids) - len(target) + lead):
+            weights[position] = 0.
     occurrence = f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}"
     import dataclasses
     graph = {'schema': GRAPH_SCHEMA, 'id': 'tune:' + occurrence, 'split': 'train',

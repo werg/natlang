@@ -208,11 +208,17 @@ class FakeRenderer:
     def __init__(self, tokenizer):
         pass
 
+    class tokenizer:   # the target's first token closes an empty think block
+        @staticmethod
+        def convert_tokens_to_ids(token):
+            return {'</think>': 7}.get(token, -1)
+
+        @staticmethod
+        def decode(ids):
+            return {7: '</think>'}.get(ids[0], 'x')
+
     def render(self, messages, tools, target):
         return [1, 2, 3], [7, 8, 9]
-
-    def think_context_end(self, target_ids):
-        return 1
 
 
 def held_manifest(tmp_path, row):
