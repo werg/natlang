@@ -1,59 +1,144 @@
 {
   "schema": "natlang.corpus-snapshot/1",
-  "id": "vibestudio-live-workflow-seed-20261118-v1",
+  "id": "vibestudio-live-workflow-seed-20261118-v2",
   "owner": "dgx",
-  "path": "runs/vibestudio-live-workflow-seed-20261118-v1",
+  "path": "runs/vibestudio-live-workflow-seed-20261118-v2",
   "files": [
     {
       "path": "sft/build/build.json",
-      "bytes": 5478,
-      "sha256": "ffe15000b8fc1a6ee374f633f8dceacbfa575714efd9df8d87ee5ef5243866b8"
+      "bytes": 7131,
+      "sha256": "f565477f5b99f7ce068c3a6b638e0e47f7738cc7432157376918381f39fd4cff"
     },
     {
       "path": "sft/build/cases.jsonl",
-      "bytes": 850,
-      "sha256": "45e27fa6232249e1915dbb0719a9e6baddb39b58e8437ca7cc2b496b35955c16",
-      "lines": 1
+      "bytes": 1662,
+      "sha256": "2e69fd1da74937bce75115890949bee0f378eda72108906288477175c2eb49b5",
+      "lines": 2
     },
     {
       "path": "sft/build/chains.pkl",
-      "bytes": 2158128,
-      "sha256": "dccaf474b785599098e359a65b55b21b6dfaf880431e50b5ba4cadf8f6b3e246"
+      "bytes": 3256985,
+      "sha256": "a77bb60ccc460b8e829ef6354f6a556692a2411e74b478c75eafea832e61e899"
     },
     {
       "path": "sft/build/rows.jsonl.zst",
-      "bytes": 37951,
-      "sha256": "57c120726bafbfea415f01a944043a875d5227bff7f2bc3b9f639e9be5bbb530"
+      "bytes": 58975,
+      "sha256": "1ea0653c975215438f4d2db4e880c22c3e536ea7e4c53fd811bdb450bb266467"
     },
     {
       "path": "sft/held-v2-separation.json",
       "bytes": 665,
-      "sha256": "9157fc59eb98bf83f9fc37c76cb87d60a56ad6535b7418862d19d62364cc9108"
+      "sha256": "239d0503a0512be7265735da93f9861ef5ee90538ccb3790f3a3071bcf6f3e19"
     },
     {
       "path": "sft/held-v3-separation.json",
       "bytes": 665,
-      "sha256": "7043503205e59405362e8b171933cc30648dfaab623db1724ea975f152d20d22"
+      "sha256": "47f1f32bc49faa468830897d091cbebc24cf38de5512d3b5d7abbeb4ae9bbf07"
     },
     {
       "path": "sft/source-groups.json",
-      "bytes": 59,
-      "sha256": "a40558e7513cccc824fca7f46a510b0d51b14ba0a7012349e7f4e24d6aa1f963"
+      "bytes": 111,
+      "sha256": "440d3cd057eed8a435c56f7625916f763e6c0b1dc75b3e71943ace606bae23c8"
     },
     {
       "path": "sft/source-ids.json",
-      "bytes": 76,
-      "sha256": "22135f9d22eee7c0706dcf7fd05b8ae2bc33f021af543f5a92695d875d7d6948"
+      "bytes": 139,
+      "sha256": "ad8076eaf0865c719cf846689320769b5220075eab191f8b2145f58a3194170f"
     },
     {
       "path": "sft/work/episodes-extract.json",
-      "bytes": 241,
-      "sha256": "aa893fa92af96765c1679a6b81773ca34555aa51fbf648be9f9958b88f8282a2"
+      "bytes": 351,
+      "sha256": "56497764db80c190970a51ddb4361baaf933d60728162f51ffb2159c8998505c"
     },
     {
       "path": "sft/work/episodes.jsonl.zst",
-      "bytes": 37693,
-      "sha256": "266c199d24b7d064d0da52603006ce4947b9d3a2b88eefb694d79ac0e1cc8596"
+      "bytes": 59589,
+      "sha256": "2d4e8b6450f8bf33c32be37be618d7d1f810ab126b60134943541127a3cdf3a7"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/source.json",
+      "bytes": 1358,
+      "sha256": "cdc05d7cdac351a3b009df04cafa7be8f2b355a8ec0b73183982249caad8a766"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/summary.json",
+      "bytes": 319,
+      "sha256": "c16e28649bafc658178064150a0b693b78d3bd53d1764f7bd37605d6a272b0d3"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/trajectory-worker-label-repair-missing-helper-full.json.gz",
+      "bytes": 651145,
+      "sha256": "d15e04066c9fd4b56af1a08293bfe3aa0d6b05bae9a3f8519c1865139903e9b4"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-0.json",
+      "bytes": 168919,
+      "sha256": "caa86bb6a96c66ec53bde3453fbd4745fdab9a03836552b9de38294c057640b7"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-1.json",
+      "bytes": 172609,
+      "sha256": "92b9205cc98e7852546fa4f4990434d548a26ab6a5ae36d478b267e1d63c3c5f"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-2.json",
+      "bytes": 382830,
+      "sha256": "8bdb8c28b44c4a8eb6893d9115fe23d2a98a15ab43cf5312bc9c43601c54ac2b"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-3.json",
+      "bytes": 144993,
+      "sha256": "de5985dc22ae867dea5e30ef5c2b97ce82002e206a5a82f56204676c0f244b53"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-4.json",
+      "bytes": 117174,
+      "sha256": "213a716d1f6e5cfe87d3627ca584feb3f70c805ae932ea40fc3d5bc7368bc429"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-5.json",
+      "bytes": 156914,
+      "sha256": "a54c456762cdb7c5c7496fdb68fcb5533a1a4acb7bcb284f4c611996dc33e1b9"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-6.json",
+      "bytes": 166151,
+      "sha256": "cb798eda2b4ad3a29d6683d7ba9230f43c6c0d64d07334703d0385c4b6bf6022"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-7.json",
+      "bytes": 135848,
+      "sha256": "19042153e8ba673a0a2e369579a24bc6d82971fe26f23466d987d0ff5c9a5893"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-8.json",
+      "bytes": 346106,
+      "sha256": "4f6a1b88bc3750fb29f3e298946f6343003264a12a9b83ab2da68d780f0cb1a9"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/call-9.json",
+      "bytes": 1197121,
+      "sha256": "1d5d24b5b148154565cac5b1a31a4c0b1304658903a841a5a5546d4a17d8d361"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/manifest.json",
+      "bytes": 2812,
+      "sha256": "24a6dda002fe2e591d31bad592764dd6973761f209445374465fb835f3ed60a2"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/unit-repair-oracle.ts",
+      "bytes": 4754,
+      "sha256": "eac71ddf8f1d89387e7a2cfeb4051a03b7f4112d501ea66e48f063122afca336"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/verification.json",
+      "bytes": 3588,
+      "sha256": "78c80f3a4547ee804a2d875cad4b946d7ccf66e3c6e8ab1f8f8d0ad84b15b51e"
+    },
+    {
+      "path": "worker-label-repair-missing-helper/verified/workspace.json",
+      "bytes": 6091,
+      "sha256": "f0ba532411ee7a36879fcf85ef42789e1e2f605dc621914917c4b88255090881"
     },
     {
       "path": "workspace-integration-theme-locale/source.json",
@@ -156,5 +241,5 @@
       "sha256": "04790d8a772842b4021efbf2c942c4dc5877f230d39163884a55a5be699ea90c"
     }
   ],
-  "bytes": 9388444
+  "bytes": 14191643
 }
