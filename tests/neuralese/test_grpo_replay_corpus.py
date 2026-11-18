@@ -88,3 +88,22 @@ def test_a_leading_empty_think_block_is_context_and_reasoned_replies_keep_every_
     assert kept.think_masked == 0 and 'weight' not in kept.groups['a'][0]['segs'][0][2]
     with pytest.raises(SystemExit):
         grpo.ReplayCorpus(f'ops={path},think=maybe', set(), 7, log=lambda r: None)
+
+
+def test_student_sampled_targets_split_teacher_and_corpus_data_from_the_students_own_samples():
+    def chain(role, round_name='rl:x', rrl=None):
+        rows = [{'sample': np.zeros(2, np.int32), **({'teacher': True} if r == 'teacher-row' else {'rrl': r} if r else {})}
+                for r in (rrl or [None])]
+        return {'ids': np.zeros(8, np.int32), 'segs': [(1 + 2 * i, 2, row) for i, row in enumerate(rows)],
+                'task': 't', 'round': round_name, 'role': role}
+    sampled = grpo.student_sampled_targets
+    assert sampled(chain('student')).tolist() == [True, True]
+    assert sampled(chain('sd')).tolist() == [True, True]
+    assert sampled(chain('teacher')).tolist() == [True, True]              # JOLT+ attempts: the actor sampled them
+    assert sampled(chain('sd_teacher', 'teacher:pool')).tolist() == [False, False]
+    assert sampled(chain('replay', 'rl-neuralese-graph:e')).tolist() == [True, True]   # own graph rows
+    assert sampled(chain('replay', '0')).tolist() == [False, False]                   # operator seeds and answers
+    rrl = chain(grpo.RRL_ROLE, rrl=['reasoning', 'action'])
+    assert sampled(rrl).tolist() == [True, True, False, False]           # the teacher action after the student's reasoning
+    carried = chain('sd', 'rrl-carried-x', rrl=[None, 'teacher-row'])     # carried search chain: reasoning, teacher action
+    assert sampled(carried).tolist() == [True, True, False, False]

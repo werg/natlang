@@ -3991,3 +3991,22 @@ before it is safe. Meanwhile the warm-up's content, teacher actions, already tra
 RL puts the student's own reasoning before each teacher action (action CE 0.05) and feeds its best chains to SD, while
 the per-step behaviour probe guards the hazard (0.54-0.55 through step 3). So run2 continues, and the warm-up and its
 ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's held results stall.
+
+**2026-11-18 19:40, grpo: each target trains under the law that produced it (SFT-row investigation; default on).**
+- **The audit.** Every trained token path in `grpo.py` already went through `train_leaves`, and with `--top-p` < 1
+  its policy term used the nucleus log-probability for every chain: episodes, SD replay (own, JOLT+, search-carried,
+  rewrite), reasoning-RL, replay corpora and teacher demos. The student's own samples were therefore already right.
+- **The defect.** Rows the student never sampled got the nucleus log-probability too.
+- **Fix (`--non-student-loss full`, default; `nucleus` opts out).** These train the full-softmax log-probability:
+  - teacher demonstrations (`sd_teacher`);
+  - the reasoning-RL teacher actions (`rrl == 'action'` rows, and the `teacher` action rows of carried search
+    chains);
+  - replay-corpus rows that are not the student's own (operator seeds and answers; own Neuralese graph rows keep the
+    nucleus, `exp0_sft.student_sampled`).
+
+  `grpo.student_sampled_targets` is the rule. `train.jsonl` records `non_student_tokens`, and `nucleus_mass_mean`
+  still averages over every target.
+- **Program-tune.** Its `rl` and `rft` objectives already score actions under the recorded sampling law
+  (`rl/native_replay.token_action_logps`: temperature and the sampler's allowed set). Nothing produces own turns for
+  its full-softmax `sft` rows.
+- **When it enters.** grpo-v4-run2 takes this at its next resume.

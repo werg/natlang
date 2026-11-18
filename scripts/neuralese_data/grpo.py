@@ -2670,6 +2670,19 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
 RATIO_FREE_ROLES = ('sd_teacher', 'replay')   # chains without actor log-probabilities (rho = 1)
 
 
+def student_sampled_targets(chain):
+    """Per target of ``chain`` (bool array): whether the student sampled it, so that its likelihood is the one under its
+    top-p nucleus. Not sampled by the student: teacher demonstrations (``sd_teacher``), the reasoning-RL term's teacher
+    actions (rows ``rrl == 'action'``, and the carried search chains' action rows marked ``teacher``) and replay-corpus rows that are not the student's own (operator seeds, consumers'
+    dataset answers; ``exp0_sft.student_sampled`` reads the corpus chain's source). Everything else (episodes, SD replay
+    of own and JOLT+ successes, reasoning-RL reasoning, own Neuralese graph rows) was sampled by the actor."""
+    import exp0_sft
+    role = chain.get('role')
+    if role == 'sd_teacher' or (role == 'replay' and not exp0_sft.student_sampled(chain)):
+        return np.zeros(sum(n for _, n, _ in chain['segs']), bool)
+    return np.concatenate([np.full(n, row.get('rrl') != 'action' and not row.get('teacher')) for _, n, row in chain['segs']])
+
+
 def token_advantage(chain, device):
     """The chain's advantage per token: its ``advantage``, times a row's own ``advantage`` where rows carry one (the
     reasoning RL term: a think block at its group-normalized return, the teacher action after it at the action weight;
@@ -3918,6 +3931,13 @@ def train(args):
                 logp_rows, policy_rows = -nll, -nucleus_nll
                 sums['outside_nucleus'] += int(outside.sum())
                 sums['nucleus_log_mass'] += (logp_rows.detach() - policy_rows.detach()).sum().item()
+                if args.non_student_loss == 'full':
+                    # a target the student never sampled (teacher demonstration, the reasoning-RL teacher action, an
+                    # operator seed) is data, not a draw from the nucleus: its likelihood is the full softmax
+                    sampled = torch.from_numpy(np.concatenate([student_sampled_targets(chains[index])
+                                                               for index, _ in items])).to(nll.device)
+                    policy_rows = torch.where(sampled, policy_rows, logp_rows)
+                    sums['non_student_tokens'] += int((~sampled).sum())
             else:
                 logp_rows = policy_rows = -exp0_sft.token_nll(model, h, positions, targets)
             loss = 0.
@@ -4153,7 +4173,7 @@ def train(args):
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
             grad_moment_cosine=None if cosine is None else round(cosine, 5),
-            top_p=args.top_p, outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
+            top_p=args.top_p, non_student_tokens=int(sums['non_student_tokens']), outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
             nucleus_mass_mean=round(math.exp(sums['nucleus_log_mass'] / max(1, loss_tokens)), 5),
             tail_logp_floor=args.tail_logp_floor, tail_masked_fraction=round(sums['tail_masked'] / max(1, loss_tokens), 6),
             tail_masked_decisions=sums['tail_masked_decisions'],
@@ -4453,6 +4473,11 @@ def main():
                         '(common.sampling.RL_TOP_P; 1.0: untruncated). The policy term scores the sampled token under the '
                         "learner's own nucleus (lfm3_fast_train.linear_nll_nucleus); calls sampled under another top_p are "
                         'refused (skip_other_sampling_law)')
+    t.add_argument('--non-student-loss', choices=('full', 'nucleus'), default='full',
+                   help='with --top-p < 1: targets the student never sampled (teacher demonstrations, the reasoning-RL '
+                        'teacher actions, non-own replay-corpus rows; grpo.student_sampled_targets) train the full-softmax '
+                        "log-probability (default), the student's own samples the nucleus one; nucleus: every target the "
+                        'nucleus one (before 2026-11-18)')
     t.add_argument('--tail-logp-floor', type=float, default=-7.,
                    help='where the actor sampled a token (or decision option) with log-probability below this and the '
                         "episode's advantage is positive, the policy term has zero weight (the KL term stays); 0: off")
