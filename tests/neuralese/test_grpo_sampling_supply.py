@@ -310,3 +310,8 @@ def test_teacher_demonstrations_default_on_with_an_opt_out(monkeypatch):
     assert record['sd']['teacher_episodes'] == 2 and record['sd']['own_episodes'] == 1
     assert 'sd' not in grpo.restore_telemetry(stats, SimpleNamespace(sd_weight=0., sd_teacher_weight=0.))
     assert math.isfinite(args.sd_teacher_weight)
+
+
+def test_prefix_retained_memory_is_bounded_by_default(monkeypatch):
+    assert parsed(monkeypatch).prefix_retained_gb == 8.
+    assert parsed(monkeypatch, '--prefix-retained-gb', '0').prefix_retained_gb == 0.

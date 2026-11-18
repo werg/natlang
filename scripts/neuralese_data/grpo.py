@@ -2999,7 +2999,7 @@ def train(args):
         def run_tree(leaf, backward=True):
             return lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens_of, pack_tokens, args.activation_gb,
                                                    backward, mode=tree_mode if share_prefix_tokens > 0 else 'levels',
-                                                   batch_tokens=args.tree_batch_tokens)
+                                                   batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb)
 
         refs = {}
         # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's

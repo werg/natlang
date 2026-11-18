@@ -3371,3 +3371,25 @@ speculative bench. So the ~110 GB is collection-time use, not the learner peak. 
 with SLOTS=24 RUNNING=24, ledger learned peak reset to 92 GB, `--min-groups 24 --max-groups 48` (AGENTS.md default;
 48-96 meant a step every 1.5-2 h), and Pop held evals on against grpo-v3's Pop base. A sampler logs the unit's cgroup
 breakdown (anon/file/shmem) and per-process CUDA every 2 min to find what fills memory during collection.
+
+**2026-11-18 06:30, grpo-v4-run1: the ~110 GB was the learner's step-1 peak, not collection; prefix tree bounded.**
+- **What the guard stops were.** Both stops (02:06 at 64 slots, 03:54 at 32) came 13-17 min after the run lowered
+  its first step's groups (`retired` marks at 01:53:50-01:54:16 and 03:37:35-03:38:07): the learner's step 1 was in
+  its policy pass (journal: `learner progress` step 1 at policy_s 126 with MemAvailable 13.7 GB and heavy swap). The
+  unit's cgroup peak was 23-38 GB; the rest of the ledger's 119 GB was CUDA (nvidia-smi). Collection alone at 24 slots
+  is ~39 GB (cgroup 17 + CUDA 22: learner 10, actor 11; sampler 05:36).
+- **Cause.** `levels` keeps every prefix of the whole step (layer inputs, FP32 history keys/values and their grads)
+  until the prefixes' backward at the end. Step 1's 48 groups (offline from the archive: 1,279 chains, 12.9M chain
+  tokens, 3x grpo-v3's steps) had 229k prefix tokens, ~31 GB retained (147 KB a token), unbounded by
+  `--activation-gb` (`leaf_gb = activation_gb - retained` just went to 0). Plus static learner ~25 GB, leaf batches,
+  the replay corpora/SD/teacher chains, the actor and the draining episodes.
+- **Fix (default, `--prefix-retained-gb 8`, 0 = old unbounded; both learners via `add_prefix_tree_args`):**
+  `run_prefix_tree` runs a forest over the bound as `prefix_parts` one after another, each to its own backward; shared
+  ancestors (the 4k-token system prompt and 2.5k second level) are recomputed once per part (~4 parts on step 1, ~2% more
+  computed tokens). Exact: gradient test against the unsplit tree. Also the planner's retained estimate now counts the
+  segment gradients. Expected learner peak -23 GB at step 1's size.
+- **Collection speed.** Decode-bound: actor ~1.2k tok/s at 62 running, ~800 at 31, ~800 at 23 (actor.log; KV 18%
+  used). The slot cut 64 -> 24 for the misattributed peak cost ~1/3 of collection. The JOLT+ hold-out (11 of 29 groups)
+  is latency, not throughput: those are all-fail groups whose students carry no advantage; slots keep working.
+  Next resume on a pin with this fix: back to SLOTS/RUNNING 48 and read the step-1 ledger peak (`cuda_peak_by_phase_gb`,
+  `prefix_tree.parts`).

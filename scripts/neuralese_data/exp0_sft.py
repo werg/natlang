@@ -339,6 +339,11 @@ def add_prefix_tree_args(parser):
                         help='shared prefixes: tree-mask (each batch one flattened forward, every token attending and '
                         'convolving along its own path), levels (level-by-level packed continuations over cached state), '
                         'off (every chain whole; as --share-prefix-tokens 0)')
+    parser.add_argument('--prefix-retained-gb', type=float, default=8.,
+                        help='levels: what the shared prefixes keep until their backward (layer inputs, FP32 history keys '
+                        'and values and their gradients), at most this; a larger step runs its prefix tree in parts '
+                        '(lfm3_fast_train.prefix_parts, exact, shared ancestors recomputed per part). grpo-v4-run1 step 1 '
+                        'held 229k prefix tokens (~31 GB) at once; 0: unbounded')
     parser.add_argument('--tree-batch-tokens', type=int, default=-1,
                         help='tree-mask batch cap (prefixes once plus their continuations); default: the cap with the least '
                         'estimated compute, prefix copies vs layer recompute (lfm3_fast_train.plan_tree_batches)')
@@ -350,7 +355,7 @@ def prefix_tree_settings(args):
 
 
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
-                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None):
+                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
     least ``share_prefix_tokens`` tokens that several chains share are computed once and every batch is packed into
     varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree` in ``mode``, exact gradients); 0: every chain
@@ -403,7 +408,8 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
         total_nll += nll.sum().item()
     clock['start'] = time.time()
     lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
-                                    mode=mode if share_prefix_tokens > 0 else 'levels', batch_tokens=tree_batch_tokens)
+                                    mode=mode if share_prefix_tokens > 0 else 'levels', batch_tokens=tree_batch_tokens,
+                                    retained_gb=retained_gb)
     if clock['end'] is not None:
         mark('prefix_backward', clock['end'])
     return total_nll, lfm3_fast_train.tree_tokens(nodes, [tokens(i, 0) for i in range(len(chains))])
@@ -584,7 +590,8 @@ def train(args):
         total_nll, computed = step_backward(model, forward, [chains[i] for i in group], denominator, pack_tokens,
                                             args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
                                             mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
-                                            tree_batch_tokens=args.tree_batch_tokens)
+                                            tree_batch_tokens=args.tree_batch_tokens,
+                                            retained_gb=args.prefix_retained_gb)
         forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0

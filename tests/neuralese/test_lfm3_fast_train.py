@@ -332,7 +332,7 @@ def test_prefix_tree_covers_every_sequence_once_within_caps():
     assert lfm3_fast_train.tree_tokens(lfm3_fast_train.prefix_tree(seqs, caps, 0), lengths) == sum(lengths)
 
 
-def _tree_run(model, seqs, caps, weights, pack_tokens, backward=True, budget=None, mode='levels'):
+def _tree_run(model, seqs, caps, weights, pack_tokens, backward=True, budget=None, mode='levels', retained_gb=None):
     """run_prefix_tree over ``seqs`` with the loss sum(h[cap:] * weight): {index: h[cap:]} and the batches seen."""
     actual, batches = {}, []
 
@@ -351,7 +351,7 @@ def _tree_run(model, seqs, caps, weights, pack_tokens, backward=True, budget=Non
     nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
     stats = lfm3_fast_train.run_prefix_tree(model, nodes, lambda i, a, b: torch.from_numpy(seqs[i][a:b]).long(), leaf,
                                             lambda i, s: len(seqs[i]) - s, pack_tokens, budget, backward, mode=mode,
-                                            batch_tokens=pack_tokens)
+                                            batch_tokens=pack_tokens, retained_gb=retained_gb)
     return actual, batches, stats
 
 
@@ -761,3 +761,43 @@ def test_rollout_lowering_resolves_imports_to_their_write_sources():
     assert stats['passthrough_imports'] == 2
     stats = collections.Counter()
     assert episode_turns({'turns': [turn(prompt)]}, stats) == [] and stats['skip_native_state_prompt'] == 1
+
+
+def test_prefix_parts_bound_prefix_tokens_and_keep_every_leaf_once():
+    leaf = lambda i: {'start': 4, 'index': i}
+    nodes = [{'start': 0, 'end': 4, 'first': 0, 'children': [
+        {'start': 4, 'end': 10, 'first': 0, 'children': [leaf(0), leaf(1)]},
+        {'start': 4, 'end': 9, 'first': 2, 'children': [leaf(2), leaf(3)]},
+        {'start': 4, 'end': 12, 'first': 4, 'children': [leaf(4)]}]}, {'start': 0, 'index': 5}]
+    parts = lfm3_fast_train.prefix_parts(nodes, 12)
+    leaves = []
+
+    def walk(node):
+        if 'index' in node:
+            leaves.append(node['index'])
+        else:
+            for child in node['children']:
+                walk(child)
+    for part in parts:
+        assert sum(lfm3_fast_train._prefix_tokens(n) for n in part) <= 12
+        for node in part:
+            walk(node)
+    assert sorted(leaves) == list(range(6)) and len(parts) == 3
+    assert lfm3_fast_train.prefix_parts(nodes, 1000) == [nodes]
+
+
+def test_prefix_tree_in_parts_gives_the_same_gradients():
+    """``retained_gb`` splits the forest (shared ancestors recomputed per part): outputs and gradients unchanged."""
+    seqs, caps = _shared_sequences()
+    _, whole = _pair()
+    weights = [torch.randn(len(s) - c, whole.config.hidden_size) for s, c in zip(seqs, caps)]
+    expected, _, plan = _tree_run(whole, seqs, caps, weights, 12)
+    assert 'parts' not in plan
+    _, split = _pair()
+    split.load_state_dict(whole.state_dict())
+    per_token = lfm3_fast_train.retained_bytes_per_token(split)
+    actual, batches, plan = _tree_run(split, seqs, caps, weights, 12, retained_gb=3 * per_token / 2**30)
+    assert plan['parts'] > 1 and sorted(i for b in batches for i, _ in b) == list(range(len(seqs)))
+    for index in expected:
+        torch.testing.assert_close(actual[index], expected[index], rtol=1e-4, atol=1e-5)
+    _grads_close(whole, split, 'prefix tree in parts')
