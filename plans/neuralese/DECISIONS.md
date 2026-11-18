@@ -3864,3 +3864,14 @@ warm-up runs only once its cause is fixed.
 - **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 25 rows, closure
   passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r13`.
 - **When it enters:** grpo-v4-run2 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: task supply round 14, `natlang-rl-task-supply-20261118e` (127 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 127 train rows in 9 new families (round 14 w251-w258 and w243).
+- **Constructs:** folder reducers 76%, decide 58%, depth 3 63%, iterateOn 57%, typed Neuralese 53%.
+- **Repetition:** 0 program texts or functional programs shared with the 35,552-row pool; top structure 12%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 40 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r14`.
+- **Finding:** dataset seeds with free-text span answers (Qasper, MuSiQue) lose most tasks to the blind solve; GSM8K
+  loses a third to wording. Round 15 authors only closed-set answers.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.

@@ -153,3 +153,20 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
 - **Next.** Round 14 (w251-w258, `AUTHOR_BRIEF_ROUND14.md`: smoke fragment keys, per-batch construct planning,
   hyphen word splits, per-world data to avoid custody binding) and w243 go into the next source.
+
+## 9. Round 14: `natlang-rl-task-supply-20261118e` (127 rows)
+
+- **Batches.** Haiku authors w251-w258 (`AUTHOR_BRIEF_ROUND14.md`) and w243 from round 13. The grpo-v4 pin moved to
+  `pin-a0981794b756` mid-round (the old qualify runtime was pruned); authors relaunched queued qualifies on it.
+- **Admitted:** 211 tasks in 9 families. The blind solve held back 22: MuSiQue (w255) 11 of 20 for several defensible
+  exact spans, GSM8K (w243) 8 of 24 for dataset wording with two readings, w254 2 cue/format near-misses. Lesson
+  (`AUTHOR_BRIEF_ROUND15.md`): closed-set answers only; free-text span seeds are not worth authoring.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r14`.
+- **Source rows.** Train rows of w243 and w251-w258, minus 15 w256 rows custody binds to held sibling worlds (shared
+  world data) and the 25 earlier custody rows. **Result: 127 rows in 9 families.**
+- **Constructs:** folder reducers 76%, decide 58%, call depth >= 3 63%, iterateOn 57%, typed Neuralese results 53%;
+  124 of 127 rows carry two or more held constructs.
+- **Repetition** (against all seven earlier POOLS, 35,552 rows): 61 distinct programs (56.1 effective), 25 structures
+  (20.1 effective), top structure 12%, top-10 instructions 24%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+- **Next.** Round 15 (w259-w266, closed answers only; WikiSQL train seed with SQL-executed answers).
