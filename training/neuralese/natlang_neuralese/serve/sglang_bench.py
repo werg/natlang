@@ -159,7 +159,7 @@ def serve(args):
     pythonpath = os.pathsep.join(filter(None, [os.environ.get('NATLANG_SGLANG_PYTHONPATH'), str(root / 'training/neuralese')]))
     env = {**os.environ, 'PYTHONPATH': pythonpath, 'CUDA_HOME': cuda,
            'PATH': os.pathsep.join([str(Path(python).parent), cuda + '/bin', os.environ.get('PATH', '')]),
-           'NATLANG_ADAPTER_SLOTS': '4', 'NATLANG_ADAPTER_RANK': '32'}
+           'NATLANG_ADAPTER_SLOTS': os.environ.get('NATLANG_ADAPTER_SLOTS', '4'), 'NATLANG_ADAPTER_RANK': '32'}
     log = open(Path(args.out) / 'sglang-server.log', 'ab')
     started = time.monotonic()
     process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
