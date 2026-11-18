@@ -25,6 +25,7 @@ term; it still trains on its outcome term and the refusal is recorded in the obj
 from __future__ import annotations
 
 import json
+import re
 import math
 from pathlib import Path
 
@@ -170,7 +171,8 @@ def root_calls(rollout, turns):
     return {(turns[0].get('graph_turn') or '').rsplit('#turn', 1)[0]}
 
 
-def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, teacher_trajectories=None):
+def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, teacher_trajectories=None,
+                      answers='withhold'):
     """``source(rollout, replay, turns) -> ({invocation: PrivilegedBlock}, telemetry)``: the episode's verified guidance.
 
     The actor recorded each model turn's guidance (``privileged_context.captured_block``): the policy's own
@@ -196,7 +198,7 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
         if case is None:
             raise CustodyError('episode has no bound training world')
         group = students.get((rollout['task_id'], json.dumps(rollout.get('group'), sort_keys=True)), [])
-        receipt, facts = case_facts(case, custody=custody,
+        receipt, facts = case_facts(case, custody=custody, answers=answers,
             teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
             attempt_feedback=group_feedback(case, group, rollout.get('sample')))
         descriptors = {item['name']: item for item in graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))}
@@ -523,7 +525,7 @@ TEACHER_SEED_OFFSET = 900
 GUIDANCE_RUN_SCHEMA = 'natlang.guidance-run/1'
 
 
-def guidance_controls(base, *, role, custody_receipt, facts, selection=None, writer=None, trajectory=None):
+def guidance_controls(base, *, role, custody_receipt, facts, selection=None, writer=None, trajectory=None, withheld=None):
     """Run-level chat controls of one JOLT+ episode: the world's custody-checked facts for the in-run guidance writer.
 
     The natlang runtime (``applications/guidance-writer``) filters them by visibility per invocation, selects with
@@ -531,6 +533,9 @@ def guidance_controls(base, *, role, custody_receipt, facts, selection=None, wri
     a teacher attempt imports the written state, a student attempt writes it without importing it (OPSD twin).
     ``trajectory`` (a ``TrajectoryCall``, rl/hindsight.py): the root call's guidance is a hindsight hint that
     ``writeHint`` writes from this verified run (teacher attempts only).
+    ``withheld`` (``privileged_context.answer_leaves``): values no written guidance may carry; the runtime rejects a
+    writeGuidance/writeHint result that contains one as the writer's tool error (guidance-writer hintCheck.ts
+    ``checkGuidance``). The writer never sees them.
     """
     if role not in ('teacher', 'student'):
         raise ValueError('guidance role is teacher or student')
@@ -541,7 +546,8 @@ def guidance_controls(base, *, role, custody_receipt, facts, selection=None, wri
                                            'facts': [fact_request(fact) for fact in facts],
                                            **({'selection': selection} if selection is not None else {}),
                                            **({'writer': writer} if writer is not None else {}),
-                                           **({'trajectory': trajectory} if trajectory is not None else {})}}
+                                           **({'trajectory': trajectory} if trajectory is not None else {}),
+                                           **({'withheld': list(withheld)} if withheld else {})}}
 
 
 def _load_custody(custody):
@@ -554,7 +560,8 @@ def _load_custody(custody):
         return None, str(error)
 
 
-def student_guidance(student_entries, *, ids, cases, config, out, custody=None, selection=None, writer=None):
+def student_guidance(student_entries, *, ids, cases, config, out, custody=None, selection=None, writer=None,
+                     answers='withhold'):
     """Bind each student entry to its world's guidance controls (write-only writer for the OPSD twin).
 
     ``ids``: the prepared packet's case ids by queue ``index``. A world refused by custody keeps the plain controls;
@@ -575,7 +582,7 @@ def student_guidance(student_entries, *, ids, cases, config, out, custody=None, 
         if case is None:
             continue
         try:
-            receipt, facts = case_facts(case, custody=custody)
+            receipt, facts = case_facts(case, custody=custody, answers=answers)
         except CustodyError:
             continue
         if not facts:
@@ -681,6 +688,98 @@ def student_episode(rollout, stats=None):
     return row
 
 
+QUOTE_WORDS = 5
+_WORD = re.compile(r"[A-Za-z0-9_']+")
+# Words a consumer's own reply uses to point at guidance it was given (grpo-v4-run1: "The user says: \"Guidance for this
+# call (training only)...", "The guidance mentions ..."); counted only when the call's visible prompt does not use them.
+GUIDANCE_NAMES = re.compile(r'\b(guidance|training only|the hint|hint says|as hinted|the note says)\b', re.I)
+
+
+def _words(text):
+    return [word.lower() for word in _WORD.findall(text or '')]
+
+
+def _grams(text, n=QUOTE_WORDS):
+    words = _words(text)
+    return {tuple(words[i:i + n]) for i in range(len(words) - n + 1)}
+
+
+def guidance_texts(rollout, decode=None):
+    """The guidance a teacher attempt was given: each writer call's returned text (``guidance_policy`` turns:
+    writeGuidance/writeHint ``return_result`` values or a plain reply) and, with ``decode`` (token ids -> text), the
+    privileged prompt segments as sampled (a text-fallback turn carries the selected facts there)."""
+    texts = []
+    for turn in rollout.get('turns') or ():
+        sampling = turn.get('sampling') or {}
+        target = turn.get('target') or {}
+        if sampling.get('guidance_policy'):
+            calls = target.get('tool_calls') or []
+            for call in calls:
+                function = call.get('function') or {}
+                if function.get('name') != 'return_result':
+                    continue
+                try:
+                    value = json.loads(function.get('arguments') or '{}').get('value')
+                except (ValueError, AttributeError):
+                    value = None
+                if value is not None:
+                    texts.append(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
+            if not calls and (target.get('content') or '').strip():
+                texts.append(target['content'])
+        elif decode is not None:
+            ids = [i for segment in sampling.get('prompt') or () if segment.get('privileged')
+                   for i in segment.get('token_ids') or ()]
+            if ids:
+                texts.append(decode(ids))
+    return list(dict.fromkeys(text for text in texts if text and text.strip()))
+
+
+def _visible(turn):
+    parts = []
+    for message in turn.get('messages') or ():
+        content = message.get('content')
+        if isinstance(content, list):
+            content = ' '.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
+        parts.append(content or '')
+        for call in message.get('tool_calls') or ():
+            parts.append((call.get('function') or {}).get('arguments') or '')
+    return '\n'.join(parts)
+
+
+def guidance_leak(rollout, *, answers=(), decode=None):
+    """Why a guided attempt must not train in student form, or [] when it may. With the guidance removed, a reply that
+    refers to it reads as text the call never saw, and an answer the guide handed over reads as a result with no
+    derivation (grpo-v4-run1: 4 of 11 guided successes quoted their guidance, 2 named it, 6 had the answer in it).
+
+    - ``quoted``: a consumer call's reasoning or text holds a ``QUOTE_WORDS``-word sequence of the guidance that its
+      visible prompt does not hold (tool-call code following a procedure is the point of a hint and is not counted);
+    - ``named``: its reasoning or text names guidance (``GUIDANCE_NAMES``) where its visible prompt does not;
+    - ``answer``: the guidance carries one of ``answers`` (``privileged_context.answer_leaves``) that the call's
+      visible prompt does not show.
+    ``decode`` reads text-fallback guidance from the privileged prompt tokens."""
+    from .privileged_context import carries
+    guidance = guidance_texts(rollout, decode)
+    if not guidance:
+        return []
+    guide_grams = set().union(*(_grams(text) for text in guidance))
+    reasons = []
+    consumers = [turn for turn in rollout.get('turns') or () if not (turn.get('sampling') or {}).get('guidance_policy')]
+    for turn in consumers:
+        target = turn.get('target') or {}
+        own = '\n'.join(text for text in (target.get('reasoning_content'), target.get('content')) if text)
+        visible = _visible(turn)
+        if 'quoted' not in reasons and (_grams(own) & guide_grams) - _grams(visible):
+            reasons.append('quoted')
+        if 'named' not in reasons and GUIDANCE_NAMES.search(own) and not GUIDANCE_NAMES.search(visible):
+            reasons.append('named')
+    if answers:
+        shown = '\n'.join(_visible(turn) for turn in consumers[:1])
+        hidden = [leaf for leaf in answers if not carries(shown, [leaf])]
+        if any(carries(text, hidden) for text in guidance):
+            reasons.append('answer')
+    return reasons
+
+
 PLAN_POLICY_PATH = 'applications/guidance-writer/planTeacherAttempts.nl'
 MAX_ATTEMPTS_PER_GROUP = 2
 
@@ -726,7 +825,8 @@ def plan_teacher_attempts(groups, *, default, budget, command=None):
 
 
 def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None,
-                    selection=None, writer=None, plan_command=None, carry=0, fact_kinds=None, trajectories=None):
+                    selection=None, writer=None, plan_command=None, carry=0, fact_kinds=None, trajectories=None,
+                    answers='withhold'):
     """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
 
     Each attempt samples the same world after its group's students with ``guidance_controls`` (role teacher): the
@@ -740,11 +840,14 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
     ``fact_kinds``: the fact kinds a teacher may be guided by (``TEACHER_FACT_KINDS`` excludes answers); None keeps all.
     ``trajectories``: ``{task_id: TrajectoryCall}`` of verified successful runs (rl/hindsight.py): a world with one
     gets a hindsight teacher (``writeHint`` over it) instead of fact guidance.
+    ``answers`` 'withhold' (default; ``privileged_context.case_facts``): procedure facts carry no result and the run
+    controls name the world's answer values (``withheld``) for the runtime's exact check of the written guidance; the
+    guide says where the solution goes, the attempt computes it. 'show' opts out.
     """
     import copy
     from ..common.jsonio import iter_jsonl_rows, write_json_durable
     from ..common.custody import CustodyError
-    from .privileged_context import case_facts
+    from .privileged_context import answer_leaves, case_facts
     if type(attempts) is not int or attempts < 1:
         raise ValueError('JOLT+ teacher attempts must be a positive integer')
     custody, refusal = _load_custody(custody)
@@ -763,7 +866,7 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
         if case is None:
             continue
         try:
-            _, facts = case_facts(case, custody=custody)
+            _, facts = case_facts(case, custody=custody, answers=answers)
         except CustodyError:
             continue
         facts = kept_facts(facts, fact_kinds)
@@ -783,7 +886,7 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
         for attempt in range(plan[first['group']]):
             sample = size + attempt
             try:
-                receipt, facts = case_facts(case, custody=custody,
+                receipt, facts = case_facts(case, custody=custody, answers=answers,
                                             attempt_feedback=group_feedback(case, members, sample))
             except CustodyError:
                 break
@@ -796,7 +899,8 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
             controls = directory / 'chat-request-config.json'
             write_json_durable(controls, guidance_controls(base, role='teacher', custody_receipt=receipt,
                                                            facts=facts, selection=selection, writer=writer,
-                                                           trajectory=trajectory))
+                                                           trajectory=trajectory,
+                                                           withheld=answer_leaves(case) if answers == 'withhold' else None))
             entry = copy.deepcopy(first)
             entry.pop('rl_endpoint', None)
             entry.pop('chat_request_config', None)
@@ -810,7 +914,8 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
             'accounting': {'budget': budget, 'planned': len(entries)}}
 
 
-def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None, fetch_text=None):
+def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None, fetch_text=None,
+                           answers='withhold'):
     """Verified captured guidance for JOLT+; custody fails closed per episode.
 
     Without readable protected packets or bound training cases every student episode is refused a privileged
@@ -846,4 +951,5 @@ def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerpri
     rendering = PrivilegedRendering.from_renderer(renderer, template=model_type,
                                                   tokenizer_fingerprint=tokenizer_fingerprint,
                                                   consume_open=roles.consume_open, consume_close=roles.consume_close)
-    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody, fetch_text=fetch_text)
+    return privileged_source(rows, cases=worlds, rendering=rendering, custody=custody, fetch_text=fetch_text,
+                             answers=answers)

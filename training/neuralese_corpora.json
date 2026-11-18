@@ -734441,6 +734441,46 @@
       "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source."
     },
     {
+      "id": "natlang-rl-authored-dev-20261118r12",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261118r12",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 33 verified cases in 33 worlds (split dev), registered 20261118r12. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261118r12",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261118r12",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 43 verified cases in 43 worlds (split confirmation), registered 20261118r12. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-dev-20261118r11",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261118r11",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 46 verified cases in 46 worlds (split dev), registered 20261118r11. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261118r11",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261118r11",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 41 verified cases in 41 worlds (split confirmation), registered 20261118r11. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
       "id": "natlang-rl-authored-dev-20261118r10b",
       "owner": "dgx",
       "path": "runs/natlang-rl-authored-dev-20261118r10b",
@@ -734538,6 +734578,40 @@
       "source_class": "immutable-RL-task-source",
       "split": "Train-only 185-row RL task source for grpo.py POOLS: authored round-10 rows in 12 new families whose programs combine the constructs held-v3 tests (folder reducers 78%, decide readouts 69%, call depth >= 3 66%, iterateOn 56%, Neuralese results 32%).",
       "note": "plans/neuralese/TASK_SUPPLY_20261118.md. Qualified (reference/negative/alias replay, smoke, custody, lint) on the grpo-v4 pin runtime 21dbc20c5, novelty-gated, blind-solved by an independent Sonnet solver (flagged tasks held back) and admitted to natlang-rl-authoring/admitted; held dev/confirmation worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r10. held_eval verify vs held-v3: 0 shared ids or split/source groups (also with the recorded exposure); ProtectedWorlds: 0 related (2 rows bound to a held sibling world left out); LFM3 held-set group closure: passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 205 --drop-related. Data on /mnt/external (runs/ entry is a symlink)."
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118b",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-task-supply-20261118b",
+      "include": [
+        "cases.jsonl",
+        "selection.json",
+        "repetition.json",
+        "constructs.json",
+        "custody.json",
+        "protection-union.json",
+        "held-verify/*.json"
+      ],
+      "source_class": "immutable-RL-task-source",
+      "split": "Train-only 205-row RL task source for grpo.py POOLS: authored round-11 rows (11 new families, w219-w232) and the round-10 w210 rows admitted after the 20261118 build; folder reducers 70%, decide 59%, call depth >= 3 63%, iterateOn 48%, typed Neuralese results 52%.",
+      "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 6. Qualified on the grpo-v4 pin runtime 21dbc20c5, novelty-gated, Sonnet blind-solved (flagged tasks held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r10b and -20261118r11. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (10 rows bound to held sibling worlds left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 210 --max-worker 232 --drop-related. CLUTRR rows seeded from the train split only. Data on /mnt/external (runs/ entry is a symlink)."
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118c",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-task-supply-20261118c",
+      "include": [
+        "cases.jsonl",
+        "selection.json",
+        "repetition.json",
+        "constructs.json",
+        "custody.json",
+        "protection-union.json",
+        "held-verify/*.json"
+      ],
+      "source_class": "immutable-RL-task-source",
+      "split": "Train-only 210-row RL task source for grpo.py POOLS: authored round-12 rows (w233-w242, 10 new families incl. bAbI train-split world-state tracking) and the round-11 leftovers w223 and w225; folder reducers 83%, decide 62%, call depth >= 3 61%, iterateOn 50%, typed Neuralese results 59%.",
+      "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 7. Qualified on the grpo-v4 pin runtime 21dbc20c5, novelty-gated, Sonnet blind-solved (flagged and author-wrong tasks held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r12. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (5 rows bound to held sibling worlds and the 10 round-11 custody rows left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 223 --max-worker 242 --drop-related round12/custody-drop.json. bAbI rows seeded from the train split only. Data on /mnt/external (runs/ entry is a symlink)."
     },
     {
       "id": "natlang-rl-authored-dev-20261104r7",
@@ -741857,6 +741931,22 @@
         }
       },
       "notes": "One verified smoke episode per included workflow family. Supersedes the two-workflow seed and includes its episodes once. Full source conversion and learner evaluation are separate work."
+    },
+    {
+      "id": "sft-warmup-20261118-v1",
+      "owner": "dgx",
+      "path": "runs/sft-warmup-20261118-v1",
+      "include": [
+        "build.json",
+        "cases.jsonl",
+        "chains.pkl",
+        "rows.jsonl.zst",
+        "val-own.pkl",
+        "val-teacher.pkl"
+      ],
+      "admission": "sft-experiment-input",
+      "license_provenance": "Teacher-generation episodes of claude-haiku-5-5 (Anthropic API), gpt-6-luna (openai-codex), nvidia/nemotron-3-ultra-550b-a55b (NVIDIA API, paid and OpenRouter free), gemini-3.5-flash-lite / gemini-3.7-flash (Google API), glm-4.7-flash on the project's GRPO task pools (teacher-gen-20261115 pool-v1, pool-v2-rich, pool-progtune-decisions); own LFM3 GRPO rollouts (grpo-v3 run1, grpo-v4 run2; project-generated); prebuilt parts keep their registered provenance (sft-neuralese-graph-20261117-v1, operators-v1 merged rows of bgkit/dataset sources, vibestudio live seed v2 with gpt-6-luna). Task sources keep their pool rows' license provenance, recorded per task in cases.jsonl.",
+      "note": "SFT warm-up mix from base 5ff07638 (plans/neuralese/SFT_WARMUP_MIX_20261118.md): 3,961 teacher + 55 own verified episodes over 4,000 tasks plus prebuilt parts; 16,271 exp0_sft --chains sequences (incl. aux), 95.3M forward / 2.84M weighted target tokens. Loss shares: teacher actions 72.4%, own successes (reasoning included) 19.4%, Neuralese graph rows 4.9%, operator rows 3.0%, live rows 0.2%. Every episode exact-replayed under a runtime with the return_result answer protocol (1cb19e291; pins ae1f7dacb, 43989d8ba; reworded openings accepted); teacher think blocks, text before the first tool call, and calls after the text backend's Neuralese refusal are zero-weight context; guided JOLT+ attempts and grpo-v2 own successes out; October out; breadth-first over tasks with families taking turns under a 90M teacher forward budget; held-v3/v2 closure. val-own.pkl / val-teacher.pkl: 40 left-over successes each on untrained tasks. Built by sft_sources.py build (378a9676d)."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-task-supply-20261118c",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-task-supply-20261118c",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 3122544,
+      "sha256": "653f5e188a013018da57d4795d6827f55da1f2962822558437b3d3f3904f748d",
+      "lines": 210
+    },
+    {
+      "path": "constructs.json",
+      "bytes": 986,
+      "sha256": "5995ae9607572b2c3f4a73fa006aca278e026f950cd0a91a9d98d9f338ac6132"
+    },
+    {
+      "path": "custody.json",
+      "bytes": 220,
+      "sha256": "78c7a48809ecf35752ad86d6148008f4e4a69fbef302d863b63f07f96d37aa1f"
+    },
+    {
+      "path": "held-verify/groups.json",
+      "bytes": 7239,
+      "sha256": "698dd7a02503ab1555f0cac12940175236f4d7a48a9b09d784c59962e4843daa"
+    },
+    {
+      "path": "held-verify/ids.json",
+      "bytes": 13369,
+      "sha256": "93835d5254e36f503c270aa640653c68128edccc592c418cc2709cc638527b7d"
+    },
+    {
+      "path": "held-verify/verify-new.json",
+      "bytes": 694,
+      "sha256": "5cdd1103e7f77929fa293114c16cf27ad31d1b53dd84328268b59c36d17f1ee7"
+    },
+    {
+      "path": "held-verify/verify-with-exposure.json",
+      "bytes": 696,
+      "sha256": "e02c4672f35b6a434ed43fd2f1105cfaee5905f52e96ecc0c4d0862d20e17082"
+    },
+    {
+      "path": "protection-union.json",
+      "bytes": 2125,
+      "sha256": "91a77b07f99a83399e1a0f3319101115cbd5da9f80b2415fb3a4dafef6924d53"
+    },
+    {
+      "path": "repetition.json",
+      "bytes": 2425,
+      "sha256": "9d2281ab58bd11b79fe07b79c2a272a202252547c4bbffc2babc02596e93ea7e"
+    },
+    {
+      "path": "selection.json",
+      "bytes": 2975,
+      "sha256": "ae9a915f46894f13277fb3179da69457ce1e94ecc7c14a94aef591637f346707"
+    }
+  ],
+  "bytes": 3153273
+}

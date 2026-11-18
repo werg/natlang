@@ -66,7 +66,10 @@ export type GuidanceRun = { schema: typeof GUIDANCE_RUN_SCHEMA; role: 'teacher' 
   writer?: 'native' | 'off';
   /** Hindsight (teacher only): a verified successful run of the task as a `TrajectoryCall`
    * (applications/guidance-writer/types.ts); the root call's guidance is the hint `writeHint` writes from it. */
-  trajectory?: Record<string, unknown> };
+  trajectory?: Record<string, unknown>;
+  /** Values no written guidance may carry (rl/privileged_context.py `answer_leaves`), checked by hintCheck.ts
+   * `checkGuidance` on every writer's result; never shown to the writer. */
+  withheld?: string[] };
 export type GuidancePolicyFunction = { function: 'selectGuidanceFacts' | 'writeGuidance' | 'writeHint'; sha256: string };
 
 /** The guidance-writer package as loaded by the host: its two natural-language definitions and its crisp parts. */
@@ -79,6 +82,8 @@ export type GuidanceWriterPackage = {
   trajectoryOverview(call: unknown): unknown;
   /** hintCheck.ts `checkHint`: why a hint is rejected (one sentence), or undefined. */
   checkHint(hint: unknown, execution: unknown): string | undefined;
+  /** hintCheck.ts `checkGuidance`: why written guidance is rejected for carrying a withheld value, or undefined. */
+  checkGuidance(guidance: unknown, withheld: readonly string[]): string | undefined;
   /** visibility.ts `visibleFacts`. */
   visibleFacts(consumer: GuidanceConsumer, facts: readonly GuidanceFact[]): GuidanceFact[];
   /** crispSelection.ts `crispSelection`. */
@@ -97,7 +102,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export function guidanceRun(value: unknown): GuidanceRun {
   if (!isRecord(value) || value.schema !== GUIDANCE_RUN_SCHEMA) fail(`x_natlang_guidance is {schema: ${GUIDANCE_RUN_SCHEMA}, ...}`);
   const run = value as Record<string, unknown>;
-  const extra = Object.keys(run).filter(key => !['schema', 'role', 'custody', 'facts', 'selection', 'budgetTokens', 'writer', 'trajectory'].includes(key));
+  const extra = Object.keys(run).filter(key => !['schema', 'role', 'custody', 'facts', 'selection', 'budgetTokens', 'writer', 'trajectory',
+    'withheld'].includes(key));
   if (extra.length) fail(`unsupported fields ${extra.join(', ')}`);
   if (run.role !== 'teacher' && run.role !== 'student') fail('role is teacher or student');
   if (!isRecord(run.custody)) fail('custody is the custody receipt object of the training world');
@@ -126,6 +132,8 @@ export function guidanceRun(value: unknown): GuidanceRun {
       fail('trajectory is a TrajectoryCall {call, function, role, prompt, steps, result, children}');
     if (run.role !== 'teacher') fail('a hindsight trajectory guides teacher attempts only');
   }
+  if (run.withheld !== undefined && (!Array.isArray(run.withheld) || run.withheld.some(value => typeof value !== 'string' || !value.trim())))
+    fail('withheld is a list of nonempty strings');
   if (run.budgetTokens !== undefined && (!Number.isSafeInteger(run.budgetTokens) || (run.budgetTokens as number) < 1))
     fail('budgetTokens is a positive integer');
   return value as GuidanceRun;
@@ -178,9 +186,12 @@ export class TrainingGuidance {
    * any other call. The agent applies it where a result is proposed; a failure is the writer's one-sentence tool error.
    */
   hintGuard(lam: LambdaNode): ((value: unknown) => string | undefined) | undefined {
-    const trajectory = this.run.trajectory;
-    if (!trajectory || this.policyOf(lam, null)?.function !== 'writeHint') return undefined;
-    return value => this.writerPackage.checkHint(value, trajectory);
+    const trajectory = this.run.trajectory, withheld = this.run.withheld ?? [];
+    const policy = this.policyOf(lam, null)?.function;
+    const hint = policy === 'writeHint' && trajectory;
+    if (!hint && !(withheld.length && (policy === 'writeGuidance' || policy === 'writeHint'))) return undefined;
+    return value => (hint ? this.writerPackage.checkHint(value, trajectory) : undefined) ??
+      this.writerPackage.checkGuidance(value, withheld);
   }
 
   /** The agent records each writeGuidance model turn as it is taken (its graph node). */
@@ -255,7 +266,8 @@ export class TrainingGuidance {
         : invokeDefinition(frame!, pkg.writer.definition, [{ ...consumer, text: ownText }, facts]));
       // The hint's check also holds a result proposed past the agent's gate (the agent applies it to return_result and
       // to eval results; this is the last word).
-      const rejected = trajectory && typeof written === 'string' ? pkg.checkHint(written, trajectory) : undefined;
+      const rejected = typeof written === 'string' ? (trajectory ? pkg.checkHint(written, trajectory) : undefined) ??
+        pkg.checkGuidance(written, this.run.withheld ?? []) : undefined;
       if (rejected) throw new Error(`hint-rejected: ${rejected}`);
       if (typeof written === 'string' && written.trim()) {
         // Span basis: the writer answers in its own plain text (an ordinary string result, measured to work on full67

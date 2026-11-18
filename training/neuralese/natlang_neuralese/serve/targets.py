@@ -78,3 +78,34 @@ def target_items(engine, messages, tools, target, *, response_tools=None):
     if ends:
         rest = rest[:ends[-1] + 1]
     return before, rest
+
+
+def non_student_context(tokenizer, target_message, target_ids, *, think="context", lead_in="context"):
+    """Leading tokens of a rendered reply the student did not sample (teacher, October, live, a privileged run) that
+    are context, not loss: its think block through ``</think>`` and the whitespace after it, and (``lead_in``
+    'context') the text it writes before its first tool call. ``think`` 'train' keeps visible reasoning (and the text
+    after it) as target; an empty think block stays context. A reply without tool calls (an answer) trains after its
+    think block. Teacher think blocks are summaries at a teacher's length (held reasoning p50 fell 1,919 -> 350
+    characters after sft-v3 trained them) and lead-in text is narration (Claude 28% of tool calls, held after sft-v3
+    12% vs the base's 2%); no verified outcome of the student selects either (DECISIONS 2026-11-18)."""
+    if think not in ("context", "train") or lead_in not in ("context", "train"):
+        raise ValueError(f"think {think!r} / lead_in {lead_in!r}: context or train")
+    if think == "train" and (target_message.get("reasoning_content") or "").strip():
+        return 0
+    ids = list(target_ids)
+
+    def first(*tokens):   # the first position of any of these vocabulary tokens (templates name them differently)
+        found = [ids.index(i) for i in (tokenizer.convert_tokens_to_ids(t) for t in tokens)
+                 if isinstance(i, int) and i in ids and tokenizer.decode([i]) in tokens]
+        return min(found) if found else None
+    end = 0
+    close = first("</think>")
+    if close is not None:
+        end = close + 1
+        while end < len(ids) and not tokenizer.decode([ids[end]]).strip():
+            end += 1
+    if lead_in == "context" and target_message.get("tool_calls") and (target_message.get("content") or "").strip():
+        start = first("<tool_call>", "<|tool_call_start|>")
+        if start is not None:
+            end = max(end, start)
+    return end

@@ -3354,3 +3354,441 @@ NATLANG_SPECULATIVE_NGRAM). Not checked on SGLang: the law (chi-square) and capt
 (`scripts/neuralese_data/check_speculative_law.py`, `--arm`/`--report` for one-server GPUs). The llama-server
 capture check passed (CPU, Q8: |dlogp| mean 0.015, p99 0.12 vs the plain floor 0.020/0.13). Single-stream engines are
 decided by their own benches below.
+
+Follow-up 05:00. Python native engine: `NATLANG_NATIVE_SPEC_DRAFT` defaults to 0. Its single-stream bench was OOM-killed
+twice, during host memory pressure, with grpo-v4 waiting on the ledger, so no gain was measured. llama-server
+(fork branch `neuralese-spec`, local; wllama `natlang-spec`, local): a CPU single-stream bench ran on real grpo-v3
+prompts (last 2048 tokens, 256 new tokens, Q8, ngram-map-k n=4) on a host with load average ~20. On the four
+requests that were paired before preemption, speculation was faster every time: 1.54/1.26/1.18/1.16 vs
+1.16/1.11/0.98/1.06 tok/s (+10 to +33%), with 13-29% of drafted tokens accepted. That is suggestive, not decisive;
+a GPU single-stream bench decides. Nothing is released, and the pins are unchanged.
+
+## 2026-11-18 05:30, grpo-v4-run1 stopped twice by the memory guard; relaunched at 24 slots with a memory sampler
+
+The 02:30 relaunch (32 slots, 106 GB) was stopped by the guard at 03:54 ("free memory below floor", 110.7 GB) while
+still collecting, before its first learner step, and the requeue was then OOM-killed at 04:17 next to a native-engine
+speculative bench. So the ~110 GB is collection-time use, not the learner peak. Relaunched at 05:30 on pin 551e5e8ba
+with SLOTS=24 RUNNING=24, ledger learned peak reset to 92 GB, `--min-groups 24 --max-groups 48` (AGENTS.md default;
+48-96 meant a step every 1.5-2 h), and Pop held evals on against grpo-v3's Pop base. A sampler logs the unit's cgroup
+breakdown (anon/file/shmem) and per-process CUDA every 2 min to find what fills memory during collection.
+
+**2026-11-18 06:30, grpo-v4-run1: the ~110 GB was the learner's step-1 peak, not collection; prefix tree bounded.**
+- **What the guard stops were.** Both stops (02:06 at 64 slots, 03:54 at 32) came 13-17 min after the run lowered
+  its first step's groups (`retired` marks at 01:53:50-01:54:16 and 03:37:35-03:38:07): the learner's step 1 was in
+  its policy pass (journal: `learner progress` step 1 at policy_s 126 with MemAvailable 13.7 GB and heavy swap). The
+  unit's cgroup peak was 23-38 GB; the rest of the ledger's 119 GB was CUDA (nvidia-smi). Collection alone at 24 slots
+  is ~39 GB (cgroup 17 + CUDA 22: learner 10, actor 11; sampler 05:36).
+- **Cause.** `levels` keeps every prefix of the whole step (layer inputs, FP32 history keys/values and their grads)
+  until the prefixes' backward at the end. Step 1's 48 groups (offline from the archive: 1,279 chains, 12.9M chain
+  tokens, 3x grpo-v3's steps) had 229k prefix tokens, ~31 GB retained (147 KB a token), unbounded by
+  `--activation-gb` (`leaf_gb = activation_gb - retained` just went to 0). Plus static learner ~25 GB, leaf batches,
+  the replay corpora/SD/teacher chains, the actor and the draining episodes.
+- **Fix (default, `--prefix-retained-gb 8`, 0 = old unbounded; both learners via `add_prefix_tree_args`):**
+  `run_prefix_tree` runs a forest over the bound as `prefix_parts` one after another, each to its own backward; shared
+  ancestors (the 4k-token system prompt and 2.5k second level) are recomputed once per part (~4 parts on step 1, ~2% more
+  computed tokens). Exact: gradient test against the unsplit tree. Also the planner's retained estimate now counts the
+  segment gradients. Expected learner peak -23 GB at step 1's size.
+- **Collection speed.** Decode-bound: actor ~1.2k tok/s at 62 running, ~800 at 31, ~800 at 23 (actor.log; KV 18%
+  used). The slot cut 64 -> 24 for the misattributed peak cost ~1/3 of collection. The JOLT+ hold-out (11 of 29 groups)
+  is latency, not throughput: those are all-fail groups whose students carry no advantage; slots keep working.
+  Next resume on a pin with this fix: back to SLOTS/RUNNING 48 and read the step-1 ledger peak (`cuda_peak_by_phase_gb`,
+  `prefix_tree.parts`).
+
+**2026-11-18 09:00, teacher traces without visible reasoning stay in SFT and in-loop SD (owner).** Rejection-sampled
+teacher replies whose reasoning the provider hides (Luna, some Nemotron) keep the empty think block as zero-weight
+context and train only the reply. The risk (answers learned without the reasoning that leads to them) is judged mild:
+the think block itself is never a target, most replies are short natlang actions, and every trace is a verified exact
+replay. Reasoning-bearing teacher output (Haiku extended thinking, Nemotron reasoning) is preferred where it is cheap.
+grpo-v4-run1 steps 2-3 `reasoning_shift` (1.9x/1.8x step 1) is completion order, not the policy: LR <= 1.4e-6, probe
+logp change <= 2e-4, step 1 trained on the first-finishing (short) groups; the sentinel's baseline moves past step 1.
+
+## 2026-11-18: task supply round 11, `natlang-rl-task-supply-20261118b` (205 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 205 train rows in 12 families. These are round-11 authored tasks (w219-w232) plus w210's rows
+  that were admitted late.
+- **Constructs:** folder reducers 70%, decide 59%, depth 3 63%, iterateOn 48%, typed Neuralese 52%.
+- **Repetition:** 0 program texts are shared with the pool, and the top structure is 12%.
+- **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 10 rows, closure passed.
+- **When it enters:** grpo-v4-run1 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+- **Memory:** authoring ledger units now pass through a 3-slot gate (`round11/gated.py`, `--wait 36000`). grpo-v4 needs
+  about 106 GB, so supply runs at the rate that fits beside it.
+- Details: TASK_SUPPLY_20261118.md section 6.
+
+## 2026-11-18 09:20, grpo-v4-run1 step time: where it goes; shared collectors failed 12% of episodes (fixed, ac8d55d91)
+
+Steps 2-3 (06:36-08:25, 48 groups, 109 min) from `train.jsonl`, `actor.log` per-minute decode and the journal:
+- **Learner phase ~54% of wall time** (step 2 07:22-08:00, step 3 08:04-08:25): reference + policy passes at
+  1.2-1.5k computed tok/s. The in-flight episodes drain through the whole phase (LPS 0): 41 -> 3 running at ~10-14
+  decode steps/s, ~20-35% of the GPU for 100-350 tok/s.
+- **Collection at full speed ~1.0-1.1k tok/s at 46 running** (contexts ~9-10k tokens/sequence; KV pool 0.5-0.6
+  used): in line with grpo-v3. The logged 766-791 averages include the two losses below.
+- **progtune-fit-route-2 (GPU SFT, 06:35-07:08) halved the actor for 33 min** (10-12 vs 22-23 decode steps/s at 47
+  running): ~13 min of step 2's collection. check-main `--python` on CUDA ran 07:59-08:42 beside step 3's learner.
+  The ledger has no GPU-time notion; GB10 time-slicing conserves GPU work, so this is a priority question, not waste.
+- **Defect: shared collector stalls failed episodes.** A node collector server whose event loop was blocked still
+  completed connects; `SharedChild` waited 60 s for its reply, then raised `TimeoutError` (not caught as the
+  `RuntimeError` fallback) and the episode ended unresolved with no model call. Every new invocation tries s000
+  first, so one stalled server failed all of them: 08:00-08:05 every episode died after 60 s (groups 212-231 all or
+  mostly unresolved), step 3 trained 93 episodes instead of ~187 and the actor ran ~7 sequences. Over the run 182 of
+  1,545 episodes (12%) ended this way, also sporadically in groups 0-211. Fix (protocol /3, default; ac8d55d91): the
+  server greets each connection, the client sends nothing to a server that does not greet within 10 s and moves on
+  (no double run when it wakes), full servers are skipped from the greeting; servers log `loop_stall` (>= 5 s lag) and
+  timestamp `invocation_end`. `NATLANG_COLLECTOR_SHARED=0` opts out. Tests: stalled-listener skip, existing
+  shared/recycle tests (3 passed). The pin's runtime is /2, so it enters at the next resume on a new pin.
+- **Telemetry:** `moment_offload.put_s` was the state save's 330-350 s plus the write; now `put_wait_s` is reported apart
+  (`put_s` is the write alone). Neither is on the critical path (`get_wait_s` 0, `wait_state_save` 0).
+- **Not a limiter:** swap during step 2's learner was 2 GB out / 1.4 GB in (4 KB pages); the SGLang scheduler stays on
+  an X925 core; persistence fsyncs in the collectors are async (p50 30 ms, p99 1.7 s).
+- **Not determined:** what blocked the stalled server for ~5 min (candidates: swap-in of idle node heaps after the
+  learner phase under the post-step writes, or an episode's synchronous work); the new `loop_stall` lines will show it.
+- **Levers not taken:** `--activation-gb 4` with `--prefix-retained-gb 8` leaves the leaves 0 GB (`leaf_gb` 0.0 every
+  step), so every layer recomputes; ACT 12 measured -5.8% policy pass on 11-17 for +7.5 GB. Holding in-flight
+  episodes' calls during the learner phase would return the drain's GPU share (est. 4-5% of a step) but needs the
+  episode wall clock and client timeouts paused with it.
+
+## 2026-11-18: task supply round 12, `natlang-rl-task-supply-20261118c` (210 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 210 train rows in 12 new families (round 12, w233-w242, including bAbI train-split world-state
+  tracking, and the round-11 leftovers w223 and w225).
+- **Constructs:** folder reducers 83%, decide 62%, depth 3 61%, iterateOn 50%, typed Neuralese 59%.
+- **Repetition:** 0 program texts or functional programs shared with the 35,212-row pool; top structure 9%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 15 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r12`.
+- **Audit:** the Sonnet blind solve held back 7 tasks (3 wrong as written, 4 ambiguous cue readings); the cue-word
+  lessons are in `AUTHOR_BRIEF_ROUND13.md`.
+- **When it enters:** grpo-v4-run1 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: GRPO actor and learner trade the GB10's memory across phases (`--actor-release`, default; d77465ec9)
+
+- **Question (owner):** why the SGLang actor and the learner are both resident on the 128 GB unified memory. Brief:
+  build the colocated release/resume (verl, slime) directly, spend the memory on the learner's activation budget and
+  on collection slots and KV, ship as default with an opt-out.
+- **Measured residency, grpo-v4-run1 (48 slots, ACT 4, KV 6; scratchpad memsample every 120 s):** collect phase:
+  learner CUDA ~10 GB (BF16 weights + FP32 masters; moments on disk), actor scheduler CUDA 11-12 GB, unit cgroup
+  (host: collectors, front, learner process, shmem 4.3) 20-33 GB. Learner phase: learner CUDA 46-65 GB, actor the
+  same 11-12 GB. `cuda_reserved_collect_gb` (25-38) is read before the moments go to disk, so it overstates what
+  collection holds by the 13.6 GB moments; `moment_offload.cuda_reserved_after_put_gb` is the collect-phase number.
+- **Reserved vs allocated:** the optimizer phase's 74 GB reserved (31.5 allocated, step 2) and 54-56 (steps 3-4) was
+  the policy pass's cached blocks with the moments read in on top; the behaviour probe's equal figure was a reporting
+  artifact (peak stats reset before the post-optimizer `empty_cache`).
+- **Shipped (d77465ec9):** (1) at learner start `WeightSync.release` pauses the actor (retract) and SGLang
+  `release_memory_occupation` frees `kv_cache,weights,cuda_graph`; the step's publish resumes, reloads the weights
+  from the mapped /dev/shm file (released weights come back undefined; SGLang restores module buffers itself) and
+  continues; a non-finite step restores on the served weights. The run's actor starts with
+  `serve_native_checkpoint --sglang-memory-saver` (`--enable-memory-saver`). (2) `empty_cache` after the reference pass
+  and before the moments are read back; probe peak reported on its own. (3) Episodes in flight wait in the paused
+  actor for the learner phase: `--case-seconds` 7200 (was 3600) and the front's backend socket guard 7200 s
+  (`SGLANG_REQUEST_SECONDS`); ts-host model fetches have no timeouts (`fetchModel`, undici Agent 0/0).
+  Opt-outs: `--no-actor-release`, `--actor-release-tags`, `--keep-learner-cache`. Telemetry: `phase_s.actor_release`,
+  `actor_release_freed_gb`, `previous_sync.actor_resume_s`.
+- **Inventory (fix the mechanism everywhere):** the only colocated trainer driving an actor's weights is `grpo.py`
+  (`git grep update_weights_from_disk`: grpo.py, and the check_sglang_hybrid_swa parity script). Held-eval engines
+  (Pop `pop_actor_driver`, `held_eval serve`), the managed llama-server, wllama and the Python native engine share no
+  machine with a learner and call no release; memory release is engine control for colocation, not a serving-protocol
+  feature, so no ENGINE_PARITY row.
+- **Smoke (`check_sglang_release.py`, fork dbc51ddb72):** Pop (RTX 4060; the DGX ledger had no room beside
+  grpo-v4-run1/run2), held-actor export 2c64220bb866, tags `kv_cache,weights,cuda_graph`, two cycles: release 0.1 s
+  frees 4.1 of 5.1 GB (weights 3.8 + 16k-token pool + graphs; ~1 GB context stays), a 1,500-token request in flight
+  waits through the release and finishes, resume 0.02 s + weight reload 0.4-4.9 s, greedy ids and logprobs after the
+  cycle bitwise equal to before (max |dlogp| 0.0). Two launch defects found and fixed on the way: torch_memory_saver
+  refuses `expandable_segments:True`, which memory_ledger sets for every unit (the actor env now drops it), and its
+  preload hook needs libcudart at exec (Pop: exit 127; the venv's CUDA wheel lib goes first on LD_LIBRARY_PATH).
+  **Not run on the GB10:** the memory saver's VMM path on unified memory; the first resume on this code is that check
+  (`actor_release_freed_gb` should read ~10-11 at KV 6; `--no-actor-release` if the actor fails to start or reload).
+- **Next resume (spend it):** the actor's ~12 GB (KV 6 + weights 3.8 + graphs) is free during the learner phase and
+  the optimizer's carried reserve (~13-40 GB above allocated) is gone: ACT 12, SLOTS 64, RUNNING 64, KV 12 (KV costs
+  only the collect phase now, which ran with ~45 GB free), budget unchanged.
+
+**2026-11-18 ~10:50, grpo-v4-run1 stopped: the SFT start regressed held-v3 by 16 pts; grpo-v4-run2 from the base
+(supervisor).** Step 1 (the SFT continuation after one GRPO step at LR 5e-7) on Pop, 2 samples, against the base 5ff07638
+(grpo-v3's Pop step 0; paired across series with warnings): per-task pass rate 47.5% -> 31.3%, -16.2 pts, permutation
+p 0.0005; ran-out 16.6% -> 29.6%, loop 16.6% -> 29.4%, repeated actions 0.3% -> 1.3%, graded 0.526 -> 0.322
+(`ops/grpo-v4/run1/held/step-00001/compare-vs-step0.json`). Runtime alone does not explain it: voltron on a newer pin
+scored 45.9%. Cause unknown, so the run stops (AGENTS.md); its states and checkpoints stay for the hunt.
+- **grpo-v4-run2:** same bundle from the untouched base 5ff07638 on pin e517372e5 (shared-collector stall fix, round-11
+  tasks, reasoning_shift baseline), 48 slots, activation 8 GB, teacher demonstrations in SD off (`--sd-teacher-weight 0`)
+  until the SFT hunt clears teacher-trace rendering; own-success SD, JOLT+, hindsight, memetic and replay stay on.
+- **Hunt:** two independently briefed investigators (archived held rollouts and forward checks; static review of the
+  SFT path). The SFT lineage (sft-v3/run1, run1-cont) is not a start policy until the cause is found and fixed.
+
+**2026-11-18 ~11:30, SFT held regression: cause found in archived held rollouts, teacher think blocks trained
+(investigator A, archived rollouts and forward probe).**
+- **Observation (held-v3, Pop, 2 samples; base on grpo-v3's Pop step 0):** the SFT model reasons 4-5x less. Per call,
+  reasoning p50 1,919 -> 350 characters, completion p50 557 -> 215 tokens (ran-out episodes: 1,837 -> 320 chars,
+  522 -> 203 tokens); compile/runtime errors per episode 1.61 -> 3.22; text beside actions in 12% of calls (2%).
+  Teacher phrasing appears in its reasoning: "Next,/Next step" 13.5% of calls (base 0.3%), "So far/Evidence so far"
+  2.7% (0.1%), Claude's "I'm settling/confirming/working" 2.6% (0.0%), first-turn "I have ..." claims about unseen
+  state. Ran-out episodes are not exact loops (unique-action share 0.90 vs 0.82): many short-reasoning steps.
+- **Forward check (already measured):** the behaviour probe on the 48 start-policy calls puts the SFT checkpoint's
+  `</think>` hazard at 1.02 per 1k tokens against the base's 0.54-0.55 (grpo-v4-run1 vs grpo-v3-run1/v4-run2
+  `behaviour probe start`); step-1 `reasoning_tokens_per_call` 236 vs grpo-v3's 952.
+- **Mechanism (predicts direction and size):** sft-verified-v3 trained the think block of every teacher/October
+  reply that had visible reasoning: ~15k such calls against 5.7k own calls, so ~70% of the trained `</think>`
+  decisions sit at the teachers' length (p50 140-300 chars: Haiku's summarized thinking, Luna-era October
+  rationales "Evidence so far ... Next step", Nemotron/Qwen short reasoning) against the student's 1,600. Only
+  reasoning-free replies had their (empty) block masked. The student's reasoning p50 moved to 350 chars and took the
+  summary style; on held tasks the base solves with long reasoning it now acts after a summary.
+- **Fix (250723952, the static-review agent; agrees independently):** `sft_sources.think_context`,
+  `--teacher-think context` default: the whole think block of a reply the student did not sample is context; covers
+  `TeacherDemos` (in-loop SD) through `call_row`.
+- **Second defect, same mechanism, shipped here:** operators-v1 (`--replay-corpus operators=...`, on in grpo-v4-run1
+  and run2) trains `</think>` at target position 0 in all 11,558 rows (6,427 operator seeds, 5,131 consumer exact
+  answers), i.e. "close reasoning at once" on ordinary consumer calls. Not the SFT cause (run1 trained it for 4 steps
+  at weight 0.05, after the SFT). Fix: `exp0_sft.mask_empty_think` (a target's leading empty think block at weight 0),
+  applied by `grpo.ReplayCorpus` at load (default `think=context`, `think=train` opts out; `think_masked_rows` in the
+  `replay corpus` log) and by `operator_rows.RowBuilder` at build (`--think`). Enters run2 at its next resume.
+- **Ruled out:** checkpoint export/serving (run1 step 1 rho_mean 0.9999, abs log rho 0.017: learner and actor agree);
+  runtime/harness (base on pin c57e7be28: 52.2% on 251 episodes, ran-out 10%; voltron on 6e56280aa 45.9%; a62037db8
+  vs 6e56280aa ts-host changes are guidance-message only, unused in held). Not checked: the SFT trainer's numerics at
+  pin 2734e2c44 (old node-by-node prefix tree, pre-757ffe5d1 Inductor; loss 0.70 -> 0.54, grad norms normal), the
+  sft-v3-run1 checkpoint alone (never held-evaluated: run1 vs run1-cont attribution), the history-reasoning binding of
+  the LFM3 template in teacher rows, October text-only replies (35% of OpenHands, 20% OpenResearcher calls) as a source
+  of the 12% text-beside-action calls.
+
+**2026-11-18 ~11:20, SFT regression: teacher think blocks were trained (static review; fixed 250723952).** Only empty
+teacher think blocks were masked; visible teacher/October reasoning (p50 ~230-250 chars, often a progress-note summary,
+vs ~1,600 for own successes) was trained through `</think>`: 65% of run1's and 74% of run1-cont's trained `</think>`
+decisions came from replies the student never sampled. Held episodes after SFT: reasoning p50 1,747 -> 336 chars,
+completion tokens per call 1,145 -> 644, calls per episode 13.7 -> 16.2, budget exhaustion 85 -> 146. The mechanism
+predicts the direction and size of the ran-out and loop increases. Fix: non-student think blocks are zero-weight context
+(`--teacher-think train` opts out); in-loop teacher demonstrations take the same default. Also found: the Neuralese
+text/graph sets carried 38% of SFT loss on ~94 tasks (padding by repetition; a `loss_concentration` report is added to
+the preflight; per-task capping is the fix for the next SFT build). The rollout investigation continues. grpo-v4-run2
+keeps `--sd-teacher-weight 0` until a resume on a pin with 250723952.
+
+**2026-11-18 10:13, grpo-v4-run2 relaunched before its first step on pin 5aa7c62c0 (supervisor).** Picks up both
+think-block fixes (250723952: non-student think blocks are context; d88e4618f: the operators replay corpus no longer
+trains `</think>` at the first target position, which run2's first launch still did) and the actor memory hand-off
+(d77465ec9, 5aa7c62c0: SGLang releases KV/weights/graphs during the learner phase; first use on the GB10). Teacher
+demonstrations in SD back on (default 0.05). 64 slots, 64 running, activation 12 GB, KV 12 GB, budget 99
+(owner: more memory, faster). If the actor fails to resume, relaunch with `--no-actor-release`.
+
+## 2026-11-18: reasoning RL against fixed teacher actions, as a search along teacher trajectories (`--reasoning-rl-weight`, default on)
+
+- **Owner's idea:** RL on the reasoning only, the next action fixed from the teacher trajectory; reward = likelihood of
+  the teacher's action given the student's sampled reasoning. Additions: optimize whole trajectories (return-to-go,
+  earlier reasoning kept in history as preserve_thinking renders it); spend samples by difficulty (a search: a few
+  samples until one scores high, more where the action is hard; never skip a step); carry the best reasoning forward
+  (greedy or a small beam); the best chains are self-distillation data.
+- **Why:** training teacher think blocks taught short summary-style reasoning (SFT -16 pts held, entries above); since
+  250723952 teacher think blocks are context and teacher trajectories teach only actions. This term trains the
+  student's own reasoning from them on-policy. Related: Quiet-STaR, LaTRO, VeriFree, RLPR, JEPO (reference-answer
+  likelihood under the model's own reasoning as the reward), Google's SRL (expert trajectories as step-wise actions).
+- **Mechanism (grpo.py `ReasoningRL`, `rrl_episodes`; the comment above `RRL_ROLE`):** sources are this run's JOLT+
+  teacher successes (`offer`; the hindsight index reaches the term through them) and `TeacherDemos` (sft_sources'
+  verified teacher rows; tasks the policy does not already solve). A segment is up to `--reasoning-rl-calls` 4
+  consecutive calls of one invocation whose prompts extend each other; tool outputs come from the trajectory, nothing
+  executes. (1) One teacher-forced forward with empty think blocks scores every step's action (`r0`, difficulty).
+  (2) At each step the actor (the run's SGLang backend, the run's sampling law, the fork's untruncated `natlang_top_k`
+  records as the front captures rollouts) draws think blocks in waves of 2 until one scores high (action mean token
+  logp >= -0.1), up to 4 (12 where r0 < -1.0). (3) Each block is scored by one forward over the rest of the segment
+  (its action, then the later actions after empty think blocks): return = r_t + sum gamma^k r_{t+k} (gamma 1); that
+  forward also leaves the carried history in the radix cache for the next step's draws. (4) The best return carries
+  forward (beam 1). (5) Each step's samples are a group: think-block tokens at the group-normalized return (truncated
+  IS against the actor's logp, tail floor, KL as for rollouts), the teacher action after each closed block as a
+  ratio-free cross-entropy at 0.05 (together: the gradient of E_z[log pi(a | x, z)]); a group spreading < 0.01 nats
+  per token trains its actions only. (6) The carried chain joins the SD replay (`--sd-weight`, source `search`), its
+  low-scoring think blocks as context. Learner change: rows may carry their own `advantage` (`token_advantage`) and a
+  chain may mix actor-sampled rows with teacher rows without logp (`behaviour_logp`); every other chain is unchanged.
+  Telemetry: `reasoning_rl` in train.jsonl (groups trained / low spread / stale, hard groups, high-scoring groups,
+  reward and r0 means, return std, length-return correlation, learner action logp, reasoning |log rho|, worker
+  counters), `sd.search_*`.
+- **Inventory (fix the mechanism everywhere):** learners consuming teacher trajectories: grpo.py (this term,
+  TeacherDemos SD, JOLT+ attempts: all covered); exp0_sft.py `train` (l. 528-) trains fixed chains with no sampler,
+  so an on-policy reasoning term has nothing to sample with (the teacher-think-as-context rule already applies there);
+  program tuning (`tune/trainer.py`) fits adapters on recorded episodes, no in-loop actor. Serving: only existing
+  SGLang `/generate` features the front already uses (sampling_seed, natlang_top_k records, input logprobs with
+  logprob_start_len); no protocol change, so no ENGINE_PARITY row; the other engines are not training actors.
+- **Live check (run2's actor, no restart):** a sampled block's fork record vs SGLang's own input logprob of the same
+  tokens: mean |d| 0.013-0.021, mean d -0.002 (no truncation bias; the rollouts' learner-actor |log rho| is 0.025).
+  Single-call form: 4 of 8 samples unclosed at 2,048 tokens on game-of-life (default cap 8,192), within-group reward
+  std ~0.02 nats/token, length-return correlation 0.14. Search form (eb91915c6 code, 2 JOLT-style segments of 3 calls
+  from TeacherDemos, while run2 collected with 64 slots): 179 s and 522 s per segment; 30 samples, 29 closed, 6 groups
+  (5 trained, 1 below the spread floor), hard steps drew 8 samples, the one step that hit the high bar stopped at 2;
+  within-group return std 0.10 nats/token; length-return correlation +0.44 (longer reasoning scored better here: watch
+  `reasoning_rl.length_return_corr` and the rollouts' `reasoning_tokens_per_call` for a drift toward length); on one
+  spider step the action was near-certain without reasoning (r0 -0.006) and every sampled block lowered it (-0.17 to
+  -0.34), so no carried SD chain there; the other segment carried one 6-row chain (8,321 tokens) into SD.
+- **Opt-out:** `--reasoning-rl-weight 0` (single decisions: `--reasoning-rl-calls 1`; no carried SD: `--sd-weight 0`
+  or `--reasoning-rl-sources`). Enters grpo-v4-run2 at its next resume on a pin with this commit.
+
+**2026-11-18, reasoning RL: teacher reasoning out of the history too (coordinator follow-up; default, opt-out).** The
+term's segments start at a random call, so the history before it held the teacher's earlier think blocks, which the
+student then reasoned on top of (the gap reported above). `teacher_segments` now renders every earlier call of the
+invocation in later prompts with an empty think block (`</think>` and its action), usable or not; the runtime's
+opening turn before the invocation's first call is kept. JOLT+ and TeacherDemos alike. Opt-out:
+`--reasoning-rl-teacher-history keep`. Tests: `test_teacher_history_renders_empty_think_blocks`,
+`test_segment_starting_later_reasons_without_teacher_reasoning`. Enters at the next resume with the term.
+
+**2026-11-18, reasoning RL: whole trajectories and segments, half each by default (owner via coordinator).** The
+owner's mental model is a walk over the whole trajectory, step by step; they also want the teacher traces kept.
+Both modes now exist. A teacher invocation is searched **whole** with probability `--reasoning-rl-whole-share` (default
+0.5): it starts at the first call, every step reasons on the student's own carried best reasoning, and it runs to the
+end (`--reasoning-rl-whole-calls N` caps it, opt-in). Otherwise it is a **segment**: up to `--reasoning-rl-calls` 4
+calls from a random call, after the teacher's recorded trace. `--reasoning-rl-teacher-history keep` is the default
+again (`empty` opts in). Also shipped:
+- Each step's group goes to the learner as soon as that step is done, tagged with the policy version its draws
+  started on (`_emit`).
+- `--reasoning-rl-horizon` 4 bounds the later actions in a return.
+- The room left for reasoning shrinks as the carried history grows; a step without `MIN_REASONING_ROOM` (256) ends
+  the trajectory (`context_full`).
+- `--reasoning-rl-workers` 8, `--reasoning-rl-groups` 32 per step.
+- Telemetry: `mode_whole` / `mode_segment` groups.
+
+Why half and half, from first principles (no measurement campaign):
+- **Actor concurrency:** a trajectory is sequential (step t+1 reasons on step t's carried block), so concurrency
+  comes from searches running in parallel, not from the mode. With 8 workers and waves of 2 there are about 16
+  sequences in flight next to 64 episode slots, either way.
+- **Wall time per group:** about the same per step in both modes (1-3 min under collection load). Whole trajectories
+  were the staleness risk: a 20-call walk takes about one 35-min learner step. That is gone now that groups are
+  emitted per step with their own version, so neither mode loses groups to `--max-staleness` 2. The carried history
+  is context, not a trained sample. The carried SD chain's think blocks keep their actor logp, so truncated IS covers
+  their age.
+- **Cost per trained group:** equal. In whole mode the earlier steps are not overhead, because each is itself a
+  trained group. A segment gets its history for free from the teacher.
+- **Learning signal, whole mode:** it trains every step under the history the deployed student has (its own
+  reasoning, preserve_thinking).
+- **Learning signal, segment mode:** it trains under the teacher's trace. That context is off-distribution, but it
+  carries the teacher's reasoning, which the owner wants in and which may help the student find the action. It also
+  spreads the group budget over more tasks per step, where whole mode concentrates groups on fewer, long trajectories.
+- **Return-to-go:** the credit beyond a few actions comes from later actions after *empty* think blocks, a weak and
+  increasingly confounded signal. So the horizon is capped at 4 in both modes, and segments of 4 calls lose little
+  credit against whole walks.
+- **Conclusion:** neither mode dominates on first principles. The mix gets both, and the per-mode telemetry (groups
+  trained, return spread, high-scoring share, per mode) shows which carries more learning signal. `1` or `0`
+  switches to one mode.
+
+Tests: `test_whole_trajectories_and_segments`, `test_teacher_history_keeps_the_trace_or_renders_empty_think_blocks`,
+`test_future_ids_horizon_and_length`, `test_groups_are_emitted_per_step_with_their_version`. Not run live on the
+actor in this form; the first resumed steps' `reasoning_rl` block is that check.
+
+**2026-11-18, reasoning RL: two modes, walk 0.7 and parallel rewrite 0.3; segments removed (owner via coordinator).**
+The owner asked for a parallel rewrite mode and a defended default instead of three modes side by side.
+- **Rewrite** (`ReasoningRL.rewrite`; TRICE's MCMC-EM over rationales, STaR rationalization):
+  - Every position keeps the teacher's recorded history, so the positions are independent and are rewritten
+    together.
+  - Each position starts from the teacher's own think block. Each of 4 rounds cuts every position's block at a
+    random point (just before `</think>` is an extension) and draws the student's continuation, up to 1,024 tokens
+    and required to close; all positions are batched.
+  - Each candidate is scored by one teacher-forced forward over its action and up to 4 later actions. The better one
+    is kept (`--reasoning-rl-rewrite-accept best`; `metropolis` at temperature 0.05 opts in).
+  - A cut only keeps a prefix, so a block ends up as the teacher's first tokens followed by the student's, each
+    student token drawn on exactly the tokens before it.
+  - Positions that now score above their teacher seed go to the SD replay (source `rewrite`). Only the student's
+    tokens are the target, trained with their actor log-probabilities; the surviving teacher prefix is prompt, never
+    trained.
+- **Segments are removed.** Their one distinct property was RL under the teacher's trace. Rewrite uses the teacher's
+  trace better: it starts from the trace and its search finds student reasoning that makes the action likely even
+  where fresh samples rarely do, fully in parallel and with short continuations. The walk gives RL under the right
+  context. Every search now starts at an invocation's first call (`--reasoning-rl-calls N` caps it, opt-in).
+- **Allocation, from what we know:**
+  - **Walk 0.7, the main share.** It trains under the history the deployed student actually has. It gives
+    contrastive on-policy signal (negative advantages too), the kind GRPO already trains well on. It is the owner's
+    model.
+  - **Rewrite 0.3.** It is cheaper per trained token: positions run in parallel, continuations are short and good
+    blocks are refined rather than resampled. It keeps the teacher traces in. But its signal is positive-only SD,
+    under an off-distribution history, and the student continues after teacher prefixes. That is the style channel
+    behind the -16 pts SFT result, now only in context, but in-context imitation can still leak into the trained
+    tokens. So it gets the minority share.
+  - **Fixed share, no auto-shift.** The signals per actor token of the two modes are not commensurable (normalized
+    RL advantages vs SD cross-entropy), so a share moved by them would follow a scale, not value.
+  - **Watch:** `reasoning_rl.worker` `generated_tokens_whole` / `generated_tokens_rewrite`, `rewrite_improved`,
+    `rewrite_gain_milli`, `sd.rewrite_*`, and the rollouts' `reasoning_tokens_per_call` and style sentinels.
+  - **Rule:** if the style sentinels move while rewrite chains are being replayed, set
+    `--reasoning-rl-rewrite-share 0` at a resume.
+- **Tests:** `test_trajectories_from_the_first_call_and_modes`, `test_rewrite_keeps_teacher_tokens_out_of_the_target`,
+  `test_rewrite_rejects_worse_and_unclosed_candidates`.
+- **Live check (run2's actor, no restart):** 2 TeacherDemos episodes, 3 positions each, 4 rounds took 160-180 s each.
+  There were 20 proposals: 4 did not close within 1,024 tokens and 3 were accepted. 2 of 6 positions beat their teacher
+  seed (+0.071 nats per action token in total) and became SD rows of 772 and 851 student tokens, prompt-side teacher
+  prefixes 28-370 tokens. That is 13,380 actor tokens for 1,623 trained tokens (12%). Continuations average ~670
+  tokens, not "short": the student reasons long.
+
+## 2026-11-18: SFT warm-up mix `sft-warmup-20261118-v1` built; launch ready (SFT-mix agent)
+
+**Plan:** `plans/neuralese/SFT_WARMUP_MIX_20261118.md`, one section per facet.
+
+**Brief (owner):** a cheap pure-SFT warm-up from the base on teacher actions and responses, with the reasoning that
+precedes them masked. The reasoning-likelihood term and GRPO follow it.
+
+**Data:** `runs/sft-warmup-20261118-v1`. 3,961 teacher and 55 own verified episodes over 4,000 tasks, plus prebuilt parts. 16,271 chains, 95.3M chain tokens, 2.84M weighted target tokens.
+- Loss shares: teacher actions 72.4%, own successes (reasoning included, grpo-v3-run1 and grpo-v4-run2) 19.4%, Neuralese graph rows 4.9%, operator rows 3.0%, live rows 0.2%.
+- Teacher selection: breadth-first over tasks, with families taking turns, under a 90M forward budget.
+- Manifest: `training/corpus-manifests/sft-warmup-20261118-v1.json`. Validation sets: val-own and val-teacher, 40 episodes each.
+- Also fixed: `exp0_sft.step_groups` now cuts steps on weighted loss tokens. Masked think tokens had filled about a third of each nominal batch.
+
+**Defects found while building, and fixed (default, with opt-out):**
+- **Narration was trained.** The text a non-student reply writes before its first tool call is now context, like its
+  think block. Claude narrates 28% of its tool calls and OpenHands 54%; held episodes after sft-v3 put text beside 12%
+  of their actions. The rule is one function, `serve.targets.non_student_context`, used by `sft_sources.think_context`,
+  by `call_row` (grpo `TeacherDemos`, from their next pin) and by the program-tune fit rows (`tune/rows.turn_graph`).
+  The fit rows trained Haiku's reasoning summaries at full weight. Opt-outs: `--teacher-lead-in train`,
+  `--teacher-think train`. Commits 884b1693e, 892073ab3.
+- **Earlier SFT sources predate the answer protocol.** On 2026-11-17 (1cb19e291) a plain reply stopped answering an
+  invocation: `return_result` is required, and the system prompt and call notes changed with it. grpo-v2/v3 own
+  successes, teacher pool-v1, October and every sft-v3 set were recorded before the change. They carry the retired
+  system prompt and, in some episodes, final plain-text answers.
+  - Now every episode is replayed under a runtime with the change, and rows come from that replay.
+  - The replay matcher accepts a call whose invocation opening the runtime reworded (same signature line, identical
+    actions and outputs; `reworded_key`).
+  - Plain-text endings fail the replay and drop out.
+  - October rows (not replayable) are out.
+- **Backend detours.** teacher_gen serves text endpoints, so a producer's Neuralese return is refused there. The calls
+  after the refusal (`neuralese-unsupported-backend`) are a detour and are now zero-weight context; the producer's own
+  return before it trains (`--backend-workarounds context`). Excluding these episodes would drop 92% of the
+  composed-Neuralese and 70% of the bgkit teacher successes.
+- **Operators file.** The operators-v1 file on disk still trains `</think>` at target 0 on all 11,558 rows. The build
+  masks it at load. GRPO's `ReplayCorpus` already did.
+
+**Hinted self-distillation audit.**
+- **What exists:** JOLT+ teacher attempts (the policy writes guidance; student form drops it from the prompt).
+- **The owner's form:** a hint about where the solution goes, then train the unhinted success.
+- **What the archive shows:** grpo-v4-run1's 11 guided successes are the only ones (v2/v3 had none; run2 none yet).
+  - 4 quote the guidance (5-gram overlap), and 2 name it ("Guidance for this call ...").
+  - In 6 the guidance contained the answer: `writeGuidance.nl` asks the writer to "say what a correct result of
+    consumer is", and the `reference_solution` fact includes the reference's final `return_result`.
+  - Nothing filters for this. `teacher_rho` discounts almost no token (median log rho 0).
+  - GRPO keeps the writer calls in the trained chain. Their prompts hold the reference solution or the hindsight run.
+- **What changed:** the SFT build excludes guided attempts (`--guided exclude`, default).
+- **What did not change:** grpo's JOLT+ path is unchanged here. It needs the hint restricted to where the solution
+  goes (an exact check on every guidance path, as `checkHint` is for `writeHint`) and a filter on trained replies that
+  quote it. This is open for the supervisor; the audit scripts are in the session scratchpad.
+
+**Recipe and criteria:** see the plan's "Recipe" section.
+- exp0_sft, 1 epoch, 32k weighted target tokens per step (about 89 steps, about 180 sequences each), LR 5e-6 peak with
+  6 warm-up steps, cosine to 10%. About 3 h.
+- val-own and val-teacher every 10 steps.
+- Behaviour probe bounds as `behaviour_probe.shifted`.
+- Held-v3 at 2 samples against the base measured on the same pin. No post-protocol Pop base exists.
+- Failure: below base - 4 pts at p < 0.05.
+
+**Launch:** `ops/sft-v4/launch.sh` (owner decides when). It needs grpo-v4-run2's DGX claim and Pop free.
+
+**Ledger:** sft-build-v5-1794992846 was cancelled; this build supersedes it. Not checked: see the plan's "Not checked"
+section.
+
+**2026-11-18 14:00, SFT warm-up then GRPO from it (supervisor, owner's plan).** At grpo-v4-run2's next step boundary it
+stops (its state stays for a return), sft-v4-run1 trains `sft-warmup-20261118-v1` from base 5ff07638 (ops/sft-v4,
+SFT_WARMUP_MIX_20261118.md: teacher actions with reasoning and narration masked, own successes ~19%, graph/operator rows;
+~89 steps, ~3 h), while Pop measures the base on the new answer protocol. As soon as the checkpoint exists,
+grpo-v4-run3 starts from it on a fresh pin of origin/main (reasoning RL walk/rewrite, all of run2's bundle) without
+waiting for the SFT checkpoint's own held eval (drive.sh, Pop). run3's held evals begin at a resume once Pop is free.
+If the SFT checkpoint's held result falls below base - 4 pts at p < 0.05, run3 stops and run2 resumes from its state.
+
+### 2026-11-18: JOLT+ hinted self-distillation no longer leaks its guidance (default on)
+
+Audit of grpo-v4-run1's 11 guided (JOLT+ teacher) successes: 6 had the answer in the guidance (writeGuidance asked for
+"a correct result"; the reference-solution and trajectory facts included the final `return_result` value), 4 quoted
+the guidance in their reasoning (5-word overlap absent from the visible prompt) and 2 named it ("Guidance for this
+call (training only)"). In student form the guidance is removed, so those replies train text the call never saw and
+results with no derivation. Fix, shaped toward a hint about where the solution goes, removed when training:
+- the guidance never carries the answer: writeGuidance.nl rewritten (MODEL_FACING_CHANGES 2026-11-18), procedure facts
+  withhold returned values and drop facts holding an answer leaf (`privileged_context.answer_leaves`, same leaf rule as
+  hintCheck.ts), and the runtime rejects written guidance containing a withheld value (`checkGuidance`, writer retries
+  on the tool error). `--guidance-answers show` opts out.
+- a guided attempt that quotes or names its guidance, or whose guidance carried an answer the prompt does not show
+  (`jolt.guidance_leak`), trains nowhere: grpo `load_group` drops it before the episode term, so SD replay (`sd_add`)
+  and reasoning RL (`ReasoningRL.offer`, JOLT+ successes first) never see it; counted as `teacher_guidance_leak*` in
+  stats. `--guidance-leaks train` opts out. `sft_sources extract` applies the same check
+  (`teacher_attempt_guidance_leak`).
+The GRPO run after the SFT warm-up starts from main with this on.

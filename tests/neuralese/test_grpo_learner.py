@@ -74,6 +74,75 @@ def test_a_publish_failure_is_this_versions_failure(tmp_path):
     assert 'publish failed' in sync.last['answer']
 
 
+def _recording_post(monkeypatch, answers=None):
+    calls = []
+
+    def post(url, body=None, timeout=600):
+        path = url.rsplit('/', 1)[1]
+        calls.append((path, body))
+        return (answers or {}).get(path, json.dumps({'success': True}))
+    monkeypatch.setattr(grpo, 'post', post)
+    return calls
+
+
+def test_a_released_actor_resumes_before_its_weight_update(tmp_path, monkeypatch):
+    """--actor-release: retract, release the tags for the learner phase; the step's publish resumes the memory before
+    reloading the weights (released weights are undefined) and only then continues generation."""
+    calls = _recording_post(monkeypatch)
+    sync, done = _sync(tmp_path), []
+    sync.sglang_url, sync.released = 'http://sglang', None
+    sync.release(['kv_cache', 'weights', 'cuda_graph'])
+    assert [c[0] for c in calls] == ['pause_generation', 'release_memory_occupation']
+    assert calls[0][1] == {'mode': 'retract'} and calls[1][1] == {'tags': ['kv_cache', 'weights', 'cuda_graph']}
+    calls.clear()
+    sync.publish(5, lambda version, ok: done.append((version, ok)))
+    sync.wait()
+    assert [c[0] for c in calls] == ['resume_memory_occupation', 'pause_generation', 'update_weights_from_disk',
+                                     'continue_generation']
+    assert calls[0][1] == {'tags': ['kv_cache', 'weights', 'cuda_graph']}
+    assert done == [(5, True)] and sync.released is None and 'actor_resume_s' in sync.last
+    calls.clear()
+    sync.publish(6, lambda version, ok: None)   # not released: no resume
+    sync.wait()
+    assert [c[0] for c in calls] == ['pause_generation', 'update_weights_from_disk', 'continue_generation']
+
+
+def test_a_skipped_update_restores_the_released_actor_on_its_served_weights(tmp_path, monkeypatch):
+    calls = _recording_post(monkeypatch)
+    sync = _sync(tmp_path)
+    sync.sglang_url, sync.released = 'http://sglang', None
+    sync.restore(3)                     # nothing released: no call
+    assert calls == []
+    sync.release(['kv_cache'])
+    calls.clear()
+    sync.restore(3)
+    assert [c[0] for c in calls] == ['resume_memory_occupation', 'update_weights_from_disk', 'continue_generation']
+    assert calls[1][1]['model_path'] == str(tmp_path) and sync.released is None
+
+
+def test_a_failed_release_continues_generation(tmp_path, monkeypatch):
+    calls = []
+
+    def post(url, body=None, timeout=600):
+        calls.append(url.rsplit('/', 1)[1])
+        if calls[-1] == 'release_memory_occupation':
+            raise OSError('not idle')
+        return '{}'
+    monkeypatch.setattr(grpo, 'post', post)
+    sync = _sync(tmp_path)
+    sync.sglang_url, sync.released = 'http://sglang', None
+    with pytest.raises(OSError):
+        sync.release(['kv_cache'])
+    assert calls == ['pause_generation', 'release_memory_occupation', 'continue_generation'] and sync.released is None
+
+
+def test_no_actor_sync_releases_nothing(tmp_path, monkeypatch):
+    calls = _recording_post(monkeypatch)
+    sync = _sync(tmp_path)
+    sync.released = None
+    assert sync.release(['kv_cache']) == 0. and calls == [] and sync.released is None
+
+
 def _export(tmp_path, model, extra):
     torch = pytest.importorskip('torch')
     from safetensors.torch import save_file
@@ -346,6 +415,9 @@ def test_reasoning_style_sentinel_flags_a_halved_reasoning_length(tmp_path):
     assert style == {'reasoning_tokens_per_call': 3.0, 'reply_tokens_per_call': 1.5}
     assert grpo.style_shift(tmp_path, style) == {}                       # no first step logged yet
     (tmp_path / 'train.jsonl').write_text('{"event": "x"}\n{"step": 1, "reasoning_tokens_per_call": 6.0}\n')
+    assert grpo.style_shift(tmp_path, style) == {}                       # launch-order steps are no baseline
+    (tmp_path / 'train.jsonl').write_text('{"step": 1, "reasoning_tokens_per_call": 1.0}\n'
+                                          '{"step": 4, "reasoning_tokens_per_call": 6.0}\n')
     assert grpo.style_shift(tmp_path, style) == {'reasoning_vs_first_step': 0.5, 'reasoning_shift': True}
     assert grpo.style_shift(tmp_path, {'reasoning_tokens_per_call': 5.0})['reasoning_shift'] is False
 

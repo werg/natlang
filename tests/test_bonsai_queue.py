@@ -857,6 +857,47 @@ def test_shared_collector_runs_invocations_in_one_node_process(tmp_path, monkeyp
     shutil.rmtree(short, ignore_errors=True)
 
 
+def test_shared_collector_skips_a_stalled_server_without_sending_it_the_request(tmp_path, monkeypatch):
+    """A server whose event loop is blocked still completes connects (the kernel's backlog) but never greets: the
+    invocation goes to the next socket within GREETING_SECONDS instead of waiting on it and failing, and the stalled
+    server never receives the request (so it cannot run the episode a second time when it wakes)."""
+    import socket, tempfile, shutil
+    cli = TS_HOST / 'dist/teacher/cli.js'
+    if not queue_module.SharedChild.supported(cli):
+        pytest.skip('ts-host dist is not built with the greeting server mode')
+    short = tempfile.mkdtemp(dir='/tmp', prefix='nlst')
+    monkeypatch.setattr(queue_module.SharedChild, 'ROOT', short)
+    monkeypatch.setattr(queue_module.SharedChild, 'GREETING_SECONDS', 0.5)
+    monkeypatch.setenv('INVOCATION_ID', 'test-shared-collector-stall')
+    command = ['node', '--x', str(cli), '--capabilities', 'json']
+    key = hashlib.sha256('\0'.join([str(Path(cli).resolve()), 'test-shared-collector-stall',
+                                     os.environ.get('NATLANG_MODEL_FACING', '')]).encode()).hexdigest()[:16]
+    root = Path(short) / f'natlang-collector-{os.getuid()}' / key
+    root.mkdir(parents=True)
+    stalled = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    stalled.bind(str(root / 's000.sock'))
+    stalled.listen(16)              # never accepts: a blocked event loop
+    log = io.StringIO()
+    try:
+        started = time.time()
+        child = queue_module.SharedChild(command, log, 2)
+        assert time.time() - started < 30
+        assert child.wait(60) == 0
+        events = [json.loads(line) for line in log.getvalue().splitlines()]
+        assert events[0] == {'event': 'shared_collector_unresponsive', 'socket': str(root / 's000.sock'),
+                             'reason': 'no greeting'}
+        assert events[1]['event'] == 'shared_collector' and events[1]['socket'] == str(root / 's001.sock')
+        stalled.settimeout(1)
+        waiting, _ = stalled.accept()      # the stalled server wakes: its connection was closed with nothing sent
+        waiting.settimeout(1)
+        assert waiting.recv(65536) == b''
+        waiting.close()
+        os.kill(child.server_pid, 15)
+    finally:
+        stalled.close()
+        shutil.rmtree(short, ignore_errors=True)
+
+
 def test_orphan_temporaries_of_dead_writers_are_swept(tmp_path):
     dead = subprocess.Popen(['true']); dead.wait()
     orphan = tmp_path / f'results.jsonl.tmp-{dead.pid}-01234567-89ab-cdef-0123-456789abcdef'

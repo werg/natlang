@@ -914,8 +914,35 @@ def _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_
     return {'mode': 'tree-mask', 'batches': len(batches), 'batch_tokens': batch_tokens}
 
 
+def retained_bytes_per_token(model):
+    """What ``levels`` keeps per prefix token until the prefixes' backward: every layer's saved input (BF16, recomputed
+    or not) and the FP32 keys and values of the full-attention layers the continuations read, with their FP32 gradients."""
+    layers = model.model.layers
+    full = sum(layer.self_attn.k_proj.weight.shape[0] for layer, key in zip(layers, _layer_keys(model))
+               if key == ('attention', -1))
+    return len(layers) * model.config.hidden_size * 2 + full * 2 * 4 * 2
+
+
+def _prefix_tokens(node):
+    return 0 if 'index' in node else node['end'] - node['start'] + sum(_prefix_tokens(c) for c in node['children'])
+
+
+def prefix_parts(nodes, limit):
+    """The forest split into parts of at most ``limit`` prefix tokens each (leaves cost nothing: they retain no graph
+    past their own batch). A subtree over the limit is split among its children's parts, each part with its own copy of
+    the path (exact, as ``tree_units``: each copy gets the gradient of its own continuations); a single prefix node over
+    the limit is a part alone."""
+    def units(node):
+        if 'index' in node or _prefix_tokens(node) <= limit:
+            return [node]
+        own = node['end'] - node['start']
+        parts = [unit for child in node['children'] for unit in units(child)]
+        return [dict(node, children=group) for group in _pack(parts, _prefix_tokens, max(1, limit - own))]
+    return _pack([unit for node in nodes for unit in units(node)], _prefix_tokens, max(1, limit))
+
+
 def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True,
-                    mode='levels', batch_tokens=None):
+                    mode='levels', batch_tokens=None, retained_gb=None):
     """Compute a ``prefix_tree``'s sequences packed, each shared prefix once, with exactly the whole sequences' gradients.
 
     Prefix nodes run level by level, each level's nodes packed into varlen batches of at most ``pack_tokens`` tokens
@@ -935,7 +962,22 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
     ``mode`` 'tree-mask': each batch of whole subtrees (``tree_units``, at most ``batch_tokens``, default
     ``plan_tree_batches``) is one flattened forward whose tokens attend and convolve along their own path
     (``hidden(parents=...)``), with one backward (the caller's); ``leaf`` and ``forward`` are called the same way.
-    'levels': the level-by-level continuations above. 'off' is the caller's (no shared prefix: a forest of leaves)."""
+    'levels': the level-by-level continuations above. 'off' is the caller's (no shared prefix: a forest of leaves).
+    ``retained_gb`` (levels; None or 0: unbounded) bounds what the prefixes keep until their backward
+    (``retained_bytes_per_token`` per prefix token): a step's forest over it runs as ``prefix_parts``, one after the
+    other, each to its own prefixes' backward (shared ancestors recomputed once per part). Unbounded, a 24-48-group GRPO
+    step kept every prefix of the step at once (grpo-v4-run1 step 1: the unit passed 110 GB, DECISIONS 2026-11-18)."""
+    if mode == 'levels' and retained_gb and nodes:
+        limit = int(retained_gb * 2**30 // retained_bytes_per_token(model))
+        if sum(_prefix_tokens(n) for n in nodes) > limit:
+            parts = prefix_parts(nodes, limit)
+            if len(parts) > 1:
+                plans = [run_prefix_tree(model, part, ids_of, leaf, tokens, pack_tokens, activation_gb, backward, mode,
+                                         batch_tokens) for part in parts]
+                merged = {key: sum(p[key] for p in plans) for key in ('prefix_batches', 'leaf_batches', 'prefix_tokens',
+                                                                       'recomputed_prefix_layer_tokens')}
+                return {**merged, 'parts': len(parts), 'retained_gb': round(max(p['retained_gb'] for p in plans), 2),
+                        'leaf_gb': min((p['leaf_gb'] for p in plans if p['leaf_gb'] is not None), default=None)}
     if mode == 'tree-mask':
         if batch_tokens is None or batch_tokens <= 0:
             batch_tokens = None if activation_gb is not None else pack_tokens       # None: plan_tree_batches
@@ -982,7 +1024,7 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
         past = sum(history(parent) for _, _, parent in batch)
         return rows + past * full * 2 * 2 / (ACTIVATION_BYTES_PER_TOKEN_LAYER * len(layers))
     prefix_tokens = sum(n['end'] - n['start'] for level in levels for n in level)
-    retained_gb = prefix_tokens * (len(layers) * hidden_size * 2 + full * 2 * 4) / 2**30
+    retained_gb = prefix_tokens * retained_bytes_per_token(model) / 2**30
     leaf_gb = None if activation_gb is None else max(0., activation_gb - retained_gb)
     spare_gb = None if activation_gb is None else max(
         0., leaf_gb - max([effective(b) for b in leaf_batches] + [0]) * bytes_gb)

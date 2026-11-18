@@ -43,3 +43,48 @@ def test_replay_chains_train_ratio_free_with_row_weights_and_no_tail_floor():
     assert torch.equal(actor, logp) and weights.tolist() == [0.5, 0.5, 0.5]
     weight, tail = grpo.policy_weight((logp - actor).exp(), actor, 0.05, 2., None)
     assert weight.tolist() == [1., 1., 1.] and not tail.any()
+
+
+class _Tokens:
+    """A tokenizer stand-in: ids index a fixed vocabulary."""
+    vocab = ['</think>', '\n\n', 'answer', '<|im_end|>', 'plan']
+
+    def convert_tokens_to_ids(self, token):
+        return self.vocab.index(token)
+
+    def decode(self, ids):
+        return ''.join(self.vocab[i] for i in ids)
+
+
+def _rows_chain(task, samples, weight=None):
+    segs, start = [], 4
+    for sample in samples:
+        row = {'kind': 'consumer', 'sample': np.asarray(sample, np.int32)}
+        if weight is not None:
+            row['weight'] = np.full(len(sample), weight, np.float32)
+        segs.append((start, len(sample), row))
+        start += 4 + len(sample)
+    return {'ids': np.zeros(start, np.int32), 'segs': segs, 'imports': [], 'sources': {}, 'task': task, 'round': 0}
+
+
+def test_a_leading_empty_think_block_is_context_and_reasoned_replies_keep_every_token(tmp_path):
+    import exp0_sft
+    blank = lambda token: token == 1                                       # noqa: E731
+    assert exp0_sft.empty_think_lead(np.array([0, 1, 2, 3]), 0, blank) == 2   # </think> \n\n | answer <|im_end|>
+    assert exp0_sft.empty_think_lead(np.array([4, 0, 2, 3]), 0, blank) == 0   # reasoning first: nothing masked
+    assert exp0_sft.empty_think_lead(np.array([], np.int32), 0, blank) == 0
+    path = tmp_path / 'chains.pkl'
+    chains = [_rows_chain('a', [[0, 1, 2, 3], [4, 0, 2, 3]]), _rows_chain('b', [[0, 2, 3]], weight=0.5)]
+    path.write_bytes(pickle.dumps({'chains': chains}))
+    corpus = grpo.ReplayCorpus(f'ops={path}', set(), 7, log=lambda r: None, tokenizer=_Tokens())
+    assert corpus.think == 'context' and corpus.think_masked == 2
+    (_, _, first), (_, _, reasoned) = corpus.groups['a'][0]['segs']
+    assert first['weight'].tolist() == [0, 0, 1, 1] and 'weight' not in reasoned
+    (_, _, seeded), = corpus.groups['b'][0]['segs']
+    assert seeded['weight'].tolist() == [0, .5, .5]                       # the row's own weight stays on the action
+    # the weights reach the loss as for every chain
+    assert exp0_sft.chain_weights(corpus.groups['a'][0], 'cpu').tolist() == [0, 0, 1, 1, 1, 1, 1, 1]
+    kept = grpo.ReplayCorpus(f'ops={path},think=train', set(), 7, log=lambda r: None, tokenizer=_Tokens())
+    assert kept.think_masked == 0 and 'weight' not in kept.groups['a'][0]['segs'][0][2]
+    with pytest.raises(SystemExit):
+        grpo.ReplayCorpus(f'ops={path},think=maybe', set(), 7, log=lambda r: None)

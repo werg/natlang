@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-warmup-20261118-v1",
+  "owner": "dgx",
+  "path": "runs/sft-warmup-20261118-v1",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 99844,
+      "sha256": "8b25d159d303db24889331082696c656665064cccd5fa15776793726a7bebd33"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 34861259,
+      "sha256": "aa9d71f2ce0ea463aca81adcd48968948d21b3130d4f562f9aa860e385efe3ee",
+      "lines": 4000
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 428688448,
+      "sha256": "77e724383a1bd19175b74f2a8ac61c47055e53ecff99ab26204e54b9edec8d38"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 13813016,
+      "sha256": "59387119a0be728f4e9f11df5eafcfad327a3bfc2c2b55dfee271aed58fb01ec"
+    },
+    {
+      "path": "val-own.pkl",
+      "bytes": 3972465,
+      "sha256": "c16829985a2321502c8553ce6d30f3564975452cd27c53ba479450e78eabdf67"
+    },
+    {
+      "path": "val-teacher.pkl",
+      "bytes": 4667309,
+      "sha256": "f07e9d7558e470ea75aaa38154e3680c5dd44241b46ee6a4f291d379be89efd6"
+    }
+  ],
+  "bytes": 486102341
+}

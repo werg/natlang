@@ -2665,3 +2665,15 @@ defeats its purpose of keeping large values out of the context. The threshold is
 argument listing shows a compacted argument as `name: type = <state>  // view of the value; name holds all of it`
 (agent.ts `views`/`inputsListing`), not with a "Compacted argument: " frame. Operator rows render their sites at this
 threshold (ts-host native/operator-site.ts).
+
+## 2026-11-18: JOLT+ guidance says where the result comes from, never the result
+
+`applications/guidance-writer/writeGuidance.nl` no longer asks for "what a correct result of consumer is": it asks
+where the result comes from (inputs, files, functions, child calls, what decides it), steps to get there, and how to
+find each value, not the value (learned operator `guidance` v2 mirrors the text). The procedure facts it reads
+(`reference_solution`, `teacher_trajectory`, and any minimum-sequence/decisive/failure/feedback fact) show a final
+`return_result` without its value and drop a fact that still holds an answer value (`privileged_context.case_facts`
+`answers='withhold'`). The run controls carry the world's answer values as `withheld`; ts-host rejects a
+writeGuidance/writeHint result containing one with the one-sentence tool error of hintCheck.ts `checkGuidance`.
+Opt-out: grpo `--guidance-answers show`. Evidence: grpo-v4-run1, 6 of 11 guided successes had the answer in their
+guidance (DECISIONS 2026-11-18).

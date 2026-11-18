@@ -29,11 +29,10 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable
 
 from ..common.custody import CUSTODY_SCHEMA, CustodyError
-from ..common.hashing import canonical_json_sha256_hex, sha256_hex
+from ..common.hashing import canonical_json_sha256_hex
 
 BLOCK_SCHEMA = 'natlang.jolt-privileged-block/2'
 REQUEST_SCHEMA = 'natlang.guidance-request/1'
@@ -319,27 +318,115 @@ class Fact:
                                           'invocation': self.invocation, 'match': list(self.match)})
 
 
-def _action_text(actions):
+RETURN_WITHHELD = 'return_result with the result the steps above computed'
+
+
+def _action_text(actions, withhold=False):
+    """Numbered reference actions. ``withhold``: a ``return_result`` shows no value (the steps that compute it stay), so
+    a guide built from the procedure says where the result comes from, never what it is."""
     lines = []
     for step, action in enumerate(actions, 1):
         if not (isinstance(action, list) and len(action) == 2 and isinstance(action[0], str)):
             raise ValueError('reference actions must be [tool, arguments] pairs')
         tool, arguments = action
-        if tool == 'eval' and isinstance(arguments, dict) and set(arguments) == {'code'}:
+        if withhold and tool == 'return_result':
+            status = arguments.get('status', 'success') if isinstance(arguments, dict) else 'success'
+            lines.append(f'{step}. {RETURN_WITHHELD}' + ('' if status == 'success' else f' (status {_text(status)})'))
+        elif tool == 'eval' and isinstance(arguments, dict) and set(arguments) == {'code'}:
             lines.append(f'{step}. eval:\n{arguments["code"]}')
         else:
             lines.append(f'{step}. {tool} {_text(arguments)}')
     return '\n'.join(lines)
 
 
-def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
+# Answer-bearing fact kinds; with ``answers='withhold'`` (the default) they still exist as facts, but the procedure
+# kinds below never carry the result: a guide says where the solution goes and the guided call computes it.
+ANSWERS = ('withhold', 'show')
+_NUMBER = re.compile(r'[-+]?\d+(?:\.\d+)?')
+
+
+def _leaves(value, out):
+    if isinstance(value, bool) or value is None:
+        return out
+    if isinstance(value, (int, float)):
+        if value not in (0, 1):
+            out.add(_text(value))
+    elif isinstance(value, str):
+        text = value.strip()
+        if _NUMBER.fullmatch(text):
+            if float(text) not in (0., 1.):
+                out.add(text)
+        elif len(text) >= 3:
+            out.add(text)
+    elif isinstance(value, list):
+        for item in value:
+            _leaves(item, out)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _leaves(item, out)
+    return out
+
+
+def answer_leaves(case):
+    """The values a guide must not carry (the same leaf rule as guidance-writer hintCheck.ts): the scalar leaves of the
+    world's expected result, of its reference's returned values (root and children) and of its child values; numbers
+    0 and 1 and strings under 3 characters are too common to tell. Sorted."""
+    semantics = case.get('semantics') or {}
+    reference = (case.get('curriculum') or {}).get('reference') or {}
+    out = set()
+    if 'expected' in semantics:
+        _leaves(semantics['expected'], out)
+    for actions in [reference.get('root') or []] + [child.get('calls') or ([child['call']] if child.get('call') else [])
+                                                     for child in reference.get('children') or []]:
+        for action in actions:
+            if isinstance(action, list) and len(action) == 2 and action[0] == 'return_result' and isinstance(action[1], dict):
+                _leaves(action[1].get('value'), out)
+    for child in reference.get('children') or []:
+        if 'value' in child:
+            _leaves(child['value'], out)
+    return sorted(out)
+
+
+def numbers_in(text):
+    """The numeric tokens of a text as strings, as guidance-writer hintCheck.ts ``numbersIn`` reads them: list markers
+    ("2. ") and identifiers ("a1", "R-21") are not numbers."""
+    text = re.sub(r'(?m)^\s*\d+[.)]\s', ' ', text)
+    tokens = (token.rstrip('.!?') for token in re.split(r'[\s,;:()\[\]{}"\'`|=<>/*]+', text))
+    return {token for token in tokens if _NUMBER.fullmatch(token)}
+
+
+def carries(text, leaves):
+    """The leaves ``text`` contains (a number as a whole number token, ``numbers_in``; a string as a case-insensitive
+    whole word or phrase)."""
+    found = []
+    numbers = numbers_in(text)
+    for leaf in leaves:
+        if _NUMBER.fullmatch(leaf):
+            if leaf in numbers or any(float(n) == float(leaf) for n in numbers):
+                found.append(leaf)
+        elif re.search(r'(?<!\w)' + re.escape(leaf.lower()) + r'(?!\w)', text.lower()):
+            found.append(leaf)
+    return found
+
+
+def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=(), answers='withhold'):
     """All privileged facts of one custody-checked training world.
+
+    ``answers`` 'withhold' (default): the procedure facts (reference solution, teacher trajectories, minimum sequence,
+    decisive evidence, reference failures, attempt feedback) never carry the result. A ``return_result`` is shown
+    without its value, and a procedure fact that still contains an answer leaf (``answer_leaves``) is left out. The
+    answer kinds (expected result, files, effects, stop, child values) are unchanged; ``jolt.TEACHER_FACT_KINDS`` keeps
+    them from teachers. grpo-v4-run1: 6 of 11 guided successes had the answer in their guidance (DECISIONS 2026-11-18).
+    'show' keeps the old facts.
 
     ``teacher_trajectories``: admitted verified trajectories of the same world,
     each ``{case_id, split, verified: True, actor, actions: [[tool, args], ...]}``.
     ``attempt_feedback``: runtime error/repair feedback from this episode's
     earlier student attempts, ``{case_id, attempt, feedback, invocation?}``.
     """
+    if answers not in ANSWERS:
+        raise ValueError(f'answers is one of {ANSWERS}')
+    withhold = answers == 'withhold'
     receipt = custody.check(case)
     if ((case.get('semantics') or {}).get('world') or {}).get('kind') == 'memetic':
         # An improvement episode has no verified reference: its expected value is not a fact, and the privileged
@@ -369,7 +456,7 @@ def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
     else:
         raise ValueError('reference failures must be a nonnegative count or a list of attempts')
     if reference.get('root'):
-        add('reference_solution', 'A verified reference solution:\n' + _action_text(reference['root']))
+        add('reference_solution', 'A verified reference solution:\n' + _action_text(reference['root'], withhold))
     for child in reference.get('children') or []:
         add('child_value', _child_text(child), match=_child_match(child))
     if curriculum.get('minimum_sequence'):
@@ -381,13 +468,19 @@ def case_facts(case, *, custody, teacher_trajectories=(), attempt_feedback=()):
         if (trajectory.get('case_id') != case['id'] or trajectory.get('split') != 'train'
                 or trajectory.get('verified') is not True or not trajectory.get('actor')):
             raise CustodyError('teacher trajectories must be verified training trajectories of this exact world')
-        add('teacher_trajectory', 'A verified successful trajectory:\n' + _action_text(trajectory['actions']))
+        add('teacher_trajectory', 'A verified successful trajectory:\n' + _action_text(trajectory['actions'], withhold))
     for item in attempt_feedback:
         if item.get('case_id') != case['id'] or type(item.get('attempt')) is not int:
             raise CustodyError('attempt feedback must come from this world\'s own earlier attempts')
         add('attempt_feedback', f'Earlier attempt {item["attempt"]} received: {item["feedback"]}',
             invocation=item.get('invocation'))
+    if withhold:
+        leaves = answer_leaves(case)
+        facts = [fact for fact in facts if fact.kind in ANSWER_KINDS or not carries(fact.text, leaves)]
     return receipt, tuple(facts)
+
+
+ANSWER_KINDS = ('expected_result', 'expected_stop', 'expected_files', 'expected_effects', 'child_value')
 
 
 # ---------------------------------------------------------------- visibility

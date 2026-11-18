@@ -30,6 +30,7 @@ import collections
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -157,8 +158,13 @@ def extract(args):
                 role = row.get('jolt_role', 'student')
                 if role == 'teacher':
                     # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
-                    # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4)
-                    from natlang_neuralese.rl.jolt import student_episode
+                    # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
+                    # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
+                    from natlang_neuralese.rl.jolt import guidance_leak, student_episode
+                    from natlang_neuralese.rl.privileged_context import answer_leaves
+                    if guidance_leak(row, answers=answer_leaves(task)):
+                        c['teacher_attempt_guidance_leak'] += 1
+                        continue
                     row = student_episode(row, c)
                     c['teacher_attempt_successes'] += 1
                 out.write({'key': f"{label}:{name}:{row['sample']}", 'source': 'rl-own', 'run': label, 'group': name,
@@ -308,18 +314,6 @@ class TemplateRenderer:
     def specials(self):
         return self._engine.specials.fget(self)
 
-    def think_context_end(self, target_ids):
-        """For a reply with no reasoning: the number of leading target tokens that are the template's empty think block
-        (through `</think>` and the whitespace after it), to be zero-weight context; the action after it is the target."""
-        close = self.tokenizer.convert_tokens_to_ids('</think>')
-        ids = list(target_ids)
-        if close not in ids:
-            return 0
-        end = ids.index(close) + 1
-        while end < len(ids) and not self.tokenizer.decode([ids[end]]).strip():
-            end += 1
-        return end
-
     def render(self, messages, tools, target):
         from natlang_neuralese.serve.targets import target_items
         target = {k: v for k, v in target.items() if v is not None}
@@ -329,13 +323,26 @@ class TemplateRenderer:
         return [i for _, i in before], [i for _, i in rest]
 
 
-def reasoning_free_context(renderer, source, target_message, target_ids):
-    """Leading target tokens that are context, not loss: a teacher's or October reply without reasoning renders the
-    template's empty think block, and training it would teach the student to close its reasoning at once (no verified
-    outcome selects that). The student's own replies keep every token as sampled."""
-    if source == 'rl-own' or (target_message.get('reasoning_content') or '').strip():
+OWN_SOURCES = ('rl-own',)
+TEACHER_THINK = ('context', 'train')
+TEACHER_LEAD_IN = ('context', 'train')
+
+
+def think_context(renderer, source, target_message, target_ids, teacher_think='context', lead_in='context'):
+    """Leading target tokens that are context, not loss: for a reply the student did not sample, its think block and
+    (``lead_in`` 'context') the text it writes before its first tool call (``serve.targets.non_student_context``, the
+    one rule the program-tune rows share). sft-v3-run1 trained teacher think blocks: held-v3 reasoning p50 fell
+    1,747 -> 336 characters, Luna's "So far ... Next," style appeared and ran-out rose 16.6% -> 29.6% (DECISIONS
+    2026-11-18). Lead-in text is narration: Claude 28% of its tool calls, OpenHands 54%, the student 1.7%; held after
+    sft-v3 12% vs 2%. The student's own replies keep every token as sampled."""
+    from natlang_neuralese.serve.targets import non_student_context
+    if teacher_think not in TEACHER_THINK:
+        raise ValueError(f'teacher_think {teacher_think!r} not in {TEACHER_THINK}')
+    if lead_in not in TEACHER_LEAD_IN:
+        raise ValueError(f'lead_in {lead_in!r} not in {TEACHER_LEAD_IN}')
+    if source in OWN_SOURCES:
         return 0
-    return renderer.think_context_end(target_ids)
+    return non_student_context(renderer.tokenizer, target_message, target_ids, think=teacher_think, lead_in=lead_in)
 
 
 def check_render(args):
@@ -400,6 +407,19 @@ def visible_key(messages):
     return json.dumps(out, ensure_ascii=False)
 
 
+def reworded_key(messages):
+    """``visible_key`` with the invocation's opening message cut to its first line (the call's signature): the runtime
+    rewords the rest (call notes, protocol sentences; e.g. 1cb19e291 made return_result the only way to answer), and a
+    recorded call whose every action, tool output and later message still matches is the same decision under today's
+    wording."""
+    out, opening = [], True
+    for role, content, calls in json.loads(visible_key(messages)):
+        if opening and role == 'user':
+            content, opening = content.split('\n', 1)[0], False
+        out.append((role, content, calls))
+    return json.dumps(out, ensure_ascii=False)
+
+
 def opening_key(messages):
     """The call's invocation: its first non-system message (the task or nl() request)."""
     for m in messages:
@@ -418,6 +438,7 @@ class ReplayEpisode:
         self.lock = threading.Lock()
         self.turns = turns
         self.keys = [visible_key(t['messages']) for t in turns]
+        self.reworded = [reworded_key(t['messages']) for t in turns]
         self.openings = [opening_key(t['messages']) for t in turns]
         self.lengths = [sum(m.get('role') != 'system' for m in t['messages']) for t in turns]
         self.served = [False] * len(turns)
@@ -442,6 +463,12 @@ class ReplayEpisode:
                 if not self.served[i] and k == key:
                     match, kind = i, 'exact'
                     break
+            if match is None:
+                reworded = reworded_key(messages)
+                for i, k in enumerate(self.reworded):
+                    if not self.served[i] and k == reworded:
+                        match, kind = i, 'reworded'
+                        break
             if match is None:
                 for i in range(len(self.turns)):
                     if not self.served[i] and self.openings[i] == opening and self.lengths[i] == length:
@@ -595,8 +622,10 @@ def replay_episode(args, server, episode, env):
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
               'log': replay.log[:64]}
-    record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and {k: v for k, v in kinds.items() if k != 'scoring-declined'} == {'exact': len(episode['turns'])}
-                       and turns == len(episode['turns']))
+    # exact: every recorded call served to the same visible history, its opening message at most reworded by the runtime
+    matched = {k: v for k, v in kinds.items() if k != 'scoring-declined'}
+    record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
+                       and sum(matched.values()) == len(episode['turns']) and turns == len(episode['turns']))
     for path in directory.iterdir():   # keep the verdict, the replayed record and the logs; drop the job scratch
         if path.is_dir():
             shutil.rmtree(path)
@@ -834,6 +863,23 @@ def verified_episodes(work, funnel, extracted=None, sources=None):
         yield episode, record
 
 
+BACKEND_WORKAROUND = 'neuralese-unsupported-backend'
+
+
+def backend_workaround(turns):
+    """Whether recorded turns ran into the text-only backend's Neuralese refusal (teacher_gen serves teachers through
+    text endpoints): the actions after it work around an error the student's actor (which serves Neuralese) never
+    raises, a detour off the student's surface (8% of v4's teacher episodes; 92% of composed-Neuralese and 70% of bgkit
+    teacher successes of pool-v1 + pool-v2-rich). The action that met it (e.g. a producer's return_result) is the
+    student's own surface."""
+    for turn in turns:
+        for message in turn.get('messages') or ():
+            content = message.get('content')
+            if message.get('role') == 'tool' and isinstance(content, str) and content.startswith(BACKEND_WORKAROUND):
+                return True
+    return False
+
+
 def held_excluded_ids(held_manifest, tasks, held):
     """Task ids among ``tasks`` ({id: task row}) in the held closure: ``held_eval.exclusion_ids`` (held tasks and their
     split groups) plus every row sharing a source group or source id with a held row (``held``: ``held_closure``)."""
@@ -862,6 +908,8 @@ def core_candidates(args, work, funnel, held):
                            'name': record['name'],
                            **({'live_source': record['live_source'], 'world': episode['world'], 'verification_mode': 'observed-live'}
                               if record.get('verification_mode') == 'observed-live' else {}),
+                           'guided': episode.get('role') == 'teacher',
+                           'backend_workaround': backend_workaround(episode['turns']),
                            'signature': minhash(shingles(action_text(episode['turns'])))})
     total, missing = teacher_coverage(args.teacher_pool, extracted)
     funnel['teacher']['manifest_successes_now'] = total
@@ -987,16 +1035,16 @@ def task_constructs(task):
     return tuple(k for k in HELD_CONSTRUCTS if features.get(k)), bool(features.get('dataset_wrapper'))
 
 
-def call_row(renderer, source, key, index, turn):
+def call_row(renderer, source, key, index, turn, teacher_think='context', lead_in='context'):
     """One verified call as a learner row: {'id', 'invocation', 'index', 'prompt', 'sample'[, 'weight']} (int32 token ids
-    from the chat template; a teacher reply without reasoning has its empty think block at weight 0). Raises on a
-    render error. Also returns (prompt length, target length, zero-weight lead)."""
+    from the chat template; a reply the student did not sample has its think block at weight 0, ``think_context``).
+    Raises on a render error. Also returns (prompt length, target length, zero-weight lead)."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
     row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
     row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
            'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
-    context = reasoning_free_context(renderer, source, turn['target'], target)
+    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in)
     if context:
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
     return row, context
@@ -1031,12 +1079,125 @@ def target_mass_report(mass):
     return {'by_suite_function': entries, 'by_role': {role: dict(counts) for role, counts in roles.items()}}
 
 
+class EpisodeSizes:
+    """(forward tokens, weighted target tokens) of a verified episode as `build` renders it, cached in WORK/sizes.jsonl
+    per (episode, renderer identity, think and lead-in policy): budgets and loss shares choose on actual sizes."""
+
+    def __init__(self, path, renderer, teacher_think, lead_in):
+        self.path, self.renderer, self.teacher_think, self.lead_in = Path(path), renderer, teacher_think, lead_in
+        self.policy = hashlib.sha256(json.dumps([renderer.identity, teacher_think, lead_in], sort_keys=True,
+                                                default=str).encode()).hexdigest()[:16]
+        self.cache, self.new = {}, []
+        if self.path.exists():
+            for line in self.path.open():
+                if line.strip():
+                    record = json.loads(line)
+                    self.cache[(record['key'], record['policy'])] = (record['forward'], record['weighted'])
+
+    def measure(self, c, turns_of):
+        from exp0_sft import chains_of
+        hit = self.cache.get((c['key'], self.policy))
+        if hit is not None:
+            return hit
+        rows = []
+        try:
+            for index, turn in enumerate(turns_of(c)):
+                rows.append(call_row(self.renderer, c['source'], c['key'], index, turn, self.teacher_think,
+                                     self.lead_in)[0])
+        except Exception:
+            return None, None
+        forward = sum(len(chain['ids']) for chain in chains_of([{'task_id': c['task_id'], 'round': c['key'],
+                                                                 'rows': rows}]))
+        weighted = int(sum(float(r['weight'].sum()) if 'weight' in r else len(r['sample']) for r in rows))
+        self.cache[(c['key'], self.policy)] = (forward, weighted)
+        self.new.append({'key': c['key'], 'policy': self.policy, 'forward': forward, 'weighted': weighted})
+        return forward, weighted
+
+    def save(self):
+        if self.new:
+            with self.path.open('a') as handle:
+                handle.write(''.join(json.dumps(record) + '\n' for record in self.new))
+            self.new = []
+
+
+def parse_aux(spec):
+    """``NAME=PATH[,share=S|all][,task_tokens=N][,think=context|train]``: a prebuilt chains file (operator rows,
+    Neuralese text/graph rows, live-workflow rows) taking ``share`` of the build's weighted target tokens (``all``: every
+    chain), each task's loss capped at ``task_tokens``; ``think`` context zero-weights a leading empty think block
+    (``exp0_sft.mask_empty_think``: written or dataset targets, e.g. operator seeds and consumer answers)."""
+    name, rest = spec.split('=', 1)
+    path, *options = rest.split(',')
+    part = {'name': name, 'path': path, 'share': 'all', 'task_tokens': 0, 'think': 'context'}
+    for option in options:
+        key, value = option.split('=', 1)
+        if key == 'share':
+            part['share'] = value if value == 'all' else float(value)
+        elif key == 'task_tokens':
+            part['task_tokens'] = int(value)
+        elif key == 'think':
+            if value not in ('context', 'train'):
+                raise ValueError(f'aux think {value!r}')
+            part['think'] = value
+        else:
+            raise ValueError(f'aux option {key!r} in {spec!r}')
+    return part
+
+
+def load_aux(part, tokenizer, held):
+    """A prebuilt part's chains grouped into units (one episode: the chains sharing task and round), held rows dropped,
+    empty think blocks masked (``part['think']`` context). Returns [{'task', 'chains', 'weighted'}]."""
+    import pickle
+    from exp0_sft import chain_weights, mask_empty_think
+    with open(part['path'], 'rb') as handle:
+        chains = pickle.load(handle)['chains']
+    if part['think'] == 'context':
+        part['think_masked_rows'] = mask_empty_think(chains, tokenizer)
+    units = collections.defaultdict(list)
+    for chain in chains:
+        task = chain.get('task')
+        if held_hit(task, (), (), held):
+            part['held_dropped'] = part.get('held_dropped', 0) + 1
+            continue
+        units[(str(task), str(chain.get('round')))].append(chain)
+    return [{'task': task, 'chains': members,
+             'weighted': float(sum(chain_weights(chain, 'cpu').sum().item() for chain in members))}
+            for (task, _), members in units.items()]
+
+
+def mix_report(chains, episodes, aux_report):
+    """Per part (source or aux name): chains, forward and weighted target tokens and their shares; loss concentration
+    over tasks (top 10 tasks, top 1% of tasks, the largest task)."""
+    from exp0_sft import chain_weights, source_tokens
+    parts = collections.defaultdict(collections.Counter)
+    per_task = collections.Counter()
+    for chain in chains:
+        weighted = float(chain_weights(chain, 'cpu').sum().item())
+        p = parts[chain.get('part') or 'unknown']
+        p['chains'] += 1
+        p['forward_tokens'] += len(chain['ids']) + source_tokens(chain)
+        p['weighted_target_tokens'] += weighted
+        per_task[str(chain.get('task'))] += weighted
+    total_w = sum(p['weighted_target_tokens'] for p in parts.values()) or 1
+    total_f = sum(p['forward_tokens'] for p in parts.values()) or 1
+    ranked = sorted(per_task.values(), reverse=True)
+    top1 = max(1, len(ranked) // 100)
+    return {'parts': {k: {'chains': v['chains'], 'forward_tokens': int(v['forward_tokens']),
+                          'weighted_target_tokens': int(v['weighted_target_tokens']),
+                          'loss_share': round(v['weighted_target_tokens'] / total_w, 4),
+                          'forward_share': round(v['forward_tokens'] / total_f, 4)} for k, v in sorted(parts.items())},
+            'weighted_target_tokens': int(total_w), 'forward_tokens': int(total_f), 'tasks': len(per_task),
+            'loss_concentration': {'top10_tasks_share': round(sum(ranked[:10]) / total_w, 4),
+                                   'top1pct_tasks_share': round(sum(ranked[:top1]) / total_w, 4),
+                                   'max_task_tokens': int(ranked[0]) if ranked else 0},
+            'aux': aux_report}
+
+
 def build(args):
     import random
     import numpy as np
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from exp0_sft import MAX_LEN, chains_of
+    from exp0_sft import MAX_LEN, chains_of, source_tokens
     work, out = Path(args.work), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
@@ -1055,8 +1216,22 @@ def build(args):
         s, n = rates.get(task_id, (None, 0))
         return s / n if n else None
 
-    # 1. verified successes of the GRPO pool (own and teacher): near-duplicates out, task caps by base pass rate
+    # 1. verified successes of the GRPO pool (own and teacher): runs left out, guided attempts and backend detours by
+    #    policy, near-duplicates out (teacher first), then each source capped on its own: task caps by base pass rate,
+    #    family shares, the dataset-wrapper share
     core, tasks = core_candidates(args, work, funnel, held)
+    excluded_runs = [re.compile(pattern) for pattern in args.exclude_run]
+    kept = []
+    for c in core:
+        if c['source'] in OWN_SOURCES and any(p.search(c.get('run') or '') for p in excluded_runs):
+            funnel[c['source']]['excluded_run'] += 1
+        elif c['source'] in OWN_SOURCES and c.get('guided') and args.guided == 'exclude':
+            funnel[c['source']]['guided_excluded'] += 1
+        elif c['source'] not in OWN_SOURCES and c.get('backend_workaround') and args.backend_workarounds == 'exclude':
+            funnel[c['source']]['backend_workaround'] += 1
+        else:
+            kept.append(c)
+    core = kept
     rng.shuffle(core)
     core.sort(key=lambda c: 0 if c['source'] == 'teacher' else 1)   # stable: teacher first, else shuffled
     dedup = NearDuplicates(args.dup_threshold)
@@ -1073,12 +1248,17 @@ def build(args):
         top = args.rich_max_per_task if constructs.get(task_id, ((), False))[0] else args.max_per_task
         p = base_rate(task_id)
         return top if p is None else max(1, round(1 + (top - 1) * (1 - p)))
-    core = capped(unique, rng, funnel, core_cap, args.max_family_share, lambda c: 0 if c['source'] == 'teacher' else 1)
-    core = wrapper_capped(core, rng, funnel, lambda c: constructs.get(c['task_id'], ((), False))[1], args.wrapper_share)
+
+    def is_wrapper(c):
+        return constructs.get(c['task_id'], ((), False))[1]
+    teacher_pool = wrapper_capped(capped([c for c in unique if c['source'] not in OWN_SOURCES], rng, funnel, core_cap,
+                                         args.max_family_share, lambda c: 0), rng, funnel, is_wrapper, args.wrapper_share)
+    own_pool = wrapper_capped(capped([c for c in unique if c['source'] in OWN_SOURCES], rng, funnel, core_cap,
+                                     args.max_family_share, lambda c: 0), rng, funnel, is_wrapper, args.wrapper_share)
 
     renderer = TemplateRenderer(args.tokenizer)
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
-    sft_episodes = []
+    sft_episodes, all_chains = [], []
     stats = collections.defaultdict(collections.Counter)
     families, domains = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
     producers = collections.defaultdict(collections.Counter)
@@ -1089,7 +1269,7 @@ def build(args):
         source, rows, written = c['source'], [], []
         for index, turn in enumerate(turns):
             try:
-                row, context = call_row(renderer, source, c['key'], index, turn)
+                row, context = call_row(renderer, source, c['key'], index, turn, args.teacher_think, args.teacher_lead_in)
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
@@ -1097,6 +1277,10 @@ def build(args):
                 if c['source'] in ('rl-own', 'teacher'):
                     return False   # a verified episode is admitted whole or not at all
                 continue
+            if (source not in OWN_SOURCES and args.backend_workarounds == 'context'
+                    and backend_workaround([turn])):
+                row['weight'] = np.zeros(len(row['sample']), np.float32)   # the detour after the refusal: context
+                stats[source]['backend_detour_calls'] += 1
             prompt, target = row['prompt'], row['sample']
             rows.append(row)
             written.append({'id': row['id'], 'episode': c['key'], 'source': source, 'run': c['run'],
@@ -1136,20 +1320,71 @@ def build(args):
         producers[producer]['think_context_calls'] += sum('weight' in r for r in rows)
         producers[producer]['reasoning_free_calls'] += sum(not (t['target'].get('reasoning_content') or '').strip()
                                                            for t in turns)
-        episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows}
-        s['forward_tokens'] += sum(len(chain['ids']) for chain in chains_of([episode]))
+        episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows, 'source': source}
+        episode_chains = chains_of([episode])
+        for chain in episode_chains:
+            chain['part'] = source
+        for row in rows:          # a chain holds its prompts in 'ids'; the per-row copies only cost memory
+            row.pop('prompt', None)
+        all_chains.extend(episode_chains)
+        episode['forward_tokens'] = sum(len(chain['ids']) for chain in episode_chains)
+        episode['weighted_target_tokens'] = int(sum(float(r['weight'].sum()) if 'weight' in r else len(r['sample'])
+                                                    for r in rows))
+        s['forward_tokens'] += episode['forward_tokens']
         sft_episodes.append(episode)
         return True
 
-    for c in core:
+    def turns_of(c):
         if c.get('verification_mode') == 'observed-live':
             from live_teacher_sources import load_episode
-            turns = load_episode(c['live_source']['path'])['turns']
-        else:
-            turns = replayed_turns(work, c['name'])
-        if not admit(c, turns):
+            return load_episode(c['live_source']['path'])['turns']
+        return replayed_turns(work, c['name'])
+
+    episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, args.teacher_think, args.teacher_lead_in)
+
+    def breadth_first(pool, key):
+        """A pool in selection order: every task's first episode before any task's second, and within a round the
+        families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key``
+        orders within a family's turn: held constructs first, then low base pass rates."""
+        rank, seen = {}, collections.Counter()
+        for c in pool:
+            rank[c['key']] = seen[c['task_id']]
+            seen[c['task_id']] += 1
+        ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
+        turn, taken = {}, collections.Counter()
+        for c in ordered:
+            turn[c['key']] = taken[(rank[c['key']], c['family'])]
+            taken[(rank[c['key']], c['family'])] += 1
+        return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
+
+    def priority(c):
+        p = base_rate(c['task_id'])
+        return (0 if constructs.get(c['task_id'], ((), False))[0] else 1, 0.5 if p is None else p, rng.random())
+
+    # teacher successes, breadth-first under the forward-token budget (0: all of the capped pool)
+    task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
+    left_over = collections.defaultdict(list)    # candidates a budget or share left out: validation sets
+    teacher_forward = 0
+    for c in breadth_first(teacher_pool, priority):
+        if args.teacher_forward_budget:
+            if teacher_forward >= 0.995 * args.teacher_forward_budget:     # full: the rest is left over unmeasured
+                funnel[c['source']]['over_forward_budget'] += 1
+                left_over['teacher'].append(c)
+                continue
+            forward, weighted = episode_sizes.measure(c, turns_of)
+            if forward is None:
+                funnel[c['source']]['render_error'] += 1
+                continue
+            if teacher_forward + forward > args.teacher_forward_budget:
+                funnel[c['source']]['over_forward_budget'] += 1
+                left_over['teacher'].append(c)
+                continue
+        if not admit(c, turns_of(c)):
             funnel[c['source']]['render_error'] += 1
-    core_forward = sum(stats[s]['forward_tokens'] for s in ('rl-own', 'teacher'))
+            continue
+        teacher_forward += sft_episodes[-1]['forward_tokens']
+        task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
+    episode_sizes.save()
 
     # 2. October trajectories (no replayable task): compiled actions, held out, deduplicated against everything admitted,
     #    one trajectory per task by default, family caps, then a forward-token budget split by group weights
@@ -1166,7 +1401,7 @@ def build(args):
                 unique.append(c)
         selected = capped(unique, rng, funnel, lambda task_id: args.october_max_per_task, args.october_family_share,
                           lambda c: 0)
-        october_budget = core_forward * args.october_share / (1 - args.october_share)
+        october_budget = teacher_forward * args.october_share / (1 - args.october_share)
         sizes = collections.Counter()
         for c in selected:
             sizes[c['group']] += c['size']
@@ -1228,12 +1463,106 @@ def build(args):
                           'actual_per_estimated_token': {g: round(v, 3) for g, v in scale.items()},
                           'passes': passes, 'chars_per_token_estimate': CHARS_PER_TOKEN}
 
+    for e in sft_episodes:
+        if e['source'].startswith('october:'):
+            task_tokens[e['task_id']] += e['weighted_target_tokens']
+
+    # 3. the loss shares: the teacher and October actions are the rest after the student's own share and each prebuilt
+    #    part's share (``--aux``), all in weighted target tokens (the loss is token-normalized)
+    actions_tokens = sum(e['weighted_target_tokens'] for e in sft_episodes)
+    aux_parts = [parse_aux(spec) for spec in args.aux]
+    fixed_share = args.own_loss_share + sum(part['share'] for part in aux_parts if part['share'] != 'all')
+    if fixed_share >= 1:
+        raise SystemExit(f'own and aux loss shares sum to {fixed_share} >= 1')
+    loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
+    all_tokens = sum(sum(u['weighted'] for u in units) for part, units in loaded if part['share'] == 'all')
+    total_tokens = (actions_tokens + all_tokens) / (1 - fixed_share)
+    aux_report = {}
+    for part, units in loaded:
+        budget = None if part['share'] == 'all' else part['share'] * total_tokens
+        rng.shuffle(units)
+        taken, used, per_task = 0, collections.Counter(), collections.Counter()
+        for unit in units:
+            if budget is not None and taken + unit['weighted'] > budget:   # a unit that would overshoot: a smaller one may fit
+                used['over_share'] += 1
+                continue
+            if part['task_tokens'] and per_task[unit['task']] + unit['weighted'] > part['task_tokens']:
+                used['over_task_tokens'] += 1
+                continue
+            per_task[unit['task']] += unit['weighted']
+            taken += unit['weighted']
+            used['units'] += 1
+            used['chains'] += len(unit['chains'])
+            used['forward_tokens'] += sum(len(chain['ids']) + source_tokens(chain) for chain in unit['chains'])
+            all_chains.extend(unit['chains'])
+            for chain in unit['chains']:
+                chain['part'] = part['name']
+        aux_report[part['name']] = {**{k: v for k, v in part.items()}, 'sha256': sha256_file(part['path']),
+                                    'available_units': len(units), 'weighted_target_tokens': int(taken),
+                                    'tasks': len(per_task), 'budget_tokens': None if budget is None else int(budget),
+                                    'max_task_tokens': int(max(per_task.values(), default=0)), **used}
+
+    # 4. the student's own verified successes (their reasoning included) up to their share, breadth-first over tasks,
+    #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``)
+    own_budget = args.own_loss_share * total_tokens if args.own_loss_share else None
+    own_tokens = 0
+    for c in breadth_first(own_pool, priority):
+        if own_budget is not None and own_tokens >= 0.99 * own_budget:     # full: the rest is left over unmeasured
+            funnel[c['source']]['over_loss_share'] += 1
+            left_over['own'].append(c)
+            continue
+        forward, weighted = episode_sizes.measure(c, turns_of)
+        if forward is None:
+            funnel[c['source']]['render_error'] += 1
+            continue
+        if own_budget is not None and own_tokens + weighted > own_budget:   # would overshoot: a smaller one may fit
+            funnel[c['source']]['over_loss_share'] += 1
+            left_over['own'].append(c)
+            continue
+        if args.max_task_target_tokens and task_tokens[c['task_id']] + weighted > args.max_task_target_tokens:
+            funnel[c['source']]['over_task_target_tokens'] += 1
+            continue
+        if not admit(c, turns_of(c)):
+            funnel[c['source']]['render_error'] += 1
+            continue
+        own_tokens += sft_episodes[-1]['weighted_target_tokens']
+        task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
+    episode_sizes.save()
+
     rows_out.close()
-    chains = chains_of(sft_episodes)
+    chains = all_chains
     rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
         pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
     os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
+    mix = mix_report(chains, sft_episodes, aux_report)
+
+    # validation sets: up to --val-episodes left-over successes per kind on tasks the build does not train (own:
+    # the student's reasoning, whose NLL rising shows drift; teacher: actions on unseen tasks)
+    trained_tasks = {e['task_id'] for e in sft_episodes}
+    validation = {}
+    for kind, pool in sorted(left_over.items()):
+        val_chains, val_tasks = [], set()
+        for c in pool:
+            if len(val_tasks) >= args.val_episodes:
+                break
+            if c['task_id'] in trained_tasks or c['task_id'] in val_tasks:
+                continue
+            try:
+                rows = [call_row(renderer, c['source'], c['key'], index, turn, args.teacher_think,
+                                 args.teacher_lead_in)[0] for index, turn in enumerate(turns_of(c))]
+            except Exception:
+                continue
+            val_chains += chains_of([{'task_id': c['task_id'], 'round': c['key'], 'rows': rows}])
+            val_tasks.add(c['task_id'])
+        if val_chains:
+            for chain in val_chains:
+                for _, _, row in chain['segs']:
+                    row.pop('prompt', None)
+            with (out / f'val-{kind}.pkl').open('wb') as handle:
+                pickle.dump({'chains': val_chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
+            validation[kind] = {'episodes': len(val_tasks), 'chains': len(val_chains),
+                                'forward_tokens': int(sum(len(chain['ids']) for chain in val_chains))}
     rated = [base_rate(e['task_id']) for e in sft_episodes if e['round'].split(':')[0] in ('rl', 'teacher')]
     rated = [p for p in rated if p is not None]
     forward = int(sum(len(c['ids']) for c in chains))
@@ -1253,10 +1582,21 @@ def build(args):
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
                    'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
-                   'loss': 'per-call rows: prompt (system, task, history, tool output) zero weight; the assistant reply '
-                           '(reasoning, text, tool calls, end token) weight 1; a teacher reply without reasoning: the '
-                           'empty think block (through </think>) zero weight, the action after it weight 1 (row weight)'},
+                   'teacher_think': args.teacher_think, 'teacher_lead_in': args.teacher_lead_in,
+                   'exclude_run': args.exclude_run, 'guided': args.guided,
+                   'backend_workarounds': args.backend_workarounds,
+                   'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
+                   'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
+                   'order': 'teacher: breadth-first over tasks (every task once before any twice), held constructs '
+                            'then low base pass rate first, under teacher_forward_budget; October by forward share of '
+                            'the teacher forward; aux parts and own successes by share of the weighted target tokens',
+                   'loss': 'per-call rows: prompt (system, task, history, tool output) zero weight; the own reply '
+                           '(reasoning, text, tool calls, end token) weight 1; a reply the student did not sample '
+                           '(teacher, October, live): its think block through </think> zero weight (teacher_think '
+                           'context; train: only an empty think block), the action after it weight 1 (row weight)'},
         'october': october_report,
+        'mix': mix,
+        'validation': validation,
         'funnel': {k: dict(v) for k, v in funnel.items()},
         'stats': {k: dict(v) for k, v in stats.items()},
         'episodes': len(sft_episodes), 'tasks': len({e['task_id'] for e in sft_episodes}),
@@ -1372,10 +1712,7 @@ def neuralese_text(args):
                             'invocation': turn.get('invocation_id'), 'messages': turn['messages'],
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': 0,
-                            'too_long': len(prompt) + len(target) > MAX_LEN,
-                            **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
-                                'world': c['world'], 'live_exchange': turn['live_exchange']}
-                               if c.get('verification_mode') == 'observed-live' else {})})
+                            'too_long': len(prompt) + len(target) > MAX_LEN})
             s['calls'] += 1
             s['target_tokens'] += len(target)
             s['call_tokens'] += len(prompt) + len(target)
@@ -1432,7 +1769,6 @@ def neuralese_graph(args):
     replay (an episode with a call on an unseen surface is dropped whole: its graph would lose a dependency). Writes
     OUT/chains.pkl (`exp0_sft.py train --chains`), OUT/rows.jsonl.zst and OUT/build.json."""
     import random
-    import numpy as np
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
     from natlang_neuralese.common.jsonio import read_jsonl
@@ -1611,6 +1947,32 @@ def main():
     b.add_argument('--october-passes', type=int, default=4,
                    help='selection passes: each renders, measures actual forward tokens and refills toward the budget')
     b.add_argument('--october-family-share', type=float, default=0.05)
+    b.add_argument('--teacher-lead-in', choices=TEACHER_LEAD_IN, default='context',
+                   help='text a non-student reply writes before its first tool call: context (default) or train')
+    b.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
+                   help="own successes of runs matching REGEX stay out (e.g. 'grpo-v2/'; run labels 'rl:grpo-v3/run1')")
+    b.add_argument('--guided', choices=('train', 'exclude'), default='exclude',
+                   help='JOLT+ guided attempts (own, student form): exclude (default: grpo-v4-run1 guided successes '
+                        'refer to the removed guidance in 4 of 11 and 6 of 11 had the answer in it) or train')
+    b.add_argument('--backend-workarounds', choices=('context', 'exclude', 'train'), default='context',
+                   help="teacher episodes that met the text backend's Neuralese refusal: context (default: every call "
+                        "whose prompt holds the refusal is zero weight; the calls before it, e.g. the producer's own "
+                        "return, train), exclude (the whole episode) or train")
+    b.add_argument('--teacher-forward-budget', type=int, default=0,
+                   help='forward tokens of teacher episodes, taken breadth-first over tasks (0: every capped episode)')
+    b.add_argument('--own-loss-share', type=float, default=0.25,
+                   help='share of the weighted target tokens taken by the student\'s own successes (0: every capped one)')
+    b.add_argument('--max-task-target-tokens', type=int, default=0,
+                   help='per task cap on weighted target tokens that own successes may fill up to (0: none)')
+    b.add_argument('--val-episodes', type=int, default=40,
+                   help='left-over own and teacher successes on untrained tasks written as OUT/val-{own,teacher}.pkl')
+    b.add_argument('--aux', action='append', default=[],
+                   metavar='NAME=PATH[,share=S|all][,task_tokens=N][,think=context|train]',
+                   help='a prebuilt chains.pkl taking a share of the weighted target tokens (parse_aux)')
+    b.add_argument('--teacher-think', choices=TEACHER_THINK, default='context',
+                   help='think block of replies the student did not sample (teacher, October, live): context (default: '
+                   'zero weight through </think>, the action is the target) or train (visible reasoning is target; '
+                   'an empty think block stays context). think_context has the evidence')
     n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')
     n.add_argument('--work', required=True)
     n.add_argument('--out', required=True)

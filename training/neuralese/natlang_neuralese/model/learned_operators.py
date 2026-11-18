@@ -80,12 +80,14 @@ EXTRACT_PROMPT = (
 # tests/neuralese/test_guidance_operator.py pins it to the file: a change there is a version bump here.
 GUIDANCE_PROMPT = (
     "1. consumer is a call about to run, and facts are verified facts about its task. consumer reads your guidance as "
-    "context before it starts; it is not shown as an answer.\n"
-    "2. Say what a correct result of consumer is, using the facts.\n"
+    "context before it starts; it computes its result itself.\n"
+    "2. Say where consumer's result comes from: which of its inputs, files, functions or child calls hold the evidence, "
+    "and what decides the result.\n"
     "3. Say in a few numbered steps how consumer gets there from its own inputs.\n"
-    "4. When a fact is feedback from an earlier attempt, say what to do instead, so consumer reaches the correct result. "
-    "Describe only the correct way; do not repeat the mistaken result or action.\n"
-    "5. Keep it brief: only what helps consumer reach a correct result. Everything you need is in consumer and facts; "
+    "4. When a fact is feedback from an earlier attempt, say what to do instead. Describe only the correct way; do not "
+    "repeat the mistaken result or action.\n"
+    "5. consumer computes every value of its result, so say how to find each value, not the value.\n"
+    "6. Keep it brief: only what helps consumer find its result. Everything you need is in consumer and facts; "
     "return the guidance text")
 # rl/privileged_context.PrivilegedRendering.header: the consumer's guidance turn opens with it.
 GUIDANCE_HEADER = 'Guidance for this call (training only):'
@@ -109,7 +111,7 @@ OPERATORS = {operator.name: operator for operator in (
     # call itself ('call' placement). The span cap matches the guidance budget a consumer renders
     # (training-guidance.ts DEFAULT_GUIDANCE_BUDGET_TOKENS = 512). Consumers import the state the way the engine does
     # (rl/privileged_context.PrivilegedRendering import form): its own system turn after the leading system turn.
-    Operator('guidance', 1, GUIDANCE_PROMPT, 'call', 512,
+    Operator('guidance', 2, GUIDANCE_PROMPT, 'call', 512,
              ('guidance_facts',), 'one', 20_000,
              'The in-run guidance writer (applications/guidance-writer/writeGuidance.nl) writing one consumer call\'s '
              'guidance from its selected verified facts; consumers are the program invocations importing it.',

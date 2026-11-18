@@ -206,6 +206,46 @@ def chain_weights(chain, device):
     return torch.from_numpy(weights.astype(np.float32)).to(device)
 
 
+def empty_think_lead(sample, close_id, blank):
+    """Leading tokens of ``sample`` that are the template's empty think block: ``</think>`` as the first token (the
+    generation prompt opens the block) and the whitespace tokens after it (``blank(id)``); 0 when the reply reasons."""
+    if not len(sample) or int(sample[0]) != close_id:
+        return 0
+    end = 1
+    while end < len(sample) and blank(int(sample[end])):
+        end += 1
+    return end
+
+
+def mask_empty_think(chains, tokenizer):
+    """Zero the loss weight of every row's leading empty think block in ``chains`` (in place); returns the rows changed.
+
+    A reply that was not sampled by the student and carries no reasoning (a written or dataset target: operator seeds,
+    operator consumers' exact answers) renders the template's empty think block, ``</think>`` at the first target
+    position. Training it teaches the student to close its reasoning at once on ordinary calls; no verified outcome
+    selects that (the same rule as ``sft_sources.think_context`` for teacher replies). The action after it trains."""
+    close_id = tokenizer.convert_tokens_to_ids('</think>')
+    cache = {}
+
+    def blank(token):
+        if token not in cache:
+            cache[token] = not tokenizer.decode([token]).strip()
+        return cache[token]
+
+    changed = 0
+    for chain in chains:
+        for _, length, row in chain['segs']:
+            lead = empty_think_lead(row['sample'], close_id, blank)
+            if not lead:
+                continue
+            weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+            if weight[:lead].any():
+                weight[:lead] = 0
+                row['weight'] = weight
+                changed += 1
+    return changed
+
+
 def packed_rows(chains, max_tokens):
     """Greedy, order-preserving packing of ``chains`` into rows of at most ``max_tokens`` tokens (a longer chain is a row
     alone; ``max_tokens`` 0: one chain per row). Returns lists of chains."""
@@ -272,7 +312,8 @@ def chain_loss_tokens(chain):
 
 
 def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
-    """Optimizer steps (lists of chain indices) of at least ``batch_loss_tokens`` loss tokens each.
+    """Optimizer steps (lists of chain indices) of at least ``batch_loss_tokens`` loss tokens each, counted as the loss
+    counts them (``chain_mass``: zero-weight context tokens such as a teacher's think block do not fill a batch).
     Random order (``grouped`` False): one shuffled list over all epochs, cut in order; a last group under half a batch
     is dropped. Grouped: per epoch, episodes (task, round) in lexicographic order of their first chain's tokens (so the
     chains that share a system prompt, task prompt or earlier calls are neighbours; ties and the cut offset random) with
@@ -288,7 +329,7 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
         steps, group, tokens = [], [], 0
         for index in order:
             group.append(index)
-            tokens += chain_loss_tokens(chains[index])
+            tokens += chain_mass(chains[index])
             if tokens >= batch_loss_tokens:
                 steps.append(group)
                 group, tokens = [], 0
@@ -310,7 +351,7 @@ def step_groups(chains, epochs, batch_loss_tokens, seed, grouped):
         for key in keys:
             for index in episodes[key]:
                 group.append(index)
-                tokens += chain_loss_tokens(chains[index])
+                tokens += chain_mass(chains[index])
                 if tokens >= batch_loss_tokens:
                     epoch.append(group)
                     group, tokens = [], 0
@@ -339,6 +380,11 @@ def add_prefix_tree_args(parser):
                         help='shared prefixes: tree-mask (each batch one flattened forward, every token attending and '
                         'convolving along its own path), levels (level-by-level packed continuations over cached state), '
                         'off (every chain whole; as --share-prefix-tokens 0)')
+    parser.add_argument('--prefix-retained-gb', type=float, default=8.,
+                        help='levels: what the shared prefixes keep until their backward (layer inputs, FP32 history keys '
+                        'and values and their gradients), at most this; a larger step runs its prefix tree in parts '
+                        '(lfm3_fast_train.prefix_parts, exact, shared ancestors recomputed per part). grpo-v4-run1 step 1 '
+                        'held 229k prefix tokens (~31 GB) at once; 0: unbounded')
     parser.add_argument('--tree-batch-tokens', type=int, default=-1,
                         help='tree-mask batch cap (prefixes once plus their continuations); default: the cap with the least '
                         'estimated compute, prefix copies vs layer recompute (lfm3_fast_train.plan_tree_batches)')
@@ -350,7 +396,7 @@ def prefix_tree_settings(args):
 
 
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
-                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None):
+                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
     least ``share_prefix_tokens`` tokens that several chains share are computed once and every batch is packed into
     varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree` in ``mode``, exact gradients); 0: every chain
@@ -403,7 +449,8 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
         total_nll += nll.sum().item()
     clock['start'] = time.time()
     lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
-                                    mode=mode if share_prefix_tokens > 0 else 'levels', batch_tokens=tree_batch_tokens)
+                                    mode=mode if share_prefix_tokens > 0 else 'levels', batch_tokens=tree_batch_tokens,
+                                    retained_gb=retained_gb)
     if clock['end'] is not None:
         mark('prefix_backward', clock['end'])
     return total_nll, lfm3_fast_train.tree_tokens(nodes, [tokens(i, 0) for i in range(len(chains))])
@@ -584,7 +631,8 @@ def train(args):
         total_nll, computed = step_backward(model, forward, [chains[i] for i in group], denominator, pack_tokens,
                                             args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
                                             mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
-                                            tree_batch_tokens=args.tree_batch_tokens)
+                                            tree_batch_tokens=args.tree_batch_tokens,
+                                            retained_gb=args.prefix_retained_gb)
         forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0

@@ -123,6 +123,11 @@ def main() -> None:
     parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='vendor',
                         help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
                              'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
+    parser.add_argument('--sglang-memory-saver', action='store_true',
+                        help="SGLang --enable-memory-saver (torch_memory_saver): the engine's KV cache, weights and "
+                             'CUDA graphs can be released and resumed (/release_memory_occupation, '
+                             '/resume_memory_occupation). The colocated GRPO actor uses it to give the GB10 its memory '
+                             'for each learner phase (grpo.py --actor-release); allocation only, no numerics change')
     parser.add_argument('--sglang-overlap-schedule', action='store_true',
                         help="SGLang's overlapped scheduler. Off by default: on DGX GB10 with CUDA graphs it put "
                              'tokens of a wrong distribution into 2-6%% of real RL turns (up to 24 nats from the '
@@ -452,6 +457,16 @@ def sglang_pool(export_dir, args, context, layout='full'):
     return total, fraction
 
 
+def memory_saver_library_path(python, current=''):
+    """LD_LIBRARY_PATH with the SGLang venv's CUDA runtime wheel directories first: torch_memory_saver's preload hook
+    needs libcudart at exec, before torch's own loader would find it (Pop: 'libcudart.so.13: cannot open shared object
+    file', scheduler exit 127)."""
+    import os
+    wheels = sorted(str(lib.parent) for lib in Path(python).parent.parent.glob(
+        'lib/python3*/site-packages/nvidia/cu*/lib/libcudart.so*'))
+    return os.pathsep.join(dict.fromkeys([*wheels, *filter(None, current.split(os.pathsep))]))
+
+
 def launch_sglang(engine, args, checkpoint, release=None):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
@@ -502,6 +517,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *swa,
                *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']),
+               *(['--enable-memory-saver'] if args.sglang_memory_saver else []),
                *(['--speculative-algorithm', 'NGRAM', '--speculative-num-draft-tokens', str(speculative['draft_tokens']),
                   '--speculative-ngram-max-bfs-breadth', '1', '--speculative-ngram-min-bfs-breadth', '1']
                  if speculative else []), *args.sglang_arg]
@@ -517,6 +533,18 @@ def launch_sglang(engine, args, checkpoint, release=None):
     env = {**os.environ, 'PYTHONPATH': backend_pythonpath, 'PATH': path, 'CUDA_HOME': cuda,
            'NATLANG_SGLANG_PROJECTION': args.sglang_projection, 'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
            'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)}
+    if args.sglang_memory_saver:
+        # torch_memory_saver refuses to start under expandable segments, which memory_ledger.py sets for every unit
+        # ("TorchMemorySaver is disabled ... expandable_segments is not supported yet"): the engine allocates its pools
+        # once, so it runs without them
+        conf = [item for item in env.get('PYTORCH_CUDA_ALLOC_CONF', '').split(',')
+                if item and item.split(':')[0].strip() != 'expandable_segments']
+        if conf:
+            env['PYTORCH_CUDA_ALLOC_CONF'] = ','.join(conf)
+        else:
+            env.pop('PYTORCH_CUDA_ALLOC_CONF', None)
+        # its LD_PRELOAD hook links libcudart; without a system CUDA runtime (Pop) the venv's wheel provides it
+        env['LD_LIBRARY_PATH'] = memory_saver_library_path(python, env.get('LD_LIBRARY_PATH', ''))
     url = f'http://127.0.0.1:{port}'
     process = start_sglang(command, env, url)
     supervise_sglang(process)

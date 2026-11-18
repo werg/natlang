@@ -1100,8 +1100,11 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
         if previous.get('engine') and spec['engine'] and previous['engine'] != spec['engine']:
             raise ValueError(f'{out} holds a run measured on another engine: {previous["engine"]!r}, '
                              f'the endpoint attests {spec["engine"]!r}')
+        # The remaining episodes run on this checkout (its pin may be a newer one; the old one may be removed), and
+        # resumed_code records it.
         spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
-                'dispatch': spec['dispatch'], 'resumed_code': spec['code']}
+                'dispatch': spec['dispatch'], 'repo': spec['repo'], 'runtime': spec['runtime'],
+                'resumed_code': spec['code']}
     (out / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')
     (out / 'result.json').unlink(missing_ok=True)
     return run(out)

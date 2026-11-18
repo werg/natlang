@@ -43,6 +43,10 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
   training with the fix; the hunt continues alongside. Fixes still go everywhere the mechanism lives, but that work
   enters at a later resume rather than delaying the run. No pre-launch smoke gates a feature: turn it on, read its
   telemetry, turn it off at a resume if it misbehaves.
+- **Don't measure what first principles already settle (owner 2026-11-18).** When a change is clearly helpful on
+  first principles and only its size is unknown, build it and use it; don't measure first whether or how much it pays,
+  above all when measuring costs significant resources. This applies broadly, to everything we might consider
+  measuring. Briefs say "build it", not "find out what it would buy".
 - **Keep the machines doing useful work** for the experiments in flight (collection, training, held eval, diagnosis).
 
 # Experiments: how results are made trustworthy

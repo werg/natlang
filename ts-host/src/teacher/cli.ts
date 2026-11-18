@@ -247,9 +247,14 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
  * `capacity` concurrent invocations, each a JSON line {argv} on its own connection, answered by {exit}. Node, the
  * bundle and the TypeScript library cost ~150 MB per process; an episode's own heap is tens of MB, so sharing the
  * process is what lets a collection run 128+ slots in ~16 GB. Closing the connection aborts that invocation (the
- * supervisor's terminate). The server exits after `idle` seconds without an invocation. */
-/** run_bonsai_queue uses a runtime's shared server only at this protocol (/1 died with EPIPE when a peer left). */
-const SERVE_PROTOCOL = 'natlang-collector-serve/2';
+ * supervisor's terminate). The server exits after `idle` seconds without an invocation.
+ * Every connection is greeted with {ready, pid, active, capacity} before the client sends its request: an episode's
+ * synchronous work blocks the whole event loop, and a blocked server still completes connects (the kernel's backlog), so
+ * the greeting is what tells a live server from a stalled one. The client sends nothing to a server that does not
+ * greet it, so a server that wakes up later finds only closed connections and never runs an invocation twice. */
+/** run_bonsai_queue uses a runtime's shared server only at this protocol (/1 died with EPIPE when a peer left; /2 had no
+ * greeting: a client waited 60 s on a stalled server and then failed its episode, grpo-v4-run1 2026-11-18). */
+const SERVE_PROTOCOL = 'natlang-collector-serve/3';
 
 async function serve(argv: string[]): Promise<void> {
   const { flags } = argumentsOf(argv);
@@ -267,10 +272,20 @@ async function serve(argv: string[]): Promise<void> {
     if (!active && !listening) { idle = setTimeout(() => process.exit(0), 1000); return; }   // replies flush first
     if (!active) idle = setTimeout(() => { release(); process.exit(0); }, idleMs);
   };
+  // Event-loop stalls (an invocation's synchronous work, swap-in, GC) hold every invocation of this process and its
+  // greetings: logged with their length so a slow collection can be traced to them.
+  let tick = Date.now();
+  setInterval(() => {
+    const now = Date.now(), lag = now - tick - 1000;
+    tick = now;
+    if (lag >= 5000) process.stdout.write(JSON.stringify({ event: 'loop_stall', stall_ms: lag, active,
+      time: new Date(now).toISOString() }) + '\n');
+  }, 1000).unref();
   const server = createServer(connection => {
     // A peer can go away at any point (a probe, a supervisor that timed out or was killed): a write to it then fails
     // with EPIPE, which must end that connection only, never the process serving the other invocations.
     connection.on('error', () => {});
+    connection.write(JSON.stringify({ ready: true, pid: process.pid, active, capacity, listening }) + '\n');
     let buffer = '', started = false, done = false;
     const stop = new AbortController();
     connection.on('close', () => stop.abort());
@@ -291,7 +306,8 @@ async function serve(argv: string[]): Promise<void> {
         // Retention is visible here: the heap after a collection, per finished invocation.
         (globalThis as { gc?: () => void }).gc?.();
         const memory = process.memoryUsage();
-        process.stdout.write(JSON.stringify({ event: 'invocation_end', served, active, heap_used_mb: Math.round(memory.heapUsed / 2**20),
+        process.stdout.write(JSON.stringify({ event: 'invocation_end', time: new Date().toISOString(), served, active,
+          heap_used_mb: Math.round(memory.heapUsed / 2**20),
           rss_mb: Math.round(memory.rss / 2**20), external_mb: Math.round(memory.external / 2**20) }) + '\n');
       };
       let request: { argv?: unknown };

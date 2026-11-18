@@ -73,6 +73,13 @@ def test_rows_carry_the_in_context_capture_and_the_consumer_import():
     content_start, content_stop = builder.span_of(reply)
     assert span == reply[content_start:content_stop] and span
     assert tokenizer.convert_tokens_to_ids('</think>') not in span
+    # Seeds and exact answers carry no reasoning: their empty think block is context, the reply after it the target.
+    close = tokenizer.convert_tokens_to_ids('</think>')
+    for chain in (op, consumer, rows['text_cut']):
+        (_, _, r), = chain['segs']
+        assert r['sample'][0] == close and r['weight'][0] == 0 and r['weight'][-1] > 0
+    kept = RowBuilder(tokenizer, roles, fingerprint, think='train').build(case(), 'compact-value', 'k1')
+    assert 'weight' not in kept['consumer']['segs'][0][2] and kept['operators'][0]['segs'][0][2]['weight'][0] == 1
     # The consumer reads the same tokens between the consume markers at the import rows.
     assert list(consumer['ids'][at:at + len(span)]) == span
     assert consumer['ids'][at - 1] == roles[2] and consumer['ids'][at + len(span)] == roles[3]

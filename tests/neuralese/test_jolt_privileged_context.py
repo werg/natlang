@@ -288,7 +288,7 @@ def test_custody_refuses_development_confirmation_and_related_worlds(tmp_path):
             {'case_id': 'jolt-fixture:dev:0', 'attempt': 1, 'feedback': 'x'}])
     facts = case_facts(train_case(), custody=protected, teacher_trajectories=[
         {'case_id': 'jolt-fixture:train:0', 'split': 'train', 'verified': True, 'actor': 'qwen3.6',
-         'actions': [['eval', {'code': 'return 2;'}]]}],
+         'actions': [['eval', {'code': 'return await count(a1);'}]]}],
         attempt_feedback=[{'case_id': 'jolt-fixture:train:0', 'attempt': 1, 'feedback': 'TypeError: x'}])[1]
     assert {'teacher_trajectory', 'attempt_feedback'} <= {fact.kind for fact in facts}
 
