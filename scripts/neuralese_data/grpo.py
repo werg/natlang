@@ -3356,6 +3356,7 @@ def train(args):
                     and held_complete(d)}
 
         last_start, last_step = 0., max(measured_steps() - {0}, default=0)
+        partial_tried = set()
         while not stop.is_set():
             try:
                 if args.held_base and not held_complete(base_out):
@@ -3377,8 +3378,15 @@ def train(args):
                         raise RuntimeError(f'the start policy measurement ended without a result (see {work}/held-pop.log)')
                 ready = sorted(d for d in checkpoint_root.glob('step-*') if (d / 'sha256.txt').exists()
                                and int(d.name.split('-')[1]) > last_step)
-                if ready and time.time() - last_start >= args.held_every_hours * 3600:
-                    directory = ready[-1]
+                # A measurement a restart interrupted (held/step-N with run.json, no result) resumes first and in place
+                # (held_eval measure resumes by manifest, policy and sampling), so a resume never waits for an
+                # evaluation or discards its episodes. NATLANG_HELD_RESUME_PARTIAL=0 opts out.
+                partial = [d for d in ready if os.environ.get('NATLANG_HELD_RESUME_PARTIAL', '1') != '0'
+                           and d.name not in partial_tried and (held_root / d.name / 'run.json').exists()
+                           and not held_complete(held_root / d.name)]
+                if partial or (ready and time.time() - last_start >= args.held_every_hours * 3600):
+                    directory = (partial or ready)[-1]
+                    partial_tried.add(directory.name)   # one attempt: a failing resume never blocks newer evaluations
                     step_number = int(directory.name.split('-')[1])
                     held_steps.add(step_number)          # kept by write_native's pruning from now on
                     (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
