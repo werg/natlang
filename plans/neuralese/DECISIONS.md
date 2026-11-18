@@ -3354,3 +3354,11 @@ NATLANG_SPECULATIVE_NGRAM). Not checked on SGLang: the law (chi-square) and capt
 (`scripts/neuralese_data/check_speculative_law.py`, `--arm`/`--report` for one-server GPUs). The llama-server
 capture check passed (CPU, Q8: |dlogp| mean 0.015, p99 0.12 vs the plain floor 0.020/0.13). Single-stream engines are
 decided by their own benches below.
+
+Follow-up 05:00. Python native engine: `NATLANG_NATIVE_SPEC_DRAFT` defaults to 0. Its single-stream bench was OOM-killed
+twice, during host memory pressure, with grpo-v4 waiting on the ledger, so no gain was measured. llama-server
+(fork branch `neuralese-spec`, local; wllama `natlang-spec`, local): a CPU single-stream bench ran on real grpo-v3
+prompts (last 2048 tokens, 256 new tokens, Q8, ngram-map-k n=4) on a host with load average ~20. On the four
+requests that were paired before preemption, speculation was faster every time: 1.54/1.26/1.18/1.16 vs
+1.16/1.11/0.98/1.06 tok/s (+10 to +33%), with 13-29% of drafted tokens accepted. That is suggestive, not decisive;
+a GPU single-stream bench decides. Nothing is released, and the pins are unchanged.
