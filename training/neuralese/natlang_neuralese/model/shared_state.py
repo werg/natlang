@@ -1339,6 +1339,40 @@ def native_step(model, ids, cache=None, *, producing=False, embeddings=None):
             'token_ids': ids[0], 'embeddings': raw[0], 'positions': positions, 'layers': tuple(captures)}
 
 
+def truncate_step_cache(base, output, keep):
+    """The cache after the first ``keep`` tokens of a native_step chunk ``output`` run from ``base`` (speculative
+    verification: the chunk is a drawn token and its drafts, and only an accepted prefix stays). Attention layers keep
+    their first positions (a static buffer is shared: ``adopt_step_cache`` makes the kept length its append frontier);
+    a finite convolution's window is the last inputs of [base window, the chunk's first ``keep`` gated inputs], exactly
+    what native_step stores after those tokens. None when a layer's state cannot be cut (gated delta recurrence)."""
+    from .lfm2_port import PortCache, ConvState, AttentionState
+    start = base.lengths[0] if base is not None else 0
+    end = start + keep
+    states = []
+    for index, (state, capture) in enumerate(zip(output['cache'].states, output['layers'])):
+        if isinstance(state, AttentionState):
+            if state.prefix_k is not None:
+                return None
+            states.append(AttentionState(state.tail_k[:, :, :end], state.tail_v[:, :, :end], state.buffer))
+        elif isinstance(state, ConvState):
+            previous = None if base is None else base.states[index]
+            gated = capture['gated_inputs'][:keep].transpose(0, 1).unsqueeze(0)
+            prefix = gated.new_zeros(1, gated.shape[1], state.window.shape[2]) if previous is None else previous.window
+            states.append(ConvState(torch.cat([prefix, gated], dim=2)[:, :, -state.window.shape[2]:]))
+        else:
+            return None
+    return PortCache(tuple(states), (end,) * len(states))
+
+
+def adopt_step_cache(cache):
+    """Make a truncated cache (truncate_step_cache) the one that grows: its static buffers append after its length."""
+    for state in cache.states:
+        buffer = getattr(state, 'buffer', None)
+        if buffer is not None:
+            buffer.frontier = state.length
+    return cache
+
+
 def validate_native_state_layout(port, block):
     """Check the entire raw profile before any mutable cached append occurs."""
     block.validate()

@@ -245,7 +245,7 @@ def speculative(args, rows):
     real GRPO calls at each concurrency: T=1 top-p 0.95 with the actor's natlang record (k=1), output tok/s, the mean
     accepted length (output tokens per verify step) and the server's memory lines. Each arm runs its own server."""
     import random
-    rows = [r for r in rows if len(r['prompt']) + args.max_tokens < 32000]
+    rows = [r for r in rows if len(r['prompt']) + args.max_tokens < min(32000, args.max_prompt)]
     picked = random.Random(0).sample(rows, min(len(rows), 4 * max(args.concurrency)))
     report = {'step': 'speculative', 'arms': {}}
     base_args = list(args.sglang_arg)
@@ -392,6 +392,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('step', choices=('workload', 'serve-measure', 'speculative', 'rescore', 'native', 'all'))
     p.add_argument('--spec-arms', nargs='*', default=['off', '4', '8'])
+    p.add_argument('--max-prompt', type=int, default=32000, help='speculative: longest prompt + reply')
     p.add_argument('--native-lanes', type=int, nargs='*', default=[1, 4, 8])
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--workload', type=Path)
