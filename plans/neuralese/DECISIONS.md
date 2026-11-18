@@ -3318,3 +3318,16 @@ finished. Relaunched as a resume (the scored groups are offered again) on pin 55
 BUDGET=106 (only ~25 of 64 slots were generating anyway), and with the operator and Neuralese-graph replay corpora
 (48f516398) at half size (units 4 and 1) until the step peak is known. voltron's measure resumed with a 4 GB claim (it
 uses ~2.3 GB; `MEASURE_GB` in pop-held.sh).
+
+## 2026-11-18 02:53, live Vibestudio workflows replace fixture teacher collection
+
+The fixture corpus `vibestudio-teacher-pilot-20261117-v2` was removed from the registry and run aliases.
+Its source evidence remains archived. Vibestudio now collects directly from authored Natlang workflows in an
+owned system-test workspace with independent effect readback. The stable training interface is the semantic
+model requests, offered tools and targets rendered by the shared SFT builder for LFM3.
+
+The verified workspace integration seed is `vibestudio-live-workflow-seed-20261118-v1` (636da923e). Its
+independent test verified the expected settings and integration history. One accepted episode yielded 37 supervised
+turns and 16 chains, with zero held-v2/v3 ID or source-group overlaps. The DGX verified all 30 manifest entries.
+It qualifies the pipeline for this workflow. No learner was launched. The source-corpus conversion remains in
+progress. See [observed live workflow data](LIVE_WORKFLOW_SFT_20261118.md).
