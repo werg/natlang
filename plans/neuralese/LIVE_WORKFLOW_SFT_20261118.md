@@ -91,3 +91,15 @@ the untouched setting, and the merge decision at the resulting workspace head. T
 invocations. Held-v3 and held-v2 exposure checks found no overlapping task IDs or source groups.
 The standard LFM3 student build produced 37 supervised model turns and 16 chains with 4,284 target tokens
 and zero over-length turns. These files qualify the pipeline with one live workflow.
+
+## Two verified workflows
+
+Pop completed `worker-label-repair-missing-helper` as managed run `st_f1bdde21993349ee9520df16d2d7029e`.
+The seeded worker failed compilation. Luna repaired it through ten completed Natlang invocations. The oracle
+rebuilt the exact candidate, passed all five original workerd tests, verified the test artifact and execution
+digest, and checked that the original manifest and test files were unchanged.
+
+The published `vibestudio-live-workflow-seed-20261118-v2` contains this trajectory and the Tick integration
+trajectory. The held-v2 and held-v3 checks found zero ID or source-group overlaps. Together the episodes produced
+58 supervised model turns, 26 chains and 6,848 target tokens. The DGX verified all 47 immutable artifacts.
+The earlier one-episode seed is superseded and its data remains archived. The seed has had no learner exposure.
