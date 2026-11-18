@@ -1785,37 +1785,59 @@ def teacher_call(row, close_id, markers):
     return call
 
 
-def teacher_segments(rows, close_id, markers, counts=None):
+def teacher_segments(rows, close_id, markers, counts=None, history='empty'):
     """Runs of consecutive usable calls of one invocation whose prompts extend the previous call's full text (the
-    calls ``exp0_sft.chains_of`` chains). Each call after the first records the previous call's ``suffix``: the tokens
-    between its reply and the next generation prompt's end (the tool output and the next turn's opening)."""
+    calls ``exp0_sft.chains_of`` chains). Each call before the last of a run records its ``suffix``: the tokens between
+    its reply and the next generation prompt's end (the tool output and the next turn's opening).
+
+    ``history`` 'empty' (the default): every earlier call of the invocation (usable or not) appears in a later call's
+    prompt with an empty think block (``</think>`` and its action), so this term's student never reasons on top of
+    teacher-style reasoning; the history the template renders before the invocation's first call (the runtime's
+    opening turn) is kept. 'keep': the recorded prompts, teacher reasoning included."""
     by_invocation = collections.defaultdict(list)
     for row in rows:
         by_invocation[row.get('invocation', '')].append(row)
     runs = []
     for group in by_invocation.values():
         group.sort(key=lambda row: row.get('index', 0))
-        current = []
+        chains = []                                   # rows whose prompts extend the previous row's full text
         for row in group:
-            call = teacher_call(row, close_id, markers)
-            if isinstance(call, str):
-                if counts is not None:
-                    counts[f'call_skip_{call}'] += 1
-                if current:
-                    runs.append(current)
-                current = []
-                continue
-            if current:
-                last = current[-1]
-                full = np.concatenate([last['prompt'], last['reply']])
-                if len(call['prompt']) >= len(full) and np.array_equal(call['prompt'][:len(full)], full):
-                    last['suffix'] = call['prompt'][len(full):]
-                    current.append(call)
+            prompt, sample = np.asarray(row['prompt']), np.asarray(row['sample'])
+            if chains:
+                last = chains[-1][-1]
+                full = np.concatenate([np.asarray(last['prompt']), np.asarray(last['sample'])])
+                if len(prompt) >= len(full) and np.array_equal(prompt[:len(full)], full):
+                    chains[-1].append(row)
                     continue
+            chains.append([row])
+        for chain in chains:
+            prompts = [np.asarray(row['prompt'], np.int32) for row in chain]
+            suffixes = [np.asarray(chain[i + 1]['prompt'][len(row['prompt']) + len(row['sample']):], np.int32)
+                        for i, row in enumerate(chain[:-1])]
+            if history == 'empty':
+                context = list(prompts[0])
+                for i, row in enumerate(chain):
+                    prompts[i] = np.asarray(context, np.int32)
+                    sample = np.asarray(row['sample'])
+                    found = np.flatnonzero(sample == close_id) if close_id is not None else []
+                    reply = [close_id, *sample[found[0] + 1:]] if len(found) else list(sample)
+                    if i + 1 < len(chain):
+                        context = context + [int(t) for t in reply] + [int(t) for t in suffixes[i]]
+            current = []
+            for i, row in enumerate(chain):
+                call = teacher_call({**row, 'prompt': prompts[i]}, close_id, markers)
+                if isinstance(call, str):
+                    if counts is not None:
+                        counts[f'call_skip_{call}'] += 1
+                    if current:
+                        runs.append(current)
+                    current = []
+                    continue
+                if current:
+                    current[-1]['suffix'] = suffixes[i - 1]
+                current.append(call)
+            if current:
                 runs.append(current)
-            current = [call]
-        if current:
-            runs.append(current)
     return runs
 
 
@@ -1986,7 +2008,8 @@ class ReasoningRL:
     def segment(self, episode, source):
         """One segment of a teacher episode: a random run (``teacher_segments``), from a random call, at most
         ``--reasoning-rl-calls`` calls that fit ``--max-sequence-tokens``; None when the episode has none."""
-        runs = teacher_segments(episode['rows'], self.close_id, self.markers, self.counts)
+        runs = teacher_segments(episode['rows'], self.close_id, self.markers, self.counts,
+                                self.args.reasoning_rl_teacher_history)
         if not runs:
             self.counts['episode_no_segment'] += 1
             return None
@@ -4179,6 +4202,9 @@ def main():
     t.add_argument('--reasoning-rl-min-std', type=float, default=0.01,
                    help='a group whose returns (nats per action token) spread less trains only its actions')
     t.add_argument('--reasoning-rl-workers', type=int, default=2, help='search threads (each one segment at a time)')
+    t.add_argument('--reasoning-rl-teacher-history', choices=('empty', 'keep'), default='empty',
+                   help='the teacher\'s earlier calls in a segment\'s history: empty think blocks (default), or keep the '
+                        'recorded teacher reasoning')
     t.add_argument('--reasoning-rl-sources', default='jolt,demos',
                    help='teacher trajectories: jolt (this run\'s JOLT+ teacher successes), demos (TeacherDemos)')
     t.add_argument('--replay-corpus', action='append', default=None, metavar='NAME=PKL[,weight=W][,units=K]',

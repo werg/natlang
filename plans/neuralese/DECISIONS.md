@@ -3611,3 +3611,11 @@ demonstrations in SD back on (default 0.05). 64 slots, 64 running, activation 12
   -0.34), so no carried SD chain there; the other segment carried one 6-row chain (8,321 tokens) into SD.
 - **Opt-out:** `--reasoning-rl-weight 0` (single decisions: `--reasoning-rl-calls 1`; no carried SD: `--sd-weight 0`
   or `--reasoning-rl-sources`). Enters grpo-v4-run2 at its next resume on a pin with this commit.
+
+**2026-11-18, reasoning RL: teacher reasoning out of the history too (coordinator follow-up; default, opt-out).** The
+term's segments start at a random call, so the history before it held the teacher's earlier think blocks, which the
+student then reasoned on top of (the gap reported above). `teacher_segments` now renders every earlier call of the
+invocation in later prompts with an empty think block (`</think>` and its action), usable or not; the runtime's
+opening turn before the invocation's first call is kept. JOLT+ and TeacherDemos alike. Opt-out:
+`--reasoning-rl-teacher-history keep`. Tests: `test_teacher_history_renders_empty_think_blocks`,
+`test_segment_starting_later_reasons_without_teacher_reasoning`. Enters at the next resume with the term.

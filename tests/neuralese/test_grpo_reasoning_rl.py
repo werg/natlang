@@ -68,6 +68,32 @@ def test_teacher_segments_chain_calls_with_suffixes():
     assert sorted(len(r) for r in grpo.teacher_segments(rows, CLOSE, set())) == [1, 1, 1]
 
 
+def test_teacher_history_renders_empty_think_blocks():
+    """The teacher's earlier calls appear in later prompts with empty think blocks (default); 'keep' opts out."""
+    rows = trajectory()
+    calls = sorted(grpo.teacher_segments(rows, CLOSE, set()), key=len)[1]
+    assert calls[0]['prompt'].tolist() == [1, 2, 3]
+    assert calls[1]['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3]            # teacher think [20] gone
+    assert calls[2]['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 31, END, 42, 3]
+    assert all(20 not in c['prompt'] and 21 not in c['prompt'] for c in calls)
+    kept = sorted(grpo.teacher_segments(rows, CLOSE, set(), history='keep'), key=len)[1]
+    assert [c['prompt'].tolist() for c in kept] == [r['prompt'].tolist() for r in rows[:3]]
+    # an unusable call in the middle (a Neuralese marker in its action) still renders empty in the history after it
+    rows[1] = {**rows[1], 'sample': np.array([21, 21, CLOSE, 100, END], np.int32)}
+    rows[2] = {**rows[2], 'prompt': np.concatenate([rows[1]['prompt'], rows[1]['sample'], [42, 3]]).astype(np.int32)}
+    runs = sorted(grpo.teacher_segments(rows, CLOSE, {100}), key=lambda r: r[0]['index'])
+    last = [r for r in runs if r[0]['index'] == 2][0][0]
+    assert last['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 100, END, 42, 3]
+
+
+def test_segment_starting_later_reasons_without_teacher_reasoning(monkeypatch):
+    rrl = sampler()
+    monkeypatch.setattr(rrl.rng, 'choice', lambda runs: max(runs, key=len))
+    monkeypatch.setattr(rrl.rng, 'randrange', lambda n: n - 1)                          # start at the last call
+    segment = rrl.segment({'task_id': 't', 'round': 1, 'rows': trajectory()}, 'demos')
+    assert segment['calls'][0]['prompt'].tolist() == [1, 2, 3, CLOSE, 30, END, 40, 41, 3, CLOSE, 31, END, 42, 3]
+
+
 def test_future_ids_and_discount():
     calls = sorted(grpo.teacher_segments(trajectory(), CLOSE, set()), key=len)[1]
     ids, spans = grpo.future_ids([1, 2, 3, 77, CLOSE], calls, 0, CLOSE)
@@ -154,7 +180,7 @@ def sampler(**overrides):
                            reasoning_rl_max_tokens=64, reasoning_rl_samples=4, reasoning_rl_max_samples=8,
                            reasoning_rl_wave=2, reasoning_rl_high_logp=-0.1, reasoning_rl_hard_logp=-1.0,
                            reasoning_rl_gamma=1.0, reasoning_rl_beam=1, top_p=0.95, reasoning_rl_groups=2,
-                           reasoning_rl_workers=1, reasoning_rl_min_std=0.01)
+                           reasoning_rl_workers=1, reasoning_rl_min_std=0.01, reasoning_rl_teacher_history='empty')
     for key, value in overrides.items():
         setattr(args, key, value)
     collector = SimpleNamespace(version=3, paused=threading.Event(), active_slots=1, stop=threading.Event(),
