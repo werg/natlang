@@ -3457,3 +3457,47 @@ Steps 2-3 (06:36-08:25, 48 groups, 109 min) from `train.jsonl`, `actor.log` per-
 - **Audit:** the Sonnet blind solve held back 7 tasks (3 wrong as written, 4 ambiguous cue readings); the cue-word
   lessons are in `AUTHOR_BRIEF_ROUND13.md`.
 - **When it enters:** grpo-v4-run1 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: GRPO actor and learner trade the GB10's memory across phases (`--actor-release`, default; d77465ec9)
+
+- **Question (owner):** why the SGLang actor and the learner are both resident on the 128 GB unified memory. Brief:
+  build the colocated release/resume (verl, slime) directly, spend the memory on the learner's activation budget and
+  on collection slots and KV, ship as default with an opt-out.
+- **Measured residency, grpo-v4-run1 (48 slots, ACT 4, KV 6; scratchpad memsample every 120 s):** collect phase:
+  learner CUDA ~10 GB (BF16 weights + FP32 masters; moments on disk), actor scheduler CUDA 11-12 GB, unit cgroup
+  (host: collectors, front, learner process, shmem 4.3) 20-33 GB. Learner phase: learner CUDA 46-65 GB, actor the
+  same 11-12 GB. `cuda_reserved_collect_gb` (25-38) is read before the moments go to disk, so it overstates what
+  collection holds by the 13.6 GB moments; `moment_offload.cuda_reserved_after_put_gb` is the collect-phase number.
+- **Reserved vs allocated:** the optimizer phase's 74 GB reserved (31.5 allocated, step 2) and 54-56 (steps 3-4) was
+  the policy pass's cached blocks with the moments read in on top; the behaviour probe's equal figure was a reporting
+  artifact (peak stats reset before the post-optimizer `empty_cache`).
+- **Shipped (d77465ec9):** (1) at learner start `WeightSync.release` pauses the actor (retract) and SGLang
+  `release_memory_occupation` frees `kv_cache,weights,cuda_graph`; the step's publish resumes, reloads the weights
+  from the mapped /dev/shm file (released weights come back undefined; SGLang restores module buffers itself) and
+  continues; a non-finite step restores on the served weights. The run's actor starts with
+  `serve_native_checkpoint --sglang-memory-saver` (`--enable-memory-saver`). (2) `empty_cache` after the reference pass
+  and before the moments are read back; probe peak reported on its own. (3) Episodes in flight wait in the paused
+  actor for the learner phase: `--case-seconds` 7200 (was 3600) and the front's backend socket guard 7200 s
+  (`SGLANG_REQUEST_SECONDS`); ts-host model fetches have no timeouts (`fetchModel`, undici Agent 0/0).
+  Opt-outs: `--no-actor-release`, `--actor-release-tags`, `--keep-learner-cache`. Telemetry: `phase_s.actor_release`,
+  `actor_release_freed_gb`, `previous_sync.actor_resume_s`.
+- **Inventory (fix the mechanism everywhere):** the only colocated trainer driving an actor's weights is `grpo.py`
+  (`git grep update_weights_from_disk`: grpo.py, and the check_sglang_hybrid_swa parity script). Held-eval engines
+  (Pop `pop_actor_driver`, `held_eval serve`), the managed llama-server, wllama and the Python native engine share no
+  machine with a learner and call no release; memory release is engine control for colocation, not a serving-protocol
+  feature, so no ENGINE_PARITY row.
+- **Next resume (spend it):** the actor's ~12 GB (KV 6 + weights 3.8 + graphs) is free during the learner phase and
+  the optimizer's carried reserve (~13-40 GB above allocated) is gone: ACT 12, SLOTS 64, RUNNING 64, KV 12 (KV costs
+  only the collect phase now, which ran with ~45 GB free), budget unchanged.
+
+**2026-11-18 ~10:50, grpo-v4-run1 stopped: the SFT start regressed held-v3 by 16 pts; grpo-v4-run2 from the base
+(supervisor).** Step 1 (the SFT continuation after one GRPO step at LR 5e-7) on Pop, 2 samples, against the base 5ff07638
+(grpo-v3's Pop step 0; paired across series with warnings): per-task pass rate 47.5% -> 31.3%, -16.2 pts, permutation
+p 0.0005; ran-out 16.6% -> 29.6%, loop 16.6% -> 29.4%, repeated actions 0.3% -> 1.3%, graded 0.526 -> 0.322
+(`ops/grpo-v4/run1/held/step-00001/compare-vs-step0.json`). Runtime alone does not explain it: voltron on a newer pin
+scored 45.9%. Cause unknown, so the run stops (AGENTS.md); its states and checkpoints stay for the hunt.
+- **grpo-v4-run2:** same bundle from the untouched base 5ff07638 on pin e517372e5 (shared-collector stall fix, round-11
+  tasks, reasoning_shift baseline), 48 slots, activation 8 GB, teacher demonstrations in SD off (`--sd-teacher-weight 0`)
+  until the SFT hunt clears teacher-trace rendering; own-success SD, JOLT+, hindsight, memetic and replay stay on.
+- **Hunt:** two independently briefed investigators (archived held rollouts and forward checks; static review of the
+  SFT path). The SFT lineage (sft-v3/run1, run1-cont) is not a start policy until the cause is found and fixed.
