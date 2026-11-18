@@ -66,3 +66,19 @@ values continue to be checked. Existing held-v3/v2 source/group exclusion is alw
 `held_eval verify` with the new live source inventory before relying on a new corpus. The result is the same
 `BUILD/chains.pkl` input to `exp0_sft.py train --chains`, with `build.json` and `rows.jsonl.zst` proving actual admission,
 rendered mass and provenance. No training launch follows merely from constructing these files.
+
+## Failed actions in successful live calls
+
+The independent workflow must pass before any episode is admitted. Within a successful model-executed call, raw
+`detail.events` entries with `kind:"action", outcome:"error"` identify failed actions by the original `tool_call_id`.
+`failed_action_turns` joins each ID to exactly one generation's `reply.raw_calls[].id`. Missing or ambiguous attribution
+refuses that source. A completion containing a failed action contributes no target, including co-emitted actions: a
+partial rewrite would fabricate a reply. The original call file remains bound evidence, and every later request keeps
+its actual assistant/tool history as zero-weight context. `call_tree.excluded_failed_action_turns` records omitted
+ordinals/IDs. Failed whole calls remain evidence only. The portable fixture path retains its existing conservative
+failed-action admission rule; this recovery filter applies to observed-live data with real action events.
+
+Read-only metadata qualification on the retained panel C failure snapshot (SHA-256
+`f5709cad3166be3840ff671729cf0682e94ed7434fa8895265d406f5a1d2c177`) found seven raw calls and three exact failed-action
+joins at generation ordinals3,9,10 of calls[6]. Its root and that call were `quiesced`; no part of the blocked run was
+admitted. This proves the event/response join on actual capture data, not a successful workflow or training exposure.

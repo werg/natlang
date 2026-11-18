@@ -14,6 +14,28 @@ def bound_file(binding, root):
     return path
 
 
+def failed_action_turns(detail):
+    """Generation ordinals containing failed actions, joined only by original tool-call IDs."""
+    errors = [event for event in detail.get('events') or []
+              if event.get('kind') == 'action' and event.get('outcome') == 'error']
+    if not errors:
+        return {}
+    failed_ids = {event.get('tool_call_id') for event in errors}
+    if any(not isinstance(ident, str) or not ident for ident in failed_ids):
+        raise ValueError('failed live action lacks its original tool-call ID')
+    owners = {}
+    for index, exchange in enumerate(detail['record'].get('model_turns') or []):
+        if exchange.get('kind') == 'generation':
+            for call in (exchange.get('reply') or {}).get('raw_calls') or []:
+                owners.setdefault(call.get('id'), []).append(index)
+    excluded = {}
+    for ident in sorted(failed_ids):
+        if len(owners.get(ident, [])) != 1:
+            raise ValueError('failed live action does not match exactly one captured generation')
+        excluded.setdefault(owners[ident][0], []).append(ident)
+    return excluded
+
+
 def load_episode(path):
     path = Path(path).resolve()
     spec = json.loads(path.read_text())
@@ -80,7 +102,7 @@ def load_episode(path):
         if summary.get('parent_call_id') != record['parent_call_id']:
             raise ValueError('live call parent differs from authoritative summary')
         records[call_id] = record
-        details.append((binding, record))
+        details.append((binding, detail))
     if seen != set(scopes):
         raise ValueError('workflow call coverage incomplete')
     roots = {call_id for call_id, record in records.items() if record['parent_call_id'] is None}
@@ -99,10 +121,13 @@ def load_episode(path):
             chain.append(current)
             current = records[current]['parent_call_id']
         ancestry[call_id] = list(reversed(chain))
-    for binding, record in details:
+    exclusions = {}
+    for binding, detail in details:
+        record = detail['record']
         call_id = record['call_id']
         if record['executor']['kind'] == 'crisp' or record.get('outcome') != 'done':
             continue  # exact mechanism and failed attempts remain evidence, never successful demonstration targets
+        exclusions[call_id] = failed_action_turns(detail)
         for index, exchange in enumerate(record.get('model_turns') or []):
             if exchange.get('schema') != 'natlang.model-exchange/1':
                 raise ValueError('unsupported live model exchange')
@@ -136,14 +161,16 @@ def load_episode(path):
             reasoning = '\n'.join(block['thinking'] for block in blocks if block.get('type') == 'thinking')
             if (reply.get('text') or '') != text or (reply.get('reasoning') or '') != reasoning:
                 raise ValueError('normalized live text/reasoning differs from original assistant response')
-            models.add(gateway['model'])
             target = {'role': 'assistant', 'content': text}
             if reasoning:
                 target['reasoning_content'] = reasoning
             if calls:
                 target['tool_calls'] = calls
+            if index in exclusions[call_id]:
+                continue  # failed action remains raw evidence and later zero-weight history, never a target
             if not target['content'] and not target.get('tool_calls'):
                 continue
+            models.add(gateway['model'])
             definition = record.get('definition') or {}
             turns.append({'messages': request['messages'], 'tools': request.get('tools') or [], 'target': target,
                 'invocation_id': call_id, 'function': definition.get('name') or 'unknown',
@@ -163,5 +190,6 @@ def load_episode(path):
             'world': world, 'call_tree': [
                 {'call_id': r['call_id'], 'parent_call_id': r['parent_call_id'], 'executor': r['executor']['kind'],
                  'outcome': r.get('outcome'), 'root_call_id': ancestry[r['call_id']][0], 'artifact': binding,
-                 'scope': scopes[r['call_id']]}
-                for binding, r in details]}
+                 'scope': scopes[r['call_id']],
+                 'excluded_failed_action_turns': {str(k): v for k, v in exclusions.get(r['call_id'], {}).items()}}
+                for binding, detail in details for r in [detail['record']]]}
