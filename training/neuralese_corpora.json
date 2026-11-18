@@ -741582,6 +741582,206 @@
         }
       },
       "notes": "Single successful workspace integration smoke. This snapshot qualifies capture, independent live verification, semantic trajectory rendering and the standard learner input. A production corpus requires broader authored source coverage."
+    },
+    {
+      "id": "vibestudio-live-workflow-seed-20261118-v2",
+      "owner": "dgx",
+      "path": "runs/vibestudio-live-workflow-seed-20261118-v2",
+      "include": [
+        "sft/build/build.json",
+        "sft/build/cases.jsonl",
+        "sft/build/chains.pkl",
+        "sft/build/rows.jsonl.zst",
+        "sft/held-v2-separation.json",
+        "sft/held-v3-separation.json",
+        "sft/source-groups.json",
+        "sft/source-ids.json",
+        "sft/work/episodes-extract.json",
+        "sft/work/episodes.jsonl.zst",
+        "worker-label-repair-missing-helper/source.json",
+        "worker-label-repair-missing-helper/summary.json",
+        "worker-label-repair-missing-helper/trajectory-worker-label-repair-missing-helper-full.json.gz",
+        "worker-label-repair-missing-helper/verified/call-0.json",
+        "worker-label-repair-missing-helper/verified/call-1.json",
+        "worker-label-repair-missing-helper/verified/call-2.json",
+        "worker-label-repair-missing-helper/verified/call-3.json",
+        "worker-label-repair-missing-helper/verified/call-4.json",
+        "worker-label-repair-missing-helper/verified/call-5.json",
+        "worker-label-repair-missing-helper/verified/call-6.json",
+        "worker-label-repair-missing-helper/verified/call-7.json",
+        "worker-label-repair-missing-helper/verified/call-8.json",
+        "worker-label-repair-missing-helper/verified/call-9.json",
+        "worker-label-repair-missing-helper/verified/manifest.json",
+        "worker-label-repair-missing-helper/verified/unit-repair-oracle.ts",
+        "worker-label-repair-missing-helper/verified/verification.json",
+        "worker-label-repair-missing-helper/verified/workspace.json",
+        "workspace-integration-theme-locale/source.json",
+        "workspace-integration-theme-locale/summary.json",
+        "workspace-integration-theme-locale/trajectory-workspace-integration-theme-locale-full.json.gz",
+        "workspace-integration-theme-locale/verified/call-0.json",
+        "workspace-integration-theme-locale/verified/call-1.json",
+        "workspace-integration-theme-locale/verified/call-10.json",
+        "workspace-integration-theme-locale/verified/call-11.json",
+        "workspace-integration-theme-locale/verified/call-12.json",
+        "workspace-integration-theme-locale/verified/call-2.json",
+        "workspace-integration-theme-locale/verified/call-3.json",
+        "workspace-integration-theme-locale/verified/call-4.json",
+        "workspace-integration-theme-locale/verified/call-5.json",
+        "workspace-integration-theme-locale/verified/call-6.json",
+        "workspace-integration-theme-locale/verified/call-7.json",
+        "workspace-integration-theme-locale/verified/call-8.json",
+        "workspace-integration-theme-locale/verified/call-9.json",
+        "workspace-integration-theme-locale/verified/manifest.json",
+        "workspace-integration-theme-locale/verified/vcs-integration-oracle.ts",
+        "workspace-integration-theme-locale/verified/verification.json",
+        "workspace-integration-theme-locale/verified/workspace.json"
+      ],
+      "admission": "verified-live-trajectory-sft-qualification",
+      "license_provenance": "Project-generated Luna executions against project-authored Vibestudio scenarios and source. Exact repositories and clean pins are retained. No model weights are included.",
+      "source_provenance": {
+        "captures": [
+          {
+            "scenario": "worker-label-repair-missing-helper",
+            "outer_run": "st_f1bdde21993349ee9520df16d2d7029e",
+            "teacher": "openai-codex:gpt-6-luna",
+            "repositories": {
+              "vibestudio": {
+                "git_commit": "84fb0df7bcb68a9c14f18d1feb0d12367d14244e",
+                "dirty": false
+              },
+              "natlang": {
+                "git_commit": "5b79c0fda510cb7a4e3adadf1fcb74060bffc014",
+                "dirty": false
+              },
+              "base": {
+                "git_commit": "19f402887c8f2731ed215bfcaec175806852e6d4",
+                "dirty": false
+              },
+              "personal": {
+                "git_commit": "2d3524a71f29f8604b495aa5749576876eaf2994",
+                "dirty": false
+              },
+              "system": {
+                "git_commit": "ff584b7d2ff6ba0cb82f11c149d69ee6210773d2",
+                "dirty": false
+              },
+              "system-testing": {
+                "git_commit": "ada6f8cfafd32a1ce625ab98a0550f8494acf9c4",
+                "dirty": false
+              },
+              "examples": {
+                "git_commit": "f3bbbe8050a05011372aa6eb57a9cf69a8d2a2e8",
+                "dirty": false
+              },
+              "google-workspace": {
+                "git_commit": "0b43a0f171070916889b3c05fc5b894cc316cf57",
+                "dirty": false
+              },
+              "news": {
+                "git_commit": "554068a39b314efc753d2f7880761be6dcdf4ba4",
+                "dirty": false
+              },
+              "spectrolite": {
+                "git_commit": "32c4475d2bd4f16dd27874656add55abb5b3def6",
+                "dirty": false
+              }
+            },
+            "completed_call_records": 10
+          },
+          {
+            "scenario": "workspace-integration-theme-locale",
+            "outer_run": "st_66ad94aafdfe468eb06b578fd91c31c6",
+            "teacher": "openai-codex:gpt-6-luna",
+            "repositories": {
+              "vibestudio": {
+                "git_commit": "f2ee9124d35925ea484ebf3a8d8d4dbc3c51f251",
+                "dirty": false
+              },
+              "natlang": {
+                "git_commit": "5b79c0fda510cb7a4e3adadf1fcb74060bffc014",
+                "dirty": false
+              },
+              "base": {
+                "git_commit": "40c6a7fce61cd8ee9c0da3f37875be2eaad5f8c3",
+                "dirty": false
+              },
+              "personal": {
+                "git_commit": "2d3524a71f29f8604b495aa5749576876eaf2994",
+                "dirty": false
+              },
+              "system": {
+                "git_commit": "ff584b7d2ff6ba0cb82f11c149d69ee6210773d2",
+                "dirty": false
+              },
+              "system-testing": {
+                "git_commit": "44530db90360c0a194cc9b37f36f8f14fc53229f",
+                "dirty": false
+              },
+              "examples": {
+                "git_commit": "f3bbbe8050a05011372aa6eb57a9cf69a8d2a2e8",
+                "dirty": false
+              },
+              "google-workspace": {
+                "git_commit": "0b43a0f171070916889b3c05fc5b894cc316cf57",
+                "dirty": false
+              },
+              "news": {
+                "git_commit": "554068a39b314efc753d2f7880761be6dcdf4ba4",
+                "dirty": false
+              },
+              "spectrolite": {
+                "git_commit": "32c4475d2bd4f16dd27874656add55abb5b3def6",
+                "dirty": false
+              }
+            },
+            "completed_call_records": 13
+          }
+        ],
+        "sft_builder_code": {
+          "schema": "natlang.code-provenance/1",
+          "git_commit": "b599c705523559e74df72e62c171b761dc7bd1b2",
+          "dirty": false
+        },
+        "renderer": {
+          "tokenizer_sha256": "7e226e34bface23ccf6e495d157bf77186c1c30a7659880e1a8994db528c3701",
+          "chat_template_sha256": "f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818",
+          "model_type": "lfm3",
+          "history_reasoning": {
+            "policy": "keep",
+            "backbone": "lfm3",
+            "template_kwargs": {
+              "preserve_thinking": true
+            },
+            "probe": "keep"
+          }
+        },
+        "held_manifest_sha256": "4547106069df540d32b250782651143eb3e7ae60fc64e2b4ffef4e2b30fc3d11",
+        "trajectory_contract": "natlang.live-teacher-task/1",
+        "learner_input": "sft/build/chains.pkl",
+        "sft_build_receipt_sha256": "f565477f5b99f7ce068c3a6b638e0e47f7738cc7432157376918381f39fd4cff"
+      },
+      "stages": {
+        "collection": {
+          "verified_live_runs": 2
+        },
+        "admission": {
+          "accepted_roots": 2,
+          "held_id_overlaps": 0,
+          "held_group_overlaps": 0
+        },
+        "rendering": {
+          "tasks": 2,
+          "episodes": 2,
+          "chains": 26,
+          "target_tokens": 6848,
+          "forward_tokens": 256979,
+          "supervised_model_turns": 58
+        },
+        "learner_exposure": {
+          "performed": false
+        }
+      },
+      "notes": "Verified live workspace integration on Tick and real worker build/test repair on Pop. This snapshot supersedes seed-v1, includes its workspace integration episode once, and qualifies the pipeline with two workflows. Full source-corpus coverage and learner evaluation are pending."
     }
   ],
   "coverage_backlog": [
