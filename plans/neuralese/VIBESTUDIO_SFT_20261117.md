@@ -1,5 +1,8 @@
 # Vibestudio fixtures through canonical program IR and backbone SFT
 
+> Historical record. The fixture teacher pilot was removed from the corpus registry. Current Vibestudio
+> collection and admission run through [the live workflow pipeline](LIVE_WORKFLOW_SFT_20261118.md).
+
 Vibestudio suites are a frontend for `natlang.program/2`, not a separate training
 format. The full model source, real entrypoint, JSON inputs, host fixture source,
 selected case, expected requirements and source lineage remain durable in the IR.
