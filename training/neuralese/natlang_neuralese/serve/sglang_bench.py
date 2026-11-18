@@ -142,8 +142,14 @@ def serve(args):
         subprocess.run([sys.executable, '-m', 'natlang_neuralese.export.native_hf', str(args.checkpoint),
                         str(export_dir), *(['--base', str(args.base)] if args.base else [])], check=True)
     run = args.max_running
+    fraction = args.mem_fraction
+    if args.static_gb:
+        # SGLang's static fraction is of the device memory free at its start (serve_native_checkpoint.sglang_pool)
+        free = int(subprocess.run([sys.executable, '-c', 'import torch; print(torch.cuda.mem_get_info()[0])'],
+                                  capture_output=True, text=True, check=True).stdout.strip())
+        fraction = round(min(0.9, args.static_gb * 1e9 / free), 4)
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
-               '--port', str(args.port), '--dtype', 'bfloat16', '--mem-fraction-static', str(args.mem_fraction),
+               '--port', str(args.port), '--dtype', 'bfloat16', '--mem-fraction-static', str(fraction),
                '--context-length', '32768', '--max-total-tokens', str(args.max_total_tokens),
                '--max-running-requests', str(run), '--max-mamba-cache-size', str(8 * run),
                '--cuda-graph-max-bs-decode', str(run), '--incremental-streaming-output', '--stream-interval', '8',
@@ -393,6 +399,8 @@ def main(argv=None):
     p.add_argument('step', choices=('workload', 'serve-measure', 'speculative', 'rescore', 'native', 'all'))
     p.add_argument('--spec-arms', nargs='*', default=['off', '4', '8'])
     p.add_argument('--max-prompt', type=int, default=32000, help='speculative: longest prompt + reply')
+    p.add_argument('--static-gb', type=float, help="SGLang's static memory (weights + KV pool + slack) in GB; the "
+                   'fraction is derived from the device memory free at each launch')
     p.add_argument('--native-lanes', type=int, nargs='*', default=[1, 4, 8])
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--workload', type=Path)
