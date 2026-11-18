@@ -3766,3 +3766,11 @@ precedes them masked. The reasoning-likelihood term and GRPO follow it.
 
 **Ledger:** sft-build-v5-1794992846 was cancelled; this build supersedes it. Not checked: see the plan's "Not checked"
 section.
+
+**2026-11-18 14:00, SFT warm-up then GRPO from it (supervisor, owner's plan).** At grpo-v4-run2's next step boundary it
+stops (its state stays for a return), sft-v4-run1 trains `sft-warmup-20261118-v1` from base 5ff07638 (ops/sft-v4,
+SFT_WARMUP_MIX_20261118.md: teacher actions with reasoning and narration masked, own successes ~19%, graph/operator rows;
+~89 steps, ~3 h), while Pop measures the base on the new answer protocol. As soon as the checkpoint exists,
+grpo-v4-run3 starts from it on a fresh pin of origin/main (reasoning RL walk/rewrite, all of run2's bundle) without
+waiting for the SFT checkpoint's own held eval (drive.sh, Pop). run3's held evals begin at a resume once Pop is free.
+If the SFT checkpoint's held result falls below base - 4 pts at p < 0.05, run3 stops and run2 resumes from its state.
