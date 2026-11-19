@@ -535,9 +535,11 @@ def serve_checkpoint(args):
         send_adapter_release(job, work, release, adapters, rank)
     _pop_upload_json(job, f'{work}/job.json')
     unit = f'{name}-{int(time.time())}'
-    # Pop's 15 GB leave 11.4-11.5 GiB admissible: 11 GiB + the 0.5 GiB reserve was refused right after the rsync
+    # Pop's 15 GB leave 10.9-11.5 GiB admissible (10.9 with the gdm greeter and slab after a desktop logout,
+    # 2026-11-19: 10.5 + the 0.5 reserve waited out its admission). The engine runs in a docker container capped by
+    # its own --memory, so this unit's budget is accounting for the driver, not the engine's limit.
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                    '--budget-gb', str(SGLANG_MEMORY_GB - .5), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
+                    '--budget-gb', os.environ.get('NATLANG_POP_HELD_BUDGET_GB', str(SGLANG_MEMORY_GB - 1.)), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
                     '--no-resumable', '--wait', '900', '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1),
