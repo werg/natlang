@@ -151,6 +151,21 @@ def prepare(checkpoint, expect_sha, wait=None):
     return read_json(receipt)
 
 
+def copy_resumable(source, dest, attempts=None, stall_seconds=120):
+    """rsync that fails a stalled stream after ``stall_seconds`` without data (--timeout) and resumes it (--partial):
+    a Wi-Fi stall on 2026-11-19 held a copy at 2.5 of 3.5 GB for 35 min. NATLANG_POP_COPY_ATTEMPTS=1 opts out."""
+    attempts = attempts or int(os.environ.get('NATLANG_POP_COPY_ATTEMPTS', '5'))
+    for attempt in range(attempts):
+        try:
+            subprocess.run(['rsync', '-a', '--partial', f'--timeout={stall_seconds}', source, dest], check=True,
+                           timeout=7200)
+            return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(30)
+
+
 def ledger_unit(name, command, *, budget_gb, workdir, env=(), wait=86400):
     unit = f'{name}-{int(time.time())}'
     argv = ['/usr/bin/python3', LEDGER, 'run', '--unit', unit, '--budget-gb', str(budget_gb), '--priority', 'low',
@@ -517,7 +532,7 @@ def serve_checkpoint(args):
     prune_pop_newest(f'{POP_CHECKPOINTS}/*.pt', POP_KEEP, protect=(target,))
     prune_pop_newest(f'{POP_EVAL_ROOT}/held-actor-*', POP_KEEP, protect=(work,))
     if not ssh(shlex.join(['test', '-f', target]) + ' && echo ok', check=False).strip():
-        subprocess.run(['rsync', '-a', '--partial', str(args.checkpoint), f'{POP}:{target}.partial'], check=True, timeout=7200)
+        copy_resumable(str(args.checkpoint), f'{POP}:{target}.partial')
         ssh(shlex.join(['mv', f'{target}.partial', target]))
     copied = time.time()
     runtime = pop_code(commit)
