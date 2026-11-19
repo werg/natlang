@@ -4336,3 +4336,40 @@ Kept: natlang-grpo-v4 (run2 checkpoints and states, run1 rollouts/groups that te
 (held base of run2, ablation, its run1 checkpoint), all task-supply/composed/bgkit-kr pools, bgkit-data, development
 data, teacher outputs (incl. broad-graphs teacher-mine work-v3, 59 GB, the next candidate if space runs short), all
 rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpoint.pt.
+
+## 2026-11-19 16:00, grpo-v4-run2 memory drive: a reference cycle kept the prefix parts' FP32 segments alive; resumed moments stayed resident (memory agent)
+
+- **Question (owner):** are opportunities left to free memory without losing speed? Method: train.jsonl phase peaks, a 15 s
+  sampler (per process-group PSS/anon, per-process CUDA by nvidia-smi, cgroup, meminfo) over collection, learner phase and
+  the step boundary, and the code of each phase.
+- **Where the memory goes (step 24, a normal step; unit budget 105.6, ledger peak 104.1 at step 23):**
+  collection: CUDA 32 GB (learner 10.3 = BF16 3.4 + FP32 masters 6.8; actor 21.6 = weights 5.5, KV 11.2, graphs 1.6, rest),
+  host cgroup 31-36 GB (nodes 14 in 17 processes, queue supervisors 2.6 in 86, learner 5.5 anon + 3.8 tmpfs weights, SGLang
+  scheduler/detokenizer/launcher 3.8, front 1.5, page cache 1); outside the unit slab 8-10 GB, page cache 6-14 GB, MemFree 36.
+  Learner phase: actor 2 GB, learner 31 (reference pass start) -> 55 -> 68 GB reserved (policy 60.6 allocated, optimizer
+  44.0 allocated against 30.6 of live tensors), cgroup 27: MemFree 6 GB. Step boundary: the learner kept **43.5 GB reserved
+  for 3 minutes** (24 GB live) while the actor resumed (+20.6 GB): 92 GB total.
+- **Cause 1 (shipped): a reference cycle in `run_prefix_tree`.** The recursive nested `walk` had itself in its closure; the
+  closure's `levels` led to every prefix node's `segment` (FP32 keys/values and grads, ~7.3 GB per part), so a finished
+  part's segments lived until Python's cycle collector ran, which on the learner's heap it rarely does. `--prefix-retained-gb 8`
+  therefore bounded one part, not the pass: 2-3 parts stacked (the 13-19 GB `reserved - live` at the step boundary, freed by
+  the end-of-step `gc.collect`, which ran after `empty_cache`; the reference pass 40 GB allocated with no gradients or
+  moments). `lfm3_fast_train.prefix_levels` is iterative; tree-mask's walk too. Test: no `Segment` survives with gc off (fails
+  on the recursive walk); the SFT trainer shares the function. Expected: reference/policy peaks -7 to -15 GB, the step-boundary
+  window ~24 GB reserved instead of 43.
+- **Cause 2 (shipped): moments a resume loaded stayed resident through the first step.** Steps after each of the 9 resumes:
+  peak 53-72 GB against 41-55 for the others; step 23: 1121 s policy pass against 820 s, MemFree 3 GB, 0.8M swapped pages.
+  `offload_loaded_moments` puts them out at once (-13.6 GB).
+- **Shipped with it:** `free_cuda_cache` (gc.collect, then empty_cache; `--no-learner-gc` opts out) at the three
+  learner cache releases, with `cuda_cache_release` (`gc_freed_gb` names any further cycle), `cuda_peak_events` (leaf batches
+  where the allocated peak grew by 1 GB) in train.jsonl; shared collector servers recycle past `--recycle-rss-mb`
+  (1536; `NATLANG_COLLECTOR_RECYCLE_RSS_MB=0` opts out): a node server sat at 5.1 GB (2.3 GB external after one invocation)
+  until it had served 64 invocations.
+- **Not changed, with reasons:** SGLang KV stays 12 GB (non-evictable use peaks at 56% of 1.8M tokens, but 80 episodes x ~30k
+  context exceed the pool: the radix cache is what it holds); `--activation-gb` stays (ACT 12 buys 5.8% of the policy pass).
+- **Checked and small:** replay corpora in the learner 0.56 GB (int32 arrays), per-episode supervisor 31 MB (imports 10),
+  node baseline ~0.25 GB + 30 MB per episode, inductor workers (fork, 0.4 GB PSS), ReferenceWeights holds no resident copy.
+- **Not checked:** what the remaining 20-25 GB of learner transients are once the cycle is gone (the new events say); the pool
+  rows in the learner heap (450 MB of JSONL, estimated 1.5 GB as dicts); freeing the learner's BF16 params during collection
+  (3.4 GB, blocked by the local held-eval path that re-snapshots them) and masters (6.8 GB); the 3.8 GB tmpfs weights copy
+  (SGLang's disk update path); kernel slab 8-10 GB (no root). Resume on a pin of this commit reads all of it at step 1.

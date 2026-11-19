@@ -1511,9 +1511,11 @@ def free_cuda_cache(collect=True):
     """Return the learner's cached CUDA blocks to the system, after the Python garbage collection when ``collect``
     (``--no-learner-gc`` opts out): tensors kept alive only by reference cycles (closures, exception frames) are freed by
     ``gc.collect`` and land in PyTorch's cache, so an ``empty_cache`` that ran before it left them reserved: the
-    post-optimizer read was 31-43 GB reserved against 24 GB of live tensors (grpo-v4-run2 steps 20-23) until the moment
-    offload's own ``empty_cache`` minutes later, which is when the actor's memory comes back. Returns the figures for
-    train.jsonl: what the collection freed, allocated, and reserved before and after."""
+    post-optimizer read was 31-43 GB reserved against 24 GB of live tensors (grpo-v4-run2 steps 20-24) until the moment
+    offload's own ``empty_cache`` minutes later, which is when the actor's memory comes back. The cycle found so far was
+    ``run_prefix_tree``'s recursive ``walk`` (``lfm3_fast_train.prefix_levels`` is iterative now); a nonzero
+    ``gc_freed_gb`` in ``cuda_cache_release`` after that fix names another one. Returns the figures for train.jsonl: what
+    the collection freed, allocated, and reserved before and after."""
     import torch
     started = time.time()
     before = torch.cuda.memory_allocated()
