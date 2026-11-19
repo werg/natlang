@@ -4127,3 +4127,41 @@ per-term measurement runs on the batches actually trained, reasoning RL and SD i
 **Run2.** No resume flag change for the hazard on this evidence: `--non-student-loss` stays `full` (its share is
 ~0.001/step). The step-8 held eval on Pop is the judge; if close_per_1k keeps rising after warm-up ends (step 10),
 measure per term on the saved batches (needs a resume on a pin with this commit).
+
+## 2026-11-19 04:30, grpo-v4-run2 hazard, step 11's exact batch per term (hazard investigation, follow-up)
+
+**Observation.** close_per_1k 0.670 (step 9) -> 0.735 (step 10, LR peak 5e-6) -> 0.761 (step 11); kl_mean 0.0021 ->
+0.0050 -> 0.0065.
+
+**Method.** `--save-step-chains` batch of step 11 (543 chains), policy step-10 checkpoint, each term written exactly as
+train_leaves writes it (behaviour_logp, token_advantage, policy_weight, non-student full, k2 KL at 0.02 against base
+logp, token_scale). Direction u = base hazard gradient / sqrt(v) of state 9 (the base gH file was deleted
+meanwhile, so no current-policy gH and no step-10 preconditioner). Subsample: 3 of 20 GRPO groups (x6.7), 60 of 184
+reasoning-RL chains (x3.2 by coefficient mass), every sd_teacher and replay chain; the KL over the selected chains.
+Script: scratchpad `hz2/termdots2.py`; 64 min at 6.4 GB.
+
+**dH per step (linear, close_per_1k units).**
+- GRPO pos think -0.45, pos post -0.05, neg think -0.07, neg post +0.00. Three groups, so this is mostly noise.
+- reasoning-RL reasoning: negative-advantage samples **+0.127**, positive -0.017; reasoning-RL teacher actions -0.022.
+- KL **-0.042**. It has the largest cosine with the hazard direction of any term (0.16; the others 0.001-0.04).
+- sd_teacher -0.0003, replay operators +0.0003, replay neuralese-graph -0.005. No SD own chains were in step 11.
+
+**Reading.**
+- The predicted total (-0.53) has the wrong sign against the observed +0.026. The 3-group GRPO subsample and the stale
+  base direction make the step total unreliable; per-term signs of the small, consistent terms are the usable part.
+- Teacher/replay rows and the non-student full softmax are negligible again (<= 0.005), as on 11-18 data.
+- The one term that raised the hazard in this batch is pushing down reasoning-RL samples with low teacher-action
+  likelihood. It is asymmetric: neg and pos carry the same coefficient mass (0.0097 vs 0.0109 in the sample;
+  0.034 vs 0.031 over the step), but the neg side moves the hazard 7x more. The lone unclosed 8192-token sample (A = -1)
+  was not in the subsample.
+- KL is the only term that reliably pulls the hazard back. At 0.02 it is outweighed once the LR is at its peak (KL
+  rose 2.4x at step 10).
+
+**Not checked.** A current-policy hazard gradient; the other 17 GRPO groups; per-chain attribution inside
+reasoning-RL neg (length or content); held-v3 at step 10 (running on Pop).
+
+**Recommendation for the resume (flags, no default change):** `--kl-beta 0.05` (2.5x the pull the measurement shows,
+about -0.10 a step, more than the observed +0.03-0.06 rise) and `--reasoning-rl-weight 0.5` (halves the one
+hazard-raising term). Keep `--non-student-loss full`. Revert either flag if step-10/12 held results fall; read
+close_per_1k and kl_mean over the next 2 steps; if the hazard still rises, measure step N's batch again with all GRPO
+groups and a gH at the current policy.
