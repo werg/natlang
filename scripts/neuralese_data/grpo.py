@@ -2661,6 +2661,32 @@ def kl_term(d, estimator):
     return 0.5 * d * d if estimator == 'k2' else d.exp() - d - 1
 
 
+def malformed_close_targets(chain, advantage, close_id, stop_ids):
+    """Bool per target of ``chain`` (torch, or None when there is none): a reply's second and later ``</think>`` and
+    the tokens after each up to the action (``exp0_sft.second_close_mask``) where the advantage is positive. Malformed
+    output is never reinforced (``--second-close context``); a negative advantage still pushes it down. ``advantage``: a
+    number or a per-token tensor (``token_advantage``)."""
+    import torch
+    import exp0_sft
+    masks = [exp0_sft.second_close_mask(row['sample'], close_id, stop_ids) for _, _, row in chain['segs']]
+    if all(m is None for m in masks):
+        return None
+    bad = torch.from_numpy(np.concatenate([np.ones(n, np.float32) if m is None else m
+                                           for m, (_, n, _) in zip(masks, chain['segs'])]) == 0)
+    if torch.is_tensor(advantage):
+        return bad & (advantage.detach().cpu() > 0)
+    return bad if advantage > 0 else torch.zeros_like(bad)
+
+
+def decision_token_kl(token_logp, ref_logp, beta, estimator, token_scale):
+    """The KL term on a sampled decision's chosen option, token by token (``--decision-token-kl``, default): those tokens
+    are what the actor emitted, and the option softmax (the decision's policy and KL terms) does not see any token all
+    options share (``</think>``, quotes, ``<|im_end|>``), so only this anchors their absolute probabilities, as the KL
+    term anchors every sampled chain token (same beta, same per-token loss factor; grpo-v4-run2's policy drifted 6-13
+    nats on ``<|im_end|>`` after short answers by step 12, DECISIONS 2026-11-19)."""
+    return beta * kl_term(ref_logp - token_logp, estimator).sum() * token_scale
+
+
 def kl_stats(sums, d):
     """Telemetry of one batch of ``d`` (ref - policy logp): the k3 KL estimate, the k2 mean the loss trains (d^2 / 2),
     the largest single-token k3 term (k3 = e^d - d - 1 grows exponentially in d: one token where the policy sits 14
@@ -3304,9 +3330,12 @@ def train(args):
     versions_live = {'actor': step}
     probes = probe_chains(args) if args.probe_turns else []
     think_close = None   # the reasoning-close token id: splits the logged gradient mass into reasoning and reply tokens
+    second_close_stops = set()
     try:
         from tokenizers import Tokenizer
-        think_close = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json')).token_to_id('</think>')
+        _tokenizer = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json'))
+        think_close = _tokenizer.token_to_id('</think>')
+        second_close_stops = {i for i in (_tokenizer.token_to_id(t) for t in exp0_sft.SECOND_CLOSE_STOPS) if i is not None}
     except Exception as error:
         log_line(log, {'event': 'no </think> id: grad_mass_share is not logged', 'error': repr(error)[:200]})
 
@@ -3942,12 +3971,14 @@ def train(args):
             imports = lfm3_fast_train.passthrough_tensors(plan, 'cuda', stored)
             options = sum(counts)
 
-            def scores_of(net):
+            def scores_of(net, tokens=False):
                 token = -exp0_sft.token_nll(net, forward(net, ids, lengths, imports), positions, targets)
-                return torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+                scores = torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+                return (scores, token, owner) if tokens else scores
             return ids, counts, scores_of
 
         ref_scores_of = []                # per decision batch: the start policy's option scores
+        ref_tokens_of = []                # and its per-token log-probabilities (--decision-token-kl)
         if reference is not None:
             # the reference pass: the policy module with the start policy's weights (ReferenceWeights), chains and
             # decisions, before any gradient exists; then the policy's own weights back from its masters
@@ -3966,7 +3997,9 @@ def train(args):
                     ids, _, scores_of = decision_inputs(batch)
                     exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
                     with torch.enable_grad():
-                        ref_scores_of.append(scores_of(model).detach())
+                        ref_scores, ref_tokens, _ = scores_of(model, tokens=True)
+                        ref_scores_of.append(ref_scores.detach())
+                        ref_tokens_of.append(ref_tokens.detach())
                 for p in live.values():
                     p.grad = None
             finally:
@@ -4017,6 +4050,11 @@ def train(args):
                                                  None if chain.get('role') == 'replay' else args.tail_logp_floor)
                     if row_weight is not None:
                         weight = weight * row_weight
+                    if args.second_close == 'context' and think_close is not None:
+                        bad = malformed_close_targets(chain, advantage, think_close, second_close_stops)
+                        if bad is not None:
+                            weight = weight.masked_fill(bad.to(weight.device), 0.)
+                            sums['second_close_masked'] += int(bad.sum())
                     # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
                     # split into reasoning and post-</think> tokens
                     mass = token_scale * abs(advantage) * weight * (1 - policy_logp.detach().exp())
@@ -4081,7 +4119,8 @@ def train(args):
             t = time.time()
             ref_scores = ref_scores_of[batch_index] if reference is not None else None
             exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
-            scores = scores_of(model)
+            scores, token_logp, owner = scores_of(model, tokens=True)
+            ref_tokens = ref_tokens_of[batch_index] if reference is not None else None
             terms, start = [], 0
             for item, k in zip(batch, counts):
                 row = item['row']
@@ -4105,7 +4144,14 @@ def train(args):
                     d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
                     term = term + args.kl_beta * kl_term(d, args.kl_estimator)
                     kl_stats(sums, d)
-                terms.append(term * decision_scale)
+                term = term * decision_scale
+                if ref_tokens is not None and args.decision_token_kl:
+                    chosen = owner == start + row['chosen']
+                    term = term + decision_token_kl(token_logp[chosen], ref_tokens[chosen], args.kl_beta, args.kl_estimator,
+                                                    scales[item['episode']][0])
+                    kl_stats(sums, ref_tokens[chosen] - token_logp[chosen])
+                    sums['decision_token_kl_tokens'] += int(chosen.sum())
+                terms.append(term)
                 sums['decision_rho'] += rho.item()
                 sums['decision_abs_log_rho'] += log_rho.abs().item()
                 sums['decision_logpi'] += logpi.item()
@@ -4114,7 +4160,7 @@ def train(args):
                 start += k
             torch.stack(terms).sum().backward()
             forward_tokens += len(ids)
-            del scores, terms
+            del scores, terms, token_logp
             torch.cuda.synchronize()
             phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
         if batches:
@@ -4232,6 +4278,7 @@ def train(args):
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, lr_data_scale=round(data_scale, 4),
             grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
+            second_close_masked=int(sums['second_close_masked']), decision_token_kl_tokens=int(sums['decision_token_kl_tokens']),
             kl_k2_mean=round(sums['kl_k2'] / units, 7), kl_k3_max_share=round(sums['kl_k3_max'] / sums['kl'], 4) if sums['kl'] > 0 else None,
             ref_dlogp_pos_max=round(sums['ref_dlogp_pos_max'], 3),
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
@@ -4457,6 +4504,13 @@ def main():
     t.add_argument('--reasoning-rl-max-tokens', type=int, default=8192,
                    help='reasoning tokens per sample at most (a sample that has not closed by then ties with its '
                         'group\'s worst)')
+    t.add_argument('--second-close', choices=('context', 'train'), default='context',
+                   help="a reply's second and later </think> and the tokens after each up to the action: context (default; "
+                        'never reinforced at a positive advantage, in every learner row: episodes, SD, reasoning RL, replay, '
+                        'teacher demonstrations; exp0_sft.second_close_mask); train: as any token (before 2026-11-19)')
+    t.add_argument('--no-decision-token-kl', dest='decision_token_kl', action='store_false',
+                   help="sampled decisions: no per-token KL on the chosen option's tokens (only the KL of the option "
+                        'softmax, which ignores the tokens all options share; before 2026-11-19)')
     t.add_argument('--truncated-episodes', choices=('drop', 'train'), default='drop',
                    help="an episode with a reply cut by a token cap (finish_reason 'length'): drop (default) leaves it out of "
                         "its group's advantages and of training; train: it scores and trains like any other (before "

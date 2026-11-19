@@ -657,7 +657,7 @@ def test_exp0_context_masks_zero_an_empty_think_lead_and_targets_after_the_end_t
     sampled = {'sample': np.array([4, 0, 2, 3], np.int32)}                    # plan </think> "A" <|im_end|>
     chains = [{'ids': np.zeros(5, np.int32), 'segs': [(1, len(r['sample']), r)], 'task': 't', 'round': 'r'}
               for r in (readout, operator, sampled)]
-    assert exp0_sft.context_masks(chains, Tok()) == {'empty_think_rows': 2, 'after_end_rows': 1}
+    assert exp0_sft.context_masks(chains, Tok()) == {'empty_think_rows': 2, 'after_end_rows': 1, 'second_close_rows': 0}
     assert readout['weight'].tolist() == [0, 1, 1]
     assert operator['weight'].tolist() == [0, 1, 1, 0]
     assert 'weight' not in sampled

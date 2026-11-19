@@ -4217,3 +4217,35 @@ groups and a gH at the current policy.
   `</think>` hazard, and step 12 already had it, before the step-13 flags. Watch `<|im_end|>` on these rows at the
   next checkpoint (scratchpad `hz2/imendprobe.py`, one 6.5 GB unit). Not yet found: which term teaches
   `"answer"` -> `</think>`. Reasoning-RL blocks never end in an answer (0 of 608 rows at steps 11-13).
+
+## 2026-11-19 08:20, a second `</think>` is never reinforced; sampled decisions get a per-token KL on the chosen option (defaults)
+
+Both changes follow from the 07:30 diagnosis: the policy put 0.6-0.96 on a second `</think>` after short answers by step 12.
+They are first-principles fixes, made without first learning which of the two candidates causes the drift.
+
+- **Second close (`--second-close context`, default; `train` opts out; exp0_sft `--second-close` likewise).** A reply's
+  second and later `</think>` and the tokens after each up to the action (`<tool_call>`, end of turn) are malformed
+  output (`exp0_sft.second_close_mask`).
+  - grpo: `malformed_close_targets` zeroes their policy weight where the advantage is positive, in every learner row
+    (episodes, SD own/search/rewrite, reasoning RL, replay corpora, teacher demonstrations). A negative advantage still
+    pushes them down, and the KL term stays, as for tail tokens. `train.jsonl` `second_close_masked` counts them.
+  - exp0_sft: `context_masks` (load time) zeroes them in every chain.
+  - run2 data: 6-11 such replies a step, mostly at positive advantage.
+- **Decisions (`--decision-token-kl`, default; `--no-decision-token-kl` opts out).** The chosen option's tokens are what
+  the actor emitted, but the option softmax (the decision's policy and KL terms) cannot see a token that all options
+  share. `decision_token_kl` adds the k2 KL on each chosen-option token at the same beta and per-token factor as chain
+  tokens; the reference pass keeps per-token option log-probabilities. This is the standard per-emitted-token KL; a
+  likelihood term at the advantage would only add noise to tokens the reward does not distinguish. `train.jsonl`
+  `decision_token_kl_tokens` counts the tokens.
+- **Left out.**
+  - Program tune (`rl/native_replay`): its rl/rft rows train whole sampled turns too. It is not running now; it gets
+    the same mask at its next use.
+  - A one-sentence runtime error that teaches the fix (`teach in errors`). The serving layer of all four engines splits
+    reasoning at the first close (`serve/http.py` 614-620 for the native engine), and the ts-host agent then takes the
+    content. Rejecting a second close is a protocol change on every engine plus a skills update: bigger than this
+    cycle; queued.
+- **Tests:** `test_a_second_think_close_and_what_follows_up_to_the_action_are_never_reinforced`,
+  `test_mask_second_close_is_a_load_time_context_mask`, `test_decision_token_kl_anchors_the_chosen_options_shared_tokens`;
+  `test_exp0_context_masks...` updated.
+- **Resume flags for run2:** none needed (both are defaults on a pin at this commit); keep `--kl-beta 0.05
+  --reasoning-rl-weight 0.5`.

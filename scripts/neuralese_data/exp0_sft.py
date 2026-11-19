@@ -313,11 +313,52 @@ def mask_after_end(chains, tokenizer):
     return changed
 
 
-def context_masks(chains, tokenizer):
+SECOND_CLOSE_STOPS = ('<tool_call>', '<|im_end|>', '<|endoftext|>')
+
+
+def second_close_mask(sample, close_id, stop_ids):
+    """Per target of one reply: 0 on every ``</think>`` after the reply's first one and on the tokens after it up to the
+    action (the next of ``stop_ids``: ``<tool_call>``, the end of turn; exclusive), else 1; None when the reply closes
+    at most once. A reply that closed its reasoning, wrote visible text and closed again is malformed output: its
+    second close must not be reinforced (grpo-v4-run2 put 0.6-0.96 on a second ``</think>`` after short answers by step
+    12; DECISIONS 2026-11-19). The first close, the visible text and the action keep their weight."""
+    sample = np.asarray(sample)
+    closes = np.flatnonzero(sample == close_id)
+    if len(closes) < 2:
+        return None
+    mask = np.ones(len(sample), np.float32)
+    stops = np.isin(sample, list(stop_ids))
+    for k in closes[1:]:
+        after = np.flatnonzero(stops[k + 1:])
+        mask[k:k + 1 + (after[0] if len(after) else len(sample) - k - 1)] = 0
+    return mask
+
+
+def mask_second_close(chains, tokenizer):
+    """Zero the loss weight of every row's second and later ``</think>`` and of what follows each up to the action
+    (``second_close_mask``; in place); returns the rows changed."""
+    close_id = tokenizer.convert_tokens_to_ids('</think>')
+    stops = vocabulary_ids(tokenizer, SECOND_CLOSE_STOPS)
+    changed = 0
+    for chain in chains:
+        for _, length, row in chain['segs']:
+            mask = second_close_mask(row['sample'], close_id, stops)
+            if mask is None:
+                continue
+            weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+            if (weight * (1 - mask)).any():
+                row['weight'] = weight * mask
+                changed += 1
+    return changed
+
+
+def context_masks(chains, tokenizer, second_close=True):
     """The load-time target rules every learner applies to prebuilt chains, whatever built them (in place): a leading
     empty think block is context (``mask_empty_think``) and nothing after the end of turn trains (``mask_after_end``).
-    Returns the rows each changed."""
-    return {'empty_think_rows': mask_empty_think(chains, tokenizer), 'after_end_rows': mask_after_end(chains, tokenizer)}
+    A second ``</think>`` in a reply and what follows it up to the action are context too (``mask_second_close``;
+    ``second_close`` False opts out). Returns the rows each changed."""
+    return {'empty_think_rows': mask_empty_think(chains, tokenizer), 'after_end_rows': mask_after_end(chains, tokenizer),
+            **({'second_close_rows': mask_second_close(chains, tokenizer)} if second_close else {})}
 
 
 def packed_rows(chains, max_tokens):
@@ -654,8 +695,9 @@ def train(args):
     if args.context_masks == 'on':
         from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.base)
-        print(json.dumps({'context_masks': context_masks(chains, tokenizer),
-                          **{f'context_masks:{name}': context_masks(c, tokenizer) for name, c in val_sets.items()}}),
+        second = args.second_close == 'context'
+        print(json.dumps({'context_masks': context_masks(chains, tokenizer, second),
+                          **{f'context_masks:{name}': context_masks(c, tokenizer, second) for name, c in val_sets.items()}}),
               flush=True)
     print(json.dumps({'episodes': len(episodes), 'sequences': len(chains), 'sequence_tokens': int(sum(len(c['ids']) for c in chains)),
                       'loss_tokens': int(loss_tokens), 'epochs': args.epochs}), flush=True)
@@ -933,6 +975,9 @@ def main():
                    help='the student\'s own sampled chains (own successes, own Neuralese graph rows; exp0_sft.student_sampled) '
                         'train the NLL under each row\'s top-p nucleus, the law they were sampled with (default 0.95, the '
                         'actor\'s; exp0_sft.targets_nll); 1: the full-softmax NLL for every chain')
+    p.add_argument('--second-close', choices=('context', 'train'), default='context',
+                   help="with --context-masks on: a reply's second and later </think> and the tokens after each up to the action "
+                        'are context (default; exp0_sft.second_close_mask); train: they train like the rest (before 2026-11-19)')
     p.add_argument('--context-masks', choices=('on', 'off'), default='on',
                    help='on (default): at load, a target row\'s leading empty think block and anything after its end '
                         'token are context in the training and validation chains (exp0_sft.context_masks); off: the '

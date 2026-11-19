@@ -630,3 +630,46 @@ def test_state_saver_writes_a_safetensors_file_that_loads_back_exactly(tmp_path,
     saver.wait()
     loaded = load_file(str(tmp_path / 'state.safetensors'))
     assert set(loaded) == set(tensors) and all(torch.equal(loaded[k], tensors[k].cpu()) for k in tensors)
+
+
+def test_a_second_think_close_and_what_follows_up_to_the_action_are_never_reinforced():
+    import exp0_sft
+    import torch
+    CLOSE, CALL, END = 124902, 125019, 124900
+    reply = [5, 6, CLOSE, 7, 8, CLOSE, 9, CALL, 3, END]            # reasoning </think> prose </think> ws <tool_call> ... end
+    mask = exp0_sft.second_close_mask(reply, CLOSE, {CALL, END})
+    assert mask.tolist() == [1, 1, 1, 1, 1, 0, 0, 1, 1, 1]
+    assert exp0_sft.second_close_mask([5, CLOSE, CALL, END], CLOSE, {CALL, END}) is None
+    assert exp0_sft.second_close_mask([CLOSE, 10, 11, 10, CLOSE], CLOSE, {CALL, END}).tolist() == [1, 1, 1, 1, 0]
+    chain = {'segs': [(3, 4, {'sample': np.array([5, CLOSE, CALL, END])}), (9, 10, {'sample': np.array(reply)})]}
+    bad = grpo.malformed_close_targets(chain, 0.8, CLOSE, {CALL, END})
+    assert bad.tolist() == [False] * 4 + [False] * 5 + [True, True] + [False] * 3
+    assert not grpo.malformed_close_targets(chain, -0.8, CLOSE, {CALL, END}).any()   # a failure still pushes it down
+    per_token = torch.tensor([0.5] * 4 + [-1.] * 10)                                  # reasoning RL rows carry their own
+    assert not grpo.malformed_close_targets(chain, per_token, CLOSE, {CALL, END}).any()
+    assert grpo.malformed_close_targets({'segs': chain['segs'][:1]}, 0.8, CLOSE, {CALL, END}) is None
+
+
+def test_mask_second_close_is_a_load_time_context_mask():
+    import exp0_sft
+
+    class Tok:
+        def convert_tokens_to_ids(self, token):
+            return {'</think>': 124902}[token]
+
+        def get_vocab(self):
+            return {'</think>': 124902, '<tool_call>': 125019, '<|im_end|>': 124900}
+    row = {'sample': np.array([5, 124902, 7, 124902, 125019, 124900])}
+    chains = [{'segs': [(2, 6, row)]}]
+    assert exp0_sft.mask_second_close(chains, Tok()) == 1 and row['weight'].tolist() == [1, 1, 1, 0, 1, 1]
+    assert exp0_sft.mask_second_close(chains, Tok()) == 0                       # idempotent
+
+
+def test_decision_token_kl_anchors_the_chosen_options_shared_tokens():
+    import torch
+    token = torch.tensor([-0.1, -0.2, -11.0], requires_grad=True)     # </think> "book" <|im_end|> of the chosen option
+    ref = torch.tensor([-0.1, -0.3, -0.05])
+    grpo.decision_token_kl(token, ref, 0.05, 'k2', 0.5).backward()
+    grad = token.grad.tolist()
+    assert grad[0] == pytest.approx(0.) and grad[2] == pytest.approx(-0.05 * 10.95 * 0.5)   # descent raises <|im_end|>
+    assert grad[1] == pytest.approx(0.05 * 0.1 * 0.5)
