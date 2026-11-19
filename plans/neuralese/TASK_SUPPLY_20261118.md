@@ -226,3 +226,30 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Pass-band estimate.** Not measured on an engine (the DGX trains). grpo-v4-run2's 221 authored groups so far:
   binary pass 0.41, 75% of groups in the 0.1-0.9 band, 16% all-fail, 9% all-pass, and 15% of episodes ending on the
   40-call budget. These families follow the same design, so a similar share in band is expected.
+
+## 13. Round 18: `natlang-rl-task-supply-20261119b` (130 rows)
+
+- **Batches.** Haiku authors w283-w290 (`AUTHOR_BRIEF_ROUND18.md`: at most 24 model calls per world after run2 showed
+  15% of authored episodes ending on the 40-call budget, a slightly easier level mix, round-17 lessons), plus the
+  leftovers w277 (theater seats), w268 (dental recall, repaired smoke children) and w280 (court docket, repaired
+  wrong answers that equalled the reference). w288 is seeded from TAT-QA **train** (arithmetic items recomputed in the
+  generator, group `tatqa:<table uid>`). w290 (DNS zone review) was admitted after the build and goes into round 19.
+- **Blind solve.** Sonnet agreed on every task of every batch, and 32 flagged tasks were held back: w280 12 ("the 5
+  characters after the date" includes the separating space), w287 5 (r2/r10 file order, a cue inside a reason that
+  argues against it, register.md rewrite unstated), w286 3 (an argument's source unstated), w284 3 (output contract vs
+  step on a count), w288 1 (rounding order unstated), plus w277 `seat-hold-reply-03` (prefix match H-1/H-10, from the
+  earlier supervisor's blind solve).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r18` (38 + 38 rows).
+- **Custody left out 32 rows**: all train rows of w283 (ferry deck loading) and w284 (blood bank matching). Their
+  programs share one root-inputs object per world letter (`{"sailing": "N-0615-a"}` for every program's world a), so
+  each train row is bound to a held row of another program. The round-16 rule said distinct inputs per sibling world;
+  round 20's brief makes it distinct inputs per task across the whole batch.
+- **Result: 130 rows in 8 families** (theater seats 21, package upgrades 21, kitchen tickets 19, dental recall 19,
+  translation dispatch 16, TAT-QA calculations 14, archive accessions 13, court docket 7).
+- **Constructs:** folder reducers 92%, decide 62%, call depth >= 3 62%, iterateOn 46%, typed Neuralese results 26%,
+  skills 7%; 126 of 130 rows carry two or more held constructs. Levels 41 / 56 / 33.
+- **Repetition** (against all 11 earlier POOLS, 35,991 rows): 57 distinct programs (53.5 effective), 23 structures
+  (18.4 effective), top structure 11%, top-10 instructions 25%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related after the drop; closure passed.
+- **Pass-band estimate.** Not measured on an engine. The same design gives 75% of run2's authored groups in band; the
+  24-call cap should cut the 15% budget-exhaustion share, which moves pass rates up toward the band's middle.

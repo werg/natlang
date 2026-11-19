@@ -4385,3 +4385,13 @@ rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpo
 - **Run2 evidence used for round 18:** authored groups pass 0.41 with 75% in band, but 15% of authored episodes end on
   the 40-call budget; the round-18 brief caps each world at 24 model calls and shifts the level mix slightly easier.
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-19: task supply round 18, `natlang-rl-task-supply-20261119b` (130 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 130 train rows in 8 new families (round 18 plus the w268/w277/w280 leftovers), one seeded from
+  TAT-QA train.
+- **Change in authoring:** each world is capped at 24 model calls, because 15% of run2's authored episodes hit the
+  40-call budget.
+- **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 32 rows (w283/w284 shared root inputs
+  across programs), closure passed. Held worlds `natlang-rl-authored-{dev,confirmation}-20261119r18`.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
