@@ -4373,3 +4373,15 @@ rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpo
   rows in the learner heap (450 MB of JSONL, estimated 1.5 GB as dicts); freeing the learner's BF16 params during collection
   (3.4 GB, blocked by the local held-eval path that re-snapshots them) and masters (6.8 GB); the 3.8 GB tmpfs weights copy
   (SGLang's disk update path); kernel slab 8-10 GB (no root). Resume on a pin of this commit reads all of it at step 1.
+
+## 2026-11-19: task supply round 17, `natlang-rl-task-supply-20261119` (103 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 103 train rows in 7 new families (round 17 w275-w282 plus w267), admitted on 2026-11-18 by a
+  supervisor that then went idle before building the source; picked up as orphaned work.
+- **Constructs:** folder reducers 85%, decide 84%, depth 3 73%, iterateOn 50%, typed Neuralese 31%; 52 programs, none
+  shared with the pool.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related, closure passed. Held worlds
+  registered as `natlang-rl-authored-{dev,confirmation}-20261119r17`.
+- **Run2 evidence used for round 18:** authored groups pass 0.41 with 75% in band, but 15% of authored episodes end on
+  the 40-call budget; the round-18 brief caps each world at 24 model calls and shifts the level mix slightly easier.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.

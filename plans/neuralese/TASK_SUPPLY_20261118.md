@@ -203,3 +203,26 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Repetition** (against all nine earlier POOLS, 35,800 rows): 44 distinct programs (41.0 effective), 24 structures
   (20.3 effective), top structure 10%, top-10 instructions 34%; 0 program texts and 0 functional programs shared.
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+
+## 12. Round 17: `natlang-rl-task-supply-20261119` (103 rows)
+
+- **Batches.** Haiku authors w275-w282 (`AUTHOR_BRIEF_ROUND17.md`) and the round-16 leftover w267 (bAbI train). The
+  round-17 supervisor admitted 7 batches on 2026-11-18 and then went idle without building the source; the task-supply
+  agent of 2026-11-19 picked it up (orphaned work, ~22 h).
+- **Admitted:** w267 16, w275 21, w276 24, w278 24, w279 25, w281 24, w282 28 (Sonnet blind solve: all agree, none
+  ambiguous). w277 (theater seats) passed novelty and its blind solve (26/26) on 2026-11-19 and goes into round 18.
+  w268 (one smoke type mismatch) and w280 (three wrong answers equal to the reference) failed qualification and are
+  being repaired for round 18.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r17` (26 + 33 rows).
+- **Source rows.** Train rows of w267-w282 not already in POOLS; custody 0 related on the first build.
+  **Result: 103 rows in 7 families** (museum exhibit rotation 18, procurement three-way match 17, water quality
+  compliance 16, energy net metering 15, crop rotation 15, hospital bed allocation 14, bAbI counting/lists 8).
+- **Constructs:** folder reducers 85%, decide 84%, call depth >= 3 73%, iterateOn 50%, typed Neuralese results 31%;
+  101 of 103 rows carry two or more held constructs. Levels 31 / 44 / 28 (L1 / L2 / L3).
+- **Repetition** (against all ten earlier POOLS, 35,888 rows): 52 distinct programs (48.5 effective), 25 structures
+  (16.3 effective), top structure 21%, top-10 instructions 29%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed. The final checks now take
+  the repetition reference set from `grpo.POOLS` (`round18/final_checks.sh`), so a new source is never left out.
+- **Pass-band estimate.** Not measured on an engine (the DGX trains). grpo-v4-run2's 221 authored groups so far:
+  binary pass 0.41, 75% of groups in the 0.1-0.9 band, 16% all-fail, 9% all-pass, and 15% of episodes ending on the
+  40-call budget. These families follow the same design, so a similar share in band is expected.
