@@ -4188,3 +4188,32 @@ groups and a gH at the current policy.
   `test_rrl_episodes_leave_unclosed_samples_untrained_by_default`,
   `test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained`; the 'floor' behaviour keeps its old tests.
 - **When it enters.** grpo-v4-run2 at the resume after the one that applies `--kl-beta 0.05 --reasoning-rl-weight 0.5`.
+
+## 2026-11-19 07:30, grpo-v4-run2 step 13 kl_mean 1.14: the k3 statistic and a dozen teacher tokens; the policy now writes a second `</think>` after short answers (sentinel diagnosis)
+
+- **Cause of the number.** `kl_mean` is the k3 estimate (`e^d - d - 1`, d = ref - policy logp), whatever
+  `kl_estimator` says the loss uses. Over step 13's saved batch (forward pass, base vs step-12 weights), the k3 sum is
+  1.19M from `sd_teacher` rows, 1.6k from reasoning RL and 135 from replay. The 1.19M comes from about a dozen tokens with
+  d = +10.6 to +12.4: `<|im_end|>` after short JSON answers ("Answer this call now, without tools. Reply with exactly
+  one of these JSON values...": reply `</think>"book"<|im_end|>`) in the new gap-v1 teacher demos
+  (teacher-gen-20261119/gap-v1, 74 sd_teacher chains at step 13 against 9 at step 12; SD_TEACHER_SOURCES since
+  72e4874d0). With 1.07M units, e^12.4 / 1.07M ~ 0.2 a token. |d| mean is unchanged because these are about a dozen of 1M tokens. Not a
+  denominator change (loss tokens 1.92M -> 1.07M), not mismatched references, not decisions (step 13 decisions' k3 sum
+  2.7). The trained k2 term on those tokens is beta*d ~ 0.6 per token (pulls `<|im_end|>` back up), with no grad spike (1.13x
+  median).
+- **What is real.** p(`<|im_end|>`) after `</think>"answer"` in those calls: base -0.0 to -2.5, step 4 and step 8 the
+  same, step 10 -0.08 to -5.8, step 12 -0.07 to -13.6. The policy puts 0.6-0.96 on a second `</think>` there instead.
+  This is the probe's rising `</think>` hazard showing up as a format break. The student's own reply ends are unaffected:
+  actor logp of the final `<|im_end|>` is -0.02 to -0.04 across all 264 archived groups. Its own answer calls run as
+  constrained decisions, whose option softmax does not depend on tokens all options share (`</think>`, quotes,
+  `<|im_end|>`), so nothing in them anchors that absolute probability. The student's own trained rows hold 6-11
+  replies a step with a second `</think>` after visible prose, most at positive advantage. Held-v3 at step 10 (other
+  series): 51.0% vs 54.1%, delta -3.1 pts, p 0.17; ran-out +2.5 pts (p 0.12).
+- **Fix (telemetry, default).** `kl_stats` also logs `kl_k2_mean` (the mean the loss trains), `kl_k3_max_share` (the
+  largest single token's share of the k3 sum) and `ref_dlogp_pos_max` (largest d with the policy below the reference).
+  `kl_mean` stays the k3 estimate for continuity. Test: extended `test_k2_kl_gradient_stays_linear_on_tail_tokens`.
+- **Run2.** No stop and no rollback on the KL number: the trained term is ordinary, and the gap-v1 teacher rows plus
+  `--kl-beta 0.05` push exactly these tokens back. The second-`</think>` drift is the open problem: it is the
+  `</think>` hazard, and step 12 already had it, before the step-13 flags. Watch `<|im_end|>` on these rows at the
+  next checkpoint (scratchpad `hz2/imendprobe.py`, one 6.5 GB unit). Not yet found: which term teaches
+  `"answer"` -> `</think>`. Reasoning-RL blocks never end in an answer (0 of 608 rows at steps 11-13).

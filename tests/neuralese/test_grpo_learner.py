@@ -345,6 +345,9 @@ def test_k2_kl_gradient_stays_linear_on_tail_tokens():
     grpo.kl_stats(sums, torch.tensor(.1))                 # a decision (0-dim)
     assert sums['ref_dlogp_over_5'] == 1 and sums['ref_dlogp_max'] == pytest.approx(10.5)
     assert sums['kl'] == pytest.approx(float(sum(math.exp(x) - x - 1 for x in (0., 10.5, -.2, .1))), rel=1e-5)
+    assert sums['kl_k2'] == pytest.approx(sum(.5 * x * x for x in (0., 10.5, -.2, .1)), rel=1e-5)
+    assert sums['kl_k3_max'] == pytest.approx(math.exp(10.5) - 11.5, rel=1e-5)   # one token is ~all of the k3 sum
+    assert sums['kl_k3_max'] / sums['kl'] > .99 and sums['ref_dlogp_pos_max'] == pytest.approx(10.5)
 
 
 def test_tail_guard_masks_only_tail_tokens_of_positive_episodes():

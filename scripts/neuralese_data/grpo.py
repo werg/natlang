@@ -2662,9 +2662,18 @@ def kl_term(d, estimator):
 
 
 def kl_stats(sums, d):
-    """Telemetry of one batch of ``d``: the k3 KL estimate, |d|, its max and the units past 5 nats."""
+    """Telemetry of one batch of ``d`` (ref - policy logp): the k3 KL estimate, the k2 mean the loss trains (d^2 / 2),
+    the largest single-token k3 term (k3 = e^d - d - 1 grows exponentially in d: one token where the policy sits 14
+    nats below the start policy adds e^14 = 1.2M and alone made grpo-v4-run2 step 13's kl_mean 1.14 while |d| stayed
+    at 0.058; ``kl_k3_max_share`` says how much of the k3 sum one token is), |d|, its max, the most positive d (policy
+    below the reference) and the units past 5 nats."""
     d = d.detach()
-    sums['kl'] += (d.exp() - d - 1).sum().item()
+    k3 = d.exp() - d - 1
+    sums['kl'] += k3.sum().item()
+    sums['kl_k2'] += (0.5 * d * d).sum().item()
+    if d.numel():
+        sums['kl_k3_max'] = max(sums['kl_k3_max'], k3.max().item())
+        sums['ref_dlogp_pos_max'] = max(sums['ref_dlogp_pos_max'], d.max().item())
     sums['ref_abs_dlogp'] += d.abs().sum().item()
     sums['ref_dlogp_over_5'] += int((d.abs() > 5).sum())
     sums['ref_dlogp_max'] = max(sums['ref_dlogp_max'], d.abs().max().item() if d.numel() else 0.)
@@ -4223,6 +4232,8 @@ def train(args):
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, lr_data_scale=round(data_scale, 4),
             grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
+            kl_k2_mean=round(sums['kl_k2'] / units, 7), kl_k3_max_share=round(sums['kl_k3_max'] / sums['kl'], 4) if sums['kl'] > 0 else None,
+            ref_dlogp_pos_max=round(sums['ref_dlogp_pos_max'], 3),
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
             grad_moment_cosine=None if cosine is None else round(cosine, 5),
