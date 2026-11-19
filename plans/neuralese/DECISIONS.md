@@ -4405,3 +4405,11 @@ rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpo
   Rounds 18 and 19 lost 51 train rows to shared inputs. The round-20 brief also requires the final newline of every
   written file to be stated, because 20 round-19 tasks were held back for leaving it open.
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-19: task supply round 20, `natlang-rl-task-supply-20261119d` (114 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 114 train rows in 8 new families, one of them seeded from FinQA train.
+- **Separation checks:** held-v3 verify 0/0. Custody found 0 related rows on the first build, because every task now
+  has distinct root inputs. Closure passed. Held worlds are `natlang-rl-authored-{dev,confirmation}-20261119r20`.
+- **Supply across rounds 17-20:** 452 train rows in 32 new families.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.

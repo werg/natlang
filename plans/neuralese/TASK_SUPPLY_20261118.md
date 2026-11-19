@@ -277,3 +277,26 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related after the drop; closure passed.
 - **Note.** w296's author added inert `Remark:` lines and unused inputs so sibling worlds pass the near-duplicate
   gate; they are distractors the programs ignore. Round 20 forbids this padding.
+
+## 15. Round 20: `natlang-rl-task-supply-20261119d` (114 rows)
+
+- **Batches.** Haiku authors w300-w307 (`AUTHOR_BRIEF_ROUND20.md`: distinct root inputs for every task of a batch,
+  final newline of every written file stated, rewritten files named, no character offsets, repeated list items
+  defined, no inert padding). w304 is seeded from FinQA **train**: each item's `qa.program` re-executed in the
+  generator, steps rewritten as numbered natural-language steps, group `finqa:<id>`.
+- **Blind solve.** Sonnet agreed on every task; 27 flagged tasks were held back: w304 8 ("earlier figure" while the
+  question names the later year first), w302 6 (one name for two lists; a step's scope under a branch), w303 5 (cue
+  case-sensitivity unstated; a header line's newline), w306 3 and w301 2 (a file's final newline, zero-padded day).
+  The newline rule cut the newline flags from 20 in round 19 to 6.
+- **w301** later regenerated its batch to 29 tasks (`qualified-2`) after its first set was admitted; the admitted
+  rows are the blind-solved `qualified-1` set, and `qualified-2` was not admitted.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r20` (31 + 25 rows).
+- **Custody: 0 related on the first build.** Distinct inputs per task removed the binding that cost 32 and 19 rows in
+  rounds 18 and 19.
+- **Result: 114 rows in 8 families** (kennel boarding 19, snow plow routes 18, marathon results 18, lost and found
+  15, exam seating 12, brewery log 12, tool library 11, FinQA program desk 9).
+- **Constructs:** folder reducers 83%, decide 54%, call depth >= 3 48%, iterateOn 53%, typed Neuralese results 40%,
+  Neuralese fan-in 36%; 107 of 114 rows carry two or more held constructs. Levels 32 / 55 / 27 (L0-1 / L2 / L3).
+- **Repetition** (against all 13 earlier POOLS, 36,226 rows): 52 distinct programs (48.9 effective), 24 structures
+  (17.1 effective), top structure 14%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
