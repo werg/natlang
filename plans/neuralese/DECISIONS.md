@@ -4395,3 +4395,13 @@ rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpo
 - **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 32 rows (w283/w284 shared root inputs
   across programs), closure passed. Held worlds `natlang-rl-authored-{dev,confirmation}-20261119r18`.
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-19: task supply round 19, `natlang-rl-task-supply-20261119c` (105 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 105 train rows in 9 new families (round 19 and w290).
+- **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 19 rows that shared root inputs with
+  held siblings, closure passed. Held worlds are `natlang-rl-authored-{dev,confirmation}-20261119r19`.
+- **Authoring rule added for round 20:** every task of a batch gets distinct root inputs, asserted in the generator.
+  Rounds 18 and 19 lost 51 train rows to shared inputs. The round-20 brief also requires the final newline of every
+  written file to be stated, because 20 round-19 tasks were held back for leaving it open.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.

@@ -253,3 +253,27 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related after the drop; closure passed.
 - **Pass-band estimate.** Not measured on an engine. The same design gives 75% of run2's authored groups in band; the
   24-call cap should cut the 15% budget-exhaustion share, which moves pass rates up toward the band's middle.
+
+## 14. Round 19: `natlang-rl-task-supply-20261119c` (105 rows)
+
+- **Batches.** Haiku authors w291-w299 (`AUTHOR_BRIEF_ROUND19.md`: argument sources named, zero-padded file names,
+  counts defined once, rounding stated, rewritten files named) and w290 from round 18. w295 (MSR SQA train seed)
+  produced no batch: the author found only 11 sequences whose turns map to one explicit column/value rule that
+  reproduces the gold, too few for 8 programs; it was replaced by w299 (bike repair queue, 7 programs after its
+  author could not find why one program's reference replay failed).
+- **Blind solve.** Sonnet agreed on every task; 27 flagged tasks were held back: w292 9 and w294 3 (unstated final
+  newline of written files), w290 8 (final newline; "approved by ticket" and "Frozen" cue near-misses), w294 4 more
+  (waitlist rewrite unstated, stale swap repliers), w296 2 (duty length before or after a delay), w299 1 (a repeated
+  job counted once or per listing).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r19` (18 + 22 rows).
+- **Custody left out 19 rows** (w291 8, w294 6, w299 4, w298 1) whose root inputs equal a held sibling's. The round-20
+  brief requires distinct inputs for every task of a batch, asserted in the generator.
+- **Result: 105 rows in 9 families** (dunning letters 17, ski school 13, crew duty limits 13, seed bank 12, rail yard
+  12, bike repair 11, DNS zone review 10, garden plots 9, orchestra library 8).
+- **Constructs:** folder reducers 79%, decide 57%, call depth >= 3 54%, iterateOn 42%, typed Neuralese results 34%,
+  Neuralese fan-in 29%; 95 of 105 rows carry two or more held constructs. Levels 26 / 50 / 29.
+- **Repetition** (against all 12 earlier POOLS, 36,121 rows): 61 distinct programs (56.7 effective), 26 structures
+  (20.3 effective), top structure 14%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related after the drop; closure passed.
+- **Note.** w296's author added inert `Remark:` lines and unused inputs so sibling worlds pass the near-duplicate
+  gate; they are distractors the programs ignore. Round 20 forbids this padding.
