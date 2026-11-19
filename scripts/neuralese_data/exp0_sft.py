@@ -46,6 +46,8 @@ from torch.utils.checkpoint import checkpoint as torch_checkpoint
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lfm3_fast_train
+# One implementation for every learner (grpo, exp0_sft, program tune).
+from natlang_neuralese.train.reply_format import SECOND_CLOSE_STOPS, second_close_mask
 
 MAX_LEN = 32000
 
@@ -311,27 +313,6 @@ def mask_after_end(chains, tokenizer):
                 row['weight'] = weight
                 changed += 1
     return changed
-
-
-SECOND_CLOSE_STOPS = ('<tool_call>', '<|im_end|>', '<|endoftext|>')
-
-
-def second_close_mask(sample, close_id, stop_ids):
-    """Per target of one reply: 0 on every ``</think>`` after the reply's first one and on the tokens after it up to the
-    action (the next of ``stop_ids``: ``<tool_call>``, the end of turn; exclusive), else 1; None when the reply closes
-    at most once. A reply that closed its reasoning, wrote visible text and closed again is malformed output: its
-    second close must not be reinforced (grpo-v4-run2 put 0.6-0.96 on a second ``</think>`` after short answers by step
-    12; DECISIONS 2026-11-19). The first close, the visible text and the action keep their weight."""
-    sample = np.asarray(sample)
-    closes = np.flatnonzero(sample == close_id)
-    if len(closes) < 2:
-        return None
-    mask = np.ones(len(sample), np.float32)
-    stops = np.isin(sample, list(stop_ids))
-    for k in closes[1:]:
-        after = np.flatnonzero(stops[k + 1:])
-        mask[k:k + 1 + (after[0] if len(after) else len(sample) - k - 1)] = 0
-    return mask
 
 
 def mask_second_close(chains, tokenizer):
