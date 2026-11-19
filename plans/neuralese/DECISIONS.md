@@ -4313,3 +4313,26 @@ of reasoning RL (03:30) was a counterweight to the term the step-11 measurement 
 mechanism (unclosed samples at -1) is now filtered, so the full weight returns at the next step boundary, with
 `--kl-beta 0.05` kept. The per-step sentinels (close_per_1k, end_logp) guard it: if either moves back toward the
 drift for two steps, the weight returns to 0.5.
+
+## 2026-11-19 13:10, storage: /mnt/external freed from 80 GB to 439 GB (storage agent)
+
+grpo-v4-run2 writes ~21 GB states and 3.4 GB checkpoints to /mnt/external, which had 80 GB free against the 50 GB
+floor. Deleted only weight/state files (checkpoint.pt, safetensors, adam-moments offloads, reserved-pending files, CAS
+blobs) of retired or discarded lines; their logs, configs, reports and rollouts stay. Checked first: no open file
+descriptors, no systemd unit, launcher, POOLS entry or teacher_gen argument names them, and the string tables of the
+run2 step-20 checkpoint and of fresh-init 5ff07638 name no deleted path (fresh-init's provenance names only
+natlang-lfm3-data-20261028 and natlang-data-repair-20261026-v4b, both kept). Exact list:
+`ops/storage/delete-20261119-external.sh`.
+- **bf95-lowlr-1105 lineage (retired 2026-11-12; no w5 checkpoint beat the base), ~178 GB:** w2-w5 learner checkpoints
+  under natlang-active-lineage, native67-ffn-candidate-v2-1102 (the chain's parent; the SFT-window controller that
+  re-hashed it is gone), w3/w4 actor stores and actor views under lfm3-rl-dgx-20261029-ops and dgx-ops-archive.
+- **Discarded GRPO weights, ~35 GB:** grpo-v2-archive run1 FP32 state, grpo-v2 hunt lrS5w2 step 5, grpo-v1 run2 steps
+  4-5, grpo-v4-run1 step 1.
+- **dgx-ops-archive, ~55 GB:** sft-v3 run1/run1-cont checkpoints (superseded; cause found 11-18), restore-smoke and
+  grpo-v4 packbench weights and AdamW offloads.
+- **Cloud corrected-mix lineage (CoreWeave gone; bf95-based), ~92 GB:** checkpoints, reserved-pending files, .cas blobs
+  and the .cloud delta under natlang-lfm3-cloud-corrected-20261103.
+Kept: natlang-grpo-v4 (run2 checkpoints and states, run1 rollouts/groups that teacher_gen reads), fresh-init, sft-v4
+(held base of run2, ablation, its run1 checkpoint), all task-supply/composed/bgkit-kr pools, bgkit-data, development
+data, teacher outputs (incl. broad-graphs teacher-mine work-v3, 59 GB, the next candidate if space runs short), all
+rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpoint.pt.
