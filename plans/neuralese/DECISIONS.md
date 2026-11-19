@@ -4413,3 +4413,11 @@ rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpo
   has distinct root inputs. Closure passed. Held worlds are `natlang-rl-authored-{dev,confirmation}-20261119r20`.
 - **Supply across rounds 17-20:** 452 train rows in 32 new families.
 - **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+**2026-11-19 20:40, grpo-v4-run2: 96 slots, ledger budget 84 GB (supervisor).** After the prefix-tree cycle and
+resume-moments fixes (fa14f6e06, 453d55153) run2's unit peaked at 58.5 GB over a full collect+learn cycle (learner
+CUDA peak 52.9 GB reserved at step 26, from 68-76 GB). The 99 GB budget kept the low-priority teacher campaign
+(tgen-gap-v1) preempted or queued most of the day and left 1-4 GB ledger headroom. At the next step boundary run2
+takes 16 more collector slots (80 -> 96, matching 96 running; ~0.3 GB each) and a budget of 84 GB: ~20 GB margin over
+the measured peak, and the freed ledger room runs the teacher campaign continuously beside the >= 15 GB probe headroom.
+If a peak passes ~80 GB the budget goes back up at the next boundary.
