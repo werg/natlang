@@ -4076,3 +4076,53 @@ ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's
   campaign's successes and replays them under pin 72e4874d0 every 2 h; `sft_sources replay` now takes only keys without
   a verdict. `grpo.SD_TEACHER_SOURCES` lists it third: grpo-v4-run2 takes it at its next resume on a pin from
   72e4874d0 or later (TeacherDemos reads the sources at start). A future SFT build reads the same WORK.
+
+## 2026-11-19 01:40, grpo-v4-run2 `</think>` hazard 0.54 -> 0.67 (steps 5-9): which terms push it (hazard investigation)
+
+**Observation.** Behaviour probe close_per_1k flat at 0.54-0.55 through step 5, then 0.560 / 0.587 / 0.616 / 0.670 at
+steps 6-9 (pin e1a76a58e from step 6: `--non-student-loss full`, 80 slots / 96 running from step 7, task round 16);
+probe sampled-logp change turns negative from step 7 (-0.001 -> -0.004) and entropy rises; kl_mean 0.0005 -> 0.0021
+as the LR warms to 4.5e-6.
+
+**Method.** gH = gradient of the probe hazard at the base (/home/werg/data/tmp-hazard-gH.pt, the 11-18 hunt), u = gH
+preconditioned by run2's own AdamW second moment at step 9 (state-step-00009), so dH_T ~ -lr <u, grad L_T> for a
+term's share of a step's token-normalized loss. Scripts: scratchpad `hz2/stateprobe.py`, `hz2/termdots.py`,
+`hz2/thinkbias.py` (session 4c9bd489).
+
+**Results.**
+- Linearization check: AdamW rebuilt from the states reproduces the step 8 -> 9 update exactly (cos 1.0000); <gH,
+  update> predicts +0.097 for an observed +0.054 (same sign and order; gH is the base's).
+- The step-9 gradient alone points the other way: one-step share -0.019 (full Adam weight -0.12). The rise at step 9
+  comes from momentum (m_8: u.m_8 = -17.6k vs u.g_9 = +26.5k), i.e. from batches of earlier steps; grad_moment_cosine
+  has been negative at steps 6-9. A rise therefore keeps going for a few steps after its source stops.
+- Per term (step-8 checkpoint, run2 data):
+  - GRPO policy term, 4 groups of steps 7-9 (32 episodes, 270k tokens): +0.205 for those 4 groups alone, as large as
+    a whole step's update, with large cancellation inside it: think tokens of positive episodes -2.07 and of
+    negative episodes +2.62 per 1e6 units of loss mass; post-think tokens +0.34 either side. Pushing down a failed
+    episode's reasoning raises the hazard; reinforcing a successful one lowers it.
+  - Teacher actions (sd_teacher; standing in for the reasoning-RL action rows, same weight 0.05): +0.79 per 1e6 units
+    with the full softmax, +0.38 with the nucleus logp. At run2's ~3k units of teacher mass a step: about +0.002 /
+    +0.001 per step. `--non-student-loss full` doubles this term, but the term is one to two orders too small to
+    explain +0.03-0.05 a step.
+  - Advantage-weighted reasoning tokens (all 264 archived groups, offline): sum_t A_t over think tokens is negative
+    in every phase (relative -0.06 at steps 1-2, -0.23 at steps 3-5, -0.13 at steps 6-7, -0.07 at steps 8-9):
+    failing episodes carry more reasoning tokens (more calls, budget stops), and under `--loss-norm token` that is a
+    net push down on reasoning. It was largest at steps 3-5, when the hazard was flat, so it alone does not predict
+    the onset; with momentum and the LR ramp it can contribute to the later rise.
+- Reading: no term changed at step 6 that moves the hazard by the observed amount. The GRPO policy term dominates
+  the hazard direction by magnitude and its sign changes from batch to batch; the pin change (non-student full)
+  measures as about +0.001 per step.
+
+**Not checked.** Reasoning-RL reasoning rows (their samples never leave memory), SD own successes (none in the 4
+sampled groups), the replay corpora (unit stopped for memory; weight 0.05 and ~2-60k tokens bound them near the teacher
+term), the KL term (it pulls toward the base), sampled decisions (grad mass share ~0), u computed from the
+base's gH (not the step-8 policy), and per-step GRPO batches before step 7.
+
+**Action (default on, opt-out).** `grpo.py --save-step-chains N` (default 4; 0 off) keeps each step's exact learner
+batch (chains, advantages, roles, row weights, actor logp, per-token loss factor) in WORK/step-chains, so the next
+per-term measurement runs on the batches actually trained, reasoning RL and SD included. Test:
+`test_save_step_chains_keeps_the_exact_batch_with_its_loss_factors_and_only_the_newest_steps`.
+
+**Run2.** No resume flag change for the hazard on this evidence: `--non-student-loss` stays `full` (its share is
+~0.001/step). The step-8 held eval on Pop is the judge; if close_per_1k keeps rising after warm-up ends (step 10),
+measure per term on the saved batches (needs a resume on a pin with this commit).

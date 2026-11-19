@@ -107,3 +107,18 @@ def test_student_sampled_targets_split_teacher_and_corpus_data_from_the_students
     assert sampled(rrl).tolist() == [True, True, False, False]           # the teacher action after the student's reasoning
     carried = chain('sd', 'rrl-carried-x', rrl=[None, 'teacher-row'])     # carried search chain: reasoning, teacher action
     assert sampled(carried).tolist() == [True, True, False, False]
+
+
+def test_save_step_chains_keeps_the_exact_batch_with_its_loss_factors_and_only_the_newest_steps(tmp_path):
+    import pickle
+    import zstandard
+    chain = {'ids': np.arange(6, dtype=np.int32), 'segs': [(2, 3, {'sample': np.arange(3, dtype=np.int32),
+                                                                   'logp': np.full(3, -0.5, np.float32)})],
+             'advantage': -0.7, 'episode': 0, 'role': 'student'}
+    for step in (1, 2, 3):
+        grpo.save_step_chains(tmp_path, step, [chain], {0: (1 / 300, 0.)}, keep=2)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['step-00002.pkl.zst', 'step-00003.pkl.zst']
+    record = pickle.loads(zstandard.ZstdDecompressor().decompress((tmp_path / 'step-00003.pkl.zst').read_bytes()))
+    saved = record['chains'][0]
+    assert record['step'] == 3 and saved['token_scale'] == 1 / 300 and saved['advantage'] == -0.7
+    assert saved['segs'][0][2]['logp'].tolist() == [-0.5] * 3 and 'token_scale' not in chain

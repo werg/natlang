@@ -2799,6 +2799,27 @@ def grad_spike(work, grad_norm, factor=5., min_steps=1):
     return {'grad_norm_vs_median': round(r, 2), 'grad_spike': r > factor}
 
 
+def save_step_chains(directory, step, chains, scales, keep):
+    """The step's exact learner batch (``--save-step-chains``): every chain with its advantage, role, row weights and
+    actor log-probabilities, and its per-token loss factor (``token_scale``), pickled and zstd-compressed to
+    ``directory/step-NNNNN.pkl.zst``; only the newest ``keep`` stay. Offline per-term diagnostics (the gradient of each
+    term against a behaviour direction, DECISIONS 2026-11-19) then run on the batches the run actually trained, which
+    the reasoning-RL samples and the SD buffer otherwise never leave memory for. Returns the file's size in MB."""
+    import pickle
+    import zstandard
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f'step-{step:05d}.pkl.zst'
+    record = {'step': step, 'chains': [{**chain, 'token_scale': scales[chain['episode']][0]} for chain in chains]}
+    data = zstandard.ZstdCompressor(level=3, threads=-1).compress(pickle.dumps(record, protocol=pickle.HIGHEST_PROTOCOL))
+    partial = path.with_suffix('.part')
+    partial.write_bytes(data)
+    os.replace(partial, path)
+    for old in sorted(directory.glob('step-*.pkl.zst'))[:-keep] if keep > 0 else ():
+        old.unlink()
+    return round(len(data) / 2**20, 1)
+
+
 def think_mask(sample, close_id):
     """True for a sampled reply's reasoning tokens: up to and including the first ``</think>`` (all, when it has none)."""
     mask = np.ones(len(sample), dtype=bool)
@@ -3833,6 +3854,9 @@ def train(args):
         teacher_log_rho = []   # per-chain arrays of the teacher tokens' log rho (``teacher_rho_summary``)
         rng = random.Random(args.seed + step)
         rng.shuffle(chains)
+        if args.save_step_chains > 0:
+            record['step_chains_mb'] = save_step_chains(work / 'step-chains', step + 1, chains, scales,
+                                                        args.save_step_chains)
         # Shared prefixes (the system prompt across groups, a group's opening prompt, an episode's earlier calls) are
         # computed once per pass and every batch is packed: a prefix tree over the step's chains (`--share-prefix-tokens`;
         # chains reading imported native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
@@ -4507,6 +4531,10 @@ def main():
     t.add_argument('--behaviour-probe', default=BEHAVIOUR_PROBE,
                    help='start-policy calls scored after every step (behaviour_probe.py): the policy on the start policy\'s own '
                         'samples (sampled-token logp change), entropy, </think> hazard; logged as "behaviour", flagged as behaviour_shift; "-": off')
+    t.add_argument('--save-step-chains', type=int, default=4,
+                   help="keep the exact learner batch of each of the last N steps in WORK/step-chains/step-N.pkl.zst (chains, "
+                        'advantages, roles, row weights, actor logp, per-token loss factor; tens of MB a step) for offline '
+                        'per-term diagnostics; 0: off')
     t.add_argument('--branch-states', type=int, default=0,
                    help='keep the FP32 training state of each of the last N steps in CHECKPOINT_DIR/state-step-N.safetensors '
                         '(about 21 GB each), so a control can --resume-state from any of them; 0: off')
