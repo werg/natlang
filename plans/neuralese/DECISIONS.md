@@ -4304,3 +4304,12 @@ Follow-up to 08:20, which left the runtime error and program tune out.
   grpo (`measure_end` itself ran on the GPU: 24 rows, 6 s, 3.7 GB); the error's effect on episodes (the next pin's
   collection shows how often it fires: count trace replies whose text holds `</think>`); whether fresh-init's backbone
   equals the HF weights bit for bit (the `end_start` stand-in assumes it).
+
+**2026-11-19 13:00, grpo-v4-run2: reasoning-RL weight back to 1.0 (supervisor).** The `</think>` drift has reversed
+since the overlong filter (e7694b4f3), the second-close mask and decision-token KL (1f65fc747) and the runtime error
+(4df956771): hazard 0.81 at step 12 -> 0.49 at step 21 (base 0.55), end-of-turn logp -1.38 (base -2.62), reclose
+p 0.004. Held-v3 step 16 vs the new-protocol base: 54.9% vs 54.1% (+0.8, p 0.75), ran-out 2.3% vs 6.5%. The halving
+of reasoning RL (03:30) was a counterweight to the term the step-11 measurement found pushing the hazard; its main
+mechanism (unclosed samples at -1) is now filtered, so the full weight returns at the next step boundary, with
+`--kl-beta 0.05` kept. The per-step sentinels (close_per_1k, end_logp) guard it: if either moves back toward the
+drift for two steps, the weight returns to 0.5.
