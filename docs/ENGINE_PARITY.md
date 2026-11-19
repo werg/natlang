@@ -119,3 +119,15 @@ Finite decision generation (2026-11-17): when no scored readout is available, th
 same encoded decision messages through ordinary ModelTurn generation with `tools: []`. Managed llama-server, wllama,
 Python native and SGLang use their existing generation route; no new serving field, probability approximation or
 engine-specific implementation is introduced. Generated receipts bind generation graph nodes, not scored decisions.
+
+Second reasoning close (2026-11-19): a reply that writes `</think>` again after its reasoning closed is answered by the
+shared chat adapter (`ts-host/src/model/chat-completion.ts`, `secondThinkClose` in `native/tool-markup.ts`) with a
+one-sentence error, nothing run. No engine changes: each splits the reply at its first close and returns the rest,
+second close included, as content. Managed llama-server and the page: the fork's autoparser (`reasoning(until("</think>"))`
+then content, `common/chat-auto-parser-generator.cpp` 137-167); Python native and SGLang: `serve/chat.py` `build_message`
+(`partition("</think>")`) and the streaming split in `serve/http.py` (`tests/neuralese/test_lfm3_format.py`
+`test_a_second_think_close_reaches_the_client_in_the_content`). The page loads its model with thinking off
+(`browser/local-model.ts` `reasoning: false`: the prompt already closes an empty think block), so any `</think>` it
+generates is a second one. The parser starts from the generation prompt's suffix from `<think>` (`p.prefix(generation_prompt,
+reasoning_start)`, line 133), so the prompt's own `<think></think>` is the parsed (empty) reasoning block and a generated
+close stays in the content there too (read from the code; not run against a page build).

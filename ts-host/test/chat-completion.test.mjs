@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
-import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport, openAIEndpointRoot } from '../dist/model/chat-completion.js';
+import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport, openAIEndpointRoot, SECOND_THINK_CLOSE } from '../dist/model/chat-completion.js';
 
 test('HTTP endpoints accept server roots and API bases without duplicating v1', async () => {
   const paths = [];
@@ -195,6 +195,48 @@ test('tool-call markup left in the text is a malformed call: returned as sampled
   } finally { await model.close(); }
 });
 
+
+test('a reply that closes its reasoning a second time is malformed: nothing runs, its text and calls stay as sampled', async () => {
+  // grpo-v4-run2 (DECISIONS 2026-11-19): `</think>"book"</think>` after a short answer instead of ending the turn. Every
+  // engine splits at the first close, so the second arrives in the content (or, unsplit, after a whole <think> block).
+  const call = { id: 'c0', type: 'function', function: { name: 'eval', arguments: '{"code":"1"}' } };
+  const replies = [
+    { content: '"book"</think>', reasoning_content: 'Pick one.' },
+    { content: 'Done.</think>', tool_calls: [call] },
+    { content: '"book"', reasoning_content: 'Pick</think> one.' },
+    { content: '<think>Pick one.</think>"book"</think>' },
+    { content: '<think>Pick one.</think>"book"' },
+    { content: '"book"', reasoning_content: 'Pick one.' }];
+  const model = await server((body, count) => ({ choices: [{ finish_reason: 'stop', message: replies[count - 1] }] }));
+  try {
+    const drive = chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm', stream: false }));
+    const first = await drive(request());
+    assert.equal(first.malformed_call, SECOND_THINK_CLOSE); assert.deepEqual(first.calls, []);
+    assert.equal(first.text, '"book"</think>'); assert.equal(first.reasoning, 'Pick one.');
+    const second = await drive(request());
+    assert.equal(second.malformed_call, SECOND_THINK_CLOSE); assert.deepEqual(second.calls, [], 'a read call does not run');
+    assert.deepEqual(second.raw_calls, [call], 'it stays for the history');
+    assert.equal((await drive(request())).malformed_call, SECOND_THINK_CLOSE, 'a close inside the reasoning');
+    assert.equal((await drive(request())).malformed_call, SECOND_THINK_CLOSE, 'unsplit: a close after the whole block');
+    assert.equal((await drive(request())).malformed_call, undefined, 'unsplit: the block\'s own close is the first');
+    assert.equal((await drive(request())).malformed_call, undefined);
+    assert.equal(model.bodies.length, 6, 'no hidden retry');
+    const optOut = chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm', stream: false }),
+      { secondThinkClose: 'content' });
+    replies.push({ content: 'Done.</think>', tool_calls: [call] });
+    const read = await optOut(request());
+    assert.equal(read.malformed_call, undefined); assert.deepEqual(read.calls, [['eval', { code: '1' }]]);
+    assert.equal(read.text, 'Done.</think>');
+  } finally { await model.close(); }
+});
+
+test('a cut-off reply with a second close is still in progress, not malformed', async () => {
+  const model = await server(() => ({ choices: [{ finish_reason: 'length', message: { content: 'x</think>y', reasoning_content: 'r' } }] }));
+  try {
+    const turn = await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm', stream: false }))(request());
+    assert.equal(turn.truncated, true); assert.equal(turn.malformed_call, undefined);
+  } finally { await model.close(); }
+});
 
 test('LFM2 pythonic call markers left in the text are a malformed call too', async () => {
   // A Neuralese-typed call answered with an unparseable return_result (here `]]`) must not read as a text reply.
