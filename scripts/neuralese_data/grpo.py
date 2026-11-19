@@ -1387,6 +1387,23 @@ class MomentOffload:
         return time.time() - started
 
 
+def moment_tensors(optimizer, masters, live):
+    """AdamW's moments in the order MomentOffload writes them."""
+    return [optimizer.state[masters[name]][key] for name in live for key in ('exp_avg', 'exp_avg_sq')]
+
+
+def offload_loaded_moments(offload, optimizer, masters, live):
+    """Put moments that are resident on the GPU out to the offload file (True), unless there are none yet (a fresh run
+    before its first optimizer step). A resume loads them with the training state; left resident they stayed through the
+    whole first step, collection and learner phase (+13.6 GB; grpo-v4-run2 step 23, the first after a resume: 67 GB
+    allocated against 54 in the steps after it, MemFree 3 GB, 0.8M swapped pages, the policy pass 1121 s against 820 s).
+    ``offload.get`` restores them bit for bit before the optimizer step."""
+    if not all('exp_avg' in optimizer.state.get(masters[name], {}) for name in live):
+        return False
+    offload.put(moment_tensors(optimizer, masters, live))
+    return True
+
+
 class ReferenceWeights:
     """The KL reference (the start policy's BF16 parameters) as a safetensors file instead of a second model resident on
     the GPU (3.5 GB through every phase, grpo-v2-run2 2026-11-15). The reference pass loads it into the policy's own
@@ -1488,6 +1505,25 @@ def release_host_memory():
         torch._C._host_emptyCache()
     except Exception:
         pass
+
+
+def free_cuda_cache(collect=True):
+    """Return the learner's cached CUDA blocks to the system, after the Python garbage collection when ``collect``
+    (``--no-learner-gc`` opts out): tensors kept alive only by reference cycles (closures, exception frames) are freed by
+    ``gc.collect`` and land in PyTorch's cache, so an ``empty_cache`` that ran before it left them reserved: the
+    post-optimizer read was 31-43 GB reserved against 24 GB of live tensors (grpo-v4-run2 steps 20-23) until the moment
+    offload's own ``empty_cache`` minutes later, which is when the actor's memory comes back. Returns the figures for
+    train.jsonl: what the collection freed, allocated, and reserved before and after."""
+    import torch
+    started = time.time()
+    before = torch.cuda.memory_allocated()
+    if collect:
+        release_host_memory()
+    mid, reserved = torch.cuda.memory_allocated(), torch.cuda.memory_reserved()
+    torch.cuda.empty_cache()
+    gb = lambda n: round(n / 2**30, 2)
+    return {'gc_freed_gb': gb(before - mid), 'allocated_gb': gb(mid), 'reserved_before_gb': gb(reserved),
+            'reserved_gb': gb(torch.cuda.memory_reserved()), 'seconds': round(time.time() - started, 2)}
 
 
 def host_pinned_gb():
@@ -3298,6 +3334,10 @@ def train(args):
     saver = StateSaver()
     # AdamW moments on disk outside the optimizer step (MomentOffload; --keep-moments-resident opts out)
     offload = None if args.keep_moments_resident else MomentOffload(work / 'adam-moments.offload')
+
+    if offload is not None:
+        # A resume loaded the moments onto the GPU: out to the file now, as after every step (see offload_loaded_moments)
+        offload_loaded_moments(offload, optimizer, masters, live)
     if args.replay:
         collector = ReplayCollector(args, work, first_group=first_group)
     else:
@@ -3904,6 +3944,14 @@ def train(args):
         # learner
         torch.cuda.reset_peak_memory_stats()
         cuda_peaks = {}                   # per learner phase: allocated / reserved peak (GB) and this process's host memory
+        cache_release = {}                # per cache release (free_cuda_cache): what gc freed, allocated, reserved
+        peak_events = {}                  # per pass: the leaf batches where the allocated peak grew by >= 1 GB
+
+        def note_peak(name, tokens, chains_in_batch):
+            peak = torch.cuda.max_memory_allocated() / 2**30      # monotone within a phase (phase_peak resets it)
+            events = peak_events.setdefault(name, [])
+            if len(events) < 16 and (not events or peak >= events[-1]['allocated_gb'] + 1):
+                events.append({'allocated_gb': round(peak, 1), 'batch_tokens': int(tokens), 'chains': chains_in_batch})
 
         def phase_peak(name):
             cuda_peaks[name] = {'allocated': round(torch.cuda.max_memory_allocated() / 2**30, 1),
@@ -4013,6 +4061,7 @@ def train(args):
                     logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets).detach()
                     for (index, _), part in zip(items, logp.split(counts)):
                         refs[index] = part
+                    note_peak('reference', len(ids), len(items))
                 with torch.enable_grad():
                     run_tree(reference_leaves, backward=False)
                 for batch in batches:
@@ -4030,7 +4079,8 @@ def train(args):
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
             phase_peak('reference')
             if not args.keep_learner_cache:
-                torch.cuda.empty_cache()  # the reference pass's cached blocks: the FP32 gradients would stack on them
+                # the reference pass's cached blocks: the FP32 gradients would stack on them
+                cache_release['reference'] = free_cuda_cache(not args.no_learner_gc)
         allocate_grads()
         record['episodes_in_flight']['policy_start'] = collector.running
         policy_started = time.time()
@@ -4122,6 +4172,7 @@ def train(args):
                 rho_post_max = max(rho_post_max, weight.max().item())
             loss.backward()
             forward_tokens += len(ids)
+            note_peak('policy', len(ids), len(items))
             del h, logp_rows, policy_rows, loss
             if time.time() - progress_mark > 300:
                 progress_mark = time.time()
@@ -4200,7 +4251,7 @@ def train(args):
             # reused by nothing the optimizer allocates and stacked the moments on top (grpo-v4-run1 step 2: optimizer
             # reserved 74 GB with 31.5 allocated)
             if not args.keep_learner_cache:
-                torch.cuda.empty_cache()
+                cache_release['optimizer'] = free_cuda_cache(not args.no_learner_gc)
             phase['moments_in'] = offload.get()   # bit-exact read back of the moments the last step wrote out
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -4210,6 +4261,8 @@ def train(args):
             # overwrite the only training state with it: drop this step's update, keep the weights
             release_grads()
             torch.cuda.empty_cache()
+            if offload is not None:
+                offload_loaded_moments(offload, optimizer, masters, live)   # read back above for the dropped step: out again
             sync.restore(step)            # a released actor resumes on the weights it served
             collector.active_slots = args.slots
             log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
@@ -4237,9 +4290,11 @@ def train(args):
         phase_peak('optimizer')
         # Hand the learner phase's cached activation blocks back for the collect phase: on unified memory PyTorch's cache is
         # system RAM, and grpo-v2-run1 held ~56 GB of it while 32 slots collected (guard stop 2026-11-14 04:56, swap).
-        torch.cuda.empty_cache()
-        release_host_memory()
+        cache_release['collect'] = free_cuda_cache(not args.no_learner_gc)
+        if args.no_learner_gc:
+            release_host_memory()
         record['cuda_reserved_collect_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
+        record['cuda_cache_release'] = cache_release
         torch.cuda.reset_peak_memory_stats()   # the behaviour probe's peak is its own, not the optimizer's carried reserve
         elements = sum(p.numel() for p in live.values())
         record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
@@ -4289,8 +4344,7 @@ def train(args):
                                              'next_group': collector.next_group, 'source_sha256': source_sha})
         if offload is not None:
             record['moment_offload'] = dict(offload.last) or None   # the previous step's put and this step's get
-            offload.put([optimizer.state[masters[name]][key] for name in live for key in ('exp_avg', 'exp_avg_sq')],
-                        after=saver)
+            offload.put(moment_tensors(optimizer, masters, live), after=saver)
         learner_seconds = sum(v for k, v in phase.items()
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
         n_dec = max(1, len(decisions))
@@ -4337,7 +4391,7 @@ def train(args):
             learner_phase_slots=args.learner_phase_slots,
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
             previous_state_save=saver.last, cuda_peak_gb=max([v['allocated'] for v in cuda_peaks.values()], default=None),
-            cuda_peak_by_phase_gb=cuda_peaks, host_pinned_gb=host_pinned_gb(),
+            cuda_peak_by_phase_gb=cuda_peaks, cuda_peak_events=peak_events, host_pinned_gb=host_pinned_gb(),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         record.update(grad_spike(work, grad_norm))
         if record.get('grad_spike'):
@@ -4401,6 +4455,9 @@ def main():
                         'the wait). --no-actor-release keeps the actor resident')
     t.add_argument('--actor-release-tags', default='kv_cache,weights,cuda_graph',
                    help='SGLang memory types released (the weights are reloaded from the mapped file on resume)')
+    t.add_argument('--no-learner-gc', action='store_true',
+                   help='release the learner\'s CUDA cache before the garbage collection as before (default: gc.collect '
+                        'first, so blocks freed by cycle collection are returned too; free_cuda_cache)')
     t.add_argument('--keep-learner-cache', action='store_true',
                    help='keep PyTorch\'s cached blocks across learner phases (default: empty the cache after the reference '
                         'pass and before the AdamW moments are read back, so the gradients and the moments do not stack '

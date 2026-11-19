@@ -639,6 +639,51 @@ def test_a_failed_moment_offload_write_keeps_the_moments_resident(tmp_path):
     assert torch.equal(tensors[0], torch.arange(10., device='cuda'))
 
 
+def test_moments_a_resume_loaded_go_out_to_the_offload_file_and_come_back_exactly(tmp_path):
+    """offload_loaded_moments: a resume's resident moments are put out at once (the first step after a resume kept them
+    resident: +13.6 GB, grpo-v4-run2 step 23); a fresh run before its first optimizer step has none and puts nothing."""
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
+    masters = {'a': torch.randn(64, 33, device='cuda', requires_grad=True), 'b': torch.randn(9, device='cuda', requires_grad=True)}
+    optimizer = torch.optim.AdamW(list(masters.values()), lr=1e-3, fused=True)
+    offload = grpo.MomentOffload(tmp_path / 'moments.offload', staging_mb=1)
+    assert grpo.offload_loaded_moments(offload, optimizer, masters, list(masters)) is False
+    assert not offload.out and offload.thread is None
+    for p in masters.values():
+        p.grad = torch.randn_like(p)
+    optimizer.step()
+    expected = [t.clone() for t in grpo.moment_tensors(optimizer, masters, list(masters))]
+    assert grpo.offload_loaded_moments(offload, optimizer, masters, list(masters)) is True
+    offload.wait()
+    assert offload.out and all(t.untyped_storage().nbytes() == 0 for t in grpo.moment_tensors(optimizer, masters, list(masters)))
+    offload.get()
+    for t, e in zip(grpo.moment_tensors(optimizer, masters, list(masters)), expected):
+        assert torch.equal(t.view(torch.int32), e.view(torch.int32))
+
+
+def test_free_cuda_cache_returns_what_the_garbage_collection_frees(monkeypatch):
+    """A tensor kept alive only by a reference cycle is freed by ``gc.collect`` into PyTorch's cache: an ``empty_cache``
+    that ran first left it reserved (the post-optimizer read of grpo-v4-run2: 31-43 GB reserved, 24 GB live)."""
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('needs CUDA')
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
+    gc.disable()
+    try:
+        cycle = [torch.empty(256 << 20, dtype=torch.uint8, device='cuda')]
+        cycle.append(cycle)
+        del cycle
+        legacy = grpo.free_cuda_cache(collect=False)           # the cycle is still alive: nothing to return
+        assert legacy['gc_freed_gb'] == 0 and legacy['reserved_gb'] >= 0.25
+        fixed = grpo.free_cuda_cache(collect=True)
+        assert fixed['gc_freed_gb'] >= 0.24 and fixed['reserved_gb'] < 0.1
+    finally:
+        gc.enable()
+
+
 def test_state_saver_writes_a_safetensors_file_that_loads_back_exactly(tmp_path, monkeypatch):
     torch = pytest.importorskip('torch')
     if not torch.cuda.is_available():

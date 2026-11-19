@@ -857,6 +857,37 @@ def test_shared_collector_runs_invocations_in_one_node_process(tmp_path, monkeyp
     shutil.rmtree(short, ignore_errors=True)
 
 
+def test_shared_collector_stops_listening_past_its_resident_memory_limit(tmp_path, monkeypatch):
+    """--recycle-rss-mb (NATLANG_COLLECTOR_RECYCLE_RSS_MB): a server whose resident memory is over the limit stops
+    listening and exits once its invocations finish, so the next invocation lands on a new process (one that grew to
+    5.1 GB stayed in service until it had served 64 invocations, grpo-v4-run2 2026-11-19)."""
+    cli = TS_HOST / 'dist/teacher/cli.js'
+    if not queue_module.SharedChild.supported(cli) or 'recycle_rss' not in cli.read_text():
+        pytest.skip('ts-host dist is not built with the rss recycle')
+    import tempfile, shutil
+    short = tempfile.mkdtemp(dir='/tmp', prefix='nlsc')
+    monkeypatch.setattr(queue_module.SharedChild, 'ROOT', short)
+    monkeypatch.setenv('INVOCATION_ID', 'test-shared-collector-rss')
+    monkeypatch.setenv('NATLANG_COLLECTOR_RECYCLE_RSS_MB', '1')      # any node process is over 1 MB
+    log = io.StringIO()
+    first = queue_module.SharedChild(['node', '--x', str(cli), '--capabilities', 'json'], log, 2)
+    assert first.wait(60) == 0
+    deadline = time.time() + 30
+    while time.time() < deadline:                                       # the server's one-second tick releases it
+        try:
+            os.kill(first.server_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.2)
+    else:
+        os.kill(first.server_pid, 15)
+        pytest.fail('the over-limit server did not exit')
+    second = queue_module.SharedChild(['node', '--x', str(cli), '--capabilities', 'json'], log, 2)
+    assert second.wait(60) == 0 and second.server_pid != first.server_pid
+    os.kill(second.server_pid, 15)
+    shutil.rmtree(short, ignore_errors=True)
+
+
 def test_shared_collector_skips_a_stalled_server_without_sending_it_the_request(tmp_path, monkeypatch):
     """A server whose event loop is blocked still completes connects (the kernel's backlog) but never greets: the
     invocation goes to the next socket within GREETING_SECONDS instead of waiting on it and failing, and the stalled

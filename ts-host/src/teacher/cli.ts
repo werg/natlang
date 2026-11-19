@@ -265,6 +265,11 @@ async function serve(argv: string[]): Promise<void> {
   // Backstop against retention across invocations: after --recycle-after invocations the server stops listening (a new
   // one takes the socket path) and exits once its running invocations finish.
   const recycleAfter = integer(flags, '--recycle-after', 64);
+  // And against a process that grew: past --recycle-rss-mb of resident memory (default 1536; NATLANG_COLLECTOR_RECYCLE_RSS_MB,
+  // 0 turns it off) it stops listening the same way, and its running invocations finish. Typical servers sit at 0.3-1 GB
+  // with 8 episodes; a model-written program that grew external memory left one at 5.1 GB until it had served 64
+  // invocations (grpo-v4-run2 2026-11-19: 2.3 GB external after one invocation, 5.2 GB of the unit's 40 GB host memory).
+  const recycleRssMb = integer(flags, '--recycle-rss-mb', Number(process.env.NATLANG_COLLECTOR_RECYCLE_RSS_MB ?? 1536));
   let active = 0, served = 0, admitted = 0, listening = true, idle: NodeJS.Timeout | undefined;
   const release = () => { if (listening) { listening = false; server.close(); rmSync(socket, { force: true }); } };
   const arm = () => {
@@ -280,6 +285,14 @@ async function serve(argv: string[]): Promise<void> {
     tick = now;
     if (lag >= 5000) process.stdout.write(JSON.stringify({ event: 'loop_stall', stall_ms: lag, active,
       time: new Date(now).toISOString() }) + '\n');
+    if (recycleRssMb > 0 && listening) {
+      const rssMb = Math.round(process.memoryUsage.rss() / 2**20);
+      if (rssMb > recycleRssMb) {
+        process.stdout.write(JSON.stringify({ event: 'recycle_rss', rss_mb: rssMb, limit_mb: recycleRssMb, active, served,
+          time: new Date(now).toISOString() }) + '\n');
+        release(); arm();
+      }
+    }
   }, 1000).unref();
   const server = createServer(connection => {
     // A peer can go away at any point (a probe, a supervisor that timed out or was killed): a write to it then fails
