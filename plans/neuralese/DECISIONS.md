@@ -4249,3 +4249,58 @@ They are first-principles fixes, made without first learning which of the two ca
   `test_exp0_context_masks...` updated.
 - **Resume flags for run2:** none needed (both are defaults on a pin at this commit); keep `--kl-beta 0.05
   --reasoning-rl-weight 0.5`.
+
+## 2026-11-19 10:00, the second `</think>`: the runtime answers it, program tune masks it, the probe watches it every step (defaults)
+
+Follow-up to 08:20, which left the runtime error and program tune out.
+
+- **Inventory (who splits a reply at `</think>` and who consumes it).** Every engine splits at the first close and
+  returns the rest, a second close included, as content: the managed llama-server and the page through the fork's
+  autoparser (`common/chat-auto-parser-generator.cpp` 133-167; the page loads with thinking off, so the prompt's own
+  `<think></think>` is the parsed block and any generated close is a second one), the Python native engine and the
+  SGLang actor through `serve/chat.py` `build_message` and the stream split in `serve/http.py` 613-620. All four reach
+  the runtime through one client, the shared chat adapter (`ts-host/src/model/chat-completion.ts`;
+  `browser/local-model.ts` 387 for the page, `model/neuralese-server.ts` 672 and `openai-compatible.ts` 108 for the
+  servers). Held eval and the RL collectors run that runtime. Learners: grpo and exp0_sft (08:20), program tune
+  (`rl/native_replay`).
+- **Runtime (default; `NATLANG_SECOND_THINK_CLOSE=content` or the adapter's `secondThinkClose: 'content'` opts out).**
+  A complete reply whose content or reasoning still holds `</think>` (a server that splits nothing leaves a leading
+  `<think>…</think>` block, whose close counts as the first) is a malformed turn: nothing runs, the reply and any calls
+  the server read stay in the history as sampled, and each call (or a user message) is answered "Your last reply closed
+  its reasoning a second time, so nothing ran; close the reasoning once, then make your tool call and end the reply."
+  It counts as a reply without an action. A generated decision fails as `decision-generation-invalid`. No engine code
+  changed. Skills `natlang-integration/references/recovery.md`, `MODEL_FACING_CHANGES.md`, `ENGINE_PARITY.md` updated.
+  Model-facing: it changes the held scoring series (ts-host tree) at the next pin.
+- **Program tune (default; recipe `rl_second_close: 'train'` opts out).** One mask implementation for every learner,
+  `natlang_neuralese.train.reply_format.second_close_mask` (exp0_sft re-exports it; grpo uses it through exp0_sft).
+  `prepare_objective(second_close=...)` drops those sampled tokens from rft episodes and positive-advantage grpo episodes
+  (actions and target weights); rows record `second_close_masked`.
+- **Probe (default `--behaviour-probe` v2).** `ops/grpo-v2/behaviour-probe-v2.json` (sha 4c240119) = v1's 48 calls
+  unchanged plus 24 distinct end-of-turn rows (14 tasks, 10.3k tokens): decision readouts the start policy answered
+  (served export 5ca8a8b1, `</think>"VALUE"<|im_end|>`) in the version-0 groups of grpo-v2 run1/run2, grpo-v3-run1 and
+  grpo-v4-run2 (sibling episodes repeat a decision exactly; each distinct row once).
+  Each step `train.jsonl` `behaviour` logs `end_logp` (mean log p(`<|im_end|>`) where the start ended), `end_logp_min`,
+  `reclose_p` (mean p of a second `</think>` there) and `end_logp_change` (vs the start); a drop beyond 1 nat sets
+  `behaviour_shift`. A resumed run whose `behaviour-start.json` predates the rows measures the start's values once from
+  its KL reference weights (a failure there is logged, never fatal); the file's `end_start` (HF base 40ebe0aa, the
+  start's backbone without the marker rows) stands in otherwise. Replaces scratchpad `hz2/imendprobe.py`.
+  - **The base already writes a second close here.** On these rows the base's end_logp is mean -2.64 (0.0 to -7.2) and
+    its mean p(`</think>`) at that position 0.41 (0.94 on row 0). These are decision options, whose reasoning closes at
+    once (`</think>` first, which the base scores about -21; MODEL_FACING_CHANGES 2026-11-13 "GRPO trains sampled
+    decision calls"): after that forced empty think block the base often closes again after the answer (why is not
+    established; one reading is that it takes the answer for reasoning). The run2 drift (07:30: teacher
+    rows of this form, base -0.0 to -2.5, step 12 to -13.6) pushed the same position further.
+  - **Numerics.** `measure_end` packs all rows into one fixed layout (`END_PACK_TOKENS`, whatever the caller's pack):
+    the fused kernels' BF16 rounding depends on the pack's shape and moves a row by up to ~0.4 nats on these tail
+    tokens (row 0: FP32 -4.44, HF BF16 -3.94, fused -4.17 in a 4-row pack and -4.56 in the 24-row pack; packing itself
+    is exact: the row alone equals it within its pack). Start and now therefore use one layout.
+- **Run2.** Not stopped. At its next resume (on a pin at or after this commit) pass `--behaviour-probe
+  .../ops/grpo-v2/behaviour-probe-v2.json` (its recorded args name v1) and read `behaviour.end_logp_change` per step.
+- **Tests:** `chat-completion.test.mjs` (second close: malformed, calls kept, unsplit block, cut-off reply, opt-out),
+  `agent-reply-calls.test.mjs`, `test_lfm3_format.py::test_a_second_think_close_reaches_the_client_in_the_content`,
+  `test_native_rl_replay.py::test_a_second_think_close_is_never_reinforced_in_whole_episode_replay`,
+  `test_grpo_learner.py::test_behaviour_end_of_turn_after_a_short_answer`.
+- **Not checked.** The fork's parser on a real page build (read from code); the resume-time reference measurement in
+  grpo (`measure_end` itself ran on the GPU: 24 rows, 6 s, 3.7 GB); the error's effect on episodes (the next pin's
+  collection shows how often it fires: count trace replies whose text holds `</think>`); whether fresh-init's backbone
+  equals the HF weights bit for bit (the `end_start` stand-in assumes it).

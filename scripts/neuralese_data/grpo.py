@@ -129,8 +129,9 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
 # held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
 # replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
-# Start-policy calls scored after every step (behaviour_probe.py; built from grpo-v2-run1's version-0 groups)
-BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v1.json')
+# Start-policy calls scored after every step (behaviour_probe.py): v1's 48 reasoning calls, and from 2026-11-19 (v2) 24
+# end-of-turn rows from the start policy's decision readouts
+BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v2.json')
 # sft_sources WORKs of verified teacher successes (TeacherDemos): teacher-gen pool-v1 and pool-v2-rich replayed under
 # the 2026-11-18 runtime first, then the 2026-11-17 SFT corpus WORK (pool-v1, replayed at aa1bd8467), then the
 # 2026-11-19 gap campaign (teacher-gen-20261119/gap-v1: task supply rounds and tasks the student rarely solves), which
@@ -3401,11 +3402,32 @@ def train(args):
             t = time.time()
             behaviour_start_path.write_text(json.dumps(behaviour_probe.measure(model, behaviour)) + '\n')
             log_line(log, {'event': 'behaviour probe start', 'calls': len(behaviour['calls']),
-                           **behaviour_probe.summary(json.loads(behaviour_start_path.read_text())),
+                           **behaviour_probe.summary(json.loads(behaviour_start_path.read_text()), probe=behaviour),
                            'seconds': round(time.time() - t, 1)})
         else:
             log_line(log, {'event': 'behaviour probe: no start measurement (resumed); copy the start run\'s '
                                     'behaviour-start.json to compare'})
+    if (behaviour is not None and behaviour.get('end_calls') and behaviour_start_path.exists() and reference is not None
+            and not json.loads(behaviour_start_path.read_text()).get('end_logp')):
+        # A start measured before the probe had end-of-turn rows (a resume onto probe v2): the start policy's values from
+        # the KL reference weights (the start policy), put into the start measurement once.
+        # Telemetry never stops the run: a failure is logged and the probe file's end_start stands in.
+        t = time.time()
+        reference.load_into(live)
+        try:
+            end = behaviour_probe.measure_end(model, behaviour)
+        except Exception as error:
+            end = None
+            log_line(log, {'event': 'behaviour probe start: end of turn not measured', 'error': repr(error)[:300]})
+        finally:
+            ReferenceWeights.restore(live, masters)
+        if end is not None:
+            start_record = json.loads(behaviour_start_path.read_text())
+            start_record.update(end)
+            behaviour_start_path.write_text(json.dumps(start_record) + '\n')
+            log_line(log, {'event': 'behaviour probe start: end of turn from the reference weights',
+                           'calls': len(end['end_logp']), 'end_logp': round(float(np.mean(end['end_logp'])), 4),
+                           'seconds': round(time.time() - t, 1)})
     log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
                    'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
                    'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
@@ -4227,7 +4249,7 @@ def train(args):
         if behaviour is not None:
             t = time.time()
             start = json.loads(behaviour_start_path.read_text()) if behaviour_start_path.exists() else None
-            record['behaviour'] = behaviour_probe.summary(behaviour_probe.measure(model, behaviour), start)
+            record['behaviour'] = behaviour_probe.summary(behaviour_probe.measure(model, behaviour), start, behaviour)
             record['behaviour_shift'] = behaviour_probe.shifted(record['behaviour'])
             phase['behaviour_probe'] = time.time() - t
             phase_peak('behaviour_probe')
@@ -4619,7 +4641,8 @@ def main():
                         'the rest stay context): fewer forward tokens a step for some variance; 1: all')
     t.add_argument('--behaviour-probe', default=BEHAVIOUR_PROBE,
                    help='start-policy calls scored after every step (behaviour_probe.py): the policy on the start policy\'s own '
-                        'samples (sampled-token logp change), entropy, </think> hazard; logged as "behaviour", flagged as behaviour_shift; "-": off')
+                        'samples (sampled-token logp change), entropy, </think> hazard, and (v2) p(<|im_end|>) after short answers '
+                        '(end_logp, end_logp_change, reclose_p); logged as "behaviour", flagged as behaviour_shift; "-": off')
     t.add_argument('--save-step-chains', type=int, default=4,
                    help="keep the exact learner batch of each of the last N steps in WORK/step-chains/step-N.pkl.zst (chains, "
                         'advantages, roles, row weights, actor logp, per-token loss factor; tens of MB a step) for offline '

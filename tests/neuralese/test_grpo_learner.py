@@ -542,6 +542,27 @@ def test_behaviour_summary_and_shift():
     assert not behaviour_probe.shifted(behaviour_probe.summary(step8))   # no start measurement: no flag
 
 
+def test_behaviour_end_of_turn_after_a_short_answer():
+    """Probe v2's end-of-turn rows: p(<|im_end|>) where the start policy ended a short answer, against the start's own
+    values (its measurement, else the probe file's ``end_start``); a mean drop beyond 1 nat flags behaviour_shift
+    (grpo-v4-run2 step 12: -0.07 to -13.6 nats on gap-v1's short-answer rows, DECISIONS 2026-11-19)."""
+    import math
+    import behaviour_probe
+    base = {'sampled_logp': [-0.65], 'entropy': [0.76], 'close_per_1k': [0.2], 'close_logp': [-0.3]}
+    start = {**base, 'end_logp': [-0.1, -2.5], 'reclose_logp': [-5.0, -3.0]}
+    same = behaviour_probe.summary(start, start)
+    assert same['end_logp'] == pytest.approx(-1.3) and same['end_logp_change'] == 0 and not behaviour_probe.shifted(same)
+    assert same['reclose_p'] == pytest.approx((math.exp(-5) + math.exp(-3)) / 2, abs=1e-5) and 'reclose_logp' not in same
+    drift = {**base, 'end_logp': [-0.07, -13.6], 'reclose_logp': [-2.7, -0.04]}
+    moved = behaviour_probe.summary(drift, start)
+    assert moved['end_logp_change'] == pytest.approx(-5.535) and moved['end_logp_min'] == -13.6
+    assert behaviour_probe.shifted(moved) and moved['logp_change'] == 0
+    # A start measured before the probe had these rows: the probe's own start values.
+    probe = {'end_start': {'end_logp': [-0.1, -2.5], 'reclose_logp': [-5.0, -3.0]}}
+    assert behaviour_probe.summary(drift, base, probe)['end_logp_change'] == pytest.approx(-5.535)
+    assert 'end_logp_change' not in behaviour_probe.summary(drift, base)   # nothing to compare with: no change, no flag
+
+
 def test_replay_bench_keeps_short_groups_only(tmp_path):
     import zstandard
     from types import SimpleNamespace
