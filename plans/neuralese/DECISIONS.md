@@ -4165,3 +4165,26 @@ about -0.10 a step, more than the observed +0.03-0.06 rise) and `--reasoning-rl-
 hazard-raising term). Keep `--non-student-loss full`. Revert either flag if step-10/12 held results fall; read
 close_per_1k and kl_mean over the next 2 steps; if the hazard still rises, measure step N's batch again with all GRPO
 groups and a gH at the current policy.
+
+## 2026-11-19 05:20, overlong filtering: samples and episodes cut by a token cap are neither ranked nor trained (default on)
+
+- **Why (first principles; coordinator, from the run2 hazard hunt).** A reasoning-RL think block that hits
+  `--reasoning-rl-max-tokens` without closing produced no action. It used to tie with the group's worst closed
+  sample and train at a negative advantage over every one of its tokens (up to 8,192), which teaches "close
+  earlier" directly: the classic truncation bias that DAPO's overlong filtering removes. run2 step 10 had 12 such
+  samples, the step whose hazard and KL jumped; step 11 had 1, at A = -1 over 8,192 tokens.
+- **Reasoning RL (`--reasoning-rl-unclosed drop`, default; `floor` opts out).** `rrl_advantages` normalizes a group
+  over its closed samples only (None at the unclosed ones), and `rrl_episodes` trains no row of an unclosed sample;
+  `reasoning_rl.unclosed_dropped` counts them. Carried search chains already kept unclosed blocks at weight 0.
+- **GRPO term (`--truncated-episodes drop`, default; `train` opts out).** An episode with any call whose sampling
+  finish_reason is 'length' leaves its group before advantages, SD and training (`lowering.episodes_truncated`). The
+  40-request budget is a task outcome and still scores 0; the 3600 s wall clock already leaves episodes unscored.
+  run2 so far: 0 of 30,155 sampled calls ended at 'length', so this changes nothing today; it guards any per-call or
+  per-episode token cap.
+- **Everywhere the mechanism lives.** One rule, `rl/rollout_math.truncated_rollout`: grpo `load_group` and program
+  tune's `native_replay.prepare_objective` (`truncated='drop'`, 'train' opts out). Not applicable: exp0_sft and SD
+  replay train verified successes only; held eval scores and never trains.
+- **Tests:** `test_rrl_advantages_drop_unclosed_samples_by_default`,
+  `test_rrl_episodes_leave_unclosed_samples_untrained_by_default`,
+  `test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained`; the 'floor' behaviour keeps its old tests.
+- **When it enters.** grpo-v4-run2 at the resume after the one that applies `--kl-beta 0.05 --reasoning-rl-weight 0.5`.

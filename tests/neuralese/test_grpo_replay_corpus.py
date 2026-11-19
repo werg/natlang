@@ -1,4 +1,5 @@
 """Fixed corpora trained in every GRPO step (`--replay-corpus`: operator rows, whole-graph Neuralese episodes)."""
+import collections
 import pickle
 import sys
 from pathlib import Path
@@ -122,3 +123,28 @@ def test_save_step_chains_keeps_the_exact_batch_with_its_loss_factors_and_only_t
     saved = record['chains'][0]
     assert record['step'] == 3 and saved['token_scale'] == 1 / 300 and saved['advantage'] == -0.7
     assert saved['segs'][0][2]['logp'].tolist() == [-0.5] * 3 and 'token_scale' not in chain
+
+
+def test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained(tmp_path, monkeypatch):
+    import json
+    import types
+    import lower_rollout_turns
+    from natlang_neuralese.rl.rollout_math import truncated_rollout
+    monkeypatch.setattr(lower_rollout_turns, 'episode_turns', lambda row, stats, states=None: [])
+    monkeypatch.setattr(lower_rollout_turns, 'decision_turns', lambda row, stats, states=None: [])
+
+    def row(finish, quality):
+        return {'task_id': 't', 'reward': {'quality': quality},
+                'turns': [{'sampling': {'finish_reason': 'stop'}}, {'sampling': {'finish_reason': finish}}]}
+    rows = [row('stop', 1.), row('length', 0.), row('stop', 0.)]
+    assert [truncated_rollout(r) for r in rows] == [False, True, False]
+    assert not truncated_rollout({'turns': [{'sampling': None}]})       # a decision call records no finish reason
+    (tmp_path / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    for mode, kept in (('drop', [1., 0.]), ('train', [1., 0., 0.])):
+        collector = types.SimpleNamespace(args=types.SimpleNamespace(top_p=0.95, truncated_episodes=mode),
+                                          groups={0: {'dir': tmp_path, 'task_id': 't', 'versions': [0]}},
+                                          states=None, generated=0, episodes=0)
+        stats = collections.Counter()
+        _, episodes, _ = grpo.load_group(collector, 0, stats)
+        assert [e['quality'] for e in episodes] == kept
+        assert stats['episodes_truncated'] == (1 if mode == 'drop' else 0)

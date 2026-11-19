@@ -786,6 +786,7 @@ def load_group(collector, group, stats):
     from natlang_neuralese.common.jsonio import read_jsonl
     from lower_rollout_turns import decision_turns, episode_turns
     from natlang_neuralese.rl.jolt import student_form
+    from natlang_neuralese.rl.rollout_math import truncated_rollout
     info = collector.groups[group]
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
@@ -809,6 +810,12 @@ def load_group(collector, group, stats):
         collector.episodes += 1
         if reward is None or row.get('unscored'):
             stats['episodes_unscored'] += 1
+            continue
+        if truncated_rollout(row) and getattr(getattr(collector, 'args', None), 'truncated_episodes', 'drop') == 'drop':
+            # a reply cut by a token cap (finish_reason 'length') ends the episode for the cap, not for what the policy
+            # did: its reward would push the cut reasoning down ("stop sooner"). It is neither ranked nor trained
+            # (overlong filtering, DECISIONS 2026-11-19). The 40-call budget is a task outcome and still scores 0.
+            stats['episodes_truncated'] += 1
             continue
         quality = float(reward['quality'])
         graded = reward.get('graded')
@@ -1924,21 +1931,26 @@ def discounted(rewards, gamma):
     return sum((gamma ** i) * (r or 0.) for i, r in enumerate(rewards))
 
 
-def rrl_advantages(returns, closed, min_std):
+def rrl_advantages(returns, closed, min_std, unclosed='drop'):
     """Advantages of one group's samples (None: the group's reasoning does not train) and the reason. A sample that
-    never closed its reasoning produced no action: it ties with the group's worst closed sample. A group whose returns
-    spread less than ``min_std`` nats per token has nothing to rank: the normalization would turn noise-sized
-    differences into full-size advantages."""
+    never closed its reasoning hit the token cap and produced no action: its score says the cap cut it, not that its
+    reasoning was worse. ``unclosed`` 'drop' (default; DAPO's overlong filtering): it gets no advantage (None at its
+    place) and the group is normalized over its closed samples alone; pushing a cut block down would teach "close
+    earlier" directly (grpo-v4-run2's ``</think>`` hazard, DECISIONS 2026-11-19). 'floor' (before 2026-11-19): it ties
+    with the group's worst closed sample and trains. A group whose returns spread less than ``min_std`` nats per token
+    has nothing to rank: the normalization would turn noise-sized differences into full-size advantages."""
     scored = [r for r, c in zip(returns, closed) if c]
     if not scored:
         return None, 'none_closed'
     floor = min(scored)
-    values = [r if c else floor for r, c in zip(returns, closed)]
+    keep = [c or unclosed != 'drop' for c in closed]
+    values = [r if c else floor for r, c, k in zip(returns, closed, keep) if k]
     mean = sum(values) / len(values)
     std = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
     if len(values) < 2 or std < max(min_std, 1e-6):
         return None, 'low_spread'
-    return [(v - mean) / std for v in values], None
+    it = iter((v - mean) / std for v in values)
+    return [next(it) if k else None for k in keep], None
 
 
 def rrl_rows(name, context, sample, action, action_weight, reasoning_advantage, action_advantage):
@@ -1957,7 +1969,7 @@ def rrl_rows(name, context, sample, action, action_weight, reasoning_advantage, 
     return rows
 
 
-def rrl_episodes(groups, reasoning_weight, action_weight):
+def rrl_episodes(groups, reasoning_weight, action_weight, unclosed='drop'):
     """The learner items of the step's reasoning RL groups: [(episode, role)] (one episode per sample: its think block
     at ``reasoning_weight * A`` and the teacher action at ``action_weight``; a group without spread trains its actions
     only) and the telemetry counters."""
@@ -1965,7 +1977,7 @@ def rrl_episodes(groups, reasoning_weight, action_weight):
     for group in groups:
         samples = group['samples']
         advantages, reason = rrl_advantages([s['return'] for s in samples], [s['closed'] for s in samples],
-                                            group['min_std'])
+                                            group['min_std'], unclosed)
         stats['groups'] += 1
         stats['samples'] += len(samples)
         stats['unclosed'] += sum(not s['closed'] for s in samples)
@@ -1993,6 +2005,9 @@ def rrl_episodes(groups, reasoning_weight, action_weight):
         else:
             stats['groups_trained'] += 1
         for k, (sample, advantage) in enumerate(zip(samples, advantages)):
+            if unclosed == 'drop' and not sample['closed']:
+                stats['unclosed_dropped'] += 1     # cut by the token cap: neither ranked nor trained
+                continue
             name = f"rrl-{group['id']}-{k}"
             rows = rrl_rows(name, group['context'], sample, group['action'], group.get('action_weight'),
                             reasoning_weight * advantage, action_weight)
@@ -3734,7 +3749,8 @@ def train(args):
             # reasoning RL against fixed teacher actions (ReasoningRL): each sample's reasoning at its group-normalized
             # action likelihood, the teacher action after it as a ratio-free cross-entropy
             rrl_groups, rrl_dropped, carried = reasoning_rl.take(step, args.reasoning_rl_groups, args.max_staleness)
-            rrl_items, rrl_stats = rrl_episodes(rrl_groups, args.reasoning_rl_weight, args.reasoning_rl_action_weight)
+            rrl_items, rrl_stats = rrl_episodes(rrl_groups, args.reasoning_rl_weight, args.reasoning_rl_action_weight,
+                                                 args.reasoning_rl_unclosed)
             rrl_stats['groups_stale'] = rrl_dropped
             rrl_stats['carried_chains'] = len(carried)
             for episode, role in rrl_items:
@@ -4430,6 +4446,14 @@ def main():
     t.add_argument('--reasoning-rl-max-tokens', type=int, default=8192,
                    help='reasoning tokens per sample at most (a sample that has not closed by then ties with its '
                         'group\'s worst)')
+    t.add_argument('--truncated-episodes', choices=('drop', 'train'), default='drop',
+                   help="an episode with a reply cut by a token cap (finish_reason 'length'): drop (default) leaves it out of "
+                        "its group's advantages and of training; train: it scores and trains like any other (before "
+                        '2026-11-19). The call budget (--max-model-requests) is an outcome either way')
+    t.add_argument('--reasoning-rl-unclosed', choices=('drop', 'floor'), default='drop',
+                   help='a reasoning-RL sample that hit --reasoning-rl-max-tokens without closing: drop (default) leaves it '
+                        "out of its group's advantages and of training (overlong filtering: a cut block pushed down teaches "
+                        '"close earlier"); floor: it ties with the worst closed sample and trains (before 2026-11-19)')
     t.add_argument('--reasoning-rl-min-std', type=float, default=0.01,
                    help='a group whose returns (nats per action token) spread less trains only its actions')
     t.add_argument('--reasoning-rl-workers', type=int, default=8,

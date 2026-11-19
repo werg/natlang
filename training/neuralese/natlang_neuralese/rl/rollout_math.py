@@ -28,6 +28,14 @@ def group_advantages(rewards: list[float | None], eps: float = 1e-6) -> tuple[li
         {"scored": len(scored), "spread": True, "mean": mean, "std": std}
 
 
+def truncated_rollout(rollout: dict) -> bool:
+    """Whether any model call of a captured episode stopped at a token cap (sampling ``finish_reason`` 'length'). Such
+    an episode ended for the cap, not for what the policy did; ranking it in its group would push the cut reply down
+    ("stop sooner"), so learners leave it out of advantages and training by default (overlong filtering, DECISIONS
+    2026-11-19). A request budget (max model requests) is a task outcome and is not a truncation."""
+    return any((turn.get('sampling') or {}).get('finish_reason') == 'length' for turn in rollout.get('turns') or ())
+
+
 def rollout_return(rollout: dict) -> float:
     """An admitted episode's return: its task-outcome ``quality`` plus any recorded Neuralese-use bonus
     (rl.task_rollouts.score). ``quality`` alone stays the success signal."""

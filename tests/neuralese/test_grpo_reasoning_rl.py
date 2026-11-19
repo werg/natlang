@@ -167,14 +167,22 @@ def test_future_ids_and_discount():
 
 
 def test_rrl_advantages():
-    a, reason = grpo.rrl_advantages([-1.0, -0.5, -9.0, -0.2], [True, True, False, True], 0.01)
+    a, reason = grpo.rrl_advantages([-1.0, -0.5, -9.0, -0.2], [True, True, False, True], 0.01, 'floor')
     assert reason is None
     assert abs(sum(a)) < 1e-9 and abs(sum(x * x for x in a) / 4 - 1) < 1e-9
-    assert a[2] == a[0] == min(a)                              # an unclosed sample ties with the worst closed one
+    assert a[2] == a[0] == min(a)                              # floor: an unclosed sample ties with the worst closed one
     assert a[3] == max(a)
     assert grpo.rrl_advantages([-1., -2.], [False, False], 0.01) == (None, 'none_closed')
     assert grpo.rrl_advantages([-0.300, -0.301, -0.302], [True] * 3, 0.01) == (None, 'low_spread')
-    assert grpo.rrl_advantages([-0.3, -5.], [True, False], 0.01) == (None, 'low_spread')   # one closed: no spread
+    assert grpo.rrl_advantages([-0.3, -5.], [True, False], 0.01, 'floor') == (None, 'low_spread')   # one closed
+
+
+def test_rrl_advantages_drop_unclosed_samples_by_default():
+    # cut by the token cap: no advantage, and the group is normalized over its closed samples alone
+    a, reason = grpo.rrl_advantages([-1.0, -0.5, -9.0, -0.2], [True, True, False, True], 0.01)
+    closed, _ = grpo.rrl_advantages([-1.0, -0.5, -0.2], [True] * 3, 0.01)
+    assert reason is None and a[2] is None and [a[0], a[1], a[3]] == closed
+    assert grpo.rrl_advantages([-0.3, -5.], [True, False], 0.01) == (None, 'low_spread')
 
 
 def group(returns, closed, action_weight=None):
@@ -187,9 +195,9 @@ def group(returns, closed, action_weight=None):
 
 def test_rrl_episodes_rows_and_advantages():
     g = group([-1.0, -2.0, -0.05], [True, False, True], np.array([0, 1, 1], np.float32))
-    items, stats = grpo.rrl_episodes([g], 2.0, 0.05)
+    items, stats = grpo.rrl_episodes([g], 2.0, 0.05, 'floor')
     assert len(items) == 3 and all(role == grpo.RRL_ROLE for _, role in items)
-    expected, _ = grpo.rrl_advantages([-1.0, -2.0, -0.05], [True, False, True], 0.01)
+    expected, _ = grpo.rrl_advantages([-1.0, -2.0, -0.05], [True, False, True], 0.01, 'floor')
     rows = [episode['rows'] for episode, _ in items]
     assert [r[0]['advantage'] for r in rows] == [2.0 * x for x in expected]
     assert [len(r) for r in rows] == [2, 1, 2]                 # no action after the unclosed sample
@@ -205,6 +213,16 @@ def test_rrl_episodes_rows_and_advantages():
     assert len(chains) == 1 and len(chains[0]['segs']) == 2   # think block and action: one sequence
     record = grpo.rrl_record(stats, collections.Counter(segments=1), 0)
     assert record['groups_trained'] == 1 and record['reward_mean'] == -0.525 and record['r0_mean'] == -0.5
+
+
+def test_rrl_episodes_leave_unclosed_samples_untrained_by_default():
+    g = group([-1.0, -2.0, -0.05], [True, False, True])
+    items, stats = grpo.rrl_episodes([g], 2.0, 0.05)
+    expected, _ = grpo.rrl_advantages([-1.0, -0.05], [True, True], 0.01)
+    assert [episode['rows'][0]['advantage'] for episode, _ in items] == [2.0 * x for x in expected]
+    assert all(episode['rows'][0]['sample'][-1] == CLOSE for episode, _ in items)
+    assert stats['unclosed'] == 1 and stats['unclosed_dropped'] == 1
+    assert grpo.rrl_record(stats, collections.Counter(), 0)['unclosed_dropped'] == 1
 
 
 def test_rrl_episodes_without_spread_train_actions_only():

@@ -1633,7 +1633,8 @@ def _empty_text_writes(turns):
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
-                      min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None):
+                      min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None,
+                      truncated='drop'):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
@@ -1658,7 +1659,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
     from .episode_graph import whole_episode_turns
-    from .rollout_math import group_advantages, rollout_return
+    from .rollout_math import group_advantages, rollout_return, truncated_rollout
     from ..serve.store import native_state_id
     if behavior_policy is not None:
         validate_invocation_behavior_policy(behavior_policy,identity)
@@ -1675,6 +1676,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     for rollout in rollouts:
         if rollout.get('reward') is None:
             continue
+        if truncated == 'drop' and truncated_rollout(rollout):
+            continue     # a reply cut by a token cap: neither ranked nor trained (``truncated`` 'train' opts out)
         _require_scored_training_episode(rollout,identity,actors=actors)
         key = (rollout['task_id'], rollout.get('group'))
         if jolt is not None:
