@@ -4648,3 +4648,10 @@ checkpoints 26-40 stay on /mnt/external as the fallback that sft-v5's drive resu
   `natlang-rl-authored-{dev,confirmation}-20261120r21`.
 - **Timing:** this round lands before grpo-v5-run1 pins. Three more batches go into round 22.
 - **Opt-out:** `--pool` without this source.
+
+## 2026-11-20: task supply round 22, `natlang-rl-task-supply-20261120b` (43 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** the 3 round-21 leftover batches, built separately so they land before grpo-v5-run1 pins.
+- **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
+  `natlang-rl-authored-{dev,confirmation}-20261120r22`.
+- **Opt-out:** `--pool` without this source.

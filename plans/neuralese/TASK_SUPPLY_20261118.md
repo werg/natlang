@@ -326,3 +326,20 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Repetition** (against all 14 earlier POOLS, 36,340 rows): 37 programs (34.5 effective). No program text and no
   functional program is shared with the pool.
 - **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
+
+## 17. Round 22: `natlang-rl-task-supply-20261120b` (43 rows)
+
+- **Batches.** These are the round-21 batches still in progress when round 21 was built: w308 (parcel lockers), w311
+  (car rental returns) and w316 (farmers market stalls). They were built as their own round so that they land before
+  grpo-v5-run1 pins. The round-22 brief authors (w317-w324, `AUTHOR_BRIEF_ROUND22.md`) go into round 23.
+- **Blind solve.** 14 tasks were held back:
+  - w308 6: an "otherwise" step whose scope was unstated, a missing "otherwise nothing" clause, and a title that
+    contradicts its rule;
+  - w311 5: a helper that reads rates it is not given, and a waiver counted on a zero fee;
+  - w316 3: real disagreements. The author files late cancellation notices under `late/`, while the program text
+    moves every cancellation to `done/`.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261120r22` (5 + 10 rows).
+- **Result: 43 rows in 3 families**, with 42 distinct answers.
+- **Constructs:** folder reducers 81%, decide 65%, depth 3 49%, iterateOn 40%, typed Neuralese 42%.
+- **Repetition:** 20 programs, none shared with the 36,414-row pool.
+- **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
