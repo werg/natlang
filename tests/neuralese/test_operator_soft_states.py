@@ -1,6 +1,7 @@
 """The learned operators' soft prompt states as tune soft states (scripts/neuralese_data/operator_soft_states.py)."""
 import pytest
 
+import operator_soft_states
 from operator_soft_states import binding, manifest_for, operator_turn
 from natlang_neuralese.tune.rows import evidence_weight, verify_action_evidence
 from natlang_neuralese.tune.soft import place_states, soft_key
@@ -27,3 +28,12 @@ def test_a_mechanical_seed_is_only_weak_evidence_and_the_manifest_binds_each_ope
     assert manifest['base'] == {} and [node['id'] for node in manifest['tree']] == ['tree:']
     with pytest.raises(Exception):
         operator_turn({**SITE, 'messages': SITE['messages'][1:]}, 'x', 'gold', case='c', index=0)
+
+
+def test_the_paired_report_splits_rows_and_pairs_within_them():
+    losses = {'text': [2.0, 1.0, 4.0], 'primed': [1.5, 1.0, 5.0], 'trained': [1.0, 0.5, 6.0]}
+    short = operator_soft_states.paired_report(losses, [0, 1])
+    long = operator_soft_states.paired_report(losses, [2])
+    assert short['mean_nll'] == {'text': 1.5, 'primed': 1.25, 'trained': 0.75}
+    assert short['trained_vs_text'] == {'mean_change': -0.75, 'se': 0.25, 'lower_rows': 2, 'rows': 2}
+    assert long['trained_vs_primed']['mean_change'] == 1.0 and long['trained_vs_primed']['lower_rows'] == 0

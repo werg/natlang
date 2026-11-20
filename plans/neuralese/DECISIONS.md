@@ -5342,3 +5342,64 @@ its periodic reclamation. Both paths submit the same named transient
 service with its own memory limit. Host and discrete-GPU jobs use the usual
 available-memory admission. The explicit `release-cache` command remains
 available, and `--no-cuda-cache-reclaim` opts out of automatic reclamation.
+
+**2026-11-20 21:40, follow-ups (soft-states strand).**
+- *Operator fit memory: 22 GB -> 11.5 GB.* The first run (`softop-fit-2`) held 15 GB of CUDA (not capped by the cgroup)
+  plus 7.8 GB of host. The causes, in order:
+  - rows up to 120k characters: compact-value sites hold the whole tool output, so the activation peak followed the
+    longest row;
+  - the mmapped 9.5 GB checkpoint's page cache charged to the job;
+  - the checkpoint's 5.5 GB training state (faa2fe339 drops it).
+  Cuts:
+  - operator turns cap rows at 40k characters (`--max-chars`, ~10k tokens; 330 of 448 rows kept);
+  - `tune.build`/`tune.learned` evict the checkpoint's page cache once the weights are on the device
+    (`cuda_context.drop_file_cache`) and create the CUDA context and compact first (`prepare_gpu`). Under today's
+    fragmentation (0 MB free in blocks of order 8 or more) the first two attempts failed to create a context;
+  - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+  The backbone was already frozen (`requires_grad_(False)`) and layer recompute was already on (`graph_loss`
+  `checkpoint_layers`).
+  `softop-fit-5` (plan-v2, base 5ff07638, 120 steps x 8 rows, `build-v2`): CUDA peak 7.5 GB allocated (8.5 GB
+  reserved), host RSS 3.0 GB, ledger 11.5 GB; about 60 s a step beside grpo-v5. It restarted at step 0 because the row
+  set changed: the old state binds the old rows, and 24 steps were lost. Steps 1-4 mean row loss: 1.68, 1.66, 0.79,
+  0.99. The held-out arms (view's text / primed state / trained state, paired NLL on test-split operator rows:
+  `operator_soft_states.py evaluate`) run when it ends. The base checkpoint is being copied byte for byte to NVMe
+  (`natlang-operator-soft-20261120/base/`, same sha256, so the same native identity): loads from `/mnt/external` took
+  7 minutes under today's disk load.
+- *Every static member primed in its real call.*
+  - Program guidance (memetic or authored) was a bare text write from position 0. The first call that reads a
+    guidance now primes it in its own opening (`native.init-body` through `neuralese.prime`; ts-host agent.ts), and
+    later calls reuse that state.
+  - A trained (refined) state is read as it is. `NATLANG_GUIDANCE_PRIMING=text` opts out. Test:
+    `native-program-guidance.test.mjs`.
+  - Memetic refinement rows now find the guidance by its place (the `<natlang_program_guidance>` block and the call's
+    function), not by state ID.
+  - Inventory of bare writes left:
+    - `writeLiterals` and `runtime.ts` Neuralese slots are produced values (input-specific). Their in-place capture
+      in the producing reply is the open OPERATORS_RESTORE §3.6 decision: producer documents grow from 8-91 tokens to
+      whole calls.
+    - `tune/learned/growth.py` writes a component's retrieval key. It is compared with keys written the same way and
+      never imported into a call.
+    - The `tune/soft.py` and `initBodyInContext` placeholders are re-primed in context immediately.
+- *Push gate.* `tests/test_data_registry_ratchet.py::test_registry_covers_what_the_catalog_found_before_it` (in
+  check-main `--quick`) walks `/mnt/external` source-storage trees through `Registry._paths()` glob expansion. With sda
+  at 88% utilisation and about 2 s per read today, it ran over an hour and was killed (exit 143 after 4,094 s). A quick
+  gate should not depend on HDD walks; this is for the data-registry strand.
+
+## 2026-11-20 20:00, program fits run beside grpo-v5 at 11.5 GB (fallow T4; program-tuning strand)
+
+- **Where the 18.6 GB went (profiled on verdict, ledger accounting).** Engine load: 4.75 GB host, of which 3.3 GB was
+  the checkpoint's training state (optimizer moments) that `load_native_engine` keeps for the service's in-place
+  optimizer step; first step +3.4 GB host, then ~+80 MB host per step (+4.8 GB over 60 steps); CUDA 6.0-6.3 GB. Ruled
+  out: CUDA charged twice (a 4 GiB CUDA allocation leaves cgroup anon unchanged), the fit store (bounded at 256 MiB),
+  lowered rows (0.3 GB for 1,280 rows), glibc retention (malloc_trim changes nothing).
+- **Fixes (defaults).** `load_native_engine(training_state=False)` in every tune entry (build, families, distill,
+  learned, apply, program_tune bank; faa2fe339). `tune.build --segment-steps N` ends the process every N steps
+  (state saved, exit 75) and a driver reruns it; the resume is exact (test: 1+1+1 segments give the same artifacts as
+  one 3-step run; 25cf760c6). The fit chain claims 13 GB at medium priority in 15-step segments.
+- **Measured:** verdict fit peak 11.5 GB at step 5 (was 18.6 GB over a whole fit), beside grpo-v5 (claim trimmed to
+  79 GB by the coordinator) and the soft-state fit.
+- **Push gate.** `check-main --quick` deselects `test_registry_covers_what_the_catalog_found_before_it`, which lists
+  every dataset directory (HDD included) and hung the gate 30+ min under the archive rsync's I/O (16b67b541); the full
+  check still runs it.
+- **Open:** the ~80 MB/step host growth's cause (segments bound it, they do not remove it); the 3.4 GB first-step host
+  jump (not CPU tensors of the fit's own; inductor/compile state is a candidate).
