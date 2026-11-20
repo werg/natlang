@@ -5675,3 +5675,20 @@ and was preempted once and requeued. Its steps:
 2. verify file count and sizes;
 3. wait until no process holds a file under the source, then swap in a symlink and delete the NVMe copy;
 4. append journal records with the `data_hdd:` path.
+
+**2026-11-20 22:30, filled reasoning runs inside sft-v7 (supervisor's request).**
+- `fr-slice-1` is cancelled: its separate 34 GB actor would have competed with sft-v7's collect actor for the same
+  memory window.
+- `ops/ei/after-sft-v6.sh` launches sft-v7 with `FILL=/home/werg/data/filled-reasoning-20261120`, so `cycle --fill`
+  generates on the collect actor beside best-of-k collection (cf2f6e95b).
+- The fill takes teacher episodes of the tasks the student fails first: measured 0, then unmeasured, then by rate.
+  `select` now writes `tasks.rates.json`, which generate reads with `--prefer-rates`. Those are the tasks the frontier mix
+  trains teacher trajectories on.
+- The fill reads the seed WORKs and the `grpo-sd-teacher` role's.
+- It gets a fixed share of the actor: `--fill-inflight` 16 draws, up to 32 when the engine has spare slots. Spare-slot-only
+  draws would starve beside a 128-slot collection.
+- The cycle's fill argv is parse-tested against generate's parser. The walk ran end to end in a test against a
+  scripted engine: draws, prefill scores, hint, leak gate, length band, filled history, rows.
+- Throughput and quality are read from that fill (`filled_reasoning.py status/build`).
+- The unused Qwen October trajectories (~13.7k in the current turn format) are being replay-verified under today's
+  runtime for the verified teacher pool (subagent; result in its own entry).
