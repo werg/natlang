@@ -36,6 +36,17 @@ def relative(value):
     return str(path)
 
 
+def data_root(repo, value):
+    """A registry path: ``<root>:<rel>`` under a logical machine root (common.paths), else relative to the checkout."""
+    head, sep, rest = value.partition(':')
+    if sep and head in {'data_nvme', 'data_hdd', 'archive', 'models', 'repo'}:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training/neuralese'))
+        from natlang_neuralese.common.paths import root
+        return root(head) / relative(rest) if rest else root(head)
+    return repo / relative(value)
+
+
 def save(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
@@ -158,7 +169,7 @@ def compile_declared_glob(pattern):
 
 
 def publish(repo, entry, reuse_cache=None, *, manifest_output=None):
-    root = repo / relative(entry['path'])
+    root = data_root(repo, entry['path'])
     files = []
     patterns = entry.get('include', ['**/*'])
     # Closed snapshots often list thousands of exact paths. Testing every path
@@ -199,6 +210,8 @@ def publish(repo, entry, reuse_cache=None, *, manifest_output=None):
                 path = Path(directory) / name
                 if path.is_file() and selected(str(path.relative_to(root))):
                     files.append(path)
+    if entry.get('exclude_globs'):
+        files = [p for p in files if not any(fnmatch.fnmatch(str(p.relative_to(root)), g) for g in entry['exclude_globs'])]
     files.sort()
     if not files:
         raise ValueError(f"empty corpus: {entry['id']} at {root}")
@@ -283,7 +296,7 @@ def current_receipt(repo, manifest):
     identity = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
     if receipt.get('status') != 'verified' or receipt.get('manifest_sha256') != identity:
         return False
-    root = repo / relative(manifest['path'])
+    root = data_root(repo, manifest['path'])
     for item in manifest['files']:
         p = root / relative(item['path'])
         if not p.is_file() or receipt.get('file_stats', {}).get(item['path']) != file_stat(p):
@@ -326,7 +339,7 @@ def verify_files(root, files, reject_symlinks=False):
 
 
 def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='local', receipt_key=None):
-    root = repo / relative(manifest['path'])
+    root = data_root(repo, manifest['path'])
     errors, checked, stats = verify_files(root, manifest['files'])
     receipt = {'id': manifest['id'], 'status': 'failed' if errors else 'verified', 'checked': len(checked),
                'verification_scope': verification_scope, 'verified_hostname': socket.gethostname(),
@@ -516,7 +529,7 @@ def local_references(paths, proc_root=Path('/proc')):
 def offload(repo, entry, manifest, args):
     local_owner = entry['owner'] == args.machine
     selected = select_manifest_files(manifest, args.files or [])
-    root = repo / relative(manifest['path'])
+    root = data_root(repo, manifest['path'])
     paths = [root / relative(item['path']) for item in selected['files']]
     errors, checked, stats = verify_files(root, selected['files'], reject_symlinks=True)
     if errors:
@@ -635,8 +648,9 @@ def offload(repo, entry, manifest, args):
 
 
 def sync(repo, entry, manifest, args):
-    root = repo / relative(entry['path'])
-    remote = args.remote_repo + '/' + relative(entry['path'])
+    root = data_root(repo, entry['path'])
+    remote = (str(data_root(repo, entry['path'])) if ':' in entry['path'] else
+              args.remote_repo + '/' + relative(entry['path']))
     pull = args.action == 'restore' or entry['owner'] != args.machine
     selected = getattr(args, 'files', None)
     if selected:
@@ -739,6 +753,10 @@ def main():
             continue
         if entry.get('retired') and not args.ids and args.action != 'status':
             continue
+        if entry.get('snapshots') == 'journal':   # a growing dataset: its snapshots are data-registry journal records
+            if args.action == 'status':
+                print(json.dumps({'id': entry['id'], 'status': 'journal-snapshots', **status_admission(entry)}))
+            continue
         if args.action == 'publish':
             if entry['owner'] == args.machine:
                 publish(args.repo, entry, args.reuse_cache)
@@ -764,7 +782,7 @@ def main():
             require_committed_offload_snapshot(args.repo, entry['id'])
             offload(args.repo, entry, manifest, args)
         else:
-            missing = [x['path'] for x in manifest['files'] if not (args.repo / entry['path'] / x['path']).is_file()]
+            missing = [x['path'] for x in manifest['files'] if not (data_root(args.repo, entry['path']) / x['path']).is_file()]
             print(json.dumps({'id': entry['id'], 'status': 'missing' if missing else ('verified' if current_receipt(args.repo, manifest) else 'present_unverified'),
                               'missing': len(missing), 'bytes': manifest['bytes'], **status_admission(entry)}))
 

@@ -33,12 +33,12 @@ def main():
     ap.add_argument('--seed', type=int, default=20261112)
     args = ap.parse_args()
     rows, seen = [], set()
-    for path in grpo.POOLS:
+    for path in grpo.default_pools():
         for row in read_jsonl(path):
             if row['id'] not in seen:
                 seen.add(row['id'])
                 rows.append(row)
-    excluded = set(exclusion_ids(grpo.HELD, rows))
+    excluded = set(exclusion_ids(grpo.default_held(), rows))
     for manifest in args.exclude_manifest:
         excluded |= exclusion_ids(manifest, rows)
     groups = {g for r in rows if r['id'] in excluded for g in r.get('source_groups') or ()}

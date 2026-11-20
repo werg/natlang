@@ -101,62 +101,41 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
+from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.sampling import RL_TOP_P, check_top_p, sampling_law_of  # noqa: E402
 from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS, LEGACY_SAMPLING  # noqa: E402
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
-MEMETIC_TASKS = resolve_str('data_nvme', 'memetic-tasks-20261118', 'cases.jsonl')
-POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-program-source-20261105', 'cases.jsonl'),
-         # fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json)
-         resolve_str('data_hdd', 'natlang-rl-bgkit-kr-20261103', 'natlang-rl-bgkit-kr-20261103', 'cases.jsonl'),
-         # 2026-11-17 task supply (TASK_SUPPLY_20261117.md): 447 authored tasks (21 families, 16 new) and
-         # 908 tau-bench/APIGen-MT store-service tasks; --pool with only the two pools above opts out
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261117', 'cases.jsonl'),
-         # 2026-11-18 task supply round 10 (TASK_SUPPLY_20261118.md): authored families built on the held-v3 constructs
-         # (folder reducers, decide readouts, call depth 3, iterateOn, typed Neuralese); --pool without it opts out
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118', 'cases.jsonl'),
-         # 2026-11-18 round 11 (TASK_SUPPLY_20261118.md section 6): 205 authored tasks, typed Neuralese and depth 3 pushed
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118b', 'cases.jsonl'),
-         # 2026-11-18 round 12 (TASK_SUPPLY_20261118.md section 7): 210 authored tasks, 12 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118c', 'cases.jsonl'),
-         # 2026-11-18 round 13 (TASK_SUPPLY_20261118.md section 8): 130 authored tasks, 8 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118d', 'cases.jsonl'),
-         # 2026-11-18 round 14 (TASK_SUPPLY_20261118.md section 9): 127 authored tasks, 9 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118e', 'cases.jsonl'),
-         # 2026-11-18 round 15 (TASK_SUPPLY_20261118.md section 10): 121 authored tasks, 8 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118f', 'cases.jsonl'),
-         # 2026-11-18 round 16 (TASK_SUPPLY_20261118.md section 11): 88 authored tasks, 6 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118g', 'cases.jsonl'),
-         # 2026-11-19 round 17 (TASK_SUPPLY_20261118.md section 12): 103 authored tasks, 7 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119', 'cases.jsonl'),
-         # 2026-11-19 round 18 (TASK_SUPPLY_20261118.md section 13): 130 authored tasks, 8 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119b', 'cases.jsonl'),
-         # 2026-11-19 round 19 (TASK_SUPPLY_20261118.md section 14): 105 authored tasks, 9 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119c', 'cases.jsonl'),
-         # 2026-11-19 round 20 (TASK_SUPPLY_20261118.md section 15): 114 authored tasks, 8 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119d', 'cases.jsonl'),
-         # 2026-11-20 round 21 (TASK_SUPPLY_20261118.md section 16): 74 authored tasks, 5 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261120', 'cases.jsonl'),
-         # 2026-11-20 round 22 (TASK_SUPPLY_20261118.md section 17): 43 authored tasks, 3 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261120b', 'cases.jsonl'),
-         # 2026-11-20 round 23 (TASK_SUPPLY_20261118.md section 18): 130 authored tasks, 8 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261120c', 'cases.jsonl'),
-         # 2026-11-20 fallow K3 (TASK_SUPPLY_20261118.md section 19): 736 git-history tasks, 10 families, gold from git;
-         # services read natlang-rl-git-history-assets-20261120 on NVMe
-         resolve_str('data_hdd', 'natlang-rl-git-history-20261120', 'cases.jsonl')]
-# held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
-# replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
-HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
+
+
+# The training data a run selects by default is a set of registry roles (training/neuralese_corpora.json entries'
+# `roles`, pinned with the code; `scripts/data_registry.py role NAME` lists one), not a list in this file:
+#   grpo-pool           the task pools, in role order (the first occurrence of a task id wins). A task-supply round is
+#                       admitted with `scripts/data_registry.py promote ID --role grpo-pool`.
+#   grpo-memetic-tasks  the memetic task set (--memetic-tasks)
+#   grpo-sd-teacher     sft_sources WORKs of verified teacher successes (TeacherDemos), in order
+#   held-eval           the held-out manifest: held-v3 (plans/neuralese/HELD_V3_20261113.md); its exclusion also covers
+#                       held-v2 (manifest `also_excludes`), so no v2 held task enters training either
+def default_pools():
+    return data_registry.role_paths('grpo-pool')
+
+
+def default_memetic_tasks():
+    return data_registry.role_path('grpo-memetic-tasks')
+
+
+def default_sd_teacher_sources():
+    return data_registry.role_paths('grpo-sd-teacher')
+
+
+def default_held():
+    return data_registry.role_path('held-eval')
+
+
 # Start-policy calls scored after every step (behaviour_probe.py): v1's 48 reasoning calls, and from 2026-11-19 (v2) 24
 # end-of-turn rows from the start policy's decision readouts
 BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v2.json')
-# sft_sources WORKs of verified teacher successes (TeacherDemos): teacher-gen pool-v1 and pool-v2-rich replayed under
-# the 2026-11-18 runtime first, then the 2026-11-17 SFT corpus WORK (pool-v1, replayed at aa1bd8467), then the
-# 2026-11-19 gap campaign (teacher-gen-20261119/gap-v1: task supply rounds and tasks the student rarely solves), which
-# its refresh loop re-extracts and replays as episodes arrive (a run reads the sources when it starts or resumes)
-SD_TEACHER_SOURCES = [resolve_str('data_nvme', 'sft-teacher-demos-20261118'), resolve_str('data_nvme', 'sft-sources-20261117'),
-                      resolve_str('data_nvme', 'sft-teacher-demos-20261119')]
 # Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
 ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
 
@@ -995,7 +974,62 @@ def archive_rollouts(directory, archive):
     with source.open('rb') as reader, partial.open('wb') as writer:
         zstandard.ZstdCompressor(level=6).copy_stream(reader, writer)
     os.replace(partial, target)
+    registry_files(archive, [target])
     return target.stat().st_size
+
+
+def registry_files(directory, paths):
+    """Record files a run added to one of its growing datasets (rollout archive, step chains). Bookkeeping never stops
+    training: a failure is printed as an event."""
+    try:
+        kind = 'grpo-step-chains' if Path(directory).name == 'step-chains' else 'grpo-rollouts'
+        data_registry.record_files(data_registry.dataset_id(directory, kind), paths, directory)
+    except Exception as error:
+        print(json.dumps({'event': 'data registry error', 'directory': str(directory), 'error': repr(error)[:300]}),
+              flush=True)
+
+
+def registry_run_records(args, work, rollouts_archive, collector, teacher_demos, replay_corpora, eligible):
+    """The run's registry records at every start and resume: what it reads (``consume``; data no registry entry holds
+    stops the run here, ``NATLANG_ALLOW_UNREGISTERED_DATA=1`` opts out) and the growing datasets it writes (rollout
+    archive, step chains), declared with their inputs and producer commit."""
+    run = data_registry.run_name('grpo', work)
+    reads = [('GRPO task pool', list(args.pool), eligible), ('held exclusion', [args.held_manifest, *args.exclude_manifest], None),
+             ('errata (excluded ids)', errata_files(args), None), ('selection pass rates', [args.pass_rates], None)]
+    if not args.replay and args.memetic_share > 0:
+        reads.append(('memetic tasks', [args.memetic_tasks], None))
+    if getattr(collector, 'variants', None) and args.neuralese_variants:
+        reads.append(('Neuralese task variants', [args.neuralese_variants], len(collector.variants)))
+    if args.hindsight_trajectories and args.teacher_attempts > 0:
+        reads.append(('hindsight trajectories', [args.hindsight_trajectories], None))
+    if teacher_demos is not None:
+        reads.append(('teacher demonstrations (self-distillation)', list(args.sd_teacher_source or default_sd_teacher_sources()), None))
+    for corpus in replay_corpora:
+        reads.append((f'replay corpus {corpus.name}', [corpus.path], len(corpus.keys)))
+    if args.replay:
+        reads.append(('learner replay of archived groups', [args.replay], None))
+    if args.behaviour_probe:
+        reads.append(('behaviour probe', [args.behaviour_probe], None))
+    if args.probe_turns:
+        reads.append(('probe turns', [args.probe_turns], None))
+    inputs = []
+    for how, items, amount in reads:
+        refs = data_registry.consume([i for i in items if i], run=run, how=how, amount=amount)
+        if how in ('GRPO task pool', 'teacher demonstrations (self-distillation)', 'Neuralese task variants', 'memetic tasks') \
+                or how.startswith('replay corpus'):
+            inputs += [r for r in refs if r.get('id')]
+    try:
+        for kind, directory, fmt in (('grpo-rollouts', rollouts_archive, 'gNNNNNN.rollouts.jsonl.zst: every episode the learner '
+                                      'lowered (turns with sampling captures), one file per group'),
+                                     ('grpo-step-chains', work / 'step-chains', 'step-NNNNN.pkl.zst: the exact learner batch of a '
+                                      'step (chains, advantages, token scales); only the newest --save-step-chains stay')):
+            if directory is None or (kind == 'grpo-step-chains' and not args.save_step_chains):
+                continue
+            data_registry.declare_dataset(data_registry.dataset_id(directory, kind), directory, kind='rollouts' if kind == 'grpo-rollouts'
+                                          else 'step-chains', format=fmt, inputs=inputs, license='project-generated (own LFM3 policy samples)',
+                                          note=f'written by {run}')
+    except Exception as error:
+        print(json.dumps({'event': 'data registry error', 'error': repr(error)[:300]}), flush=True)
 
 
 RETIRED = 'retired'   # a group that never trains again: lowered for the learner, or left out by a resume
@@ -3329,6 +3363,7 @@ def save_step_chains(directory, step, chains, scales, keep):
     partial = path.with_suffix('.part')
     partial.write_bytes(data)
     os.replace(partial, path)
+    registry_files(directory, [path])
     for old in sorted(directory.glob('step-*.pkl.zst'))[:-keep] if keep > 0 else ():
         old.unlink()
     return round(len(data) / 2**20, 1)
@@ -3775,7 +3810,7 @@ def train(args):
     sd_teacher_on = args.sd_teacher_weight > 0 and args.sd_teacher_episodes > 0
     reasoning_rl_on = args.reasoning_rl_weight > 0 and args.reasoning_rl_groups > 0 and not args.replay
     if not args.replay and (sd_teacher_on or (reasoning_rl_on and 'demos' in args.reasoning_rl_sources.split(','))):
-        teacher_demos = TeacherDemos(args.sd_teacher_source or SD_TEACHER_SOURCES, collector.by_id, args.held_manifest,
+        teacher_demos = TeacherDemos(args.sd_teacher_source or default_sd_teacher_sources(), collector.by_id, args.held_manifest,
                                      renderer_tokenizer(args.actor_export, work / 'sd-teacher-tokenizer'),
                                      args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r),
                                      uses_path=work / 'teacher-demo-uses.json', take_seed=f'{args.seed}:{first_group}')
@@ -3913,6 +3948,7 @@ def train(args):
     # every trained episode is kept (compressed) beside the checkpoints: the w5 lesson (AGENTS.md: pruned bundles lost 85
     # successful episodes); '-' keeps none
     rollouts_archive = None if args.rollouts_dir == '-' else Path(args.rollouts_dir or checkpoint_root.parent / 'rollouts')
+    registry_run_records(args, work, rollouts_archive, collector, teacher_demos, replay_corpora, len(tasks))
     checkpoints = sorted(checkpoint_root.glob('step-*'))
     held_steps = set(json.loads((work / 'held-steps.json').read_text())) if (work / 'held-steps.json').exists() else set()
     stop = threading.Event()
@@ -5063,8 +5099,8 @@ def main():
     t.add_argument('--actor-store', help="the actor's native block store (--store-dir; default WORK/actor): consumer calls "
                    'read their imported Neuralese state from it')
     t.add_argument('--actor-export', help="the actor's HF export dir (layout and frozen tables; default WORK/actor/sglang-hf)")
-    t.add_argument('--pool', action='append', help='task pool cases.jsonl (repeatable; default: POOLS)')
-    t.add_argument('--held-manifest', default=HELD)
+    t.add_argument('--pool', action='append', help='task pool cases.jsonl (repeatable; default: the registry role grpo-pool)')
+    t.add_argument('--held-manifest', help='held-out manifest (default: the registry role held-eval, held-v3)')
     t.add_argument('--exclude-manifest', action='append', default=[], help='more held manifests to exclude')
     t.add_argument('--task-ids', help='JSON list: train only on these pool ids (smoke)')
     t.add_argument('--group', type=int, default=8)
@@ -5180,7 +5216,7 @@ def main():
                    help='distinct verified teacher episodes kept per task (teacher models taking turns)')
     t.add_argument('--sd-teacher-source', action='append', default=None,
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
-                        'default SD_TEACHER_SOURCES)')
+                        'default: the registry role grpo-sd-teacher)')
     t.add_argument('--reasoning-rl-weight', type=float, default=1.0,
                    help='reasoning RL against fixed teacher actions (ReasoningRL): a search along teacher trajectory '
                         'segments samples the student\'s own think blocks, rewarded by the teacher actions\' mean token '
@@ -5273,7 +5309,7 @@ def main():
                         'is the chains of one task key, consumers with their pass-through producer documents); '
                         'repeatable; held tasks are dropped; think=train keeps a target\'s leading empty think block as '
                         'loss (default context: weight 0, ReplayCorpus)')
-    t.add_argument('--memetic-tasks', default=MEMETIC_TASKS,
+    t.add_argument('--memetic-tasks',
                    help='memetic "improve program P" rows (python -m natlang_neuralese.rl.memetic_tasks build: '
                         'DIR/cases.jsonl; default: every program, support 4); RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md '
                         'section 3')
@@ -5456,7 +5492,9 @@ def main():
         args.top_p = check_top_p(args.top_p)
         from natlang_neuralese.common.cuda_context import ensure_context
         ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
-        args.pool = args.pool or POOLS
+        args.pool = args.pool or default_pools()
+        args.held_manifest = args.held_manifest or default_held()
+        args.memetic_tasks = args.memetic_tasks or default_memetic_tasks()
         # a split group (dynamic sampling) holds as few as 2 slots: room for slots / 2 groups in flight
         args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // (
             2 if args.dynamic_sampling_max_spread > 0 else args.group))

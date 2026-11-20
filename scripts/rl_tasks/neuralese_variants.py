@@ -212,10 +212,11 @@ def task_helper_problems(row, spec):
 def build(a):
     import grpo
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
-    pools = a.pool or grpo.POOLS
+    pools = a.pool or grpo.default_pools()
     tasks, excluded = grpo.load_tasks(SimpleNamespace(
         pool=pools, held_manifest=a.held_manifest, exclude_manifest=[], task_ids=None,
         exclude_family_regex=r'^ext_codebase-(py|natlang)_codebase_', seed=a.seed, pass_rates=None, pass_band=None,
+        exclude_ids=None,   # grpo.errata_files: the default errata, as a run excludes them
         pass_min_scored=None, explore=None, max_model_requests=None, case_seconds=None))
     from natlang_neuralese.common.jsonio import read_jsonl
     every = [r for p in pools for r in read_jsonl(p)]
@@ -291,6 +292,11 @@ def build(a):
         'task_helpers': a.task_helpers and {'path': a.task_helpers, 'sha256': sha256_file_hex_cached(Path(a.task_helpers)),
                                             'rows': len(authored_rows), 'rejected': rejected}}
     (out / 'selection.json').write_text(json.dumps(selection, indent=1) + '\n')
+    from natlang_neuralese.common import data_registry
+    data_registry.record_dataset(data_registry.dataset_id(out, 'neuralese-variants'), out, kind='rl-tasks',
+                                 format='Neuralese-declaring variants of pool tasks: cases.jsonl (grpo --neuralese-variants), '
+                                        'selection.json', inputs=[*pools, a.held_manifest, a.pass_rates],
+                                 license='derived from the grpo task pools (each keeps its license provenance)')
     print(json.dumps({k: selection[k] for k in ('rows', 'measured_in_band_rows', 'skipped')}))
 
 
@@ -299,7 +305,7 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
-    b.add_argument('--pool', action='append', help='pool cases.jsonl (default: grpo.POOLS)')
+    b.add_argument('--pool', action='append', help='pool cases.jsonl (default: the registry role grpo-pool)')
     b.add_argument('--held-manifest', default=None)
     b.add_argument('--pass-rates', default=None)
     b.add_argument('--family-band', type=float, nargs=2, default=(0.1, 0.9))
@@ -308,8 +314,8 @@ def main():
     b.add_argument('--seed', type=int, default=20261113)
     a = parser.parse_args()
     import grpo
-    a.held_manifest = a.held_manifest or grpo.HELD
-    a.pass_rates = a.pass_rates or str(Path(grpo.HELD).parent.parent / 'exp1-rft' / 'base-pass-rates.json')
+    a.held_manifest = a.held_manifest or grpo.default_held()
+    a.pass_rates = a.pass_rates or str(Path(a.held_manifest).parent.parent / 'exp1-rft' / 'base-pass-rates.json')
     build(a)
 
 

@@ -86,6 +86,12 @@ def admit(batch, qualified, novelty, drop, supersede, reviewer, note, pool, dry_
                  'superseded_case_ids': sorted(supersede), 'pool_sha256': sha256(cases_path)}
         with open(pool / 'admissions.jsonl', 'a') as log:
             log.write(json.dumps(entry) + '\n')
+        from natlang_neuralese.common import data_registry
+        data_registry.record_dataset(
+            data_registry.dataset_id(pool, 'rl-tasks'), pool, kind='rl-tasks', include=['cases.jsonl', 'admissions.jsonl'],
+            format='natlang.program/2 task JSONL (cases.jsonl, every admitted authored task) + admissions.jsonl',
+            inputs=[str(qdir / 'verified' / 'cases.jsonl')], closed=False, note=f'after admitting {batch}',
+            license='project-authored: tasks written by Claude subagents under the natlang authoring briefs')
     summary['pool_sha256'] = entry['pool_sha256']
     return summary
 

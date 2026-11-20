@@ -7,6 +7,16 @@ for a follow-up project: a centralized registry that producers write automatical
 catalog is built as providers (`code_constants`, `grpo_runs`, `teacher_campaigns`, `registry`, hand layer) so it can switch
 to that registry and drop the hand layer.
 
+## Status (2026-11-20 evening): the registry is built
+
+`natlang_neuralese/common/data_registry.py` (CLI `scripts/data_registry.py`; DECISIONS 2026-11-20 18:30). Resolved:
+1-8, 12 (licenses recorded per entry; memetic rows inherit their pools'), 13 (rollout archives are datasets, each group
+file recorded), 14 (`scripts/data_registry.py protected`), 15 (each refresh is a snapshot; every run records the sha it
+read), 17-20 as discoverability (every remaining directory is an archive inventory with sizes; supersession recorded
+where known; orphans visible through empty consumers), 23 (consumers are a lookup: `data_registry.py consumers ID`).
+Partly: 9 (paths are root-qualified in the registry; plans still say `ops/`), 10 (build_supply.py moved into git; the
+other round scripts not), 16 (step chains recorded, kept 4 deep). Open: 11, 21, 22.
+
 ## Datasets no registry knows about (live training inputs)
 
 1. **The two largest GRPO task pools are unregistered.** `/mnt/external/natlang-rl-composed-20261103/memetic-program-source-20261105/cases.jsonl`

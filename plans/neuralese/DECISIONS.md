@@ -4979,6 +4979,73 @@ vocabulary embeddings.
 - No held measurement of prefix-robust training (first principles: a cheap regularizer toward the condition serving
   actually has; the next program fit's development outcomes show any regression).
 
+## 2026-11-20 18:30, training-data registry: producers record what they write, runs what they read; pools are registry roles (data-registry strand; default)
+
+Owner (2026-11-20): discoverability problems found by the ops catalog become "a system where we don't have to keep track
+of things by hand and it's centralized and we don't lose track of training data and tasks". The 23 findings are in
+`plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md` (130 datasets, 42 unregistered; pools only in `grpo.py POOLS`).
+
+**Design: the corpus registry, extended, in two layers with one id namespace** (`natlang_neuralese/common/data_registry.py`,
+CLI `scripts/data_registry.py`).
+- *Git layer* = `training/neuralese_corpora.json` + immutable `training/corpus-manifests/` (unchanged schema; new optional
+  fields `kind, format, rows, license, producer, inputs, protected, roles, snapshots`). It is pinned with the code, so
+  what a pinned run *selects* comes from here: `roles` replace the hand lists (`grpo-pool` with an order, `grpo-memetic-tasks`,
+  `grpo-sd-teacher`, `held-eval`). Paths may now be root-qualified (`data_hdd:...`, `data_nvme:...`, resolved by
+  `common.paths`), so no `runs/` symlink is needed; `sync_training_corpora.py` resolves them and skips `snapshots: journal`
+  entries (growing sources).
+- *Journal layer* = append-only `<data_nvme>/data-registry/journal.jsonl` (+ content-addressed manifests, a stat-keyed
+  digest cache), machine-wide and checkout-independent. Why not git for everything: pins may not commit, rollout
+  archives and step chains add a file per group/step (a hot path), teacher campaigns and SFT WORKs grow in place (an
+  immutable git manifest per id cannot follow them), and `register_corpora` runs check-main per commit. Producers append
+  `dataset` snapshots (manifest sha, files, rows, format, producer script/argv/commit/dirty, inputs with their shas,
+  license, protected, supersedes) and `files` records; consumers append `consume` records (run, dataset, sha of what was
+  read, how, amount). `promote ID [--role R]` folds a closed journal snapshot into the git layer through
+  `register_corpora` (unattended commit).
+- *The check*: `consume()` and `require_registered()` refuse a path no dataset holds, and a path only an archive
+  *inventory* holds, with `NATLANG_ALLOW_UNREGISTERED_DATA=1` as the opt-out (recorded in the consume record). Static
+  ratchet in check-main --quick (`tests/test_data_registry_ratchet.py`): registry well-formed, roles complete and
+  ordered (kind and license required), held role protected, every listed producer calls `record_*`, every consumer
+  calls `consume`, trainers name no dataset paths. `scripts/data_registry.py check` scans the data roots.
+
+**Migrated (default on).**
+- grpo.py: `POOLS/MEMETIC_TASKS/SD_TEACHER_SOURCES/HELD` removed; `default_pools()` etc. resolve the roles (verified
+  equal, element for element and in order, to the removed lists: 18 pools incl. git-history). At every start/resume it
+  consumes pools, held/exclude manifests, errata, pass rates, memetic tasks, variants, hindsight, SD sources, replay
+  corpora, probes; declares its rollout archive and step chains and records each archived group and saved step.
+- teacher_gen (consumes its pool.json pools and selection inputs; the campaign is a growing dataset, each scored task
+  adds its episode files), sft_sources (extract/replay snapshot the WORK, build/neuralese-text/-graph check inputs and
+  record the built set with inputs), exp0_sft train (consumes --chains/--val-chains), held_eval (each finished result is
+  a protected `held-eval` dataset), memetic_tasks build, hindsight index, operator_rows build/merge, admit_authored,
+  assemble.py (+ its held splits, protected), assemble_selection_pool, neuralese_variants build. Callers of the removed
+  constants (program_tune, simulate_selection, exp1_measure_cases, neuralese_variants, memetic_tasks, teacher_gen,
+  hindsight, sft_sources held default) use the roles.
+- Task supply: `natlang-rl-authoring/round10/build_supply.py` (the one pool producer outside git, finding 10) moved to
+  `scripts/rl_tasks/build_supply.py` and records its source; the old path is a shim; `round18/final_checks.sh` and two
+  round9 helpers use `grpo.default_pools()`. A round is admitted with `scripts/data_registry.py promote ID --role grpo-pool`.
+- Ops page catalog: reads the merged registry (cards for every registered dataset with a kind; provenance = producer,
+  commit, inputs, license, manifest sha; consumers = consume records plus derived datasets). `catalog_sources.json`
+  (the hand layer) deleted. The UI text change in `app/ui/data.mjs` needs the next page publish.
+- Fixed on the way: `neuralese_variants.py build` crashed (`grpo.errata_files` needs `exclude_ids`).
+
+**Backfill.** Git layer: roles on the 16 registered pools, new entries `memetic-program-source-20261105`,
+`natlang-rl-bgkit-kr-20261103` (the two largest pools, finding 1), `memetic-tasks-20261118`, the three SD sources,
+`held-v3`, `held-v2` (protected). Journal: every other dataset of the catalog with full digests (task sources, teacher
+campaigns, SFT WORKs and sets, operator rows/chains, live corpus, hindsight, errata, edits, pass rates, probes, rollout
+archives, step chains, held evals, external sources, compaction/broad-graph corpora, full67), and every other directory
+of /mnt/external, /home/werg/data and ops/ as an archive inventory (per-directory counts and bytes). Run by
+`journal_backfill.py` (ledger, low priority).
+
+**Enters grpo-v5-run1 at its next resume on a new pin** (same pools as main's POOLS had; the run reads them through
+the registry and records its reads). Its inputs are all registered (the readers-copy of
+`sft-neuralese-graph-20261117-v1` that its `--replay-corpus` names is its own entry).
+
+**Not built / left:** exclusions and corrections as one registry layer read by every builder (findings 21, 22: the ops
+page's `data-edits` layer is registered, `sft_sources build` still reads no row exclusions); per-step learner exposure
+(finding 16: step chains are recorded, but kept 4 deep); the round tooling besides build_supply still lives in
+natlang-rl-authoring (held_verify.sh, custody_check.py; finding 11's union_groups_fast.py import); sft_sources'
+default `--teacher-pool` and the exp1-rft pass-rates default are still paths (registered datasets, not roles); Pop
+writes its own journal (held evals there are recorded on Pop, not merged into the DGX view).
+
 ## 2026-11-20 16:30, reasoning RL without the future agreement bias: token-level forward KL from the privileged twin (default; paper review, part a)
 
 **What the paper shows** (Strauss, Fowl & Razin, "Which Tokens, in What Order, and How Fast?", arXiv 2611.23397, read

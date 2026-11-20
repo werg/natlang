@@ -195,14 +195,14 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     index = sub.add_parser('index', help='per-task shortest verified run as a TrajectoryCall (JSONL)')
     index.add_argument('--episodes', action='append', required=True, help='sft_sources episodes*.jsonl.zst (repeatable)')
-    index.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: grpo.HELD)')
+    index.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: the registry role held-eval)')
     index.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     from .held_eval import exclusion_ids
     manifest = args.held_manifest
     if manifest is None:
-        from ..common.paths import resolve_str
-        manifest = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
+        from ..common.data_registry import role_path
+        manifest = role_path('held-eval')
     # two streaming passes: the held closure needs only each task's id and split group
     cases, count = {}, 0
     for episode in _episodes(args.episodes):
@@ -220,6 +220,11 @@ def main(argv=None):
         for task_id in sorted(records):
             handle.write(json.dumps(records[task_id], ensure_ascii=False) + '\n')
     partial.replace(out)
+    from ..common import data_registry
+    data_registry.record_dataset(data_registry.dataset_id(out.parent, 'hindsight-index') if out.parent.name.startswith(
+        'hindsight-index') else data_registry.path_id('hindsight-index', out), out, kind='index',
+        format='natlang.hindsight-trajectory/1 JSONL: per task the shortest verified run as a TrajectoryCall',
+        inputs=[*args.episodes, manifest], license='derived from the episodes it indexes')
     sources = {}
     for record in records.values():
         sources[record['source']] = sources.get(record['source'], 0) + 1

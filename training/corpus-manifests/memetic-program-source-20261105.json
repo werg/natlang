@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "memetic-program-source-20261105",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-rl-composed-20261103/memetic-program-source-20261105",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 341446694,
+      "sha256": "b3fef4c7dcd36e0bedbd03c67353634b5d7323ad0468ac1d0f73533f2e5de966",
+      "lines": 28733
+    }
+  ],
+  "bytes": 341446694
+}

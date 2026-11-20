@@ -213,7 +213,7 @@ function catalog(ctx, params) {
   const groupNav = h('div', { class: 'facet' });
   side.append(filterBox, h('label', { class: 'small row', style: 'margin-top:8px' }, h('input', { type: 'checkbox', checked: !!st.used, onchange: e => { st.used = e.target.checked ? '1' : ''; history.replaceState(null, '', link.home() + qs(st)); paint(); } }), 'Only data a run used'),
     h('h4', {}, 'Kind'), kindNav, h('h4', {}, 'Jump to'), groupNav,
-    h('p', { class: 'small muted', style: 'margin-top:12px' }, 'Found through the trainer\'s constants, run directories, the corpus registry and a hand list (', mono('catalog_sources.json'), '). Keys: ', h('kbd', {}, '/'), ' search, ', h('kbd', {}, 'j'), h('kbd', {}, 'k'), ' move, ', h('kbd', {}, 'Enter'), ' open.'));
+    h('p', { class: 'small muted', style: 'margin-top:12px' }, 'Found through the data registry (producers record what they write, runs what they read; ', mono('scripts/data_registry.py'), ') and the run directories. Keys: ', h('kbd', {}, '/'), ' search, ', h('kbd', {}, 'j'), h('kbd', {}, 'k'), ' move, ', h('kbd', {}, 'Enter'), ' open.'));
   v.append(h('div', { class: 'catgrid' }, side, main));
   paint();
   return v;

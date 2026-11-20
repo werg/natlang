@@ -768,6 +768,14 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step, train
 
 def train(args):
     run_started = time.time()
+    # what the run trains on, recorded in the data registry before it is read (data no entry holds stops it here;
+    # NATLANG_ALLOW_UNREGISTERED_DATA=1 opts out)
+    from natlang_neuralese.common import data_registry
+    data_registry.consume([args.chains or args.turns], run=data_registry.run_name('sft', args.out_dir),
+                          how='SFT training chains' if args.chains else 'SFT training turns')
+    if args.val_chains:
+        data_registry.consume(args.val_chains, run=data_registry.run_name('sft', args.out_dir),
+                              how='SFT validation chains')
     if not 0. < args.ambient_p_clean <= 1. or args.ambient_temperature <= 0.:
         raise SystemExit('--ambient-p-clean must be in (0, 1] and --ambient-temperature > 0')
     episodes = [] if args.chains else pickle.load(open(args.turns, 'rb'))['episodes']

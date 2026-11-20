@@ -287,6 +287,12 @@ def assemble(inputs, out, *, share, domains, family_share=0.05, min_effect_share
                'scope': 'verified train rows kept byte-identical except curriculum.rl.family for merged dataset '
                         'wrapper families (original in curriculum.rl.source_family); no oracle, split or program change'}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
+    from natlang_neuralese.common import data_registry
+    data_registry.record_dataset(data_registry.dataset_id(out, 'rl-tasks'), out, kind='rl-tasks',
+                                 include=['cases.jsonl', 'repetition.json', 'receipt.json'],
+                                 format='natlang.rl-selection-pool/1: cases.jsonl + receipt.json',
+                                 inputs=[i['path'] for i in receipt.get('inputs') or [] if isinstance(i, dict) and i.get('path')],
+                                 license='derived: each input pool keeps its license provenance')
     print(json.dumps({'cases': str(cases), 'rows': len(ordered), 'classes': receipt['generator_classes']}))
     return receipt
 

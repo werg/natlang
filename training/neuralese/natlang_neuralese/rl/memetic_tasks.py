@@ -260,8 +260,8 @@ def main(argv=None):
     m.add_argument('--out', required=True, help='cases.jsonl to write')
     m.add_argument('--programs', type=int, help='at most this many programs (one family at a time)')
     for p in (b, m):
-        p.add_argument('--pool', action='append', help='task pool cases.jsonl (default: grpo.POOLS)')
-        p.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: grpo.HELD)')
+        p.add_argument('--pool', action='append', help='task pool cases.jsonl (default: the registry role grpo-pool)')
+        p.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: the registry role held-eval)')
         p.add_argument('--pass-rates', action='append',
                        help='base pass rates {task_id: {successes, scored}}, repeatable and summed (build: none, every '
                             'program enters; measure: exp1-rft)')
@@ -273,8 +273,8 @@ def main(argv=None):
     from ..common.jsonio import read_jsonl
     from ..common.paths import resolve_str
     from .held_eval import exclusion_ids
-    cases = [row for pool in (args.pool or grpo.POOLS) for row in read_jsonl(pool)]
-    excluded = set(exclusion_ids(args.held_manifest or grpo.HELD, cases))
+    cases = [row for pool in (args.pool or grpo.default_pools()) for row in read_jsonl(pool)]
+    excluded = set(exclusion_ids(args.held_manifest or grpo.default_held(), cases))
     protected = ProtectedWorlds.load()
     for case in cases:
         try:
@@ -297,6 +297,13 @@ def main(argv=None):
             raise SystemExit(f'--set {name}: not a setting ({", ".join(DEFAULTS)})')
         settings[name] = json.loads(value)
     build(cases, args.out, settings=settings, excluded=frozenset(excluded), pass_rates=rates)
+    from ..common import data_registry
+    data_registry.record_dataset(
+        data_registry.dataset_id(args.out, 'memetic-tasks'), args.out, kind='rl-tasks',
+        include=['cases.jsonl', 'build.json', 'specs/*.json'],
+        format='memetic "improve program P" rows (natlang.memetic-tasks/1): cases.jsonl + build.json + specs/',
+        inputs=[*(args.pool or grpo.default_pools()), args.held_manifest or grpo.default_held(), *paths],
+        license='derived from the grpo task pools (each keeps its license provenance)')
 
 
 if __name__ == '__main__':

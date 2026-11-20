@@ -439,3 +439,11 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
   - Episode length against the 40-call budget. A line-origin search reads up to one patch per commit that touched the
     file.
   - No blind solve: the gold is computed, not authored.
+
+## Admission from 2026-11-20 on: registry roles, not POOLS
+
+`grpo.py POOLS` is gone: the trainers' pools are the git registry's `grpo-pool` role (DECISIONS 2026-11-20 18:30).
+`round18/final.sh` still works: `round10/build_supply.py` is a shim for `scripts/rl_tasks/build_supply.py`, which also
+records the new source in the data registry (journal). After the final checks pass, admit it with
+`scripts/data_registry.py promote natlang-rl-task-supply-<tag> --role grpo-pool` (an unattended registry commit with
+check-main --quick; the next pin trains it). `grpo.default_pools()` replaces `grpo.POOLS` in helper scripts.

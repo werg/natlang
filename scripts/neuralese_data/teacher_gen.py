@@ -44,6 +44,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
+from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 BASE_RATES = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft', 'base-pass-rates.json')
@@ -392,6 +393,7 @@ class Generator:
             teacher.failures = 0
             with self.manifest.open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
+            record_episode_files(self.work, directory)
             self.done.add(index)
             self._release(index, 'done', teacher)
         print(json.dumps({'event': 'task scored', **{k: record[k] for k in ('index', 'task_id', 'seconds', 'episodes')}}),
@@ -441,12 +443,49 @@ def validate_pool_resume(work, args):
         raise ValueError('requested held exclusion manifest differs from this campaign; use a new --work')
 
 
+def campaign_id(work):
+    return data_registry.dataset_id(work, 'teacher-gen')
+
+
+def record_campaign(work, args, teachers):
+    """Registry records at every launch: the task sources the campaign selected from (WORK/pool.json, the held closure,
+    rates, coverage) as a consumption, and the campaign itself as a growing dataset (each scored task adds its episode
+    files: ``record_episode_files``). Data no registry entry holds stops the launch."""
+    pool = json.loads((work / 'pool.json').read_text()) if (work / 'pool.json').exists() else {}
+    run = data_registry.run_name('teacher-gen', work)
+    data_registry.consume([p['path'] for p in pool.get('pools') or []], run=run, how='teacher task pool',
+                          amount=pool.get('eligible'))
+    data_registry.consume([x for x in [pool.get('held_manifest'), args.base_rates, *args.covered_by, *args.priority_pool,
+                                       *[e['path'] for e in pool.get('excluded_errata') or []]] if x],
+                          run=run, how='teacher task selection (held closure, rates, coverage, errata)')
+    try:
+        data_registry.declare_dataset(
+            campaign_id(work), work, kind='teacher-demos',
+            format='teacher-gen campaign: manifest.jsonl (one scored task: teacher, episodes, outcomes), '
+                   'episodes/tNNNNNN/{cases,rollouts}.jsonl, pool.json, inputs.json, launches.jsonl',
+            inputs=[p['path'] for p in pool.get('pools') or []],
+            license='teacher outputs of ' + ', '.join(sorted({f"{t.model_id} ({t.provider or t.endpoint})" for t in teachers}))
+                    + '; tasks keep their pools\' licenses')
+        data_registry.record_files(campaign_id(work), [p for p in (work / name for name in (
+            'pool.json', 'inputs.json', 'tasks.jsonl')) if p.exists()], work)
+    except Exception as error:
+        print(json.dumps({'event': 'data registry error', 'error': repr(error)[:300]}), flush=True)
+
+
+def record_episode_files(work, directory):
+    try:
+        data_registry.record_files(campaign_id(work), [p for p in (directory / n for n in (
+            'cases.jsonl', 'rollouts.jsonl', 'score.json')) if p.exists()], work)
+    except Exception as error:
+        print(json.dumps({'event': 'data registry error', 'error': repr(error)[:300]}), flush=True)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--work', required=True)
     p.add_argument('--pool', action='append', default=[],
                    help='explicit canonical ProgramRecord JSONL pool; repeatable, replaces the default GRPO pools')
-    p.add_argument('--held-manifest', help='held exclusion manifest (default grpo.HELD, including predecessor closure)')
+    p.add_argument('--held-manifest', help='held exclusion manifest (default: the registry role held-eval, including predecessor closure)')
     p.add_argument('--root-mode', choices=('student', 'authored'), default='student',
                    help='student executes the real program entry; authored requires its actual reference root eval')
     p.add_argument('--teacher', action='append', default=[], type=json.loads, metavar='JSON',
@@ -499,7 +538,7 @@ def main():
     from natlang_neuralese.common.code_provenance import code_provenance
     if not (work / 'tasks.jsonl').exists():
         import grpo
-        pool_args = SimpleNamespace(pool=args.pool or grpo.POOLS, held_manifest=args.held_manifest or grpo.HELD,
+        pool_args = SimpleNamespace(pool=args.pool or grpo.default_pools(), held_manifest=args.held_manifest or grpo.default_held(),
                                     exclude_manifest=[], task_ids=None,
                                     exclude_family_regex=args.exclude_family_regex, exclude_ids=[],
                                     no_default_errata=False, seed=args.seed, pass_rates=args.base_rates,
@@ -553,6 +592,7 @@ def main():
                                  'code': code_provenance(),
                                  'root_mode': args.root_mode,
                                  'teachers': [{k: v for k, v in vars(t).items() if k not in ('cool_until', 'failures')} for t in teachers]}) + '\n')
+    record_campaign(work, args, teachers)
     generator = Generator(args, teachers)
 
     def stop(signum, frame):

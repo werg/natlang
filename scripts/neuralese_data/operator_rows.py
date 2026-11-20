@@ -387,6 +387,11 @@ def build(args):
                                   sorted({key.split('/')[0] for key in summary['sources']})}
     builder.sites.close()
     (out / 'manifest.json').write_text(json.dumps(summary, indent=1, sort_keys=True) + '\n')
+    from natlang_neuralese.common import data_registry
+    data_registry.record_dataset(data_registry.dataset_id(out, 'operator-rows'), out, kind='sft-rows',
+                                 format='natlang.operator-rows/2: <operator>/<source>.{train,test,test-textcut}.pkl + manifest.json',
+                                 inputs=[*(str(p) for p in case_files(args.cases, operators)), *map(str, args.held)],
+                                 license='derived: operator cases of the compaction sources (each keeps its license)')
 
 
 def merge(args):
@@ -422,6 +427,11 @@ def merge(args):
                           'tokens': int(sum(len(c['ids']) + sum(len(d['ids']) for d in c['sources'].values()) for c in chains)),
                           'loss_tokens': int(sum(length for c in chains for _, length, _ in c['segs']))}
     (out / 'merge.json').write_text(json.dumps(summary, indent=1) + '\n')
+    from natlang_neuralese.common import data_registry
+    data_registry.record_dataset(data_registry.dataset_id(out, 'operator-chains'), out, kind='chains',
+                                 include=['chains.pkl', 'val.pkl', 'merge.json'],
+                                 format='natlang.operator-rows/2 merged chains (exp0_sft --chains / grpo --replay-corpus)',
+                                 inputs=[str(rows)], license='derived from the operator rows')
     print(json.dumps({k: v for k, v in summary.items() if k != 'sources'}))
 
 

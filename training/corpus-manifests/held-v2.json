@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "held-v2",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 2972113,
+      "sha256": "cd9adc05e8b4b36895d9c6b2c339cfa0a00130da5beb5558d24a81577c68f943",
+      "lines": 256
+    },
+    {
+      "path": "engine.json",
+      "bytes": 1137,
+      "sha256": "5f2fb79abfc462adb163ce37ba53c84e41d7873fa23080655119ed6e846ef918"
+    },
+    {
+      "path": "exclusion-ids.json",
+      "bytes": 118006,
+      "sha256": "220d47d61cfd4a0f575fbea66c31b37b908eda831a0b132f6fbeed78e74fd130"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 101707,
+      "sha256": "dfe0a9158e2cc4232ab9ad48cfbdb07b7e7e8cbc69625ffe95a83cff9fb670e6"
+    }
+  ],
+  "bytes": 3192963
+}

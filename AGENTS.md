@@ -87,11 +87,12 @@ with the owner only what is truly theirs. Waiting for an OK on a technical cours
 
 ## Held-out evaluation
 
-- **The held set is held-v3:** `ops/held-v3/manifest.json` under `/home/werg/data/lfm3-rl-dgx-20261029/` (sha
-  45471060, 256 tasks; `plans/neuralese/HELD_V3_20261113.md`), the default `grpo.HELD`. It is held-v2 with 14 bad or
-  leaking tasks replaced and the same `engine.json`. Never train on held ids or their source-group siblings. Training
-  excludes them through `held_eval.exclusion_ids()`, which also covers held-v2 (`also_excludes`). Before relying on
-  the set for a new data source, run `held_eval verify` against `ops/held-v3/exposure/collect_exposure.py`.
+- **The held set is held-v3:** `ops/held-v3/manifest.json` under `/home/werg/data/lfm3-rl-dgx-20261029/` (sha 45471060,
+  256 tasks; `plans/neuralese/HELD_V3_20261113.md`), the registry role `held-eval` (`grpo.default_held()`). It is
+  held-v2 with 14 bad or leaking tasks replaced and the same `engine.json`. Never train on held ids or their
+  source-group siblings. Training excludes them through `held_eval.exclusion_ids()`, which also covers held-v2
+  (`also_excludes`). Before relying on the set for a new data source, run `held_eval verify` against
+  `ops/held-v3/exposure/collect_exposure.py`.
 - **Tooling** (`rl/held_eval.py`): `measure` (resumable, sample-major episodes against `--endpoint` or
   `--checkpoint`), `serve` (the pinned engine as a ledger unit) and `compare A/result.json B/result.json`. The primary
   statistic is the mean per-task pass-rate change with a within-task permutation p and a task-bootstrap CI, timeouts
@@ -215,11 +216,11 @@ is the plan this approach came from.
 ("Moved from AGENTS.md 2026-11-15"). Defaults as of 2026-11-15:
 
 - **Shape.** One ledger unit holds the learner and its child SGLang actor (held engine pin, FP8 KV). `--slots` (96)
-  work-stealing episodes run continuously over shuffled task groups (`--group 8`) from `POOLS`, excluding held-v3/v2
-  tasks and siblings, `ops/pool-errata` rows and `ext_codebase-*` families (`WORK/pool.json` records the pools). Each
-  step trains on the groups finished since the last one (`--min-groups 24` to `--max-groups 48`, `--max-staleness 2`).
-  A share of 1 - `--explore` (0.4) comes from tasks with pass rate in `--pass-band 0.1 0.9`, which a task's latest
-  scored group updates. The rest are unmeasured tasks.
+  work-stealing episodes run continuously over shuffled task groups (`--group 8`) from the registry role `grpo-pool`,
+  excluding held-v3/v2 tasks and siblings, `ops/pool-errata` rows and `ext_codebase-*` families (`WORK/pool.json`
+  records the pools). Each step trains on the groups finished since the last one (`--min-groups 24` to `--max-groups
+  48`, `--max-staleness 2`). A share of 1 - `--explore` (0.4) comes from tasks with pass rate in `--pass-band 0.1 0.9`,
+  which a task's latest scored group updates. The rest are unmeasured tasks.
 - **Episodes and reward.** 40 model calls per episode (a budget stop scores 0); the 3600 s wall clock is an unscored
   safety net; a signal-killed episode abandons its group. `--reward graded` (file partial credit) or `binary`; selection
   pass rates and held eval stay binary. Sampling is temperature 1, top-p 0.95 everywhere (`common/sampling.py`).
@@ -304,10 +305,13 @@ is the plan this approach came from.
   Git history is the archive. Keep source/training data, protected held data and live recovery dependencies. Run the
   targeted tests for a change. Fix every failure you see whatever its origin; don't rerun suites on a base commit to
   assign blame.
-- **Data.** Publish data additions in `training/neuralese_corpora.json` with immutable SHA-256 manifests under
-  `training/corpus-manifests/`, and transfer them with `scripts/sync_training_corpora.py`. Keep conversion, admission,
-  staging and actual learner exposure separate and explicit. Every dataset and model license is acceptable: record
-  license provenance as a fact, never hold data for license review.
+- **Data.** The training-data registry (`natlang_neuralese.common.data_registry`, CLI `scripts/data_registry.py`) knows
+  every dataset: producers record what they write and consumers what they read, automatically; a run refuses data no
+  entry holds. Its git layer is `training/neuralese_corpora.json` with immutable SHA-256 manifests under
+  `training/corpus-manifests/` (roles there select what trainers use: a pool is admitted with `data_registry.py promote
+  ID --role grpo-pool`, never a code list), transferred with `scripts/sync_training_corpora.py`. Keep conversion,
+  admission, staging and actual learner exposure separate and explicit. Every dataset and model license is acceptable:
+  record license provenance as a fact, never hold data for license review.
 - **Storage hygiene.** Free space continuously. Delete discarded runs and approaches (checkpoints, optimizer states,
   exports, frozen runtime copies, diagnostic outputs, obsolete recipes and registry entries) without asking: list the
   exact paths in a script first, then delete and verify. Keep the active lineage and its parents, the latest verified
