@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-choice-confidence-v10-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-google-choice-confidence-v10-final",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-source-generation-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "Closedpercase choiceconfidenceaudit; confidencesheldscalar not calibratedtargets."
+}

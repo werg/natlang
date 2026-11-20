@@ -1,0 +1,225 @@
+{
+  "id": "external-expansion-deepdive-native-long-20261015-v1-render-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/external-expansion-deepdive-native-long-20261015-v1-render",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+  "license": "facts from the source rows",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+  "admission": "lfm3 render of the registered corpus external-expansion-deepdive-native-long-20261015-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "external-expansion-deepdive-native-long-20261015-v1-render",
+    "external-expansion-deepdive-native-long-20261015-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 366,
+            "supervised_tokens": 75058,
+            "tokens": 6657862,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 60705020,
+        "decoded_text_data_sha256": "2695b0072c9afcff28579768c92ed7ed6f6b9c8603c34ae1d65302429b6082f5",
+        "documents": 366,
+        "max_document_tokens": 42850,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "74b88afd58518c2bd56240d11852c06c6141a0424d36fddc698539eb5ffcaad1",
+        "exact_subset": {
+          "file": "exact-subset/full/lfm3/text-data.jsonl.zst",
+          "sha256": "74b88afd58518c2bd56240d11852c06c6141a0424d36fddc698539eb5ffcaad1",
+          "documents": 366,
+          "counts": {
+            "train": 366
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 7374,
+            "supervised_tokens": 1557623,
+            "tokens": 101556243,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 911377779,
+        "decoded_text_data_sha256": "6c922a37d3a3d1b85ac7c47929c9f6b38b16514ec11fa46a80dbee6e2a8124e3",
+        "documents": 7374,
+        "max_document_tokens": 43104,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "404f2086edb0b599405cc005127aa20638c1582083f5f4b5c3a9a6acdb340423",
+        "exact_subset": {
+          "file": "exact-subset/program-header/lfm3/text-data.jsonl.zst",
+          "sha256": "8448aa3e6d4a98534a95a92ff95b69abad74d843bf6a50e9991742475936750e",
+          "documents": 7365,
+          "counts": {
+            "excluded_nonidentical": 9,
+            "train": 7365
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 2302212,
+            "documents": 2367,
+            "opening_tokens": 641366,
+            "supervised_tokens": 1613483,
+            "tokens": 36512884,
+            "tool_tokens": 33539003
+          }
+        },
+        "decoded_text_data_bytes": 334000074,
+        "decoded_text_data_sha256": "ece54798fa3654fb2c85b278b39baf4c0826735cc8be1a2e600ab266edb3c110",
+        "documents": 2367,
+        "max_document_tokens": 43104,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "263059e7a979fccc459470a8d07d6f99c3f0b0accd109050a4a133a3d573a6f6",
+        "exact_subset": {
+          "file": "exact-subset/whole-trajectory/lfm3/text-data.jsonl.zst",
+          "sha256": "2db8d3857d6467fc96aaec7926277911fe177fc951d4884f9b447cfe17830266",
+          "documents": 2300,
+          "counts": {
+            "excluded_nonidentical": 67,
+            "train": 2300
+          }
+        }
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "external-expansion-deepdive-native-long-20261015-v1-render",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 366,
+        "reference_documents": 366,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 7374,
+        "reference_documents": 7365,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 9
+      },
+      "whole-trajectory": {
+        "documents": 2367,
+        "reference_documents": 2367,
+        "same_order": 0,
+        "only_reference": 67,
+        "only_student": 67
+      }
+    },
+    "target_parse": "not checked (parts render: sources are streamed part inputs)",
+    "exact_subset": {
+      "policy": "keep documents identical to the reference (id, split, source groups, source record ids); drop train documents sharing a source group with any held document of either render",
+      "resolved_problems": [
+        "whole-trajectory: split_or_group_changed 67"
+      ],
+      "excluded": {
+        "full": 0,
+        "program-header": 9,
+        "whole-trajectory": 67
+      }
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 7365,
+        "whole-trajectory": 2300
+      },
+      "detail": {
+        "program-header": {
+          "train": 7365,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/external-expansion-deepdive-native-long-20261015-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 7365,
+              "bytes": 27668226,
+              "sha256": "dff86feb65c1f7b328e5cf520d574d55ff5fc928d2d552427e6f071719a6c859"
+            },
+            {
+              "path": "runs/lfm3-renders/external-expansion-deepdive-native-long-20261015-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 2300,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/external-expansion-deepdive-native-long-20261015-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 2300,
+              "bytes": 26322986,
+              "sha256": "d7d5666c31c230a295d9ca4f84ef57733f58cab6315c1ca1e68ea5a8e661ff42"
+            },
+            {
+              "path": "runs/lfm3-renders/external-expansion-deepdive-native-long-20261015-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  },
+  "render_policy_binding_sha256": "72a0fa7dcf4760ac820a4d88045184373565b3cf0459cfde5a7062c687055927"
+}

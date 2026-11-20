@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v9-upstream-raw-shards-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v9-source-reconstruction-v1",
+  "include": [
+    "raw/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-source-generation-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "ThreepinnedAGNews emotionTREC trainshards. Boardgameshardalreadyregisteredprior sourcebound24snapshot. Dependenciesexcluded."
+}

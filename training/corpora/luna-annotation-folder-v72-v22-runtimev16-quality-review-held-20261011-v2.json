@@ -1,0 +1,15 @@
+{
+  "id": "luna-annotation-folder-v72-v22-runtimev16-quality-review-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v72-annotation-folder-final-v2",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-luna-source-annotation-comparison-and-visibility-audit",
+  "training_admission": false,
+  "admission": "audit-only-no-semantic-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V72 exact-row final review v2 supersedes the unregistered local v1 diagnostic. 87/88 outputs; 504/632 completed-item exact source-annotation matches; 8 unscored index49 items retained. Every completed input folder file and output/return map matched exactly; exact source-state request joins are pinned. Disagreements are not automatic negatives."
+}

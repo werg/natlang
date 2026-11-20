@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v39-final-quality-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/quality-review-v39-choice-folder-final-20261010-v4",
+  "include": [
+    "*"
+  ],
+  "split": "train-inherited-evidence-only",
+  "source_class": "provider-final-semantic-and-trace-quality",
+  "training_admission": false,
+  "admission": "held-source-quality-capture-and-native-review-required",
+  "notes": "48complete324/357sourceannotations23exactmaps. Savedmapsreturnmatchedinputsunchanged;903childcalls/calleredges/outputcaptures108rejected104scopefailureevents. Exactproviderrequestbodiesnotretained; no inferred promptvisibility orautomaticadmission. RegisteronlyV4auditpreviousdraftsnotcounted."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v97-b502-runtime-20261008",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v97-b502-runtime-20261008",
+  "admission": "held-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Frozen Node runtime identity for exact payment recovery. Runtime provenance only, not training examples."
+}

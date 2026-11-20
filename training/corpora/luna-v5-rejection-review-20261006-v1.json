@@ -1,0 +1,13 @@
+{
+  "id": "luna-v5-rejection-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v5-rejection-review-20261006-v1",
+  "admission": "diagnostic-source-and-contract-review-not-training",
+  "include": [
+    "*.json",
+    "*.md"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-teacher-20261006-v5"
+  ]
+}

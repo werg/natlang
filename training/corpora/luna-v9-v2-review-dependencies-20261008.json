@@ -1,0 +1,16 @@
+{
+  "id": "luna-v9-v2-review-dependencies-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v2",
+  "include": [
+    "README.md",
+    "build-provenance.json",
+    "review/action-quality-review.jsonl",
+    "review/case02-write-reemission-proof.json",
+    "review/luna-v17-action-disposition.jsonl",
+    "review/luna-v17-parent-source-review.jsonl",
+    "review/opencode-bunny-parent-source-review.jsonl"
+  ],
+  "admission": "provenance dependencies only; no additional training admission",
+  "notes": "Exact historical inputs referenced by V9 text-source-selection-26.json; required for DGX Maple twin reproducibility. Superseded candidate snapshots do not inherit final V9 admission."
+}

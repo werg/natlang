@@ -1,0 +1,13 @@
+{
+  "id": "luna-v54-iterative-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v54-sched543-train-audit-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-generation-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "11 genuine complete iterateOn typed carries; accepted indices5/6/8 bypass iterator, index8 stale authority despite correct final answer. Index2 pending-placeholder rejection. Keep topology and carry quality separate from final grading; no admission."
+}

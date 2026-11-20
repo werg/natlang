@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-google-v26-prepared-reviewed-inputs-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26-reviewed-v2",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "512 complete train cases,64 per eight families;20 holds and7584 prior IDs/groups excluded through canonical logical evidence root. Prepared only, not launched."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "luna-v73-v75-admission-blockers-outline-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-admission-blockers-v1",
+  "include": [
+    "outline.json",
+    "outline.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-native-generation-admission-blocker-outline",
+  "training_admission": false,
+  "admission": "audit-only-no-source-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Original v1 blocker outline preserved as historical evidence. Later correction distinguishes V36 used-adapter 390-key closure and folder-level single_call topology."
+}

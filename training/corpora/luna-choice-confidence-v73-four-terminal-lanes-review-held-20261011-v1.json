@@ -1,0 +1,16 @@
+{
+  "id": "luna-choice-confidence-v73-four-terminal-lanes-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v73-four-terminal-lane-review-v1",
+  "include": [
+    "review.json",
+    "case-audit.jsonl",
+    "closed-files.json"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "four-lane-parent-and-source-comparison-audit-held",
+  "training_admission": false,
+  "admission": "audit-only-no-semantic-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Sealed V73 partial-lane audit: 44 rows, 33 parent accepted and 11 rejected; all 44 returned values equal saved decisions.json. 33 exact source-annotation matches; the 11 rejected rows differ from source annotations, so this is reported as parent/source disagreement, not independently adjudicated semantic error. Nineteen captured scope-failure events are retained as model-authored action errors/recoveries; no concrete runtime/source bug found. V73 lane02 is still waiting and this report is explicitly not campaign closure."
+}

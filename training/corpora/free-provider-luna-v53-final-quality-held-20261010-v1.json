@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v53-final-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v53-choice-folder-final-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Sealed 51-case native audit with exact source/IR/file pins, complete keys and valid decision options. Raw child wire request bodies unavailable; no byte-exact prompt visibility claim. Source-label comparison remains descriptive and all training admission held."
+}

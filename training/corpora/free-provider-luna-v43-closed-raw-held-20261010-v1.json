@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v43-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v43-fortyseven-runtimev13-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "47operationallyclosed,334/368annotationmatches27exactmaps.415inputfilesintact;1062childedges1061outputcaptures. OneError:terminatedinfrastructure, notsemanticnegative."
+}

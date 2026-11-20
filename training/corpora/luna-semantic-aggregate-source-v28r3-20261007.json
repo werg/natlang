@@ -1,0 +1,13 @@
+{
+  "id": "luna-semantic-aggregate-source-v28r3-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v8-r3-final-reviewed-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "reviewed-source-and-scripted-reference-only; missing actual teacher observations; no admission",
+  "derived_from": [
+    "luna-semantic-aggregate-source-v28r1-20261007"
+  ],
+  "notes": "75 explicit Finding facts independently reviewed; 8/8 scripted references. Fact/contract revisions preserve original 4 train/4 test source groups; not new independent worlds and not same-input DPO pairs."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v27-closure-provenance-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-closure-provenance-supplement-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Additive exact45holdpolicy andactualsharedclosurecode bytes forDGXfullS1 closure54program404items; oldpacketunchanged, noadmission."
+}

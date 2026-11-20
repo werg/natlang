@@ -1,0 +1,10 @@
+{
+  "id": "local-hot-ffn-compile-probes-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-hot-ffn-20261006-v1",
+  "include": [
+    "*"
+  ],
+  "admission": "failed-numerical-parity-diagnostics-not-training-data",
+  "notes": "CPU small PEFT functional FFN compile prototype; fixed missing config startup. FP32 outputs exact but gradients differ2.91e-11; BF16 outputs differ0.000488/grad0.000977 after explicit LoRA dtype correction. No deployment or CUDA performance claim."
+}

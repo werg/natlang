@@ -12,7 +12,7 @@ reviewer said what (by the hash of its exact definition), and the explicit decis
 
 A `hold` decision on an item receipt appends the proposed entry to holds.jsonl as a pending record and writes a new
 manifest. `clear` and `defer` never change the registry. No receipt grants training admission: admission, split and
-quality decisions stay explicit in training/neuralese_corpora.json.
+quality decisions stay explicit in training/corpora.
 
 The same module maps row receipts to the review vocabulary of the S1 semantic reviews (v7 categories) and to the
 dispositions the packet builders require, so build_*_review_packet.py and bind_*_receipts.py read reviewSourceRow

@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v21-current-shared-request-audit-held-20261010-v5",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-luna-pubmedqa-full-abstract-final-v5",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Current shared hashing/helper pin:37 item-bound states,35 exact child request and2 same-invocation capture-only,124 saved request turns. Outcome2of5exact,30of37 itemmatches remains unchanged and held."
+}

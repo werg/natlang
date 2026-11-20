@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v15-iterate-richness-v4-scope-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-20261007-v4-root-review",
+  "include": [
+    "**/*"
+  ],
+  "admission": "independent-72-pass-source-scope-review-not-teacher-data-or-admission",
+  "notes": "Full 72-pass evidence review binds source, proof and per-case snapshot hashes; checks current-pass scope, carried drafts, exact evidence reads and literal support. Review artifact only; no teacher output or admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+  "derived_from": [
+    "neuralese-v15-iterate-richness-proof-v4-passed-20261007-v1"
+  ]
+}

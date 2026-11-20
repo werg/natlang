@@ -1,0 +1,19 @@
+{
+  "id": "s1-question-collection-v15-luna-closed-raw-20261008",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-candidates-20261008-v15-numeric-answer-contract",
+  "include": [
+    "generation-review-v1/luna/plan.approved.json",
+    "generation-review-v1/luna/root-authorization.json",
+    "generation-review-v1/luna/dispatcher-process.log",
+    "generation-review-v1/luna/dispatcher-process-binding.json",
+    "generation-review-v1/luna/campaign-v1/**",
+    "generation-review-v1/luna/closed-review-v1/**"
+  ],
+  "admission": "held-closed-teacher-generation-and-graph-review-no-training-or-DPO-admission",
+  "derived_from": [
+    "s1-question-collection-v15-generation-source-20261008",
+    "s1-question-collection-runtime-v12-7c52a088-20261008"
+  ],
+  "notes": "Complete closed V15 Luna actual campaign and graph-bound closeout. 32 source-indexed cases: 16 accepted, 16 rejected by the configured answer and answers.json content checks; return map equals saved file in all cases, with no infrastructure errors. Source/gold object equality and normalized accepted maps are reported separately. Actual soft graph shows 48 typed writes and 46 linked readouts across 16 authored-soft cases; one case wrote but did not read its typed blocks and later used crisp fallback. All raw partial/result/error/trace/manifest/journal/claim/log records are preserved. Parent acceptance is generation outcome only; no trace, training, learned-vector, or DPO admission."
+}

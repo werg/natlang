@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v83-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v83-campaign-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+  "notes": "One completed guided/controller-assisted actual Luna soft-state teacher attempt; parent accepted, retained raw graph and provenance; action admission pending."
+}

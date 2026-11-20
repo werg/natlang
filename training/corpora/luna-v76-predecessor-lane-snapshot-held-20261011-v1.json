@@ -1,0 +1,19 @@
+{
+  "id": "luna-v76-predecessor-lane-snapshot-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v76-v37-runtimev17-predecessor-snapshot-v1",
+  "include": [
+    "FILES.sha256",
+    "campaign-launch.json",
+    "predecessors.json",
+    "snapshot.json",
+    "worker-*.queue.jsonl",
+    "worker-*.journal.snapshot.jsonl"
+  ],
+  "split": "inherited-train-generation-lineage-evidence",
+  "source_class": "held-luna-predecessor-lane-snapshot",
+  "training_admission": false,
+  "admission": "predecessor-lineage-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Immutable lane-by-lane predecessor snapshot binding V76 to five logical V75 lanes and their captured queue/journal evidence. This is scheduling lineage only."
+}

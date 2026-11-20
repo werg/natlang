@@ -1,0 +1,18 @@
+{
+  "id": "neuralese-v18-v19-action45-plus84-gpu-handoff-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "neuralese-v18-v19-action45-plus84-gpu-handoff-review-20261008-v1/README.md",
+    "neuralese-v18-v19-action45-plus84-gpu-handoff-review-20261008-v1/gpu-handoff-review-packet-v1.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/action45-root-admitted84-integration-v1/root-integration-adoption-v1.json"
+  ],
+  "admission": "immutable-root-integration-adoption-and-next-gpu-handoff-review-only; active-checkpoint-pin-and-resume-plan-pending; no-training-launch",
+  "derived_from": [
+    "v18-v19-action45-base-selected84-native-text-20261008-v1",
+    "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+    "neuralese-native-text-input-map-lfm-action45-refinement-recipe-20261008-v1",
+    "neuralese-native-text-input-map-lfm-action45-refinement-launch-20261008-v1"
+  ],
+  "notes": "Root adoption certificate approves exact84 native/text integration for a future reviewed run. Packet clarifies manifest file SHA vs sync canonical content identity, pins exact full input hashes, reconstruction commands and inherited trainer/runtime inputs. The Pop action45 refinement trainer is still running; its latest checkpoint is intentionally not hashed or transferred. DGX has the base and compact84 delta but not the active Pop continuation checkpoint. Root must review/select a clean full checkpoint and step budget before a new recipe or training launch. No active input change, stop, resume, or launch is authorized by this evidence-only snapshot."
+}

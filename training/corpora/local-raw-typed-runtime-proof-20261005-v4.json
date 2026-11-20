@@ -1,0 +1,13 @@
+{
+  "id": "local-raw-typed-runtime-proof-20261005-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-raw-typed-runtime-proof-20261005-v4",
+  "admission": "qualified-typed-runtime-controls-not-training-examples",
+  "include": [
+    "**/*"
+  ],
+  "derived_from": [
+    "local-raw-foundation-20261005-v3"
+  ],
+  "notes": "Production structured write matches ordinary native-value causal prefix exactly; opaque placeholder restored correctly. Eight encode/transport controls and finite nonzero input gradient pass. CPU proof does not qualify trained recurrence weights, stopping, or semantic correctness."
+}

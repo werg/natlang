@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-choice-confidence-v14-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v14-adapter-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-static-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "47referenceprograms368itemsactualreplay47/47accepted/capturevisible. Sourcequality/trajectoryadmissionheld."
+}

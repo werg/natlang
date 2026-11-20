@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v41-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v41-fifty-runtimev13-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "50/50closed;351/382sourceannotationmatches28fullmapsexact907/907childcaptures. Rawpreservedheld."
+}

@@ -1,10 +1,10 @@
-"""Resolve cross-corpus index references: a directory, or a corpus registry id (training/neuralese_corpora.json,
+"""Resolve cross-corpus index references: a directory, or a corpus registry id (training/corpora,
 kind "cross-corpus-index") whose snapshot lives at <repo>/<entry path> on every machine that synced it."""
 import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-REGISTRY = "training/neuralese_corpora.json"
+REGISTRY = "training/corpora"
 
 
 def resolve(ref, repo: Path = REPO) -> tuple[Path, str | None]:
@@ -13,7 +13,10 @@ def resolve(ref, repo: Path = REPO) -> tuple[Path, str | None]:
     path = Path(ref)
     if path.is_dir():
         return path, None
-    entries = {e["id"]: e for e in json.loads((repo / REGISTRY).read_text())["corpora"]}
+    import sys
+    sys.path.insert(0, str(Path(repo) / "training" / "neuralese"))
+    from natlang_neuralese.common import corpus_registry
+    entries = {e["id"]: e for e in corpus_registry.load(repo)["corpora"]}
     entry = entries.get(str(ref))
     if entry is None or entry.get("kind") != "cross-corpus-index":
         raise FileNotFoundError(f"cross-corpus index {ref!r}: neither a directory nor a registered index id")

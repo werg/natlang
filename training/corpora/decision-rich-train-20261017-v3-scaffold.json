@@ -1,0 +1,26 @@
+{
+  "id": "decision-rich-train-20261017-v3-scaffold",
+  "owner": "dgx",
+  "path": "runs/decision-rich-train-20261017-v3-scaffold",
+  "include": [
+    "cases.jsonl",
+    "union-audit.json",
+    "broad-selection-proof.json",
+    "task-source-manifest.json",
+    "additional-scaffold-cases.jsonl",
+    "additional-scaffold-qualification.json"
+  ],
+  "source_class": "immutable-RL-task-source-with-source-bound-live-qualified-curriculum-extension",
+  "split": "Train-only 140-task source; preserves all 128 prior train tasks and adds 12 distinct exact task IDs with accepted Qwen live qualification.",
+  "admission": "RL-task-source-only; no native SFT graph rows or student exposure claim.",
+  "training_admission": true,
+  "training_admission_reason": "The original 128-task source remains intact. Twelve additional train-only task rows are bound to the accepted 48-row source-qualified Qwen scaffold run; decision, held-group and quality-group intersections are empty.",
+  "derived_from": [
+    "decision-rich-train-20261016-v2-curriculum",
+    "qwen-public-return-repair48-native-graphs-20261017-v1"
+  ],
+  "task_source_manifest": "runs/decision-rich-train-20261017-v3-scaffold/task-source-manifest.json",
+  "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261017-v3-scaffold.json",
+  "license_provenance": "The 128 original task rows retain their source license facts. The 12 authored curriculum tasks are project-generated; Qwen qualification source uses the separately registered teacher-data corpus provenance.",
+  "notes": "Scheduling metadata is inherited from exact task definitions. The 48 accepted teacher trajectories qualify the 12 tasks but are not used as RL targets; the 44 older accepted teacher trajectories remain separately converted. Registration does not claim task execution or model exposure."
+}

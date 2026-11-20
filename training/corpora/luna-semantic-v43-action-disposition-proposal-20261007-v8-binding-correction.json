@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v43-action-disposition-proposal-20261007-v8-binding-correction",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v43-action-disposition-proposal-20261007-v8-binding-correction",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Exact25candidate binding correction; excludesLIB236wrongreasoning, no recurrence or corpus admission",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

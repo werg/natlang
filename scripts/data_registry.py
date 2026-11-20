@@ -8,7 +8,7 @@
   check    [PATH..]       exit 1 when a data path (default: the registry roles and the data directories of the roots)
                           is in no dataset
   promote  ID.. [--role NAME] [--all-closed] [--dry-run]   fold closed journal snapshots into
-                          training/neuralese_corpora.json (scripts/neuralese_data/register_corpora.py commits them
+                          training/corpora (scripts/neuralese_data/register_corpora.py commits them
                           unattended); --role grpo-pool admits a task-supply source into training
 """
 from __future__ import annotations

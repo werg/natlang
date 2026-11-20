@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v53-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v53-runtimev14-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "All 51 source queues completed. Exact program source preserved, returned maps equal saved decisions.json and inputs unchanged. 35 exact annotation maps / 16 with 28 item differences; no independent source truth or admission."
+}

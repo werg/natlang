@@ -1,0 +1,76 @@
+{
+  "id": "view-ask-20261010-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/view-ask-20261010-v2",
+  "include": [
+    "*.port-records.jsonl",
+    "manifest.json",
+    "view-stage/records.jsonl",
+    "view-stage/pieces.jsonl",
+    "view-stage/conversion.json"
+  ],
+  "split": "closed by source group and against published corpora (s1-full-final-20261003, harness-bench-swe-rebench-openhands-pi-records-20261010-v3; scripts/neuralese_data/cross_corpus.py): upstream splits kept; train-only sources carved 5/5 by group; protected bgkit benchmark hits forced to test; components touching a published split take it, unplaceable components and already-published examples dropped",
+  "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
+  "admission": "superseded-by-view-ask-20261010-v3;held-pending-view-stage-qualification",
+  "training_admission": false,
+  "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by view-ask-20261010-v4 (same inputs, closure against S1 and harness v4); rows dropped by the later closure were split leaks. No unique rows.",
+  "corpus_publication_for_training": false,
+  "supersedes": "view-ask-slice-20261010-v1",
+  "derived_from": [
+    "view-sources-20261010-v2",
+    "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+    "s1-full-final-20261003"
+  ],
+  "license": "per record (license field and lineage.notes.license_provenance): provenance classes {\"unverified\": 22404, \"share-alike\": 34173, \"attribution\": 24260, \"permissive\": 42204, \"copyleft\": 4457, \"weak-copyleft\": 2061}",
+  "build": {
+    "script": "scripts/neuralese_view_corpus.py build --preset v2 --cross-index <S1 index> --cross-index <harness-bench v3 index>",
+    "code_commit": "4e31658bf846287e075a8ea5c9daa943ab0a25aa",
+    "builder": "scripts/neuralese_data/view_corpus.py@2",
+    "record_version": "natlang.port-record/1",
+    "options": {
+      "caps": {
+        "cnn_dailymail": 4000,
+        "squad": 400,
+        "quality": 300,
+        "qmsum": 400,
+        "codesearchnet": 5000,
+        "codesearchnet_go": 1500,
+        "codesearchnet_java": 1500,
+        "codesearchnet_javascript": 1500,
+        "codesearchnet_php": 1500,
+        "codesearchnet_ruby": 1500,
+        "websrc": 2000,
+        "xlam": 3000,
+        "repo_configs": 1500,
+        "toolace": 2000,
+        "wtq": 2000,
+        "fetaqa": 2500,
+        "spider_bird": 2500,
+        "tabfact": 2000,
+        "swe_tool_outputs": 3500,
+        "s1_tool_outputs": 3000
+      },
+      "max_source_chars": 32000,
+      "min_source_chars": 200,
+      "seed": 0,
+      "questions_per_source": 4,
+      "extracts_per_source": 3,
+      "protected_index": "/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json",
+      "protected_index_sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+    },
+    "cross_corpus_indexes": [
+      {
+        "corpus_id": "s1-full-final-20261003",
+        "records": 1870591,
+        "registry_id": "cross-corpus-index-s1-full-final-20261003-v1"
+      },
+      {
+        "corpus_id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+        "records": 3843,
+        "registry_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1"
+      }
+    ],
+    "view_stage_conversion": "natlang_neuralese.data.view_records@1 (view-stage/: train and test splits; records.jsonl sha256 3e276b32bfc1a13dc7d588e03cd0f3e68e12dab95ea84b923e4689437090cf4c)"
+  },
+  "notes": "129559 port records over 49673 sources; by split {'train': 110856, 'validation': 10511, 'test': 8192}; by artifact x kind {\"code\": {\"extract\": 9552, \"reconstruct\": 11666, \"summary\": 11666}, \"data\": {\"extract\": 15415, \"qa\": 2662, \"reconstruct\": 5565}, \"html\": {\"extract\": 2805, \"qa\": 8000, \"reconstruct\": 2000}, \"log\": {\"extract\": 11008, \"reconstruct\": 5564}, \"prose\": {\"qa\": 87, \"reconstruct\": 4546, \"summary\": 5245}, \"table\": {\"extract\": 8452, \"qa\": 20222, \"reconstruct\": 5104}}; by task {\"compare\": 82167, \"consume\": 12947, \"reconstruct\": 34445}; by target origin {\"code-computed\": 51006, \"dataset-qa\": 27197, \"dataset-summary\": 5245, \"identity\": 34445, \"upstream-docstring\": 11666}. No teacher-written targets (ToolACE dialogues and xLAM calls are upstream-generated; ToolACE turns are never targets). Cross-corpus closure: 136,341 built, 2,023 exact examples already in S1 dropped (SQuAD 1,486, QuALITY 537), 4757 records in unplaceable components dropped (2,826 SWE-rebench tool outputs whose repository the harness bench and S1 put in different splits), no violations. view-stage/: 119,048 trajectory-trainer records (validation kept with the corpus) for the view stage. Supersedes view-ask-slice-20261010-v1."
+}

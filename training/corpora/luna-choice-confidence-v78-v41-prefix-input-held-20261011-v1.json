@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v78-v41-prefix-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v78-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-generation-input",
+  "source_class": "held-luna-provider-generation-input",
+  "training_admission": false,
+  "admission": "prepared-input-only-root-review-required-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root-review candidate only: 18 visible, accepted authored references from the V41 immutable label prefix; 122 source items across five queues, V17 frozen runtime. Root approval is false and no worker was launched. The 5 other static references remain preserved in the prefix-static artifact with missing criteria capture reported."
+}

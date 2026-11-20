@@ -1,0 +1,21 @@
+{
+  "id": "neuralese-workflowevals-old256-closed-raw-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-slot1-spacebunny3-successor-20261002",
+  "admission": "held-closed-raw-generation-observations-action-review-pending-no-training-admission",
+  "include": [
+    "worker-1.queue.jsonl",
+    "worker-1/case-*.results.jsonl",
+    "worker-1/case-*.collector.log",
+    "worker-1/jobs/*.result.json",
+    "worker-1/jobs/*.error.json",
+    "worker-1/jobs/*.partial.json",
+    "worker-1/jobs/*.result.json.manifest.json",
+    "worker-1/jobs/*.error.json.manifest.json",
+    "worker-1/jobs/*.partial.json.manifest.json",
+    "worker-1/*.results.jsonl.manifest.json",
+    "worker-1/*.error.json.manifest.json",
+    "worker-1/*.partial.json.manifest.json"
+  ],
+  "notes": "Immutable raw snapshot of the retired 256-case WorkflowEvals directory-reducer campaign. Terminal recount: 245 accepted parent outcomes and 11 rejected; all 256 have result records. Raw campaign rows, provider job result records, case logs, and queue evidence are retained. All remain held for source/action review and required conversions; this does not grant training admission or authorize controller resumption."
+}

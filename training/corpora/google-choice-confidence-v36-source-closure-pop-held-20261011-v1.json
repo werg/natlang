@@ -1,0 +1,16 @@
+{
+  "id": "google-choice-confidence-v36-source-closure-pop-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-source-closure-packet-v2",
+  "split": "inherited-train-source-closure-input",
+  "source_class": "source-closure-evidence",
+  "training_admission": false,
+  "admission": "full-s1-dgx-key-closure-pending",
+  "notes": "V36 exact source-key input packet: 54 static programs, 390 original source IDs/groups from prepared V36 cases; four rows intersect current V17 source-quality holds. Packet requests DGX S1/harness-v4/protected exact-key checks only. No S1 result, source-quality clearance, native model actions, training admission, or independent-world credit.",
+  "include": [
+    "README.md",
+    "FILES.sha256",
+    "closure-packet-v1.json",
+    "closure-input-v1/**/*"
+  ]
+}

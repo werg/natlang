@@ -1,0 +1,11 @@
+{
+  "id": "luna-v43-suffix658-1374-runtimev19-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-closed-raw-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Closed raw evidence for the 69-program V43 suffix campaign; held evidence only, not training data.",
+  "training_admission": false,
+  "review_status": "closed; immutable raw outputs, journals, queues, approval and source review pinned; source/child targets separately selected in a reviewed derivative."
+}

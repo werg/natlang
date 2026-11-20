@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-v28-targetbound-text-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v10-target-binding",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "held-targetbound-provider-conversion",
+  "training_admission": false,
+  "admission": "native-IR-and-trace-held-scoped-text-derivative-separate",
+  "independent_new_worlds": 0,
+  "notes": "Exact source conversion and296cleanrowinput for separately root-approved ordinary-text-only delta;17failedactions excluded; native/trace and recurrence held. V10separatecohortpreview281 is not combinedcorpus count280."
+}

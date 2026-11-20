@@ -1,0 +1,22 @@
+{
+  "id": "natlang-specialization-cases-declines-20261009-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1",
+  "include": [
+    "README.md",
+    "cases.jsonl",
+    "declines.jsonl",
+    "findings.jsonl"
+  ],
+  "split": "source",
+  "source_class": "specializer-compiled-cases-and-declines-from-recorded-calls",
+  "admission": "held-crisp-versus-natural-language-evidence-only",
+  "training_admission": true,
+  "corpus_publication_for_training": false,
+  "derived_from": [],
+  "license": "internal: recorded runs of this repository's programs on DGX",
+  "notes": "Exported 2026-10-09 by natlang compilations export-corpus (ts-host/src/calls/corpus.ts) from the DGX call store: 7 compiled cases (examples/specialization support, pi scheduler pass/step, harness boundary) with the recorded calls each was checked on and the judge's verdicts, and 8 declines with reasons (semantic, unstable, no-clusters, budget) and sample calls. Evidence of which parts of natural-language functions are crisp, for the harness bench and the Neuralese student; inputs may contain conversation text from pi runs. Admission for any training use is a separate decision.",
+  "review_status": "2026-10-11 dgx-held-recovery: evidence label only; 7 compiled cases with recorded calls and judge verdicts plus 8 declines with reasons. Recorded natlang calls: admitted as natlang-call data. JeFF scan 0 hits.",
+  "consumable_by_direct_stage": false,
+  "required_conversion": "render recorded calls as call programs; findings.jsonl is empty"
+}

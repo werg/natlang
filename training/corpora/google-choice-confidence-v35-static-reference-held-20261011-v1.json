@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v35-static-reference-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v35-adapter-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-derived-static",
+  "source_class": "held-provider-label-derived-static-reference",
+  "training_admission": false,
+  "admission": "held-static-reference-only-no-teacher-trajectory-admission",
+  "independent_new_worlds": 0,
+  "notes": "55 source-bound static reference cases from closed V35 labels: 395 strict accepted source labels, 117 rejections, 55/55 scripted reference replays pass, 900 authored reference turns. Adapter receives source label evidence but creates static code/reference traces; no provider-generated scaffold/reasoning is claimed. Replays prove reference/runtime behavior, not oracle correctness or training admission. Includes exact 58-component runtime archive and manifests."
+}

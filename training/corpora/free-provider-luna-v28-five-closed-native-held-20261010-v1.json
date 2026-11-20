@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v28-five-closed-native-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev28-five-runtimev7-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "closed-native-teacher-sampled-trajectories",
+  "training_admission": false,
+  "admission": "five case-oracle successes pending independent trajectory/source/split quality review",
+  "independent_new_worlds": 0,
+  "notes": "gpt-6-luna/runtimev7, 5/5 case accepted; 313 saved model replies and78633completion tokens. Exact terminal result accounting verified by supervisor; immutable journals preserve counts. Existing V28 train worlds, not independent new worlds. Case acceptance does not qualify learned neuralese channel or automatic SFT/DPO admission."
+}

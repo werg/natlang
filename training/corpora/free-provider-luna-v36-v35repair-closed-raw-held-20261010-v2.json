@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v36-v35repair-closed-raw-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-and-v35repair-runtimev12-v2",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-source-generation-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "FreshfixedV12closed11cases10V9foldercompositions+1V35index20repair. Failedoriginalpreservedseparately nohistoryrewrite. Completionnotadmission finalauditpending."
+}

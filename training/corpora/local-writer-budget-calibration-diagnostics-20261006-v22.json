@@ -1,0 +1,19 @@
+{
+  "id": "local-writer-budget-calibration-diagnostics-20261006-v22",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "closed-full-state-and-resource-diagnostics; not training examples or semantic qualification",
+  "include_root_prefixes": [
+    "neuralese-batched-writer-admission-20261006-v22"
+  ],
+  "include": [
+    "neuralese-batched-writer-admission-20261006-v22/**",
+    "neuralese-batched-writer-admission-20261006-v22-runtime/**",
+    "neuralese-batched-writer-admission-20261006-v22-launch.json",
+    "neuralese-batched-writer-admission-20261006-v22-cpu-sampler.py"
+  ],
+  "derived_from": [
+    "local-host-padding-writer-diagnostics-20261006-v21"
+  ],
+  "notes": "V22 full-state1917->1956, zero errors/replay. Native gold tapes included in joint geometry; first13writerroutesstaged but7writernewcalibrationstillfallback. Batch observer improperly included releasedgoldaux, laterselectivebatchdisabled: actualpeak6.61->4.23GiB. BoundedCPUstacks270.7s4786samples captured, CUDAlaunch/wait not distinguishable; instrumented then uninstrumented timing retained. Uninstrumented13nodes103.712/102.789sec,7nodes61.973sec. GPUone-minute mean37.68%. Best1920conditional CE.00905 vs shuffled.50584,4/12better, separatelypreserved; freewriter/stoppingpending. ActiveV23live-tape-only batch calibration excluded."
+}

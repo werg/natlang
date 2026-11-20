@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-luna-v46-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v46-runtimev14-v1",
+  "include": [
+    "prepared-plan-unapproved-v1.json",
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "provider-source-runtime-generation-review",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-trace-review-required",
+  "notes": "Four medium workers queued behind actual V45 predecessor PIDs and immutable queues. 50 source programs, 389 items. No admission."
+}

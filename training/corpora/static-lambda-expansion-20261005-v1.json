@@ -1,0 +1,16 @@
+{
+  "id": "static-lambda-expansion-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/static-lambda-expansion-20261005-v1",
+  "admission": "decision-filtered-static-native-requires-source-split-closure",
+  "include": [
+    "**/*.jsonl",
+    "**/*.json"
+  ],
+  "note": "1272 training cases, 10225 native decisions;9137 approved and1088 held. Includes authored action plans and exact constructed-world oracle answers; noisy dataset-label answers remain held. All traces executed through real runtime with zero model calls. Supersedes unregistered stock-note workbench run; reference/native files are representations of the same examples, not additive. Requires native-to-neuralese conversion and source/split closure before training.",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "9,137 approved decisions; 1,088 noisy dataset-label decisions stay held (label defect)",
+  "required_conversion": "source/split closure; render",
+  "consumable_by_direct_stage": false
+}

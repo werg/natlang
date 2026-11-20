@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v81-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v81-campaign-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-generation-or-review-evidence-no-training-admission",
+  "notes": "Completed guided oldpromptv1 same-world attempt, correctanswer, actualfullsoftedgecoverage unqualified; preservepartial/retrybranches."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v83-actual-graph-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v83-root-graph-review-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+  "notes": "Held exact actual writer/typed-argument/read proof for five soft edges and source-supported notes/final answer; no admission."
+}

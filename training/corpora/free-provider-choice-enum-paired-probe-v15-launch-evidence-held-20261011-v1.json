@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-choice-enum-paired-probe-v15-launch-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-choice-enum-paired-probe-v15-launch-evidence-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "paired-diagnostic-no-independent-world-credit",
+  "source_class": "prompt-probe-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Bounded 48-item paired baseline/candidate prompt probe. Captures root-level NL instruction changes and static reference replays; point-in-time campaign launch observation is included, but live worker journals/logs/results and any training/DPO admission are excluded."
+}

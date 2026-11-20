@@ -1,0 +1,19 @@
+{
+  "id": "v73-native-candidate-v4-context-span-text-derivative-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v4-context-spans-v1",
+  "include": [
+    "FILES.sha256.json",
+    "README.md",
+    "receipt.json",
+    "renderer-omissions.jsonl",
+    "row-membership.jsonl",
+    "text-rows.jsonl"
+  ],
+  "split": "inherited-train-held-text-preview",
+  "source_class": "held-native-candidate-rendered-text-with-reviewed-context-only-spans",
+  "training_admission": false,
+  "admission": "held-rendered-text-derivative-only-no-training-admission; native-trajectory-trace-recurrence-and-qualification-remain-unapproved",
+  "independent_new_worlds": 0,
+  "notes": "846 exact native-candidate V3 turns, current shared serving renderer, pinned tokenizer, 0 omissions. 82 rows carry 145 exact reviewed context-only spans (25,517 token positions); 764 rows have no spans and remain normally supervised in this preview. All source IDs/groups/splits and raw native candidate line bindings are recorded per row. Current 79-item source-quality policy has zero ID/group overlap. This exact subset derives from the 909-row V73 ancestor closure; it is not an independent closure receipt or admission. Prior 82-line hash mismatch remains disclosed; corrected literal-row bindings are used."
+}

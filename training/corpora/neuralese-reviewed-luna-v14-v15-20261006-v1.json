@@ -1,0 +1,7 @@
+{
+  "id": "neuralese-reviewed-luna-v14-v15-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-luna-v14-v15-20261006-v1",
+  "admission": "reviewed-materialization-conversion-evidence; per-target-current-policy-and-closure-applied-in-derived-v4",
+  "notes": "108reviewselected raw,106materialized/968turns.12explicit rawholds including emptyprovider/source11+27/missinginline. Failed decisions remain marked; conversion6 preserves unresolved producer sites as crisp; coverageaudit pending."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v71-v33-v15-terminal-audit-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v71-folder-terminal-v4",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-review-only",
+  "source_class": "closed-provider-quality-audit-held",
+  "training_admission": false,
+  "admission": "held-audit-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Immutable V71 terminal audit v4, including exact campaign inventory and infrastructure-incomplete index16 evidence. Parent outcomes, source annotation disagreements, full-input visibility, and scope events are reported separately. No semantic or training admission."
+}

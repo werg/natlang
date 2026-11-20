@@ -1,0 +1,29 @@
+{
+  "id": "opencode-step5-bridge9-case07three-native-text-20261009-v2",
+  "owner": "pop",
+  "path": "runs",
+  "manifest": {
+    "path": "training/corpus-manifests/opencode-step5-bridge9-case07three-native-text-20261009-v2.json",
+    "sha256": "dfdf2d828ccfa4e977c5c212ba05283655efc1112ccb70f2573acb1207ff10d5"
+  },
+  "admission": "Root-adopted twelve compact native action records and twelve faithful text records (Bridge nine + case07 three); selected actions only. Step5 ordinary-action admitted total is 32. Recurrence delta zero; no DPO, whole-trajectory, runtime qualification, model-performance claim, or active-input change.",
+  "derived_from": [
+    "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1",
+    "luna-river-derived-writer-native-text-delta-20261009-v1",
+    "v18-v19-opencode-step5-selected-seven-native-text-delta-20261009-v1",
+    "v18-v19-opencode-step5-selected-eight-native-text-delta-20261009-v1",
+    "v18-v19-opencode-step5-fresh00-02-selected-five-native-text-delta-20261009-v1",
+    "luna-rwa-v7-nine-admitted-native-text-20261009-v1",
+    "luna-derived-body-native-text-nine-20261009-v1"
+  ],
+  "notes": "Root adoption: runs/opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/root-native-text-composition-adoption-v1.json (SHA f7776ec917a82e0f04e8690f21e8563bd44c8a91f636a4c318f192d631f7fa99). Incremental rows: 12 native and 12 text, all train, zero recurrence. Virtual cumulative counts: 5518 native (3483 train/2035 test), 4750 text (3046 train/1704 test), R=4961 unchanged. Bridge project-authored root remains unsampled; provider503 unfinished continuation is held, not semantic failure. Included exact raw result/trace/capture, source/admission/review receipts, compact deltas, frozen runtime and renderer snapshots, and proof files. Full base artifacts are referenced through registered corpus lineage and not copied. A provisional v1 registry/manifest attempt was created before publisher formatting validation and synced once; publish rejected it as noncanonical. It remains preserved as an unpublished attempt with its verification receipt; v2 is the publisher-canonical sealed snapshot and exact same evidence files.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence",
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1",
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1",
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1",
+    "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1",
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1"
+  ]
+}

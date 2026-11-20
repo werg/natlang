@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v18-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v18",
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Closed 512 source-bound teacher labels; 399 annotation matches and 113 mismatches. Preserve all provider outcomes; label agreement is not independent semantic truth.",
+  "exclude_dirs": [
+    "__pycache__"
+  ]
+}

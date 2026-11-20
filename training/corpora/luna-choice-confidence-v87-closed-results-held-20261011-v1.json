@@ -1,0 +1,23 @@
+{
+  "id": "luna-choice-confidence-v87-closed-results-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+  "include": [
+    "campaign-launch.json",
+    "root-supervisor-launch-v1.json",
+    "worker-*/queue.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/case-*/results.jsonl",
+    "worker-*/case-*/results.jsonl.manifest.json",
+    "worker-*/case-*/jobs/*.trace.jsonl",
+    "worker-*/case-*/jobs/*.result.json"
+  ],
+  "split": "held-closed-provider-generation-results",
+  "source_class": "closed-native-teacher-trajectory-and-trace-evidence",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "closed output evidence only; no training, trace, recurrence, or independent-world admission",
+  "notes": "V87 closed 51/51 programs; results/journals/queues/trace snapshots are pinned. Keep exact source annotation comparisons in the separate quality review; no automatic admission."
+}

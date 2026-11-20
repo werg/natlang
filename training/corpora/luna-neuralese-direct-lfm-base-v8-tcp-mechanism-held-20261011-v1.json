@@ -1,0 +1,35 @@
+{
+  "id": "luna-neuralese-direct-lfm-base-v8-tcp-mechanism-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+  "include": [
+    "direct-export-v2/manifest.json",
+    "tcp-readout-mechanism-v1/launch.json",
+    "tcp-readout-mechanism-v1/exit.json",
+    "tcp-readout-mechanism-v1/output.log",
+    "tcp-readout-mechanism-v1/run/**",
+    "tcp-readout-mechanism-v1/runtime/natlang_neuralese/**",
+    "tcp-readout-mechanism-v2/launch.json",
+    "tcp-readout-mechanism-v2/exit.json",
+    "tcp-readout-mechanism-v2/output.log",
+    "tcp-readout-mechanism-v2/run/**",
+    "tcp-readout-mechanism-v2/runtime/natlang_neuralese/**",
+    "tcp-runtime-mechanism-v1/launch.json",
+    "tcp-runtime-mechanism-v1/exit.json",
+    "tcp-runtime-mechanism-v1/output.log",
+    "tcp-runtime-mechanism-v1/run/**",
+    "tcp-runtime-mechanism-v1/runtime/natlang_neuralese/**"
+  ],
+  "split": "held-synthetic-tcp-mechanism-diagnostics",
+  "source_class": "synthetic-token-choice-projection-mechanism-and-runtime-checks",
+  "training_admission": false,
+  "admission": "held-synthetic-mechanism-only-no-trained-tcp-certificate-no-training-admission",
+  "neuralese_consumer_qualified": false,
+  "independent_new_worlds": 0,
+  "parent_registry_ids": [
+    "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+    "luna-neuralese-direct-lfm-base-v8-runtime-feedback-evidence-held-20261011-v1",
+    "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1"
+  ],
+  "notes": "Additive held synthetic mechanism evidence against the V8 export; no learned/trained TCP, training admission, or end-to-end task/runtime qualification. tcp-readout-mechanism-v1 exited 1 and failed its synthetic nonidentity mechanism check at default natural precision (incremental logits delta 0.0035095); preserve this failure. tcp-readout-mechanism-v2 uses matmul_precision=highest and its synthetic mechanism check passed (incremental logits delta 0.00002575; finite gradients), but tcp_artifact_qualified and full_runtime_qualified remain false. tcp-runtime-mechanism-v1 passed the synthetic runtime mechanism check, but runtime_qualified remains false; it tests mechanism only. Launch receipts are preserved exactly, including uncommitted_runtime_changes=true where present; this records the frozen-launch provenance limitation and is not retrospectively repaired. No trained TCP certificate is implied."
+}

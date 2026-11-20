@@ -1,0 +1,24 @@
+{
+  "id": "google-choice-confidence-v35-source-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v35-source",
+  "split": "inherited-train-input",
+  "source_class": "held-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-active-labeling-excluded",
+  "notes": "V35 source selection and frozen Google pool request inputs; 512 source cases, source/frozen adapter, root source review and launch process. The labeling campaign is active; mutable pool.log and all labels, journals, results and worker outputs are intentionally excluded. No output-quality conclusion or training admission.",
+  "include": [
+    "cases.jsonl",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/models.json",
+    "frozen-adapter-v1/scripts/label_decision_cases.py",
+    "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+    "omissions.jsonl",
+    "root-launch-process-v1.json",
+    "root-source-launch-review-v1.json",
+    "source-manifest.json"
+  ]
+}

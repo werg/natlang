@@ -1,0 +1,19 @@
+{
+  "id": "neuralese-semantic-iterate-reducers-v26-luna-campaign-v1-closed-raw-20261008",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/**/*",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.approved.json",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/root-authorization.json",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launch-registration-v1.json",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/**/*",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/closed-raw-review-v1/**/*"
+  ],
+  "admission": "held-closed-raw-generation-observations-action-review-pending-no-training-admission",
+  "derived_from": [
+    "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008",
+    "neuralese-semantic-iterate-reducers-v26-luna-launch-binding-v1-20261008"
+  ],
+  "notes": "Closed raw V26 Luna campaign for all 16 reviewed source IDs. All 16 claims and results are terminal: 15 parents accepted, LANG-850 rejected on files/answer, zero infrastructure error sidecars. The LANG-850 trajectory's carried notes collapsed factual eligibility evidence into a proposed JSON draft; its final interpreter then returned no_action despite eligible LOCALE-B with 17 verified issues and request-level lead assignment. Keep as a held semantic trajectory rejection, not infrastructure. Preserves raw jobs, actions, graph, partials, journals, claims, launch attempts and exact runtime/source bindings. Neither acceptance nor CPU reference proof grants action trace, DPO or training admission."
+}

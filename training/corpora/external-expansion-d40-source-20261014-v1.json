@@ -1,0 +1,20 @@
+{
+  "id": "external-expansion-d40-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D40",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "manifest.json",
+    "sessions.parquet"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "thoughtworks/agentic-coding-trajectories",
+    "revision": "cef72d1f4d0caabf85937adf8337a14b7522c782",
+    "license": "other"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

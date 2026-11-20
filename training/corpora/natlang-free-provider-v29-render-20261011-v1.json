@@ -1,0 +1,116 @@
+{
+  "id": "natlang-free-provider-v29-render-20261011-v1",
+  "owner": "dgx",
+  "path": "runs/natlang-free-provider-v29-render-20261011-v1",
+  "include": [
+    "receipt.json",
+    "*/*/text-data.jsonl",
+    "*/*/omissions.jsonl",
+    "*.jsonl",
+    "*.json",
+    "render-omissions/*/omissions.jsonl",
+    "*/omissions.jsonl"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "admission": "renders of admitted source corpora: free-provider-v29-admitted-ordinary-text-20-20261010-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+  "training_admission": false,
+  "training_admission_reason": "superseded: program-header re-derived with the shared table (v2)",
+  "derived_from": [
+    "free-provider-v29-admitted-ordinary-text-20-20261010-v1"
+  ],
+  "license": "facts from the source rows (see the source corpora)",
+  "renders": {
+    "full": {
+      "lfm25": {
+        "file": "full/lfm25/text-data.jsonl",
+        "sha256": "7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 5768,
+            "tokens": 169069
+          }
+        },
+        "max_document_tokens": 12444,
+        "merge_omissions": {}
+      },
+      "mellum21": {
+        "file": "full/mellum21/text-data.jsonl",
+        "sha256": "02c89d01f983725604b640aee92f9e67886da1fd146e963d88cc77f1b74a38fe",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 6155,
+            "tokens": 171143
+          }
+        },
+        "max_document_tokens": 12776,
+        "merge_omissions": {}
+      }
+    },
+    "program-header": {
+      "lfm25": {
+        "file": "program-header/lfm25/text-data.jsonl",
+        "sha256": "8d2aa721c1c78b69048cf9d13a213c6d01c7c04c18ff360ad4e06164106e9584",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 5768,
+            "tokens": 65741
+          }
+        },
+        "max_document_tokens": 5810,
+        "merge_omissions": {}
+      },
+      "mellum21": {
+        "file": "program-header/mellum21/text-data.jsonl",
+        "sha256": "cd4310d2c4091f2a9ee983abe523af0d938f8a0fad1694a8c53dce7b5b2aaa0d",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 6155,
+            "tokens": 67453
+          }
+        },
+        "max_document_tokens": 6159,
+        "merge_omissions": {}
+      }
+    }
+  },
+  "selection": {
+    "source": "admitted LFM2.5 ordinary-text packet (root receipt), unchanged"
+  },
+  "render_omissions": {},
+  "program_header_parity": {
+    "method": "strip_generic_system_prompt.py (token splice; rows carry escaped special spellings, so not re-tokenizable from text)"
+  },
+  "build": {
+    "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+    "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+    "container": "natlang-neuralese:26.09",
+    "renderer_code": {
+      "scripts/neuralese_data/strip_generic_system_prompt.py": "3fc79d524b38dd200aa4bad71ea1318d6f695d224e71f3f8af4ba86709206c16",
+      "scripts/neuralese_data/text_tokenizer_twin.py": "3f231d35593e4f3755fe0c9ae55cc280961bc08b1d5a1baa93e28e3348d7dd20"
+    },
+    "receipt": "runs/natlang-free-provider-v29-render-20261011-v1/receipt.json",
+    "sources": {
+      "lfm_text": "/home/werg/natlang/runs/natlang-free-provider-v29-render-20261011-v1/full/lfm25/text-data.jsonl",
+      "mellum_twin": "runs/free-provider-v29-admitted-ordinary-text-20-mellum21-twin-20261011-v1"
+    },
+    "exclude_programs": [],
+    "reserved": null,
+    "protected": null,
+    "held_text": {}
+  },
+  "notes": "Admitted LFM2.5 packet (full/lfm25, byte copy) + Mellum2.1 twin (text_tokenizer_twin.py via text_tokenizer_twin_packet.sh, current renderer; LFM round trip exact on every row, 0 omissions; history reasoning restored from the packet's native records) + program-header twins of both (strip_generic_system_prompt.py; token splice, rows carry escaped special spellings). context_only_spans re-expressed per twin (whole history assistant messages recovered from the LFM spans, re-rendered with native_gold_packet_context_only_messages, each masked twin span checked to hold the same message). JeFF reserved-text scan of the native records: 0 hits. No whole-trajectory rendering (decision-level packet).",
+  "superseded_by": "natlang-free-provider-v29-render-20261011-v2"
+}

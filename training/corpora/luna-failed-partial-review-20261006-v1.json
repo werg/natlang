@@ -1,0 +1,14 @@
+{
+  "id": "luna-failed-partial-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-failed-partial-review-20261006-v1",
+  "admission": "diagnostic-only; failed partials are not positives",
+  "include": [
+    "*.md",
+    "*.json"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-teacher-20261006-v2"
+  ],
+  "notes": "Read-only Luna review of two 384-request-budget exhausted partials. Empty-record versus string type failure remains unresolved; no blanket infrastructure/model-error verdict or admission."
+}

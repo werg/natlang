@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v15-prepared-20261007-v12-runtime-proof",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v15-prepared-20261007-v12-runtime-proof",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Actual scriptedreference proof24/24 sourceV12 no providercalls; no semanticadmission",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

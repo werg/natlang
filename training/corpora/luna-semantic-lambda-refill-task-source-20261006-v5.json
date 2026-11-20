@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v5",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v5",
+  "admission": "source-candidates; current-policy native reference passed; generated-output quality and split closure pending",
+  "include": [
+    "*.jsonl",
+    "*.json"
+  ],
+  "notes": "Seed6172 generated40folder shapes:33native-reference-verified,7bankingheld. Selected9SMS tasks for collection;24SST2 candidates preserved/deferred, not training exclusion. Subset mapping preserves sourceIDs and linehashes; no labels added to model prompt. Allverified and selectedsubset are not independent example counts."
+}

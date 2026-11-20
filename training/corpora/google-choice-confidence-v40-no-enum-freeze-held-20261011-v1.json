@@ -1,0 +1,15 @@
+{
+  "id": "google-choice-confidence-v40-no-enum-freeze-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+  "include": [
+    "frozen-adapter-v1-json-schema-no-choice-enum/**/*",
+    "prepared-no-choice-enum-v1/preparation.json"
+  ],
+  "split": "inherited-train-provider-input",
+  "source_class": "held-provider-runner-freeze",
+  "training_admission": false,
+  "admission": "input-freeze-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Six-file V40 provider adapter freeze prepared after the exact V41 CLINC JSON-schema diagnostic succeeded when choice.enum was omitted. Local exact-label and confidence checks are unchanged. Not launched and no provider output is included."
+}

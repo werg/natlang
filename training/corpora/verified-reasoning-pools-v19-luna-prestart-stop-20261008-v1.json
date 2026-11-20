@@ -1,0 +1,14 @@
+{
+  "id": "verified-reasoning-pools-v19-luna-prestart-stop-20261008-v1",
+  "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+  "include": [
+    "generation-review-v1/luna/campaign-v1/*",
+    "generation-review-v1/luna/campaign-v1/**/*"
+  ],
+  "admission": "closed-zero-call-storage-prestart-stop; no-teacher-quality-or-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-v19-answer-key-v2-20261008-v1"
+  ],
+  "notes": "Original approved attempt is preserved separately: 25 claims terminalized abandoned when 7367 MiB free space was below 8192 MiB floor; zero provider calls and zero result rows. It is not resumed. Failure retained as operational provenance.",
+  "owner": "pop"
+}

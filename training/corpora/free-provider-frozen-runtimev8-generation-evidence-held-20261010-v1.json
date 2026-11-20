@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-frozen-runtimev8-generation-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v8",
+  "include": [
+    "**/*"
+  ],
+  "split": "not-applicable",
+  "source_class": "immutable-generation-runtime-evidence",
+  "training_admission": false,
+  "admission": "execution evidence, not a training corpus",
+  "independent_new_worlds": 0,
+  "notes": "1330pinnedfiles plusfrozenruntime receipt; source/db code throughGit. DirectFileHandle argument.readText example and onefile siblingboundary guidance; olderfrozenruntime untouched."
+}

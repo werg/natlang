@@ -1,0 +1,15 @@
+{
+  "id": "luna-v43-runtimev18-v19-paired48-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev19-paired48-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "held-same-world-runtime-review",
+  "source_class": "paired-runtime-quality-review",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "paired runtime comparison only; no quality-improvement/causal claim and no training/trace/recurrence admission",
+  "notes": "34 main plus 14 same-world repeated source programs: exact maps V18/V19 29/48 and 30/48, item agreement identical 343/367. Review JSON pins exact source/result/visibility evidence."
+}

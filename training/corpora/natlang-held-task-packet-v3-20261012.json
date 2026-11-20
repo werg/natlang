@@ -1,0 +1,11 @@
+{
+  "id": "natlang-held-task-packet-v3-20261012",
+  "owner": "dgx",
+  "path": "runs/natlang-held-task-packet-v3-20261012",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "cases.jsonl",
+    "provenance.json"
+  ],
+  "note": "Held task-success packet v3 (2026-10-12): v2 with content-preservation constraints on the four edit_stream rows (v2 edit_stream oracles only excluded words and checked case, so a reply such as \"ok\" was a task success; found by the LFM2.5-350M base dragnet). Same 64 natlang programs over 16 generated shapes (4 each), split test, seed 61012, ids and documents; all 64 reference-verified through the collector (verifyCases). Executed for real by the in-run task evaluation (eval/task_cadence.py), scored host-exact. Never a training source."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-v29-visible-input-native-text-v3-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v3-ast-span-map",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-source-group-review-only",
+  "source_class": "provider-derived-held-quality-review",
+  "training_admission": false,
+  "admission": "held-native-parent-approval-capture-contract-and-recurrence-qualification",
+  "notes": "Intermediate AST-span replay before final numeric mention coordinates; held evidence, superseded by V4."
+}

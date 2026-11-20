@@ -1,0 +1,16 @@
+{
+  "id": "luna-v41-invalid-recovery-seven-runtimev17-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v41-invalid-recovery-seven-runtimev17-prepared-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-provider-generation-no-admission",
+  "source_class": "provider-generated-native-closeout",
+  "training_admission": false,
+  "admission": "closed generation evidence only; no native, trace, recurrence, or text admission",
+  "derived_from": [
+    "google-v41-prefix-static-held-20261011-v1"
+  ],
+  "notes": "Closed 7-program additive V41 run, exact source/reference and rendered-child visibility audit is separately registered. Result maps include five disagreements across 39 items; raw output and worker evidence are preserved."
+}

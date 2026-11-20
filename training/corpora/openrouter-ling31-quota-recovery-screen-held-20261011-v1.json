@@ -1,0 +1,21 @@
+{
+  "id": "openrouter-ling31-quota-recovery-screen-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261011-v1/provider-openrouter-ling31-free-source-prep-v1/quota-recovery-review-v1/ling-screen-4",
+  "include": [
+    "cases.jsonl",
+    "completion-receipt.json",
+    "labels.jsonl",
+    "labels.jsonl.manifest.json",
+    "launch-receipt.json",
+    "plan.approved.json",
+    "root-authorization-v1.json",
+    "runner.log"
+  ],
+  "split": "inherited-train-provider-diagnostic",
+  "source_class": "held-provider-quota-recovery-screen-and-result",
+  "training_admission": false,
+  "admission": "availability-diagnostic-only-no-labels-accepted-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root-authorized Ling 3.1 four-row screen stopped at the first HTTP 429: 1 request, 0 valid labels, 3 rows unrequested, no continuation and no NVIDIA fallback. Completion SHA 2b135cbbcbbf096d432ae304c44d1e388877e676ceaa829f2a98dfb18bfdf248; output SHA 45d0f474fff8af2292bd5bbf9beffbf1b054737146a5cb011826e87ba2a30c7c; source cases SHA 775c1de34540c61d9a040762377cb4fc42625f617a3f6f0337c6419b8ba0f302. The response had no Retry-After or quota IDs, so reset timing remains unknown."
+}

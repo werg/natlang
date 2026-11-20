@@ -1,0 +1,16 @@
+{
+  "id": "neuralese-v25-target-output-role-audit-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-target-output-role-audit-20261008-v1",
+  "include": [
+    "README.md",
+    "roles.jsonl",
+    "manifest.json"
+  ],
+  "admission": "held-review-only-no-training-admission",
+  "notes": "Per-action raw-event audit distinguishes literal target code, nested Neuralese calls, accumulation/computation, structured serialization, and exact visible-input re-emission from separate typed eval-finish outputs. Review only; no writer or gradient admission.",
+  "derived_from": [
+    "neuralese-v25-actual-action-review-20261008-v8",
+    "neuralese-v25-actual-action-preview-20261008-v3"
+  ]
+}

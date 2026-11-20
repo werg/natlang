@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v5",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v5",
+  "admission": "closed-native-candidates-needs-semantic-source-split-review-and-neuralese-conversion",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "include_root_prefixes": [
+    "worker-",
+    "closed-audit"
+  ],
+  "notes": "{\"attempts\": 9, \"completed\": 9, \"current_policy_positive_candidates\": 4, \"positive_inline_calls\": 145, \"disposition\": \"Closed snapshot. Source/split/independent intermediate semantics and neuralese conversion pending. Current source holds applied. Policy pass does not confer final training admission.\"}"
+}

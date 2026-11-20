@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-v28-local-split-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v28-source-split-review-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "native-visible-input-conversion-review",
+  "training_admission": false,
+  "admission": "held-root-context-and-source-review",
+  "notes": "Five inherited authored train groups disjoint parent held groups and current8805text heldgroups; global closure pending. Source-bound visible folder inputs for owner closure."
+}

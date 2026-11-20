@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v82-v41-prefix-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v82-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-reviewed-generation-inputs",
+  "source_class": "held-prepared-luna-generation-queues",
+  "training_admission": false,
+  "admission": "root-reviewed-queue-inputs-only-no-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V82 source/capture and queue preparation, five immutable queues, copied canonical hold policy, and prep source. Queue source comprises 20 statically authored programs/148 train labels after exact master, hold, and prior source ID/group filtering; root approved and launched separately. Mutable journals/logs/status are excluded."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-choice-folder-v36-v35repair-inputs-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-and-v35repair-runtimev12-v2",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-recovery-review-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-generation-reviewed-inputs",
+  "training_admission": false,
+  "admission": "generation-input-or-quality-review-only-not-training-data",
+  "notes": "Freshrootreview afterclosedV35journals31complete+1failed, alloldPIDs exited; originalV36V1guardcorrectlyblockedandpreserved. Fiveworkers3/2/2/2/2usingfixedfrozenV12;10trainfolderdecisioncompositions64items +1heldV35sourceindex20freshrepair. Sources/golds/splits unchanged, noautomaticadmission/independent-worldcredit. Activejournals/logs/results excluded."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "luna-semantic-lambda-task-source-20261006-v2",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v2",
+  "admission": "prepared-verified-nonbank-train-tasks-not-generated-training-examples",
+  "include": [
+    "reviewed.cases.jsonl",
+    "source-review.json",
+    "approved-plan.json",
+    "worker-*/queue.jsonl"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-task-source-20261006-v1"
+  ],
+  "notes": "63 pending nonbank tasks, five Luna workers. Banking34 held due visible criterion/category mismatch; completed nonbank3 not repeated. Operator interrupted v1 partials preserved, not negatives."
+}

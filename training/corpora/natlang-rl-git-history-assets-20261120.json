@@ -1,0 +1,11 @@
+{
+  "id": "natlang-rl-git-history-assets-20261120",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-git-history-assets-20261120",
+  "include": [
+    "git-history/*.json"
+  ],
+  "source_class": "immutable-RL-task-source",
+  "split": "Service snapshots of the git-history RL source: one JSON per repository (newest 40 first-parent commits: metadata, changes, patches, tip tree and the blobs of every version), bound by SHA-256 in each case's git service.",
+  "note": "Runtime input of natlang-rl-git-history-20261120 and its held packets; on NVMe (/home/werg/data/natlang-rl-git-history-20261120/assets) because collectors read it while training (runs/ entry is a symlink)."
+}

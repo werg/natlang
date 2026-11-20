@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-v20-checkpoint-eviction-incident-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v20-checkpoint-eviction-incident-20261008-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "integrity-incident-incomplete-unrecovered-no-training-admission",
+  "notes": "Incident record for two V20 full-state checkpoint paths removed from Pop before remote mirroring was confirmed. Exact DGX SSH checks and size searches found no byte-exact copies. Original full-state manifest remains unchanged but incomplete; see incident.json for hashes, sizes, failed verification, surviving artifacts and impact.",
+  "derived_from": [
+    "neuralese-native-text-warmup-v20-closed-storage-20261008",
+    "neuralese-native-text-warmup-v20-surviving-artifacts-20261008"
+  ]
+}

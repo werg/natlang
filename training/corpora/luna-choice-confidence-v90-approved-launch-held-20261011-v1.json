@@ -1,0 +1,21 @@
+{
+  "id": "luna-choice-confidence-v90-approved-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v90-v40-runtimev17-prepared-v1",
+  "include": [
+    "reviewed-plan-root-approved-v1.json",
+    "root-owner-approval-v1.json",
+    "root-supervisor-launch-v1.json"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-generation-approval-and-launch-evidence",
+  "source_class": "root-approved-luna-generation-launch-receipt",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "launch evidence only; no data admission",
+  "notes": "Additive approval/supervisor-start snapshot for V90. Original prepared-only plan and mutable campaign status/journals are not replaced or included."
+}

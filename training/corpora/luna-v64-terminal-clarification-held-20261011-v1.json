@@ -1,0 +1,10 @@
+{
+  "id": "luna-v64-terminal-clarification-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v64-terminal-text-v4-clarification-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-quality-and-generation-evidence",
+  "training_admission": false,
+  "admission": "held-pending-explicit-review",
+  "notes": "Correction: direct literal label is valid when the same request has full source evidence. Separate from trace admission; sealed proposal versions unchanged."
+}

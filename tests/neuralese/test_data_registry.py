@@ -20,9 +20,13 @@ def roots(tmp_path, monkeypatch):
     monkeypatch.setattr(dr, '_DIGESTS', None)
     monkeypatch.setattr(dr, '_LOADED', None)
     repo = tmp_path / 'repo'
-    (repo / 'training').mkdir()
-    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'schema': 'x', 'corpora': []}))
+    (repo / 'training' / 'corpora').mkdir(parents=True)
     return tmp_path
+
+
+def git_entries(repo, entries):
+    from natlang_neuralese.common import corpus_registry
+    corpus_registry.save(repo, {'schema': corpus_registry.SCHEMA, 'corpora': entries})
 
 
 def pool(path, ids):
@@ -107,7 +111,7 @@ def test_roles_come_from_the_git_layer_in_order(roots):
                {'id': 'p1', 'owner': 'dgx', 'path': 'data_hdd:p1', 'roles': {'grpo-pool': {'order': 1, 'file': 'cases.jsonl'}}},
                {'id': 'p3', 'owner': 'dgx', 'path': 'data_hdd:p3', 'retired': True,
                 'roles': {'grpo-pool': {'order': 0, 'file': 'cases.jsonl'}}}]
-    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': entries}))
+    git_entries(repo, entries)
     assert dr.role_paths('grpo-pool', repo=repo) == [str(roots / 'data_hdd' / 'p1' / 'cases.jsonl'),
                                                       str(roots / 'data_hdd' / 'p2' / 'cases.jsonl')]
     # a journal snapshot of a git entry adds facts but never moves its pinned path or roles
@@ -177,8 +181,8 @@ def test_promote_role_appends_after_current_members(roots, monkeypatch, capsys):
     import data_registry as cli
     repo = roots / 'repo'
     pool(roots / 'data_hdd' / 'p1' / 'cases.jsonl', ['a'])
-    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': [
-        {'id': 'p1', 'owner': 'dgx', 'path': 'data_hdd:p1', 'roles': {'grpo-pool': {'order': 4, 'file': 'cases.jsonl'}}}]}))
+    git_entries(repo, [
+        {'id': 'p1', 'owner': 'dgx', 'path': 'data_hdd:p1', 'roles': {'grpo-pool': {'order': 4, 'file': 'cases.jsonl'}}}])
     pool(roots / 'data_hdd' / 'new' / 'cases.jsonl', ['b'])
     dr.record_dataset('new', roots / 'data_hdd' / 'new', kind='rl-tasks', format='f', license='L')
     monkeypatch.setattr(dr, 'code_repo', lambda: repo)
@@ -247,9 +251,9 @@ def test_glob_includes_claim_only_their_fixed_prefix(roots):
     repo = roots / 'repo'
     pool(repo / 'runs' / 'a-1' / 'cases.jsonl', ['a'])
     pool(repo / 'runs' / 'b-1' / 'cases.jsonl', ['b'])
-    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': [
+    git_entries(repo, [
         {'id': 'legacy', 'owner': 'dgx', 'path': 'runs', 'include': ['a-1/*']},
-        {'id': 'b', 'owner': 'dgx', 'path': 'runs/b-1', 'include': ['cases.jsonl']}]}))
+        {'id': 'b', 'owner': 'dgx', 'path': 'runs/b-1', 'include': ['cases.jsonl']}])
     reg = dr.load(repo=repo, fresh=True)
     assert reg.find(repo / 'runs' / 'a-1' / 'cases.jsonl')['id'] == 'legacy'
     assert reg.find(repo / 'runs' / 'b-1' / 'cases.jsonl')['id'] == 'b'
@@ -261,8 +265,8 @@ def test_leading_wildcard_include_claims_only_matching_entries(roots):
     repo = roots / 'repo'
     pool(repo / 'runs' / 'succ-v1' / 'x.jsonl', ['a'])
     pool(repo / 'runs' / 'other' / 'cases.jsonl', ['b'])
-    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': [
-        {'id': 'legacy', 'owner': 'dgx', 'path': 'runs', 'include': ['succ-v*/**']}]}))
+    git_entries(repo, [
+        {'id': 'legacy', 'owner': 'dgx', 'path': 'runs', 'include': ['succ-v*/**']}])
     reg = dr.load(repo=repo, fresh=True)
     assert reg.find(repo / 'runs' / 'succ-v1' / 'x.jsonl')['id'] == 'legacy'
     assert reg.find(repo / 'runs' / 'other' / 'cases.jsonl') is None

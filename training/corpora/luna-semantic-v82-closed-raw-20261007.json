@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v82-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v82-campaign-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-generation-or-review-evidence-no-training-admission",
+  "notes": "Two completed typedDraft enum route/mileage recoveryattempts, source-supported correctanswers; individualaction admissionpending. Changedsourcecontractprecludes casualDPOpairs."
+}

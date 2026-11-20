@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v8",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v8",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed native SFT and separately closed recurrence channel",
+  "notes": "All3706 V7native+774 originalreviewedV32actions=4480; all3684 V7recurrence+774=4458.347 newholds inclall35ambiguoustrafficworldactions and3hardduplicate blocks; case13partialexplicitomission. Same-worldrecoveries keepgroups/splits. No targetrewrites or weightqualification."
+}

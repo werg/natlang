@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-sched540-v42-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v42-sched540-case12-quality-audit-v1",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Independentfixture/gold/result/trace/runtimeaudit. FouriterateOnstatehandoffsbytypedblockID;noscopefailures1accuratelyrejectedlibraryobjectread. V38partialcomparisonnotcausal(seed/runtime/budgetdiffer). Noautomaticadmission."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "luna-annotation-folder-v62-reviewed-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v62-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Reviewed five-worker successor waits for V61 accounting before executing 24 annotation-only inline folder programs (96 items). Queues disjoint; current29 holds excluded. Active outputs excluded. Generation approval does not grant training admission.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

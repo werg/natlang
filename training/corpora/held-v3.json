@@ -1,0 +1,28 @@
+{
+  "id": "held-v3",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v3",
+  "include": [
+    "cases.jsonl",
+    "manifest.json",
+    "engine.json",
+    "exclusion-ids.json",
+    "reject-ids.jsonl",
+    "replace-ids.jsonl",
+    "pin.sh"
+  ],
+  "kind": "held",
+  "protected": true,
+  "admission": "evaluation-only-never-training",
+  "training_admission": "evaluation-only",
+  "roles": {
+    "held-eval": {
+      "order": 0,
+      "file": "manifest.json"
+    }
+  },
+  "supersedes": "held-v2",
+  "format": "held_eval pinned set: manifest.json (sha 45471060), cases.jsonl (256 tasks)",
+  "license": "project task sources (see manifest pool)",
+  "note": "The held-out set (plans/neuralese/HELD_V3_20261113.md). Training excludes these ids, their split groups and source-group siblings (held_eval.exclusion_ids), and held-v2 through also_excludes."
+}

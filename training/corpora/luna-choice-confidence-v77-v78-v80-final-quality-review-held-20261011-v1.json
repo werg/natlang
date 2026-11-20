@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-confidence-v77-v78-v80-final-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v77-v78-v80-final-v4",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-provider-generation-quality-audit",
+  "training_admission": false,
+  "admission": "exact-output-review-only-no-source-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Corrected v4 audit of closed V77/V78/V80 campaigns against exact original decision source rows, saved result maps and item-bound child request evidence. It explicitly supersedes three earlier local audit attempts with invalid visibility joins/omitted source fields. V77: 815/833 source decisions agree; 825/833 full state/question/options were in same item-bound saved rendered child request. V78: 112/122 agree, 8 missing final values and 2 nonmissing disagreements; 114/122 full-context request matches. V80: 126/139 agree, 1 missing final and 12 nonmissing disagreements; 125/139 full-context request matches. Each output source input item file matched exact master fields. Existing source quality/license holds remain unchanged. No original provider wire bytes or statistical ranking claimed."
+}

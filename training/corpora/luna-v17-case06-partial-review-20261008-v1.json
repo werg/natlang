@@ -1,0 +1,10 @@
+{
+  "id": "luna-v17-case06-partial-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-v17-case06-partial-review-20261008-v1",
+  "admission": "held-partial-review-evidence-only;no-admission-or-DPO",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Root review of 192-response/request-budget source6 partial: distinct progress, concrete API/type friction, correct intermediate decision; missing original graph/capture evidence cannot be retroactively synthesized. Bound exact raw source/partial/runtime hashes."
+}

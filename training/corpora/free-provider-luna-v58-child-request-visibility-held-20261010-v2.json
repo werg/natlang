@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v58-child-request-visibility-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-child-request-visibility-supplement-v2",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Corrects raw-substring matcher via exact JSON-escaped strings.380/394 item states in saved requests,14 additional exact captures,0 uncovered by both.877 nested requests saved. Request text is not original byte-wire evidence. Supersedes only v1 visibility counts."
+}

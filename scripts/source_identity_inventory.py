@@ -80,12 +80,13 @@ def include_matches(relative: str, pattern: str) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--registry", type=Path, default=Path("training/neuralese_corpora.json"))
+    parser.add_argument("--registry", type=Path, default=Path("training/corpora"))
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     root = args.root.resolve()
     registry_path = args.registry if args.registry.is_absolute() else root / args.registry
-    registry = json.loads(registry_path.read_text())
+    from natlang_neuralese.common import corpus_registry
+    registry = corpus_registry.load(registry_path)
 
     # Registry snapshot manifests are a second authority for explicitly listed
     # files. Read them separately so canonical source bundles beneath pruned build
@@ -233,7 +234,7 @@ def main() -> None:
     payload = {
         "schema": "natlang.source_identity_inventory/1",
         "builder": {"path": str(Path(__file__).resolve().relative_to(root)), "sha256": sha256_file(Path(__file__))},
-        "registry": {"path": str(registry_path.relative_to(root)), "sha256": sha256_file(registry_path)},
+        "registry": {"path": str(registry_path.relative_to(root)), "signature": str(corpus_registry.signature(registry_path))},
         "scope": "registered case artifacts plus canonical case JSONL under runs/, data/, and training/",
         "admission": "inventory only; does not imply source quality or training admission",
         "counts": {"registry_corpora": len(corpus_rows), "case_artifacts": len(artifacts),

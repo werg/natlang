@@ -1,0 +1,10 @@
+{
+  "id": "annotation-inline-folder-static-held-20261011-v21",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v21",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "160 reference-accepted annotation-only folder programs640 distinct complete train rows across13families. Twelve52each/PubMedQA16; shared truncationrule/current45holds/prior8796/V27exclusions. Frozen14components, no providercalls/admission."
+}

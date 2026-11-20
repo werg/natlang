@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-mixed-decisions-v5-closed-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v5",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "closed-free-provider-typed-decision-labels",
+  "training_admission": false,
+  "admission": "held-typed-and-semantic-quality-review",
+  "notes": "1024sourcecases18families:848typedvalid/176invalid(175mass1JSON); raw labels and attempts immutable; validformat notsemanticadmission. Wholepool repair176separatelyqueuedV8, no renormalization or goldprompt."
+}

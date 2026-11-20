@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-v24-v25-source-action-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v25-source-action-review-20261008-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-per-action-source-quality-review-no-training-admission",
+  "derived_from": [
+    "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008",
+    "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008"
+  ],
+  "notes": "Held actual-action review of V24/V25 campaign evidence, separate from scripted runtime references. V25 screened all 16 parent outputs against source-reviewed expected values and manually reviewed four selected note targets plus the TREE-710/FISH-730 incorrect authority cases; other actions remain unreviewed. V24 review currently contains the FLD-510 pass-03/pass-04 sample while exhaustive V24 review proceeds separately. No action or training admission is granted."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "semantic-lambda-refinement-tasks-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-next-20261006-v1",
+  "include": [
+    "cases.jsonl",
+    "cases.jsonl.report.json"
+  ],
+  "admission": "prepared-verified-refinement-tasks-not-generated-training-examples",
+  "notes": "SUPERSEDED for future collection by semantic-lambda-refinement-tasks-20261006-v2, which uses the explicit top-level JSON array/read-back contract and cross-source family v3. Do not schedule or collect both versions. Historical source-only artifact remains immutable."
+}

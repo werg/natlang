@@ -1,0 +1,20 @@
+{
+  "owner": "pop",
+  "path": "runs/luna-repair-s52082-s52089-review-20261015-v1",
+  "license": "Project-generated curriculum; source data licenses retained in selected IR program records",
+  "split": "train-only replay-checked failed-action handoffs; protected packet and current source review v18 checked",
+  "notes": "One of five Luna repair attempts passed exact oracle; four failed attempts remain excluded. Source quality, causal pair and native admission are separate.",
+  "id": "luna-repair-s52082-s52089-preference-candidate-20261015-v1",
+  "include": [
+    "SEMANTIC_REVIEW.md",
+    "preference-pairs.review-candidates.jsonl",
+    "preference-pairs.review-candidates.jsonl.audit.jsonl",
+    "preference-pairs.review-candidates.jsonl.manifest.json"
+  ],
+  "source_class": "causally verified Luna failed-action preference pair candidate",
+  "admission": "One chosen/rejected pair at the same failed action site; causal audit reports one verified pair; final DPO label/training audit remains pending",
+  "training_admission": false,
+  "training_admission_reason": "Pair is retained for explicit DPO review only; builder manifest marks final_training_audited=false and labels_finalized=false.",
+  "review_status": "Reviewed chosen typed eval and malformed rejected eval-argument object; no direct DPO training admission yet.",
+  "required_conversion": "Final preference-pair training audit, explicit labels and per-model DPO recipe if used"
+}

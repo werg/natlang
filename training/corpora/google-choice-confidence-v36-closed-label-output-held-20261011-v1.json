@@ -1,0 +1,17 @@
+{
+  "id": "google-choice-confidence-v36-closed-label-output-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v36-source",
+  "include": [
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json",
+    "root-launch-receipt-v1.json"
+  ],
+  "split": "inherited-train-provider-labels",
+  "source_class": "held-provider-generated-choice-confidence-labels",
+  "training_admission": false,
+  "admission": "held-label-evidence-only-independent-quality-review-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Closed V36 output: 512/512 source-bound choice-confidence rows, 512 terminal HTTP 200 labels, plus 33 failed HTTP attempts in append-only ledger (21 HTTP 500, 12 HTTP 503). Exact source inputs/frozen pool are separately registered. No training admission; paired V36 quality/static snapshots registered separately."
+}

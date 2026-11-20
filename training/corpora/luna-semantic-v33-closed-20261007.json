@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v33-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v33-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw generation evidence only; per-actionreview required",
+  "notes": "Closed24freshV12worldtargets24exports21accepted3failed4/7/18; finaloracleacceptance doesnotestablishallactions. ST91overstrictsame-itemscope classifier; CG62benchmark/UTCreferencequalification sourcehold; case18badmultigeneric/capture-call schema. Native source/output evidence immutable."
+}

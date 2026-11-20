@@ -5,7 +5,7 @@
     {
       "id": "registered-evaluation-only-packets",
       "kind": "evaluation-packets",
-      "registry": "training/neuralese_corpora.json"
+      "registry": "training/corpora"
     },
     {
       "id": "memetic-held-programs",

@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-runtime-small-teachers-v10-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v10",
+  "include": [
+    "**/*"
+  ],
+  "split": "not-training-data",
+  "source_class": "frozen-provider-runtime-with-workspace-dependency-overlay",
+  "training_admission": false,
+  "admission": "runtime-evidence-only",
+  "notes": "Complete1331runtimefiles plusmanifest; node_modules links excluded fromtransfers. Sharedfreezer9610fb65merged hostlocal+rootinstalleddependencies, actualESMproviderimportpassed noAPIcalls. Destinationmustinstall/recreate own localdeps; archivealone notdeployable. Originalmanifestv1incompleteglob excluded/preserved.",
+  "exclude_dirs": [
+    "node_modules"
+  ]
+}

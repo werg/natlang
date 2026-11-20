@@ -240,12 +240,12 @@ def split_chain_key(row: dict) -> str:
 
 def registered_source_pieces(sources):
     """Load exact piece tables listed beside the source in its immutable corpus manifest."""
-    registry_path = ROOT / 'training/neuralese_corpora.json'
-    registry = json.loads(registry_path.read_text())
+    from natlang_neuralese.common import corpus_registry
+    registry = corpus_registry.load(ROOT)
     entries = registry.get('corpora', [])
     registered = {entry['id']: entry for entry in entries}
     if len(registered) != len(entries):
-        raise ValueError('duplicate corpus IDs in training/neuralese_corpora.json')
+        raise ValueError('duplicate corpus IDs in training/corpora')
     tables, bindings = {}, []
     for source in sources:
         source_arg = Path(source)
@@ -288,7 +288,7 @@ def registered_source_pieces(sources):
             raise ValueError(f'registered source bytes differ from immutable manifest: {relative}')
         if not matches:
             bindings.append({'source': relative, 'source_sha256': file_sha(source_path),
-                             'registry_sha256': file_sha(registry_path), 'manifest': None,
+                             'registry_sha256': None, 'manifest': None,
                              'piece_table': None})
             continue
         declared = []
@@ -312,7 +312,7 @@ def registered_source_pieces(sources):
         corpus_id, entry, manifest_path, listed, rel_to_corpus, piece_rel, item = declared[0]
         binding = {'source': relative, 'source_sha256': source_hash, 'corpus_id': corpus_id,
                    'also_registered_as': [row[0] for row in declared[1:]],
-                   'registry_sha256': file_sha(registry_path),
+                   'registry_sha256': file_sha(corpus_registry.entry_path(ROOT, corpus_id)),   # its entry file
                    'manifest': str(manifest_path.relative_to(ROOT)), 'manifest_sha256': file_sha(manifest_path),
                    'piece_table': None}
         if piece_rel:
@@ -370,8 +370,9 @@ def registered_candidate_selection_admission(corpus_id, sources, *, registry_fil
     """
     if (registry_file is None) != (manifest_file is None):
         raise ValueError('candidate admission registry and manifest overrides must be provided together')
-    registry_path = Path(registry_file) if registry_file is not None else ROOT / 'training/neuralese_corpora.json'
-    registry = json.loads(registry_path.read_text())
+    from natlang_neuralese.common import corpus_registry
+    # an override (register_corpora's proposed registration) is one registry document; the checkout is its entry files
+    registry = json.loads(Path(registry_file).read_text()) if registry_file is not None else corpus_registry.load(ROOT)
     entries = [entry for entry in registry.get('corpora', []) if entry.get('id') == corpus_id]
     if not entries:
         # A corpus id with no registry entry (a mixed-source render of several registered sources) has no

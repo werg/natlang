@@ -1,0 +1,12 @@
+{
+  "id": "luna-semantic-v25-recovery-accounting-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v25-recovery-accounting-20261007",
+  "admission": "accounting-diagnostic-only;all16-original-exports-validate;does-not-change-source-or-split-admission",
+  "include": [
+    "*.json"
+  ],
+  "derived_from": [
+    "luna-semantic-reducers-source-v25r1-20261007"
+  ]
+}

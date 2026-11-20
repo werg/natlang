@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-semantic-iterate-v15-readable-source-20261007-v13",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v15-soft-state-20261007-v13-readable",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-readable-source-and-frozen-scripted-proof-only-no-teacher-or-training-admission",
+  "derived_from": [
+    "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1"
+  ],
+  "notes": "Fresh V13 readable-prose variant, source.cases.jsonl SHA-256 ad5840f4177e86938aead2a192506d670cc71f28b514b8833b8263c366a23291; 12 authored V15 worlds, preserving source groups, splits, and gold, with V10 course AC-73 plus AC-73A and vaccine decision.json boundary clarifications. Includes source review and frozen V79 CPU scripted proof (proof SHA-256 9e1f6be018ec5e1fc123933f8306f77c54e3df29c7f2bd8c163ea84ea2083ac1), 12/12 cases, 48 clean reads, 144 successful outcomes. Proof is runtime mechanics only, with zero provider/model calls; no teacher output or training admission."
+}

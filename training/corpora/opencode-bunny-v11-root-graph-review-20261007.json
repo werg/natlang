@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-v11-root-graph-review-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v11-root-graph-review-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "technical-readiness-only-no-training-admission",
+  "notes": "Actual five validated semantic soft edges and one typed readout; not source quality admission."
+}

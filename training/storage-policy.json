@@ -22,7 +22,7 @@
   "leftover_after_days": 2,
   "keep": {
     "registries": [
-      "training/neuralese_corpora.json",
+      "training/corpora",
       "training/neuralese_artifacts.json"
     ],
     "reference_texts": [

@@ -1,0 +1,19 @@
+{
+  "id": "luna-choice-confidence-v88-root-approval-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v88-v41-runtimev17-v1",
+  "include": [
+    "reviewed-plan-root-approved-v1.json",
+    "root-owner-approval-v1.json",
+    "root-hold-check-v1.json",
+    "root-supervisor-launch-v1.json"
+  ],
+  "split": "held-provider-generation-approval-evidence",
+  "source_class": "root-reviewed-generation-approval-and-launch-receipt",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "approved inputs/launch evidence only; active worker output is not included",
+  "notes": "Root approval and supervisor launch receipt bind V88 plan SHA 8f5ce633c13c57a03fbf27a3bae5f8cf304e7cc5e66ea94b422b13f6cb8646cb. Excludes mutable campaign-launch and worker journals/logs/results."
+}

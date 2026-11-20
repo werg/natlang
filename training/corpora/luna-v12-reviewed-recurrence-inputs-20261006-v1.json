@@ -1,0 +1,10 @@
+{
+  "id": "luna-v12-reviewed-recurrence-inputs-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v12-reviewed-recurrence-inputs-20261006-v1",
+  "admission": "reviewed-constructed-train-source-exact-runtime-positive; turn-level-admission-and-closure-required",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ]
+}

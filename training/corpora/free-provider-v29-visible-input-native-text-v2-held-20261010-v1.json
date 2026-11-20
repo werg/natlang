@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-v29-visible-input-native-text-v2-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-source-group-review-only",
+  "source_class": "provider-derived-held-quality-review",
+  "training_admission": false,
+  "admission": "held-explicit-global-closure-and-root-admission-pending",
+  "notes": "344actualconvertedturns/0errors;321clean targets after23failedactions excluded;299heldtextpreviews deduplicated22. Shared8ce4db33 perread graphproducer /3. No native/recurrence/admission claim."
+}

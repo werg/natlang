@@ -1,0 +1,15 @@
+{
+  "id": "google-choice-confidence-v41-clinc-enum-diagnostics-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+  "include": [
+    "v41-clinc-400-diagnostic-v2/receipt.json",
+    "v41-clinc-400-diagnostic-v6/receipt.json"
+  ],
+  "split": "inherited-train-provider-diagnostic",
+  "source_class": "held-provider-schema-diagnostic",
+  "training_admission": false,
+  "admission": "diagnostic-evidence-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Same CLINC request: original strict JSON Schema enum request returned HTTP400; v6 JSON schema without choice enum returned HTTP200 and passed the unchanged local exact-option/confidence validator. No fallback or source/output mutation."
+}

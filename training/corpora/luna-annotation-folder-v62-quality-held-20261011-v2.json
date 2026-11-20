@@ -1,0 +1,10 @@
+{
+  "id": "luna-annotation-folder-v62-quality-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v62-annotation-folder-final-v2",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "96/96 item-bound rendered-request state visibility;120/120 input files exact.11 accepted programs76 correct decisions20differences; eight recovered scope events. No gold leak: coincident expected-map text was model console output. Allheld."
+}

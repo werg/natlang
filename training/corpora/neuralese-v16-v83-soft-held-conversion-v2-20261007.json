@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v16-v83-soft-held-conversion-v2-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Held V10 candidate five selected soft write/read pairs; ten-record subset misses separate existing producer action0081. Receipt trust revalidation required. No new native/R admission; inherited V15 references do not count as additional examples."
+}

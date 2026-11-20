@@ -1,0 +1,217 @@
+{
+  "id": "natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered corpus natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1",
+    "pop-static-recovery-loop-recursion-s62000-native-20261013-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 40,
+            "supervised_tokens": 3020,
+            "tokens": 160016,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 1554800,
+        "decoded_text_data_sha256": "ed5cc2a0be4bdc565133bf51a4985e84c965a6b0c4ad9574b866fdb680c10485",
+        "documents": 40,
+        "max_document_tokens": 4223,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "3ca54aa898f452c21904891e27c72bc8fe4d6f9f659430d3e4a5adbb4bb471ae",
+        "exact_subset": {
+          "file": "exact-subset/full/lfm3/text-data.jsonl.zst",
+          "sha256": "d02399e3220c9d4ed3110c6c12a9e3a3a707dc16da0cb904c80d577bbe458aaa",
+          "documents": 33,
+          "counts": {
+            "excluded_nonidentical": 7,
+            "train": 33
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 768,
+            "supervised_tokens": 56906,
+            "tokens": 678948,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 6856993,
+        "decoded_text_data_sha256": "f9c36e4160b9e36b7f79feea3c07e2e9a2e445e893b64f365e185dc79e61eec2",
+        "documents": 768,
+        "max_document_tokens": 1108,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "e2bf41c71b6ef7f519a9c0cbd09cd1c9f11e42006a77da1af4685fe20431243a",
+        "exact_subset": {
+          "file": "exact-subset/program-header/lfm3/text-data.jsonl.zst",
+          "sha256": "0b7bf46c2922978e6560bc793ff1429bfed87ea0e742e1f70425253802cfe2b5",
+          "documents": 580,
+          "counts": {
+            "excluded_nonidentical": 188,
+            "train": 580
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {},
+        "decoded_text_data_bytes": 0,
+        "decoded_text_data_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "documents": 0,
+        "max_document_tokens": 0,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+        "exact_subset": {
+          "file": "exact-subset/whole-trajectory/lfm3/text-data.jsonl.zst",
+          "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "documents": 0,
+          "counts": {}
+        }
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 40,
+        "reference_documents": 34,
+        "same_order": 0,
+        "only_reference": 1,
+        "only_student": 7
+      },
+      "program-header": {
+        "documents": 768,
+        "reference_documents": 582,
+        "same_order": 0,
+        "only_reference": 2,
+        "only_student": 188
+      },
+      "whole-trajectory": {
+        "documents": 0,
+        "reference_documents": 0,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": {
+      "full:exact": 40,
+      "program-header:exact": 768
+    },
+    "exact_subset": {
+      "policy": "keep documents identical to the reference (id, split, source groups, source record ids); drop train documents sharing a source group with any held document of either render",
+      "resolved_problems": [
+        "full: split_or_group_changed 1",
+        "program-header: split_or_group_changed 2"
+      ],
+      "excluded": {
+        "full": 7,
+        "program-header": 188,
+        "whole-trajectory": 0
+      }
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 580,
+        "whole-trajectory": 0
+      },
+      "detail": {
+        "program-header": {
+          "train": 580,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 580,
+              "bytes": 120463,
+              "sha256": "1663a00d2ea4a9af49035cadc1efc71d45834d03e8efb00fb135edf751c80905"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 0,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-pop-static-recovery-loop-recursion-s62000-render-20261013-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

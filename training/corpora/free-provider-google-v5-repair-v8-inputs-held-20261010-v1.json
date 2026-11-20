@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-google-v5-repair-v8-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v5-mass-json-repair-v8",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/**/*",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/models.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "pinned-invalid-typed-response-repair-inputs",
+  "training_admission": false,
+  "admission": "generation-inputs-only-live-output-excluded",
+  "notes": "176V5invalidcases unchanged IDs/gold/groups; sharedexplicitone-unitmass promptstrictvalidation unchanged;4quotagroupworkers behindV7projectlock, no paidfallback. Frozen6payloadfiles+manifest; outputsreviewheld."
+}

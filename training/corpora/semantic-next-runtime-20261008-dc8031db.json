@@ -1,0 +1,13 @@
+{
+  "id": "semantic-next-runtime-20261008-dc8031db",
+  "owner": "pop",
+  "path": "runs/semantic-next-runtime-20261008-dc8031db",
+  "admission": "immutable-runtime-evidence-only;not-training-data",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "node_modules"
+  ],
+  "notes": "Stable committed runtime with saved inline/const alias/chained .with, shared capture validation, accurate eval read_code guidance, normalized typed-result converter/JSON replay parity. Isolated compilation and unchanged shared dependencies; frozen1025file receipt."
+}

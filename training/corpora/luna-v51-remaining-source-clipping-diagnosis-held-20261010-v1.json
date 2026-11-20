@@ -1,0 +1,10 @@
+{
+  "id": "luna-v51-remaining-source-clipping-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-remaining-source-clipping-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "source-input-loss-quality-diagnosis",
+  "training_admission": false,
+  "admission": "held-source-provenance-full-evidence-repair-required",
+  "notes": "Read-only exact input clipping review. V18 Newsgroups 7 / 64 clipped, VitaminC 2 / 64, AG News zero. Historical 2300-per-family census finds BoardgameQA 664 clipped, HelpSteer 1531, Yelp 239, BoolQ 38, Newsgroups 319, VitaminC 3, AG News zero. Missing historical immutable upstream pins block safe tail backfill; preserve originals and record omission. Fresh source builds must retain full evidence with explicit downstream budget exclusions."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "luna-choice-confidence-v87-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v87-choice-confidence-final-v1",
+  "include": [
+    "audit.json",
+    "audit.md",
+    "FILES.sha256.json"
+  ],
+  "split": "held-quality-review",
+  "source_class": "independent-closed-output-quality-audit",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "quality evidence only; disagreement comparisons do not grant data or trace admission",
+  "notes": "V87 review: 51 programs, 404 source items, 372 exact inherited annotation agreements and 32 differences. All item states have item-bound saved-rendered-request joins; 80 also have same-invocation capture snapshots. No original-wire claim."
+}

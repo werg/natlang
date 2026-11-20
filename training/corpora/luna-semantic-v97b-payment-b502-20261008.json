@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v97b-payment-b502-20261008",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v97b-payment-b502-20261008",
+  "admission": "held-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Closed fresh payment recovery on b502 prior-eval alias fix: accepted six exact files. Original failed V96 preserved separately. Actual source/action review still required."
+}

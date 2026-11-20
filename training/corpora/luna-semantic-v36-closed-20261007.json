@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v36-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v36-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw sameworld teacher diversity/recovery evidence pending quality review",
+  "notes": "24exports22accepted2rejected; no independentworldcount; oldCIRassessmentwindowambiguityheld, not modelnegative. Preserveoriginalsourcegroup/split and actualfailure/success evidence."
+}

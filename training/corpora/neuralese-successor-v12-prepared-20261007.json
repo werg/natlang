@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v12-prepared-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "reviewed source and scripted oracle scaffolding only; no actual teacher admission",
+  "notes": "Root reviewed24independentworlds/48records/12packets,12file/12iterate,12train12test,84groups. Exact formats, dated calibration and signed authority explicit. Source33c2e405...; actualruntime proof24/24zero modelcalls separate. Training/native child review stillmandatory; generated V33 teacherobservationsnotblanketapproved."
+}

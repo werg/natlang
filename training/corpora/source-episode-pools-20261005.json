@@ -1,0 +1,16 @@
+{
+  "id": "source-episode-pools-20261005",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/source-episode-pools-20261005",
+  "admission": "source-episodes-unadmitted-need-teacher-generation-and-paired-gates",
+  "include": [
+    "**/*.jsonl",
+    "**/*.json",
+    "**/*.md",
+    "**/*.nl",
+    "**/*.ts",
+    "**/*.mjs",
+    "**/*.txt"
+  ],
+  "note": "Latest version of each S2 source-episode pool (contractnli v4-r3, scifact source v6 and episodes v2, kernel source, efficiency, code golf, crossword, CSP, timeseries, research landscape, selection v3-r2, optimization expanded, slate v3). Earlier source versions and the ungraded candidate queues were retired; selected reusable source episodes and decision cases are in s2-usable-sources-20261015-v1."
+}

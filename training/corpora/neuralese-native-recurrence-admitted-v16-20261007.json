@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-native-recurrence-admitted-v16-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-approved-next-native-recurrence-inputs",
+  "notes": "Root admission verifies 5184 native /4903 recurrence records, exact V15 prefixes, split-pure groups and closed recurrence. Five semantic edges, no new worlds/DPO. Historical proposal manifest retained; root-admission.json records final decision. Active V21 unchanged; text derivative separate."
+}

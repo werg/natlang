@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-admitted-61-local-native-actions-and-exact-v14-prefix;recurrence-unchanged;not-runtime-or-foundation-qualified",
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-20261007-v14-final",
+    "luna-semantic-v68-v71-closed-action-audit-20261007-v1"
+  ],
+  "notes": "Root admission root-admission.json SHA 7cc01f66569fe02b15c6f1c0c5490cb2ec947018e9c49e9269fad677e94f4a10 binds 5,173 native rows (3,167 train/2,006 test): exact V14 prefix plus 61 exact local actions (59 boolean, 2 typed Draft). The additions introduce five previously held source groups relative to V14; these repeated campaign worlds are not newly generated independent facts. The 4,892-row recurrence prefix is unchanged; zero recurrence edges and DPO pairs added. The APR-A creator decision 0002 and linked 0006 stay held for an unsupported navigation-date constraint. Forty inline-instruction conversions and twelve missing child-result producers remain held; 898 other accepted-parent actions lack approval and 57 rejected-parent actions are held. Native action admission only; no runtime transport/foundation qualification."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v9-upstream-reconstruction-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-v9-upstream-reconstruction-v4",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-source-generation-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "Freshupstream reconstruction92uniqueclippedstate/mappedlabel matches explicitrawrowhash/revisions; notprooforiginalOct4revision. Licensesprovenanceonly, source/split/qualityclosurepending."
+}

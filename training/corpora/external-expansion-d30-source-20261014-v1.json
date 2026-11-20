@@ -1,0 +1,24 @@
+{
+  "id": "external-expansion-d30-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D30",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "data/train-00000-of-00006.parquet",
+    "data/train-00001-of-00006.parquet",
+    "data/train-00002-of-00006.parquet",
+    "data/train-00003-of-00006.parquet",
+    "data/train-00004-of-00006.parquet",
+    "data/train-00005-of-00006.parquet"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "allenai/Dolci-Instruct-SFT-Tool-Use",
+    "revision": "dc042846f0f2de0f15eedae3d6ced04223ed47eb",
+    "license": null
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

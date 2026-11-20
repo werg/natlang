@@ -1,0 +1,14 @@
+{
+  "id": "luna-direct-clean-base-first-attempt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-failed-initialization-attempt",
+  "source_class": "failed-clean-base-initialization-diagnostic",
+  "training_admission": false,
+  "admission": "failed-initialization-evidence-only-no-training-or-foundation-qualification",
+  "independent_new_worlds": 0,
+  "notes": "Preserves the first clean-base preparation attempt, including its partial/untrained artifact, failure receipt, probe output and preparation code. This attempt failed before a valid initialization receipt; it is retained for failure diagnosis and is not a model qualification or training example."
+}

@@ -1,0 +1,189 @@
+{
+  "id": "sol-repair-pilot-s52106-s52113-render-20261015-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered render sol-repair-pilot-s52106-s52113-render-20261015-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "sol-repair-pilot-s52106-s52113-render-20261015-v1",
+    "sol-repair-pilot-s52106-s52113-curated-20261015-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 4,
+            "supervised_tokens": 335,
+            "tokens": 30541,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 297048,
+        "decoded_text_data_sha256": "9543ae368973f078206e692ad88ecd29641b63432e5779f233904ca6ecc150a4",
+        "documents": 4,
+        "max_document_tokens": 7914,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "4651eb5a0c14ff38912a629d0365dfe752967aeb4a4b9b4e181dcb88b859d232"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 18,
+            "supervised_tokens": 1491,
+            "tokens": 43448,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 423809,
+        "decoded_text_data_sha256": "ab3fb71edcc5d3b057a41368754f233b4114615e893a73a39ce2daaec0883207",
+        "documents": 18,
+        "max_document_tokens": 3870,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "9a27bb9bcd75b55a49925ec39341f84ac9bc8628c6f354695349495c56f4d8f1"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 9541,
+            "documents": 14,
+            "opening_tokens": 7120,
+            "supervised_tokens": 2421,
+            "tokens": 30083,
+            "tool_tokens": 3641
+          }
+        },
+        "decoded_text_data_bytes": 300216,
+        "decoded_text_data_sha256": "a6846e515931c8d759cc7c1b55afb22949d9f96cd3315d58eb098d8de096a5f6",
+        "documents": 14,
+        "max_document_tokens": 3870,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "8e18ead19f1bec7d36c4177d086d4b833104762be3b1aff8d36b1337fd225375"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "sol-repair-pilot-s52106-s52113-render-20261015-v1",
+    "student": "lfm3",
+    "identical_documents": true,
+    "views": {
+      "full": {
+        "documents": 4,
+        "reference_documents": 4,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 18,
+        "reference_documents": 18,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 14,
+        "reference_documents": 14,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": {
+      "full:exact": 4,
+      "program-header:exact": 18
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 18,
+        "whole-trajectory": 14
+      },
+      "detail": {
+        "program-header": {
+          "train": 18,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 18,
+              "bytes": 10929,
+              "sha256": "76516be7132d61603964193c867cd4d65df604afd4a496e558490b5fda8fbac0"
+            },
+            {
+              "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 14,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 14,
+              "bytes": 13515,
+              "sha256": "235a0643ace896fdf6a8e3a62bc46edcf805f76e1b6804f614b496e93d8123c1"
+            },
+            {
+              "path": "runs/lfm3-renders/sol-repair-pilot-s52106-s52113-render-20261015-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

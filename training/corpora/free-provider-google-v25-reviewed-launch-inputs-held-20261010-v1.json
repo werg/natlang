@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-google-v25-reviewed-launch-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v25",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "512 complete train inputs, 64 per each of eight families. Canonical seven source-quality holds excluded. Historical clipped rows and prior IDs/groups excluded. Shared quota ownership serializes V23/V24/V25; no paid fallback. Frozen runtime and launch receipt included; active outputs excluded. Prepared-only snapshot remains immutable.",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/**/*"
+  ]
+}

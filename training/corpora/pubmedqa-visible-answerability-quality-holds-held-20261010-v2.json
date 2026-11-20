@@ -1,0 +1,13 @@
+{
+  "id": "pubmedqa-visible-answerability-quality-holds-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/pubmedqa-visible-answerability-holds-v2",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-independent-quality-review",
+  "notes": "Root reviewed five ambiguous V56source questions; combined with two earlier exclusions for seven exact original train ID/group/split holds. Raw labels/results preserved; no admission for remaining samples."
+}

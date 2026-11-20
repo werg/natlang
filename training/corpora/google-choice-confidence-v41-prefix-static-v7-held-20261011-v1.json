@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v41-prefix-static-v7-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v7-current-criteria",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-static-reference-and-source-label-derivative",
+  "source_class": "held-provider-label-prefix-and-authored-static-reference",
+  "training_admission": false,
+  "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77–V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
+}

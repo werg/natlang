@@ -1,0 +1,9 @@
+{
+  "id": "neuralese-inline-lambda-writer-design-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-inline-lambda-writer-design-20261007",
+  "admission": "design-only;inline-writer-transport-not-implemented;not-trainingdata",
+  "include": [
+    "*.md"
+  ]
+}

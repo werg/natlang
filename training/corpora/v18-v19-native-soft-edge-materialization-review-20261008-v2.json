@@ -1,0 +1,28 @@
+{
+  "id": "v18-v19-native-soft-edge-materialization-review-20261008-v2",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "v18-v19-native-soft-edge-review-20261008-v2/README-v2.md",
+    "v18-v19-native-soft-edge-review-20261008-v2/review-manifest-v2.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/topology-report-v2.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/v18-accepted-materialized-actions.jsonl",
+    "v18-v19-native-soft-edge-review-20261008-v2/v18-conversion-audit.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/v18-conversion-audit.stderr.txt",
+    "v18-v19-native-soft-edge-review-20261008-v2/v18-message-target-preservation.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/v18-writer-reader-action-facet-review.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/v19-completed-unreviewed-actions.jsonl",
+    "v18-v19-native-soft-edge-review-20261008-v2/v19-conversion-audit.json",
+    "v18-v19-native-soft-edge-review-20261008-v2/v19-conversion-audit.stderr.txt",
+    "v18-v19-native-soft-edge-review-20261008-v1/v18-accepted-actual-results.jsonl",
+    "v18-v19-native-soft-edge-review-20261008-v1/v19-completed-unreviewed-results.jsonl",
+    "v18-v19-native-soft-edge-review-20261008-v1/topology-report.json",
+    "v18-v19-native-soft-edge-review-20261008-v1/TOPOLOGY-REVIEW-PROPOSAL.md"
+  ],
+  "admission": "corrected-materialization-and-source-edge-review-evidence-only; individual-action semantic review pending; no training or DPO admission",
+  "derived_from": [
+    "verified-reasoning-pools-v18-luna-closed-20261008-v1",
+    "verified-reasoning-pools-v19-answer-key-v2-20261008-v1"
+  ],
+  "notes": "V2 fixes typed Neuralese-reference counts by matching converter semantics and tracks serialized literal ID mentions separately; original 651 V18 messages and targets remain byte-identical to v1 and conversion audit passes 651/651. V18 review covers 108 deduplicated edges over 117 observed writer turns, 99 typed result receipts, and 106 writer-context/reader-scope receipts; zero writer action bodies are approved yet. Independent source/action review separately registered: all 48 source-item gold bindings and 96 payload edges checked; 10 empty {} outputs and two missing-context edges remain held. V19 five completed diagnostic rows remain unreviewed, 3 accepted and 2 rejected by corrected materializer; none is parent-accepted. No automatic writer-action approval, semantic/trace/DPO/qualification/training admission, learned-vector claim, or independent-world credit."
+}

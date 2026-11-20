@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-luna-v61-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v61-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Closed 53 V25 folder programs with 402 decisions; 34 accepted,19 rejected and32 target disagreements. All saved output maps equal returned maps. Actual trajectories and errors preserved, no training admission."
+}

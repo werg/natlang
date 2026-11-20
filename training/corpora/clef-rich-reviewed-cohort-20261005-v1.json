@@ -1,0 +1,17 @@
+{
+  "id": "clef-rich-reviewed-cohort-20261005-v1",
+  "owner": "pop",
+  "path": "runs/clef-rich-reviewed-cohort-20261005-v2",
+  "admission": "reviewed-constructed-world-exact-runtime-positive-source-and-graph-closed; heldout-never-optimized",
+  "include": [
+    "records.jsonl",
+    "pieces.jsonl",
+    "admission.json",
+    "recurrence-audit.json",
+    "held-targets.jsonl"
+  ],
+  "derived_from": [
+    "clef-rich-teacher-evidence-20261005-v1"
+  ],
+  "notes": "1120train/747heldout decisions;670writers,677edges,depth5,branch3.12train/8heldout authored fixtures. Not a broad reliability qualification."
+}

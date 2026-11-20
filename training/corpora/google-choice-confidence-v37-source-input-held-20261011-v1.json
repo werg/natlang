@@ -1,0 +1,24 @@
+{
+  "id": "google-choice-confidence-v37-source-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v37-source",
+  "include": [
+    "cases.jsonl",
+    "omissions.jsonl",
+    "source-manifest.json",
+    "root-source-preparation-review-v1.json",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/models.json",
+    "frozen-adapter-v1/scripts/label_decision_cases.py",
+    "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py"
+  ],
+  "split": "inherited-train-input",
+  "source_class": "held-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-launched-held-no-label-admission",
+  "independent_new_worlds": 0,
+  "notes": "V37 source input and frozen pool only. 512 cases are exact original-master inherited-train rows with unchanged source identity/group/split/answer, selected across available families; current V16 policy holds, prior provider/annotation reservations and V22 source groups were excluded. Frozen ten-model free pool uses the pinned six-file execution bundle and 2048 output tokens. Root separately approved/launched supervisor PID 1045263; launch receipt is registered separately. No labels/results/active worker logs or requests are included; no training admission."
+}

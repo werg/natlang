@@ -1,0 +1,16 @@
+{
+  "id": "maple-sft-v13-r2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/maple-sft-v13-r2",
+  "admission": "rendered-existing-admitted-sft-not-new-examples",
+  "include": [
+    "maple-v13.sft.jsonl",
+    "maple-v13.sft.jsonl.manifest.json",
+    "maple-v13.sft.jsonl.rejected.jsonl"
+  ],
+  "derived_from": [
+    "native-sft-v13-r2"
+  ],
+  "training_admission": false,
+  "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): duplicate render of native-sft-v13-r2 for the retired Maple tokenizer; the source is admitted instead"
+}

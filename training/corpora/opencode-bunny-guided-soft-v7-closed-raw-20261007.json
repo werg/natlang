@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-guided-soft-v7-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v7",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Closed exact-gold guided soft case, five sequential validated write/read edges. Offered native IO not executed. Text-marker stand-in transport, no learned-vector qualification or admission."
+}

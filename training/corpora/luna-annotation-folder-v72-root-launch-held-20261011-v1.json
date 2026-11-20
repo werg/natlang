@@ -1,0 +1,14 @@
+{
+  "id": "luna-annotation-folder-v72-root-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v72-runtimev16-v1",
+  "include": [
+    "root-approved-plan-v1.json",
+    "root-supervisor-launch-v1.json"
+  ],
+  "split": "inherited-train-input-only",
+  "source_class": "held-native-generation-inputs",
+  "training_admission": false,
+  "admission": "generation-launch-evidence-only",
+  "notes": "Root-approved V72 supervisor1025637 waits per lane on V71; at most five combined generator workers. Separate supplement preserves immutable preparation snapshot. 88 programs/640 original train items; V16 callable diagnostic adopted; current74 source holds checked. No source/trace/training admission or independent-world credit."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "student-sft-step13164",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/student-sft-step13164",
+  "include": [
+    "adapter_model.safetensors",
+    "adapter_config.json",
+    "SOURCE.json",
+    "README.md"
+  ],
+  "admission": "selected-student-adapter-not-training-examples",
+  "derived_from": [
+    "native-sft-v13-r2"
+  ]
+}

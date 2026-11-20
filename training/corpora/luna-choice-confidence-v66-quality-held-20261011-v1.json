@@ -1,0 +1,10 @@
+{
+  "id": "luna-choice-confidence-v66-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v66-folder-terminal-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-source-and-trajectory-quality-evidence",
+  "training_admission": false,
+  "admission": "quality-evidence-only",
+  "notes": "55complete/5exit0,400typedvalid382annotationmatches/18differences;41exactaccepted14mapmismatch.55intactmaps/files,391item-boundstate/326fullcontract visibility.73type mismatch and13ReferenceErrors recovered, no establishedsharedbug. PartialV65retry nowcomplete; no world/admission."
+}

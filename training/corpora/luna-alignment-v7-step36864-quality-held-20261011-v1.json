@@ -1,0 +1,10 @@
+{
+  "id": "luna-alignment-v7-step36864-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-luna-alignment-v7-step36864-v1",
+  "split": "held-evaluation-evidence",
+  "source_class": "held-quality-and-generation-evidence",
+  "training_admission": false,
+  "admission": "held-pending-explicit-review",
+  "notes": "Exact failed eval row, immutable runtime/recipe/checkpoint pins, unchanged selection/denominators and training-window diagnosis. Eight strict failures; no runtime/transport/stopping qualification."
+}

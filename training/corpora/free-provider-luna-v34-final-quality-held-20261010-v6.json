@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v34-final-quality-held-20261010-v6",
+  "owner": "pop",
+  "path": "runs/quality-review-v26-luna-v34-final-20261010-v6",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-source-generation-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "Closed29cases28exactsemanticpasses1measureformatrejection;5manualtraversals not iterateOnqualification. Finalcorrectsearlierincompleteaudits allheld."
+}

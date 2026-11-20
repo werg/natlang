@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-google-choice-confidence-v15-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v15-gemini-choice-confidence-and-static-replay-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-source-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Independentclosedchoiceconfidence/sourceagreementaudit; noindependenttruth oradmission."
+}

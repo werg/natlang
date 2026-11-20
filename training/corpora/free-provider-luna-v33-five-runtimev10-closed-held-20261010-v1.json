@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v33-five-runtimev10-closed-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev33-five-runtimev10-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "closed-source-repaired-semantic-iterate-trajectories",
+  "training_admission": false,
+  "admission": "held-per-turn-quality-source-closure-review",
+  "independent_new_worlds": 0,
+  "notes": "5closed5exactoutputs, candidate-localfloodfactrepair/numericlistscoping successful inthese5singletrials. Not acontrolledpairedstudy nor trajectory/native/recurrence admission."
+}

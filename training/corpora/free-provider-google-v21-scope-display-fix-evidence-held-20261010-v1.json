@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v21-scope-display-fix-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-pubmedqa-full-abstract-and-static-replay-v1/scope-value-display-fix-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-runtime-visibility-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-live-model-quality-review",
+  "notes": "Sealed diagnosis and fresh replay evidence. Authoritative review-v2 corrects diagnostic JSON-rendered-literal checks; original receipt preserved. Previous state2290 cut at2000, now full. Model-facing debt unmeasured until live teacher audit."
+}

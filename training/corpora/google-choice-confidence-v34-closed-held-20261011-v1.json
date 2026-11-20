@@ -1,0 +1,24 @@
+{
+  "id": "google-choice-confidence-v34-closed-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v34-source",
+  "split": "inherited-train-evidence",
+  "source_class": "held-provider-label-source-and-results",
+  "training_admission": false,
+  "admission": "closed-source-label-evidence-only",
+  "notes": "Closed512case V34 free-provider choice-confidence source and sanitized labels/attempts, exact frozen adapter and launch provenance. Labels remain held; no training or teacher-trace admission.",
+  "include": [
+    "cases.jsonl",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/models.json",
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json",
+    "launch-plan-v1.json",
+    "omissions.jsonl",
+    "pool.log",
+    "root-launch-process-v1.json",
+    "root-source-launch-review-v1.json",
+    "source-manifest.json"
+  ]
+}

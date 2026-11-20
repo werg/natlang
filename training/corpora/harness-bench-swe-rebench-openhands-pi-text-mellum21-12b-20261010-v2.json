@@ -1,0 +1,70 @@
+{
+  "id": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+  "include": [
+    "text.jsonl",
+    "receipt.json",
+    "provenance.jsonl",
+    "omissions.jsonl"
+  ],
+  "split": "inherited from the source records (by repository; source groups repository and instance)",
+  "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
+  "admission": "admitted-harness_bench-cohort-text-stages (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'; the pending trainer support landed: Pop's 89982d41 'Weight rendered tool-response user wrappers as feedback', text_warmup.chat_roles labels a user turn whose body begins with <tool_response> as tool): the Mellum line's text stages at cohort fraction 0.25 beside the native text, as the LFM twin; the 874 test documents are a reported stratum, never qualification evidence; enters through recipe raw-recurrence-mellum-v4",
+  "training_admission": true,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+  ],
+  "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+  "build": {
+    "script": "scripts/build_neuralese_text_packet.py",
+    "code_commit": "621de060",
+    "command": "scripts/build_neuralese_text_packet.py --records data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl --pieces data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/pieces.jsonl --tokenizer /home/werg/data/models/mellum21-12b-a2.5b-thinking --out data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+    "renderer": "natlang_neuralese.data.text_corpus.gold_text_rows",
+    "rendering": "natlang.native_gold_chat/3",
+    "renderer_code": {
+      "scripts/build_neuralese_text_packet.py": "26ac8990d9a535b79bdd217d24df79016895807357d91639ef3116403522f87e",
+      "training/neuralese/natlang_neuralese/data/text_corpus.py": "ba9c3ac961e157c12bd82fba4439eb988e304b111602d4cdd0b1700bfd0f73e5",
+      "training/neuralese/natlang_neuralese/serve/chat.py": "92d76e9a789ba12530843897cceef0b821aa8e31e0bef433dee8324b1b387282"
+    },
+    "tokenizer_sha256": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+    "tokenizer": {
+      "class": "TokenizersBackend",
+      "files": {
+        "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+        "special_tokens_map.json": "20e1ead0b0986b55989aa8116bafe63efcbae0daf8ed047970cd28b36aada4d9",
+        "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+        "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+      },
+      "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+    },
+    "source_files": {
+      "pieces.jsonl": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9",
+      "records.jsonl": "83e1ee703d1ea4a2f7e245a13a2a84d0d4ea475ee5af40425283adcc278bbb16"
+    },
+    "text_jsonl_sha256": "6ad00112ccc402bba6f2b3455b840b8680485503aae8c0d6fbeaf2eaf500fb61",
+    "history_reasoning": {
+      "backbone": "mellum",
+      "policy": "keep",
+      "probe": "keep",
+      "template_kwargs": {}
+    }
+  },
+  "tokens": {
+    "test": {
+      "documents": 874,
+      "max_document_tokens": 95613,
+      "suffix_tokens": 192040,
+      "tokens": 22516330
+    },
+    "train": {
+      "documents": 2969,
+      "max_document_tokens": 105093,
+      "suffix_tokens": 629543,
+      "tokens": 72894669
+    }
+  },
+  "notes": "Text twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (splits follow S1's placement), rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3) under the backbone's declared history_reasoning keep (receipt). Same documents and tokens as harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1 (95,410,999 tokens), only the splits differ: 2969 train / 874 test documents (72,894,669 / 22,516,330 tokens; suffix 629,543 / 192,040). View parts render as their preview. Per-record admission is the records' own. Tool-role check of this twin (chat_roles with prepare_text_windows' tool_response prefixes, Mellum tokenizer, all 3,843 documents): turn labels system 3,843 / user 3,849 / tool 87,337 / assistant reply 96,890; tokens tool 69,984,862 vs user 1,794,079; no document with tool messages lacks a tool label. Admitted on that basis (the v1 twin was held only for this).",
+  "supersedes": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1"
+}

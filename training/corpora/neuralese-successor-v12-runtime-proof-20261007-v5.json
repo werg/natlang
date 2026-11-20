@@ -1,0 +1,11 @@
+{
+  "id": "neuralese-successor-v12-runtime-proof-20261007-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v5",
+  "include": [
+    "conversion-summary.json",
+    "index-v5-review.md"
+  ],
+  "admission": "runtime/converter diagnostic only; no teacher admission",
+  "notes": "Historical same-world diagnostic; preserves residual unknown/any capture holds before host primitive type attestation."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-choice-confidence-v66-closed-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v66-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-generation-quality-and-source-closure",
+  "training_admission": false,
+  "admission": "held-pending-explicit-quality-and-source-review",
+  "notes": "Actual55/55 complete/5workerexit0 including fresh relatedretry ofV65index135.400original sourceitems. Detailed quality audit pending; saved originals/partials preserved and alloutputsheld. RuntimeV15/sourcepolicy/current62approval exactpins retained."
+}

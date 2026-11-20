@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v9",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v9",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed native SFT and separately source-reviewed closed recurrence",
+  "notes": "4805native/4778R; exactV8prefix+325realteacherreviewednative/320closedR,124deltaedges864combined,depth5.189source+6unknown-result+5closureholds and941nonselecteddecisions retained. No syntheticreturns/gold/context/group/splitrewrites,0newworlds, no weights/runtime qualification. Approved325binding239d9540 androotadmission hash explicit."
+}

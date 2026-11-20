@@ -1,0 +1,16 @@
+{
+  "id": "luna-semantic-lambdas-generated-v23-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v23",
+  "admission": "candidate-exact-native-trajectories-needs-current-conversion-and-graph-admission",
+  "include": [
+    "launch.json",
+    "worker-*/case-*.results.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/supervisor.log"
+  ],
+  "derived_from": [
+    "luna-semantic-lambdas-source-v23-20261006"
+  ],
+  "notes": "40/40 exact accepted, three workers exited zero. Review separates constrained task variety from reducer/iteration coverage. Preserve held splits; copies are not additional examples."
+}

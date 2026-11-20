@@ -1,0 +1,15 @@
+{
+  "id": "verified-reasoning-pools-v19-luna-launch-20261008-v1",
+  "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+  "include": [
+    "generation-review-v2/luna/launch-packet-v2/*",
+    "generation-review-v2/luna/launch-packet-v2/**/*"
+  ],
+  "admission": "generation-launch-provenance-only-no-teacher-quality-or-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
+    "verified-reasoning-pools-v19-frozen-runtime-reference-20261008-v1"
+  ],
+  "notes": "Immutable launch-time packet for root-approved five-slot Luna storage-recovery campaign. Captures approved exact plan, authorization, immutable review-time authority snapshot, initial dispatcher launch receipt, and claim ledger. Live campaign results will be published as a separate closure snapshot after completion. This packet grants no result or data admission.",
+  "owner": "pop"
+}

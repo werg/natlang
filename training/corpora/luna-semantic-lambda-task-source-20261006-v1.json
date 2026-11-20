@@ -1,0 +1,16 @@
+{
+  "id": "luna-semantic-lambda-task-source-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v1",
+  "admission": "prepared-verified-train-tasks-not-generated-training-examples",
+  "include": [
+    "cases.jsonl",
+    "reviewed.cases.jsonl",
+    "cases.jsonl.report.json",
+    "source-review.json",
+    "approved-plan.json",
+    "worker-*/queue.jsonl",
+    "runtime/frozen-runtime.json"
+  ],
+  "notes": "100 verified source-backed semantic directory reducers, 24 iterateOn cases; five Luna worker queues. Outputs published separately after closure/review. Existing train source documents reused; preserve source grouping. Campaign stopped for contract review; banking34 now held; pending nonbank63 transferred to v2. Original artifact manifest unchanged."
+}

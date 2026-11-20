@@ -109,7 +109,7 @@ from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS, LEGACY_SAMPLING 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 
 
-# The training data a run selects by default is a set of registry roles (training/neuralese_corpora.json entries'
+# The training data a run selects by default is a set of registry roles (training/corpora entries'
 # `roles`, pinned with the code; `scripts/data_registry.py role NAME` lists one), not a list in this file:
 #   grpo-pool           the task pools, in role order (the first occurrence of a task id wins). A task-supply round is
 #                       admitted with `scripts/data_registry.py promote ID --role grpo-pool`.

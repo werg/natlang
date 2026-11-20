@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v84-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v84-campaign-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Closed actual guided-source campaign. Includes incomplete budget-exhausted attempts 03/06/07, semantic RFQ rejection and DR field-format rejection, plus successes. Preserve actual partials; no automatic admission or DPO pair from prompt revisions."
+}

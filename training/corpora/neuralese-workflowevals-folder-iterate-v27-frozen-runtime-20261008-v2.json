@@ -1,0 +1,11 @@
+{
+  "id": "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v2",
+  "owner": "pop",
+  "path": "runs/workflowevals-folder-iterate-v27-runtime-20261008-854789a4",
+  "include": [
+    "frozen-runtime/*",
+    "frozen-runtime/**/*"
+  ],
+  "admission": "held-complete-runtime-snapshot-no-training-or-runtime-qualification-admission",
+  "notes": "Complete immutable V27 runtime snapshot: all 1,048 files from frozen-runtime.json, including root metadata/prelude/package files and recursively nested runtime tree. Bound to committed source 854789a4 and the V27 fresh CPU reference proof. V1 was an incomplete recursive-only manifest and is superseded; no learned-weight, transport, gradient-replay, or training qualification is implied."
+}

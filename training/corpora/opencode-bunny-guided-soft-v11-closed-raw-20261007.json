@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-guided-soft-v11-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v11",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Official SDK prompt-directed text action bridge. Closed parent outcomes held for source/action quality review; not genuine vector qualification."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-folder-v81-v85-rejection-sweep-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v81-v85-rejection-sweep-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "held-posthoc-quality-review",
+  "source_class": "held-authored-folder-choice-rejection-audit",
+  "training_admission": false,
+  "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
+  "independent_new_worlds": 0,
+  "notes": "Joins all 65 result rows from closed campaigns V81–V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
+}

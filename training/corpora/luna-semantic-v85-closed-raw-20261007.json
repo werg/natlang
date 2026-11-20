@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v85-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v85-campaign-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Closed actual teacher evidence. Preserve incomplete budget attempts and parent outcomes; pending per-action source/graph/quality review. Not new source groups or automatic training admission."
+}

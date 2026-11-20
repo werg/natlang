@@ -1,0 +1,13 @@
+{
+  "id": "luna-v17-recovery-runtime-20261008-a2a53630",
+  "owner": "pop",
+  "path": "runs/luna-v17-recovery-runtime-20261008-a2a53630",
+  "admission": "immutable-runtime-evidence-only;not-training-data",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Stable committed runtime isolated compilation; typed JSON/nested soft final-result writes, finite record scope capture/effect order, eval read_code and streamed partial evidence. Installed node_modules shared locally and excluded from artifact sync.",
+  "exclude_dirs": [
+    "node_modules"
+  ]
+}

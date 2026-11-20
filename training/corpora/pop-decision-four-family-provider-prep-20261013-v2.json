@@ -1,0 +1,19 @@
+{
+  "id": "pop-decision-four-family-provider-prep-20261013-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261013-v1/fresh-decision-provider-v2",
+  "include": [
+    "cases.jsonl",
+    "omissions.jsonl",
+    "source-manifest.json"
+  ],
+  "source_class": "source-disjoint typed provider-decision candidate selection",
+  "license": "per upstream dataset; inherited from source cases",
+  "split": "train only, 128 each from four families; 23 explicit source holds and 12 overlong states omitted",
+  "admission": "prepared only; 64 live Gemini pilot queued, no model output admitted",
+  "training_admission": false,
+  "required_conversion": "provider labels, response validity and semantic review, then explicit native corpus admission",
+  "derived_from": [
+    "pop-decision-four-family-source-20261013-v4"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-native-gold-text-corpus-20261007-v8-draft",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v8",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.md",
+    "**/*.mjs"
+  ],
+  "admission": "Unadmitted superseded renderer attempt96omissions, preserve failure evidence; V8r2 fixes exact attested inlinebody rendering",
+  "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+}

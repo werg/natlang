@@ -1,0 +1,19 @@
+{
+  "id": "neuralese-semantic-iterate-reducers-v18-source-v6-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v18-20261008-v6",
+  "admission": "root-reviewed-authored-task-source-for-generation;scripted-reference-not-training-admitted",
+  "include": [
+    "source.cases.jsonl",
+    "source-manifest.json",
+    "source-proof.json",
+    "source-quality-review.json",
+    "README.md",
+    "runtime-reference-proof-summary.json",
+    "authored-reference-dc8031db/*"
+  ],
+  "exclude_dirs": [
+    "generation-review-v1"
+  ],
+  "notes": "Eight distinct operational worlds, four train/four test, source80e80f...7445. Root reviewed exact scoped exceptions, selection separate from authority, tie rules and no-action outputs. Corrected slot duration/end facts and requested privacy fields; public direct identifier exclusion remains decisive. CPU reference8/8,96actions,32reads,40softlinks is scripted structural evidence only. Three saved authored inline .with capture scaffolds exercise new surface. Active generation deliberately excluded."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v36-final-quality-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-choice-folder-and-v35repair-v3",
+  "include": [
+    "*"
+  ],
+  "source_class": "source-semantic-closure-quality-evidence",
+  "split": "evidence-only-inherited-train",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-closure-pending",
+  "notes": "V9folder57/64source labels7mismatches6programs, calmjoysource-suspect notcleanmodelnegative. RepairV35index20exacttypedmanual4passcalls noiterateOn qualification. Allheld sourcequalityreviewpending."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v41-prefix-static-v5-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v5-current-criteria",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-static-reference-and-source-label-derivative",
+  "source_class": "held-provider-label-prefix-and-authored-static-reference",
+  "training_admission": false,
+  "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77–V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
+}

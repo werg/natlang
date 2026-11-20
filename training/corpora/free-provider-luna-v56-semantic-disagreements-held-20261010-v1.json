@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v56-semantic-disagreements-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v56-pubmedqa-disagreements-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-independent-quality-review",
+  "notes": "Nine full-visible-input annotation disagreements independently assessed. Five underdetermined/conflicting/broad-scope source questions held from future strict-label derivatives; four gold-supported interpretations remain review evidence. No labels rewritten."
+}

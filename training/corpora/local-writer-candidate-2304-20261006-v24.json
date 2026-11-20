@@ -1,0 +1,15 @@
+{
+  "id": "local-writer-candidate-2304-20261006-v24",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-2304-20261006-v24",
+  "admission": "conditional-candidate-full-state; not semantic-qualified and not training examples",
+  "include": [
+    "best-checkpoint.pt",
+    "best-evaluation.json",
+    "candidate.json"
+  ],
+  "derived_from": [
+    "local-writer-budget-calibration-diagnostics-20261006-v22"
+  ],
+  "notes": "Pinned best conditional writer candidate2304: paired writtenCE0.00069975,n12,shuffled0.510717,4/12individualbetter. Free recursive writer/stopping evaluation pending. Full optimizer/RNG state preserved; exact SHA in candidate.json. Not semantic/channel qualified or training data."
+}

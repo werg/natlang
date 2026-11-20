@@ -1,0 +1,21 @@
+{
+  "id": "luna-neuralese-direct-lfm-base-v8-runtime-feedback-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+  "include": [
+    "direct-export-v2/manifest.json",
+    "direct-runtime-qualification-v1/**",
+    "direct-feedback-diagnostic-v1/**",
+    "status-supplement-v1/**"
+  ],
+  "split": "held-runtime-and-behavior-diagnostic",
+  "source_class": "direct-serving-runtime-replay-and-feedback-diagnostic",
+  "training_admission": false,
+  "admission": "evidence-only-no-training-or-task-admission",
+  "runtime_plumbing_status": "pass-limited-to-explicit-8-and-32-token-replay-contract",
+  "consumer_task_qualification": false,
+  "autonomous_stopping_qualification": false,
+  "independent_new_worlds": 0,
+  "parent_registry_id": "luna-neuralese-direct-lfm-base-v8-export-and-paired-behavior-held-20261011-v1",
+  "notes": "Additive V8 status receipt plus complete frozen runtime qualification and feedback-diagnostic trees. The stored direct-SFT report remains unchanged and reports qualified=true at step 1000; the current owner decision makes value-relative MSE report-only for direct SFT and evaluates value use in end-to-end consumers, with no rewritten report or newly issued certificate. Runtime report passes only its 8/32-token writer/cache/wire/replay-gradient checks; it explicitly fails consumer_task_qualified and autonomous_stopping_qualified. Feedback diagnostic task_qualified=false. These are held diagnostics, not training admission or general task qualification."
+}

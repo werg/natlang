@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v16",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v16",
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "admission": "closed-teacher-evidence; current-source-and-target-review-required",
+  "notes": "80assignedattempts closed; frozenEXTRA2 includes heldextraction27. Worker1referenceequal40,38source-supported after2holds; failedintermediateactions need filtering. Worker2reviewpending. Not training admission."
+}

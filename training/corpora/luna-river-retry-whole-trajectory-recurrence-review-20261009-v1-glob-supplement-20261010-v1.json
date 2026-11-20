@@ -1,0 +1,19 @@
+{
+  "admission": "supplemental-immutable-evidence-only",
+  "id": "luna-river-retry-whole-trajectory-recurrence-review-20261009-v1-glob-supplement-20261010-v1",
+  "include": [
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/calls.sqlite",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/provenance.json",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/unresolved-calls.json"
+  ],
+  "native_admission": false,
+  "notes": "Root approved current exact durable bytes for supplemental publication only; no claim these existed at original publication. Original source manifests unchanged, no independent examples or training/native/trace admission. Source luna-river-retry-whole-trajectory-recurrence-review-20261009-v1; exact audited files, dynamic/ambiguous artifacts excluded.",
+  "owner": "pop",
+  "path": "runs",
+  "trace_admission": false,
+  "training_admission": false,
+  "split": "evidence-only-inherited-source",
+  "source_class": "supplemental-immutable-runtime-source-and-quality-evidence",
+  "source_snapshot": "luna-river-retry-whole-trajectory-recurrence-review-20261009-v1",
+  "supplemental_worklist_sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
+}

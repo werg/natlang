@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-choice-confidence-v11-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v11-adapter-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "source_class": "closed-provider-static-quality-evidence",
+  "split": "evidence-only-inherited-groups",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "357sourceagreeinglabels48authoredprograms48actualreferenceaccepted810nativeheldturns155disagreementsretained. Notteacherreasoningtraces, noadmission/sourcequalitypending."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "google-v41-prefix-static-v11-fieldowned-disjoint-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v11-disjoint-fieldowned",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-static-label-derivative",
+  "source_class": "held-disjoint-static-folder-decision-reference-from-pinned-label-prefix",
+  "training_admission": false,
+  "admission": "static reference generation only; source and annotation quality remains held; no native trajectory or training admission",
+  "independent_new_worlds": 0,
+  "notes": "Filtered raw prefix against 217 exact program reservations from V77-V85, mapped to 1,587 original source IDs/groups; retained 298 raw label lines. Shared adapter produced 20 programs/147 exact annotation-consistent labels, all 20 reference replays passed, zero replay failures. Current scaffold field-ownership correction is pinned by static output; all source facts remain held. See prefix-derivation.json and parent-source-disjointness review in V86 input packet."
+}

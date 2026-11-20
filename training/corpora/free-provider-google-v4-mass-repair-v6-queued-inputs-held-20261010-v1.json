@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-google-v4-mass-repair-v6-queued-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/*.py",
+    "frozen-adapter-v1/models.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "quota-locked-invalid-typed-output-regeneration-queue",
+  "training_admission": false,
+  "admission": "generation inputs only; repair outputs still require schema/sourcequality review",
+  "independent_new_worlds": 0,
+  "notes": "Exact178failedV4inputs, sourceannotations/splits unchanged, newprompt clarifiesexclusiveprobabilitymass and noallzero. Samefree4quota-group scheduler/soleprojectlock behindV5, no extra immediate calls or paidfallback. Originalinvalidresponses preserved separately. Closed startup importfailure before any requests; replaced by separatelypinned V7 frozenlayout, see startupcloseout."
+}

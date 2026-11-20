@@ -1,0 +1,11 @@
+{
+  "id": "neuralese-free-decoded-infra-failure-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-free-decoded-20261006-v1",
+  "admission": "infrastructure-evidence-only-no-reader-scores-no-model-negatives",
+  "include": [
+    "selection.json",
+    "container.log",
+    "status.json"
+  ]
+}

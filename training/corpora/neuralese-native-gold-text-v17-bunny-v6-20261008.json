@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-native-gold-text-v17-bunny-v6-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261008-v17-bunny-held-proposal-v6",
+  "admission": "root-admitted-derived-ordinary-native-chat-gold-text;not-new-task-admission",
+  "include": [
+    "**/*"
+  ],
+  "derived_from": [
+    "neuralese-native-r-v17-bunny-v5-20261008",
+    "neuralese-native-gold-text-v16-v5-20261007"
+  ],
+  "notes": "Root override bound by exact root-admission receipt. 4470 documents,2771 train1699 test,32 actual action deltas,0 omissions. V16 byte prefix/native renderer/tokenizer retained; hashed context augmentation explicitly labeled. No current training input handoff or runtime qualification."
+}

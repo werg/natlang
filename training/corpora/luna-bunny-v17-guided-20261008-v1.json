@@ -1,0 +1,10 @@
+{
+  "id": "luna-bunny-v17-guided-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-bunny-v17-guided-20261008-v1",
+  "admission": "held-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Stopped campaign preserved after revision-label typing bug and subsequent source-causality/schema leakage review. Actual successes and partials retained; source-invalid attempts not model negatives. Held for source/action review."
+}

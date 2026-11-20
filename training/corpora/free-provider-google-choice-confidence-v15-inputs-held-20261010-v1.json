@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-choice-confidence-v15-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v15",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-input-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "512fresh inheritedtrain rows IDsANDgroupsdisjointallpriorprovider cases; sharedprojectquotaqueuebehindV14. Activeoutputs excluded; sourcequalityheld."
+}

@@ -5,7 +5,7 @@
 
 SOURCE_DIR is an assembled source (``scripts/rl_tasks/assemble.py``) with ``held/dev.jsonl`` and ``held/confirmation.jsonl``.
 Each is copied, immutably, to ``runs/<id>-{dev,confirmation}-<stamp>/cases.jsonl`` with a pinned manifest under
-``training/corpus-manifests/`` and an ``evaluation-only-never-training`` entry in ``training/neuralese_corpora.json`` (after
+``training/corpus-manifests/`` and an ``evaluation-only-never-training`` entry in ``training/corpora/`` (after
 the entries of the same id prefix), so custody keeps their worlds out of every training pool. A registered packet is never
 rewritten: a later rebuild registers a new stamped packet. The protection digest changes; rebuild selection pools afterwards.
 """
@@ -20,12 +20,13 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
-REGISTRY = REPO / 'training' / 'neuralese_corpora.json'
+REGISTRY = REPO / 'training' / 'corpora'
 SPLITS = {'dev': 'dev.jsonl', 'confirmation': 'confirmation.jsonl'}
 
 
 def register(source, prefix, stamp, label, dry_run):
-    registry = json.loads(REGISTRY.read_text())
+    from natlang_neuralese.common import corpus_registry
+    registry = corpus_registry.load(REPO)
     ids = {entry['id'] for entry in registry['corpora']}
     entries, summary = [], {}
     for split, name in SPLITS.items():
@@ -45,14 +46,12 @@ def register(source, prefix, stamp, label, dry_run):
                     'bytes': cases.stat().st_size}
         (REPO / 'training' / 'corpus-manifests' / f'{packet_id}.json').write_text(json.dumps(manifest, indent=2) + '\n')
         entries.append({'id': packet_id, 'owner': 'dgx', 'path': f'runs/{packet_id}',
-                        'admission': 'evaluation-only-never-training', 'include': ['cases.jsonl'],
+                        'admission': 'evaluation-only-never-training', 'include': ['cases.jsonl'], 'kind': 'held', 'protected': True,
                         'note': f'Held {split} packet of the {label} ({len(rows)} verified cases, split {split}), registered '
                                 f'{stamp}. Related units share a split. For development and confirmation of RL outcomes; '
                                 f'never a training source.'})
     if entries:
-        anchor = max(i for i, entry in enumerate(registry['corpora']) if entry['id'].startswith(prefix + '-'))
-        registry['corpora'][anchor + 1:anchor + 1] = entries
-        REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
+        corpus_registry.write_entries(REPO, entries)
     return summary
 
 

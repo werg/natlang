@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v32-twentythree-closed-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev32-twentythree-runtimev8-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "closed-native-provider-semantic-iterate-trajectories",
+  "training_admission": false,
+  "admission": "held-root-per-turn-quality-and-source-closure",
+  "independent_new_worlds": 0,
+  "notes": "23closed21exact/2reject, known0sourceunderverified/1-2ambiguousquarantine/4numericpunctuationnotmodelnegative. Other19exact candidates, notadmitted;367956completiontokens,16observediterateOn/7directinvocation,55scopefailureevents reviewongoing. Runtime8immutable."
+}

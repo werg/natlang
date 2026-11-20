@@ -1,0 +1,9 @@
+{
+  "id": "neuralese-stop-trainability-audit-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-stop-trainability-audit-20261007",
+  "admission": "diagnostic-design-only;fixed-head-has-live-backbone-gradient;not-trainingdata",
+  "include": [
+    "*.md"
+  ]
+}

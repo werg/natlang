@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v8-mass-json-repair-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-v8-mass-json-repair",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-case-review-only",
+  "source_class": "provider-typed-decision-quality-review",
+  "training_admission": false,
+  "admission": "held-semantic-quality-and-explicit-root-review-required",
+  "notes": "Exactsource/output/attempt/model/familyaudit; strictvalidatorunchanged, noadmission. Futuretypedchoicevariant has separate schema/semantics, no normalization."
+}

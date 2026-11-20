@@ -1,0 +1,16 @@
+{
+  "id": "v73-native-candidate-operational-metrics-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-operational-metrics-v4",
+  "include": [
+    "metrics.json",
+    "metrics.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-native-operational-diagnostics",
+  "training_admission": false,
+  "admission": "trace-frequency-and-context-diagnostics-only-no-semantic-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Direct counts from 43 pinned trace files: 909 saved model request starts/ends/turns, 937 tool actions, 44 scope failure events, action outcome distributions, and message-content context size statistics. Recovery means only later successful action in the same invocation. No raw-wire claim."
+}

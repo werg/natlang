@@ -1,0 +1,16 @@
+{
+  "id": "pop-render-cache-cleanup-reviewed-inputs-20261010-v1",
+  "owner": "pop",
+  "path": "runs/storage-render-cache-cleanup-20261010-v1",
+  "include": [
+    "reviewed-plan.json",
+    "original-render-cache-manifest.json",
+    "prepare-review.py",
+    "execute-review.py"
+  ],
+  "split": "evidence-only",
+  "source_class": "storage-cleanup-review",
+  "training_admission": false,
+  "admission": "evidence-only",
+  "notes": "870renderpayloadchunks concatenate byte-identicallytofinalSFT; prospectivecleanup preservesallrejectionfiles/cachemanifest/auditcache/finaloutput."
+}

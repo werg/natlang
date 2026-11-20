@@ -1,0 +1,18 @@
+{
+  "id": "luna-choice-confidence-v86-v41-prefix-runtimev17-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v86-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "prior-source-disjointness-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-reviewed-generation-inputs",
+  "source_class": "held-luna-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "root review pending; input and queue preparation only; no provider calls, outputs, or training admission",
+  "independent_new_worlds": 0,
+  "notes": "Prepared five-worker V86 plan from 20 static authored programs/147 exact labels. Plan SHA d87fc16fe43402adfbb4d5d45621e24b79d625adbedbb429749d4559ec92de63; root_approved=false at preparation. V17 runtime; five actual V85 predecessor lanes. Root must independently validate final predecessor journal/accounting and approve before launch. Prior-source-disjointness review records zero ID/group overlaps with selected V77-V85 rows."
+}

@@ -1,0 +1,17 @@
+{
+  "id": "verified-reasoning-pools-v19-frozen-runtime-reference-20261008-v1",
+  "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+  "include": [
+    "runtime-build/runtime/*",
+    "runtime-build/runtime/**/*",
+    "runtime-reference-ling-v1/*",
+    "runtime-reference-ling-v1/**/*",
+    "generation-review-v2/luna/launch-packet-v2/README.md"
+  ],
+  "admission": "immutable-frozen-runtime-and-cpu-reference-proof; no-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-v19-answer-key-v2-20261008-v1"
+  ],
+  "notes": "Frozen compiled successor runtime receipt bf7889dbf75f46e875e2bd38734f324f9c92d3a732c1c627f799d76e9f484769 includes d9340de1 map fix 5825a4c3 and read API 5cf78e01 lineage. CPU reference proof covers 25/25 cases and 211 native deterministic reference decisions with zero provider calls; not teacher output, runtime qualification, or training admission.",
+  "owner": "pop"
+}

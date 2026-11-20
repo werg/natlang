@@ -1,0 +1,27 @@
+{
+  "id": "view-sources-20261009-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/raw/view-sources-20261009",
+  "include": [
+    "sources.json",
+    "qmsum/**",
+    "fetaqa/**",
+    "wtq/repo.tar.gz",
+    "codesearchnet/*.parquet",
+    "websrc/**"
+  ],
+  "split": "source",
+  "source_class": "public-dataset-slices-with-dataset-questions-summaries-and-artifacts",
+  "admission": "held-source-view-corpus-evidence-only",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [],
+  "license": "per dataset: QMSum MIT; FeTaQA and WikiTableQuestions CC-BY-SA-4.0; WebSRC v1.0 CC-BY-4.0; CodeSearchNet per repository (redistribution-permitting licences only)",
+  "source_url": "https://github.com/Yale-LILY/QMSum; https://github.com/Yale-LILY/FeTaQA; https://github.com/ppasupat/WikiTableQuestions; https://huggingface.co/datasets/code-search-net/code_search_net; https://huggingface.co/datasets/X-LANCE/WebSRC_v1.0",
+  "build": {
+    "script": "scripts/neuralese_view_corpus.py fetch",
+    "code_commit": "518bfb17",
+    "fetcher": "scripts/neuralese_data/view_sources.py"
+  },
+  "notes": "Pinned slices downloaded 2026-10-09 for the view/ask corpus (plans/neuralese/VIEW_CORPUS.md): QMSum all splits (rev 83d7768c), FeTaQA all splits (rev bbc441be), the WikiTableQuestions repository tarball (rev 7d455a5a; the builder reads its unpacked data/*.tsv and csv/ tables, which are derived from the tarball and not separately listed), CodeSearchNet Python (rev bd0cf261: leading train row groups, 20k+ rows, plus full valid/test), and WebSRC v1.0 train+dev (rev 7aa0bc6e: every site's dataset.csv and 12 pages per site, read member by member from the remote zip; screenshots not fetched). sources.json lists URL, revision, SHA-256, size and licence per file. Evidence only: the derived port records are view-ask-slice-20261010-v1 with their own admission."
+}

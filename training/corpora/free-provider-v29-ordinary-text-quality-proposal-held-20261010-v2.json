@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-v29-ordinary-text-quality-proposal-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/luna-v29-ordinary-text-quality-proposal-20261010-v2",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "quality-provenance-and-publication-audit",
+  "training_admission": false,
+  "admission": "held-review-evidence-only",
+  "notes": "136peractionreviews22candidates/1lineageheld, proposalsonly. Rootfoundrationaleerrors:REC0036/37wrongF3identifier; FLD0082/REC0060arereadoutsnotauthorityupdates. FreshrolecorrectV3reviewpending; noadmission."
+}

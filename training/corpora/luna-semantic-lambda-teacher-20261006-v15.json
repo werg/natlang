@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v15",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v15",
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "admission": "closed-reviewed-evidence-pending-source-target-and-producer-admission",
+  "notes": "80 assigned attempts,78 nonempty completed,2 empty provider overloads unscored. Each worker mixed20skill/20extract. Sourcefixture11 held; fixture27 undercoverage, wrong/missing inline skill choice held. Duplicate variants are not independent facts. Supplemental diagnosis holds fixture27 as ambiguous source/gold alignment; do not treat it as a confident model negative."
+}

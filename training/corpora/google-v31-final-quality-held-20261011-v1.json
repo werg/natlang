@@ -1,0 +1,10 @@
+{
+  "id": "google-v31-final-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v31-final-v3",
+  "split": "inherited-train-evidence",
+  "source_class": "held-generation-quality-and-source-closure",
+  "training_admission": false,
+  "admission": "held-pending-explicit-quality-and-source-review",
+  "notes": "Full512provider/105 complete differences, actual58execution payloads and reference57program407items/928native turns. No automatic source holds, negatives, newworlds or admission."
+}

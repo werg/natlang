@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-luna-v51-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v51-runtimev14-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Reviewed independent V18 successor, 53 original source-bound train programs / 399 items, five Luna workers. V49 closure and audit pinned; its partial status preserved. Inputs only while active; outputs require separate sealed closeout.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "unapproved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ]
+}

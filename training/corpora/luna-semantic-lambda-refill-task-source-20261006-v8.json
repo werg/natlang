@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v8",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v8",
+  "admission": "source-candidates-only-current-source-policy-applied-output-semantic-split-review-pending",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "notes": "11 no-hints SMS targets selected from39 verified of48 no-hints shapes, nine policy holds. 28 SST targets deferred. Initial accidentally hinted build retained entirely unselected; neither source variants nor subsets count as new independent samples."
+}

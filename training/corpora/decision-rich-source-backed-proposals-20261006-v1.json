@@ -1,0 +1,10 @@
+{
+  "id": "decision-rich-source-backed-proposals-20261006-v1",
+  "owner": "pop",
+  "path": "runs/decision-rich-source-backed-proposals-20261006-v1",
+  "admission": "proposal-only-eight-reviewed-facts-upstream-lineage-and-global-split-check-required-not-training-admission",
+  "include": [
+    "review.md",
+    "proposals.json"
+  ]
+}

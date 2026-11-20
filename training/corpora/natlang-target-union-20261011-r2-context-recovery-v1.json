@@ -1,0 +1,33 @@
+{
+  "id": "natlang-target-union-20261011-r2-context-recovery-v1",
+  "owner": "pop",
+  "path": "runs/natlang-target-union-20261011-r2-context-recovery-v1",
+  "include": [
+    "receipt/derivative-receipt.json",
+    "receipt/replacement-ids.json",
+    "program-header/lfm25/text-data.jsonl",
+    "full/lfm25/text-data.jsonl"
+  ],
+  "source_class": "replacement-rendering-overlay-for-already-admitted-native-text",
+  "split": "per-row source split and source_groups are retained exactly; only the existing 87 source IDs are replaced by restored-context renders",
+  "admission": "replacement-only overlay over natlang-target-union-20261011-r2; consumers must replace rows by exact ID and must not append these documents or double-count their targets",
+  "training_admission": false,
+  "training_admission_reason": "2026-10-14 current cross-corpus protected-group audit found train overlaps in R2/R3; old aggregate and R2-derived context recovery require corrected held closure before fresh training admission. Preserve immutable evidence and independently useful source rows.",
+  "derived_from": [
+    "natlang-target-union-20261011-r2",
+    "luna-v17-step5-selected112-native-87-targetbound-text-20261009-v2"
+  ],
+  "license": "inherited unchanged from the exact source rows in r2",
+  "renders": {
+    "full": {
+      "lfm25": "runs/natlang-target-union-20261011-r2-context-recovery-v1/full/lfm25/text-data.jsonl"
+    },
+    "program-header": {
+      "lfm25": "runs/natlang-target-union-20261011-r2-context-recovery-v1/program-header/lfm25/text-data.jsonl"
+    },
+    "whole-trajectory": {
+      "lfm25": "unchanged in natlang-target-union-20261011-r2; no source_record_ids intersect the 87 replacements"
+    }
+  },
+  "notes": " Current aggregate admission withdrawn; exact overlap audit: /home/werg/data/dgxops/r2-r3-current-held-group-audit.log. No artifact bytes or immutable SHA manifests changed."
+}

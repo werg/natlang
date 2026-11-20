@@ -1,0 +1,31 @@
+{
+  "id": "restored-pending-whole-native-graph-bands-lfm-20261025-v1",
+  "include": [
+    "ready.json",
+    "188000/native-graphs.jsonl.zst",
+    "188000/membership.json",
+    "250000/native-graphs.jsonl.zst",
+    "250000/membership.json",
+    "320000/native-graphs.jsonl.zst",
+    "320000/membership.json",
+    "600000/native-graphs.jsonl.zst",
+    "600000/membership.json",
+    "1200000/native-graphs.jsonl.zst",
+    "1200000/membership.json",
+    "2100000/native-graphs.jsonl.zst",
+    "2100000/membership.json"
+  ],
+  "source_class": "capacity-deferred-original-whole-native-graph-recovery",
+  "training_admission": false,
+  "split": "604 original train graphs grouped by physical forward/KV geometry; held/source identities remain original.",
+  "training_admission_reason": "Original pending obligations retained; larger-band activation requires measured device capacity and normal CE/held checks.",
+  "derived_from": [
+    "original-lfm-native-full-sft-pending-ledger"
+  ],
+  "notes": "336 additional whole rows fit below188000 tokens,139 below250000,70 below320000,46 below600000,12 below1200000 and1 below2100000. These are prepared views, not exposure, capacity passes or independent new examples.",
+  "owner": "dgx",
+  "path": "runs/restored-pending-whole-native-graph-bands-lfm-20261025-v1",
+  "snapshot_manifest": "training/corpus-manifests/restored-pending-whole-native-graph-bands-lfm-20261025-v1.json",
+  "admission": "Source recovery/eligibility only; no new training exposure. Every original graph quota remains authoritative.",
+  "license_provenance": "Inherited exact original reviewed source licenses and provenance; no license exclusions or new teacher generations."
+}

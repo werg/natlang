@@ -1,0 +1,11 @@
+{
+  "id": "v17-status-only-return-audit-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v17-status-only-return-audit-20261008-v2",
+  "include": [
+    "clarification.json",
+    "files.sha256"
+  ],
+  "admission": "held-raw-or-review-evidence-no-new-training-admission",
+  "notes": "Status-only successful root results have exact same-invocation typed staged values. Clarifies no quarantine of admitted prefix; no new examples."
+}

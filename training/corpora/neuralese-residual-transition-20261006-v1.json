@@ -1,0 +1,9 @@
+{
+  "id": "neuralese-residual-transition-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-residual-transition-20261006-v1",
+  "include": [
+    "*.json"
+  ],
+  "admission": "zero-residual-initial-transition-parity-diagnostic-not-learned-channel-admission"
+}

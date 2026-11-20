@@ -1,0 +1,16 @@
+{
+  "id": "neuralese-v24-semantic-target-role-correction-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-semantic-target-role-correction-20261008-v1",
+  "include": [
+    "README.md",
+    "role-correction.json"
+  ],
+  "admission": "held-role-correction-audit-only-no-training-admission",
+  "notes": "Supplemental audit corrects generation roles for all 63 targets in the sealed V24 semantic-target preview. Separates 50 trained readout surfaces (47 exact, 3 changed), 5 note writers/forwarders, 5 direct final interpreters, and 3 forwarded final completions. Sealed proposal/materialization remain unchanged; no learned projection qualification or training admission.",
+  "derived_from": [
+    "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+    "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+    "neuralese-v24-actual-action-review-20261008-v1"
+  ]
+}

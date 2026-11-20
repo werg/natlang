@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-v28-conversion-intermediate-v2-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "superseded-held-conversion-review-evidence",
+  "training_admission": false,
+  "admission": "excluded-intermediate-debug-artifacts",
+  "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+}

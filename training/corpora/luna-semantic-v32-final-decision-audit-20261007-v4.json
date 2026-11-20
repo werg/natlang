@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v32-final-decision-audit-20261007-v4",
+  "owner": "pop",
+  "path": "runs/luna-v32-decision-quality-audit-20261007-final-closed-v4",
+  "include": [
+    "**"
+  ],
+  "admission": "quality audit candidates/holds only; no root training admission",
+  "notes": "Bindsclosed26targets25terminalexports1121native decisions; effective804candidate316qualityholds1infra, plus128replyresourceheldpartial withoutterminalledger. Exactsameitemscope vscreatoroverrestriction vsTS88sourceconflict; no crosspromptDPO/recoveryindependentcount."
+}

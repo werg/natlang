@@ -1,0 +1,11 @@
+{
+  "id": "clef-decision-lambda-diagnostic-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/clef-decision-lambda-diagnostic-20261005-v1",
+  "admission": "held-superseded-oracle-and-source-identities",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "note": "First pilot retained for diagnosis only. One optimistic patch oracle subsequently corrected; superseded source fixture aliases.6/16programs and102native decisions are NOT admitted here; do not add to revised pilot counts."
+}

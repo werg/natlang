@@ -1,0 +1,7 @@
+{
+  "id": "luna-v14-evidence-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v14-evidence-quality-review-20261006-v1",
+  "admission": "independent-source-semantic-review-evidence-not-training-examples",
+  "notes": "20/20 exact accepts,36/36 returned records exact.19 source-supported candidates; fixture11 held because objective sensor origin not in gold.22intermediatefailed actions retained; all20 inline Evidence lambdas,172invocations closed. No admission from runtimeacceptance."
+}

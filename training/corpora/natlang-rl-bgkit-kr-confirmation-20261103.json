@@ -1,0 +1,12 @@
+{
+  "id": "natlang-rl-bgkit-kr-confirmation-20261103",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-bgkit-kr-confirmation-20261103",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "cases.jsonl"
+  ],
+  "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source.",
+  "kind": "held",
+  "protected": true
+}

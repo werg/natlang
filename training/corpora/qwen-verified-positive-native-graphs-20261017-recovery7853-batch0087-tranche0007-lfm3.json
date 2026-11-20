@@ -1,0 +1,39 @@
+{
+  "admission": "lfm3 student twin of qwen-verified-positive-native-graphs-20261017-recovery7853-batch0087-tranche0007 (scripts/neuralese_data/teacher_graph_student_twin.py): the reference lfm25 view's admitted teacher actions re-rendered from the exact source trajectories; inherits its admission, splits, deduplication and decision omissions; 0 explicit render omissions",
+  "derived_from": [
+    "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0087-tranche0007"
+  ],
+  "id": "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0087-tranche0007-lfm3",
+  "include": [
+    "lfm3/receipt.json",
+    "lfm3/train/native-graphs.jsonl.zst",
+    "lfm3/test/native-graphs.jsonl.zst"
+  ],
+  "license_provenance": "Project-collected trajectories from self-hosted nvidia/Qwen3.8-Flash-Next-FP4-Local revision b9ce18a6887e18c089fdea8509a33e63429a3300. Historical sampler labels and exact current actor/model-source provenance are retained in bound source receipts; source licenses are provenance, not admission barriers.",
+  "note": "Registration establishes availability only; learner exposure is recorded by each continuation.",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0087-tranche0007",
+  "source_binding": {
+    "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+    "model_key": "lfm3",
+    "omitted_rows": 0,
+    "reference_receipt_sha256": "b5e35dcd1624afb0d39601b3dea36a5aaf7a2f6bf73802b917abc7de09553239",
+    "rows": 596,
+    "source_trajectories_sha256": "6864120aeb27622b36f298187f4f0f71ff35e9576e01fa21e760a373f62bc316",
+    "tokenizer": {
+      "expanded_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+      "role_token_ids": [
+        125033,
+        125034,
+        125035,
+        125036
+      ],
+      "source_fingerprint": "8818b793a02e560d72d2bafee3a1ca9cfedd9b84518bce89800fc4db80ca967a"
+    },
+    "verification_passed": true
+  },
+  "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+  "split": "Train-only; empty test views. Current connected held/quality/pending source and decision protections remain excluded.",
+  "training_admission": true,
+  "training_admission_reason": "Both complete model views passed exact private-export recovery, original full-trajectory source/oracle/current protection, decision-hold, source-bound graph identity, and complete action accounting. Registration establishes no student exposure."
+}

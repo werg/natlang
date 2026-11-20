@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v24-quality-closure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-choice-confidence-and-static-replay-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "V24 provider quality, complete source disagreements/candidates, exact source/Pop closure and additive policy clarification.54 programs406items920native turns. Full S1 pending; source_refs absent, local snapshot bound only. Actual static adapter unconditionally applied canonical30holds; zero intersections."
+}

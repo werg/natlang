@@ -1,0 +1,22 @@
+{
+  "id": "luna-annotation-folder-v72-v22-runtimev16-full-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v72-runtimev16-v1",
+  "include": [
+    "campaign-launch.json",
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-supervisor-launch-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/worker.log",
+    "worker-*/case-*/**/*"
+  ],
+  "split": "inherited-train-raw-generation-evidence",
+  "source_class": "held-luna-annotation-folder-closed-raw-output",
+  "training_admission": false,
+  "admission": "raw-generation-evidence-only-no-source-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V72 closed raw evidence snapshot. Main campaign launched lanes 1,3,4,5; lane 2 completed via separate approved supplement PID1033871 on the same original queue. All 88 queue keys terminal: 87 result records plus one index49 model_request_budget failure preserved with partial/evidence. No quality inference/admission."
+}

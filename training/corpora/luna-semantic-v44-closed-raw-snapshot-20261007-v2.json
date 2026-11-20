@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v44-closed-raw-snapshot-20261007-v2",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v44-closed-raw-snapshot-20261007-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Closed raw campaign3outputs1accepted2rejected; no native/recurrence admission by raw acceptance",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

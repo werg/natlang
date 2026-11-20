@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-google-choice-confidence-v43-launch-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-source",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl",
+    "launch-review-v1/FILES.sha256",
+    "launch-review-v1/launch-review.json",
+    "root-launch-approved-v1.json",
+    "frozen-adapter-v1/**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-input-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Immutable V43 approved input/runtime snapshot only. The live labels, attempt journal, quota state, worker-launch log, and active outputs are excluded. Pool remains held; no provider-policy or source admission."
+}

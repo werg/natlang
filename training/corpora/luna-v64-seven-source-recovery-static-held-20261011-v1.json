@@ -1,0 +1,10 @@
+{
+  "id": "luna-v64-seven-source-recovery-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-recovery-static-frozen-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Seven exact original trainobjects, excluded ambiguous Dynamo5 preserved inparentlineage; two referenceaccepted programs4+3,16executioncomponents frozen. Relatedworlds, held."
+}

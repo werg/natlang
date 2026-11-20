@@ -1,0 +1,15 @@
+{
+  "id": "google-choice-confidence-v36-model-rotation-fairness-supplement-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-model-rotation-fairness-v1",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "inherited-train-quota-allocation-review",
+  "source_class": "held-provider-model-availability-and-scheduler-review",
+  "training_admission": false,
+  "admission": "scheduler-diagnostic-only-no-quality-ranking-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Supplement to V36 model-coverage accounting. Records exact 10-model frozen pool, 2-model V36 use, observed shared project quota state and earlier free-tier daily quota evidence. Eight no-request models are not semantic failures; exact prelaunch state was not archived, so the report keeps that uncertainty."
+}

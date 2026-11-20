@@ -1,0 +1,13 @@
+{
+  "id": "v20-luna-campaign-v1-raw-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v20-closed-raw-snapshot-20261008-v1/campaign-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-closed-raw-attempt-action-review-pending-no-training-admission",
+  "derived_from": [
+    "v20-counterfactual-source-v8-20261008"
+  ],
+  "notes": "Immutable raw V20 Luna campaign V1, indices 0-4. Operator-stopped with five partial attempts and no final result rows. Preserves original action/evidence sidecars; no source-negative relabel, action admission, or training admission."
+}

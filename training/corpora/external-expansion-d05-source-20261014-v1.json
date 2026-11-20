@@ -1,0 +1,19 @@
+{
+  "id": "external-expansion-d05-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D05",
+  "include": [
+    "acquisition.json",
+    "CodeAgentSFTDataset.json",
+    "README.md"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "PersonalAILab/AFM-CodeAgent-SFT-Dataset",
+    "revision": "9ef8d1f90e36fffbe2df15f979a08c00f1e72ab1",
+    "license": "apache-2.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

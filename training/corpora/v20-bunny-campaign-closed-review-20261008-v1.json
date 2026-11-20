@@ -1,0 +1,15 @@
+{
+  "id": "v20-bunny-campaign-closed-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v20-closed-review-20261008-v1",
+  "include": [
+    "review.json",
+    "evidence-reference-manifest.json"
+  ],
+  "admission": "held-closed-review-provenance-only-no-training-admission",
+  "derived_from": [
+    "v20-counterfactual-source-v8-20261008",
+    "v20-bunny-campaign-v1-raw-20261008"
+  ],
+  "notes": "Closed review and hash-reference packet for the V20 Bunny campaign. It records accepted/rejected/infrastructure outcomes but does not admit source, actions, traces, or training examples."
+}

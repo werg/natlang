@@ -23,8 +23,8 @@ def nz(path, dialect="native-state/test", width=8, tensors=0):
 
 
 def repo_with_corpus(tmp_path):
-    (tmp_path / "training").mkdir()
-    (tmp_path / "training/neuralese_corpora.json").write_text(json.dumps({"corpora": [{"id": "corpus-a"}]}))
+    (tmp_path / "training/corpora").mkdir(parents=True)
+    (tmp_path / "training/corpora/corpus-a.json").write_text(json.dumps({"id": "corpus-a"}))
     return tmp_path
 
 

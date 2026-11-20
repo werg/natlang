@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v12",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v12",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "admission": "verified-no-hint-constructed-train-fixture-tasks-source-and-trajectory-review-pending"
+}

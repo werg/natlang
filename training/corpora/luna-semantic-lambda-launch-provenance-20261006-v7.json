@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v7",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v7",
+  "admission": "collection-provenance-only; not training examples",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-refill-task-source-20261006-v7"
+  ],
+  "notes": "Two freed slots, fresh frozen Node runtime includes non-null unknown/{} conversion fix. Eight disjoint SMS targets. Preserve active frozen v4/v5 runtime; new source compiler build did not alter their snapshot."
+}

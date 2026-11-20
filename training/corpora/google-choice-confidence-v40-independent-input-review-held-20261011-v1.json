@@ -1,0 +1,15 @@
+{
+  "id": "google-choice-confidence-v40-independent-input-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+  "include": [
+    "root-review-input-v1/report.json",
+    "root-review-input-v1/decision_source_quality_holds.json"
+  ],
+  "split": "inherited-train-provider-input-review",
+  "source_class": "held-provider-input-independent-review",
+  "training_admission": false,
+  "admission": "input-audit-only-no-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root independent exact source/master/train/current-hold and frozen component review for V40. Report is immutable and identifies exact source rows, group/ID disjointness, quotas, and runtime pins. The copied policy binds preparation-time holds."
+}

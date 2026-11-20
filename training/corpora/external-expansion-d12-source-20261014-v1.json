@@ -1,0 +1,24 @@
+{
+  "id": "external-expansion-d12-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D12",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "cmp-flash-msa-coopgit.tar.gz",
+    "cmp-flash-msa-solo.tar.gz",
+    "cmp-full-coopgit.tar.gz",
+    "cmp-full-solo.tar.gz",
+    "cmp-full-team-noproto.tar.gz",
+    "cmp-full-team.tar.gz"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "CooperBench/team-trajectories",
+    "revision": "dd371629174a226ecd251672af315699b77de05d",
+    "license": "apache-2.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

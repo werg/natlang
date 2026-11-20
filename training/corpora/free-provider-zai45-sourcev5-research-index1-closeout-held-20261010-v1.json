@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "include": [
+    "provider-zai45-sourcev5-research-pair-v1/case-001/**/*",
+    "provider-zai45-sourcev5-research-pair-v1/queue.jsonl",
+    "provider-zai45-sourcev5-research-pair-v1/journal.jsonl",
+    "provider-zai45-sourcev5-research-pair-v1/launch-receipt-v1.json",
+    "runtime-small-teachers-v5/frozen-runtime.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "provider-native-trajectory",
+  "training_admission": false,
+  "admission": "held for native admission and teacher trace review",
+  "independent_new_worlds": 0,
+  "notes": "RES-832 passed six scoped checks with COHORT-C4-A34 /240/include. 20 turns,12382tokens. Exact V15 review pins source/runtime/output/trace. Old index2 storage pause remains preserved; fresh runtimev6 retry separate."
+}

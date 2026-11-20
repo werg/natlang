@@ -1,0 +1,16 @@
+{
+  "id": "luna-v74-budget-diagnostic-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-budget-diagnostic-v1",
+  "include": [
+    "diagnosis.json",
+    "diagnosis.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-luna-incomplete-budget-diagnostic",
+  "training_admission": false,
+  "admission": "incomplete-failure-review-only-no-semantic-score-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V74 two model_request_budget failures reviewed as incomplete/unscored. Exact two invocation phases and visible source inputs preserved. Not a full campaign audit or semantic negative."
+}

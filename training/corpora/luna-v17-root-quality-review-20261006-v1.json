@@ -1,0 +1,10 @@
+{
+  "id": "luna-v17-root-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v17-root-quality-review-20261006-v1",
+  "admission": "independent-root-audit-final-candidates-not-blanket-training-admission",
+  "include": [
+    "findings.json",
+    "report.md"
+  ]
+}

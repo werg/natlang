@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-luna-v59-iterative-coverage-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Three unchanged original train cases5/6/8; original V54 accepted/manual results preserved. One worker seeks iterative topology, not semantic failure repair. No admission/world credit.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "candidate-unapproved-plan-v1.json",
+    "preparation-review.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-v12-native-cohort-v2-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v12-candidate-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-admitted-native-sft-4955-no-new-recurrence",
+  "notes": "V2 exact V11 prefix plus 12 root-admitted V48 native crisp targets. 4,955 native records, 3,074 train / 1,881 test; 4,892 recurrence records unchanged, no new recurrence admitted. Four approved rows carry validated neuralese_code sidecars; underlying crisp target is exact after stripping sidecar, as independently bound in root-admission.json. This native cohort does not assert added producer/reader recurrence closure.",
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-v11-20261007-v1",
+    "luna-semantic-v48-closed-action-audit-20261007-v1"
+  ]
+}

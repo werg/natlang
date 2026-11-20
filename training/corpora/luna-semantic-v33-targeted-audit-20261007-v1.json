@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v33-targeted-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v33-targeted-audit-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "historicaldiagnostic; ST91interpretation supersededbyrootoverlayv1",
+  "notes": "Exact3rejections auditinitialevidence; ST91sourceconfound classification corrected toordinaryentityscopeoverstrict modeljudgment inregisteredoverlay. CG62referencepoint ambiguity remainsheld;18runtime schemafailuresnotconverterbug."
+}

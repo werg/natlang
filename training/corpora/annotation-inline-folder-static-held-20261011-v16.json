@@ -1,0 +1,10 @@
+{
+  "id": "annotation-inline-folder-static-held-20261011-v16",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v16",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "24 programs and 96 complete annotation-grounded train items, zero provider label calls. Shared inline directory reducer scaffold; exact source groups preserved. All reference outputs/child captures pass. Source truth and native reasoning admission remain held."
+}

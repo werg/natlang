@@ -1,0 +1,18 @@
+{
+  "id": "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev18-repeat14-closed-raw-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-provider-generation-closed-no-admission",
+  "source_class": "provider-generation-raw-results",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "closed held generation evidence; same-world repeat only; output quality review is separate; no training, native trajectory, or recurrence admission",
+  "derived_from": [
+    "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+    "luna-v43-runtimev18-closed-raw-held-20261011-v1"
+  ],
+  "notes": "14 repeated source programs/111 items, seed base 43101. All five worker queues terminal complete. Completion and valid outputs do not imply semantic correctness; see separate review."
+}

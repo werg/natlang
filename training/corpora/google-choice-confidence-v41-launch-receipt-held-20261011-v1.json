@@ -1,0 +1,16 @@
+{
+  "id": "google-choice-confidence-v41-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source/root-launch-review-v1",
+  "include": [
+    "review.json",
+    "receipt.json",
+    "stop-receipt.json"
+  ],
+  "split": "inherited-train-launch-evidence",
+  "source_class": "held-provider-launch-and-stop-receipts",
+  "training_admission": false,
+  "admission": "launch-control-evidence-only-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Separate V41 root launch/stop evidence. PID1084868 made one successful request before stop when repeated CLINC HTTP 400 failures were identified; this is not a closed batch snapshot. Mutable labels, attempts and runner logs excluded."
+}

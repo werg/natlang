@@ -1,0 +1,16 @@
+{
+  "id": "bgkit-knowledge-rationalized-20261007-v1",
+  "owner": "dgx",
+  "path": "runs/bgkit-knowledge-rationalized-20261007-v1",
+  "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1, root turns only); not teacher-sampled",
+  "include": [
+    "*.jsonl",
+    "*.log"
+  ],
+  "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. BGKit/Schnitzeljagd and HotpotQA knowledge families (knowledge_evidence 22,354 turns, people_chain 29,992, people_lookup 12,962, repo_answer 5,600, digest_desk 4,703, knowledge_research 2,156): 4,440/4,440 cases admitted, 77,767 decisions, 5,202 root rationales. HotpotQA CC-BY-SA-4.0. Files: *.ir, *.rows, *.turns, *.rationales, *.prompts (prompts predate the full-context view).",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "verified replay 4,440/4,440 cases; rows approved; train only",
+  "required_conversion": "render; protected-overlap check against protected-bgkit (HotpotQA/SQuAD/TriviaQA/NQ) before use: hits go to test or are omitted",
+  "consumable_by_direct_stage": false
+}

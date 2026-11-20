@@ -1,0 +1,14 @@
+{
+  "id": "native-sft-v13-r2",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/native-sft-v13-r2",
+  "admission": "existing-native-sft-approved-recipe-preserve-group-splits",
+  "include": [
+    "teacher.jsonl"
+  ],
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "approved recipe v33; every row training_admission.approved (exact native-runtime oracle); 105,869 train / 5,432 test kept",
+  "required_conversion": "render with the current native chat renderer (full-prompt and program-header, LFM2.5 and Mellum2.1 tokenizers); language migration ts-host/scripts/migrate-neuralese-language.mjs; migrate legacy read_function/edit_function/diff_functions schemas, calls, prompt and program IR names with ts-host/scripts/inline-curriculum/migrate-code-tools.mjs (first-100-row audit confirmed train row teacher-program:02590d13f1d4c3530aa2:decision:0003, source row SHA-256 da0eec807c0858efecf211795a014ddead23293ed6edb0c6f1e4137e400f1b52; whole-corpus incidence remains unaudited); cross-corpus split closure; exclude or move to test the programs containing JeFF reserved test texts (plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json, defect D3)",
+  "consumable_by_direct_stage": false
+}

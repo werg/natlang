@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-google-poolv3-source-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/source-license-evidence-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "not-training-data",
+  "source_class": "read-only-source-provenance",
+  "training_admission": false,
+  "admission": "held; publication and successful reference execution do not grant admission",
+  "independent_new_worlds": 0,
+  "notes": "Corrected row count276 placeholder labels; original upstream revisions unrecorded. Current HEADs are comparison references, not historical inputs. No source metadata or admission changed."
+}

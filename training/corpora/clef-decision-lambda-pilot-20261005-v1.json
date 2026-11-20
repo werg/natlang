@@ -1,0 +1,11 @@
+{
+  "id": "clef-decision-lambda-pilot-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/clef-decision-lambda-pilot-20261005-v1",
+  "admission": "decision-filtered-live-teacher-native-requires-global-source-split-closure",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "note": "5accepted programs/85approved native decisions,11held whole cases.68live WorkersAI requests,29604inputtokens; explicit authored controller/plans and runtime tools, teacher choices checked independently against constructed-world oracle. Only native.jsonl holds training candidate decisions; requests/rejections/oracle case fields are audit evidence. Trace seed6131 differs from source case seed6132 but source hash is pinned. Derived from decision-lambda-source-20261005-v1; not additive independent examples."
+}

@@ -1,0 +1,228 @@
+{
+  "id": "natlang-native-turns-clef-pools-20261011-v2-render-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/natlang-native-turns-clef-pools-20261011-v2-render",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered corpus natlang-native-turns-clef-pools-20261011-v2-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "natlang-native-turns-clef-pools-20261011-v2-render",
+    "clef-pools-20261011-v2"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 139,
+            "supervised_tokens": 6164,
+            "tokens": 517560,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 5055074,
+        "decoded_text_data_sha256": "a62f961f12ca630b860b353268a8c22a09b0305cc226bb2c84558e8274243953",
+        "documents": 139,
+        "max_document_tokens": 4088,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "84b96afa71e1901c5d26539d09b0505fa9858bff28665b073a5edd0407253c71",
+        "exact_subset": {
+          "file": "exact-subset/full/lfm3/text-data.jsonl.zst",
+          "sha256": "45186f9460a204fc3b100f527af53a3ed926f7b2ee1431546fb2cf7640499a70",
+          "documents": 120,
+          "counts": {
+            "excluded_nonidentical": 19,
+            "train": 120
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 2838,
+            "supervised_tokens": 121197,
+            "tokens": 1638700,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 17451471,
+        "decoded_text_data_sha256": "a040609d133bcd47c5721aa13536eb1769ac1981cd32814e2c89b81f4a9bb295",
+        "documents": 2838,
+        "max_document_tokens": 1031,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "e9dfbf1ab9ba713753ec7795b2fb5af51b81b98ef452feb7730de47a3f881477",
+        "exact_subset": {
+          "file": "exact-subset/program-header/lfm3/text-data.jsonl.zst",
+          "sha256": "e8e3155bad3e2b57d1531583a0b119c4086fb134597c70f33dc4587d4fd3bc68",
+          "documents": 2470,
+          "counts": {
+            "excluded_nonidentical": 368,
+            "train": 2470
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 459656,
+            "documents": 2392,
+            "opening_tokens": 323701,
+            "supervised_tokens": 129711,
+            "tokens": 1427812,
+            "tool_tokens": 344060
+          }
+        },
+        "decoded_text_data_bytes": 16450839,
+        "decoded_text_data_sha256": "60a0877ce0a10639a48403a1e76c8c5ae0835a391bfc768bdb6c6e09bd576755",
+        "documents": 2392,
+        "max_document_tokens": 1031,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "7af85e9c1beb46264cf3eab028f8bcf8ac1a87b95c52d28d75a84d3d16f17f49",
+        "exact_subset": {
+          "file": "exact-subset/whole-trajectory/lfm3/text-data.jsonl.zst",
+          "sha256": "1d837c12db9bf435b3e2c7ce4d2877bcaa9019ac0543dd5c7d4868a936871a0a",
+          "documents": 2325,
+          "counts": {
+            "excluded_nonidentical": 67,
+            "train": 2325
+          }
+        }
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "natlang-native-turns-clef-pools-20261011-v2-render",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 139,
+        "reference_documents": 2480,
+        "same_order": 0,
+        "only_reference": 2360,
+        "only_student": 19
+      },
+      "program-header": {
+        "documents": 2838,
+        "reference_documents": 2480,
+        "same_order": 0,
+        "only_reference": 10,
+        "only_student": 368
+      },
+      "whole-trajectory": {
+        "documents": 2392,
+        "reference_documents": 2325,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 67
+      }
+    },
+    "target_parse": {
+      "full:exact": 139,
+      "program-header:exact": 2838
+    },
+    "exact_subset": {
+      "policy": "keep documents identical to the reference (id, split, source groups, source record ids); drop train documents sharing a source group with any held document of either render",
+      "resolved_problems": [
+        "program-header: split_or_group_changed 10"
+      ],
+      "excluded": {
+        "full": 19,
+        "program-header": 368,
+        "whole-trajectory": 67
+      }
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 2470,
+        "whole-trajectory": 2325
+      },
+      "detail": {
+        "program-header": {
+          "train": 2470,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-clef-pools-20261011-v2-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 2470,
+              "bytes": 459389,
+              "sha256": "16e7711e2ddf60d7867cdf4083aefac519d34fd3ee6bd3d55da5a1007b38e480"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-clef-pools-20261011-v2-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 2325,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-clef-pools-20261011-v2-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 2325,
+              "bytes": 730947,
+              "sha256": "0edbeef7083ef5777da6b3a81446cb24c2542edce6b2bec93f8e86f3fe3121f7"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-clef-pools-20261011-v2-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

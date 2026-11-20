@@ -1,0 +1,33 @@
+{
+  "id": "free-provider-google-pool-v2-closed-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "include": [
+    "provider-google-model-pool-mixed-decisions-v2/cases.jsonl",
+    "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/__pycache__/label_decision_cases.cpython-310.pyc",
+    "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/label_decision_cases.py",
+    "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/models.json",
+    "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/run_gemini_decision_pool.py",
+    "provider-google-model-pool-mixed-decisions-v2/labels.jsonl",
+    "provider-google-model-pool-mixed-decisions-v2/labels.jsonl.attempts.jsonl",
+    "provider-google-model-pool-mixed-decisions-v2/labels.jsonl.manifest.json",
+    "provider-google-model-pool-mixed-decisions-v2/launch-receipt-v1.json",
+    "provider-google-model-pool-mixed-decisions-v2/source-manifest.json",
+    "provider-google-model-pool-mixed-decisions-v2/worker.log",
+    "quality-review-v10-correction-v1/review-correction.json",
+    "quality-review-v10-correction-v1/review-correction.md",
+    "quality-review-v10/review.json",
+    "quality-review-v10/review.md"
+  ],
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "independent_new_worlds": 0,
+  "split": "inherited-train",
+  "source_class": "typed-decision-labels-with-shared-quota-pool-provenance",
+  "admission": "held-pending-source-quality-and-current-IR-conversion",
+  "derived_from": [
+    "free-provider-google-planned-pool-sources-held-20261010-v1"
+  ],
+  "license": "Inherited source datasets and authored decision-case source provenance",
+  "notes": "Closed 1024 unique inherited train cases, 899 strict typed-valid and125 invalid probability sums. Provider allocations are nonpaired. No arithmetic normalization or semantic admission. Review v10 correction supplements the original mistaken per-family error display; both receipts retained. Active v3 labels and project quota state excluded."
+}

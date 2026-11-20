@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v90-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v90-campaign-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Closed actual results and partial budget attempts preserved. Completion is not per-action admission; no automatic DPO."
+}

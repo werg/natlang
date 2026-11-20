@@ -1,0 +1,27 @@
+{
+  "id": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v26-google-choice-confidence-v9-complete",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "quality-review-evidence",
+  "training_admission": false,
+  "admission": "held-derivative-or-review-evidence-only",
+  "derived_from": [
+    "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+    "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+  ],
+  "notes": "V9 quality review V26; earlier quality review snapshot superseded by V27; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+  "supersedes": "free-provider-google-v9-partial-quality-held-20261010-v1",
+  "snapshot_pin": {
+    "files": 2,
+    "bytes": 79214,
+    "file_sha256": {
+      "review.json": "a4f8c61382e2845a220b862652313d63f4614fe1fb604b409eb5d467221fad45",
+      "review.md": "b23e523adafe2b183a375c7d744b17ddbfe7e46522539d85b7624512d1b96a63"
+    }
+  }
+}

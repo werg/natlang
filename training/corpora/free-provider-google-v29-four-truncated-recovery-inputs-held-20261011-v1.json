@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-google-v29-four-truncated-recovery-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-v29-truncated-four-recovery-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Four original BoardgameQA inputs retry after V30 with2048outputtokens; sameIDs/groups no newworldcredit. Ambiguousnewsgroup input omitted, originalprefixespreserved; activeoutputs excluded.",
+  "include": [
+    "cases.jsonl",
+    "root-related-source-launch-review-v1.json",
+    "frozen-adapter-v1/**"
+  ]
+}

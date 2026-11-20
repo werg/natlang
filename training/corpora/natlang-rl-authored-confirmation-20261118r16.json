@@ -1,0 +1,12 @@
+{
+  "id": "natlang-rl-authored-confirmation-20261118r16",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-authored-confirmation-20261118r16",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "cases.jsonl"
+  ],
+  "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 29 verified cases in 27 worlds (split confirmation), registered 20261118r16. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source.",
+  "kind": "held",
+  "protected": true
+}

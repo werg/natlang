@@ -1,0 +1,31 @@
+{
+  "id": "luna-neuralese-direct-lfm-v8-held-gpu-evidence-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8",
+  "source_class": "runtime-diagnostic-evidence",
+  "split": "held-diagnostic-no-independent-world-credit",
+  "training_admission": false,
+  "admission": "held GPU/runtime diagnostic evidence only; no training admission, no task qualification, and no autonomous stopping qualification",
+  "notes": "Selected closed V8 nonfinite failure and same-case token-driven update, token-writer setup/runtime qualification receipts, long-gradient diagnostic, frozen runtime source snapshots, and direct artifact manifest. Model weights, checkpoints, kernel caches, active epoch-v2 outputs, and bulky source inputs are excluded. Recipe and source input hashes are preserved in the stage/launch receipts.",
+  "include_manifest": true,
+  "include_prefixes": [
+    ".",
+    "direct-export-v2",
+    "direct-runtime-long-gradient-diagnostic-v2",
+    "direct-runtime-long-gradient-diagnostic-v2/run",
+    "direct-runtime-long-gradient-diagnostic-v2/runtime",
+    "direct-runtime-token-writer-qualification-v1",
+    "direct-runtime-token-writer-qualification-v1/runtime",
+    "direct-runtime-token-writer-qualification-v2",
+    "direct-runtime-token-writer-qualification-v2/run",
+    "direct-runtime-token-writer-qualification-v2/runtime",
+    "native-e2e-failing-context-diagnostic-launch-v2",
+    "native-e2e-failing-context-diagnostic-launch-v2/runtime",
+    "native-e2e-failing-context-diagnostic-launch-v3",
+    "native-e2e-failing-context-diagnostic-launch-v3/runtime",
+    "native-e2e-failing-context-diagnostic-v2",
+    "native-e2e-failing-context-diagnostic-v2/native_e2e",
+    "native-e2e-failing-context-diagnostic-v3",
+    "native-e2e-failing-context-diagnostic-v3/native_e2e"
+  ]
+}

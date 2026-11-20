@@ -1,0 +1,19 @@
+{
+  "id": "neuralese-v14-v1-failed-context-diagnostic-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1",
+  "include": [
+    "README.md",
+    "candidate-manifest.json",
+    "diagnostics/README.md",
+    "diagnostics/v6r3-rematerialized-context-mismatch.jsonl",
+    "diagnostics/rematerialization-summary.json",
+    "diagnostics/materialize-current-remat-diagnostic.mjs",
+    "diagnostics/context-mismatch-native-decision-approvals.json"
+  ],
+  "admission": "historical-failed-review-diagnostic-only;not-training-data;superseded-by-v14-v2-source-identity-correction",
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-20261007-v14-final"
+  ],
+  "notes": "Preserves the V14 v1 mistaken materializer/context mismatch diagnostic for audit history. Its source was the later scripted replay SHA f8c470c20bd587b09301f54591716f8a05a8e95bf2f3c3126cff1ebc17e0e06c; it compared soft-reference representation with rendered text and does not establish a materializer bug. Do not use as training input or approval evidence. Corrected by V14 v2, which binds original reference source SHA 9189dcd3c73beaf4bcd79508721916e5f6510421ae5e74c5e74886ae6206cd0a."
+}

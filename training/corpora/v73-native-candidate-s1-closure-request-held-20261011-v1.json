@@ -1,0 +1,19 @@
+{
+  "id": "v73-native-candidate-s1-closure-request-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-s1-closure-v1",
+  "include": [
+    "FILES.sha256",
+    "closure-packet-v1.json",
+    "dgx-request-v1.md",
+    "build-summary-v2.json",
+    "closure-input-v2/**/*",
+    "pop-harness4-v2/**/*"
+  ],
+  "split": "inherited-train-source-closure-request",
+  "source_class": "held-candidate-source-closure-request",
+  "training_admission": false,
+  "admission": "candidate-s1-closure-pending-no-native-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Exact candidate-level closure packet for 43 programs/909 materialized turns/302 source IDs and groups. Shared source_case_closure adapter locally produced 43 records, 909 bound candidate rows, zero harness4/protected/internal group errors; full DGX S1 still pending. Input v2 supersedes a failed v1 task.json field-pointer attempt, retained as history."
+}

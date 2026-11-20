@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v15-depth2-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v8",
+  "include": [
+    "**"
+  ],
+  "admission": "generation-source-only; twelve nested same-world depth2 variants root-reviewed; no static/native/recurrence training admission; twelve unchanged iterative controls held for wording limitations",
+  "notes": "24 retained worlds/groups/splits/gold, 17 specialist-role realism repairs, 12 nested instruction variants; zero new independent worlds or cross-prompt DPO pairs. Source proof is scripted runtime evidence, not teacher data. root-generation-review.json binds approved indices and exact source SHA."
+}

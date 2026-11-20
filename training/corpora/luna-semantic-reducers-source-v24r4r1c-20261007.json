@@ -1,0 +1,28 @@
+{
+  "id": "luna-semantic-reducers-source-v24r4r1c-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
+  "admission": "candidate-root-reviewed-authored-source-not-training-trajectories",
+  "include": [
+    "source.cases.jsonl",
+    "campaign-source.json",
+    "source-split-manifest.json",
+    "source-oracle-check.json",
+    "source-quality-review.md",
+    "source-lineage-review-v4r1c.json",
+    "capture-visibility-proof-repaired-runtime.json",
+    "oracle-review-repaired-runtime.json",
+    "native-results-repaired-runtime.jsonl",
+    "native-report-repaired-runtime.json",
+    "native-visible-traces-repaired-runtime.jsonl",
+    "native-visible-report-repaired-runtime.json",
+    "build_v4r1c.py",
+    "README-r1c.md",
+    "worker-1/queue-r1c.jsonl",
+    "worker-2/queue-r1c.jsonl",
+    "worker-3/queue-r1c.jsonl",
+    "worker-4/queue-r1c.jsonl",
+    "prepared-plan-r1c.json"
+  ],
+  "notes": "16new worlds:10directory/file semantic reducers and6same-item refinements,9train/7test wholeworlds. Unlaunched V4draft had a badwetlandoracle; rootcaught and correctedbeforegeneration; R1C also clarifies power safety ordering, invoice damage, and platform barrier/authority predicates. Includesexplicitdraftlineage48/56evidencerowscarryover, not additional independent worlds. Native16/16 reference/capture proofs on052bd628repairednestedFileHandle runtime; no admission from replay success. Four reviewedLuna queues launched approvedplan814611bed8a4cddc621c7e4cce38888cbee2872c5c5c05a077c80ece7857fdd8."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v12-runtime-proof-20261007-v6",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v6",
+  "include": [
+    "**"
+  ],
+  "admission": "runtime/converter diagnostic only; no teacher admission",
+  "notes": "Fresh zero-model-call actual runtime replay of unchanged24V12 worlds.24writers84reads0capture holds after exact host-observed primitive attestation;24child-result producer-missing sites remain explicit. Not independent model data."
+}

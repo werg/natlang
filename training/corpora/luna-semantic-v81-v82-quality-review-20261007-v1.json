@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v81-v82-quality-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v81-v82-quality-review-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-generation-or-review-evidence-no-training-admission",
+  "notes": "Held3casequalityreview; V81nofiveedgequalification, V82correcttyped/arithmeticparentresults; noadmission orDPO."
+}

@@ -12,10 +12,38 @@ import register_corpora as rc  # noqa: E402
 import sync_training_corpora as sync  # noqa: E402
 
 REAL = Path(__file__).resolve().parents[1]
+OLD = {'id': 'old', 'owner': 'dgx', 'path': 'x'}
+NEW = {'id': 'new', 'owner': 'dgx', 'path': 'data/corpora/new', 'include': ['*.jsonl']}
 
 
 def sh(*args, cwd):
     return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout
+
+
+def text(entry):
+    return json.dumps(entry, indent=2) + '\n'
+
+
+def main_ids(origin):
+    """Ids whose entry file is at origin's main."""
+    listing = sh('git', 'ls-tree', '--name-only', 'main', rc.ENTRIES + '/', cwd=origin).split()
+    return sorted(Path(name).name[:-5] for name in listing if name.endswith('.json'))
+
+
+def main_entry(origin, ident):
+    return sh('git', 'show', f'main:{rc.entry_file(ident)}', cwd=origin)
+
+
+def push_from_other(tmp_path, origin, files, message):
+    """Another clone commits FILES {rel: text} and pushes them to main."""
+    other = tmp_path / 'other'
+    sh('git', 'clone', '-q', str(origin), str(other), cwd=tmp_path)
+    for rel, content in files.items():
+        (other / rel).parent.mkdir(parents=True, exist_ok=True)
+        (other / rel).write_text(content)
+        sh('git', 'add', rel, cwd=other)
+    sh('git', '-c', 'user.email=o@o', '-c', 'user.name=o', 'commit', '-q', '-m', message, cwd=other)
+    sh('git', 'push', '-q', 'origin', 'HEAD:main', cwd=other)
 
 
 def setup(tmp_path, monkeypatch):
@@ -27,13 +55,20 @@ def setup(tmp_path, monkeypatch):
     (repo / 'scripts').mkdir()
     shutil.copy(REAL / 'scripts/sync_training_corpora.py', repo / 'scripts/sync_training_corpora.py')
     shutil.copy(REAL / 'scripts/git_publish.py', repo / 'scripts/git_publish.py')
+    package = repo / 'training/neuralese/natlang_neuralese'
+    (package / 'common').mkdir(parents=True)
+    (package / '__init__.py').write_text('')
+    (package / 'common/__init__.py').write_text('')
+    shutil.copy(REAL / 'training/neuralese/natlang_neuralese/common/corpus_registry.py',
+                package / 'common/corpus_registry.py')
     (repo / 'foreign-dirty.txt').write_text('original dirty\n')
     (repo / 'foreign-staged.txt').write_text('original staged\n')
     (repo / 'training/corpus-manifests').mkdir(parents=True)
     (repo / 'training/corpus-manifests/.keep').write_text('')
     (repo / '.gitignore').write_text('data/\n')
-    registry = {'schema': 'natlang.neuralese-corpus-registry/1', 'corpora': [{'id': 'old', 'owner': 'dgx', 'path': 'x'}]}
-    (repo / rc.REGISTRY).write_text(json.dumps(registry, indent=2) + '\n')
+    (repo / 'training/corpus-registry.json').write_text(json.dumps({'schema': 'natlang.neuralese-corpus-registry/2'}, indent=2) + '\n')
+    (repo / rc.ENTRIES).mkdir(parents=True)
+    (repo / rc.entry_file('old')).write_text(text(OLD))
     sh('git', 'add', '-A', cwd=repo)
     sh('git', 'commit', '-q', '-m', 'init', cwd=repo)
     sh('git', 'push', '-q', 'origin', 'main', cwd=repo)
@@ -61,8 +96,8 @@ def test_registers_from_main_preserving_foreign_staged_and_dirty_files(tmp_path,
     sh('git','add','foreign-staged.txt',cwd=repo)
     entry = {'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
     assert rc.register([entry],'Register new',check=False)==['new']
-    shown=json.loads(sh('git','show',f'main:{rc.REGISTRY}',cwd=origin))
-    assert [item['id'] for item in shown['corpora']]==['old','new']
+    assert main_ids(origin)==['new','old']
+    assert main_entry(origin,'new')==text(entry) and main_entry(origin,'old')==text(OLD)
     manifest=json.loads(sh('git','show','main:training/corpus-manifests/new.json',cwd=origin))
     assert manifest['files'][0]['path']=='a.jsonl'
     assert (repo/'foreign-dirty.txt').read_text()=='foreign unstaged\n'
@@ -73,16 +108,31 @@ def test_registers_from_main_preserving_foreign_staged_and_dirty_files(tmp_path,
 
 
 @pytest.mark.parametrize('staged',[False,True])
-def test_dirty_or_staged_registry_is_actionable_and_preserved(tmp_path,monkeypatch,staged):
+def test_dirty_or_staged_selected_entry_is_actionable_and_preserved(tmp_path,monkeypatch,staged):
     origin,repo=setup(tmp_path,monkeypatch)
-    registry=repo/rc.REGISTRY;registry.write_text(registry.read_text().replace('"x"','"foreign"'))
-    if staged:sh('git','add',rc.REGISTRY,cwd=repo)
+    registry=repo/rc.entry_file('new');registry.write_text(text({**NEW,'path':'foreign'}))
+    if staged:sh('git','add',rc.entry_file('new'),cwd=repo)
     before=registry.read_bytes();head=sh('git','rev-parse','main',cwd=origin)
     entry={'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
     with pytest.raises(ValueError,match='foreign or concurrent'):
         rc.register([entry],'Register new',check=False)
     assert registry.read_bytes()==before and sh('git','rev-parse','main',cwd=origin)==head
     assert bool(sh('git','diff','--cached','--name-only',cwd=repo))==staged
+    assert sh('git','stash','list',cwd=repo)==''
+
+
+@pytest.mark.parametrize('staged',[False,True])
+def test_dirty_or_staged_other_entry_does_not_block_and_is_preserved(tmp_path,monkeypatch,staged):
+    origin,repo=setup(tmp_path,monkeypatch)
+    other=repo/rc.entry_file('old');other.write_text(text({**OLD,'path':'foreign'}))
+    if staged:sh('git','add',rc.entry_file('old'),cwd=repo)
+    before=other.read_bytes()
+    assert rc.register([NEW],'Register new',check=False)==['new']
+    assert main_ids(origin)==['new','old'] and main_entry(origin,'old')==text(OLD)
+    assert other.read_bytes()==before
+    cached=sh('git','diff','--cached','--name-only',cwd=repo).splitlines()
+    assert cached==([rc.entry_file('old')] if staged else [])
+    if staged:assert sh('git','show',':'+rc.entry_file('old'),cwd=repo)==before.decode()
     assert sh('git','stash','list',cwd=repo)==''
 
 
@@ -117,23 +167,30 @@ def test_actual_push_race_rebuilds_without_touching_other_work(tmp_path,monkeypa
     assert calls==[0] and sh('git','show','main:other.txt',cwd=origin)=='concurrent\n'
     assert (repo/'foreign-dirty.txt').read_text()=='untouched\n'
     assert sh('git','diff','--cached','--name-only',cwd=repo).splitlines()==['foreign-staged.txt']
-    assert [item['id'] for item in json.loads(sh('git','show',f'main:{rc.REGISTRY}',cwd=origin))['corpora']]==['old','new']
+    assert main_ids(origin)==['new','old'] and main_entry(origin,'new')==text(entry)
 
 
-def test_foreign_registry_edit_during_preparation_is_never_published(tmp_path,monkeypatch):
+@pytest.mark.parametrize('target',['new','old'])
+def test_foreign_entry_edit_during_preparation_is_never_published(tmp_path,monkeypatch,target):
     origin,repo=setup(tmp_path,monkeypatch)
     sync_module=rc._module(repo/'scripts/sync_training_corpora.py','race_sync')
     original_publish=sync_module.publish;original_module=rc._module
     def publish(*args,**kwargs):
         result=original_publish(*args,**kwargs)
-        path=repo/rc.REGISTRY;path.write_text(path.read_text().replace('"x"','"foreign"'))
+        (repo/rc.entry_file(target)).write_text(text({'id':target,'owner':'pop','path':'foreign'}))
         return result
     monkeypatch.setattr(sync_module,'publish',publish)
     monkeypatch.setattr(rc,'_module',lambda path,name: sync_module if name=='natlang_registration_corpus_sync' else original_module(path,name))
     head=sh('git','rev-parse','main',cwd=origin)
-    with pytest.raises(ValueError,match='foreign or concurrent'):
-        rc.register([{'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}],'Register new',check=False)
-    assert 'foreign' in (repo/rc.REGISTRY).read_text() and sh('git','rev-parse','main',cwd=origin)==head
+    if target=='new':
+        with pytest.raises(ValueError,match='foreign or concurrent'):
+            rc.register([NEW],'Register new',check=False)
+        assert sh('git','rev-parse','main',cwd=origin)==head and main_ids(origin)==['old']
+    else:  # a foreign edit of another entry is neither published nor a conflict
+        assert rc.register([NEW],'Register new',check=False)==['new']
+        assert main_ids(origin)==['new','old'] and main_entry(origin,'new')==text(NEW)
+        assert main_entry(origin,'old')==text(OLD)
+    assert 'foreign' in (repo/rc.entry_file(target)).read_text()
 
 
 def test_changed_entry_under_registered_id_is_refused(tmp_path, monkeypatch):
@@ -196,44 +253,43 @@ def test_publish_reuses_manifest_only_while_entry_and_file_stats_match(tmp_path,
     assert len(hashed) == 2
 
 
-def test_concurrent_conflicting_registry_push_is_not_overwritten(tmp_path,monkeypatch):
+def test_concurrent_conflicting_entry_push_is_not_overwritten(tmp_path,monkeypatch):
     origin,repo=setup(tmp_path,monkeypatch)
     publisher=rc._module(repo/'scripts/git_publish.py','conflict_git_publish');original=rc._module
     monkeypatch.setattr(rc,'_module',lambda path,name: publisher if name=='natlang_registration_git_publish' else original(path,name))
     calls=[]
     def race(_attempt):
         if calls:return
-        calls.append(True);other=tmp_path/'other'
-        sh('git','clone','-q',str(origin),str(other),cwd=tmp_path)
-        path=other/rc.REGISTRY;registry=json.loads(path.read_text())
-        registry['corpora'].append({'id':'new','owner':'pop','path':'foreign'})
-        path.write_text(json.dumps(registry,indent=2)+'\n')
-        sh('git','add',rc.REGISTRY,cwd=other)
-        sh('git','-c','user.email=o@o','-c','user.name=o','commit','-q','-m','foreign registry',cwd=other)
-        sh('git','push','-q','origin','HEAD:main',cwd=other)
+        calls.append(True)
+        push_from_other(tmp_path,origin,{rc.entry_file('new'):text({'id':'new','owner':'pop','path':'foreign'})},'foreign entry')
     monkeypatch.setattr(publisher,'before_push',race)
     entry={'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
     with pytest.raises(ValueError,match='not published'):
         rc.register([entry],'Register new',check=False)
-    assert json.loads(sh('git','show',f'main:{rc.REGISTRY}',cwd=origin))['corpora'][-1]['path']=='foreign'
+    assert json.loads(main_entry(origin,'new'))['path']=='foreign'
+    assert sh('git','ls-tree','--name-only','main',rc.MANIFESTS+'/new.json',cwd=origin)==''
     assert not (repo/rc.MANIFESTS/'new.json').exists()
-    assert json.loads((repo/rc.REGISTRY).read_text())['corpora']==[{'id':'old','owner':'dgx','path':'x'}]
+    assert not (repo/rc.entry_file('new')).exists() and (repo/rc.entry_file('old')).read_text()==text(OLD)
 
 
-def test_selected_registry_edited_after_plan_is_not_published_or_overwritten(tmp_path,monkeypatch):
+@pytest.mark.parametrize('target',['new','old'])
+def test_entry_edited_after_plan_is_not_published_or_overwritten(tmp_path,monkeypatch,target):
     origin,repo=setup(tmp_path,monkeypatch)
     publisher=rc._module(repo/'scripts/git_publish.py','late_edit_git_publish');original=rc._module
     monkeypatch.setattr(rc,'_module',lambda path,name: publisher if name=='natlang_registration_git_publish' else original(path,name))
     def late_edit(attempt):
         if attempt==0:
-            path=repo/rc.REGISTRY;path.write_text(path.read_text().replace('"x"','"late foreign edit"'))
+            (repo/rc.entry_file(target)).write_text(text({'id':target,'owner':'pop','path':'late foreign edit'}))
     monkeypatch.setattr(publisher,'before_push',late_edit)
-    entry={'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
-    with pytest.raises(ValueError,match='not published'):
-        rc.register([entry],'Register new',check=False)
-    assert 'late foreign edit' in (repo/rc.REGISTRY).read_text()
-    committed=json.loads(sh('git','show',f'main:{rc.REGISTRY}',cwd=origin))
-    assert committed['corpora']==[{'id':'old','owner':'dgx','path':'x'}]
+    if target=='new':  # the selected entry file: blocks
+        with pytest.raises(ValueError,match='not published'):
+            rc.register([NEW],'Register new',check=False)
+        assert main_ids(origin)==['old']
+    else:  # another entry: neither published nor a conflict
+        assert rc.register([NEW],'Register new',check=False)==['new']
+        assert main_ids(origin)==['new','old'] and main_entry(origin,'new')==text(NEW)
+    assert main_entry(origin,'old')==text(OLD)
+    assert 'late foreign edit' in (repo/rc.entry_file(target)).read_text()
 
 
 def test_candidate_admission_gate_receives_exact_proposed_registry_and_manifest(tmp_path,monkeypatch):
@@ -249,7 +305,9 @@ def test_candidate_admission_gate_receives_exact_proposed_registry_and_manifest(
         if isinstance(command,(list,tuple)) and any('render_native_turn_corpus.py' in str(item) for item in command):
             registry=Path(command[command.index('--admission-registry-file')+1])
             manifest=Path(command[command.index('--admission-manifest-file')+1])
-            assert json.loads(registry.read_text())['corpora'][-1]==entry
+            corpora=json.loads(registry.read_text())['corpora']
+            assert [row['id'] for row in corpora]==['new','old']
+            assert {row['id']:row for row in corpora}=={'new':entry,'old':OLD}
             assert json.loads(manifest.read_text())['id']=='new'
             assert '--verify-admission-only' in command
             observed.append(True)
@@ -287,29 +345,28 @@ def test_registration_preserves_canonical_data_symlink(tmp_path,monkeypatch):
     assert (repo/'data/corpora/linked').is_symlink()
     manifest=json.loads(sh('git','show','main:training/corpus-manifests/linked.json',cwd=origin))
     assert manifest['files'][0]['path']=='source.jsonl'
+    assert main_ids(origin)==['linked','old'] and main_entry(origin,'linked')==text(entry)
 
 
-def test_concurrent_distinct_registry_addition_is_semantically_rebased(tmp_path,monkeypatch):
+def test_concurrent_distinct_entry_addition_is_rebased(tmp_path,monkeypatch):
     origin,repo=setup(tmp_path,monkeypatch)
     publisher=rc._module(repo/'scripts/git_publish.py','registry_race_publisher');original=rc._module
     monkeypatch.setattr(rc,'_module',lambda path,name: publisher if name=='natlang_registration_git_publish' else original(path,name))
     calls=[]
     def race(_attempt):
         if calls:return
-        calls.append(True);other=tmp_path/'other'
-        sh('git','clone','-q',str(origin),str(other),cwd=tmp_path)
-        path=other/rc.REGISTRY;registry=json.loads(path.read_text())
-        registry['corpora'].append({'id':'concurrent','owner':'pop','path':'other'})
-        path.write_text(json.dumps(registry,indent=2)+'\n')
-        sh('git','add',rc.REGISTRY,cwd=other)
-        sh('git','-c','user.email=o@o','-c','user.name=o','commit','-q','-m','other registry',cwd=other)
-        sh('git','push','-q','origin','HEAD:main',cwd=other)
+        calls.append(True)
+        push_from_other(tmp_path,origin,{rc.entry_file('concurrent'):text({'id':'concurrent','owner':'pop','path':'other'})},'other entry')
     monkeypatch.setattr(publisher,'before_push',race)
     entry={'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
     assert rc.register([entry],'Register new',check=False)==['new']
-    registry=json.loads(sh('git','show',f'main:{rc.REGISTRY}',cwd=origin))
-    assert [item['id'] for item in registry['corpora']]==['old','concurrent','new']
-    assert json.loads((repo/rc.REGISTRY).read_text())==registry
+    assert main_ids(origin)==['concurrent','new','old']
+    assert main_entry(origin,'new')==text(entry)
+    assert json.loads(main_entry(origin,'concurrent'))=={'id':'concurrent','owner':'pop','path':'other'}
+    # the checkout was advanced to main: its entry files are main's
+    assert sorted(p.name[:-5] for p in (repo/rc.ENTRIES).iterdir())==main_ids(origin)
+    for ident in main_ids(origin):
+        assert (repo/rc.entry_file(ident)).read_text()==main_entry(origin,ident)
 
 
 def test_replace_preserves_existing_manifest_bytes_and_refuses_changed_snapshot(tmp_path,monkeypatch):
@@ -321,6 +378,7 @@ def test_replace_preserves_existing_manifest_bytes_and_refuses_changed_snapshot(
     replacement={**entry,'notes':'reviewed metadata only'}
     assert rc.register([replacement],'Update metadata',replace=True,check=False)==['new']
     assert sh('git','rev-parse',f'main:{manifest_name}',cwd=origin)==before
+    assert main_entry(origin,'new')==text(replacement)
     head=sh('git','rev-parse','main',cwd=origin)
     (repo/'data/corpora/new/extra.jsonl').write_text('{"new":true}\n')
     with pytest.raises(ValueError,match='immutable snapshot changed'):
@@ -363,31 +421,33 @@ def test_red_quick_check_preserves_complete_failure_without_publishing(tmp_path,
     assert not (repo/rc.MANIFESTS/'new.json').exists()
 
 
-def test_safely_syncs_new_upstream_registry_before_registration(tmp_path,monkeypatch):
-    origin,repo=setup(tmp_path,monkeypatch);other=tmp_path/'other'
-    sh('git','clone','-q',str(origin),str(other),cwd=tmp_path)
-    path=other/rc.REGISTRY;registry=json.loads(path.read_text())
-    registry['corpora'].append({'id':'already-upstream','owner':'pop','path':'other'})
-    path.write_text(json.dumps(registry,indent=2)+'\n')
-    sh('git','add',rc.REGISTRY,cwd=other)
-    sh('git','-c','user.email=o@o','-c','user.name=o','commit','-q','-m','upstream',cwd=other)
-    sh('git','push','-q','origin','HEAD:main',cwd=other)
+def test_new_upstream_entry_is_kept_by_registration(tmp_path,monkeypatch):
+    origin,repo=setup(tmp_path,monkeypatch)
+    upstream={'id':'already-upstream','owner':'pop','path':'other'}
+    push_from_other(tmp_path,origin,{rc.entry_file('already-upstream'):text(upstream)},'upstream')
     (repo/'foreign-staged.txt').write_text('staged\n');sh('git','add','foreign-staged.txt',cwd=repo)
     entry={'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
     assert rc.register([entry],'Register new',check=False)==['new']
-    registry=json.loads(sh('git','show',f'main:{rc.REGISTRY}',cwd=origin))
-    assert [row['id'] for row in registry['corpora']]==['old','already-upstream','new']
+    assert main_ids(origin)==['already-upstream','new','old']
+    assert main_entry(origin,'already-upstream')==text(upstream) and main_entry(origin,'new')==text(entry)
     assert sh('git','diff','--cached','--name-only',cwd=repo).splitlines()==['foreign-staged.txt']
 
 
-def test_unpublished_local_registry_commit_is_never_swept_into_registration(tmp_path,monkeypatch):
-    origin,repo=setup(tmp_path,monkeypatch);path=repo/rc.REGISTRY;registry=json.loads(path.read_text())
-    registry['corpora'].append({'id':'local-only','owner':'pop','path':'other'})
-    path.write_text(json.dumps(registry,indent=2)+'\n');sh('git','add',rc.REGISTRY,cwd=repo)
+def test_unpublished_local_commit_of_selected_entry_blocks_registration(tmp_path,monkeypatch):
+    origin,repo=setup(tmp_path,monkeypatch);path=repo/rc.entry_file('new')
+    path.write_text(text({'id':'new','owner':'pop','path':'local'}));sh('git','add',rc.entry_file('new'),cwd=repo)
     sh('git','commit','-q','-m','local only',cwd=repo)
     before=sh('git','rev-parse','main',cwd=origin)
-    entry={'id':'new','owner':'dgx','path':'data/corpora/new','include':['*.jsonl']}
     with pytest.raises(ValueError,match='unpublished local commits'):
-        rc.register([entry],'Register new',check=False)
+        rc.register([NEW],'Register new',check=False)
     assert sh('git','rev-parse','main',cwd=origin)==before
-    assert json.loads(path.read_text())['corpora'][-1]['id']=='local-only'
+    assert json.loads(path.read_text())['path']=='local'
+
+
+def test_unpublished_local_commit_of_other_entry_is_never_swept_into_registration(tmp_path,monkeypatch):
+    origin,repo=setup(tmp_path,monkeypatch);path=repo/rc.entry_file('local-only')
+    path.write_text(text({'id':'local-only','owner':'pop','path':'other'}));sh('git','add',rc.entry_file('local-only'),cwd=repo)
+    sh('git','commit','-q','-m','local only',cwd=repo)
+    assert rc.register([NEW],'Register new',check=False)==['new']
+    assert main_ids(origin)==['new','old']
+    assert json.loads(path.read_text())['id']=='local-only'

@@ -1,0 +1,25 @@
+{
+  "id": "google-choice-confidence-v36-source-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v36-source",
+  "include": [
+    "cases.jsonl",
+    "omissions.jsonl",
+    "source-manifest.json",
+    "root-source-preparation-review-v1.json",
+    "preparation-support/annotation-reservation-v22-verified.jsonl",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/models.json",
+    "frozen-adapter-v1/scripts/label_decision_cases.py",
+    "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py"
+  ],
+  "split": "inherited-train-input",
+  "source_class": "held-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-prepared-not-launched",
+  "independent_new_worlds": 0,
+  "notes": "Prepared 512 V36 input cases only. Round-robin 9-family selection, exact original source IDs/groups/train roles/answers preserved; current canonical V15 holds, all previous provider IDs/groups, V21 annotation reservation, and 640 V22 annotation rows are excluded. V22 criteria are treated as separately derived metadata; reservation bridge rebinds each to exact master row index/hash/id/group/split. Frozen ten-model free pool copies current V35 models and exact current runner/import source. Root review and launch still required; no labels, requests, paid fallback, or training admission."
+}

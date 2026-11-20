@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v1",
+  "owner": "pop",
+  "path": "runs/workflowevals-folder-iterate-v27-runtime-20261008-854789a4",
+  "include": [
+    "frozen-runtime/**/*"
+  ],
+  "admission": "held-runtime-snapshot-no-training-or-runtime-qualification-admission",
+  "notes": "Superseded incomplete V1 runtime-tree snapshot: its glob omitted three files at frozen-runtime root. V2 below captures all 1,048 files and is the authoritative complete frozen V27 runtime snapshot. No training or runtime qualification admission."
+}

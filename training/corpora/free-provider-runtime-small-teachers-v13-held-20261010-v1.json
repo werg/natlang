@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-runtime-small-teachers-v13-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v13",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "node_modules",
+    "__pycache__"
+  ],
+  "split": "runtime-evidence-only",
+  "source_class": "frozen-generation-runtime",
+  "training_admission": false,
+  "admission": "runtime-only-not-training-admission",
+  "notes": "V13sharedbuiltcompiler/runtimeguidance forunsupportedinferredcallabletypes,fixedcaptures-vs-callarguments,creation-timetemplateinterpolation; nosemanticvalidationchanges. ActiveV40remainsfrozenV12."
+}

@@ -1,0 +1,34 @@
+{
+  "id": "natlang-rl-git-history-20261120",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-git-history-20261120",
+  "include": [
+    "cases.jsonl",
+    "qualification.json",
+    "verification.json",
+    "verification/*.json",
+    "diversity.json",
+    "receipt.json",
+    "reference-check.json",
+    "repos.jsonl",
+    "build-commit.txt",
+    "repetition.json",
+    "custody.json",
+    "custody-after-held-registration.json",
+    "protection-union.json",
+    "held-verify/*.json"
+  ],
+  "source_class": "immutable-RL-task-source",
+  "split": "Train-only 736-row RL task source for grpo.py POOLS: repository-history questions over 106 bgkit-data repositories (14 more are held dev/confirmation units), 10 families (line origin, line and signature before a rewrite, commit files, file created, last change author/date, commit counts, churn, tree delta, JSON value at a commit) answered through a read-only git service; every gold value is git output.",
+  "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 19 (fallow register K3). Built by scripts/rl_tasks/sources/git_history.py (source git-history) from bgkit-data/repos staged to NVMe; every case re-solved through its own git service to git's answer (reference-check.json, 835/835) and qualified by verify.mjs on the grpo-v5-run1 pin runtime f9664edfedb3 (834/835 kept; 2,606 of 2,607 wrong controls rejected, the one accepted differed from gold only in letter case and its case was dropped). Services read their snapshots from natlang-rl-git-history-assets-20261120 on NVMe (NATLANG_RL_GIT_ASSETS overrides). Held units registered as natlang-rl-git-history-{dev,confirmation}-20261120. Data on /mnt/external (runs/ entry is a symlink). Upstream licences are recorded per case (repository URL and its licence file's first line).",
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line; services read natlang-rl-git-history-assets-20261120",
+  "roles": {
+    "grpo-pool": {
+      "order": 17,
+      "file": "cases.jsonl"
+    }
+  },
+  "license": "project-generated questions over bgkit-data repositories (each repository keeps its own license); gold values are git output",
+  "training_admission": "grpo-task-pool"
+}

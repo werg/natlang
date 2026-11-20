@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-v29-admitted-ordinary-text-20-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v29-admitted-ordinary-text-packet-v1",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-only-no-new-evaluation-credit",
+  "source_class": "admitted-ordinary-text-only",
+  "training_admission": true,
+  "admission": "ordinary-text-only",
+  "native_admission": false,
+  "trace_admission": false,
+  "independent_new_worlds": 0,
+  "notes": "20train/0held/0omissions;169069fulltokens5768supervisedsuffix/max12444. Text7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f. ExactpinnedLFM2.5 history/tokenizer rendering, no nativeIR/trace/recurrence qualification orindependentworldcredit. CurrentV5GPUinputunchanged."
+}

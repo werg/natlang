@@ -1,0 +1,14 @@
+{
+  "id": "s2-usable-sources-20261015-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/s2-usable-sources-20261015-v1",
+  "admission": "source-episodes-and-decision-cases-require-quality-gates",
+  "include": [
+    "**/*.jsonl"
+  ],
+  "training_admission": false,
+  "training_admission_reason": "Selected source tasks, decision cases, teacher labels and improvement records are reusable inputs, but are not model-ready examples. Apply source-quality holds, paired outcome gates, split closure and current rendering before admission.",
+  "review_status": "The mixed v2 snapshot contained ungraded and failed candidate attempts; only source episodes, decision cases, labels and small improvement-step evidence were retained. No queue result was promoted to training.",
+  "required_conversion": "filter decision cases by decision_source_quality_holds.json; select verified labels and outcomes; convert accepted examples to teacher turns or port records; render for the current direct stage",
+  "consumable_by_direct_stage": false
+}

@@ -1,0 +1,7 @@
+{
+  "id": "luna-v15-fixture27-diagnosis-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v15-fixture27-diagnosis-20261006-v1",
+  "admission": "source-ambiguity-diagnosis-not-training-data",
+  "notes": "All candidates visible; oldfixture27 question has nonunique gold. Preserve immutable reviews and apply current semantic hold to derived admissions; new31 explicitall24."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v17-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v17-adapter-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "provider-source-generation-diagnosis-review",
+  "training_admission": false,
+  "admission": "held-source-semantic-split-trace-quality-review",
+  "notes": "47 static programs354 exact saved annotation agreements158 rejected differences; all47 actual reference replay passed. Source semantic truth remains separate."
+}

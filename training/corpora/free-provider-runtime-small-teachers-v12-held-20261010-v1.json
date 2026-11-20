@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-runtime-small-teachers-v12-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v12",
+  "include": [
+    "**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "frozen-provider-generation-runtime",
+  "training_admission": false,
+  "admission": "generation-input-or-quality-review-only-not-training-data",
+  "notes": "Current built Node runtime2fee02a087, exact whitespacefragment textpayloads avoid authenticatedliteral contentidentity collision; includes501238 action-coordinate/capture fixes and shared3bbc typeddecisionadapter. Frozen1381payloadfiles+manifest; local Node dependency links need canonical installation on othermachines. Wiretextemulation2 unchanged, promptguidanceunchanged. No learnedvector/runtimequalification.",
+  "exclude_dirs": [
+    "node_modules",
+    "__pycache__"
+  ]
+}

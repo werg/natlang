@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v16-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v16-adapter-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "provider-source-runtime-generation-review",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-trace-review-required",
+  "notes": "50 programs, 389 source-label agreements, all 50 reference replay accepted. Held native rows and mismatches preserved."
+}

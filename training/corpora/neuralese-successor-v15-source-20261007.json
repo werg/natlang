@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v15-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v15-prepared-20261007-candidate-v9",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed source for generation only; static scripted actions separately audited",
+  "notes": "Twenty-four new semantic worlds,12train12held,12nested reducers and12 iterators. Complete category-aligned facts, mixed labels per folder;132 actual scripted child reads. Organization-as-person signer wording remains realism limitation; no automatic admission."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "google-choice-confidence-v41-json-object-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source/root-launch-review-v2-json-object",
+  "include": [
+    "review.json",
+    "launch-receipt.json",
+    "quota-repair-receipt.json",
+    "quota-state-before.json",
+    "quota-state-after.json"
+  ],
+  "split": "launch-control-evidence",
+  "source_class": "held-provider-launch-evidence",
+  "training_admission": false,
+  "admission": "launch-evidence-only-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root-approved V41 JSON-object relaunch and exclusive quota-state repair evidence; binds 2047 remaining cases and frozen adapter manifest. No mutable runner log or generated labels included."
+}

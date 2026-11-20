@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v14-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v14-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed source cases for generation only; scripted reference proof is not teacher admission",
+  "notes": "Six independent worlds: two nested inherited/local policy reducers, four 4/5-pass iterateOn records;3train3held. All thirty actual scripted child reads successful and source-bound, exact output files. Attempt history includes unavailable overwrittenv4 bytes and cleanup incident."
+}

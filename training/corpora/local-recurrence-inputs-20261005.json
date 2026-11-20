@@ -1,0 +1,10 @@
+{
+  "id": "local-recurrence-inputs-20261005",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/local-recurrence-inputs-20261005",
+  "include": [
+    "*.jsonl",
+    "*.pt"
+  ],
+  "admission": "pinned-bounded-diagnostic-inputs"
+}

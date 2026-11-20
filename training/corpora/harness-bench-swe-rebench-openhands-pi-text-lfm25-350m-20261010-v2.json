@@ -1,0 +1,71 @@
+{
+  "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+  "include": [
+    "text.jsonl",
+    "receipt.json",
+    "provenance.jsonl",
+    "omissions.jsonl"
+  ],
+  "split": "inherited from the source records (by repository; source groups repository and instance)",
+  "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
+  "admission": "admitted-harness_bench-cohort-text-stages (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): the LFM line's text stages (core_text_warmup, autoregressive_text_fixup) at cohort fraction 0.25 beside the native text, via an assembled text input (scripts/assemble_neuralese_cohorts.py) and text_warmup --cohort-weights; the 874 test documents (S1-placed held repositories) are a reported stratum, never qualification evidence; enters through recipe raw-recurrence-v5",
+  "training_admission": true,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+  ],
+  "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+  "build": {
+    "script": "scripts/build_neuralese_text_packet.py",
+    "code_commit": "621de060",
+    "command": "scripts/build_neuralese_text_packet.py --records data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl --pieces data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/pieces.jsonl --tokenizer /home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f --out data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+    "renderer": "natlang_neuralese.data.text_corpus.gold_text_rows",
+    "rendering": "natlang.native_gold_chat/3",
+    "renderer_code": {
+      "scripts/build_neuralese_text_packet.py": "26ac8990d9a535b79bdd217d24df79016895807357d91639ef3116403522f87e",
+      "training/neuralese/natlang_neuralese/data/text_corpus.py": "ba9c3ac961e157c12bd82fba4439eb988e304b111602d4cdd0b1700bfd0f73e5",
+      "training/neuralese/natlang_neuralese/serve/chat.py": "92d76e9a789ba12530843897cceef0b821aa8e31e0bef433dee8324b1b387282"
+    },
+    "tokenizer_sha256": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
+    "tokenizer": {
+      "class": "TokenizersBackend",
+      "files": {
+        "chat_template.jinja": "ba551d58630afa3190b1be3602e28301f3d2e9bbac978dfc49d6d825171648b6",
+        "tokenizer.json": "df1d8d5ec5d091b460562ffd545e4a5e91d17d4a0db7ebe733be34ed374377bd",
+        "tokenizer_config.json": "3701f370c70034d06e28947ff51c1063983393319f429e3ce58f06a45fae67cc"
+      },
+      "path": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+    },
+    "source_files": {
+      "pieces.jsonl": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9",
+      "records.jsonl": "83e1ee703d1ea4a2f7e245a13a2a84d0d4ea475ee5af40425283adcc278bbb16"
+    },
+    "text_jsonl_sha256": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+    "history_reasoning": {
+      "backbone": "lfm2",
+      "policy": "last_turn_only",
+      "probe": "drops-history",
+      "template_kwargs": {
+        "preserve_thinking": false
+      }
+    }
+  },
+  "tokens": {
+    "test": {
+      "documents": 874,
+      "max_document_tokens": 102005,
+      "suffix_tokens": 185811,
+      "tokens": 18329680
+    },
+    "train": {
+      "documents": 2969,
+      "max_document_tokens": 92606,
+      "suffix_tokens": 605772,
+      "tokens": 56223273
+    }
+  },
+  "notes": "Text twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (splits follow S1's placement), rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3) under the backbone's declared history_reasoning last_turn_only (receipt). Same documents and tokens as harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1 (74,552,953 tokens), only the splits differ: 2969 train / 874 test documents (56,223,273 / 18,329,680 tokens; suffix 605,772 / 185,811). View parts render as their preview. Per-record admission is the records' own. Admission carried from harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1.",
+  "supersedes": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1"
+}

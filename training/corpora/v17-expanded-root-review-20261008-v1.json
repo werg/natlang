@@ -1,0 +1,14 @@
+{
+  "id": "v17-expanded-root-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v17-expanded-root-review-20261008-v1",
+  "include": [
+    "context-sufficiency-review.json",
+    "context-sufficiency-review.sha256",
+    "exact-soft-body-hydration-review-v2.json",
+    "exact-soft-body-hydration-review-v2.sha256",
+    "value-visibility.json"
+  ],
+  "admission": "held-raw-or-review-evidence-no-new-training-admission",
+  "notes": "Root context sufficiency/exact body hydration diagnostic receipts for held27-action proposal. Same-run provider bodies identified; generic authenticated hydration pending. Not corpus admission."
+}

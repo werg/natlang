@@ -1,0 +1,15 @@
+{
+  "id": "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/source-pool/*",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/root-review-v1/*",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/runtime-reference-proof-62884d2a/*",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.draft.json",
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/source-index-catalog.json",
+    "neuralese-semantic-iterate-reducers-v26-runtime-20261008-62884d2a/frozen-runtime/**/*"
+  ],
+  "admission": "held-new-authored-source-root-reviewed-cpu-reference-only-no-provider-generation-or-training-admission",
+  "notes": "Immutable V26 sixteen-world eight-domain source pool, root semantic review, 1046-file frozen runtime from committed HEAD 62884d2a, and 16-case CPU-only authored reference proof. Proof records 192 native actions and 64 exact current-pass child reads, with zero provider/model calls. Includes an unapproved generation plan draft and reviewer-only index catalog; neither is passed to the model. No generation, action, trace, DPO, or training admission is granted."
+}

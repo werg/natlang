@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-source-cards-source-v22-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-source-cards-source-20261006-v22",
+  "admission": "source-only-48-reference-verified-variants-seven-active-reviewed-facts-city-state-source-held-not-trajectory-admission",
+  "include": [
+    "all.cases.jsonl",
+    "all.cases.jsonl.report.json"
+  ]
+}

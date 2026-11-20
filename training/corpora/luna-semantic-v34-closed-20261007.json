@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v34-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v34-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw teacher evidence pending per-action quality review",
+  "notes": "5sameworldrecoveries5accepted; CG62sourcebenchmark/UTCreferencegap remainsheld."
+}

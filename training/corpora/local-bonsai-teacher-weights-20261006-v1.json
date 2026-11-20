@@ -1,0 +1,10 @@
+{
+  "id": "local-bonsai-teacher-weights-20261006-v1",
+  "owner": "pop",
+  "path": "models",
+  "admission": "inactive-teacher-model-artifact; not training examples",
+  "include": [
+    "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+  ],
+  "notes": "Local Bonsai generation previously stopped by user. Preserve exact inactive teacher checkpoint on DGX before local eviction to free6GB training/checkpoint headroom. Restore with sync_training_corpora before any future local teacher use; model bytes are not training data tokens."
+}

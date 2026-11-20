@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-zai45-v28-case0-ordering-failure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1/case-000",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "closed-model-semantic-ordering-failure",
+  "training_admission": false,
+  "admission": "failed actual teacher trajectory/review evidence only; potential same-contract preference negative requires valid paired success",
+  "independent_new_worlds": 0,
+  "notes": "52turns32447completiontokens, correcteligible set and advance but returned ascendingIDs/measures instead of explicit descendingcount ordering. Transportcomplete. SourceV28source-v3 immutable, oldruntimev6 metadata falselyv1 actualnativev2 documented by sharedschemafix; no retrospectivetrace mutation."
+}

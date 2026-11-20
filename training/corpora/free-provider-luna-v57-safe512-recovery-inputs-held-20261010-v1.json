@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-luna-v57-safe512-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-safe512-file-write-recovery-v57-runtimev15-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "One unchanged original SAFE-512 train case recovery for missing file write. Prior correct-return/file-omission rejection preserved; no gold hint or semantic rewrite.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "candidate-unapproved-plan-v1.json",
+    "preparation-review.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

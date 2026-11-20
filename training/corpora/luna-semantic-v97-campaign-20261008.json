@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v97-campaign-20261008",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v97-campaign-20261008",
+  "admission": "held-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Closed actual Luna/Bunny source V16 campaign. Six of seven exact case outputs; course-version contract ambiguity held, not DPO negative. No automatic per-action admission."
+}

@@ -1,0 +1,187 @@
+{
+  "id": "external-expansion-rightfit-native-20261015-v2-render-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+  "license": "facts from the source rows",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+  "admission": "lfm3 render of the registered render external-expansion-rightfit-native-20261015-v2-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "external-expansion-rightfit-native-20261015-v2-render",
+    "external-expansion-rightfit-native-20261015-v2"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 870,
+            "supervised_tokens": 361227,
+            "tokens": 11292019,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 100615583,
+        "decoded_text_data_sha256": "1b98a9ad21c65bf58c93b3f1cff41a6abdbd335560990d34b7bd5b859ea5198d",
+        "documents": 870,
+        "max_document_tokens": 47760,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "d714558c8116012aa478b85854eae20fe0a2d7c5520ab40ae2a254e27878ecad"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 17330,
+            "supervised_tokens": 8083506,
+            "tokens": 154204203,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 1324075575,
+        "decoded_text_data_sha256": "a740d26e2c03c6bc37aed10db2b9d404d6c51d59d8a38dfa9444308d83a5c104",
+        "documents": 17330,
+        "max_document_tokens": 51312,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "bf71244aefe8718a48b404a4d68b4aa784682c9de28b8ec5fb8fcb2f32c57b70"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 9476836,
+            "documents": 8288,
+            "opening_tokens": 1216852,
+            "supervised_tokens": 8180262,
+            "tokens": 89821282,
+            "tool_tokens": 78189688
+          }
+        },
+        "decoded_text_data_bytes": 784632546,
+        "decoded_text_data_sha256": "38bc3a9a60d0dc06bdd3ad2b9031a8a8c022e10633773f1b2ec39d2991f41c84",
+        "documents": 8288,
+        "max_document_tokens": 51312,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "585b26f1aaf139e2e7041fc40a18bbe81fa9e3d83a7fe66892aff2b3f5a31f35"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "external-expansion-rightfit-native-20261015-v2-render",
+    "student": "lfm3",
+    "identical_documents": true,
+    "views": {
+      "full": {
+        "documents": 870,
+        "reference_documents": 870,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 17330,
+        "reference_documents": 17330,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 8288,
+        "reference_documents": 8288,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": "not checked (parts render: sources are streamed part inputs)"
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 17330,
+        "whole-trajectory": 8288
+      },
+      "detail": {
+        "program-header": {
+          "train": 17330,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 17330,
+              "bytes": 32237279,
+              "sha256": "9b5c1a307d5228d9b0eb0f3255244e202fc7b883389775f5c4bdb576a9f920bc"
+            },
+            {
+              "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 8288,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 8288,
+              "bytes": 35538825,
+              "sha256": "a34ef125fd8193f3bfba52508eafab628e0a1c4dd7d0a030dc25b60c52ea031b"
+            },
+            {
+              "path": "runs/lfm3-renders/external-expansion-rightfit-native-20261015-v2-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  },
+  "render_policy_binding_sha256": "59b140c27081d9d63f31274d6225e719afc5bccb23e41a8a92861c5b5c400485"
+}

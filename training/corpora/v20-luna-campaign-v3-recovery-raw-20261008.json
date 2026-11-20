@@ -1,0 +1,14 @@
+{
+  "id": "v20-luna-campaign-v3-recovery-raw-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v20-closed-raw-snapshot-20261008-v1/campaign-v3",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-closed-recovery-action-review-pending-no-training-admission",
+  "derived_from": [
+    "v20-counterfactual-source-v8-20261008",
+    "v20-luna-campaign-v1-raw-20261008"
+  ],
+  "notes": "Immutable budget-charged V20 Luna recovery campaign V3 for indices 0-4, preserving the prior V1 attempts as historical evidence. Five final rows exist; output/action quality and cross-attempt lineage remain held for explicit review. No automatic DPO or training admission."
+}

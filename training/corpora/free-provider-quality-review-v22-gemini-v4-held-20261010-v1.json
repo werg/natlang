@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-quality-review-v22-gemini-v4-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v22-gemini-v4",
+  "include": [
+    "review.json",
+    "review.md",
+    "root-mass-diagnosis-v1.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "independent-typed-label-quality-review",
+  "training_admission": false,
+  "admission": "review evidence only; source-binding/admission still pending",
+  "independent_new_worlds": 0,
+  "notes": "846valid/178invalid, allprobabilitymass; 581gradedgates but21ordinaldecisionfalseadmissions. Rootsupplement refinesfailurecause:46allzero/132substantialmass errors, norounding-only. No rawnormalization/teachertrajectorycredit."
+}

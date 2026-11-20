@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-local-stage-free-decoded-20261006-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-free-decoded-20261006-v2",
+  "admission": "conditional-matched-evaluation-crisp12of12-written0of12-all62writers-truncated-not-training-data",
+  "include": [
+    "summary.json",
+    "selection.json",
+    "results.jsonl",
+    "writers.jsonl",
+    "writer-blocks/*.safetensors",
+    "launch.json"
+  ]
+}

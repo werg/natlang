@@ -1,0 +1,11 @@
+{
+  "id": "luna-v24r3-filehandle-audit-20261007",
+  "owner": "pop",
+  "path": "runs/luna-v24r3-filehandle-audit-20261007",
+  "admission": "diagnostic-runtime-and-outcome-review-not-training-examples",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "notes": "R3equipment/museum FileHandle errors tracedto nestedcapability childscoping bug, fixed052bd628. Threearchive/oneshipment eventswereiterateOn misuse/blockage, notthatbug. No museumDPOnegative orsourceadmission inferred; 5focusedprivacy/alias/rollbacktests pass."
+}

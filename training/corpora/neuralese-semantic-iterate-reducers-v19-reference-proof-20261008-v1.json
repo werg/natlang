@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-semantic-iterate-reducers-v19-reference-proof-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/authored-reference-cb892",
+  "include": [
+    "**/*"
+  ],
+  "admission": "scripted-runtime-reference-proof-not-model-training-data",
+  "derived_from": [
+    "neuralese-semantic-iterate-reducers-v19-source-20261008-v1"
+  ],
+  "notes": "Nine-case structural reference on frozen cb892 runtime: 108 decisions, 36 evidence reads. Independently reviewed source outcome derivations remain separate from authored reference execution. No provider inference, model qualification, action admission or new-world credit. Separate snapshot preserves actual runtime proof not matched by original source nested glob."
+}

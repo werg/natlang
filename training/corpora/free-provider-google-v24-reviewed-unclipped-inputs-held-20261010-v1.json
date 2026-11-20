@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-google-v24-reviewed-unclipped-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v24",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "512 untouched complete train inputs, eight families64each. Shared quota lock waits V23; source IDs/groups disjoint; clipped and quality-held historical evidence explicitly omitted. Active outputs excluded.",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/**/*"
+  ]
+}

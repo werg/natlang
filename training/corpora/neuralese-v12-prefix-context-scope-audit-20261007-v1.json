@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v12-prefix-context-scope-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v12-old-prefix-context-scope-audit-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "context-binding-audit-with-explicit-unverified-v7-gap",
+  "notes": "Old-prefix context scope audit: selected V9 and V11 materialized contexts match exactly; V7 has 3,706 rows without source materialized context in the published snapshot and remains unverified. No retroactive V7 context qualification.",
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-v11-20261007-v1"
+  ]
+}

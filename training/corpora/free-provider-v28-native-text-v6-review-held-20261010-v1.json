@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-v28-native-text-v6-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v6",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "native-visible-input-conversion-review",
+  "training_admission": false,
+  "admission": "held-root-context-and-source-review",
+  "notes": "Fresh shared normalization-adapter candidate,256held textdocs/28omissions;157observediterateOn/99manual. No admission or channel claim; source closure explicitly pending."
+}

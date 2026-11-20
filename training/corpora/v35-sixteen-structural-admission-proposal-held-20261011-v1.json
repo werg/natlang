@@ -1,0 +1,10 @@
+{
+  "id": "v35-sixteen-structural-admission-proposal-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-v5-sixteen-admission-proposal-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-trace-structural-and-semantic-quality",
+  "training_admission": false,
+  "admission": "held-pending-action-level-review",
+  "notes": "Structural/actionproof review only.16parentaccepted485converted turns,42/64 typedprior-noteedges; none approved. Exact modelwriter evidence distinct from graph closure."
+}

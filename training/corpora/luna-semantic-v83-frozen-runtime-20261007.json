@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v83-frozen-runtime-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v83-runtime-20261007/runtime",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+  "notes": "Exact frozen source/dist/scripts runtime including text teacher stand-in promptv2; transport mechanism only, not learned neuralese weights or foundation certificate."
+}

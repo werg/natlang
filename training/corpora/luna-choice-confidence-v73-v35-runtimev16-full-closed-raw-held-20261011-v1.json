@@ -1,0 +1,24 @@
+{
+  "id": "luna-choice-confidence-v73-v35-runtimev16-full-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v3",
+  "include": [
+    "campaign-launch.json",
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-supervisor-launch-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-generation-source-review-v2.json",
+    "predecessor-bindings-v1.json",
+    "worker-*/queue.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/worker.log",
+    "worker-*/case-*/**/*"
+  ],
+  "split": "inherited-train-raw-generation-evidence",
+  "source_class": "held-luna-choice-confidence-closed-raw-output",
+  "training_admission": false,
+  "admission": "raw-generation-evidence-only-no-source-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Complete V73 v3 closed raw campaign, all five actual lanes. 55/55 terminal result rows on V35 source cases; preserves all wrong-label outputs and scoped action errors. The earlier four-lane raw snapshot is superseded for whole-campaign coverage by this full snapshot. No admission."
+}

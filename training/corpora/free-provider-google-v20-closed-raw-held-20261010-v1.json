@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v20-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v20",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-generation-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "512 typed-valid final decisions, 408 saved annotation matches, 104 disagreements. Actual final models are Gemma 4 26B/31B. Preserve failures and outcomes, no annotation truth adjudication."
+}

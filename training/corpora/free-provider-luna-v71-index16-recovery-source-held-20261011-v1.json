@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v71-index16-recovery-source-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v71-index16-retry-source-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-recovery-source",
+  "source_class": "single-case-recovery-source-subset-held",
+  "training_admission": false,
+  "admission": "source-lineage-only-no-independent-world-credit",
+  "independent_new_worlds": 0,
+  "notes": "Exact original V71 source index16 and authored reference subset, with recovery-lineage pins to the preserved original transport failure. Source identity, group, split, prompt, and gold are unchanged; this subset is held and is not a new source world or admission."
+}

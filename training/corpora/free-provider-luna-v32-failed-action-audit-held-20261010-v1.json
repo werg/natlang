@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v32-failed-action-audit-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/luna-sourcev32-runtimev8-failed-action-audit-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-source-group-review-only",
+  "source_class": "provider-derived-held-quality-review",
+  "training_admission": false,
+  "admission": "held-quality-audit-not-training-data",
+  "notes": "117failedactiontargets;100badtargets within17of19otherwiseunambiguousexactoutcomes. Turn-level targetexclusion required, no wholetrajectory automaticadmission."
+}

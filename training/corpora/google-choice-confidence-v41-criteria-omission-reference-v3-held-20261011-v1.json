@@ -1,0 +1,15 @@
+{
+  "id": "google-choice-confidence-v41-criteria-omission-reference-v3-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v3-no-identity-criteria",
+  "include": [
+    "review/criteria-omission-review.json",
+    "static/**/*"
+  ],
+  "split": "inherited-train-static-reference-only",
+  "source_class": "held-static-label-derived-reference-criteria-fix",
+  "training_admission": false,
+  "admission": "authored-reference-and-capture-proof-only-no-provider-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Fresh shared scaffold/adapter derivative after omission of generated identity-only criteria when the source has no criteria or shared family rubric. Preserves real criteria and keeps the complete option domain; five CLINC reference rows now have full captures. This is static reference evidence, not model wire-request evidence or training admission."
+}

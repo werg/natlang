@@ -1,0 +1,10 @@
+{
+  "id": "google-v31-root-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v31-root-provider-closeout-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-quality-and-generation-evidence",
+  "training_admission": false,
+  "admission": "held-pending-explicit-review",
+  "notes": "Root strict structure, identity and annotation comparison; 105 complete source/output candidates. No automatic source exclusions or DPO-negative labeling."
+}

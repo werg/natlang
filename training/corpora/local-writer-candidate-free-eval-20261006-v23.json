@@ -1,0 +1,10 @@
+{
+  "id": "local-writer-candidate-free-eval-20261006-v23",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-eval-20261006-v23",
+  "include": [
+    "**/*"
+  ],
+  "admission": "protected-conditional-evaluation-never-train",
+  "notes": "Pinned1920 weights, written2/4, encoded2/4, crisp3/4, shuffled0/4;21 nontruncated native token writers. Conditional teacher prefixes, no autonomous-program/channel qualification."
+}

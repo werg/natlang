@@ -1,0 +1,189 @@
+{
+  "id": "luna-held-shapes-s52084-curated-render-20261015-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/luna-held-shapes-s52084-curated-render-20261015-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered render luna-held-shapes-s52084-curated-render-20261015-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "luna-held-shapes-s52084-curated-render-20261015-v1",
+    "luna-held-shapes-s52084-curated-20261015-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 45,
+            "supervised_tokens": 4751,
+            "tokens": 274753,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 2658988,
+        "decoded_text_data_sha256": "8bf7394bc5887e3c2113c9b98f1505ae3631f641c078431345eb4a5eb40e4ba2",
+        "documents": 45,
+        "max_document_tokens": 8554,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "bd9988f8dd6cd69422d8e240d5c1a493586ecaa58d5c5129cc4716b2073ba677"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 719,
+            "supervised_tokens": 78146,
+            "tokens": 1544524,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 15242650,
+        "decoded_text_data_sha256": "40f211bc48ed342e9edb8f73ccc67cef1a60cb87f5990f59f4ca5a08289fc94a",
+        "documents": 719,
+        "max_document_tokens": 9530,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "6152ad3d927b2926ee256fdb99bc470c779803cf39dfc9ebb3d3beee51958dff"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 270375,
+            "documents": 473,
+            "opening_tokens": 186204,
+            "supervised_tokens": 84171,
+            "tokens": 917172,
+            "tool_tokens": 81430
+          }
+        },
+        "decoded_text_data_bytes": 9463698,
+        "decoded_text_data_sha256": "9db2fd10d90d78e4010ecbbac1391064e898970a03b3b26172537b5efcf86313",
+        "documents": 473,
+        "max_document_tokens": 9530,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "e2a62d4660db812c3789565eb219b5bae96cebc5211f61bbfad2a4e129b9d88a"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "luna-held-shapes-s52084-curated-render-20261015-v1",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 45,
+        "reference_documents": 45,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 719,
+        "reference_documents": 720,
+        "same_order": 0,
+        "only_reference": 1,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 473,
+        "reference_documents": 473,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": {
+      "full:exact": 45,
+      "program-header:exact": 719
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 719,
+        "whole-trajectory": 473
+      },
+      "detail": {
+        "program-header": {
+          "train": 719,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-s52084-curated-render-20261015-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 719,
+              "bytes": 262067,
+              "sha256": "8cfe828d3cd388bb3c57ee837202ee15008677e7caaa050ae5f5f07d50210c9f"
+            },
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-s52084-curated-render-20261015-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 473,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-s52084-curated-render-20261015-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 473,
+              "bytes": 340638,
+              "sha256": "31815747ced2c8749be58c132463528508db074c7241d1175b27ea6a26f19665"
+            },
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-s52084-curated-render-20261015-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

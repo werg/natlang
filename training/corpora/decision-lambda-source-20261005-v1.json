@@ -1,0 +1,12 @@
+{
+  "id": "decision-lambda-source-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/decision-lambda-source-20261005-v1",
+  "admission": "verified-source-cases-not-training-trajectories",
+  "include": [
+    "cases.jsonl",
+    "verification.jsonl",
+    "summary.json"
+  ],
+  "note": "16 source cases /4families, runtime-composed questions and five named captures. Verified scope reads before decisions. Stable fixture source groups across seed/option permutations; small authored-world mechanism pilot, not16independent source facts. Oracle replay native files omitted from snapshot intentionally; source cases can regenerate them. Source-level gold fixed for missing patch contract evidence. Not live teacher data."
+}

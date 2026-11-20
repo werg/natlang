@@ -1,0 +1,18 @@
+{
+  "id": "google-choice-confidence-v36-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-choice-confidence-held-v1",
+  "include": [
+    "quality-review.json",
+    "quality-review.md",
+    "disagreements.jsonl",
+    "scorer-output.json",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-quality-review",
+  "source_class": "independent-provider-label-quality-review",
+  "training_admission": false,
+  "admission": "held-quality-review-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Exact source/provider label scoring supplement. 512 valid typed responses, 390/512 exact choice agreement, 122 disagreements, 0 answer errors/invalid schema. Family-level scorer output, per-model/family aggregates and full source-row disagreement bindings are pinned. The 26b/31b item allocations differ and do not support model ranking. Usage and artifact hashes are recorded; no semantic/source/license clearance or training admission."
+}

@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-v29-ordinary-text-quality-proposal-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/luna-v29-ordinary-text-quality-proposal-20261010-v3",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-only-no-new-evaluation-credit",
+  "source_class": "held-root-reviewed-quality-proposal",
+  "training_admission": false,
+  "admission": "review-and-receipt-evidence-only",
+  "native_admission": false,
+  "trace_admission": false,
+  "independent_new_worlds": 0,
+  "notes": "RolecorrectV3 rechecks23proposedturns;20strictcandidates/1lineageheld; wrongRECwriterIDs0036/37excluded;8readouts exactbodycopies. Rootordinary-only20receipt separatelybound, no native/recurrenceadmission."
+}

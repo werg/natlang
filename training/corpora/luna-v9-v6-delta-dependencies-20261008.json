@@ -1,0 +1,11 @@
+{
+  "id": "luna-v9-v6-delta-dependencies-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v6-repeat-context-repair",
+  "include": [
+    "delta-native-records-26.jsonl",
+    "delta-pieces-26.jsonl"
+  ],
+  "admission": "provenance dependencies only; no additional training admission",
+  "notes": "Exact historical inputs referenced by V9 text-source-selection-26.json; required for DGX Maple twin reproducibility. Superseded candidate snapshots do not inherit final V9 admission."
+}

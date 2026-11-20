@@ -328,7 +328,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     });
     io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `distillation export: ${result.manifest.turns.rows} training rows ` +
       `(${result.manifest.turns.bySource.teacher} teacher, ${result.manifest.turns.bySource.stack} tuned stack; ${result.manifest.roots.correct}/` +
-      `${result.manifest.roots.rerun} training roots correct) in ${result.directory}; not admitted: register it in training/neuralese_corpora.json to train on it`);
+      `${result.manifest.roots.rerun} training roots correct) in ${result.directory}; not admitted: register it in training/corpora to train on it`);
     return 0;
   }
   const sweepPath = value('--sweep');

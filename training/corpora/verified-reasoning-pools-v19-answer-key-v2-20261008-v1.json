@@ -1,0 +1,21 @@
+{
+  "id": "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
+  "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+  "include": [
+    "source-build/*",
+    "source-build/**/*",
+    "source-verification.json",
+    "review-v1/root-independent-verification.json",
+    "review-v1/prior-source-disjointness.json",
+    "review-v1/source-summary.json",
+    "review-v1/case-source-gold-summary.json",
+    "root-source-runtime-review.json"
+  ],
+  "admission": "root-approved-source-generation; teacher-and-training-held",
+  "derived_from": [
+    "s1-full-final-20261003",
+    "verified-reasoning-pools-20261008-v18-answer-key-v2-20261008-v1"
+  ],
+  "notes": "25 derived task variants/cases over 100 unique original S1 train records (100 items total, four per case) from reasoning_gym and reasoning_synlogic. Root-expanded comparison found zero overlap with 287 prior original IDs. Independent verifier SHA bbe0bfb3c8bb7c5953991709c0c12f31d824d38c72f1ecbf07b3bb65f2584188. Constructed variants receive zero independent-world credit. Teacher outputs, quality, semantic, trace, DPO, and training admission remain held.",
+  "owner": "pop"
+}

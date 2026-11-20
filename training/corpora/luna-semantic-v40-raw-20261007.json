@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v40-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v40-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw generation evidence only; no training admission",
+  "notes": "Five same-world variants, original groups/splits retained; no new independent worlds or cross-prompt DPO. Per-action review outstanding."
+}

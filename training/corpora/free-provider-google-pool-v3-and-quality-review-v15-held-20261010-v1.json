@@ -1,0 +1,23 @@
+{
+  "id": "free-provider-google-pool-v3-and-quality-review-v15-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "include": [
+    "provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+    "provider-google-model-pool-mixed-decisions-v3/labels.jsonl",
+    "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.attempts.jsonl",
+    "provider-google-model-pool-mixed-decisions-v3/labels.jsonl.manifest.json",
+    "provider-google-model-pool-mixed-decisions-v3/source-manifest.json",
+    "provider-google-model-pool-mixed-decisions-v3/launch-receipt-v1.json",
+    "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/*.py",
+    "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/models.json",
+    "quality-review-v15/review.json",
+    "quality-review-v15/review.md"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "provider-typed-labels-and-read-only-quality-review",
+  "training_admission": false,
+  "admission": "held pending corrected static conversion, replay and explicit source admission",
+  "independent_new_worlds": 0,
+  "notes": "1024 final labels, 852 typed-valid, 549 all existing scorer gates; invalid distributions unchanged and rejected. Review also records ZAI research index1 accepted exact scoped result; underlying ZAI artifacts need separate publication."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-frozen-runtimev7-generation-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v7",
+  "include": [
+    "**/*"
+  ],
+  "split": "not-applicable",
+  "source_class": "immutable-generation-runtime-evidence",
+  "training_admission": false,
+  "admission": "execution evidence only, not a training corpus",
+  "independent_new_worlds": 0,
+  "notes": "Frozen runtime artifact for native Luna V28 campaign, 1330 pinned files. Includes shared scope-eval-v2 metadata correction; active older runtimes are unchanged. Source development synchronizes through Git; this snapshot preserves exact generation execution."
+}

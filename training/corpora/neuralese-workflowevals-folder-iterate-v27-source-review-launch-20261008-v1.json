@@ -1,0 +1,20 @@
+{
+  "id": "neuralese-workflowevals-folder-iterate-v27-source-review-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs/workflowevals-folder-iterate-20261008-v3",
+  "include": [
+    "source.cases.jsonl",
+    "source-manifest.json",
+    "source-proof.json",
+    "review-facts.json",
+    "root-review-v1/review.json",
+    "runtime-reference-proof-v27-854789a4/**/*",
+    "generation-review-v1/luna/plan.draft.json",
+    "generation-review-v1/luna/plan.approved.json",
+    "generation-review-v1/luna/root-authorization.json",
+    "generation-review-v1/luna/source-index-catalog.json",
+    "generation-review-v1/luna/launch-binding-v1.json"
+  ],
+  "admission": "held-generation-only-approved-no-training-admission",
+  "notes": "Root-approved V27 source/proof and Luna generation binding. Thirty derived WorkflowEvals task variants from existing high-confidence labels across inherited source groups; zero independent-world credit. Source labels remain original and are excluded from model input. CPU reference proof is runtime-mechanics only, not teacher observation. Includes root review, exact approved plan, root authorization, launch binding, and full no-provider reference proof. Active mutable claim journals and model outputs are intentionally excluded; no training, trace, DPO, or action admission."
+}

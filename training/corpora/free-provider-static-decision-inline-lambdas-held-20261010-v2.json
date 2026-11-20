@@ -1,0 +1,31 @@
+{
+  "id": "free-provider-static-decision-inline-lambdas-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v5",
+  "include": [
+    "cases.jsonl",
+    "frozen-adapter-v1/TEACHER_DECISION_LABELS.md",
+    "frozen-adapter-v1/teacher-decision-labels.mjs",
+    "label-manifest.json",
+    "native.held.jsonl",
+    "rejections.jsonl",
+    "replay.failures.jsonl",
+    "replay.results.jsonl",
+    "scorer-manifest.json",
+    "source-manifest.json",
+    "summary.json"
+  ],
+  "split": "inherited-train-source-groups",
+  "source_class": "authored-static-current-IR-from-typed-provider-decisions",
+  "admission": "held-pending-source-and-static-reference-quality-review",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "free-provider-google-pool-v1-closed-held-20261009-v1",
+    "free-provider-static-decision-inline-lambdas-held-20261010-v1"
+  ],
+  "license": "Inherited exact source licenses, preserved per compatible batch",
+  "independent_new_worlds": 0,
+  "notes": "131 strict source-consistent labels→23 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5→boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
+  "superseded_by": "free-provider-static-decision-inline-lambdas-held-20261010-v3"
+}

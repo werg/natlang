@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v16",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v16",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "admission": "verified-reference-task-source-only;teacher-results-require-independent-source-split-quality-review",
+  "notes": "80verified train/nohint variants over40active authored facts;39reused and one new explicitcontroller-audit evidencefixture30 replacing heldfixture11. Held6-9 unchanged. Does not admit mutable teachers or count80newfacts."
+}

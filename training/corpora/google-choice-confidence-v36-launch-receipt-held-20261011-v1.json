@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v36-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v36-source",
+  "include": [
+    "root-launch-receipt-v1.json"
+  ],
+  "split": "inherited-train-launch-evidence",
+  "source_class": "provider-pool-launch-receipt",
+  "training_admission": false,
+  "admission": "held-launch-evidence-only",
+  "independent_new_worlds": 0,
+  "notes": "Separate append-only receipt binds the already launched V36 ten-model free pool to the immutable V36 source/frozen-runtime inputs. The original preparation review remains unchanged. Active labels, attempts, logs, and results are excluded until closure."
+}

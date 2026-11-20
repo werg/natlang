@@ -1,0 +1,10 @@
+{
+  "id": "luna-v64-seven-source-clearance-exercise-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-quality-clearance-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-generation-quality-and-source-closure",
+  "training_admission": false,
+  "admission": "held-pending-explicit-quality-and-source-review",
+  "notes": "Actual2native rows→29turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
+}

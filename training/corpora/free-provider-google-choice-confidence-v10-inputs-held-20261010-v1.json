@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-google-choice-confidence-v10-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v10",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "generation-and-publication-review-inputs",
+  "training_admission": false,
+  "admission": "held-evidence-only",
+  "notes": "193originalV5choicecases notinV9; freshaf335f4ffa runtime,4total/max2inflightpacedrequests/group,7secondstartpacingsharedcooldowns/projectlock,PID840729. Noextraindependentworld/admission."
+}

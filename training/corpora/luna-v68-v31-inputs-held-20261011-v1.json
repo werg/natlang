@@ -1,0 +1,22 @@
+{
+  "id": "luna-v68-v31-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v68-v31-runtimev15-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-current-policy-at-approval-v1.json",
+    "v31-input-provenance-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-provider-generation-input-plan",
+  "training_admission": false,
+  "admission": "held-inputs-no-generated-output",
+  "notes": "Rootapprovedfiveworker57program407originaltrainitems successor afterV67completeaccounting. Actual58staticcomponentpayloads/reference/current62holds/sourceIDs/groups verified. RuntimeV15medium384requests60turns32768context1800resourcesec,fullS1pending. Liveoutputsexcluded; noextra simultaneousslots/newworld/admission."
+}

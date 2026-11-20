@@ -9,7 +9,7 @@ Two modes, one contract (agreed DGX/Pop 2026-10-10):
 - ``records``: native records concatenated with ``cohort`` set to the cohort name, and the cohorts' pieces merged
   (one name, one text). Consumer: native graph conversion and training.
 
-A cohort is ``NAME=corpus:<registered id>`` (training/neuralese_corpora.json, its immutable manifest under
+A cohort is ``NAME=corpus:<registered id>`` (training/corpora, its immutable manifest under
 training/corpus-manifests/ pins every byte; the entry must have ``training_admission: true``) or, for inputs that are
 not registered corpora, ``NAME=path:<file>@<sha256>`` (records mode: ``NAME=path:<records>@<sha>,<pieces>@<sha>``)
 together with ``--authority NAME=<text>``, the explicit lineage authority (recipe and review pins) under which that
@@ -24,7 +24,14 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-REGISTRY = REPO / 'training' / 'neuralese_corpora.json'
+REGISTRY = REPO / 'training' / 'corpora'
+
+
+def _corpus_registry():
+    import sys
+    sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+    from natlang_neuralese.common import corpus_registry
+    return corpus_registry
 MANIFESTS = REPO / 'training' / 'corpus-manifests'
 LABEL = {'text': 'text_cohort', 'records': 'cohort'}
 COHORT_NAME_CHARS = set('abcdefghijklmnopqrstuvwxyz0123456789_-.')
@@ -32,7 +39,7 @@ COHORT_NAME_CHARS = set('abcdefghijklmnopqrstuvwxyz0123456789_-.')
 
 def registered_file(corpus_id, name):
     """(path, sha256) of one file of an admitted registered corpus."""
-    registry = json.loads(REGISTRY.read_text())
+    registry = _corpus_registry().load(REGISTRY)
     entries = [entry for entry in registry['corpora'] if entry.get('id') == corpus_id]
     if len(entries) != 1:
         raise ValueError('not exactly one registered corpus: ' + corpus_id)

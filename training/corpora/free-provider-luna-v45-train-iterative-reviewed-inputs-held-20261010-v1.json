@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v45-train-iterative-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1",
+  "include": [
+    "root-generation-source-review-v1.json",
+    "reviewed-plan-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "FourfreshtrajectoriesoriginalV35trainindices1/5/10/14, source/instructions/goldunchanged; iterative-state tracecoverage notnewworlds. Protected16..31excluded. V44closedbeforefournewworkers; sameV13runtime/medium/384budget."
+}

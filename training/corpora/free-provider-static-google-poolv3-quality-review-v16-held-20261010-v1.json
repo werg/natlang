@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-static-google-poolv3-quality-review-v16-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v16",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "not-training-data",
+  "source_class": "quality-and-conversion-review",
+  "training_admission": false,
+  "admission": "read-only evidence",
+  "independent_new_worlds": 0
+}

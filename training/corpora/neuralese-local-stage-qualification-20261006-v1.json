@@ -1,0 +1,7 @@
+{
+  "id": "neuralese-local-stage-qualification-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-qualification-20261006-v1",
+  "admission": "execution-gradient-diagnostic-and-parent-checkpoint-evidence-only;not-training-admission",
+  "notes": "Exact350M weights; sequential/grouped one-stage support, primal parity, time/memory. Parent full optimizer/RNG checkpoint112MiB. Independent consumer task quality and autonomous stopping remain unqualified."
+}

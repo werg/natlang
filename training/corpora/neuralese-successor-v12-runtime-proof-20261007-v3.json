@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v12-runtime-proof-20261007-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v3",
+  "include": [
+    "**"
+  ],
+  "admission": "converter diagnostic; no teacher admission",
+  "notes": "Sameexactsource/materialization as proofV1. CLI scopefix12writers48reads36dynamic-site conflicts; no new independentdata. Residual changing-closure binding fixedsubsequently in d1651e3d and separateV4proof."
+}

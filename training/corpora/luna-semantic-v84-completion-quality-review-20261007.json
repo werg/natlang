@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v84-completion-quality-review-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v84-completion-audit-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Held V84 partial/completion and Bunny V7 actual graph review; three request-budget failures, cases08/11 exactsuccess, Bunnyfive validated softedges nonlearnedstandin. No admission."
+}

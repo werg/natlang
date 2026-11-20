@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v3",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "source-provenance-quality-recovery-evidence",
+  "training_admission": false,
+  "admission": "held-source-quality-closure-pending",
+  "notes": "Corrected5590/5733exactrefs5421base+169delta;143unresolved140rows including46sameIDhashmismatch97absent. V2multisourceaccountingbug correctedfreshversion. Groups/sourcecasesactualclosure pending noadmission."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v90-frozen-runtime-proof-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v90-typed-read-runtime-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "reproduction-runtime-and-proof-not-training-data",
+  "notes": "Immutable runtime and CPU source proof, text-marker-standin/2. Runtime transport revision distinct from guidance revision."
+}

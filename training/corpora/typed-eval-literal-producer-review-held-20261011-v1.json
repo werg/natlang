@@ -1,0 +1,10 @@
+{
+  "id": "typed-eval-literal-producer-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/typed-eval-literal-producer-review-20261011-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-real-model-producer-proof-evidence",
+  "training_admission": false,
+  "admission": "producer-proof-only-not-operator-approval",
+  "notes": "Actual shared AST witness extraction on PROV521pass2 modelreturned literal matches graphbody/typedpriorstate/sameinvocationrawcall. Sharedcodesealed; source/trace/operatoradmission unchanged. Full approvedsoftstateconversion not yetrun, no fabricatedtrainingmessage/newworld."
+}

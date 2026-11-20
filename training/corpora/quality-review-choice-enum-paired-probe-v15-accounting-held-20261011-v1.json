@@ -1,0 +1,16 @@
+{
+  "id": "quality-review-choice-enum-paired-probe-v15-accounting-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-choice-enum-paired-probe-v15-accounting-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "paired-diagnostic-no-independent-world-credit",
+  "source_class": "provider-prompt-probe-accounting-review",
+  "training_admission": false,
+  "admission": "held accounting supplement only; no training or trace admission",
+  "derived_from": [
+    "free-provider-choice-enum-paired-probe-v15-launch-evidence-held-20261011-v1"
+  ],
+  "notes": "Additive telemetry/rejection accounting for the sealed V15 V2 quality review. Collector start counts are not physical attempts; prompt/completion token usage is unavailable. The V2 review and raw trajectories are unchanged."
+}

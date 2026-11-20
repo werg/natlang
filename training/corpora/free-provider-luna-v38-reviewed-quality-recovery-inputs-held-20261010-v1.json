@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v38-reviewed-quality-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-recovery-review-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "source-provenance-quality-recovery-evidence",
+  "training_admission": false,
+  "admission": "held-source-quality-closure-pending",
+  "notes": "FourmediumreasoningfreshV12qualityrecovery attempts V35indices8/10/12/18;1brokenstatechain2wrongdecisions1incompleteedgecount. Sourcegroups/golds unchanged noindependentworldcredit noautoDPO/admission. Max5includingoneV37remainingworker. Activeoutputsexcluded."
+}

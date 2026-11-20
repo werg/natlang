@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v34-label-disagreements-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v34-label-disagreements-v1",
+  "split": "inherited-train-diagnostic",
+  "source_class": "provider-label-quality-review",
+  "training_admission": false,
+  "admission": "held-diagnostic-only-no-relabel-or-admission",
+  "notes": "Detailed exact-source and provider-output review of all 93 V34 top-choice disagreements. Joins provider labels and cases to exact pinned parent source rows/criteria; no gold-in-prompt claim, no relabel, no statistical ranking, no training admission.",
+  "include": [
+    "review.json",
+    "review.md"
+  ]
+}

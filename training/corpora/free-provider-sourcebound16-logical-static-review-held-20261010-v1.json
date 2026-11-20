@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-sourcebound16-logical-static-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound-boardgame-ruletaker-16-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "source-bound-reviewed-logical-static-reference-candidate",
+  "training_admission": false,
+  "admission": "rootcontentreviewpassed; globalprotectedclosureawaitsportableindexes; conditionalstaticreferenceallowlistonly",
+  "independent_new_worlds": 0,
+  "notes": "16explicitpublictrainrows,2authoredwrappercases/36native turns,sourcebindingproviderreceipts preserved; zerooriginal7624heldoutgroup/exactstateoverlap andlocalbenchmarkexacthits. CivilComments excluded. No teacherreasoning/learnedchannel/worldcredit."
+}

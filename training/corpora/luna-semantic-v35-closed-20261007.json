@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v35-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v35-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw teacher evidence pending per-action quality review",
+  "notes": "24freshV13worlds23accepted1rejected; actualdecisionqualityauditpending. Parentacceptance alone not admission."
+}

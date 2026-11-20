@@ -1,0 +1,10 @@
+{
+  "id": "google-v32-final-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v32-final-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-generation-quality-and-source-closure",
+  "training_admission": false,
+  "admission": "held-pending-explicit-quality-and-source-review",
+  "notes": "512strict typedvalid/119fullinputdifferences/53acceptedstaticreferences393item-bound captures. Allheld; annotationagreement/staticreplay not admission."
+}

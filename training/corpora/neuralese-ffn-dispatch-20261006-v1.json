@@ -1,0 +1,12 @@
+{
+  "id": "neuralese-ffn-dispatch-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-ffn-dispatch-20261006-v1",
+  "admission": "synthetic-performance-parity-diagnostic-not-training",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.pt",
+    "**/*.safetensors"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "google-choice-confidence-v41-prefix-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v1",
+  "include": [
+    "prefix-input/**/*",
+    "prefix-snapshot-receipt.json",
+    "static/**/*"
+  ],
+  "split": "inherited-train-static-reference",
+  "source_class": "held-static-reference-from-provider-label-prefix",
+  "training_admission": false,
+  "admission": "static-reference-only-no-source-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Immutable prefix snapshot of 187 complete newline-terminated rows from the still-active V41 JSON-object label append stream, SHA 770ea33d4898aca32837c26d4bec1351a8aac51a38ca14eec60ae62183e93995. Shared adapter accepted 159 strict source-consistent labels into 23 authored programs; 18 replays passed full capture visibility. Five CLINC programs remain present in static output and failures because the criteria capture is absent; no dropped source rows or output changes. Zero provider calls in adapter/replay. Not training admission."
+}

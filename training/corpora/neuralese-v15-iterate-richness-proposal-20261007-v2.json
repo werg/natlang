@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v15-iterate-richness-proposal-20261007-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-generation-only-scoped-reference-defect-retained-as-history",
+  "notes": "Preserved source and pass-local audit. The first pass prematurely adopts later route data; retain as failed proposal history, do not collect or use as a clean oracle. Same twelve worlds/groups/splits. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+  "derived_from": [
+    "neuralese-v15-iterate-richness-proposal-20261007-v1"
+  ]
+}

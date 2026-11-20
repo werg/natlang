@@ -1,0 +1,27 @@
+{
+  "id": "natlang-rl-task-supply-20261118g",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-task-supply-20261118g",
+  "include": [
+    "cases.jsonl",
+    "selection.json",
+    "repetition.json",
+    "constructs.json",
+    "custody.json",
+    "protection-union.json",
+    "held-verify/*.json"
+  ],
+  "source_class": "immutable-RL-task-source",
+  "split": "Train-only 88-row RL task source for grpo.py POOLS: authored round-16 rows (w269-w274, 6 new families); folder reducers 88%, decide 51%, call depth >= 3 65%, iterateOn 42%, typed Neuralese results 41%.",
+  "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 11. Qualified on grpo-v4 pin runtimes ec7982265 / a0981794b, novelty-gated, Sonnet blind-solved (6 flagged or over-budget tasks held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r16. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related on first build (world-specific root inputs per the round-16 custody addendum); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 269 --max-worker 274 --drop-related round15/custody-drop.json. w267 and w268 were still in progress and go into the next source. Data on /mnt/external (runs/ entry is a symlink).",
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
+  "roles": {
+    "grpo-pool": {
+      "order": 9,
+      "file": "cases.jsonl"
+    }
+  },
+  "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
+  "training_admission": "grpo-task-pool"
+}

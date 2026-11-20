@@ -1,0 +1,15 @@
+{
+  "id": "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+  "include": [
+    "README.md",
+    "proposal.json"
+  ],
+  "admission": "held-candidate-selection-pending-root-no-training-admission",
+  "derived_from": [
+    "neuralese-v24-actual-action-review-20261008-v1",
+    "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008"
+  ],
+  "notes": "Reference-only V24 candidate proposal preserving exact actual generation event, split/group, action/request/response/context hashes and body/value hashes. Includes 55 direct unwrapped prose-note candidates (27 train, 28 test-only), 8 typed result candidates (3 train, 5 test-only), six wrapper-bearing notes in an adapter-review backlog because each contains new pass content, and explicit rejected/eval-produced targets. No materialized body copies, training admission, or DPO admission."
+}

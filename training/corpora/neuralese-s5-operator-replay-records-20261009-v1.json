@@ -1,0 +1,25 @@
+{
+  "id": "neuralese-s5-operator-replay-records-20261009-v1",
+  "owner": "dgx",
+  "path": "runs/neuralese-s5-operator-smoke-20261009-v1",
+  "include": [
+    "records-train.jsonl",
+    "records-test.jsonl",
+    "records-train.blocks/*",
+    "records-test.blocks/*",
+    "stdlib-text-init.nz",
+    "collect-train.err",
+    "collect-test.err"
+  ],
+  "split": "explicit (records-train / records-test, from the cases' source split)",
+  "source_class": "replay-records-of-operator-programs",
+  "admission": "s5-operator-smoke;backbone-specific-blocks-lfm2.5-350m-pilot-v4-heads;not-task-admission",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "neuralese-operator-cases-20261009-v1"
+  ],
+  "license": "internal",
+  "notes": "natlang.replay-record/1 (a78372fc): 216 records (144 train from 24 cases, 72 held from 12 cases), 0 failures; programs read(v), read(map(v,f)), read(split(zip(a,b))[i]), laws combineIdentity and splitZip, collected on the reference server with LFM2.5-350M + runs/neuralese-s3-pilot-20261005-v4 heads and the text-init standard library in the same directory. Blocks are only meaningful for that backbone and those heads.",
+  "training_admission_reason": "2026-10-11 dgx-held-recovery: backbone-specific smoke replay (LFM2.5 pilot v4 heads); regenerate from neuralese-operator-cases-20261009-v1 for a new backbone."
+}

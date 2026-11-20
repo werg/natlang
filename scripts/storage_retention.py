@@ -134,7 +134,12 @@ def registered_files(policy: dict, repo: Path = REPO) -> set[str]:
     found: set[str] = set()
     for registry in policy['keep']['registries']:
         try:
-            entries = json.loads((repo / registry).read_text())
+            if (repo / registry).is_dir():     # the corpus registry, one file per entry
+                sys.path.insert(0, str(repo / 'training/neuralese'))
+                from natlang_neuralese.common import corpus_registry
+                entries = corpus_registry.load(repo)
+            else:
+                entries = json.loads((repo / registry).read_text())
         except (OSError, ValueError):
             continue
         for entry in entries.get('corpora') or entries.get('artifacts') or []:
@@ -149,7 +154,14 @@ def registered_files(policy: dict, repo: Path = REPO) -> set[str]:
             if manifest:
                 try:
                     data = json.loads((repo / manifest).read_text())
-                    base = repo / data.get('path', entry.get('path', ''))
+                    where = data.get('path', entry.get('path', ''))
+                    head, sep, rest = where.partition(':')
+                    if sep and head in ('data_nvme', 'data_hdd', 'archive', 'models'):   # a root-qualified registry path
+                        sys.path.insert(0, str(repo / 'training/neuralese'))
+                        from natlang_neuralese.common.paths import root as machine_root
+                        base = machine_root(head) / rest
+                    else:
+                        base = repo / where
                     paths = [base / f['path'] for f in data.get('files', [])]
                 except (OSError, ValueError):
                     paths = []

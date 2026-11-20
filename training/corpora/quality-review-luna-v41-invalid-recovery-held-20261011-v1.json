@@ -1,0 +1,16 @@
+{
+  "id": "quality-review-luna-v41-invalid-recovery-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-luna-v41-invalid-recovery-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-quality-review-no-admission",
+  "source_class": "provider-generated-native-quality-review",
+  "training_admission": false,
+  "admission": "quality review only; disagreements remain held",
+  "derived_from": [
+    "luna-v41-invalid-recovery-seven-runtimev17-closed-raw-held-20261011-v1"
+  ],
+  "notes": "Exact source-static map comparison, item-level saved-request visibility, result/trace hashes, and worker terminal accounting. Saved rendered-message evidence is not raw wire evidence; held source references are not independent truth."
+}

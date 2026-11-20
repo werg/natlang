@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-lambdas-source-v23-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v23",
+  "admission": "root-reviewed40fresh-authored-facts-reference40of40-passed-source-candidates-only-no-generated-trajectory-admission",
+  "include": [
+    "source.cases.jsonl",
+    "campaign-source.json",
+    "oracle-review.md",
+    "reference-verification.json",
+    "approved-plan.json",
+    "worker-*/queue.jsonl"
+  ]
+}

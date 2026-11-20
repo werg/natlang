@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-native-r-v17-bunny-v5-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261008-v17-bunny-held-proposal-v5",
+  "admission": "root-admitted-exact-source-grounded-native-sft-and-closed-recurrence;not-runtime-qualified",
+  "include": [
+    "**/*"
+  ],
+  "derived_from": [
+    "neuralese-native-recurrence-admitted-v16-20261007"
+  ],
+  "notes": "Root override only through runs/neuralese-v17-root-review-20261008-v1/root-admission.json. 5216 native (3186 train2030 test),4935 recurrence,1009 closed links; V16 byte prefixes retained plus32 actual Bunny actions. Authentic external function-body context distinct from preserved same-run azf read. Historical proposal flags remain unchanged; active Pop run input not changed."
+}

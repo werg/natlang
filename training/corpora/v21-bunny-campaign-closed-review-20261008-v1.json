@@ -1,0 +1,15 @@
+{
+  "id": "v21-bunny-campaign-closed-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v21-closed-raw-review-20261008-v1",
+  "include": [
+    "review.json",
+    "evidence-manifest.json"
+  ],
+  "admission": "held-closed-review-provenance-only-no-training-admission",
+  "derived_from": [
+    "v21-counterfactual-source-v3-20261008",
+    "v21-bunny-campaign-v3-raw-20261008"
+  ],
+  "notes": "Closed V21 Bunny raw evidence review packet. It binds exact source, plans, runtime receipt, results, traces and logs by SHA-256; structural closure and review do not grant action, trace, DPO, or training admission."
+}

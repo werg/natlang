@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-luna-v31-undeclared-draft-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-20261010-v1/failure-case009",
+  "include": [
+    "receipt.json",
+    "receipt.md"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "authored-semantic-iterate-generation-evidence",
+  "training_admission": false,
+  "admission": "held-root-review-or-explicit-exclusion",
+  "independent_new_worlds": 0,
+  "notes": "RAIL740 child result unknown because Draft alias absent from eval scope; JSON string double serialized. Strict gold and original failure preserved. Not an admitted DPO pair."
+}

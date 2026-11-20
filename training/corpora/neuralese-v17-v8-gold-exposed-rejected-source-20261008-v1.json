@@ -1,0 +1,21 @@
+{
+  "id": "neuralese-v17-v8-gold-exposed-rejected-source-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "neuralese-v17-v8-publication-20261008-v1/rejected-gold-exposed-v8-disposition-v1.json",
+    "semantic-lambda-topology-v17-v8-review-v1/README.md",
+    "semantic-lambda-topology-v17-v8-review-v1/luna-proposal-v1.json",
+    "semantic-lambda-topology-v17-v8-review-v1/source-review.json",
+    "semantic-lambda-topology-v17-v8-review-v1/source.cases.jsonl"
+  ],
+  "admission": "rejected-source-held; gold-exposed; no generation or training admission",
+  "derived_from": [
+    "neuralese-semantic-iterate-v17-guided-source-v7-20261008"
+  ],
+  "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d…; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
+  "include_root_prefixes": [
+    "semantic-lambda-topology-v17-v8-review-v1",
+    "neuralese-v17-v8-publication-20261008-v1"
+  ]
+}

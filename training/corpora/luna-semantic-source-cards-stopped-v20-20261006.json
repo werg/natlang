@@ -1,0 +1,18 @@
+{
+  "id": "luna-semantic-source-cards-stopped-v20-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-source-cards-20261006-v20",
+  "admission": "operator-stopped-raw-and-partial-evidence-held-source-city-state-conflict-unfinished-unscored",
+  "include": [
+    "launch.json",
+    "approved-plan.json",
+    "worker-*/queue.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/case-*.results.jsonl",
+    "worker-*/case-*.results.jsonl.manifest.json",
+    "worker-*/case-*.collector.log",
+    "worker-*/supervisor.log",
+    "worker-*/jobs/*.json",
+    "worker-*/jobs/*.jsonl"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "luna-choice-confidence-v68-v69-terminal-quality-audit-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/quality-review-v68-v69-folder-terminal-v1",
+  "include": [
+    "v68-quality-review-v1.json",
+    "v68-quality-review-v2.json",
+    "v69-quality-review-v1.json",
+    "v69-quality-review-v2.json",
+    "v68-v69-scope-failure-attribution-v1.json",
+    "v68-v69-scope-failure-attribution-v2.json",
+    "closed-raw-audit-manifest-v1.json",
+    "closed-raw-audit-manifest-v2.json"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "closed-provider-generation-independent-quality-review",
+  "training_admission": false,
+  "admission": "held-quality-review-no-training-admission-no-DPO",
+  "notes": "Immutable V2 terminal outcome audits and action-level V1/V2 scope-failure attributions plus raw-campaign fingerprint manifests. Parent accepted/rejected counts and earlier failures are distinguished; all failed actions remain preserved. Review does not grant action approval, training admission, or DPO eligibility."
+}

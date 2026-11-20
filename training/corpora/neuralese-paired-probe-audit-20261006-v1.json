@@ -1,0 +1,7 @@
+{
+  "id": "neuralese-paired-probe-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v3-probe-repair-20261006-v1",
+  "admission": "selection-provenance-audit-not-training-data",
+  "notes": "Pure-data donor eligibility/typed source facts and crisp skillproducer diagnosis; actual GPU consumer scores separate."
+}

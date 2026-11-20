@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-runtime-small-teachers-v9-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v9",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "node_modules"
+  ],
+  "split": "not-applicable",
+  "source_class": "immutable-generation-runtime-snapshot",
+  "training_admission": false,
+  "admission": "runtime-only-not-training-data",
+  "notes": "1331frozenfiles+rootdiffreceipt;10changed1addedvsV8,nativepromptunchanged. Snapshot newfuturegenerationonly, existingV32 frozenv8untouched. Livequality unmeasured."
+}

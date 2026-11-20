@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v33-action-audit-20261007-v4",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v33-action-audit-20261007-v4",
+  "include": [
+    "**"
+  ],
+  "admission": "diagnostic evidence only; per-action candidates require independent root admission",
+  "notes": "Exact child outputs, creator contracts and holds preserved. Parent success and conversion closure confer no admission. Legacy CIR and CG62 source ambiguities remain held; no cross-prompt DPO."
+}

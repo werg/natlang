@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v16-v83-soft-held-conversion-v6-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v6",
+  "include": [
+    "**/*"
+  ],
+  "admission": "historical-held-candidate-with-separate-root-selection",
+  "notes": "Final candidate binds fresh shared validator CLI rows. Root selection receipt is published separately; historical held artifact remains unchanged."
+}

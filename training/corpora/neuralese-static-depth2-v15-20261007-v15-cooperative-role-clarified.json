@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Source-only six explicitcooperativeauthority facts sameVOLworld; originalV14goldgroups/splits preserved, V48generation approved only",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

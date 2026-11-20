@@ -1,0 +1,17 @@
+{
+  "id": "verified-reasoning-pools-v20-luna-retry-campaign-v2-closed-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2",
+  "include": [
+    "luna/campaign-v2/*",
+    "luna/campaign-v2/**/*",
+    "luna/retry-closeout-v2/*",
+    "luna/retry-closeout-v2/**/*"
+  ],
+  "admission": "held-provider-outcome-evidence-only-no-training-or-dpo-admission",
+  "derived_from": [
+    "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
+    "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1"
+  ],
+  "notes": "Complete immutable Luna retry campaign-v2 raw tree (57 files) and exact seven-row pair closeout. Cases 3, 4, 8 and 10 passed the unchanged oracle; 19, 20 and 22 remain rejected. Same V20 source rows and program IR hashes as their prior attempts; zero new-world credit. Provider outcomes only; no source/gold mutation, action/trace/DPO/training admission, or automatic pairing."
+}

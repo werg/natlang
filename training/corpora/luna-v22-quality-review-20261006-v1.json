@@ -1,0 +1,10 @@
+{
+  "id": "luna-v22-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v22-quality-review-20261006-v1",
+  "admission": "review48exact-accepted-source-holds-confirmed-not-trajectory-admission",
+  "include": [
+    "README.md",
+    "audit.json"
+  ]
+}

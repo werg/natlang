@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-scheduler-throughput-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-scheduler-throughput-20261006-v1",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "admission": "synthetic-scheduler-throughput-diagnostic-not-training-or-task-accuracy"
+}

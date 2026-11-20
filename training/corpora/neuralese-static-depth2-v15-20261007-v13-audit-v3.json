@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-static-depth2-v15-20261007-v13-audit-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v3",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.md",
+    "**/*.mjs"
+  ],
+  "admission": "Final semantic review114 subset; referenced V10 root admission, no additional independent worlds",
+  "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+}

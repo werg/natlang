@@ -270,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument('--trajectories', help='SWE-rebench OpenHands trajectories parquet (teacher-recorded observations)')
     source.add_argument('--replayed', help='`natlang run applications/pi -- replay` output (pi-replayed observations)')
     parser.add_argument('--surface', required=True, help='`natlang run applications/pi -- surface --companion` output')
-    parser.add_argument('--corpus', required=True, help='the source corpus id in training/neuralese_corpora.json')
+    parser.add_argument('--corpus', required=True, help='the source corpus id in training/corpora')
     parser.add_argument('--out', required=True)
     parser.add_argument('--limit', type=int, default=0, help='trajectories to read (0: all)')
     parser.add_argument('--offset', type=int, default=0)

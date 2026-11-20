@@ -4,10 +4,11 @@ Static checks (no data access): the git layer is well formed, the roles the trai
 producer records what it writes and the trainers name no dataset paths of their own."""
 import ast
 import json
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-REGISTRY = REPO / 'training/neuralese_corpora.json'
+
 
 # Scripts that write training data: each records its output in the registry (data_registry.record_dataset /
 # declare_dataset / record_files). A new producer joins this list.
@@ -27,7 +28,9 @@ DATASET_MARKERS = ('cases.jsonl', 'held-v', 'task-supply', 'memetic-tasks-', 'sf
 
 
 def entries():
-    return json.loads(REGISTRY.read_text())['corpora']
+    sys.path.insert(0, str(REPO / 'training/neuralese'))
+    from natlang_neuralese.common import corpus_registry
+    return corpus_registry.load(REPO)['corpora']
 
 
 def test_registry_ids_are_unique_path_components():
@@ -115,3 +118,26 @@ def test_registry_covers_what_the_catalog_found_before_it(monkeypatch):
     reg = dr.load(fresh=True)
     missing = [p for p in paths if (reg.find(p) or {'admission': dr.INVENTORY}).get('admission') == dr.INVENTORY]
     assert not missing, f'{len(missing)} datasets the catalog knew are not registered: {missing[:20]}'
+
+
+def test_registry_is_one_file_per_entry():
+    """The git layer stays split: no single registry document (every change would copy all of it into history), each
+    entry file names its own id, and no entry file is huge (long file lists live in the manifests: include_manifest)."""
+    assert not (REPO / 'training/neuralese_corpora.json').exists()
+    directory = REPO / 'training/corpora'
+    big = []
+    for path in directory.glob('*.json'):
+        entry = json.loads(path.read_text())
+        assert entry['id'] == path.stem, path
+        if path.stat().st_size > 1_000_000:
+            big.append(path.name)
+    assert not big, f'registry entries over 1 MB (move file lists into the manifest): {big}'
+
+
+def test_registry_readers_use_the_loader():
+    """Nothing reads or writes the retired single file: every reader goes through common.corpus_registry."""
+    import subprocess
+    hits = subprocess.run(['git', 'grep', '-l', 'neuralese_corpora.json', '--', '*.py', '*.mjs', '*.ts', '*.sh'],
+                          cwd=REPO, capture_output=True, text=True).stdout.split()
+    allowed = {'training/neuralese/natlang_neuralese/common/corpus_registry.py', 'tests/test_data_registry_ratchet.py'}
+    assert not set(hits) - allowed, f'readers of the retired registry file: {sorted(set(hits) - allowed)}'

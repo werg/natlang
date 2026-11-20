@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v34-semantic-review-v1-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v34-label-disagreements-root-candidate-semantic-v1",
+  "split": "inherited-train-diagnostic",
+  "source_class": "provider-label-semantic-review",
+  "training_admission": false,
+  "admission": "held-semantic-diagnostic-no-relabel-no-training-admission",
+  "notes": "Initial item-level full-state semantic review of all 93 V34 label disagreements; later V2/V3 correct several misbound notes. Superseded as interpretive guidance only; raw source and output pins remain valid. Held diagnostic, no relabel/admission.",
+  "include": [
+    "review.json",
+    "review.md"
+  ]
+}

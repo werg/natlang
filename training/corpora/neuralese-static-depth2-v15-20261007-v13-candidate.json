@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-static-depth2-v15-20261007-v13-candidate",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v13-candidate",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.md",
+    "**/*.mjs"
+  ],
+  "admission": "Technical authored static candidate evidence; only114 targets admitted separately by V10 root receipt, other174 held; scripted proof not semantic admission",
+  "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+}

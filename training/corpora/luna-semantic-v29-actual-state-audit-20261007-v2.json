@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v29-actual-state-audit-20261007-v2",
+  "owner": "pop",
+  "path": "runs/luna-v29-child-contract-audit-20261007-v2",
+  "include": [
+    "**"
+  ],
+  "admission": "diagnostic actual-input audit; no automatic teacher admission",
+  "notes": "51 exact child invocations/16 worlds reconstructed from actual carried states: seven first off-pass updates, five later propagation calls, three wrapper-shape errors (overlap retained). No missed current-pass updates; all reconstructed final drafts equal expected. Immutable V1 ideal-stage report preserved and hash bound. Parent-writer closure and usable native decisions require explicit subsequent selection."
+}

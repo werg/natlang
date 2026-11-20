@@ -1,0 +1,18 @@
+{
+  "id": "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v43-prefix-latest-delta-adapter-v3",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-static-reference-no-admission",
+  "source_class": "static-label-derived-reference-evidence",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "543 exact source-top labels converted to authored static references; 1398 rejection records preserved; all 69 reference replays passed; no native provider trajectories or training admission",
+  "derived_from": [
+    "google-v43-resume-enum-omit-source-inputs-held-20261011-v1",
+    "google-v43-label-prefix-latest-delta-held-20261011-v1"
+  ],
+  "notes": "Source labels at indices 658-1374 only; remaining rejection rows include 1224 rows without a label in this suffix, 173 source-top disagreements, and 1 label error. Root source/hold policy remains applicable."
+}

@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v6",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v6",
+  "admission": "closed-native-trajectories; explicit current-policy positives/holds; independent semantic review, source/split closure and neuralese conversion pending",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "include_root_prefixes": [
+    "worker-",
+    "closed-audit"
+  ],
+  "notes": "Closed fresh recovery of v3 index7 provider overload, one completed trajectory but quality_pending for Equerry versus Equerry to King George VI. Keep held until evidence-based source/answer review; not an automatic semantic failure or positive. Original failed attempt remains separate."
+}

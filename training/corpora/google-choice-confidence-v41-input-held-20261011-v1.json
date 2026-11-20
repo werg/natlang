@@ -1,0 +1,18 @@
+{
+  "id": "google-choice-confidence-v41-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+  "include": [
+    "cases.jsonl",
+    "omissions.jsonl",
+    "source-manifest.json",
+    "prepared-launch-command-v1.json",
+    "frozen-adapter-v1/**/*"
+  ],
+  "split": "inherited-train-provider-input",
+  "source_class": "held-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-launch-receipt-separate-no-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V41 2048 fresh inherited-train source rows; 715 CLINC, 288 DBpedia, 290 LanguageID, 40 Newsgroups, 715 Yahoo. Exact master/hash/train and current hold/source reservations root-checked before launch. Frozen ten-model bundle pinned; active mutable labels/attempts/logs excluded."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "s1-question-collection-v8-action-source-audit-20261008-v1",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-v8-action-source-audit-20261008-v1",
+  "include": [
+    "README.md",
+    "review.json"
+  ],
+  "admission": "held-independent-source-context-quality-review-no-training-admission",
+  "derived_from": [
+    "s1-question-collection-v8-action-candidates-20261008-v5"
+  ],
+  "notes": "Independent source/question/context audit of the 49 converted V8 action candidates. Flags source-quality holds for qa_quality_mcq:32 and :34 despite exact port-gold matches; parent failures remain unchanged. Review only, no training/DPO admission."
+}

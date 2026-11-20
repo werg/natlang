@@ -1,0 +1,13 @@
+{
+  "id": "luna-semantic-v27-conversion8-review-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-conversion8-review-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "decision-audit-only; 272 candidates pending semantic review, 106 held; no training admission",
+  "derived_from": [
+    "luna-semantic-v27-closed-20261007"
+  ],
+  "notes": "Case25 SHA-bound prose erratum preserves original accepted result. Conversion omissions explicit; no synthesized child outputs."
+}

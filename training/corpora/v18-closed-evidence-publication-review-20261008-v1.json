@@ -1,0 +1,10 @@
+{
+  "id": "v18-closed-evidence-publication-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v18-closed-evidence-proposal-20261008-v1",
+  "admission": "publication-review-only;not-training-data",
+  "include": [
+    "proposal.json"
+  ],
+  "notes": "Hash-bound closed V6/V8 raw inventory. Six materializer-accepted rows out of12 over eight source worlds is not action-level semantic admission."
+}

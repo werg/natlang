@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v15-iterate-richness-proof-v2-failed-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-20261007-v2-runtime-proof-canonical-check3",
+  "include": [
+    "**/*"
+  ],
+  "admission": "failed-canonical-scripted-reference-diagnostic-only-no-teacher-data",
+  "notes": "Full failed canonical proof, source copy, all per-case snapshots, trajectories, native decisions, action reviews and artifact manifest. Preserves the reference-driver/source selector failure; no provider/model calls and no admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+  "derived_from": [
+    "neuralese-v15-iterate-richness-proposal-20261007-v2"
+  ]
+}

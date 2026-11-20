@@ -1,0 +1,120 @@
+{
+  "id": "natlang-free-provider-v29-render-20261011-v2",
+  "owner": "dgx",
+  "path": "runs/natlang-free-provider-v29-render-20261011-v2",
+  "include": [
+    "receipt.json",
+    "*/*/text-data.jsonl",
+    "*/*/omissions.jsonl",
+    "*.jsonl",
+    "*.json",
+    "render-omissions/*/omissions.jsonl",
+    "*/omissions.jsonl"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "admission": "renders of admitted source corpora: free-provider-v29-admitted-ordinary-text-20-20261010-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "derived_from": [
+    "free-provider-v29-admitted-ordinary-text-20-20261010-v1"
+  ],
+  "license": "facts from the source rows (see the source corpora)",
+  "renders": {
+    "full": {
+      "lfm25": {
+        "file": "full/lfm25/text-data.jsonl",
+        "sha256": "7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_spans": 0,
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 5768,
+            "tokens": 169069
+          }
+        },
+        "max_document_tokens": 12444,
+        "merge_omissions": {}
+      },
+      "mellum21": {
+        "file": "full/mellum21/text-data.jsonl",
+        "sha256": "02c89d01f983725604b640aee92f9e67886da1fd146e963d88cc77f1b74a38fe",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_spans": 0,
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 6155,
+            "tokens": 171143
+          }
+        },
+        "max_document_tokens": 12776,
+        "merge_omissions": {}
+      }
+    },
+    "program-header": {
+      "lfm25": {
+        "file": "program-header/lfm25/text-data.jsonl",
+        "sha256": "1959a715abcf9ab5ac2612d3e65519541af0f3f8d1fc0965600a8588d2aad91b",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_spans": 0,
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 5768,
+            "tokens": 65597
+          }
+        },
+        "max_document_tokens": 5794,
+        "merge_omissions": {}
+      },
+      "mellum21": {
+        "file": "program-header/mellum21/text-data.jsonl",
+        "sha256": "bcd6a9e8a3d5a3be221fbcd141e51e6649e00647d40629613577bcabc5ff3e78",
+        "documents": 20,
+        "by_split": {
+          "train": {
+            "context_only_spans": 0,
+            "context_only_tokens": 0,
+            "documents": 20,
+            "supervised_tokens": 6155,
+            "tokens": 67347
+          }
+        },
+        "max_document_tokens": 6146,
+        "merge_omissions": {}
+      }
+    }
+  },
+  "selection": {
+    "source": "admitted LFM2.5 ordinary-text packet (root receipt), unchanged"
+  },
+  "render_omissions": {},
+  "program_header_parity": {
+    "method": "strip_generic_system_prompt.py with the shared table (training/prompt-pieces/pieces.json, b470e2d4 + abcf8b66)"
+  },
+  "build": {
+    "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+    "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+    "container": "natlang-neuralese:26.09",
+    "renderer_code": {
+      "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+      "scripts/neuralese_data/text_tokenizer_twin.py": "3f231d35593e4f3755fe0c9ae55cc280961bc08b1d5a1baa93e28e3348d7dd20",
+      "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+    },
+    "receipt": "runs/natlang-free-provider-v29-render-20261011-v2/receipt.json",
+    "sources": {
+      "lfm_text": "/home/werg/natlang/runs/natlang-free-provider-v29-render-20261011-v1/full/lfm25/text-data.jsonl",
+      "mellum_twin": "runs/free-provider-v29-admitted-ordinary-text-20-mellum21-twin-20261011-v1"
+    },
+    "exclude_programs": [],
+    "reserved": null,
+    "protected": null,
+    "held_text": {}
+  },
+  "notes": "v1 with program-header re-derived by the shared table (ts-host renderSystemPrompt over current + historical pieces). Full renderings are hard links of v1's. context_only_spans preserved in all four renders (V73: 145 spans each)."
+}

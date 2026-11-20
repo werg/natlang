@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY = 'training/neuralese_corpora.json'
+REGISTRY = 'training/corpora'
 SET_DIR = ROOT / 'runs' / 'natlang-target-set-20261011'
 SPEC = SET_DIR / 'spec.json'
 BASE_ID = 'natlang-target-set-20261011'
@@ -32,9 +33,9 @@ RENDERINGS = ('full', 'program-header', 'whole-trajectory')
 def origin_registry(fetch: bool = True) -> dict:
     if fetch:
         subprocess.run(['git', 'fetch', '-q', 'origin'], cwd=ROOT, check=False)
-    shown = subprocess.run(['git', 'show', f'origin/main:{REGISTRY}'], cwd=ROOT, check=True, capture_output=True,
-                           text=True).stdout
-    return json.loads(shown)
+    sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+    from natlang_neuralese.common import corpus_registry
+    return corpus_registry.load_ref(ROOT, 'origin/main')
 
 
 def superseded_ids(corpora: list[dict]) -> set[str]:

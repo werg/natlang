@@ -1,0 +1,18 @@
+{
+  "id": "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/proposal-review.json",
+    "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/text-visibility-review.json",
+    "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/delta-native-records.jsonl",
+    "s1-question-collection-v8-root-selected-action-admission-20261008-v1/admission.json",
+    "s1-question-collection-v8-action-second-source-review-20261008-v1/review.json"
+  ],
+  "admission": "superseded-47-action-proposal-and-context-review-only; not-active-training-admission",
+  "derived_from": [
+    "s1-question-collection-v8-action-supported-proposal-20261008-v1",
+    "s1-question-collection-v8-action-source-audit-20261008-v1"
+  ],
+  "notes": "Immutable review evidence for the superseded47 selected-action proposal: old root action47 admission, exact selected delta, prior proposal review, second source audit, and model-visible-context review. The later visibility review found two insufficient answer-grounding excerpts (qa_quality_mcq:24 and :26); action45 admission excludes both. The old47 root certificate and outputs remain preserved as history and are not current training admission. No full cumulative native/text copies are selected here."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v15-iterate-richness-proposal-20261007-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v3",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-generation-only-supported-scoped-reference-no-teacher-output",
+  "notes": "Supported same-world scoped pass outcomes and selectors; root-scoped source revision audit retained. Source-only proposal; successful scripted proof does not establish teacher semantics or corpus admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+  "derived_from": [
+    "neuralese-v15-iterate-richness-proposal-20261007-v2"
+  ]
+}

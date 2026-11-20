@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-choice-confidence-v12-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/held-static-choice-confidence-v12-adapter-v1",
+  "include": [
+    "*"
+  ],
+  "split": "train-inherited-evidence-only",
+  "source_class": "provider-static-derivative-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "51authoredgroups389sourceannotationmatches123rejects51actualreferenceaccepted/capturevisible880nativeheldturns. Noautomaticsemantic/sourceadmission."
+}

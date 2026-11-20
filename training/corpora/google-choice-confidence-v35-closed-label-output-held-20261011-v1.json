@@ -1,0 +1,18 @@
+{
+  "id": "google-choice-confidence-v35-closed-label-output-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v35-source",
+  "include": [
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json",
+    "pool.log",
+    "root-launch-process-v1.json"
+  ],
+  "split": "inherited-train-provider-labels",
+  "source_class": "held-provider-generated-typed-decisions",
+  "training_admission": false,
+  "admission": "held-label-evidence-only-awaits-independent-quality-review",
+  "independent_new_worlds": 0,
+  "notes": "Closed V35 ten-model pool output. Exact 512 source cases, 512 saved typed-label rows, 548 recorded request attempts. Includes frozen input binding, full attempt ledger, label rows, completed process and pool log. Typed/schema output does not imply agreement with source labels or training admission. Paired static reference snapshot is separately registered."
+}

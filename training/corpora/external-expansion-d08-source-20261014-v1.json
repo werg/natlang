@@ -1,0 +1,22 @@
+{
+  "id": "external-expansion-d08-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D08",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "accepted_trajectories.json",
+    "data/combined-00000-of-00001.parquet",
+    "data/follower-00000-of-00001.parquet",
+    "data/leader-00000-of-00001.parquet"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "CooperBench/cooperator-dual-policy-sft-data",
+    "revision": "dbe21f772080659a89da671d87a23e767a0e9ed5",
+    "license": "mit"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

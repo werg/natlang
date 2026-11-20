@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v25-direct-return-event-proof-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-direct-return-event-proof-20261008-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-review-only-no-training-admission",
+  "derived_from": [
+    "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008"
+  ],
+  "notes": "Small held proof of two exact selected direct typed-text return_result events and three authenticated same-parent reader links. Recurrence audit retains three unresolved upstream context roots and is not structurally closed. RAIL-741 is only a source-grounded candidate for separate review; TREE-710 remains a semantic hold because its final target adds an unsupported item-specific authority requirement. No training or DPO admission."
+}

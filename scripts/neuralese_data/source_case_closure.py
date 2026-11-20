@@ -172,7 +172,8 @@ def json_pointer_value(value, pointer: str, *, where: str):
 
 def verify_registered_index(reference: str, index_root: Path) -> dict:
     """Verify registered index manifest file hashes when an index is registered locally."""
-    registry = json.loads((ROOT / "training/neuralese_corpora.json").read_text(encoding="utf-8"))
+    from natlang_neuralese.common import corpus_registry
+    registry = corpus_registry.load(ROOT)
     entry = next((item for item in registry["corpora"]
                   if item.get("kind") == "cross-corpus-index" and
                   (item.get("id") == reference or (ROOT / item.get("path", "")) == index_root)), None)

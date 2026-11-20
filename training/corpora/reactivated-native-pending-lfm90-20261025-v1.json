@@ -1,0 +1,20 @@
+{
+  "id": "reactivated-native-pending-lfm90-20261025-v1",
+  "include": [
+    "native-graphs.jsonl.zst",
+    "membership.json"
+  ],
+  "source_class": "exact-whole-graph-original-pending-capacity-view",
+  "training_admission": true,
+  "split": "90 original train graphs, all forward/KV sizes<=137052, exact saved bindings and targets; held groups disjoint.",
+  "training_admission_reason": "Existing original pending admission and row identity retained; current complete-source CE contract validates these whole rows and the real v8 capacity entry passed.",
+  "derived_from": [
+    "original-lfm-native-full-sft-pending-ledger"
+  ],
+  "notes": "Subset view only; no truncation, detached producer or duplicate-row credit. Activation is not exposure. The other604 pending original graphs remain mandatory.",
+  "owner": "dgx",
+  "path": "runs/reactivated-native-pending-lfm90-20261025-v1",
+  "snapshot_manifest": "training/corpus-manifests/reactivated-native-pending-lfm90-20261025-v1.json",
+  "admission": "Source recovery/eligibility only; no new training exposure. Every original graph quota remains authoritative.",
+  "license_provenance": "Inherited exact original reviewed source licenses and provenance; no license exclusions or new teacher generations."
+}

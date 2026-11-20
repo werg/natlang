@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-zai45-counter-and-glob-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v14",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "inherited-train-source-groups",
+  "source_class": "quality-review-correction-and-runtime-bug-evidence",
+  "admission": "evidence-only-no-training-admission",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "free-provider-zai45-sourcev5-procurement-closeout-held-20261010-v1"
+  ],
+  "independent_new_worlds": 0,
+  "notes": "Corrects initial scope interpretation: the FileHandle child folder contains one root-level file, but **/ glob semantics wrongly required a slash and hid that file from listing/search. Preserve valid folder tools; fix zero-component globstar directories. Reconciles 84 collector sends / 85 transport starts with one local completion retry; its original attempted response is unrecoverable, no inferred payload. No source or output mutation/admission."
+}

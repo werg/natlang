@@ -1,0 +1,17 @@
+{
+  "id": "google-choice-confidence-v41-v78-v79-prefix-remainder-combined-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-v78-v79-remainder-static-v1",
+  "include": [
+    "prefix-snapshot-receipt.json",
+    "prefix-input/**/*",
+    "static/**/*",
+    "combined-v80-input/**/*"
+  ],
+  "split": "inherited-train-static-source-and-replay-input",
+  "source_class": "held-provider-label-prefix-and-static-replay-source",
+  "training_admission": false,
+  "admission": "static-reference-and-future-generation-source-only-no-provider-call-admission",
+  "independent_new_worlds": 0,
+  "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78’s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v31-authority-failure-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-20261010-v1/failure-case007",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "authored-semantic-iterate-generation-evidence",
+  "training_admission": false,
+  "admission": "held-root-review-or-explicit-exclusion",
+  "independent_new_worlds": 0,
+  "notes": "Two genuineauthority-decision failures, raw/goldpreserved; neither is an admitted exactprefix DPOpair."
+}

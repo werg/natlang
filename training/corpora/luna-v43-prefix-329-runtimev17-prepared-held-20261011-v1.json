@@ -1,0 +1,16 @@
+{
+  "id": "luna-v43-prefix-329-runtimev17-prepared-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-prefix-329-runtimev17-prepared-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-generation-plan-no-admission",
+  "source_class": "provider-generation-preparation",
+  "training_admission": false,
+  "admission": "unapproved preparation only; no provider calls or training admission",
+  "derived_from": [
+    "google-v43-choice-confidence-prefix-329-static-held-20261011-v1"
+  ],
+  "notes": "Five-worker V17 Luna plan created by the shared preparation tool from 31 exact static source cases; reviewed-plan has root_approved=false. Do not launch without owner review and current disjointness/resource checks."
+}

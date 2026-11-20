@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v41-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v41-closed-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw closed generation and quality/resource audit evidence only; no automatic native/recurrence admission",
+  "notes": "28queued/25exact exports12accepted13rejected/3budget-heldpartials; exactsharedoracle grades andjournalaccounting matched, deadworkers beforefreeze. Missingterminaloracles/completehostledgers onpartialsheld; sourcegroups/splits/runtime identities retained."
+}

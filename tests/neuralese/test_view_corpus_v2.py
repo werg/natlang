@@ -183,10 +183,9 @@ def test_cross_corpus_registry_resolves_ids(tmp_path):
     root = tmp_path / "data/ix"
     root.mkdir(parents=True)
     (root / "index.json").write_text("{}")
-    (tmp_path / "training").mkdir()
-    (tmp_path / "training/neuralese_corpora.json").write_text(json.dumps({"corpora": [
-        {"id": "cross-corpus-index-x-v1", "kind": "cross-corpus-index", "path": "data/ix"},
-        {"id": "x", "path": "data/x"}]}))
+    (tmp_path / "training/corpora").mkdir(parents=True)
+    for entry in ({"id": "cross-corpus-index-x-v1", "kind": "cross-corpus-index", "path": "data/ix"}, {"id": "x", "path": "data/x"}):
+        (tmp_path / "training/corpora" / f"{entry['id']}.json").write_text(json.dumps(entry))
     assert reg.resolve("cross-corpus-index-x-v1", tmp_path) == (root, "cross-corpus-index-x-v1")
     assert reg.resolve(root, tmp_path) == (root, None)
     for bad in ("x", "missing"):
@@ -196,7 +195,8 @@ def test_cross_corpus_registry_resolves_ids(tmp_path):
 
 def test_registered_view_v2_indexes_are_portable():
     from neuralese_data import cross_corpus_registry as reg
-    entries = {e["id"]: e for e in json.loads((reg.REPO / reg.REGISTRY).read_text())["corpora"]}
+    from natlang_neuralese.common import corpus_registry
+    entries = {e["id"]: e for e in corpus_registry.load(reg.REPO)["corpora"]}
     for ix in entries["view-ask-20261010-v2"]["build"]["cross_corpus_indexes"]:
         assert "path" not in ix
         entry = entries[ix["registry_id"]]

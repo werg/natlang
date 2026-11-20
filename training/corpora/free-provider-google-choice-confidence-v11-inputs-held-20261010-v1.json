@@ -1,0 +1,25 @@
+{
+  "id": "free-provider-google-choice-confidence-v11-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v11",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/models.json",
+    "frozen-adapter-v1/scripts/label_decision_cases.py",
+    "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-case-review-only",
+  "source_class": "provider-decision-label-confidence-generation-inputs",
+  "training_admission": false,
+  "admission": "held-generation-inputs-only-live-output-excluded",
+  "notes": "Immutable input snapshot for queued Gemini choice-confidence V11. Exact cases/source manifest/launch receipt and frozen adapter files only; active worker.log and live labels/output artifacts intentionally excluded. Cases use new source IDs/groups disjoint from existing provider choice inputs per approved source selection; no output or training admission."
+}

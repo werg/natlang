@@ -1,0 +1,13 @@
+{
+  "id": "verified-reasoning-runtime-v17-carry8-bbaa0847-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-v17-carry8-case20-bbaa0847-source/frozen-runtime",
+  "include": [
+    "**/*"
+  ],
+  "admission": "immutable-frozen-runtime-dependency; no-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1"
+  ],
+  "notes": "Frozen bbaa0847 shared runtime snapshot used by V18 answer-key v2 CPU reference proof and prior V17 carry recovery. Exact runtime receipt and compiled dist included; preserved as a dependency only, not a qualification certificate or training admission."
+}

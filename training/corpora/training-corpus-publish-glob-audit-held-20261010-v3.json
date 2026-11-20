@@ -1,0 +1,16 @@
+{
+  "id": "training-corpus-publish-glob-audit-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/training-corpus-publish-glob-audit-20261010-v3",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "quality-provenance-and-publication-audit",
+  "training_admission": false,
+  "admission": "held-review-evidence-only",
+  "notes": "18manifests251currentlyomittedcandidatefiles;4latersnapshotscoverrelatedomissions. Currentpresencecannotestablishpublicationtimepresence; durablemissingbytesworklistpending, noadmissionchange."
+}

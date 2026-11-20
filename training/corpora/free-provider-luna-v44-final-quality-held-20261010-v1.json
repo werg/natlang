@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v44-final-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v44-choice-folder-final-20261010-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Independentclosedaudit. Evalokdoesnotimplytypedhostreturn. Directexactsource-state-in-childtoolcontext349/376conservativevisibilitynotinvisibility. BillableIOunavailable; no wireprompt/sourcequalityadmissionclaim."
+}

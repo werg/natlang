@@ -1,0 +1,17 @@
+{
+  "id": "google-choice-confidence-v41-prefix-static-v4-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v4-current-criteria",
+  "include": [
+    "prefix-snapshot-receipt.json",
+    "prefix-input/**/*",
+    "remaining-after-v77-v78-v79-v80-v1/**/*",
+    "static/**/*"
+  ],
+  "split": "inherited-train-static-reference-only",
+  "source_class": "held-static-provider-label-derived-reference-input",
+  "training_admission": false,
+  "admission": "strict-source-label-and-reference-replay-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Fresh immutable byte-prefix of active V41 JSON-object labels (534 newline-complete rows, SHA a8ea6b771a6dc3e03fb17433d5a505cc5158dbfc676b80b0144d2420a71c7c13), tied to exact source cases SHA d7762d1e4e9386e98b3061599a2ade0bf271c034050e770d82697c43f00b1f96. Shared current criteria adapter accepted 449 labels overall; after excluding 1,131 prior selected IDs/groups from completed V77/V78/V79/V80 queues, 236 labels remained and yielded 21 static programs/151 accepted source labels, all 21 reference replays passed. All outputs remain held and no gold enters model-facing inputs."
+}

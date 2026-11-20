@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v9-source-r4-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v9-prepared-r4",
+  "include": [
+    "**"
+  ],
+  "admission": "source-and-scripted-proof-only;no-actualteacher-admission",
+  "notes": "Exactsameactualsemantics/inputs/finalgold/splits/groupsasr3;12scriptedintermediatevaluescorrectedacross7worlds. Zero-model referenceproof32/32. Rootgenerationreviewscopedrecoveryindices17,19,22,24,27,29,31; V30 usesnewfrozenprompt, nosame-inputDPOclaim."
+}

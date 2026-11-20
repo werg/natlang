@@ -1,0 +1,12 @@
+{
+  "id": "neuralese-local-stage-learned-runtime-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-learned-runtime-20261006-v1",
+  "admission": "exact-final2200-weight-runtime-diagnostic-lengths8-32-serving-cache-replay-and-input-gradients-passed-not-foundation-semantic-or-autonomous-stopping-admission",
+  "include": [
+    "report.json",
+    "metrics.jsonl",
+    "launch.json",
+    "runtime-identity.json"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "luna-semantic-lambdas-closed-v18-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v18",
+  "admission": "raw-candidate-80-supported-finals-source-split-per-target-and-recurrence-admission-required",
+  "include": [
+    "launch.json",
+    "approved-plan.json",
+    "worker-*/queue.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/case-*.results.jsonl",
+    "worker-*/case-*.results.jsonl.manifest.json",
+    "worker-*/case-*.collector.log",
+    "worker-*/supervisor.log"
+  ]
+}

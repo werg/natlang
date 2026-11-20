@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v37-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v37-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw source-revision teacher evidence pending quality review; held test world",
+  "notes": "CIRclearancewindow explicitlyasof11Jan and priorleadapprovalpermitted;1accepted. SameV13worldgroup/split. Oldambiguoussourceattempts stayheld; no crosspromptDPO/independentworld increment."
+}

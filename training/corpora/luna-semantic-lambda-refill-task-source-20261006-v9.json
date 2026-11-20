@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v9",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v9",
+  "admission": "source-candidates-current-policy-reference-verified-not-training-outcomes",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "notes": "Seed6176 32shapes/24verified/eight holds, 13SMSselected; other candidates deferred. No hints; new ID definition/source holds; source reuse not independent new worlds."
+}

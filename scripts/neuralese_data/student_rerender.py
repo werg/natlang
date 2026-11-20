@@ -38,12 +38,18 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 sys.path.insert(0, str(REPO / 'scripts' / 'neuralese_data'))
-REGISTRY = REPO / 'training/neuralese_corpora.json'
+REGISTRY = REPO / 'training/corpora'
 WRAPPER = 'scripts/neuralese_data/render_native_turn_corpus.sh'
 PARTS = 'scripts/neuralese_data/render_parts.py'
 LEDGER = REPO / 'scripts/memory_ledger.py'
 VENV_PY = REPO / '.venv-neuralese/bin/python'
 PYTHONPATH = f'{REPO}/training/neuralese:{REPO}'
+
+
+def _registry():
+    sys.path.insert(0, str(REPO / 'training/neuralese'))
+    from natlang_neuralese.common import corpus_registry
+    return corpus_registry.load(REPO)
 
 
 def load(path):
@@ -165,7 +171,7 @@ def parts_command(entry: dict, path: Path, out: Path, student: str, cpus: int) -
 
 
 def plan(args):
-    registry = load(REGISTRY)['corpora']
+    registry = _registry()['corpora']
     registered = {c['id'] for c in registry}
     wanted = set(args.id or [])
     with Queue(args.queue) as queue:
@@ -718,7 +724,7 @@ def serving_view_file(item: dict, view: str, student: str) -> Path | None:
 
 def add(args):
     """Queue a student-only render (no registered reference render) of an admitted source corpus."""
-    registry = {c['id']: c for c in load(REGISTRY)['corpora']}
+    registry = {c['id']: c for c in _registry()['corpora']}
     source = registry[args.source_corpus]
     if not source.get('training_admission'):
         raise SystemExit(f'{args.source_corpus} is not training-admitted')
@@ -743,7 +749,7 @@ def entry(args):
 
 def registry_entry(item: dict, student: str) -> dict:
     from natlang_neuralese.common.hashing import sha256_file_hex
-    registry = {c['id']: c for c in load(REGISTRY)['corpora']}
+    registry = {c['id']: c for c in _registry()['corpora']}
     source = registry[item.get('source_corpus') or item['id']]
     out = REPO / item['out']
     receipt = load(out / 'receipt.json')

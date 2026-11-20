@@ -1,0 +1,18 @@
+{
+  "id": "natlang-call-store-v20-retry-and-static-proof-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2/callstore-snapshot-v1",
+  "include": [
+    "snapshot_call_store.py",
+    "snapshot-spec.json",
+    "snapshot-final/calls.sqlite",
+    "snapshot-final/provenance.json",
+    "snapshot-final/unresolved-calls.json",
+    "snapshot-final/blobs/**/*"
+  ],
+  "admission": "held-callstore-run-attribution-and-storage-review-no-trace-or-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1"
+  ],
+  "notes": "Online-backup, VACUUMed Pop CallStore capture tied only through exact source-action and retry trace invocation IDs. 201 calls selected (128 scripted static-reference calls, 73 provider retry calls); 551/551 referenced blobs hash-verified, zero missing. Snapshot has 36 unresolved unselected machine-store calls and 128 source-action proof invocation IDs absent from the store; both omissions are explicitly listed. Static records match exact parent_call_id to 23 proof root IDs; V20 records match 7 exact retry trace roots and 25 transitive parent_call_id descendants. Evidence-ID sets have zero cross-origin collisions; call links carry root evidence IDs and matching paths. 176 external parent_call_id links are retained explicitly; schema currently declares no foreign keys. No compilation/case links were present. No automatic trace, teacher-quality, qualification, DPO, independent-world, or training admission."
+}

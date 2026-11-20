@@ -2,7 +2,7 @@
 
 One registry, two layers, one id namespace (plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md):
 
-- **Git layer**: ``training/neuralese_corpora.json`` with immutable ``training/corpus-manifests/<id>.json`` snapshots
+- **Git layer**: ``training/corpora`` with immutable ``training/corpus-manifests/<id>.json`` snapshots
   (``scripts/sync_training_corpora.py`` publishes and syncs them, ``register_corpora.py`` commits them unattended). It
   is pinned with the code, so what a pinned run *selects* comes from here: ``roles`` (``grpo-pool``,
   ``grpo-memetic-tasks``, ``grpo-sd-teacher``, ``held-eval``) replace the hand-edited lists in ``grpo.py``.
@@ -37,7 +37,7 @@ from .paths import root
 
 RECORD_SCHEMA = 'natlang.data-registry-record/1'
 SNAPSHOT_SCHEMA = 'natlang.corpus-snapshot/1'
-GIT_REGISTRY = 'training/neuralese_corpora.json'
+from . import corpus_registry  # noqa: E402  (the git layer: one file per entry)
 GIT_MANIFESTS = 'training/corpus-manifests'
 PORTABLE_ROOTS = ('data_nvme', 'data_hdd', 'archive', 'models')
 ALLOW_ENV = 'NATLANG_ALLOW_UNREGISTERED_DATA'
@@ -511,6 +511,8 @@ class Registry:
                 except (ValueError, KeyError):
                     continue
                 include = ds.get('include') or []
+                if ds.get('include_manifest'):      # its manifest lists the files; prefixes name where they live
+                    include = [f'{d}/*' if d != '.' else '*' for d in ds.get('include_prefixes') or ['.']]
                 # A dataset holds what its includes name, not its whole directory: an exact name is that file, a glob
                 # the directory before its first wildcard (two datasets may share a directory, such as runs/)
                 targets = []
@@ -644,12 +646,12 @@ def load(*, repo=None, fresh=False) -> Registry:
     """The merged registry. The git layer is read from REPO (default: the checkout this code runs from)."""
     global _LOADED
     repo = Path(repo) if repo else code_repo()
-    key = (str(repo), _mtime(repo / GIT_REGISTRY), _mtime(journal_path()))
+    key = (str(repo), corpus_registry.signature(repo), _mtime(journal_path()))
     if not fresh and _LOADED is not None and _LOADED[0] == key:
         return _LOADED[1]
     if _GIT_CACHE.get('key') != key[:2]:
         try:
-            git_entries = json.loads((repo / GIT_REGISTRY).read_text())['corpora']
+            git_entries = corpus_registry.load(repo)['corpora']
         except (OSError, ValueError, KeyError):
             git_entries = []
         _GIT_CACHE.update(key=key[:2], entries=git_entries)

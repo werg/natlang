@@ -8,7 +8,7 @@ never selectable (the selection pool reads train rows only), but custody can onl
 through the protected-worlds registry. Every admitted batch therefore registers its new held rows here: rows whose
 ids are not yet in a registered ``natlang-rl-authored-*`` packet are written, immutably, to
 ``runs/natlang-rl-authored-{dev,confirmation}-<stamp>/cases.jsonl`` with a pinned manifest under
-``training/corpus-manifests/`` and an ``evaluation-only-never-training`` entry in ``training/neuralese_corpora.json``.
+``training/corpus-manifests/`` and an ``evaluation-only-never-training`` entry in ``training/corpora/``.
 Registered packets are never rewritten (a later batch adds a new stamped packet). The protection digest changes with each
 registration; rebuild the selection pool afterwards.
 """
@@ -27,7 +27,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E40
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 DEFAULT_POOL = resolve_str('data_hdd', 'natlang-rl-authoring', 'admitted')
-REGISTRY = REPO / 'training' / 'neuralese_corpora.json'
+REGISTRY = REPO / 'training' / 'corpora'
 PREFIX = 'natlang-rl-authored-'
 SPLITS = {'dev': 'dev', 'confirmation': 'confirmation'}
 
@@ -42,8 +42,8 @@ def registered_ids(registry):
 
 
 def register(pool, stamp, dry_run):
-    text = REGISTRY.read_text()
-    registry = json.loads(text)
+    from natlang_neuralese.common import corpus_registry
+    registry = corpus_registry.load(REPO)
     known = registered_ids(registry)
     rows = [json.loads(line) for line in (Path(pool) / 'cases.jsonl').read_text().splitlines() if line.strip()]
     pending = {split: [r for r in rows if r['split'] == split and r['id'] not in known] for split in SPLITS}
@@ -67,13 +67,11 @@ def register(pool, stamp, dry_run):
         (REPO / 'training' / 'corpus-manifests' / f'{packet_id}.json').write_text(json.dumps(manifest, indent=2) + '\n')
         worlds = len({r['curriculum']['external'].get('unit') for r in items})
         entries.append({'id': packet_id, 'owner': 'dgx', 'path': f'runs/{packet_id}',
-                        'admission': 'evaluation-only-never-training', 'include': ['cases.jsonl'],
+                        'admission': 'evaluation-only-never-training', 'include': ['cases.jsonl'], 'kind': 'held', 'protected': True,
                         'note': f'Held {split} rows of the authored (Haiku-written, qualified) RL task pool: {len(items)} verified '
                                 f'cases in {worlds} worlds (split {split}), registered {stamp}. Related invocation worlds stay on one '
                                 f'split. For development and confirmation of RL outcomes; never a training source.'})
-    anchor = next(i for i, e in enumerate(registry['corpora']) if e['id'] == 'natlang-rl-bgkit-kr-confirmation-20261103')
-    registry['corpora'][anchor + 1:anchor + 1] = entries
-    REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
+    corpus_registry.write_entries(REPO, entries)
     summary['packets'] = [e['id'] for e in entries]
     return summary
 

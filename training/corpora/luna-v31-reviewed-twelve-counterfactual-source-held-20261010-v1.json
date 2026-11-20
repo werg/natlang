@@ -1,0 +1,19 @@
+{
+  "id": "luna-v31-reviewed-twelve-counterfactual-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-v31-next-iterate-expansion-20261010-v1",
+  "include": [
+    "build-source.mjs",
+    "source-v2/source.cases.jsonl",
+    "source-v2/source-proof.json",
+    "source-v2/source-manifest.json",
+    "source-v2/root-review-plan.json",
+    "source-v2/root-generation-source-review-v1.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "reviewed-author-derived-semantic-iterate-counterfactual-sources",
+  "training_admission": false,
+  "admission": "sampling source approval only; generated trajectories need independent visibility/quality review",
+  "independent_new_worlds": 0,
+  "notes": "12unique inherited V25/V26train groups disjointV28/V29; one explicitpredicateedit percase, regeneratedvisiblefactline, exactrecomputedoracle; no goldinvisibleinput. Source-v1intermediate excluded; source-v2metadata corrected. Historicalbuilder pinned; sharedCLI generalization inprogress."
+}

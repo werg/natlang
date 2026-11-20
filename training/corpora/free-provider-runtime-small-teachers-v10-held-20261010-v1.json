@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-runtime-small-teachers-v10-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v10",
+  "include": [
+    "dist/**/*",
+    "scripts/**/*",
+    "src/**/*",
+    "training/source-reviews/**/*",
+    "prelude.js",
+    "package.json",
+    "package-lock.json",
+    "frozen-runtime.json"
+  ],
+  "split": "not-training-data",
+  "source_class": "frozen-provider-runtime-with-workspace-dependency-overlay",
+  "training_admission": false,
+  "admission": "excluded-incomplete-manifest-replaced-v2",
+  "notes": "Sharedfreezer9610fb65 merges local+roothostinstalleddependency links with localprecedence; actual frozenproviderESMimport passed noAPIcalls. Dependency packages remain installed/shared and mustnotchange whilejobsrun; transferredsource snapshotalone does not install dependencylinks on destination. RuntimeV9initialmissingroot-hoistedpi-aifailurepreserved. Originalinclude globs omitted127root-leveldist/scripts/sourcefiles; metadatafailure, notcomplete runtime snapshot. Usev2."
+}

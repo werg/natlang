@@ -1,0 +1,18 @@
+{
+  "id": "luna-v28-counterfactual-five-reviewed-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-counterfactual-next-five-v26-v24-v25-20261009-v1/source-v3",
+  "include": [
+    "source.cases.jsonl",
+    "source-proof.json",
+    "source-manifest.json",
+    "root-generation-source-review-v1.json",
+    "generation-script.snapshot.mjs"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "reviewed-data-derived-semantic-iterate-worlds",
+  "training_admission": false,
+  "admission": "source-approved-for-sampled-generation-only; source-v1/v2 excluded; results require independent gold/capture/admission review",
+  "independent_new_worlds": 0,
+  "notes": "Five exact counterfactual worlds from existing V26/V24/V25 train groups. Four iterative lambda children and captured semantic notes. Root review independently checked20evidence files; task input has no gold decision. The vendor convenience symlink is excluded; this snapshot covers embedded case/source/proof bytes, not the entire dataset cache."
+}

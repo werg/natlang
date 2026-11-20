@@ -1,0 +1,29 @@
+{
+  "id": "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v2/text-build-v3/output-manifest.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/adopted-delta-omissions.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/full-assembly-proposal-v1.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/full-assembly-proposal-v2.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-pieces.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-records.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v1.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v2.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v1.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v2.json",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/text-provenance.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/text-target-bindings.jsonl",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/text.jsonl"
+  ],
+  "admission": "root-approved-full-consolidation-of-previously-admitted-native-and-text-sources; unchanged recurrence prefix; no new qualification or live-input mutation",
+  "derived_from": [
+    "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1",
+    "v18-v19-step5-case01-scorefact-selected3-native-text-delta-20261009-v1",
+    "v18-v19-step5-scorefact-selected14-native-text-delta-20261009-v1"
+  ],
+  "notes": "Exact physical consolidation5467 native (3432train/2035test),4699 text (2995train/1704test), unchanged4961 recurrence (3072train/1889test). V2 canonical text metadata fixes manifest structure only; v1 preserved, all data outputs unchanged. Includes selected3/14 once. River derived1 and later Step5 seven-actions remain separate deltas, excluded here. Admissions inherited from exact root-reviewed components. Successful sync/schema checks do not qualify learned writers/runtime/recurrence or alter frozen recipes."
+}

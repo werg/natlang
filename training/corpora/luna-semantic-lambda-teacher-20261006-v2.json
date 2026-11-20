@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v2",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v2",
+  "admission": "closed-native-trajectories; current-policy positives separated; neuralese conversion and split closure pending",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "include_root_prefixes": [
+    "worker-",
+    "closed-audit"
+  ],
+  "notes": "63attempts,61completedrows,2request-budgetfailedpartials preserved. Current-policy ledger and admitted subset are derivatives, not independent samples. Source holds remainbinding; convert only explicit positives after split closure."
+}

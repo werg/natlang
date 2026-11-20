@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v38-static-reference-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v38-adapter-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-derived-static-reference",
+  "source_class": "held-provider-label-derived-static-reference",
+  "training_admission": false,
+  "admission": "static-reference-and-replay-only-no-provider-teacher-trajectory-admission",
+  "independent_new_worlds": 0,
+  "notes": "V38 shared static adapter: 512 source rows, 428 accepted labels, 84 rejections; 55 authored static programs with 55/55 successful reference replays. Labels remain annotation-derived and source truth is not independently adjudicated; held."
+}

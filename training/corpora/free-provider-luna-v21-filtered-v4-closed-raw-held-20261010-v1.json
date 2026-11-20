@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v21-filtered-v4-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v21-v4-runtimev15-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Closed five filtered full-abstract reducers37items.30 correct decisions,seven differences; two exact-map/file successes. Original attempts and graphs retained, no admission."
+}

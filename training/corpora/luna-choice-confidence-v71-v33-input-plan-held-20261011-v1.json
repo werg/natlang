@@ -1,0 +1,21 @@
+{
+  "id": "luna-choice-confidence-v71-v33-input-plan-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v71-v33-runtimev15-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-supervisor-launch-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ],
+  "split": "inherited-train-input-only",
+  "source_class": "held-native-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-active-generation-output-excluded",
+  "notes": "Root-approved V71 inputs from the V33 static reference set, five worker queues and launch receipts. The campaign is active; mutable campaign-launch state, journals, logs, and result files are excluded. No outcome-quality conclusion or training admission."
+}

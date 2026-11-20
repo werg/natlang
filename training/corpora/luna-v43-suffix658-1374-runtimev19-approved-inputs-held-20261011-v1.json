@@ -1,0 +1,23 @@
+{
+  "id": "luna-v43-suffix658-1374-runtimev19-approved-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-prepared-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "approved-plan-v1.json",
+    "root-independent-approval-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/decision_source_quality_holds.json",
+    "source-review/prepare_luna_folder_campaign.py",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "held-generation-inputs-no-admission",
+  "source_class": "approved-provider-generation-inputs",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "approved five-lane launch inputs and immutable queues only; active journals, logs, results and mutable campaign status excluded",
+  "derived_from": [
+    "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1"
+  ],
+  "notes": "69 authored folder programs on runtime V19, root-approved plan; five predecessor lanes are the exact V90 queue/journal/runtime references embedded in the source review. Independent new worlds=0."
+}

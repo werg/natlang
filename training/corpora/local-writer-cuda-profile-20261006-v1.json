@@ -1,0 +1,10 @@
+{
+  "id": "local-writer-cuda-profile-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-cuda-profile-20261006-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "synthetic-performance-diagnostics-not-training-data",
+  "notes": "Two-writer CUDA trace with61,470 kernels; profiler overhead, no production gain or channel qualification. Includes preserved startup/report failures and small RMS parity probes; no alternative deployed."
+}

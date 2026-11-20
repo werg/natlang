@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v7",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v7",
+  "admission": "closed-native-policy-candidates-needs-semantic-source-split-and-conversion-closure",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "include_root_prefixes": [
+    "worker-",
+    "closed-audit"
+  ],
+  "notes": "{\"attempts\": 8, \"completed\": 8, \"current_policy_positive_candidates\": 5, \"positive_inline_calls\": 244, \"disposition\": \"Closed snapshot; current source holds enforced. Independent intermediate semantic/source/split review and neuralese conversion pending. Not new independent worlds.\"}"
+}

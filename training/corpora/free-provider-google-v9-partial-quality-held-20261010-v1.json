@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v9-partial-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-v9-partial",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "quality-provenance-and-publication-audit",
+  "training_admission": false,
+  "admission": "held-review-evidence-only",
+  "notes": "42savedrepliessnapshotallstrictvalid/31gold; sourceSHA0511463eb2387788fc8733d3413456667f74e371035b663f0bffd9907acd14f7. Partial/no controlledpromptcredit/admission; confidencecalibration separate."
+}

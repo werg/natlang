@@ -1,0 +1,9 @@
+{
+  "id": "protected-bgkit-20261003",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/protected-bgkit-20261003",
+  "admission": "protected-evaluation-never-train",
+  "include": [
+    "*.json"
+  ]
+}

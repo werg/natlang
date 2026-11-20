@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v16-v83-soft-held-conversion-v1-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Held original V9 converter omission evidence. No admission; preserve failure to track typed soft argument conversion repair."
+}

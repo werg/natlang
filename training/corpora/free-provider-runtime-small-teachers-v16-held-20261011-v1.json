@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-runtime-small-teachers-v16-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v16",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-execution-runtime",
+  "source_class": "source-bound-frozen-native-runtime",
+  "training_admission": false,
+  "admission": "held-runtime-input-no-data-admission",
+  "notes": "Fresh isolated freeze of current shared ts-host runtime for the V72 candidate; runtime and declared files are pinned by frozen-runtime.json. This is runtime provenance only and confers no source, native-trace, or training admission."
+}

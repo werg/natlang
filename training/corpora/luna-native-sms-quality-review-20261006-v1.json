@@ -1,0 +1,17 @@
+{
+  "id": "luna-native-sms-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-native-sms-quality-review-20261006-v1",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.md",
+    "**/*.log"
+  ],
+  "admission": "diagnostic-independent-review-not-training-admission",
+  "derived_from": [
+    "luna-semantic-lambda-teacher-20261006-v2",
+    "luna-semantic-lambda-teacher-20261006-v3",
+    "luna-semantic-lambda-teacher-20261006-v4"
+  ]
+}

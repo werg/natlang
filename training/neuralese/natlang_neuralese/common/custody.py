@@ -231,7 +231,11 @@ def _read_protected_registry(path):
             raise CustodyError(f'protected source registry {path} changed during cached verification')
         return cached[1]
     try:
-        value = json.loads(Path(path).read_bytes())
+        if Path(path).is_dir():      # the corpus registry: one file per entry (common.corpus_registry)
+            from .corpus_registry import load
+            value = load(path)
+        else:
+            value = json.loads(Path(path).read_bytes())
     except (OSError, ValueError) as error:
         raise CustodyError(f'protected source registry {path} is not readable; custody fails closed') from error
     if before != _custody_file_identity(path):

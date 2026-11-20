@@ -1,0 +1,27 @@
+{
+  "id": "verified-reasoning-pools-20261008-v9",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "verified-reasoning-pools-20261008-v9/README.md",
+    "verified-reasoning-pools-20261008-v9/source.cases.jsonl",
+    "verified-reasoning-pools-20261008-v9/source-manifest.json",
+    "verified-reasoning-pools-20261008-v9/source-proof.json",
+    "verified-reasoning-pools-20261008-v9/selection.json",
+    "verified-reasoning-pools-20261008-v9/independent-verification.json",
+    "verified-reasoning-pools-20261008-v9/root-generation-review.json",
+    "verified-reasoning-pools-20261008-v9/lineage/v7-source-group-correction.json",
+    "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/source-index-catalog.json",
+    "verified-reasoning-pools-20261008-v9/runtime-reference-proof-bd433d21/**",
+    "verified-reasoning-runtime-20261008-bd433d21/**",
+    "verified-reasoning-runtime-20261008-987bffd3/**",
+    "verified-reasoning-pools-20261008-v9/runtime-reference-proof/**",
+    "neuralese-semantic-iterate-reducers-v25-20261008-v1/readiness-probe-45c15184/receipt.json",
+    "verified-reasoning-pools-20261008-v7/source.cases.jsonl"
+  ],
+  "admission": "source-generation-reviewed; no teacher observations or training admission",
+  "derived_from": [
+    "s1-full-final-20261003"
+  ],
+  "notes": "Six generation task variants over 23 existing S1 train records: 16 Reasoning Gym and 7 demonstration-checkable SynLogic. Nine unsupported SynLogic candidates are documented as omissions. Original source groups/splits/licenses are preserved; zero independent-world credit. V7 source-group correction history and both root-reviewed/current CPU runtime proof dependencies are included. Provider generation is a separate pending execution-plan review; scripted references are not teacher data or training qualification."
+}

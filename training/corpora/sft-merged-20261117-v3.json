@@ -1,0 +1,13 @@
+{
+  "id": "sft-merged-20261117-v3",
+  "owner": "dgx",
+  "path": "runs/sft-merged-20261117-v3",
+  "include": [
+    "chains.pkl",
+    "merge.json"
+  ],
+  "admission": "sft-experiment-input",
+  "license_provenance": "Own LFM3 GRPO rollouts (project-generated); teacher episodes of nvidia/nemotron-3-ultra-550b-a55b (free and paid NVIDIA API), gpt-6-luna (openai-codex), gemini-3.5/3.7-flash, glm-4.7-flash, claude-haiku-5-5 (Anthropic API) on the project's GRPO pool; October corpora rows keep their registered sources' license provenance (Luna/Qwen/Bonsai teacher curricula; SWE-rebench OpenHands Qwen3-Coder trajectories, OpenResearcher web sessions, CooperBench) as recorded per row in rows.jsonl.zst provenance.",
+  "note": "sft-verified-20261117-v3 chains + sft-neuralese-text-20261117-v2 chains, concatenated and shuffled (seed 20261117; merge.json has part sha256s). Input of sft-v3-run1 (restart 2026-11-17).",
+  "kind": "sft-rows"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v7-mass-repair-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-gemini-v7-mass-repair",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-case-review-only",
+  "source_class": "provider-typed-decision-quality-review",
+  "training_admission": false,
+  "admission": "held-semantic-quality-and-explicit-root-review-required",
+  "notes": "ImmutableV4/V7pins andperfamilymodelquality review. Proposedsinglechoiceboundedconfidence formatfuturecontrolledvariant only; nooldrownormalization/admission."
+}

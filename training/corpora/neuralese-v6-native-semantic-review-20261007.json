@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v6-native-semantic-review-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-v6-native-decision-quality-audit-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "diagnostic review history and corrected root overlay",
+  "notes": "V1/V2 overbroad precomputation holds are preserved as history; V3 applies actual standalone child instructions, 255 allowed/two assembly-only parent violations. Native decisions and recurrence branch closure have distinct dispositions."
+}

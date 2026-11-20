@@ -1,0 +1,13 @@
+{
+  "id": "decision-visible-answerability-root-review-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Root addsfive forward strict-label quality holds,total25. Preserve prior20policy, fullsource decisions, original annotations andattempts. British-born doesnotentail citizenship; neutralcontact hasnouniqueemotion; teachinghospital ambiguity; shortthreadreply lacksorigin; economicviabilitycriterion missing."
+}

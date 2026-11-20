@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-static-depth2-v15-20261007-v13-audit-history",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v1",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.md",
+    "**/*.mjs"
+  ],
+  "admission": "Root retained first decision audit; final v3 corroborates114 subset; no independent data admission",
+  "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+}

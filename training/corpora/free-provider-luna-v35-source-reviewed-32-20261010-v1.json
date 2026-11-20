@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-luna-v35-source-reviewed-32-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v3",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "node_modules",
+    "__pycache__"
+  ],
+  "split": "inherited-source-review-16train16held",
+  "source_class": "authored-static-semantic-self-improvement-source",
+  "training_admission": false,
+  "admission": "generation-input-or-quality-review-only-not-training-data",
+  "notes": "Reviewed32fictionalrequests8relatedfamilies/16train16held,40requestanddomain sourcegroups; noindependentworldcredit; generationapprovedonly, trajectory/qualityadmissionpending."
+}

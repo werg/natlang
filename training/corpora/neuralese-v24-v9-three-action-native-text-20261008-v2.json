@@ -1,0 +1,20 @@
+{
+  "id": "neuralese-v24-v9-three-action-native-text-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-integration-20261008-v2",
+  "include": [
+    "README.md",
+    "integration-review.json",
+    "packet-manifest.json",
+    "native-append/*",
+    "text-append/*"
+  ],
+  "admission": "root-admitted-three-exact-native-sft-and-ordinary-gold-text-delta; no new recurrence rows or channel qualification",
+  "notes": "Root integration admission receipt cdcf22eb4ec39cac02f19cdd6b0ea6e770e9b6782cbdc5ef613233c952eb6056 approves exactly 3 train native actions and their 3 ordinary gold-text documents. Exact V9 native/text prefixes retained; recurrence records/pieces are byte-identical V9 copies, with no new recurrence rows/edges. Historical per-row preview admission flags remain unchanged; root receipt controls only these exact final artifact paths. No runtime/foundation/DPO/autonomous-stopping qualification and no active training input change. See derived V1 diagnostic corpus for converter inputs and initial two-row omission evidence.",
+  "derived_from": [
+    "luna-v17-v9-portable-context-proposal-20261008",
+    "neuralese-v24-root-action-admission-20261008-v1",
+    "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+    "neuralese-v24-v9-v1-context-render-omission-diagnostic-20261008"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "local-recurrence-stress-cohort-v1-20261005",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/local-recurrence-stress-cohort-v1-20261005",
+  "include": [
+    "records.jsonl",
+    "selection.json"
+  ],
+  "admission": "diagnostic-selection-not-representative-quality-set"
+}

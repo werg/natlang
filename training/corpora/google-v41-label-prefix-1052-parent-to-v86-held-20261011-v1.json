@@ -1,0 +1,16 @@
+{
+  "id": "google-v41-label-prefix-1052-parent-to-v86-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v10-fieldowned",
+  "include": [
+    "labels-prefix.jsonl",
+    "labels-prefix.jsonl.manifest.json",
+    "prefix-receipt.json"
+  ],
+  "split": "inherited-train-partial-provider-label-prefix",
+  "source_class": "held-byte-complete-prefix-of-active-google-label-output",
+  "training_admission": false,
+  "admission": "partial immutable byte-prefix provenance only; labels are not training data; no admission or new-world credit",
+  "independent_new_worlds": 0,
+  "notes": "A byte-complete snapshot of 1,052 lines from the still-mutable V41 JSON-object label output. Prefix SHA 17996d29b843b9064bcee7c5a09590fc049f3e274650f122dfe7003d7da467b7. Parent for disjoint V11 static conversion; not a completed provider screen. Broad static output in this directory is intentionally not included in this snapshot."
+}

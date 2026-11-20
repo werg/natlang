@@ -1,0 +1,17 @@
+{
+  "id": "google-choice-confidence-v41-json-object-remaining-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-source",
+  "include": [
+    "cases-remaining-v2-json-object.jsonl",
+    "omissions.jsonl",
+    "source-manifest.json",
+    "frozen-adapter-v2-json-object/**/*"
+  ],
+  "split": "inherited-train-provider-input",
+  "source_class": "held-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-json-object-restart-no-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V41 JSON-object restart input: 2047 remaining inherited-train cases; one earlier successful label is carried by parent review and is not rerun. Frozen runtime v2 has explicit json_object format, strict local validation and reasoning preservation. Full source manifest and omissions retained; root launch review/receipt and quota repair are registered separately. Mutable labels/attempts/output manifests and runner logs are excluded."
+}

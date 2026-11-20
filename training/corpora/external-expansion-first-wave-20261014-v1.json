@@ -1,0 +1,20 @@
+{
+  "id": "external-expansion-first-wave-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-first-wave-20261014-v1",
+  "include": [
+    "turns/**/*.turns.jsonl.zst",
+    "turns/**/*.summary.json",
+    "ir/**/build.json",
+    "runtime-page.json",
+    "admission-review.json"
+  ],
+  "source_class": "statically-lowered-external-native-teacher-turns",
+  "training_admission": true,
+  "training_admission_reason": "Owner2026-10-14 static natlang-like conversion and broad coding/Neuralese teacher training",
+  "derived_from": [
+    "external-expansion-initial-handoffs-20261014-v1"
+  ],
+  "license": "external source facts retained in pinned snapshots/port records",
+  "notes": "Exact reference verifies static native program plumbing using upstream recorded teacher targets; does not independently execute or verify external research/code targets."
+}

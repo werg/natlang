@@ -1,0 +1,19 @@
+{
+  "id": "external-expansion-d01-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D01",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "sft_width_depth_agent_1p3.jsonl"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "WideSeek-R1/WideSeek-R1-SFT-data",
+    "revision": "44c3e17769da4039901f52523378704775717242",
+    "license": "apache-2.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

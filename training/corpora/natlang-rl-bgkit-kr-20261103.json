@@ -1,0 +1,27 @@
+{
+  "id": "natlang-rl-bgkit-kr-20261103",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-rl-bgkit-kr-20261103/natlang-rl-bgkit-kr-20261103",
+  "include": [
+    "cases.jsonl",
+    "receipt.json",
+    "qualification.json",
+    "verification.json",
+    "diversity.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line + receipt.json (natlang.broad-rl-task-source/1)",
+  "training_admission": "grpo-task-pool",
+  "roles": {
+    "grpo-pool": {
+      "order": 1,
+      "file": "cases.jsonl"
+    }
+  },
+  "license": "bgkit KR reader families built from the bgkit export (project-generated programs over public dataset sources; see receipt.json builds)",
+  "producer": {
+    "script": "scripts/rl_tasks/assemble.py",
+    "git_commit": null
+  },
+  "note": "fallow K1: bgkit KR reader families, 4,734 rows verified by reference/negative/alias replay (verification.json). Held dev/confirmation: natlang-rl-bgkit-kr-{dev,confirmation}-20261103."
+}

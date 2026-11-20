@@ -1,0 +1,20 @@
+{
+  "id": "external-expansion-d11-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D11",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "sharegpt.json",
+    "train.jsonl"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "agentsynth/agentsynth-trajectories",
+    "revision": "2e7bfacd604d6fd759dda3e97797d33894b49985",
+    "license": "mit"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

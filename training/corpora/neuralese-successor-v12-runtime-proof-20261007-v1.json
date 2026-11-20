@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v12-runtime-proof-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "diagnostic CPU scripted references; not teacher training data",
+  "notes": "24/24 actualruntime sourceproof,216decisions168validsites528hostsnapshots,zero modelcalls. Frozen initialconverter scopeprojection and dynamic-site bugs documented; do not count scripted toolobservations as teacherdata."
+}

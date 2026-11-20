@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v43-action-disposition-proposal-20261007-v7",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v43-action-disposition-proposal-20261007-v7",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Immutable800action technicalproposal; only24 source/binding reviewed by root separate actionreceipt; otherunselected/knownerror/sourceheld preserved, recurrencegraph structural only",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

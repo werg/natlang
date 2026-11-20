@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-v28-root-ordinary-text-decision-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v28-root-ordinary-text-admission-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "root-scoped-text-admission-decision",
+  "training_admission": false,
+  "admission": "review-evidence-not-training-targets",
+  "independent_new_worlds": 0,
+  "notes": "Exact296clean assistantaction rows bound to rawinputline/source/target/split/groups; approves only ordinarytext render. No native IR/trace/recurrence/channeladmission; currentGPUinput unchanged."
+}

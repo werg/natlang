@@ -1,0 +1,18 @@
+{
+  "id": "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev18-closed-raw-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-provider-generation-closed-no-admission",
+  "source_class": "provider-generation-raw-results",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "closed held generation evidence; output quality review is separate; no training, native trajectory, or recurrence admission",
+  "derived_from": [
+    "luna-v43-prefix-646-runtimev18-approved-inputs-held-20261011-v1",
+    "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+  ],
+  "notes": "34 programs, 256 source items, 986 saved turns. Full closed worker queues, journals, logs and outputs preserved. Completion is not semantic correctness; preserve 15 source-label disagreements and all failure details."
+}

@@ -1,0 +1,73 @@
+{
+  "id": "qwen-verified-positive-native-graphs-20261015-v5",
+  "owner": "dgx",
+  "path": "runs/qwen-verified-positive-native-graphs-20261015-v5",
+  "include": [
+    "lfm25/receipt.json",
+    "lfm25/train/native-graphs.jsonl.zst",
+    "lfm25/test/native-graphs.jsonl.zst",
+    "lfm25/validation-proof.json",
+    "mellum21/receipt.json",
+    "mellum21/train/native-graphs.jsonl.zst",
+    "mellum21/test/native-graphs.jsonl.zst",
+    "mellum21/validation-proof.json"
+  ],
+  "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+  "split": "Train-only; all 9,535 graphs per model are from eligible accepted assistant actions with exact prompt/context retained at 0.05 weight. Test files are empty and no held evaluation rows are claimed.",
+  "admission": "2,749 source trajectories yielded 9,572 eligible accepted actions; 37 exact token/weight duplicates were omitted against prior admitted rows or earlier retained rows, leaving 9,535 unique train graphs per model. Failed, unexecuted and unapproved actions remain explicit context/omission evidence in each receipt. These are ordinary one-node text graphs, not authentic Neuralese edge captures.",
+  "training_admission": true,
+  "training_admission_reason": "All graphs from both actual expanded student tokenizers passed the shared native graph parser and exact tokenizer fingerprint checks. The full source file, transfer receipt, batch-source bindings and decision-admission cache are hash-bound in the model receipts. All 1,162 emitted source groups per model have zero current held, quality, source-review or decision-hold intersections. Cross-model graph ID sets match exactly; every declared duplicate points to its exact represented row; current protection closure is recorded in the validation proof.",
+  "derived_from": [
+    "qwen-verified-positive-native-graphs-20261015-v1-v2",
+    "qwen-verified-positive-native-graphs-20261015-v3",
+    "qwen-verified-positive-native-graphs-20261015-v4"
+  ],
+  "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision 7b719225242aacd3dbd3f9407468c2ee9a9d2594. Transfer, batch, teacher-source, selection, protection and decision-admission receipts remain at the exact SHA-bound source paths in source_binding and the per-model build receipts. No license exclusion.",
+  "note": "New unique Qwen positive trajectories are appended without resetting prior graph row credits. Full raw source remains available at the SHA-bound source path; output conversions preserve per-row original source and decision evidence.",
+  "source_binding": {
+    "raw_source": {
+      "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/native-trajectories.jsonl",
+      "sha256": "5759f85506435dfe46ae344d02b1f124f4ceeca24536533c5bfd31c9e1866b66",
+      "bytes": 889460337,
+      "rows": 2749
+    },
+    "transfer_receipt": {
+      "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/transfer-receipt.json",
+      "sha256": "7667872a9806de5946b00e2b20b1d95051a1174fcd95e6b3b1a16d9fd8fbf04c"
+    },
+    "batch_source_bindings": {
+      "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/batch-source-bindings.json",
+      "sha256": "7f89e05ad14eb1729b2fa4e3ac963fd72281aaa050ea7f4c4632efd34c554e6e"
+    },
+    "decision_admission": {
+      "receipt_path": "/home/werg/data/dgxops/qwen-decision-cache-retention-20261017/v5/cd79f7518d0f36e5bf93087584d1a1f9aa2d5251421f47e4f6f7e83fc17da836/receipt.json",
+      "receipt_sha256": "1112fed02ba326fd2438776b82e962761e985b3217d0751e850d5e2adfcbd80e",
+      "output_sha256": "d6eb30105dbc2c7821c3092b0d464505b2e4a2f4ec297b50484bf2023c01389a",
+      "output_storage_status": "deleted_rebuildable_generated_cache",
+      "output_original_path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/decision-admission-cache/cd79f7518d0f36e5bf93087584d1a1f9aa2d5251421f47e4f6f7e83fc17da836/decisions.jsonl",
+      "output_bytes": 1410262102,
+      "cache_cleanup_plan": {
+        "path": "/home/werg/data/dgxops/qwen-decision-cache-retention-20261017/verified-cache-plan.json",
+        "sha256": "55c3689ca42e58b6a51f6de83db03df9460cb3bfcf6dc51ecc7fdf9e19c208a6",
+        "status": "cache-key-removed-after-output-hash-verification"
+      }
+    },
+    "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+    "models": {
+      "lfm25": {
+        "build_receipt_sha256": "ab85ce1663ad6f280534db344ec2a36d247e59c0ae63d44cf4a6d947514d9c48",
+        "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+        "train_sha256": "d056056f9940b095d5a684cbe76c77e3176d31283769efdf490a907d58c542ad",
+        "held_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+        "validation_proof_sha256": "4000b467bafe26c67e607ed7c6aeb35799feeadd9cfe5a8e84ec749c2be49a44"
+      },
+      "mellum21": {
+        "build_receipt_sha256": "3066a7680f30b44d62a6f8ed9d0ad656c9f151503a8a31d5740bae641f5bba6d",
+        "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+        "train_sha256": "ba0bffd51f463322ef142683c7fc437d4c76c5d5aa00e2dd31bf62b399597180",
+        "held_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+        "validation_proof_sha256": "4000b467bafe26c67e607ed7c6aeb35799feeadd9cfe5a8e84ec749c2be49a44"
+      }
+    }
+  }
+}

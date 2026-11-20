@@ -1,0 +1,20 @@
+{
+  "id": "pop-decision-four-family-source-20261013-v4",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261013-v1/fresh-decision-source-v4",
+  "include": [
+    "decision-cases.jsonl",
+    "decision-data.manifest.json",
+    "decision-episodes.jsonl",
+    "decision-episodes.audit.json"
+  ],
+  "source_class": "project-generated typed decision cases from pinned HF datasets",
+  "license": "per upstream dataset; pinned in source manifest",
+  "split": "train only, 800 each: AG News, BoolQ, BoardgameQA, PubMedQA",
+  "admission": "static source generation gate passed; provider labels and source-quality review still required",
+  "training_admission": false,
+  "required_conversion": "typed provider labeling and semantic/source review before native training conversion",
+  "derived_from": [
+    "natlang-decision-sources-catalog-20261004"
+  ]
+}

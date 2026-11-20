@@ -5,7 +5,7 @@ Datasets come from providers, each reading a source of truth rather than a hand 
              (parsed with ast, never imported), so a new supply round appears as soon as it lands in POOLS
   runs       GRPO runs (ops/grpo-*/run*/train.jsonl), their held evals, SFT runs (ops/sft-v*/run*), teacher-gen campaigns
   registry   the training-data registry (natlang_neuralese.common.data_registry): the git layer
-             (training/neuralese_corpora.json, 3k+ entries, one browsable dataset) and the journal producers write; every
+             (training/corpora, 3k+ entries, one browsable dataset) and the journal producers write; every
              registered dataset with a kind is a card, and its producer, inputs, license and consumers come from it
 Each dataset: {id, title, group, kind, reader, path, parts, protected, size_bytes, rows, provenance, consumers, relations}.
 Expensive facts (line counts, sizes) are cached under the dashboard cache and refreshed when files change.
@@ -25,7 +25,7 @@ from natlang_neuralese.common.paths import root as _root  # noqa: E402  (machine
 ROOTS = {name: str(_root(name)) for name in ('data_nvme', 'data_hdd', 'repo', 'archive')}
 HDD = ROOTS['data_hdd']
 GRPO = REPO + '/scripts/neuralese_data/grpo.py'
-REGISTRY = REPO + '/training/neuralese_corpora.json'
+REGISTRY = REPO + '/training/corpora'   # one file per entry (natlang_neuralese.common.corpus_registry)
 
 
 # ---------- cheap facts ----------
@@ -200,9 +200,10 @@ _REG = {}
 
 
 def registry():
-    s = sig(REGISTRY)
+    from natlang_neuralese.common import corpus_registry
+    s = corpus_registry.signature(REPO)
     if _REG.get('sig') != s:
-        reg = read_json(REGISTRY, {})
+        reg = corpus_registry.load(REPO)
         by_path = {}
         links = {}
 
@@ -238,13 +239,18 @@ def registry_entry_for(path):
 _CONS = {}
 
 
+def _registry_signature():
+    from natlang_neuralese.common import corpus_registry
+    return corpus_registry.signature(REPO)
+
+
 def consumers_index():
     """path -> [{run, how, amount}] from what runs recorded: GRPO pool.json pools, teacher-gen pool.json, sft-mix build.json
     inputs, SFT launch.json chains."""
     from natlang_neuralese.common.data_registry import journal_path
     key = tuple(sig(p) for p in glob.glob(OPS + '/grpo-*/run*/pool.json') + glob.glob(OPS + '/teacher-gen-*/*/pool.json')
                 + glob.glob(REPO + '/runs/sft-*/build.json') + glob.glob(OPS + '/sft-v*/run*/launch.json')
-                + [p for p in (str(journal_path()), REGISTRY) if os.path.exists(p)])
+                + [p for p in (str(journal_path()), REPO + '/training/corpus-registry.json') if os.path.exists(p)]) + (str(_registry_signature()),)
     if _CONS.get('key') == key:
         return _CONS['v']
     idx = {}
@@ -464,9 +470,9 @@ def _build_catalog():
                     'consumers': consumers_of(tc['path'], tc['parts_map']['tasks'])})
     # registry as one dataset
     reg, _ = registry()
-    out.append({'id': 'corpus-registry', 'title': 'Corpus registry (training/neuralese_corpora.json)', 'group': 'Registries', 'kind': 'index', 'reader': 'registry',
+    out.append({'id': 'corpus-registry', 'title': 'Corpus registry (training/corpora)', 'group': 'Registries', 'kind': 'index', 'reader': 'registry',
                 'path': REGISTRY, 'parts': [{'id': 'entries', 'title': 'Entries'}], 'rows': len(reg.get('corpora', [])),
-                'size_bytes': os.path.getsize(REGISTRY), 'format': 'natlang.neuralese-corpus-registry/1 + corpus-manifests/<id>.json (natlang.corpus-snapshot/1)',
+                'size_bytes': sum(e.stat().st_size for e in os.scandir(REGISTRY)), 'format': 'training/corpora/<id>.json (one registry entry each) + corpus-manifests/<id>.json (natlang.corpus-snapshot/1)',
                 'provenance': {'writer': 'scripts/neuralese_data/register_corpora.py'}})
     # every other registered dataset (producer records, backfill, git entries with a kind)
     out += _registry_datasets(out, sd_set, c)
@@ -711,7 +717,11 @@ def data_registry(inp):
         if not e:
             raise QueryError('no such registry entry', 'not_found')
         man = read_json(f"{REPO}/training/corpus-manifests/{e['id']}.json", None)
-        full = os.path.join(REPO, e.get('path', ''))
+        from natlang_neuralese.common.data_registry import absolute
+        try:
+            full = str(absolute(e.get('path', '')))
+        except ValueError:
+            full = os.path.join(REPO, e.get('path', ''))
         return {'kind': 'registry_entry', 'entry': e, 'manifest': man and {**{k: v for k, v in man.items() if k != 'files'}, 'files': (man.get('files') or [])[:300]},
                 'exists': os.path.exists(full), 'realpath': os.path.realpath(full)}
     q = (inp.get('q') or '').lower()

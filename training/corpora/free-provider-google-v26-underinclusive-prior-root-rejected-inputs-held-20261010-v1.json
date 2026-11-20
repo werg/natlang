@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-google-v26-underinclusive-prior-root-rejected-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "REJECTED preparation: physical prior-root undercounted historical logical aliases (6777 vs7584 overlap exclusions). No jobs launched and not eligible for launch/admission. Corrected fresh V26 reviewed-v2 replaces candidate without overwriting history."
+}

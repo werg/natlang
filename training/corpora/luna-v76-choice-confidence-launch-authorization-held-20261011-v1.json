@@ -1,0 +1,15 @@
+{
+  "id": "luna-v76-choice-confidence-launch-authorization-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v76-v37-runtimev17-v1",
+  "include": [
+    "root-approved-plan-v1.json",
+    "root-launch-receipt-v1.json"
+  ],
+  "split": "inherited-train-generation-control-evidence",
+  "source_class": "held-luna-launch-authorization-evidence",
+  "training_admission": false,
+  "admission": "launch-evidence-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Separate root-reviewed V76 plan and launch receipt; launch receipt pins plan SHA ba29e14472a16ef7db38300ddefabd605db6e28a481cd47380459bff62fa3c6d. Five-lane launch under supervisor 1075640. No mutable campaign launch state, results, or logs included."
+}

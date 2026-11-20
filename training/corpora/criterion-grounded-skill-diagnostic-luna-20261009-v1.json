@@ -1,0 +1,26 @@
+{
+  "id": "criterion-grounded-skill-diagnostic-luna-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "criterion-grounded-skill-candidate-20261008-v1/artifact-manifest.json",
+    "criterion-grounded-skill-candidate-20261008-v1/fixtures/contexts.json",
+    "criterion-grounded-skill-candidate-20261008-v1/fixtures/expected-decisions.json",
+    "criterion-grounded-skill-candidate-20261008-v1/skills/judge-against-criteria/SKILL.md",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/plan-root-review-v3.json",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/root-review-v3.md",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/plan-root-approved-v3.json",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/live-results-review-v1.json",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/live-results-manifest-v1.json",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-results-v3/**",
+    "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/publication-snapshot-v1/**",
+    "authored-root-guided-runtime-v9/frozen/**"
+  ],
+  "split": "diagnostic",
+  "source_class": "project-authored-synthetic-fixtures-with-sampled-provider-student-observations",
+  "admission": "held-diagnostic-only-no-training-admission",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [],
+  "notes": "Four project-authored synthetic criterion fixtures evaluated in discovery and instructed arms using Luna through normal native skill discovery/read. Preserves raw results and traces, exact approved plan, used skill candidate, evaluator and fake-provider harness source copies, host-only contexts/oracle, root reviews, entire pinned frozen runtime v9, plus a held proposed task-workflows-v3 collection snapshot. Eight executions / 32 collector requests; all four exact host decisions matched in each arm and all skill bodies were read. This is diagnostic evidence only, not a clean benchmark, generalization claim, or training candidate. The skill collection v3 is held and was not used in this run. No source-world expansion or automatic admission."
+}
