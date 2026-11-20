@@ -68,6 +68,10 @@ def operator_turn(site, seed_text, provenance, *, case, index):
             'evidence': evidence(provenance)}
 
 
+def turn_chars(messages, reply):
+    return sum(len(m['content']) for m in messages if isinstance(m.get('content'), str)) + len(reply)
+
+
 def turns(args):
     tokenizer, roles, _ = operator_rows.load_tokenizer(args.base)
     renderer = TokenRenderer(tokenizer, role_ids=roles)
@@ -90,8 +94,8 @@ def turns(args):
                         break
                     read += 1
                     record = json.loads(line)
-                    if record.get('split') in ('test', 'validation'):
-                        continue   # test cases stay for the ablation and evaluation
+                    if (record.get('split') in ('test', 'validation')) != (args.split == 'test'):
+                        continue   # train turns from train cases; test turns (evaluate) from test cases only
                     if held.hit(record):
                         counts['held_dropped'] += 1
                         continue
@@ -112,6 +116,9 @@ def turns(args):
                             counts[f'unverified:{seed["provenance"]}'] += 1
                             continue
                         text = tokenizer.decode(seed_ids, skip_special_tokens=False)
+                        if args.max_chars and turn_chars(site['messages'], text) > args.max_chars:
+                            counts['over_max_chars'] += 1   # a row's activations scale with its length (fit memory)
+                            continue
                         stream.write(json.dumps(operator_turn(site, text, seed['provenance'], case=case, index=index)) + '\n')
                         counts[f'{site["operator"]}:{seed["provenance"]}'] += 1
                         wrote = True
@@ -119,6 +126,63 @@ def turns(args):
     sites.close()
     print(json.dumps({'out': str(out), 'counts': dict(counts)}, sort_keys=True))
     return counts
+
+
+def evaluate(args):
+    """Held-out check of a fit on test-split operator turns, forward only on the frozen backbone: the token-weighted NLL
+    of each verified reply under view's text, under the state primed from it (the fit's initial state) and under the
+    trained state, paired per row."""
+    import math
+    import random
+    import torch
+    from natlang_neuralese.common.cuda_context import prepare_gpu
+    from natlang_neuralese.data.native_graph import graph_loss
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.tune.build import fit_store_context, import_archive
+    from natlang_neuralese.tune.rows import turn_graph
+    build = Path(args.build)
+    result = json.loads((build / 'result.json').read_text()) if (build / 'result.json').exists() else None
+    state = json.loads((build / 'state.json').read_text())
+    init = json.loads((build / 'soft-init.json').read_text())
+    prepare_gpu(args.device)
+    config = {'device': args.device}
+    with fit_store_context(config) as store:
+        engine = load_native_engine(args.checkpoint, device=args.device, dtype=getattr(torch, args.dtype), store=store)
+        import_archive(engine, [build / 'artifacts'], [build / 'states'])
+        turns = [json.loads(line) for line in Path(args.turns).read_text().splitlines() if line.strip()]
+        random.Random(0).shuffle(turns)
+        turns = turns[:args.rows]
+        arms = {'text': None, 'primed': {key: record['state'] for key, record in init.items()},
+                'trained': dict(state['soft_states'])}
+        losses = {arm: [] for arm in arms}
+        engine.shared_model.eval()
+        for turn in turns:
+            turn = {**turn, 'partition': 'train'}   # rendering only; never trained
+            for arm, soft in arms.items():
+                row = turn_graph(engine, turn, prompt_weight=0., soft=soft)
+                example = parse_graph(row['graph'], tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
+                blocks = {name: engine.store.get_native_state(spec['id']).block
+                          for name, spec in (row['graph'].get('external_states') or {}).items()}
+                identity = {name: {key: getattr(block, key) for key in
+                                   ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
+                            for name, block in blocks.items()}
+                with torch.no_grad():
+                    loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=False,
+                                         **({'external_blocks': blocks, 'external_identity': identity} if blocks else {}))
+                losses[arm].append(float(loss))
+    def paired(a, b):
+        diffs = [y - x for x, y in zip(losses[a], losses[b])]
+        mean = sum(diffs) / len(diffs)
+        sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / max(len(diffs) - 1, 1))
+        return {'mean_change': mean, 'se': sd / math.sqrt(len(diffs)), 'lower_rows': sum(d < 0 for d in diffs), 'rows': len(diffs)}
+    report = {'build': str(build), 'turns': args.turns, 'rows': len(turns), 'step': state.get('step'),
+              'complete': result is not None, 'mean_nll': {arm: sum(v) / len(v) for arm, v in losses.items()},
+              'primed_vs_text': paired('text', 'primed'), 'trained_vs_primed': paired('primed', 'trained'),
+              'trained_vs_text': paired('text', 'trained')}
+    print(json.dumps(report, indent=1))
+    if args.out:
+        Path(args.out).write_text(json.dumps({**report, 'losses': losses}, indent=1) + '\n')
 
 
 def manifest_for(bindings, program_hash):
@@ -167,6 +231,17 @@ def main(argv=None):
     t.add_argument('--context-tokens', type=int, default=131072)
     t.add_argument('--admit-mechanical', action='store_true',
                    help='admit mechanical seeds as weak (enclosing-success) rows; off by default: they are not verified')
+    t.add_argument('--split', choices=('train', 'test'), default='train')
+    t.add_argument('--max-chars', type=int, default=40000,
+                   help='longest row (site and reply characters; ~10k tokens): bounds the fit\'s activation memory (0: no cap)')
+    e = sub.add_parser('evaluate')
+    e.add_argument('--build', required=True)
+    e.add_argument('--turns', required=True, help='test-split turns (turns --split test)')
+    e.add_argument('--checkpoint', required=True)
+    e.add_argument('--rows', type=int, default=64)
+    e.add_argument('--device', default='cuda')
+    e.add_argument('--dtype', default='bfloat16')
+    e.add_argument('--out')
     p = sub.add_parser('plan')
     p.add_argument('--turns', required=True)
     p.add_argument('--checkpoint', required=True)
@@ -179,10 +254,7 @@ def main(argv=None):
     p.add_argument('--dtype', default='bfloat16')
     p.add_argument('--store-scratch', default=None)
     args = parser.parse_args(argv)
-    if args.command == 'turns':
-        turns(args)
-    else:
-        plan(args)
+    {'turns': turns, 'plan': plan, 'evaluate': evaluate}[args.command](args)
 
 
 if __name__ == '__main__':

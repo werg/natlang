@@ -165,10 +165,17 @@ def load_plan(path):
     return plan, manifest, rows, read(plan['rollouts']) if plan.get('rollouts') else []
 
 
+SEGMENT_EXIT = 75   # a segment ended before the last step: rerun to continue (EX_TEMPFAIL)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--plan', required=True)
     parser.add_argument('--out', required=True)
+    parser.add_argument('--segment-steps', type=int, default=0,
+                        help='end this process after N steps (state saved, exit 75): a driver reruns it until result.json '
+                             'exists. Bounds the host memory a long fit accumulates per step (2026-11-20: ~80 MB/step on '
+                             'LFM3); the resume restores state.json and the artifacts exactly, as after a preemption')
     args = parser.parse_args(argv)
     plan, manifest, rows, rollouts = load_plan(args.plan)
     # The effective prompt weight: explicit, else the current default, except that an in-flight fit resuming its
@@ -188,6 +195,8 @@ def main(argv=None):
     with fit_store_context(config) as store:
         engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
                                     dtype=engine_dtype(config), store=store, training_state=False)
+        from ..common.cuda_context import drop_file_cache
+        drop_file_cache(config['checkpoint'])   # the weights are on the device; its cached pages are not needed
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
         import_archive(engine,
@@ -233,7 +242,11 @@ def main(argv=None):
         trainer = JointTrainer(engine, manifest, rows + rollouts, recipe, state=state, privileged=privileged,
                                workdir=out / 'rl', parent=parent, pinned=plan.get('pinned'), warm=plan.get('warm'))
         save()
+        segment_start = trainer.state['step']
         while trainer.state['step'] < trainer.total_steps:
+            if args.segment_steps and trainer.state['step'] - segment_start >= args.segment_steps:
+                print('progress: ' + json.dumps({'segment_end': trainer.state['step'], 'of': trainer.total_steps}), flush=True)
+                return SEGMENT_EXIT
             before = json.loads(json.dumps(trainer.state)) if plan.get('emitBoundaries') else None
             record = trainer.step()
             save()
