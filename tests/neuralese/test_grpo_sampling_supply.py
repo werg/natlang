@@ -280,6 +280,30 @@ def test_teacher_demonstrations_are_verified_held_closed_capped_and_least_replay
     assert demos.take([], 8, stats) == []
 
 
+def test_teacher_demonstration_uses_persist_across_a_resume(tmp_path, monkeypatch):
+    """A resume continues least-used-first from the saved counters instead of replaying the same demonstrations."""
+    monkeypatch.setattr(sft_sources, 'TemplateRenderer', FakeRenderer)
+    work = teacher_work(tmp_path, [(f'teacher:p:a{i}:0', 'a', 'm0', True) for i in range(4)])
+    manifest = held_manifest(tmp_path, {'id': 'h'})
+    by_id = {'a': {'id': 'a'}, 'h': {'id': 'h'}}
+    uses = tmp_path / 'run' / 'teacher-demo-uses.json'
+    uses.parent.mkdir()
+
+    def build(take_seed):
+        return grpo.TeacherDemos([str(work)], by_id, manifest, None, max_per_task=4, seed=0, log=lambda r: None,
+                                 uses_path=uses, take_seed=take_seed)
+    stats = collections.Counter()
+    demos = build('0:0')
+    first = {demos.take(['a'], 1, stats)[0]['round'] for _ in range(2)}
+    demos.take(['a'], 1, stats, use='rrl_uses', prefix='rrl_demo')
+    demos.save()
+    resumed = build('0:9')
+    assert sum(item['uses'] for item in resumed.by_task['a']) == 2
+    assert sum(item.get('rrl_uses', 0) for item in resumed.by_task['a']) == 1
+    after = {resumed.take(['a'], 1, stats)[0]['round'] for _ in range(2)}
+    assert first.isdisjoint(after) and len(first | after) == 4              # the unused two come next
+
+
 def test_a_teacher_demonstration_trains_ratio_free_with_its_row_weights():
     import torch
     import exp0_sft
@@ -321,3 +345,14 @@ def test_teacher_demonstrations_default_on_with_an_opt_out(monkeypatch):
 def test_prefix_retained_memory_is_bounded_by_default(monkeypatch):
     assert parsed(monkeypatch).prefix_retained_gb == 8.
     assert parsed(monkeypatch, '--prefix-retained-gb', '0').prefix_retained_gb == 0.
+
+
+def test_sd_buffer_survives_a_resume_without_rolled_back_steps(tmp_path):
+    path = tmp_path / 'sd-buffer.pkl'
+    rows = [{'prompt': np.array([1, 2], np.int32), 'sample': np.array([3], np.int32)}]
+    buffer = [{'episode': {'task_id': 't', 'rows': rows, 'decisions': []}, 'version': v, 'uses': v % 2} for v in (3, 4, 5)]
+    grpo.sd_buffer_save(path, buffer)
+    restored = grpo.sd_buffer_load(path, 5)                  # the state saved after step 5 (lowered at 0..4)
+    assert [item['version'] for item in restored] == [3, 4] and restored[1]['uses'] == 0
+    assert restored[0]['episode']['rows'][0]['prompt'].tolist() == [1, 2]
+    assert grpo.sd_buffer_load(None, 5) == [] and grpo.sd_buffer_load(tmp_path / 'missing.pkl', 5) == []

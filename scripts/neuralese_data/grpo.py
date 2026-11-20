@@ -225,10 +225,12 @@ def git_pin():
 
 
 def held_complete(out):
-    """A finished held measurement in ``out``: a cut ``held_eval measure`` also writes result.json (complete false), and a
-    loop that took that for done would compare against a 20-episode start policy (grpo-v2-run1, 2026-11-13)."""
+    """A finished held measurement in ``out`` (its directory, or the result file itself): a cut ``held_eval measure``
+    also writes result.json (complete false), and a loop that took that for done would compare against a 20-episode
+    start policy (grpo-v2-run1, 2026-11-13)."""
+    path = Path(out) if str(out).endswith('.json') else Path(out) / 'result.json'
     try:
-        return bool(json.loads((Path(out) / 'result.json').read_text()).get('complete'))
+        return bool(json.loads(path.read_text()).get('complete'))
     except (OSError, ValueError):
         return False
 
@@ -1728,6 +1730,32 @@ def sd_take(buffer, step, args, stats):
     return [item['episode'] for item in chosen]
 
 
+def sd_buffer_save(path, buffer):
+    """The self-distillation buffer to ``path`` (atomic; None: not persisted)."""
+    if path is None:
+        return
+    import pickle
+    tmp = Path(path).with_suffix('.tmp')
+    with tmp.open('wb') as handle:
+        pickle.dump({'schema': 1, 'buffer': buffer}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    tmp.replace(path)
+
+
+def sd_buffer_load(path, step):
+    """The saved buffer's items added before ``step`` (an item's version is the step that lowered it, which produced
+    version + 1: a resume from an earlier state never replays successes of the steps it rolled back); [] when absent or
+    unreadable."""
+    if path is None or not Path(path).exists():
+        return []
+    import pickle
+    try:
+        with Path(path).open('rb') as handle:
+            saved = pickle.load(handle)
+    except Exception:
+        return []
+    return [item for item in saved.get('buffer', []) if item['version'] < step]
+
+
 def renderer_tokenizer(export_dir, out):
     """A tokenizer directory for ``sft_sources.TemplateRenderer`` from the actor's HF export (its tokenizer, template and
     model type), so teacher calls render with the exact ids the actor serves."""
@@ -1749,7 +1777,8 @@ class TeacherDemos:
     rendering (``call_row`` on the replayed turns: the student-form prompt the runtime builds, the teacher's reply as
     target, an empty think block at weight 0)."""
 
-    def __init__(self, works, by_id, held_manifest, tokenizer, max_per_task, seed, log=print):
+    def __init__(self, works, by_id, held_manifest, tokenizer, max_per_task, seed, log=print, uses_path=None,
+                 take_seed=None):
         import random as _random
         from sft_sources import TemplateRenderer, held_closure, held_excluded_ids, verified_episodes
         self.renderer = TemplateRenderer(tokenizer)
@@ -1793,6 +1822,17 @@ class TeacherDemos:
                 item['uses'] = 0
             self.by_task[task_id] = kept
         self.episodes = sum(len(v) for v in self.by_task.values())
+        # Least used first spans resumes: the use counters persist in ``uses_path`` (a resume used to restart them at 0
+        # with the same tie order, so every resume replayed the same demonstrations first: grpo-v4-run2 resumed 14 times
+        # in 40 steps), and ties break by ``take_seed`` (the resumed run's first group), not the construction seed.
+        self.uses_path = Path(uses_path) if uses_path else None
+        if self.uses_path is not None and self.uses_path.exists():
+            saved = json.loads(self.uses_path.read_text())
+            for items in self.by_task.values():
+                for item in items:
+                    item.update(saved.get(item['key']) or {})
+        if take_seed is not None:
+            self.rng = _random.Random(take_seed)
         log({'event': 'sd teacher demonstrations', 'tasks': len(self.by_task), 'episodes': self.episodes,
              'funnel': {k: dict(v) for k, v in self.funnel.items()}, 'renderer': self.renderer.identity})
 
@@ -1831,6 +1871,17 @@ class TeacherDemos:
             out.append({'task_id': item['task_id'], 'round': item['key'], 'rows': rows, 'decisions': [],
                         'reward': 1., 'quality': 1., 'role': 'sd_teacher', 'teacher_model': item['teacher']})
         return out
+
+    def save(self):
+        """The use counters to ``uses_path`` (the train loop calls it after every step)."""
+        if self.uses_path is None:
+            return
+        with self.lock:
+            uses = {item['key']: {k: v for k, v in item.items() if k.endswith('uses') and v}
+                    for items in self.by_task.values() for item in items}
+        tmp = self.uses_path.with_suffix('.tmp')
+        tmp.write_text(json.dumps({k: v for k, v in uses.items() if v}, sort_keys=True) + '\n')
+        tmp.replace(self.uses_path)
 
 
 def sd_teacher_tasks(collector, band):
@@ -2123,7 +2174,7 @@ class ReasoningRL:
     points, so concurrent copies would each prefill it), and each scoring forward leaves the next step's history
     (z, action, tool output) in the radix cache for the draws that continue from it."""
 
-    def __init__(self, args, sglang_url, close_id, stop_ids, banned, markers, collector, demos, log=print):
+    def __init__(self, args, sglang_url, close_id, stop_ids, banned, markers, collector, demos, log=print, first_group=0):
         self.args, self.url, self.close_id, self.collector, self.demos, self.log = (
             args, sglang_url, close_id, collector, demos, log)
         self.stops = sorted({close_id, *stop_ids})
@@ -2134,7 +2185,9 @@ class ReasoningRL:
         self.jolt, self.queued = collections.deque(maxlen=256), collections.deque()
         self.lock = threading.Lock()
         self.counts = collections.Counter()
-        self.rng = random.Random(f'{args.seed}:reasoning-rl')
+        # seeded per resume (the resumed run's first group): one seed for every resume repeated its demo picks, rewrite
+        # choices and sampling seeds after each restart
+        self.rng = random.Random(f'{args.seed}:reasoning-rl:{first_group}')
         self.ids = 0
         self.demo_tasks = sorted(demos.by_task) if demos is not None else []
 
@@ -2217,6 +2270,12 @@ class ReasoningRL:
                 else:
                     groups, carried = self.run(segment, emit=self._emit)
             except Exception as error:   # a failed request loses the rest of this trajectory only
+                if stop.is_set() or self.collector.stop.is_set():
+                    # The run is stopping: the actor goes with the unit (or after train() returns) and takes the
+                    # in-flight requests with it. Not an actor failure; the unfinished trajectory is dropped as any
+                    # unfinished episode is (grpo-v4-run2: all 114 'request failed' events were these).
+                    self.counts['abandoned_at_stop'] += 1
+                    return
                 self.counts['failures'] += 1
                 if self.counts['failures'] <= 20 or self.counts['failures'] % 100 == 0:
                     self.log({'event': 'reasoning rl request failed', 'failures': self.counts['failures'],
@@ -3397,7 +3456,8 @@ def train(args):
     if not args.replay and (sd_teacher_on or (reasoning_rl_on and 'demos' in args.reasoning_rl_sources.split(','))):
         teacher_demos = TeacherDemos(args.sd_teacher_source or SD_TEACHER_SOURCES, collector.by_id, args.held_manifest,
                                      renderer_tokenizer(args.actor_export, work / 'sd-teacher-tokenizer'),
-                                     args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r))
+                                     args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r),
+                                     uses_path=work / 'teacher-demo-uses.json', take_seed=f'{args.seed}:{first_group}')
     replay_corpora = []
     if args.replay_corpus and args.no_neuralese_passthrough:
         raise SystemExit('--replay-corpus consumers import their producer documents: drop --no-neuralese-passthrough')
@@ -3552,7 +3612,7 @@ def train(args):
         from natlang_neuralese.model.shared_state import ROLE_MARKERS
         markers = [i for i in (served.token_to_id(m) for m in ROLE_MARKERS) if i is not None]   # Neuralese role markers
         reasoning_rl = ReasoningRL(args, sglang_url, think_close, stop_ids, banned, markers, collector, teacher_demos,
-                                   log=lambda r: log_line(log, r))
+                                   log=lambda r: log_line(log, r), first_group=first_group)
         reasoning_rl.start(stop)
         log_line(log, {'event': 'reasoning rl', 'sources': reasoning_rl.sources, 'demo_tasks': len(reasoning_rl.demo_tasks),
                        'stop_ids': reasoning_rl.stops, 'banned': banned, 'markers': markers,
@@ -3597,7 +3657,10 @@ def train(args):
                                        '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT).returncode
                 base = Path(args.held_baseline) if args.held_baseline else work / 'held' / 'step-00000' / 'result.json'
-                if (step_number or name) and code == 0 and base.exists():
+                # Only complete measurements pair: a stop mid-measurement also exits 0 with a partial result.json
+                # (grpo-v4-run2 held/step-00038: 13 of 512 episodes, with a compare a judge would read as the step's).
+                (out / 'compare-vs-step0.json').unlink(missing_ok=True)
+                if (step_number or name) and code == 0 and held_complete(base) and held_complete(out):
                     subprocess.run([*python, 'compare', str(base), str(out / 'result.json'), '--out',
                                     str(out / 'compare-vs-step0.json'), *strict_series], cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT)
         finally:
@@ -3724,7 +3787,8 @@ def train(args):
                                        '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle,
                                       stderr=subprocess.STDOUT).returncode
-                if step_number and code == 0 and held_complete(base_out):
+                (out / 'compare-vs-step0.json').unlink(missing_ok=True)   # complete measurements only (as held())
+                if step_number and code == 0 and held_complete(base_out) and held_complete(out):
                     subprocess.run([*python, 'compare', str(base_out / 'result.json'), str(out / 'result.json'), '--out',
                                     str(out / 'compare-vs-step0.json'), *strict_series], cwd=REPO, env=pinned_env(), stdout=handle,
                                    stderr=subprocess.STDOUT)
@@ -3778,10 +3842,20 @@ def train(args):
                     (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
                     if (directory / 'checkpoint.pt').exists():
                         sha = (directory / 'sha256.txt').read_text().strip()
-                        last_start, last_step = time.time(), step_number
-                        evaluate(step_number, held_root / f'step-{step_number:05d}', sha,
-                                 ['serve-checkpoint', '--checkpoint', str(directory / 'checkpoint.pt'), '--policy-id', sha,
-                                  '--commit', run['code']['git_commit'], '--step', str(step_number), *pop_engine])
+                        previous_start, last_start, last_step = last_start, time.time(), step_number
+                        try:
+                            evaluate(step_number, held_root / f'step-{step_number:05d}', sha,
+                                     ['serve-checkpoint', '--checkpoint', str(directory / 'checkpoint.pt'), '--policy-id',
+                                      sha, '--commit', run['code']['git_commit'], '--step', str(step_number), *pop_engine])
+                        except Exception:
+                            # Pop never served it (rsync or serve failed): the newest checkpoint is tried at the next
+                            # retry instead of an --held-every-hours interval later (grpo-v4-run2 lost up to an hour
+                            # of Pop time per 'Pop does not serve' failure).
+                            if not (held_root / f'step-{step_number:05d}' / 'run.json').exists():
+                                last_start = previous_start
+                                held_steps.discard(step_number)   # never measured: write_native's pruning may drop it
+                                (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
+                            raise
             except Exception as error:   # Pop or the network failed: the run trains on, the evaluation retries later
                 log_line(log, {'event': 'held eval failed', 'remote': 'pop', 'error': repr(error)[:500]})
                 stop.wait(540)
@@ -3792,7 +3866,13 @@ def train(args):
     # actor tokens/s while the learner computes (learner-phase slots) and while it waits (all slots), cumulative
     phase_totals = collections.Counter()
     phase_mark = {'time': time.time(), 'tokens': actor_generated(args.actor)}
-    sd_buffer = []   # self-distillation replay of recent rare successes (``sd_add``/``sd_take``; --sd-weight)
+    # self-distillation replay of recent rare successes (``sd_add``/``sd_take``; --sd-weight). It persists in
+    # WORK/sd-buffer.pkl so a resume keeps the window's successes (grpo-v4-run2 resumed every 1-6 steps against a 4-step
+    # window and lost most of them); NATLANG_SD_BUFFER_PERSIST=0 opts out.
+    sd_buffer_path = work / 'sd-buffer.pkl' if os.environ.get('NATLANG_SD_BUFFER_PERSIST', '1') != '0' else None
+    sd_buffer = sd_buffer_load(sd_buffer_path, step) if args.resume and args.sd_weight > 0 else []
+    if sd_buffer:
+        log_line(log, {'event': 'sd buffer restored', 'episodes': len(sd_buffer)})
     memetic_history = list(memetic_gap_history(work / 'train.jsonl'))   # [sum, count] of per-group guided gaps
     while not stop.is_set() and (not args.max_steps or step < args.max_steps):
         phase = collections.OrderedDict()
@@ -4466,6 +4546,10 @@ def train(args):
             record.update(blocks_removed=files, blocks_freed_mb=round(freed / 2**20, 1),
                           block_gc_s=round(time.time() - t, 2))
         log_line(log, record)
+        if teacher_demos is not None:
+            teacher_demos.save()
+        if args.sd_weight > 0:
+            sd_buffer_save(sd_buffer_path, sd_buffer)
         if save_native and held_due:
             sync.wait()                   # the actor now serves (and attests) this step's checkpoint
             held(step, args.held_samples)
@@ -4476,6 +4560,7 @@ def train(args):
     if offload is not None:
         offload.wait()
     collector.stop.set()
+    stop.set()                            # reasoning-RL workers stop before the actor goes
     log_line(log, {'event': 'stopped', 'step': step})
 
 

@@ -844,6 +844,10 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
         warnings.append('different code or series (' + ', '.join(sorted(series_differences)) + ')')
     if engine_differences:
         warnings.append('engine differs in ' + ', '.join(sorted(engine_differences)))
+    incomplete = [name for name, result in (('first', first), ('second', second)) if not result.get('complete')]
+    if incomplete:
+        # a stopped measurement's partial result pairs only the tasks it reached (a fast-first subset): never a verdict
+        warnings.append('incomplete measurement: ' + ', '.join(incomplete))
 
     timed_out = sample_timed_out
 
@@ -880,7 +884,7 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     out_second = sum(ran_out(b[k]) and not ran_out(a[k]) for k in common)
     rates = ran_out_rate(first), ran_out_rate(second)
     return {'first': side(first), 'second': side(second), 'engine': engines[0] or engines[1],
-            'engine_attested': None not in engines, 'same_code': side(first)['code'] == side(second)['code'],
+            'engine_attested': None not in engines, 'complete': not incomplete, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
             'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
             'series_differences': series_differences, 'engine_differences': engine_differences, 'warnings': warnings,
