@@ -436,7 +436,9 @@ coedit. All five independent checks passed. The capture is registered as
 `vibestudio-open-goal-luna-smoke-reconcile-20261120-cqppvh`.
 The native trajectory IR yielded nine learner chains, 1,735 target tokens,
 and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
-open-goal shares were 100% for this one-goal smoke. Its Tick unit peaked at
+open-goal shares were 100% for this one-goal smoke. The learner's CPU input
+loader packed all nine chains and reproduced the weighted target count.
+The longest chain was 25,875 tokens under its 32,000-token limit. The Tick unit peaked at
 7.3 GiB over 3 minutes 10 seconds. No campaign or training was launched.
 
 The [462-goal release](vibestudio-open-goal-pop-pins-462.tsv) preserves all
