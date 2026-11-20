@@ -5494,3 +5494,79 @@ first checkpoint ~1 h after the SFT ends and its held result 2.5-4 h later. Firs
   extract restarting each time). The build runs at medium (5 GB, CPU); it preempts only low units.
 - *Task-supply rounds 17-23 and git-history (~1,450 rows) have no teacher episodes:* gap-v1's pool ends at
   task-supply-20261118g. A teacher campaign on them would bring those families into the next mix.
+
+## 2026-11-20 22:00, expert iteration is the method (owner-approved 2026-11-20); sft-v7 is its first cycle (expert-iteration strand)
+
+**Owner question:** "what is the best strategy and data distribution combination here to move efficiently towards a very
+strong model?" SFT, reasoning RL and GRPO ran as separate channels with separate data rules. **Owner approval
+2026-11-20 ("OK let's make it so!"):** one expert-iteration loop in which every source feeds a single per-task pool of
+verified trajectories in the student's own distribution. AGENTS.md "State" now names it as the method; GRPO is the
+polish phase after SFT gains flatten, not the engine.
+
+**Why (the evidence on this page).**
+- sft-v5 (verified teacher actions with teacher think as context, plus own successes) is the only training that has
+  moved held-v3 up: +5.8 pts p 0.03 interim, +4.3 pts p 0.054 complete at grpo-v5-run1 step 1.
+- grpo-v4-run2: no held gain in 40 steps; collection-bound (126 episodes an hour, actor released 39% of wall time for
+  the learner). Best-of-k collection without a learner runs the actor at its cap all the time (~1.6-2k tok/s, ~15k
+  completion tokens an episode: ~400 episodes an hour).
+- sft-v3's -16 pts: trained teacher think blocks (Luna's style) cut per-call reasoning 1,919 -> 350 chars and raised
+  ran-out. Off-distribution reasoning targets hurt; on-distribution ones (own successes) did not.
+- Reasoning RL's sequence reward selected early closes (future agreement bias, 16:30 entry); the token-level twin FKL
+  replaced it. Filling student reasoning into teacher trajectories offline (filled_reasoning.py, rationalization strand)
+  does the same job as data, with no RL credit assignment.
+
+**The loop (each cycle one bounded collect -> train -> eval experiment, pinned).**
+1. **Tasks are the stock:** authored task rounds, teacher-campaign tasks and the existing pools, through the registry's
+   `grpo-pool` role minus the held-v3/v2 closure and errata.
+2. **Per task, the best verified trajectories in the student's own distribution, from the cheapest source:** own
+   best-of-k successes (execution-verified, exact replay) first; teacher trajectories where the student has none.
+   **Teacher reasoning is chosen per teacher model (owner correction 2026-11-20):** it trains as a target where it suits
+   (long enough, close to the student's style, actions likely after it), else stays masked context or is replaced by
+   student-filled reasoning. The rationalization strand audits each model and publishes the treatment through the
+   registry role `teacher-think-treatment`; the builder reads it per episode (`sft_sources.ThinkTreatment`: episode,
+   then source, then model, then default). Empty think blocks are never targets (unchanged masks).
+3. **Frontier weighting by the student's measured pass rate per task** (`frontier.json`, the cycle's own collection;
+   never held tasks): solved (>= 0.75) keeps one own episode as a light anchor and no teacher; sometimes trains own
+   successes (task cap by pass rate, as before); never/unmeasured trains teacher trajectories (filled ones replace their
+   unfilled episode, `replaces=teacher`). Own successes of the trained policy are taken before older policies'.
+   Family share 0.05 and wrapper share 0.15 per source as before; Neuralese graph 0.05 and operator 0.03 aux shares stay.
+4. **Train:** Ambient SFT (exp0_sft default) on that mix; held-v3 on Pop is the gate, paired on the cycle's pin with the
+   start policy and the base.
+5. **Iterate:** the adopted policy resamples; its successes replace teacher trajectories where it now solves a task;
+   its failures (`never`, or rate <= 0.25) feed the teacher campaign as a frontier list (teacher_gen gap tiers with
+   `--student-groups` = this collection, every earlier campaign as `--covered-by`).
+6. **GRPO** after SFT gains flatten (two cycles without adoption), from the best policy.
+
+**Built (`scripts/neuralese_data/expert_iteration.py`; tests `tests/neuralese/test_expert_iteration.py`).**
+- `select`: pool tasks ordered band -> failed -> unmeasured (solved left out), families in turn, rates from the base
+  measurement, every GRPO run's and earlier cycles' groups.
+- `collect`: best-of-k with the start policy's SGLang actor (`grpo.actor_command`: held engine serve args, overlapped
+  scheduler, no memory release since there is no learner) at 128 slots and 128 running, grpo's own `Collector`
+  (episodes, scoring, dynamic sampling) over the fixed order, one group of k per task, no new group after `--hours`.
+  Writes GRPO-format groups, so `sft_sources extract --rl` and `teacher_gen --student-groups` read it unchanged.
+  Resumable (scored tasks skipped). Registered as rollouts.
+- `frontier`: per-task rates and tiers of the one policy every collection served; refuses held tasks.
+- `cycle`: pin -> Pop base + start held (background) -> select -> collect (+ `filled_reasoning.py generate --polite`
+  on the same actor when `--fill` is given) -> frontier -> teacher frontier campaign (low priority, 4+4+1 teacher slots
+  beside gap-v1) -> extract/replay (seeded from earlier WORKs' verdicts) and the filled build -> frontier build -> SFT
+  (`ops/grpo-v4/launch-sft.sh`) -> Pop held of the candidate -> verdict. Each stage resumable (`stages/*.done`).
+- `sft_sources build`: `--frontier`, `--anchor-per-task`, `--think-treatment` (default: the registry role, else
+  `--teacher-think` for every episode, today's behaviour); build.json records the frontier and treatment counts.
+- `grpo.py`: `build_parser()` and `actor_command()` factored out (no behaviour change) for the collector.
+
+**Per-cycle criteria (declared now; each cycle's DECISIONS line restates them with its numbers).** Held-v3 at 2 samples,
+candidate vs the start policy measured on the cycle's pin:
+- **Success:** delta >= +2 pts with ran-out no more than 2 pts above the start's. The candidate is adopted; if it is
+  also above the base, `ops/current-policy.json` points at it.
+- **Failure:** delta < -3 pts at p < 0.05: not adopted, diagnosis starts (degradation means bug); the next cycle
+  resamples from the same start.
+- **Neutral:** otherwise; adopted when the point estimate is > 0 with ran-out within 2 pts.
+- **Expected (sft-v7):** +2 to +5 pts over its start.
+
+**sft-v7, the first cycle (after sft-v6).** Start: the best complete held policy at launch (sft-v6's SFT checkpoint if its
+held result is at least sft-v5's, else sft-v5's checkpoint 16cd47af). k 4, 6 h collection, own loss share 0.35, teacher
+budget 180M forward tokens, LR 5e-6, Ambient SFT on, `--prefer-unseen` the start's build. Wall time: pin 10 min,
+collection 6-7 h (~2,400 episodes over ~600-900 tasks with dynamic sampling), replay and build 2-3 h, SFT ~3.5-4 h,
+candidate held on Pop 2.5-4 h (base and start measured on Pop during collection): **~15-18 h** to the verdict.
+Launch: `ops/ei/launch.sh` (below in the report). Coordination: the rationalization strand owns filled_reasoning.py and
+the treatment table; until the table is registered every teacher episode keeps today's `context`.

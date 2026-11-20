@@ -1,0 +1,131 @@
+"""Expert iteration (scripts/neuralese_data/expert_iteration.py) and its pool rules in sft_sources build."""
+import collections
+import json
+import random
+import sys
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(REPO / 'scripts/neuralese_data'), str(REPO / 'training/neuralese'), str(REPO)]
+
+import expert_iteration as ei  # noqa: E402
+import sft_sources  # noqa: E402
+
+
+def write_group(root, name, task_id, rewards, role='student'):
+    directory = root / 'groups' / name
+    directory.mkdir(parents=True)
+    (directory / 'rewards.jsonl').write_text(''.join(
+        json.dumps({'task_id': task_id, 'reward': r, 'jolt_role': role}) + '\n' for r in rewards))
+    return directory
+
+
+def test_group_outcomes_count_student_samples_only(tmp_path):
+    a = write_group(tmp_path, 'g000000', 't1', [1.0, 0.0, None, 1.0])
+    b = write_group(tmp_path, 'g000001', 't1', [1.0], role='teacher')
+    c = write_group(tmp_path, 'g000002', 't2', [0.5, 0.0])
+    assert ei.group_outcomes([a, b, c, tmp_path / 'missing']) == {'t1': [2, 3], 't2': [0, 2]}
+
+
+@pytest.mark.parametrize('s,n,expected', [(4, 4, 'solved'), (3, 4, 'solved'), (1, 4, 'sometimes'), (0, 4, 'never'),
+                                          (1, 1, 'unmeasured'), (0, 0, 'unmeasured')])
+def test_tier_by_pass_rate(s, n, expected):
+    assert ei.tier(s, n) == expected
+
+
+def test_selection_order_puts_band_then_failures_then_unmeasured_and_drops_solved():
+    rows = [{'id': f'{kind}{i}', 'family': f'f{i % 2}'} for kind in 'bfus' for i in range(4)]
+    rates = {**{f'b{i}': (1, 4) for i in range(4)}, **{f'f{i}': (0, 4) for i in range(4)},
+             **{f's{i}': (4, 4) for i in range(4)}}
+    order, counts = ei.selection_order(rows, rates, random.Random(0))
+    kinds = [r['id'][0] for r in order]
+    assert kinds == ['b'] * 4 + ['f'] * 4 + ['u'] * 4
+    assert counts == {'band': 4, 'failed': 4, 'unmeasured': 4}
+    families = [r['family'] for r in order[:4]]
+    assert families[0] != families[1]                         # families take turns within a tier
+    with_solved, _ = ei.selection_order(rows, rates, random.Random(0), include_solved=True)
+    assert [r['id'][0] for r in with_solved][-4:] == ['s'] * 4
+
+
+def test_frontier_drop_keeps_the_cheapest_verified_source_per_task():
+    tiers = {'solved': 'solved', 'some': 'sometimes', 'never': 'never'}
+    own = {'some'}
+    assert sft_sources.frontier_drop('solved', tiers, own) == 'frontier_task_solved'
+    assert sft_sources.frontier_drop('some', tiers, own) == 'frontier_own_success'
+    assert sft_sources.frontier_drop('never', tiers, own) is None          # teacher (filled first) trains here
+    assert sft_sources.frontier_drop('unmeasured-task', tiers, own) is None
+
+
+def test_think_treatment_takes_the_most_specific_entry_and_filled_renders_as_context(tmp_path):
+    spec = {'schema': 'natlang.teacher-think-treatment/1', 'default': 'context',
+            'models': {'haiku': 'train', 'luna': 'filled'}, 'sources': {'teacher:x/pool': 'context'},
+            'episodes': {'teacher:x/pool:g1:0': 'train'}}
+    path = tmp_path / 'treatment.json'
+    path.write_text(json.dumps(spec))
+    t = sft_sources.ThinkTreatment.load(str(path), 'context')
+    assert t.of({'source': 'teacher', 'teacher': 'haiku', 'run': 'teacher:y/pool', 'key': 'k'}) == 'train'
+    assert t.of({'source': 'teacher', 'teacher': 'haiku', 'run': 'teacher:x/pool', 'key': 'k'}) == 'context'
+    assert t.of({'source': 'teacher', 'teacher': 'luna', 'run': 'teacher:x/pool', 'key': 'teacher:x/pool:g1:0'}) == 'train'
+    assert t.render({'source': 'teacher', 'teacher': 'luna', 'run': 'r', 'key': 'k'}) == 'context'
+    assert t.of({'source': 'rl-own', 'teacher': 'haiku'}) is None
+    assert t.render({'source': 'rl-own'}) == 'context'
+    assert sft_sources.ThinkTreatment.load('none', 'train').of({'source': 'teacher', 'teacher': 'haiku'}) == 'train'
+    with pytest.raises(ValueError):
+        sft_sources.ThinkTreatment({'models': {'m': 'sometimes'}})
+
+
+def test_load_frontier_refuses_other_files(tmp_path):
+    path = tmp_path / 'f.json'
+    path.write_text(json.dumps({'schema': 'x', 'tasks': {}}))
+    with pytest.raises(ValueError):
+        sft_sources.load_frontier(path)
+    path.write_text(json.dumps({'schema': ei.FRONTIER_SCHEMA, 'policy': 'abc', 'tasks': {'t': {'tier': 'never'}}}))
+    assert sft_sources.load_frontier(path) == ('abc', {'t': {'tier': 'never'}})
+    assert sft_sources.load_frontier(None) == (None, {})
+
+
+def test_episode_sizes_cache_per_candidate_treatment(tmp_path):
+    class Renderer:
+        identity = {'id': 1}
+    sizes = sft_sources.EpisodeSizes(tmp_path / 'sizes.jsonl', Renderer(), lambda c: c['think'], 'context')
+    assert sizes.policy('train') != sizes.policy('context')
+    fixed = sft_sources.EpisodeSizes(tmp_path / 'sizes.jsonl', Renderer(), 'context', 'context')
+    assert fixed.think_of({'think': 'train'}) == 'context' and fixed.policy('context') == sizes.policy('context')
+
+
+class _Base:
+    """The parts of grpo.Collector the frontier subclass relies on."""
+
+    def __init__(self, tasks, own):
+        self.by_id = {t['id']: t for t in tasks}
+        self.own, self.pending, self.lock, self.outstanding = own, collections.deque(), threading.Lock(), 0
+        self.paused = threading.Event()
+        self.args = type('A', (), {'max_outstanding': 2})()
+        self.created = []
+
+    def _learnable(self):
+        pass
+
+    def _new_group(self):
+        row = self._pick()
+        self.created.append(row['id'])
+        self.outstanding += 1
+        self.pending.extend((row['id'], i) for i in range(2))
+
+
+def test_frontier_collector_walks_the_order_once_skips_scored_tasks_and_stops_at_the_deadline():
+    tasks = [{'id': t} for t in ('a', 'b', 'c', 'd')]
+    collector = ei.frontier_collector(_Base)(tasks, own={'b': (1, 4)})
+    collector.setup(['c', 'b', 'x', 'a', 'd'], time.time() + 3600)
+    assert list(collector.order) == ['c', 'a', 'd']            # scored and unknown tasks out, order kept
+    taken = [collector._take() for _ in range(4)]
+    assert [t[0] for t in taken] == ['c', 'c', 'a', 'a']
+    assert collector._take() is None                           # max_outstanding 2: waits for the learner-free drain
+    collector.outstanding = 0
+    collector.deadline = time.time() - 1
+    assert collector._take() is None and collector.finished()  # past the deadline: no new group, done when drained
+    assert collector.created == ['c', 'a']

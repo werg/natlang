@@ -156,11 +156,14 @@ actually in flight; fix a stale list in the same cycle.
 
 # Current approach (revisable; each item stands on its rationale)
 
-**State.** The start policy is the untouched base (5ff07638): no w5 checkpoint beat it on held-out. The method is
-plain GRPO (`scripts/neuralese_data/grpo.py train`). grpo-v2-run1 and run2 both regressed significantly on held-out; the 2026-11-15
-hunt points at fresh AdamW taking near-full-LR noise steps at LR 1e-5 with ~24 groups a step, and an LR sweep chooses
-grpo-v3's step size. The latest DECISIONS.md entries are authoritative; `plans/neuralese/APPROACH_REVIEW_20261111.md`
-is the plan this approach came from.
+**State.** The method is **expert iteration** (owner-approved 2026-11-20; DECISIONS "expert iteration"): one loop in
+which every source feeds a per-task pool of verified trajectories in the student's own distribution (own best-of-k
+successes first, teacher trajectories with student-filled reasoning where it cannot solve the task, never teacher
+reasoning or empty think blocks as targets), weighted by the student's measured pass rate per task, trained by Ambient
+SFT and gated by held-v3 on Pop; its new failures feed the teacher campaign. `scripts/neuralese_data/expert_iteration.py`
+drives the cycles (sft-v7 is the first). GRPO is the polish phase once SFT gains flatten, not the engine. The start
+policy is the best held-measured checkpoint (`ops/current-policy.json`); the latest DECISIONS.md entries are
+authoritative.
 
 - **Standard tooling, minimal crisp code** (an HF training loop with `lfm3_fast_train`, the SGLang server). Earlier
   controllers, custody schemas and transitions consumed the effort and confounded measurements. Build infrastructure

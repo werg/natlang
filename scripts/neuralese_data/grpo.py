@@ -3583,6 +3583,22 @@ def load_variants(args, tasks, work):
     return variants
 
 
+def actor_command(args, work, source_sha):
+    """(command, url) of the run's SGLang actor: ``serve_native_checkpoint.py`` with the pinned held engine's serve args
+    (``engine.json`` beside the held manifest), its store under WORK/actor. Used by ``train`` and by
+    ``expert_iteration.py collect``."""
+    engine = json.loads((Path(args.held_manifest).parent / 'engine.json').read_text())['serve_args']
+    store = Path(work) / 'actor'
+    store.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(HERE / 'serve_native_checkpoint.py'), '--store-dir', str(store),
+               '--checkpoint', args.checkpoint, '--checkpoint-sha256', source_sha, '--base', args.base,
+               '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
+               '--hf-export-dir', str(store / 'sglang-hf'),
+               *(['--sglang-memory-saver'] if args.actor_release else []),
+               *(['--sglang-overlap-schedule'] if actor_overlap(args) else []), *args.actor_arg]
+    return command, f'http://127.0.0.1:{args.actor_port}'
+
+
 def train(args):
     import torch
     import behaviour_probe
@@ -3614,16 +3630,7 @@ def train(args):
         # other's admission), served with the pinned held-v2 eval engine (held-v2/engine.json serve_args): training and
         # held measurements sample with the same arithmetic.
         try:
-            engine = json.loads((Path(args.held_manifest).parent / 'engine.json').read_text())['serve_args']
-            store = work / 'actor'
-            store.mkdir(parents=True, exist_ok=True)
-            url = f'http://127.0.0.1:{args.actor_port}'
-            command = [sys.executable, str(HERE / 'serve_native_checkpoint.py'), '--store-dir', str(store),
-                       '--checkpoint', args.checkpoint, '--checkpoint-sha256', source_sha, '--base', args.base,
-                       '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
-                       '--hf-export-dir', str(store / 'sglang-hf'),
-                       *(['--sglang-memory-saver'] if args.actor_release else []),
-                       *(['--sglang-overlap-schedule'] if actor_overlap(args) else []), *args.actor_arg]
+            command, url = actor_command(args, work, source_sha)
             with (work / 'actor.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
@@ -5085,7 +5092,9 @@ def train(args):
     log_line(log, {'event': 'stopped', 'step': step})
 
 
-def main():
+def build_parser():
+    """The command line (``train``); ``expert_iteration.py collect`` parses the same flags, so its collector, actor and
+    episodes run with exactly grpo's defaults."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
     t = sub.add_parser('train')
@@ -5490,7 +5499,11 @@ def main():
                    'learner every step and on the actor after every weight sync')
     t.add_argument('--probe-chains', type=int, default=4)
     t.add_argument('--probe-max-tokens', type=int, default=8000)
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
     if args.command == 'train':
         args.top_p = check_top_p(args.top_p)
         from natlang_neuralese.common.cuda_context import ensure_context

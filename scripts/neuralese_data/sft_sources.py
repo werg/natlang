@@ -409,6 +409,88 @@ def think_context(renderer, source, target_message, target_ids, teacher_think='c
     return non_student_context(renderer.tokenizer, target_message, target_ids, think=teacher_think, lead_in=lead_in)
 
 
+# Teacher reasoning is chosen per teacher model, source or episode (owner 2026-11-20): a treatment table published through
+# the registry role ``teacher-think-treatment`` (the rationalization strand's per-model audit) says, per episode, whether
+# a non-student reply's think block trains (``train``: long enough, close to the student's style, actions likely after
+# it), stays masked context (``context``) or gives way to student-filled reasoning (``filled``: the filled version is an
+# ``--aux NAME=PATH,replaces=teacher`` part, filled_reasoning.py; an episode without one renders as ``context``).
+THINK_TREATMENTS = ('train', 'context', 'filled')
+THINK_TREATMENT_ROLE = 'teacher-think-treatment'
+
+
+class ThinkTreatment:
+    """``natlang.teacher-think-treatment/1``: {"default": T, "models": {teacher model id: T}, "sources": {run or pool
+    label: T}, "episodes": {episode key: T}}; the most specific entry wins (episode, source, model, default)."""
+
+    def __init__(self, spec=None, default='context', path=None):
+        spec = spec or {}
+        self.path, self.default = path, spec.get('default', default)
+        self.models, self.sources, self.episodes = (dict(spec.get(k) or {}) for k in ('models', 'sources', 'episodes'))
+        for value in [self.default, *self.models.values(), *self.sources.values(), *self.episodes.values()]:
+            if value not in THINK_TREATMENTS:
+                raise ValueError(f'think treatment {value!r} not in {THINK_TREATMENTS}')
+        self.counts = collections.Counter()
+
+    @classmethod
+    def load(cls, path, default):
+        """PATH, 'none' (every episode ``default``), or None: the registry role's file when one dataset holds it."""
+        if path == 'none':
+            return cls(default=default)
+        if path is None:
+            paths = data_registry.role_paths(THINK_TREATMENT_ROLE)
+            if not paths:
+                return cls(default=default)
+            if len(paths) > 1:
+                raise ValueError(f'registry role {THINK_TREATMENT_ROLE} names {len(paths)} files')
+            path = paths[0]
+        return cls(json.loads(Path(path).read_text()), default, str(path))
+
+    def of(self, c):
+        """The treatment of candidate ``c`` (own episodes: None, every sampled token is theirs)."""
+        if c.get('source') in OWN_SOURCES:
+            return None
+        for table, key in ((self.episodes, c.get('key')), (self.sources, c.get('run')), (self.models, c.get('teacher'))):
+            if key is not None and key in table:
+                return table[key]
+        return self.default
+
+    def render(self, c):
+        """The ``teacher_think`` a candidate renders with (``filled`` while it is not replaced: context)."""
+        value = self.of(c)
+        return 'context' if value in (None, 'filled') else value
+
+    def report(self):
+        return {'path': self.path, 'sha256': sha256_file(self.path) if self.path else None, 'default': self.default,
+                'models': self.models, 'sources': self.sources, 'episodes': len(self.episodes),
+                'admitted_episodes': dict(self.counts)}
+
+
+# The frontier (expert_iteration.py frontier): the measured pass rate of the policy a build trains, per task, and its
+# tier. With ``build --frontier`` each task keeps its cheapest verified source (``frontier_drop``).
+FRONTIER_TIERS = ('solved', 'sometimes', 'never', 'unmeasured')
+
+
+def load_frontier(path):
+    """``natlang.ei-frontier/1`` -> (policy sha, {task id: {'successes', 'scored', 'tier'}})."""
+    if not path:
+        return None, {}
+    data = json.loads(Path(path).read_text())
+    if data.get('schema') != 'natlang.ei-frontier/1':
+        raise ValueError(f'{path}: not a frontier file')
+    return data.get('policy'), data['tasks']
+
+
+def frontier_drop(task_id, tiers, own_tasks):
+    """Why a non-own trajectory of ``task_id`` (teacher episode, filled teacher episode) leaves a frontier build, or
+    None: a task the policy solves reliably needs only its anchor, and a task with an own verified success trains that
+    (the student's own distribution) instead."""
+    if tiers.get(task_id) == 'solved':
+        return 'frontier_task_solved'
+    if task_id in own_tasks:
+        return 'frontier_own_success'
+    return None
+
+
 def check_render(args):
     """Render recorded student calls and compare with the actor's exact prompt and sampled ids."""
     renderer = TemplateRenderer(args.tokenizer)
@@ -1226,10 +1308,10 @@ class EpisodeSizes:
     per (episode, renderer identity, think and lead-in policy): budgets and loss shares choose on actual sizes."""
 
     def __init__(self, path, renderer, teacher_think, lead_in, backend_workarounds='context', own_empty_think='context'):
-        self.path, self.renderer, self.teacher_think, self.lead_in = Path(path), renderer, teacher_think, lead_in
+        # teacher_think: one value, or a function of the candidate (``ThinkTreatment.render``)
+        self.path, self.renderer, self.lead_in = Path(path), renderer, lead_in
+        self.think_of = teacher_think if callable(teacher_think) else (lambda c, value=teacher_think: value)
         self.backend_workarounds, self.own_empty_think = backend_workarounds, own_empty_think
-        policy = [renderer.identity, teacher_think, lead_in, backend_workarounds, own_empty_think, 'wrapped-refusal']
-        self.policy = hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()[:16]
         self.cache, self.new = {}, []
         if self.path.exists():
             for line in self.path.open():
@@ -1237,23 +1319,30 @@ class EpisodeSizes:
                     record = json.loads(line)
                     self.cache[(record['key'], record['policy'])] = (record['forward'], record['weighted'])
 
+    def policy(self, think):
+        policy = [self.renderer.identity, think, self.lead_in, self.backend_workarounds, self.own_empty_think,
+                  'wrapped-refusal']
+        return hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
     def measure(self, c, turns_of):
         from exp0_sft import chains_of
-        hit = self.cache.get((c['key'], self.policy))
+        think = self.think_of(c)
+        policy = self.policy(think)
+        hit = self.cache.get((c['key'], policy))
         if hit is not None:
             return hit
         rows = []
         try:
             for index, turn in enumerate(turns_of(c)):
-                rows.append(call_row(self.renderer, c['source'], c['key'], index, turn, self.teacher_think,
+                rows.append(call_row(self.renderer, c['source'], c['key'], index, turn, think,
                                      self.lead_in, self.backend_workarounds, self.own_empty_think)[0])
         except Exception:
             return None, None
         forward = sum(len(chain['ids']) for chain in chains_of([{'task_id': c['task_id'], 'round': c['key'],
                                                                  'rows': rows}]))
         weighted = int(sum(float(r['weight'].sum()) if 'weight' in r else len(r['sample']) for r in rows))
-        self.cache[(c['key'], self.policy)] = (forward, weighted)
-        self.new.append({'key': c['key'], 'policy': self.policy, 'forward': forward, 'weighted': weighted})
+        self.cache[(c['key'], policy)] = (forward, weighted)
+        self.new.append({'key': c['key'], 'policy': policy, 'forward': forward, 'weighted': weighted})
         return forward, weighted
 
     def save(self):
@@ -1405,6 +1494,11 @@ def build(args):
     own_rates = json.loads(group_rates.read_text()) if group_rates.exists() else {}
     rates.update({k: (v['successes'], v['scored']) for k, v in own_rates.items()
                   if k not in rates and v['scored']})
+    # the frontier: the trained policy's own measured rates replace every other rate of its tasks
+    frontier_policy, frontier = load_frontier(getattr(args, 'frontier', None))
+    rates.update({k: (v['successes'], v['scored']) for k, v in frontier.items() if v.get('scored')})
+    tiers = {k: v.get('tier') for k, v in frontier.items()}
+    treatment = ThinkTreatment.load(getattr(args, 'think_treatment', None), args.teacher_think)
 
     def base_rate(task_id):
         s, n = rates.get(task_id, (None, 0))
@@ -1453,6 +1547,8 @@ def build(args):
     constructs = {task_id: task_constructs(task) for task_id, task in tasks.items()}
 
     def core_cap(task_id):
+        if tiers.get(task_id) == 'solved':     # solved reliably: a light anchor
+            return getattr(args, 'anchor_per_task', 1)
         top = args.rich_max_per_task if constructs.get(task_id, ((), False))[0] else args.max_per_task
         p = base_rate(task_id)
         return top if p is None else max(1, round(1 + (top - 1) * (1 - p)))
@@ -1460,12 +1556,22 @@ def build(args):
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
     trained_keys, trained_before = trained_in(getattr(args, 'prefer_unseen', None) or [])
-    teacher_pool = wrapper_capped(capped([c for c in unique if c['source'] not in OWN_SOURCES], rng, funnel, core_cap,
-                                         args.max_family_share, lambda c: 0, trained_keys), rng, funnel, is_wrapper,
-                                  args.wrapper_share, trained_keys)
     own_pool = wrapper_capped(capped([c for c in unique if c['source'] in OWN_SOURCES], rng, funnel, core_cap,
                                      args.max_family_share, lambda c: 0, trained_keys), rng, funnel, is_wrapper,
                               args.wrapper_share, trained_keys)
+    # frontier builds: each task's cheapest verified source (own successes, else teacher; ``frontier_drop``)
+    own_tasks = {c['task_id'] for c in own_pool} if frontier else set()
+    teacher_candidates = []
+    for c in unique:
+        if c['source'] in OWN_SOURCES:
+            continue
+        why = frontier_drop(c['task_id'], tiers, own_tasks) if frontier else None
+        if why:
+            funnel[c['source']][why] += 1
+        else:
+            teacher_candidates.append(c)
+    teacher_pool = wrapper_capped(capped(teacher_candidates, rng, funnel, core_cap, args.max_family_share, lambda c: 0,
+                                         trained_keys), rng, funnel, is_wrapper, args.wrapper_share, trained_keys)
 
     renderer = TemplateRenderer(args.tokenizer)
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
@@ -1480,8 +1586,8 @@ def build(args):
         source, rows, written = c['source'], [], []
         for index, turn in enumerate(turns):
             try:
-                row, context = call_row(renderer, source, c['key'], index, turn, args.teacher_think, args.teacher_lead_in,
-                                        args.backend_workarounds, args.own_empty_think)
+                row, context = call_row(renderer, source, c['key'], index, turn, treatment.render(c),
+                                        args.teacher_lead_in, args.backend_workarounds, args.own_empty_think)
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
@@ -1518,6 +1624,7 @@ def build(args):
             target_mass[(c['family'], row['function'], row['invocation_role'])].update(
                 calls=1, target_tokens=row['target_tokens'], weighted_target_tokens=row['target_tokens'] - row['loss_from'])
         funnel[source]['admitted'] += 1
+        treatment.counts[treatment.of(c) or 'own'] += 1
         s = stats[source]
         s['calls'] += len(rows)
         s['target_tokens'] += sum(len(r['sample']) for r in rows)
@@ -1561,7 +1668,7 @@ def build(args):
             return load_episode(source['path'])['turns']
         return replayed_turns(work, c['name'])
 
-    episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, args.teacher_think, args.teacher_lead_in,
+    episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, treatment.render, args.teacher_lead_in,
                                  args.backend_workarounds, args.own_empty_think)
 
     def breadth_first(pool, key):
@@ -1583,8 +1690,9 @@ def build(args):
 
     def priority(c):
         p = base_rate(c['task_id'])
-        return (not bool(c.get('open_goal')), not bool(constructs.get(c['task_id'], ((), False))[0]),
-                0.5 if p is None else p, rng.random())
+        # a frontier build takes the trained policy's own successes before older policies' (its own distribution)
+        return (not bool(c.get('open_goal')), bool(frontier_policy) and c.get('policy') != frontier_policy,
+                not bool(constructs.get(c['task_id'], ((), False))[0]), 0.5 if p is None else p, rng.random())
 
     # teacher successes, breadth-first under the forward-token budget (0: all of the capped pool)
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
@@ -1805,7 +1913,7 @@ def build(args):
             if c['task_id'] in trained_tasks or c['task_id'] in val_tasks:
                 continue
             try:
-                rows = [call_row(renderer, c['source'], c['key'], index, turn, args.teacher_think,
+                rows = [call_row(renderer, c['source'], c['key'], index, turn, treatment.render(c),
                                  args.teacher_lead_in, args.backend_workarounds, args.own_empty_think)[0]
                         for index, turn in enumerate(turns_of(c))]
             except Exception:
@@ -1840,7 +1948,14 @@ def build(args):
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
                    'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
-                   'teacher_think': args.teacher_think, 'teacher_lead_in': args.teacher_lead_in,
+                   'teacher_think': args.teacher_think, 'think_treatment': treatment.report(),
+                   'frontier': {'path': getattr(args, 'frontier', None), 'policy': frontier_policy,
+                                'sha256': sha256_file(args.frontier) if getattr(args, 'frontier', None) else None,
+                                'tiers': dict(collections.Counter(tiers.values())),
+                                'anchor_per_task': getattr(args, 'anchor_per_task', 1),
+                                'rule': 'own successes where the task has any; a solved task keeps anchor_per_task own '
+                                        'episodes and no teacher; teacher (filled first) only where no own success'}
+                   if frontier else None, 'teacher_lead_in': args.teacher_lead_in,
                    'exclude_run': args.exclude_run, 'guided': args.guided,
                    'prefer_unseen': {'builds': list(getattr(args, 'prefer_unseen', None) or []),
                                      'episodes': len(trained_keys), 'tasks': len(trained_before)},
@@ -2252,7 +2367,15 @@ def main():
     b.add_argument('--teacher-think', choices=TEACHER_THINK, default='context',
                    help='think block of replies the student did not sample (teacher, October, live): context (default: '
                    'zero weight through </think>, the action is the target) or train (visible reasoning is target; '
-                   'an empty think block stays context). think_context has the evidence')
+                   'an empty think block stays context). think_context has the evidence. The default treatment: '
+                   '--think-treatment chooses per teacher model, source or episode')
+    b.add_argument('--think-treatment', default=None, metavar='JSON|none',
+                   help='teacher think treatment per model/source/episode (ThinkTreatment; default: the registry role '
+                        f'{THINK_TREATMENT_ROLE} when registered, else --teacher-think for every episode)')
+    b.add_argument('--frontier', help='expert_iteration.py frontier JSON: per-task pass rates and tiers of the policy '
+                   'this build trains; each task keeps its cheapest verified source (frontier_drop)')
+    b.add_argument('--anchor-per-task', type=int, default=1,
+                   help='own episodes of a task the frontier marks solved (a light anchor)')
     n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')
     n.add_argument('--work', required=True)
     n.add_argument('--out', required=True)
