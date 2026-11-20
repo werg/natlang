@@ -472,7 +472,36 @@ def _build_catalog():
         if ds.get('code_consumer'):
             ds['consumers'] = (ds.get('consumers') or []) + [{'run': 'grpo (default)', 'how': ds['code_consumer'], 'amount': None}]
     _relations(out)
+    _pending(out)
     return out
+
+
+def _pending(out):
+    """Trainer default pools (grpo.py POOLS / registry role grpo-pool) that an active GRPO run does not read yet: they enter
+    at that run's next start or resume on a newer pin. Active = train.jsonl written in the last two hours."""
+    now = time.time()
+    active = []
+    for ds in out:
+        if ds.get('reader') != 'grpo-run':
+            continue
+        try:
+            if now - os.path.getmtime(ds['path'] + '/train.jsonl') > 7200:
+                continue
+        except OSError:
+            continue
+        rec = None
+        for rec in jsonl(ds['path'] + '/runs.jsonl'):
+            pass
+        active.append({'run': ds['run'], 'id': ds['id'], 'pin': os.path.basename(str((rec or {}).get('pin') or '')) or None,
+                       'started': (rec or {}).get('started')})
+    for ds in out:
+        ref = (ds.get('provenance') or {}).get('code_ref') or ''
+        if not (ref.endswith(' POOLS') or ref.endswith('grpo-pool')):
+            continue
+        users = {c.get('run') for c in ds.get('consumers') or []}
+        pend = [a for a in active if a['id'] not in users]
+        if pend:
+            ds['pending'] = pend
 
 
 def _relations(out):
@@ -544,7 +573,7 @@ def describe(ds):
 
 def _card(ds):
     keep = ('id', 'title', 'group', 'kind', 'reader', 'path', 'protected', 'size_bytes', 'rows', 'rows_estimated', 'mtime', 'missing', 'consumers',
-            'relations', 'consumers_note', 'note', 'run', 'hidden')
+            'relations', 'consumers_note', 'note', 'run', 'hidden', 'pending')
     out = {k: ds.get(k) for k in keep if ds.get(k) is not None}
     prov = ds.get('provenance') or {}
     out['what'], out['found_via'] = describe(ds)

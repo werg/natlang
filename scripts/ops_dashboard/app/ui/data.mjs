@@ -147,6 +147,8 @@ function compactMembers(ms) {
   }
   return ms.length > 2 ? `×${ms.length}` : ms.join(' · ');
 }
+/** References that exclude a dataset (held manifests, errata) are not uses: they are listed apart as "excluded by". */
+const isExclusion = c => /held_manifest|errata|exclu/i.test(c.how || '');
 export function usage(consumers) {
   const cats = new Map();
   for (const c of consumers || []) {
@@ -159,11 +161,11 @@ export function usage(consumers) {
 }
 const isDs = run => /^(grpo|teacher-gen|sft|sft-mix|pool):/.test(run);
 /** One line: "GRPO grpo-v4 run1–3, grpo-v1 run1–2 · Teacher-gen 3 campaigns". */
-function usageLine(consumers, { max = 2 } = {}) {
+function usageLine(consumers, { max = 2, prefix = null } = {}) {
   const u = usage(consumers);
   if (!u.length) return null;
   const all = (consumers || []).map(c => `${c.run} (${c.how})`).join('\n');
-  return h('span', { class: 'usage', title: all }, u.map(({ cat, fams }, i) => [i ? h('span', { class: 'sep' }, ' · ') : null, h('span', { class: 'ucat' }, cat), ' ',
+  return h('span', { class: 'usage', title: all }, prefix, u.map(({ cat, fams }, i) => [i ? h('span', { class: 'sep' }, ' · ') : null, h('span', { class: 'ucat' }, cat), ' ',
     fams.slice(0, max).map((f, j) => { const last = f.runs.at(-1).run; const label = `${f.fam}${f.members.length ? ' ' + compactMembers(f.members) : ''}`; return [j ? ', ' : '', isDs(last) ? a(link.ds(last), label) : label]; }),
     fams.length > max ? h('span', { class: 'muted' }, ` +${fams.length - max}`) : null]));
 }
@@ -224,7 +226,14 @@ function dsRow(d, ed) {
     h('div', { class: 'small muted ellip', title: `${d.path}\nfound via ${d.found_via}` }, d.what || d.format || '', h('span', { class: 'via' }, ` · ${d.found_via}`))),
     h('span', { class: 'n', title: d.rows_estimated ? 'estimated from a 4 MB sample (large file on the HDD)' : '' }, d.rows == null ? '—' : (d.rows_estimated ? '~' : '') + count(d.rows)),
     h('span', { class: 'n muted' }, bytes(d.size_bytes)), h('span', { class: 'n muted', title: d.mtime ? dayClock(d.mtime * 1000) : '' }, d.mtime ? ago(d.mtime * 1000, Date.now()) : '—'),
-    h('span', { class: 'small ellip' }, usageLine(d.consumers) || h('span', { class: 'muted' }, d.consumers_note ? 'not used by a run (see dataset)' : '—')));
+    h('span', { class: 'small ellip' }, usedCell(d)));
+}
+function usedCell(d) {
+  const uses = (d.consumers || []).filter(c => !isExclusion(c)), excl = (d.consumers || []).filter(isExclusion);
+  const pend = (d.pending || []).map(p => p.run);
+  return [usageLine(uses) || (pend.length || excl.length ? null : h('span', { class: 'muted' }, '—')),
+    pend.length ? h('span', { class: 'pend', title: (d.pending || []).map(p => `${p.run} runs on ${p.pin || 'its pin'}, started before this pool was listed`).join('\n') }, `${uses.length ? ' · ' : ''}pending: enters ${pend.join(', ')} at its next resume on a newer pin`) : null,
+    excl.length ? h('span', { class: 'excl' }, uses.length || pend.length ? ' · ' : '', usageLine(excl, { prefix: 'excluded by ' })) : null];
 }
 const statCard = (value, label, title) => h('div', { class: 'card', title }, h('div', { class: 'stat' }, h('b', {}, value), h('span', {}, label)));
 
@@ -273,10 +282,13 @@ function datasetHeader(ctx, ds) {
       ds.code ? h('span', { title: 'code commit the run recorded' }, 'code ', h('b', { class: 'mono' }, `${ds.code.git_commit?.slice(0, 10)}${ds.code.dirty ? ' (dirty)' : ''}`)) : null)),
   h('div', { class: 'pathbox' }, h('span', { class: 'mono small ellip', title: ds.path }, ds.path), h('button', { class: 'btn sm', onclick: e => { navigator.clipboard?.writeText(ds.path); e.target.textContent = 'Copied'; } }, 'Copy path'))));
   if (ds.note) card.append(h('div', { class: 'notice' }, ds.note));
-  const used = usage(ds.consumers);
+  const used = usage((ds.consumers || []).filter(c => !isExclusion(c))), excluded = (ds.consumers || []).filter(isExclusion);
   const usedBox = h('div', {}, h('h3', {}, 'Used by'), used.length ? used.map(({ cat, fams }) => h('div', { class: 'usegroup' }, h('div', { class: 'ucat' }, cat),
     h('ul', { class: 'plain' }, fams.flatMap(f => f.runs).map(c => h('li', {}, isDs(c.run) ? a(link.ds(c.run), c.run.replace(/^[a-z-]+:/, '')) : c.run, c.amount ? h('span', { class: 'small muted' }, ` · ${c.amount}`) : null)))))
-    : h('div', { class: 'muted small' }, ds.consumers_note || 'No run, build or campaign record reads it.'));
+    : h('div', { class: 'muted small' }, ds.consumers_note || 'No run, build or campaign record trains on it.'),
+    (ds.pending || []).map(p => h('div', { class: 'pend small' }, `Pending: enters ${p.run} at its next resume on a newer pin (it runs on ${p.pin || 'an older pin'}, started before this pool was listed).`)),
+    excluded.length ? h('div', { class: 'usegroup' }, h('div', { class: 'ucat' }, 'Excluded by (these runs and builds keep it out of training)'),
+      h('ul', { class: 'plain' }, excluded.map(c => h('li', {}, isDs(c.run) ? a(link.ds(c.run), c.run.replace(/^[a-z-]+:/, '')) : c.run, h('span', { class: 'small muted' }, ` · ${c.how}`))))) : null);
   const fromBox = h('div', {}, h('h3', {}, 'Where it comes from'), kv([['found via', ds.found_via], ['format', ds.format], ['producer', prov.producer || prov.writer], ['trainer constant', prov.code_ref],
     ['registry', reg ? a(link.item('corpus-registry', reg.id, { part: 'entries' }), `${reg.id}${reg.admission ? ' · ' + reg.admission : ''}`) : 'not registered'],
     ['license', reg?.license_provenance || reg?.license ? clampText(reg.license_provenance || reg.license, 220) : null], ['side records', (prov.records || []).join(', ')],

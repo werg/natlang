@@ -336,3 +336,5 @@ details.saw { margin-top: 8px; } details.saw > summary { cursor: pointer; } deta
 .fp { font-size: 16px; letter-spacing: .06em; background: var(--sunken); border-radius: 8px; padding: 6px 10px; }
 @media (max-width: 520px) { .gate { margin: 10px 0; } .gbody .btn.big { width: 100%; text-align: center; } .gsteps li { font-size: 10.5px; } }
 @media (max-width: 900px) { .trajgrid { grid-template-columns: 1fr; } .railcard { max-height: 260px !important; } .itemlayout.wide { grid-template-columns: 1fr; } .itemside.folded { order: -1; } }
+
+.pend { color: var(--warn-ink); } .excl { color: var(--muted); } .excl .ucat { font-weight: 400; color: var(--muted); }
