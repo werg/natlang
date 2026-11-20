@@ -802,6 +802,37 @@ def held_closure(manifest_path):
     return ids, groups, sources
 
 
+def live_holdout_registry(path, held):
+    """Add the predeclared Vibestudio holdouts to the learner's source-group closure."""
+    group_splits, training = {}, {}
+    task_ids = set()
+    test_cases = 0
+    ids, groups, sources = held
+    for line in zstd_lines(path):
+        row = json.loads(line)
+        if row.get('interaction') != 'open-user-goal':
+            continue
+        task_id, split, relatives = row.get('taskId'), row.get('split'), row.get('sourceGroups')
+        if (not isinstance(task_id, str) or not task_id.startswith('vibestudio:') or task_id in task_ids or
+                split not in ('train', 'validation', 'test') or not isinstance(relatives, list) or not relatives or
+                not all(isinstance(group, str) and group.strip() for group in relatives)):
+            raise ValueError('invalid or duplicate open-goal holdout registry row')
+        task_ids.add(task_id)
+        for group in relatives:
+            if group_splits.setdefault(group, split) != split:
+                raise ValueError(f'open-goal source group crosses splits: {group}')
+        if split == 'train':
+            training[task_id] = set(relatives)
+        else:
+            test_cases += 1
+            ids.add(task_id)
+            sources.add(task_id)
+            groups.update(relatives)
+    if not training or not test_cases:
+        raise ValueError('open-goal registry needs both train and held cases')
+    return training
+
+
 CHARS_PER_TOKEN = 3.3   # estimate for selecting October rows before rendering (calibrated in build.json)
 DEFAULT_OCTOBER_GROUPS = ('luna-curricula=3', 'qwen-s72=2', 'fallow-v13r2=2', 'qwen-campaign=1', 'luna-early-cohorts=1',
                           'luna-v19-decision-children=1', 'luna-clinc-children=1', 'luna-ep-campaigns=1',
@@ -1254,6 +1285,11 @@ def build(args):
     rng = random.Random(args.seed)
     funnel = collections.defaultdict(collections.Counter)
     held = held_closure(args.held_manifest)
+    registry_path = getattr(args, 'live_holdout_registry', None)
+    registry_digest = sha256_file(registry_path) if registry_path else None
+    registered_training = live_holdout_registry(registry_path, held) if registry_path else {}
+    if registry_path and sha256_file(registry_path) != registry_digest:
+        raise ValueError('live holdout registry changed during read')
     # base pass rates: the exp1 measurement of the start policy, else the run groups' own (near-start) outcomes
     rate_data = json.loads(Path(args.base_rates).read_text()) if args.base_rates else {}
     rates = {k: (v['successes'], v['scored']) for k, v in rate_data.items()
@@ -1271,6 +1307,11 @@ def build(args):
     #    policy, near-duplicates out (teacher first), then each source capped on its own: task caps by base pass rate,
     #    family shares, the dataset-wrapper share
     core, tasks = core_candidates(args, work, funnel, held)
+    for candidate in core:
+        if candidate.get('open_goal'):
+            task = tasks[candidate['task_id']]
+            if registered_training.get(task['id']) != set(task['source_groups']):
+                raise ValueError(f'open goal {task["id"]} is absent from the pinned training registry or has different source groups')
     open_goals_only = getattr(args, 'open_goals_only', False)
     if open_goals_only and (args.october or args.aux):
         raise SystemExit('--open-goals-only cannot be combined with --october or --aux')
@@ -1660,6 +1701,7 @@ def build(args):
                    'observed_live': [c['live_source'] for c in core if c.get('verification_mode') == 'observed-live'],
                    'october': args.october, 'held_manifest': args.held_manifest,
                    'held_manifest_sha256': sha256_file(args.held_manifest), 'base_rates': args.base_rates,
+                   'live_holdout_registry': {'path': registry_path, 'sha256': registry_digest} if registry_path else None,
                    'renderer': renderer.identity},
         'policy': {'max_per_task': args.max_per_task, 'rich_max_per_task': args.rich_max_per_task,
                    'held_constructs': HELD_CONSTRUCTS, 'wrapper_share': args.wrapper_share,
@@ -2011,6 +2053,8 @@ def main():
     b.add_argument('--out', required=True)
     b.add_argument('--tokenizer', required=True)
     b.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    b.add_argument('--live-holdout-registry', metavar='CATALOG.jsonl',
+                   help='required for open-goal training; output of pnpm natlang:teacher --list --open-goals')
     b.add_argument('--no-default-teacher-pool', action='store_true',
                    help='live-only build: do not require coverage of the historical default teacher pool')
     b.add_argument('--min-open-goal-share', type=float, choices=[0.8],

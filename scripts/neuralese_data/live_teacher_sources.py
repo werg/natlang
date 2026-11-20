@@ -121,6 +121,7 @@ def load_episode(path):
     verification = json.loads(bound_file(spec['verification'], path.parent).read_text())
     if (verification.get('schema') != 'natlang.live-task-verification/1' or
             verification.get('task_id') != spec['id'] or verification.get('run_id') != world['run_id'] or
+            verification.get('split', spec['split']) != spec['split'] or
             verification.get('world') != world or
             verification.get('status') != 'passed'):
         raise ValueError('live task verification does not attest this actual task/run')

@@ -323,6 +323,25 @@ def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
     assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8}
 
 
+def test_vibestudio_holdout_closes_over_source_group_siblings(tmp_path):
+    catalog = tmp_path / 'goals.jsonl'
+    training = {'interaction': 'open-user-goal', 'taskId': 'vibestudio:train', 'split': 'train',
+                'sourceGroups': ['train-world']}
+    holdout = {'interaction': 'open-user-goal', 'taskId': 'vibestudio:held', 'split': 'test',
+               'sourceGroups': ['test-world', 'shared-source']}
+    catalog.write_text(json.dumps(training) + '\n' + json.dumps(holdout) + '\n')
+    held = set(), set(), set()
+    assert s.live_holdout_registry(catalog, held) == {'vibestudio:train': {'train-world'}}
+    assert s.held_hit('renamed', [], ['shared-source'], held)
+    assert s.held_hit('renamed', ['vibestudio:held'], [], held)
+    assert not s.held_hit('vibestudio:train', [], ['train-world'], held)
+
+    training['sourceGroups'].append('shared-source')
+    catalog.write_text(json.dumps(training) + '\n' + json.dumps(holdout) + '\n')
+    with pytest.raises(ValueError, match='crosses splits'):
+        s.live_holdout_registry(catalog, (set(), set(), set()))
+
+
 def test_wrapper_cap_keeps_dataset_wrappers_to_their_share_of_the_selection():
     import collections
     import random

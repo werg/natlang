@@ -22,6 +22,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const equal = isDeepStrictEqual;
   if (manifest.schema !== 'natlang.live-teacher-task/1' || receipt.schema !== 'natlang.live-task-verification/1' ||
       !equal(attestation, row.provenance.verification) || receipt.task_id !== row.task.id ||
+      (receipt.split ?? manifest.split) !== manifest.split ||
       receipt.run_id !== row.outcome.world.run_id || receipt.status !== 'passed' ||
       !['id', 'family', 'split', 'source_namespace', 'source_ids', 'source_groups', 'source_revisions', 'interaction'].every(
         key => equal(manifest[key], row.task[key])) ||
