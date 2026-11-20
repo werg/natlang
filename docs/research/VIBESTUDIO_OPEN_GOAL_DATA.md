@@ -144,7 +144,7 @@ python scripts/vibestudio/open_goal_inventory.py \
 | --- | --- | --- |
 | Discover relevant state | The agent chooses search queries and sources, discovers workspace files, and inspects the live DOM and visible controls in an owned panel | Provider accounts, remote devices, and discovery across panels and workspaces |
 | Choose and compose skills | Goal-only root chooses research, revision, or a revision that depends on the research result | Broad installed skill selection, branching and replanning across longer workflows |
-| Execute independently verifiable work | Public evidence is read from the live cache. A workspace revision or ordered browser change is independently read back | Publishing, deployment, integration changes, and durable cross-service outcomes |
+| Execute independently verifiable work | Public evidence is read from the live cache. Workspace revisions and ordered browser changes have independent readback. Declared suite execution checks the current workspace receipt | Broader CLI workflows, publishing, deployment, integration changes, and durable cross-service outcomes |
 | Recover safely | A concurrent file edit makes the agent reread, replan, and verify a revision that retains the competing edit | Service interruptions, partial commits, delegated work, and follow-up goals across sessions |
 | Generalize to fresh goals | A source group ties related public tasks together | Real user-goal intake and held source groups for every capability family |
 | Train from trajectories | The SFT importer and native materializer consume observed call trees in canonical trajectory IR | A live teacher smoke through the complete pipeline and measured results on held open goals |
@@ -157,3 +157,13 @@ changed, the sequence of actions, the final DOM, and the unchanged workspace
 source. The System Testing qualification selector
 `open-goal-oracle-sequence-studio-dispatch` exercises the actual panel and
 verifier with a reference sequence.
+
+The suite lane adds five training goals and one source-separated holdout.
+The open-goal program discovers actual runtime declarations, decides among
+the observed alternatives, and delegates to the existing Natlang suite
+review tree. It distinguishes planning, an authorized focused run, and a
+filter that matched no tests. The verifier re-resolves the declaration in
+the owned context and checks the exact execution receipt. Reference selectors
+`open-goal-oracle-verify-adventure-world-state` and
+`open-goal-oracle-verify-adapter-selected-module` cover Workerd and native
+execution respectively.
