@@ -1,6 +1,30 @@
 {
   "schema": "vibestudio.open-goal-coverage/2",
   "families": {
+    "browserMigration": {
+      "capabilities": ["personal-live-browser-import-review", "personal-live-browser-handoff", "personal-live-collection"],
+      "skills": ["personal:extensions/browser-data/SKILL.md"]
+    },
+    "googleSetup": {
+      "capabilities": ["google-live-setup-journey", "approvals-permissions", "oauth"],
+      "skills": ["google-workspace:skills/google-workspace/SKILL.md"]
+    },
+    "local-reconciliation": {
+      "capabilities": ["vcs", "vcs-integration", "workspace-vcs-integration", "workspace-scratch-handoff"],
+      "skills": ["base:skills/vibestudio-vcs/SKILL.md"]
+    },
+    "unit-rollout": {
+      "capabilities": ["workspace-unit-repair", "unit-diagnostics"],
+      "skills": ["base:skills/workspace-dev/SKILL.md"]
+    },
+    "vaultWork": {
+      "capabilities": ["spectrolite-live-vault", "spectrolite-live-revision-handoff"],
+      "skills": []
+    },
+    "terminal-handoff": {
+      "capabilities": ["workspace-terminal-checklist", "workspace-live-terminal-checks", "docs-discovery"],
+      "skills": ["base:skills/terminal-apps/SKILL.md", "base:skills/terminal/SKILL.md", "base:packages/testkit/SKILL.md"]
+    },
     "eval-handoff": {
       "capabilities": ["workspace-live-eval-recovery", "eval-lifecycle", "workspace-scratch-handoff"],
       "skills": ["base:skills/sandbox/SKILL.md"]
@@ -111,6 +135,44 @@
     }
   },
   "cases": {
+    "open-goal-google-setup-archive-drive-grant-does-not-unlock-mail": {
+      "capabilities": {
+        "google-live-setup-journey": ["boundOwnedSetupView", "matchedSetupRoute"],
+        "approvals-permissions": ["exactReversibleViewActions", "preservedOwnedSetupHistory"],
+        "oauth": ["matchedSetupRoute", "rejectsAlias"]
+      },
+      "skills": {"google-workspace:skills/google-workspace/SKILL.md": ["matchedSetupRoute", "preservedOwnedSetupHistory"]}
+    },
+    "open-goal-unit-rollout-repair-counterparty-balance-with-competing-domain-note": {
+      "capabilities": {"workspace-unit-repair": ["exactObservedRepair", "preservedConcurrentRolloutEdit", "independentNativeRolloutCheck"]},
+      "skills": {"base:skills/workspace-dev/SKILL.md": ["attestedInitialNativeState", "independentNativeRolloutCheck"]}
+    },
+    "open-goal-unit-rollout-diagnose-compile-only-without-edits": {
+      "capabilities": {"unit-diagnostics": ["attestedInitialNativeState", "discoveredExactRolloutUnit", "matchedRolloutOutcome"]}
+    },
+    "open-goal-reconcile-dispatch-channel-and-guard": {
+      "capabilities": {"vcs": ["observedOwnedIntegration"], "vcs-integration": ["verifiedNativeIntegration", "protectedNeighborAndMain"]},
+      "skills": {"base:skills/vibestudio-vcs/SKILL.md": ["observedOwnedIntegration", "verifiedNativeIntegration"]}
+    },
+    "open-goal-vault-compare-dock-shift-authority": {
+      "capabilities": {"spectrolite-live-vault": ["joinedNativeKnowledge", "independentVaultReadback"]}
+    },
+    "open-goal-terminal-recover-revocation-after-process-loss": {
+      "capabilities": { "workspace-terminal-checklist": ["exactLiveChecklist", "verifiedTerminalContinuity", "exactNativeExit"] },
+      "skills": { "base:skills/terminal-apps/SKILL.md": ["verifiedTerminalContinuity", "protectedOwnedContext"] }
+    },
+    "open-goal-terminal-discover-resume-after-clean-closeout": {
+      "capabilities": { "docs-discovery": ["exactTerminalDiscovery"], "workspace-terminal-checklist": ["verifiedTerminalContinuity", "exactNativeExit"] },
+      "skills": { "base:skills/terminal-apps/SKILL.md": ["exactTerminalDiscovery", "verifiedTerminalContinuity"] }
+    },
+    "open-goal-terminal-discover-deterministic-versus-agent-test": {
+      "capabilities": { "docs-discovery": ["exactTerminalDiscovery"] },
+      "skills": { "base:packages/testkit/SKILL.md": ["exactTerminalDiscovery", "resultGrounded"] }
+    },
+    "open-goal-terminal-timeout-separate-queue-health": {
+      "capabilities": { "workspace-live-terminal-checks": ["exactNativeChecks", "verifiedLocalHandoff"] },
+      "skills": { "base:skills/terminal/SKILL.md": ["exactNativeChecks", "rejectedForeignAction"] }
+    },
     "open-goal-eval-handoff-restart-shelter-current-after-empty-cancel": {
       "capabilities": {
         "workspace-live-eval-recovery": ["keptOriginalEvalReceipts", "boundIndependentBlobReadback", "authorizedExactEvalRetry"],

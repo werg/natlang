@@ -69,7 +69,9 @@ capture and supervision. It can contribute to the mix when both open-goal
 shares pass. The build evaluates the shares before publishing its rows, so a
 rejected mix leaves the previous admitted rows available.
 The current importer accepted all five archived seed-v3 assignment captures,
-retaining 124 supervised calls under their original task identities.
+retaining 124 supervised calls under their original task identities. A build
+that uses all five episodes needs at least 20 distinct verified open goals
+and at least four times the selected non-open weighted target mass.
 
 The minimum applies both to distinct admitted goals divided by all
 training trajectories and to the weighted target tokens from their
@@ -81,7 +83,7 @@ auxiliary data are included in the denominator when selected.
 ### One-case smoke on Pop
 
 Recreate the release's detached worktrees on Pop from the
-[343-goal source pins](vibestudio-open-goal-pop-pins-343.tsv).
+[live Luna smoke pins](vibestudio-open-goal-pop-pins-luna.tsv).
 Set `RELEASE` to the desired directory. Run the following in Bash from Pop's
 Natlang checkout, using the ledger for the dependency installation.
 
@@ -103,7 +105,7 @@ while IFS=$'\t' read -r name sha; do
   fi
   test "$(git -C "$RELEASE/$name" rev-parse HEAD)" = "$sha"
   test -z "$(git -C "$RELEASE/$name" status --porcelain)"
-done < docs/research/vibestudio-open-goal-pop-pins-343.tsv
+done < docs/research/vibestudio-open-goal-pop-pins-luna.tsv
 ```
 
 Install the host dependencies with `pnpm install --frozen-lockfile` from
@@ -130,7 +132,7 @@ python "$LEDGER_CHECKOUT/scripts/memory_ledger.py" run \
   --env "NATLANG_REPO=$NATLANG_CHECKOUT" \
   --env "VIBESTUDIO_MAX_CONCURRENT_BUILDS=1" \
   -- pnpm natlang:teacher --case open-goal-reconcile-workshop-update \
-  --out "$CAPTURE_DIRECTORY"
+  --approve-codex-session --test-timeout-ms 600000 --out "$CAPTURE_DIRECTORY"
 ```
 
 Wait for the unit to exit successfully and keep the entire capture directory.
@@ -422,6 +424,29 @@ resolution for shared `types.ts` re-exports. The Node filesystem loader
 resolves these paths through its filesystem adapter. Llama Server, wllama,
 Python native, and SGLang consume the rendered calls from the TypeScript host.
 They have no separate implementation of callable-folder source resolution.
+
+The next live run verified the full document recovery on Tick. Luna's
+first write saw a stale revision. A dedicated Natlang reconciliation
+call compared the original text, proposed change, current text, and fresh
+evidence. The final readback confirmed both the requested revision and the
+coedit. All five independent checks passed. The capture is registered as
+`vibestudio-open-goal-luna-smoke-reconcile-20261120-cqppvh`.
+The native trajectory IR yielded nine learner chains, 1,735 target tokens,
+and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
+open-goal shares were 100% for this one-goal smoke. Its Tick unit peaked at
+7.3 GiB over 3 minutes 10 seconds. No campaign or training was launched.
+
+The 462-goal staged catalog preserves all 343 released rows exactly. It
+includes 104 held-out goals. Its new lanes cover terminal discovery and
+recovery, reconciliation against local and incoming revisions, retained
+scratch evidence, Spectrolite knowledge and renderer recovery, native unit
+rollout, and Google onboarding. All 14 Google onboarding references passed
+in managed Vibestudio. All 13 unit rollout references passed, including the
+three cases rerun against the pinned native build. The available evidence
+covers 334 distinct goals including 70 held-out goals, with further managed
+verification pending.
+Google's evidence is registered as
+`vibestudio-open-goal-google-setup-reference-14-20261120`.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
@@ -430,3 +455,7 @@ under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
 The [343-goal source pins](vibestudio-open-goal-pop-pins-343.tsv) reproduce
 the release catalog tested on Tick, whose SHA-256 is
 `0427ccd200ef1fab0508559eb1564807acaddbef6c1a81f66e57aec685c3528b`.
+Pop also reproduced that catalog from the live smoke pins in
+`/home/werg/vibestudio-worktrees/open-goal-live-luna-343.WsHCyK`. The
+Natlang CLI reported Codex sign-in on Pop. Its host was occupied by a
+separate model-serving job at the time of staging.
