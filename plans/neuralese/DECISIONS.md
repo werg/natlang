@@ -5732,3 +5732,21 @@ per segment in backward). Through today's native-state format it would still car
 `gated_inputs` (about 144 KB/token), so it pays only with window-trimmed carried states (conv tail, the 256-token sliding window)
 alongside the full-attention KV (about 14 KB/token). It is not built yet. Until it is, the next fit takes all 448 rows with a claim sized from the
 measured uncapped peak: 15 GB CUDA + 3.3 GB RSS, budget 19 GB.
+
+## 2026-11-20 22:50, expert iteration: dry run of the cycle stages; registry lookups of temporary paths no longer walk the HDD (expert-iteration strand)
+
+- **Hang.** `test_extract_takes_teacher_successes_in_student_form` hung three times under disk load: `extract` ->
+  `record_work` -> `_input_refs` -> `Registry.find` of a tmp path fell through the lexical fast path to the full index,
+  which lists and resolves every registered directory (many on /mnt/external). **Fix (66d17b4a6):** a path that is
+  temporary on both its given and resolved spelling is looked up only among datasets recorded in temporary
+  directories (no portable path is temporary). Test `test_find_of_a_temporary_path_indexes_only_temporary_datasets`;
+  test_sft_sources + test_data_registry + test_expert_iteration now 79 passed in 11.6 s.
+- **Dry run** (scratch, unpinned, isolated registry; Pop's base actor through the new `collect --actor URL`): select
+  (3 tasks) -> collect k 2 (6 episodes, 1 success, 11 min; rerun resumed with every task skipped) -> frontier (never 2,
+  sometimes 1) -> extract -> replay (1 exact success) -> build `--frontier` with the registered teacher-think treatment
+  (`teacher-reasoning-audit-20261120/treatment.json`): 1 own episode, 21 calls, 20.6k forward tokens. All passed.
+  Fixed on the way (05e7972f8): the fill unit's `--render-tokenizer` was created only by the later data stage; an
+  empty teacher frontier would have launched `teacher_gen --limit 0` (= every task). A collection outside the data
+  roots cannot be registered: smokes set `NATLANG_ALLOW_UNREGISTERED_DATA=1` with their own `NATLANG_DATA_REGISTRY`.
+- **Not exercised:** pin, Pop held (pop-held.sh), the teacher campaign launch, launch-sft.sh, verdict: each wraps a
+  launcher already used by sft-v5/v6, with argument shapes checked by reading and ruff (undefined names: none).
