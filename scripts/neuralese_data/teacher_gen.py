@@ -22,9 +22,14 @@ Several teachers share one WORK: each claims a task before running it (WORK/clai
            --pause-below-available-gb N does the same while host MemAvailable is below N GB
   stop:    systemctl --user stop <unit>   (killed episodes are redone on the next launch)
   resume:  launch the same command again (finished tasks are skipped)
+  routing: each task goes first to the teacher with the best yield on its family (--route-ratio, over the --covered-by
+           campaigns' and this campaign's verdicts); a teacher far below --route-floor on a family leaves it alone; a
+           task a teacher fails here goes on to another teacher (--attempts teachers per task, episodes/tNNNNNN-aK);
+           a teacher spec's "min_failed" reserves a (stronger, scarcer) teacher for tasks that many teachers failed
   provider failures (an episode ending before its first model turn, or with exhausted provider retries: 429s, quota windows,
   refused or expired credentials) are no verdict: deferred.jsonl, retried twice; a teacher whose provider keeps failing
-  backs off (--provider-cooldown, doubling per consecutive failure up to an hour)
+  backs off (--provider-cooldown, doubling per consecutive failure up to an hour); a refused account (credit balance,
+  quota spent: PERMANENT_PROVIDER_FAILURES) retires its teacher for this launch
 """
 import argparse
 import json
@@ -54,6 +59,9 @@ BASE_TIERS = ['band', 'base_fails', 'unmeasured', 'base_solves']
 # --covered-by (gap campaigns): tasks without a teacher success in the earlier campaigns, by how much a demonstration is
 # worth now: the student rarely solves it, it is new task supply (--priority-pool), no teacher tried it, a teacher failed it
 GAP_TIERS = ['student_rare', 'priority_pool', 'teacher_untried', 'teacher_failed']
+# family routing: a teacher's family rate is shrunk towards its overall rate with this many episodes of weight; a teacher
+# with no record at all starts at ROUTE_DEFAULT
+ROUTE_PRIOR, ROUTE_DEFAULT = 5, 0.3
 
 
 def base_rank(rates, band):
@@ -85,6 +93,26 @@ def teacher_coverage(works):
                 else:
                     entry['failed_by'].add(record['teacher']['model_id'])
     return coverage
+
+
+def family_stats(works):
+    """(family, teacher model id) -> [successes, scored episodes] over teacher_gen manifests (routing's evidence)."""
+    stats = {}
+    for work in works:
+        path = Path(work, 'manifest.jsonl')
+        if not path.exists():
+            continue
+        for line in path.open():
+            if line.strip():
+                add_stats(stats, json.loads(line))
+    return stats
+
+
+def add_stats(stats, record):
+    entry = stats.setdefault((record.get('family') or '?', record['teacher']['model_id']), [0, 0])
+    for episode in record['episodes']:
+        entry[0] += episode['outcome'] == 'task_success' and (episode.get('reward') or 0) >= 1
+        entry[1] += 1
 
 
 def student_rates(base_rates, group_globs):
@@ -177,6 +205,9 @@ def chat_config_path(work, model_id):
 
 # the collector's message when a provider kept failing a request (429, 5xx, transport) through every retry
 PROVIDER_FAILURE = 'provider request retry exhausted'
+# a provider refusing the account itself (credits or quota spent): every further request fails the same way, so the
+# teacher is retired for this launch instead of deferring task after task (an hour-long cooldown still wakes 8 slots)
+PERMANENT_PROVIDER_FAILURES = ('credit balance is too low', 'insufficient_quota', 'exceeded your current quota')
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
@@ -227,12 +258,12 @@ def make_teacher(spec):
             raise ValueError(f'a provider teacher takes no HTTP controls: {sorted(extra)}')
         return SimpleNamespace(model_id=spec['model_id'], provider=spec['provider'], endpoint=None,
                                reasoning_effort=spec.get('reasoning_effort', 'low'), slots=int(spec.get('slots', 2)),
-                               cool_until=0., failures=0)
+                               min_failed=int(spec.get('min_failed', 0)), cool_until=0., failures=0, enabled=True)
     url = spec.get('chat_completions_url') or completions_url(spec['endpoint'])
     return SimpleNamespace(model_id=spec['model_id'], provider=None, endpoint=spec['endpoint'].rstrip('/'),
                            chat_completions_url=url, api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
                            chat_config=default_chat_config(url) if spec.get('chat_config') is None else spec['chat_config'],
-                           cool_until=0., failures=0)
+                           min_failed=int(spec.get('min_failed', 0)), cool_until=0., failures=0, enabled=True)
 
 
 class Generator:
@@ -246,20 +277,84 @@ class Generator:
         self.tasks = [json.loads(line) for line in (self.work / 'tasks.jsonl').open()]
         self.cursor = 0
         self.manifest = self.work / 'manifest.jsonl'
-        self.done = set()
+        self.teachers = teachers
+        # routing evidence: the earlier campaigns' verdicts plus this one's (updated as verdicts come in)
+        self.stats = family_stats(args.covered_by)
+        self.overall = {}         # teacher model id -> [successes, scored] over every family
+        for (_, model), (wins, scored) in self.stats.items():
+            entry = self.overall.setdefault(model, [0, 0])
+            entry[0], entry[1] = entry[0] + wins, entry[1] + scored
+        self.tried = {}           # index -> teacher model ids with a verdict on it in this campaign
+        self.solved = set()
         if self.manifest.exists():
-            self.done = {json.loads(line)['index'] for line in self.manifest.open() if line.strip()}
+            for line in self.manifest.open():
+                if line.strip():
+                    self._note_verdict(json.loads(line))
+        self.done = {index for index in self.tried if self._finished(index)}
         (self.work / 'claims').mkdir(exist_ok=True)
         self.retry = []           # tasks whose episodes the provider failed (no verdict), retried after the cursor
         self.attempts = {}
-        # a task an earlier campaign's teacher failed (`failed_by`) goes to another teacher of this one when there is one:
-        # the teacher that failed passes it on (self.passed) and takes it itself only once the cursor is through
-        self.models = {teacher.model_id for teacher in teachers}
+        self.running = 0
+        # tasks a teacher leaves for a better-placed one (it failed the task in an earlier campaign or here, another
+        # teacher has a much better yield on its family, or it is reserved for teachers with `min_failed`): the better
+        # teachers take them first; once the cursor is through, any eligible teacher does
         self.passed = []
 
+    def _note_verdict(self, record):
+        index, model = record['index'], record['teacher']['model_id']
+        add_stats(self.stats, record)
+        entry = self.overall.setdefault(model, [0, 0])
+        for episode in record['episodes']:
+            entry[0] += episode['outcome'] == 'task_success' and (episode.get('reward') or 0) >= 1
+            entry[1] += 1
+        self.tried.setdefault(index, set()).add(model)
+        if any(e['outcome'] == 'task_success' and (e.get('reward') or 0) >= 1 for e in record['episodes']):
+            self.solved.add(index)
+        if index < len(self.tasks):
+            task = self.tasks[index]
+            if index not in self.solved and model not in (task.get('failed_by') or ()):
+                task['failed_by'] = sorted({*(task.get('failed_by') or ()), model})
+
+    def _finished(self, index):
+        """No further teacher of this campaign takes the task: solved, --attempts teachers tried it, or no enabled
+        teacher that has not tried it would take it."""
+        tried = self.tried.get(index, set())
+        if index in self.solved or len(tried) >= self.args.attempts:
+            return True
+        return not any(t.enabled and t.model_id not in tried and self._eligible(index, t) for t in self.teachers)
+
+    def _estimate(self, family, teacher):
+        """(posterior success rate, scored episodes) of `teacher` on `family`: its family record shrunk towards its overall
+        rate (ROUTE_PRIOR episodes of weight; teachers without any record start at ROUTE_DEFAULT)."""
+        model = teacher.model_id
+        overall = self.overall.get(model, (0, 0))
+        prior = (overall[0] + ROUTE_DEFAULT * ROUTE_PRIOR) / (overall[1] + ROUTE_PRIOR)
+        s, n = self.stats.get((family, model), (0, 0))
+        return (s + prior * ROUTE_PRIOR) / (n + ROUTE_PRIOR), n
+
+    def _eligible(self, index, teacher):
+        """Whether `teacher` may take the task at all: not tried by it here, enough teachers failed it for its
+        `min_failed`, and its family yield is not hopeless (below --route-floor over at least --route-min-scored)."""
+        task = self.tasks[index]
+        if not teacher.enabled or teacher.model_id in self.tried.get(index, ()):
+            return False
+        if len(task.get('failed_by') or ()) < teacher.min_failed:
+            return False
+        rate, n = self._estimate(task['row'].get('family') or '?', teacher)
+        return not (n >= self.args.route_min_scored and rate < self.args.route_floor)
+
     def _passes(self, index, teacher):
+        """`teacher` leaves the task to another eligible teacher first: it failed the task (an earlier campaign) and
+        another did not, or another's family yield is at least --route-ratio times its own."""
         failed = set(self.tasks[index].get('failed_by') or ())
-        return teacher.model_id in failed and not self.models <= failed
+        others = [t for t in self.teachers if t is not teacher and self._eligible(index, t)]
+        if teacher.model_id in failed and any(t.model_id not in failed for t in others):
+            return True
+        if not self.args.route_ratio:
+            return False
+        family = self.tasks[index]['row'].get('family') or '?'
+        mine = self._estimate(family, teacher)[0]
+        return any(self._estimate(family, t)[0] >= self.args.route_ratio * mine for t in others)
 
     def _no_verdict(self, record):
         """Every episode ended unresolved before its first model turn or as an infrastructure error from exhausted provider
@@ -281,16 +376,17 @@ class Generator:
                 held = json.loads(path.read_text() or '{}')
             except (OSError, ValueError):
                 return False   # being written by its claimant
-            if held.get('state') == 'done':
+            if held.get('state') == 'done' and not (index in self.tried and not self._finished(index)):
                 self.done.add(index)
                 return False
-            try:
-                os.kill(int(held.get('pid', 0)), 0)
-                return False   # its claimant is alive
-            except (ProcessLookupError, ValueError):
-                pass
-            except PermissionError:
-                return False
+            if held.get('state') != 'done':   # a done claim with a verdict here goes on to another teacher (--attempts)
+                try:
+                    os.kill(int(held.get('pid', 0)), 0)
+                    return False   # its claimant is alive
+                except (ProcessLookupError, ValueError):
+                    pass
+                except PermissionError:
+                    return False
             tmp = path.with_suffix(f'.{os.getpid()}')
             tmp.write_text(mine)
             os.replace(tmp, path)
@@ -313,13 +409,17 @@ class Generator:
         while time.time() < teacher.cool_until and not self.stop.is_set():
             self.stop.wait(5)
         with self.lock:
-            while self.retry and (self.retry[0][0] <= time.time() or self.cursor >= len(self.tasks)):
-                index = self.retry.pop(0)[1]
-                if index not in self.done and self._claim(index, teacher):
-                    return index
+            if not teacher.enabled:
+                return None
             end = min(len(self.tasks), self.args.limit or len(self.tasks))
+            for position, (when, index) in enumerate(self.retry):
+                if (when <= time.time() or self.cursor >= end) and self._eligible(index, teacher):
+                    del self.retry[position]
+                    if index not in self.done and self._claim(index, teacher):
+                        return index
+                    break
             for position, index in enumerate(self.passed):
-                if self.cursor >= end or not self._passes(index, teacher):
+                if self._eligible(index, teacher) and (self.cursor >= end or not self._passes(index, teacher)):
                     del self.passed[position]
                     if index not in self.done and self._claim(index, teacher):
                         return index
@@ -329,15 +429,21 @@ class Generator:
                 self.cursor += 1
                 if index in self.done or index % self.args.shard[1] != self.args.shard[0]:
                     continue
-                if self._passes(index, teacher):
+                if not self._eligible(index, teacher) or self._passes(index, teacher):
                     self.passed.append(index)
                     continue
                 if self._claim(index, teacher):
                     return index
-            while self.passed:   # the cursor is through: the passed tasks go to whichever teacher asks
-                index = self.passed.pop(0)
-                if index not in self.done and self._claim(index, teacher):
-                    return index
+            # the cursor is through: the passed tasks go to whichever eligible teacher asks
+            for position, index in enumerate(self.passed):
+                if index in self.done:
+                    continue
+                if self._eligible(index, teacher):
+                    del self.passed[position]
+                    if self._claim(index, teacher):
+                        return index
+                    break
+            self.passed = [index for index in self.passed if index not in self.done and not self._finished(index)]
             return None
 
     def run_task(self, index, teacher):
@@ -345,7 +451,8 @@ class Generator:
         from natlang_neuralese.rl import task_rollouts
         a, task = self.args, self.tasks[index]
         row = task['row']
-        directory = self.work / 'episodes' / f't{index:06d}'
+        attempt = len(self.tried.get(index, ()))   # a later teacher's attempt keeps the earlier ones' episodes
+        directory = self.work / 'episodes' / (f't{index:06d}' if not attempt else f't{index:06d}-a{attempt}')
         if directory.exists():   # an unscored attempt (stopped mid-episode) is redone whole
             shutil.rmtree(directory)
         directory.mkdir(parents=True)
@@ -397,10 +504,15 @@ class Generator:
             record['unsupported'] = 'decide-native-capture'
         with self.lock:
             if self._no_verdict(record):
+                refusal = next((m for m in PERMANENT_PROVIDER_FAILURES if m in logs), None)
+                if refusal and teacher.enabled:
+                    teacher.enabled = False
+                    print(json.dumps({'event': 'teacher retired', 'teacher': teacher.model_id, 'reason': refusal}),
+                          flush=True)
                 self.attempts[index] = self.attempts.get(index, 0) + 1
                 with (self.work / 'deferred.jsonl').open('a') as handle:
                     handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
-                teacher.failures += 1
+                teacher.failures += not refusal
                 teacher.cool_until = max(teacher.cool_until, time.time() + min(
                     3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
                 if self.attempts[index] < 3:
@@ -412,25 +524,40 @@ class Generator:
             with self.manifest.open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
             record_episode_files(self.work, directory)
-            self.done.add(index)
-            self._release(index, 'done', teacher)
+            self._note_verdict(record)
+            if self._finished(index):
+                self.done.add(index)
+                self._release(index, 'done', teacher)
+            else:   # another teacher tries it (it now counts this one in failed_by)
+                self._release(index, 'retry', teacher)
+                self.passed.insert(0, index)
         print(json.dumps({'event': 'task scored', **{k: record[k] for k in ('index', 'task_id', 'seconds', 'episodes')}}),
               flush=True)
         return report
 
     def slot(self, teacher):
-        while not self.stop.is_set():
+        while not self.stop.is_set() and teacher.enabled:
             if (self.work / 'PAUSE').exists() or mem_available_gb() < self.args.pause_below_available_gb:
                 self.stop.wait(10)
                 continue
             index = self._take(teacher)
             if index is None:
-                return
+                with self.lock:
+                    pending = self.running or self.retry
+                if not pending:
+                    return
+                self.stop.wait(30)   # a running task may still come back for another teacher
+                continue
+            with self.lock:
+                self.running += 1
             try:
                 self.run_task(index, teacher)
             except Exception as error:   # one task's failure never stops the generation
                 self._release(index, 'failed', teacher)
                 print(json.dumps({'event': 'task failed', 'index': index, 'error': repr(error)[:400]}), flush=True)
+            finally:
+                with self.lock:
+                    self.running -= 1
 
 
 def validate_pool_resume(work, args):
@@ -546,6 +673,15 @@ def main():
                    help='gap campaign: rows of these pools (new task supply) are kept whatever their student rate (repeatable)')
     p.add_argument('--rare-rate', type=float, default=0.25,
                    help='gap campaign: a measured task is kept when the student solves it at most this often')
+    p.add_argument('--attempts', type=int, default=2,
+                   help='distinct teachers of this campaign that try a task until one succeeds (1: one verdict per task)')
+    p.add_argument('--route-ratio', type=float, default=2.0,
+                   help='a teacher leaves a task to another one whose yield on its family is at least this many times its '
+                        'own; it takes it itself once the cursor is through (0: no family routing)')
+    p.add_argument('--route-floor', type=float, default=0.03,
+                   help='a teacher whose family yield is below this (over at least --route-min-scored episodes) never '
+                        'takes that family\'s tasks')
+    p.add_argument('--route-min-scored', type=int, default=30)
     p.add_argument('--seed', type=int, default=20261115)
     p.add_argument('--seed-base', type=int, default=50_000_000)
     args = p.parse_args()
