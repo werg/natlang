@@ -179,6 +179,11 @@ For a one-workspace smoke, pass `--workspace examples`. The report sets
 `complete` only when the live catalogs of all six templates match their
 expected source owners, document digests, and visible metadata.
 
+The pinned managed inventory matched 254 visible entries across all six
+workspaces, representing 64 distinct source documents. The snapshot records
+the exact revisions and original report digest. Re-run the probe after
+adding skills. [Pinned managed inventory](vibestudio-installed-skill-snapshot.json)
+
 | Capability | Evidence in the first cases | Gap |
 | --- | --- | --- |
 | Discover relevant state | The agent chooses search queries and sources, discovers workspace files, and inspects the live DOM and visible controls in an owned panel | Provider accounts, remote devices, and discovery across panels and workspaces |
