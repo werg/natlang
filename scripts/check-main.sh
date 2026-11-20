@@ -138,8 +138,11 @@ if [ $python = 1 ]; then
   if [ -n "$python_error" ]; then
     step python-setup python_setup_error "$python_error"
   elif [ $quick = 1 ]; then
+    # --quick stays static: the registry coverage check lists the dataset directories (HDD included; it hung the push
+    # gate 30+ min under archive I/O on 2026-11-20) and runs in the full check only
     step python-ratchets env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests/test_machine_paths_ratchet.py \
-      tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py tests/test_data_registry_ratchet.py
+      tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py tests/test_data_registry_ratchet.py \
+      --deselect tests/test_data_registry_ratchet.py::test_registry_covers_what_the_catalog_found_before_it
   else
     # Two processes: one pytest over everything grows past 18 GB.
     # Name the active test and dump stacks on a long wait; faulthandler does not
