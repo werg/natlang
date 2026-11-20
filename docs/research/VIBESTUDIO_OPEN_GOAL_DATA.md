@@ -251,16 +251,16 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 317 open goals across six workspace templates, with 248
-training goals and 69 source-separated holdouts. The same Base entry point
+The pinned 343-goal release declares 268 training goals and 75
+source-separated holdouts across six workspace templates. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 94 | Public evidence and document recovery, ordered CDP changes and readback, visual recovery across renderer revisions, declared suite verification, publishing, native PDF evidence, and Natlang program discovery, execution and authorized signing |
-| Personal | 74 | Declared tests, Mission Control, browser-library-to-collection work, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
+| Examples | 110 | Public evidence and document recovery, ordered CDP changes and readback, visual recovery across renderer revisions, declared suite verification, publishing, native PDF evidence, Natlang program execution and signing, and native eval recovery |
+| Personal | 84 | Declared tests, Mission Control, browser-library-to-collection work, browser migration, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
 | System | 55 | Declared tests, hub and terminal operations, retained conversations and cursor recovery, Host diagnostics, and owned local delivery with interrupted acknowledgement recovery |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 21 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence across pages before continuing to an authorized vault edit or hold |
@@ -391,7 +391,12 @@ cases passed controlled renderer checks and are registered in the same catalog.
 The 16 native eval recovery goals, including both held-out goals, passed
 managed verification. They cover cancelled and failed evaluations, exact
 retry of the original source and inputs, prior-result fallback, and verified
-scratch handoff. The 333-goal catalog preserves the prior 317 entries.
+scratch handoff. The 343-goal release adds these goals and ten Personal
+browser migration goals, preserving the prior 317 entries. The current
+reference evidence covers 307 released goals, including 63 held-out goals.
+It also covers 19 goals in staged catalogs. The evidence bundles are
+`vibestudio-open-goal-verified-317-20261120` and
+`vibestudio-open-goal-google-setup-verified-9-20261120`.
 The managed collector now passes the registered goal directly as the Natlang
 root's sole argument. Outcome verification also checks the registered goal.
 
@@ -409,3 +414,6 @@ checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
 `pins.tsv` records the exact revisions. The catalog SHA-256 is
 `b2ed072ab3a9a57632ba1e2ab127ea953a6b2c6b402dd6291aff8cab0eaec5aa`.
+The [343-goal source pins](vibestudio-open-goal-pop-pins-343.tsv) reproduce
+the release catalog tested on Tick, whose SHA-256 is
+`0427ccd200ef1fab0508559eb1564807acaddbef6c1a81f66e57aec685c3528b`.
