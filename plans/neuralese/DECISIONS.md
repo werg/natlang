@@ -5570,3 +5570,108 @@ collection 6-7 h (~2,400 episodes over ~600-900 tasks with dynamic sampling), re
 candidate held on Pop 2.5-4 h (base and start measured on Pop during collection): **~15-18 h** to the verdict.
 Launch: `ops/ei/launch.sh` (below in the report). Coordination: the rationalization strand owns filled_reasoning.py and
 the treatment table; until the table is registered every teacher episode keeps today's `context`.
+
+## 2026-11-20 23:00, filled reasoning for teacher trajectories, teacher-reasoning audit and treatment table (rationalization strand)
+
+**What was asked.** STaR-style rationalization: replace each teacher call's think block (or the empty one) with
+reasoning in the student's own distribution that leads to the teacher's action. Whole trajectories, step by step, as
+reusable SFT data. Owner additions on the way: hinted candidates see the *sequence* of teacher replies and responses;
+scoring on the unhinted trajectory; explicit guards against the future agreement bias; throughput design (prefix
+sharing, scoring by prefill, few candidates, full GPU windows, incremental); and first an audit of whether some teachers'
+own reasoning can simply be trained (treatments a/b/c per model).
+
+**Built.**
+- `scripts/neuralese_data/filled_reasoning.py` (424d4398e, f5452c8f3; tests `tests/neuralese/test_filled_reasoning.py`).
+  - `generate`: every verified teacher success of the WORKs (default: the `grpo-sd-teacher` role), held closure out.
+  - Per step t it draws 2 unhinted and 2 hinted candidates. The hint is a system turn holding the teacher's replies and
+    tool responses t..t+3, placed right before the step's assistant opening. The hinted and unhinted prompts therefore
+    share the whole history in the radix cache, and each step costs only its new tokens.
+  - Each candidate is scored by one prefill on the unhinted trajectory: the per-action-token log-likelihood of the
+    teacher's actions t and t+1 after it, minus the same after an empty block.
+  - Gates:
+    - the block is closed;
+    - a hinted block may not quote or name the hinted replies or responses (a 40-character window of them, or a short
+      action whole, that is not already in the context) nor refer to the hint;
+    - the unhinted p(`</think>`) where the block closes is >= 0.01 (no hint-forced close);
+    - the improvement is > 0.
+  - **Selection against the future agreement bias:** candidates compete only inside a length band (0.67-1.5x) anchored
+    on a closed unhinted sample's length at that step. The selected lengths follow the student's own distribution; the
+    sequence score never ranks a short block against a long one.
+  - No admitted candidate: the call keeps an empty block (context) and its action trains, as today.
+  - The chosen block extends the history for the later calls.
+  - Polite mode (`--polite`) draws only into spare engine slots. Refused connections retry: training actors are released
+    during learner phases. `fills.jsonl` is append-only and resumable, so new campaign episodes are covered on rerun.
+  - `status` reports throughput and projection. `build` writes `chains.pkl` with per-row `sampled` flags (block: student
+    sample, nucleus NLL; action: teacher) and `report.json`: lengths, hazard, leakage and admission per origin, the
+    action NLL with the filled block and with an empty one.
+  - `audit`: per teacher model over all verified episodes, then through the student on 60 calls per model (prefill).
+    Writes `treatment.json` (`sft_sources.ThinkTreatment` schema).
+- `exp0_sft.sampled_targets` (per-row flags) and `grpo.student_sampled_targets` (replay corpora read them).
+- `sft_sources --aux NAME=PATH,share=S,replaces=teacher`: a filled episode replaces its unfilled chains in the build, so
+  the same actions are never trained twice.
+- Fixed on the way:
+  - `verified_episodes` hashed the fixture admission file once per *episode*, over the HDD (now once per file).
+  - `data_registry` `find()` built a filesystem index of every dataset, including HDD symlinks under `runs/`. Under
+    archive I/O, `consume()` sat in D state for 20+ minutes at every run start. Lookups now go through the registry's own
+    paths first: 0.35 s (d8ecc414a, test).
+  - The machine-path ratchet was red from expert_iteration.py (ad733c80f).
+
+**Audit (static part; `/home/werg/data/teacher-reasoning-audit-20261120/audit.json`, sft-sources-20261120b +
+sft-teacher-demos-20261119).**
+
+| model | verified episodes | calls with reasoning | reasoning chars p25 / p50 / p90 | tool syntax in think | action quoted in think | treatment |
+|---|---|---|---|---|---|---|
+| student (own successes) | 7,790 | 95.8% | 491 / 1,539 / 8,000 | 2.6% | 15.4% | (reference) |
+| claude-haiku-5-5 | 14,316 | 90.7% | 235 / 408 / 683 | 0% | 2.9% | filled |
+| gpt-6-luna | 7,181 | 0.09% | (29 chars p50 where present) | 0% | 0% | filled |
+| nemotron-3-ultra (NIM) | 622 | 100% | 143 / 313 / 1,472 | 0% | 9.3% | filled |
+| nemotron-3-ultra:free | 144 | 100% | 97 / 210 / 1,085 | 0% | 8.9% | filled |
+| gemini-3.5-flash-lite / 3.7-flash | 56 / 10 | 0% | none | | | filled |
+| glm-4.7-flash | 6 | 100% | 193 / 537 / 5,941 | 0% | 18% | filled |
+
+October Qwen3.6-35B-A3B trajectories (provenance strand; `teacher-provenance-20261120`) have reasoning on almost every
+call, but it is short: p50 113-239 characters, and 111 for the Qwen3.8-Flash ("pennyroyal") native trajectories.
+
+- **The length gate decides every model.** The gate is teacher p50 >= 0.5x the student's 1,539 characters; sft-v3's
+  -16 pts came from training short teacher blocks, 1,919 -> 350 characters per call. Haiku's summarized thinking (408)
+  and Nemotron's (210-313) are 4-7x shorter than the student's own. Luna and Gemini have none.
+- **No model qualifies for (a), train as target.** The owner's priors hold on presence: Luna and Gemini have none,
+  Nemotron and Qwen have it. On length they do not: none of them is long enough.
+- The NLL half of the audit (student per-token NLL on teacher reasoning; action NLL after the teacher's reasoning vs an
+  empty block) did not run: the grpo-v5 actor went away with its stop. It runs in the slice below. It cannot move any
+  model to (a) while the length gate fails.
+- `treatment.json` is registered and promoted to the role `teacher-think-treatment` (3324a86fc): every teacher model
+  is `filled`, default `context`.
+  - Until a filled corpus is built for an episode, `ThinkTreatment.render` maps `filled` to `context`, today's
+    behaviour. The sft-v6/v7 builders read it per episode; nothing changes until the filled aux part exists.
+  - (b) masked context stays the fallback per call.
+
+**Throughput: not measured yet.**
+- The pilot against the grpo-v5 actor never ran:
+  - first the registry D-state stall above;
+  - then grpo-v5-run1 was stopped for sft-v6, which now holds 80 GB, leaving ~1 GB of ledger headroom.
+- Queued instead: unit `fr-slice-1` (`ops/filled-reasoning/slice.sh`, 34 GB, medium priority).
+  - It runs a dedicated actor serving sft-v5 16cd47af at 64 running, generates 60 episodes into
+    `/home/werg/data/filled-reasoning-20261120`, writes `ops/filled-reasoning/slice-status.json` (episodes/h, steps/h,
+    tokens per filled step, projection), then reruns the audit with its NLL half.
+  - It starts when sft-v6's SFT frees memory.
+- Estimate to check against it:
+  - The corpus is ~22k verified teacher episodes, ~7.5 calls each, so ~165k steps.
+  - At 4 candidates x ~1k tokens, a step is ~4k decode tokens: ~660M tokens.
+  - At 4-6k tok/s on a dedicated 128-slot actor, that is 30-45 h.
+  - The sft-v6/v7 teacher selection alone (~7.7k episodes, ~57k steps) is 10-16 h.
+- So the full pass runs in the EI cycles' collect windows (`expert_iteration.py cycle --fill`, polite on the collect
+  actor) and in any window between runs, incrementally.
+- **Default for the next SFT after sft-v6:** the filled aux part (`--aux filled=<corpus>/chains.pkl,share=S,replaces=teacher`)
+  once `report.json` shows:
+  - the selected lengths and `</think>` hazard within the student's own (unhinted) distribution;
+  - hinted leakage rejected;
+  - action NLL after the filled block below the empty-block NLL.
+
+**Housekeeping.** `ops/teacher-gen-20261115` (47 GB) is moving to `/mnt/external/dgx-ops-archive-20261118/` (unit
+`fr-move-tg1115`, `ops/filled-reasoning/move_teacher_gen_20261115.py`). The unit runs at low priority with ionice idle,
+and was preempted once and requeued. Its steps:
+1. rsync onto the partial copy;
+2. verify file count and sizes;
+3. wait until no process holds a file under the source, then swap in a symlink and delete the NVMe copy;
+4. append journal records with the `data_hdd:` path.
