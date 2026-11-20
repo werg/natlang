@@ -494,6 +494,7 @@ class Registry:
     def _paths(self):
         if self._index is None:
             index = []
+            self._roots = {}
             for ident, ds in self.datasets.items():
                 try:
                     p = absolute(ds['path'])
@@ -513,6 +514,9 @@ class Registry:
                         pass
                 for k in keys:
                     index.append((k, ident))
+                if exact:     # the dataset's own directory names it too, but holds nothing else by prefix
+                    for k in {os.path.normpath(str(p)), os.path.realpath(p)}:
+                        self._roots.setdefault(k, ident)
             index.sort(key=lambda kv: -len(kv[0]))
             self._index = index
         return self._index
@@ -526,7 +530,11 @@ class Registry:
         except OSError:
             pass
         best = None
-        for k, ident in self._paths():
+        index = self._paths()
+        for c in candidates:
+            if c in self._roots and not any(k == c for k, _ in index):
+                return self.datasets[self._roots[c]]
+        for k, ident in index:
             for c in candidates:
                 if c == k or c.startswith(k.rstrip('/') + '/'):
                     if best is None or len(k) > len(best[0]):

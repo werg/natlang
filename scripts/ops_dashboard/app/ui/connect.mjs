@@ -78,7 +78,8 @@ export async function createConnection(ui) {
         applicationId: configuration.applicationId, definitionId: definition.id, definitionVersion: definition.version, timeoutMs: 30000,
         context: { viewId: sessionStorage.getItem('ops.view') || (() => { const v = crypto.randomUUID(); sessionStorage.setItem('ops.view', v); return v; })(),
           ...(identity?.documentPath ? { documentPath: identity.documentPath } : {}), ...(identity?.publication ? { publicationId: identity.publication } : {}) },
-        onOwnerReplaced() { ui.status('The session owner restarted. Reload to reconnect this device.', 'warn'); },
+        // The browser's device owner moved (another tab took it over, or it restarted): reconnect by reloading, at most once a minute.
+        onOwnerReplaced() { const last = Number(sessionStorage.getItem('ops.reloaded') || 0); if (Date.now() - last > 60000) { sessionStorage.setItem('ops.reloaded', String(Date.now())); location.reload(); } else ui.status('The connection moved to another tab of this page. Reload to reconnect here.', 'warn'); },
       });
       try { return await mount(attachment); } catch (e) { await attachment.detach().catch(() => {}); throw e; }
     },

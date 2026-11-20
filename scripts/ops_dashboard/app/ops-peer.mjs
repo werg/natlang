@@ -110,11 +110,17 @@ export async function runOpsPeer({ signal }) {
   log({ running: true, deviceId: nativeId, ownerInstanceId: owned.supervisor.ownerInstanceId });
   session.participation.onStatus(s => log({ connection: s.phase, error: s.error }));
   const pairingLoop = (async () => {
+    // Enrollment stays available for the participant's whole life: each finite window (Tendriller bounds one at ten
+    // minutes) is followed by the next. A window that ends with a transition in flight leaves its durable ordering pause;
+    // the next window's first pass inspects that exact request and reconciles it (adopt + resume) before taking new ones.
+    let lastPairing = '';
     while (!signal.aborted) {
-      let lastPairing = '';
-      const w = startPairingWindow({ owned, signal, onStatus: status => { const k = JSON.stringify(status); if (status?.state && status.state !== 'idle' && k !== lastPairing) { lastPairing = k; log({ pairing: status }); } } });
+      const w = startPairingWindow({ owned, signal, onStatus: status => {
+        if (!status?.state || status.state === 'idle' || status.state === 'window_closed') return;
+        const k = JSON.stringify(status); if (k !== lastPairing) { lastPairing = k; log({ pairing: status }); } } });
       await w.done.catch(e => log({ pairing_error: e.message }));
-      if (await session.orderingPause().catch(() => null)) { log({ pairing: 'ordering paused: restart this peer to reconcile the reviewed transition' }); return; }
+      if (await session.orderingPause().catch(() => null)) log({ pairing: 'a transition is still in flight; the next window reconciles it' });
+      await new Promise(r => setTimeout(r, 1000));
     }
   })();
   const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
