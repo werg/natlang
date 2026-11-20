@@ -5675,3 +5675,60 @@ and was preempted once and requeued. Its steps:
 2. verify file count and sizes;
 3. wait until no process holds a file under the source, then swap in a symlink and delete the NVMe copy;
 4. append journal records with the `data_hdd:` path.
+
+**2026-11-20 22:30, filled reasoning runs inside sft-v7 (supervisor's request).**
+- `fr-slice-1` is cancelled: its separate 34 GB actor would have competed with sft-v7's collect actor for the same
+  memory window.
+- `ops/ei/after-sft-v6.sh` launches sft-v7 with `FILL=/home/werg/data/filled-reasoning-20261120`, so `cycle --fill`
+  generates on the collect actor beside best-of-k collection (cf2f6e95b).
+- The fill takes teacher episodes of the tasks the student fails first: measured 0, then unmeasured, then by rate.
+  `select` now writes `tasks.rates.json`, which generate reads with `--prefer-rates`. Those are the tasks the frontier mix
+  trains teacher trajectories on.
+- The fill reads the seed WORKs and the `grpo-sd-teacher` role's.
+- It gets a fixed share of the actor: `--fill-inflight` 16 draws, up to 32 when the engine has spare slots. Spare-slot-only
+  draws would starve beside a 128-slot collection.
+- The cycle's fill argv is parse-tested against generate's parser. The walk ran end to end in a test against a
+  scripted engine: draws, prefill scores, hint, leak gate, length band, filled history, rows.
+- Throughput and quality are read from that fill (`filled_reasoning.py status/build`).
+- The unused Qwen October trajectories (~13.7k in the current turn format) are being replay-verified under today's
+  runtime for the verified teacher pool (subagent; result in its own entry).
+
+## 2026-11-20 23:30, operator soft state (view@compact-value): held-out NLL at step 12, the 40k-character cap and its excluded rows (operator soft-state strand)
+
+**Fit.** softop-fit-5 then softop-fit-7 (`build-v2`, plan `plan-v2.json`, 330 verified compact-value rows of at most 40k characters,
+120 steps x 8 rows, Adam 1e-3, CSPD prefix share 0.5, frozen 5ff07638 backbone). Memory: CUDA peak 7.5-7.8 GB, RSS 3.0-3.3 GB,
+about 11.9 GB in the ledger, about 60 s per step. The fit resumes exactly from `state.json` (written after every update):
+fit-5 was stopped at step 12 by the ledger guard (free memory below floor) and fit-7 continued 13-19 before sft-v6-run1
+preempted it. It is requeued at medium priority (fits run at medium; training and held evals at high) and resumes as
+memory frees. The base checkpoint is now on NVMe (`natlang-operator-soft-20261120/base/checkpoint.pt`, sha 5ff07638 checked;
+the plan points there). Its HDD load took about 5 minutes per resume. Per-step training loss (batch mean, 8 different rows a step) is
+1.68 1.66 0.79 0.99 1.00 0.80 1.12 1.89 0.81 1.44 1.28 1.02 2.38 1.16 1.29 1.72 1.36 1.32 1.68 (steps 1-19). Rows differ per step, so
+this is not a progress curve; the held-out pair below is.
+
+**Held-out check at step 12** (`operator_soft_states.py evaluate`, every test-split verified compact-value turn: 565 rows built
+uncapped, `turns-test-v2.jsonl`; reply NLL per token on the frozen backbone, paired per row; `eval-step12.json`):
+
+| rows | text | primed | trained | primed - text | trained - primed | trained lower than primed |
+|---|---|---|---|---|---|---|
+| all 565 | 1.157 | 1.117 | 0.885 | -0.040 +- 0.004 | -0.232 +- 0.009 | 565 / 565 |
+| short (<= 40k chars) 534 | 1.201 | 1.160 | 0.919 | -0.042 +- 0.004 | -0.241 +- 0.009 | 534 / 534 |
+| long (> 40k chars) 31 | 0.389 | 0.374 | 0.292 | -0.015 +- 0.003 | -0.082 +- 0.006 | 31 / 31 |
+
+Priming the state from view's text in its real position is already slightly better than the text itself. After 12 steps the trained state lowers
+every held-out row. The long rows the fit never saw improve by about the same relative amount (-25% vs -24% of the
+text NLL) from a much lower base: their replies are mostly verbatim spans of a long value. This is NLL of verified
+replies, not task success; the operator enters production through `PROMPT_STATES` in `operator-stage.sh` (soft command).
+The trained arm is re-measured on the final state when the fit ends.
+
+**The cap.** `turns --max-chars 40000` excluded 118 of 448 verified training rows (40,143-119,832 characters, median 59,126),
+listed with root, call and length in `natlang-operator-soft-20261120/excluded-v2.jsonl`. It is a stopgap for this fit only.
+Memory analysis for bringing them back: the fit already checkpoints every layer (`graph_loss checkpoint_layers=True`,
+`retain_states=False`, `serve/native_grad.py:398`), so the remaining length cost is the checkpoint boundaries
+(24 x 2048 BF16, about 96 KB/token) plus one layer's recompute (FFN 7680 wide, about 100 KB/token), about 340 KB/token
+observed: about 4 GB at 12k tokens and 15 GB CUDA at the longest row (about 36k tokens; softop-fit-2 measured that 15 GB). Computing the site under no_grad does not apply, because
+the state precedes the value and every value token's activations carry its gradient. The exact bounded path is
+sequence-segment recompute (run the row in token segments, carry each segment's state as an imported state, recompute
+per segment in backward). Through today's native-state format it would still carry every conv layer's full
+`gated_inputs` (about 144 KB/token), so it pays only with window-trimmed carried states (conv tail, the 256-token sliding window)
+alongside the full-attention KV (about 14 KB/token). It is not built yet. Until it is, the next fit takes all 448 rows with a claim sized from the
+measured uncapped peak: 15 GB CUDA + 3.3 GB RSS, budget 19 GB.

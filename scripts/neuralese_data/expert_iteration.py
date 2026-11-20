@@ -139,6 +139,9 @@ def select(args):
     report = {'eligible': len(rows), 'held_excluded': excluded, 'rated': len(rates), 'group_dirs': len(dirs),
               'tiers': counts, 'selected': len(ordered), 'families': len({r.get('family') for r in ordered})}
     out.with_suffix('.report.json').write_text(json.dumps(report, indent=1) + '\n')
+    # the rates the order came from (filled_reasoning generate --prefer-rates: teacher episodes of failed tasks first)
+    out.with_suffix('.rates.json').write_text(json.dumps({k: {'successes': s, 'scored': n} for k, (s, n) in rates.items()},
+                                                         sort_keys=True) + '\n')
     log({'event': 'selected', **report})
 
 
@@ -174,7 +177,7 @@ def frontier_collector(base):
 def wait_actor(url, sha, process, log_path, timeout=3600):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if process.poll() is not None:
+        if process is not None and process.poll() is not None:
             raise RuntimeError(f'actor exited with {process.returncode} (see {log_path})')
         try:
             with urllib.request.urlopen(url + '/v1/neuralese/info', timeout=10) as response:
@@ -217,21 +220,28 @@ def collect(args):
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
-    command, url = grpo.actor_command(g, work, sha)
-    with (work / 'actor.log').open('a') as handle:
-        actor = subprocess.Popen(command, cwd=REPO, env=grpo.pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
-                                 start_new_session=True)
+    actor = None
+    if args.actor:      # an actor already serving this policy (smokes, a shared engine): its attested sha must match
+        url = args.actor.rstrip('/')
+        wait_actor(url, sha, None, None, timeout=60)
+        sglang = None
+    else:
+        command, url = grpo.actor_command(g, work, sha)
+        with (work / 'actor.log').open('a') as handle:
+            actor = subprocess.Popen(command, cwd=REPO, env=grpo.pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
+                                     start_new_session=True)
+        wait_actor(url, sha, actor, work / 'actor.log')
+        sglang = url.rsplit(':', 1)[0] + ':' + str(args.actor_port + 1000)
 
     def stop_actor(*_):
-        if actor.poll() is None:
+        if actor is not None and actor.poll() is None:
             os.killpg(actor.pid, signal.SIGTERM)
     import atexit
     atexit.register(stop_actor)
-    wait_actor(url, sha, actor, work / 'actor.log')
     g.actor = url
-    sglang = url.rsplit(':', 1)[0] + ':' + str(args.actor_port + 1000)
     (work / 'actor.json').write_text(json.dumps({'url': url, 'sglang': sglang, 'checkpoint_sha256': sha,
-                                                 'export': str(work / 'actor' / 'sglang-hf'), 'pid': actor.pid}) + '\n')
+                                                 'export': str(work / 'actor' / 'sglang-hf'),
+                                                 'pid': actor.pid if actor else None}) + '\n')
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(g.top_p, capture=True)) + '\n')
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     collector = frontier_collector(grpo.Collector)(g, tasks, work, sha, REPO / 'ts-host',
@@ -437,15 +447,28 @@ class Cycle:
         if not (self.collect_dir / 'actor.json').exists():
             self.note(stage='fill', skipped='no actor')
             return
+        self.work_tokenizer()      # --render-tokenizer: the data stage made it only after the collection
         actor = json.loads((self.collect_dir / 'actor.json').read_text())
         if actor['checkpoint_sha256'] != self.start_sha:
             raise SystemExit('collect actor serves another policy')
-        self.ledger(f'{self.a.name}-fill', 6, 'medium',
-                    self.py('filled_reasoning.py', 'generate', '--out', self.a.fill, '--sglang', actor['sglang'],
-                            '--front', actor['url'], '--render-tokenizer', self.work / 'tokenizer',
-                            '--export', actor['export'], '--polite', '--max-running', self.a.slots),
-                    self.dir / 'fill.log', detach=True)
+        self.ledger(f'{self.a.name}-fill', 6, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True)
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
+
+    def fill_command(self, actor):
+        """filled_reasoning.py generate on the collect actor: the seed WORKs then the grpo-sd-teacher role's (first
+        WORK wins a key), teacher episodes of the tasks the student fails first (the select stage's rates: failed, then
+        unmeasured, then by rate; the frontier mix trains teacher trajectories there), and a fixed share of the actor
+        (``--fill-inflight`` draws in flight while collection keeps every slot busy, up to twice that when it does not;
+        spare-slot-only draws would starve beside a 128-slot collection)."""
+        from natlang_neuralese.common import data_registry
+        works = list(dict.fromkeys([*map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
+        rates = self.dir / 'tasks.rates.json'
+        return self.py('filled_reasoning.py', 'generate', '--out', self.a.fill, '--sglang', actor['sglang'],
+                       '--front', actor['url'], '--render-tokenizer', self.work / 'tokenizer', '--export', actor['export'],
+                       '--polite', '--max-running', self.a.slots, '--min-inflight', self.a.fill_inflight,
+                       '--max-inflight', 2 * self.a.fill_inflight, '--workers', self.a.fill_inflight,
+                       *[x for w in works for x in ('--work', w)],
+                       *(('--prefer-rates', rates) if rates.exists() else ()))
 
     def stop_unit(self, unit):
         subprocess.run([*LEDGER, 'cancel', '--unit', unit])
@@ -469,6 +492,8 @@ class Cycle:
         covered = [*TEACHER_POOLS, *sorted(OPS.glob('ei/*/teacher'))]
         rare = [t for t, v in json.loads((self.dir / 'frontier.json').read_text())['tasks'].items()
                 if v['tier'] in ('never',) or v['successes'] / max(1, v['scored']) <= 0.25]
+        if not rare:     # teacher_gen --limit 0 means every task
+            return self.mark('teacher', frontier_tasks=0)
         command = [PY, str(self.pin / 'scripts/neuralese_data/teacher_gen.py'),
                    '--work', str(work), '--pause-below-available-gb', '25', '--exclude-family-regex', '(?!)',
                    *[x for c in covered if Path(c) != work and (Path(c) / 'manifest.jsonl').exists()
@@ -483,11 +508,14 @@ class Cycle:
         self.ledger(f'{self.a.name}-teacher', 7, 'low', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
         self.mark('teacher', frontier_tasks=len(rare), work=str(work))
 
+    def work_tokenizer(self):
+        self.work.mkdir(parents=True, exist_ok=True)
+        if not (self.work / 'tokenizer').exists():
+            os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', self.work / 'tokenizer')
+
     def data_stage(self):
         w = self.work
-        w.mkdir(parents=True, exist_ok=True)
-        if not (w / 'tokenizer').exists():
-            os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', w / 'tokenizer')
+        self.work_tokenizer()
         steps = []
         if self.a.seed_work:
             steps.append(['/usr/bin/python3', str(OPS / 'sft-v5' / 'seed_replays.py'), str(w), *self.a.seed_work])
@@ -659,6 +687,8 @@ def main():
     c.add_argument('--dynamic-sampling-max-spread', type=float, default=0.1,
                    help="grpo's early stop of a group whose first wave agrees (0: all k samples always)")
     c.add_argument('--actor-port', type=int, default=8470)
+    c.add_argument('--actor', help='use this running actor front (its attested policy must be --checkpoint) instead '
+                   'of launching one')
     c.add_argument('--actor-arg', action='append', default=[])
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
@@ -684,6 +714,8 @@ def main():
     y.add_argument('--slots', type=int, default=128)
     y.add_argument('--kv-gb', type=int, default=12)
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
+    y.add_argument('--fill-inflight', type=int, default=16,
+                   help='filled-reasoning draws kept in flight on the collect actor (twice that when it has spare slots)')
     y.add_argument('--no-teacher-campaign', action='store_true')
     y.add_argument('--replay-workers', type=int, default=8)
     y.add_argument('--teacher-budget', type=int, default=180_000_000)

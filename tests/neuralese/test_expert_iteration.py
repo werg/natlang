@@ -129,3 +129,30 @@ def test_frontier_collector_walks_the_order_once_skips_scored_tasks_and_stops_at
     collector.deadline = time.time() - 1
     assert collector._take() is None and collector.finished()  # past the deadline: no new group, done when drained
     assert collector.created == ['c', 'a']
+
+
+def test_cycle_fill_command_parses_as_filled_reasoning_generate(tmp_path, monkeypatch):
+    """The fill stage's argv is a valid ``filled_reasoning.py generate`` command: seed WORKs then the role's, the
+    select stage's rates first, a fixed share of the collect actor."""
+    import types
+    import filled_reasoning
+    from natlang_neuralese.common import data_registry
+    monkeypatch.setattr(data_registry, 'role_paths', lambda name: ['/data/demos', '/data/seed'])
+    args = types.SimpleNamespace(dir=str(tmp_path / 'c'), pin=str(tmp_path / 'pin'), commit='a' * 40, start_sha='b' * 64,
+                                 start='x', sft_work=str(tmp_path / 'w'), fill=str(tmp_path / 'fill'),
+                                 seed_work=['/data/seed'], slots=128, fill_inflight=16)
+    cycle = ei.Cycle(args)
+    (cycle.dir / 'tasks.rates.json').write_text('{}')
+    command = cycle.fill_command({'sglang': 'http://127.0.0.1:1', 'url': 'http://127.0.0.1:2', 'export': '/e'})
+    assert command[1].endswith('scripts/neuralese_data/filled_reasoning.py')
+    parsed = filled_reasoning.build_parser().parse_args(command[2:])
+    assert parsed.command == 'generate' and parsed.work == ['/data/seed', '/data/demos']
+    assert parsed.prefer_rates == [str(cycle.dir / 'tasks.rates.json')] and parsed.polite
+    assert (parsed.min_inflight, parsed.max_inflight, parsed.max_running) == (16, 32, 128)
+
+
+def test_fill_takes_failed_then_unmeasured_tasks_first():
+    import filled_reasoning
+    episodes = [{'task_id': t, 'key': t} for t in ('solved', 'unmeasured', 'failed', 'band')]
+    rates = {'solved': (4, 4), 'failed': (0, 4), 'band': (1, 4)}
+    assert [e['task_id'] for e in filled_reasoning.prefer(episodes, rates)] == ['failed', 'unmeasured', 'band', 'solved']

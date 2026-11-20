@@ -604,24 +604,43 @@ class Registry:
             probe = parent
         return self._find_full(path)
 
+    def _temp_view(self, temp):
+        if getattr(self, '_temp', None) is None:
+            view = object.__new__(Registry)
+            view.datasets = {}
+            for ident, ds in self.datasets.items():
+                try:
+                    if any(_under(os.path.normpath(str(absolute(ds['path']))), t) for t in temp):
+                        view.datasets[ident] = ds
+                except (ValueError, KeyError):
+                    continue
+            view._index = view._keymap = None
+            self._temp = view
+        return self._temp
+
     def _find_full(self, path) -> dict | None:
         candidates = {os.path.normpath(os.path.abspath(str(path)))}
         try:
             candidates.add(os.path.realpath(path))
         except OSError:
             pass
-        self._paths()
-        if self._keymap is None:
-            self._keymap = {}
-            for k, ident in self._index:
-                self._keymap.setdefault(k, ident)
+        temp = _temp_roots()
+        # A temporary path (test fixtures, scratch) can only lie in a dataset recorded in a temporary directory: no
+        # portable (registered) path is temporary. The index over every registered directory lists and resolves them on
+        # the HDD (minutes under load: test_extract_takes_teacher_successes_in_student_form hung three times).
+        src = self._temp_view(temp) if all(any(_under(c, t) for t in temp) for c in candidates) else self
+        src._paths()
+        if src._keymap is None:
+            src._keymap = {}
+            for k, ident in src._index:
+                src._keymap.setdefault(k, ident)
         best = None
         for c in candidates:      # the deepest ancestor (or the path itself) that a dataset names
-            if c in self._roots and c not in self._keymap:
-                return self.datasets[self._roots[c]]
+            if c in src._roots and c not in src._keymap:
+                return self.datasets[src._roots[c]]
             probe = c
             while True:
-                ident = self._keymap.get(probe)
+                ident = src._keymap.get(probe)
                 if ident is not None:
                     if best is None or len(probe) > len(best[0]):
                         best = (probe, ident)
@@ -682,6 +701,16 @@ class Registry:
 
 _LOADED = None
 _GIT_CACHE: dict = {}
+
+
+def _temp_roots() -> set:
+    import tempfile
+    base = tempfile.gettempdir()
+    return {os.path.normpath(base), os.path.realpath(base)}
+
+
+def _under(path: str, base: str) -> bool:
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
 
 
 def _read_journal() -> list:

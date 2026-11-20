@@ -302,3 +302,20 @@ def test_find_takes_the_lexical_fast_path_and_agrees_with_the_full_index(roots, 
     assert not calls
     # a file a glob dataset claims is the full index's question
     assert reg.find(inner)['id'] == full[inner] == 'inner' and calls == [inner]
+
+
+def test_find_of_a_temporary_path_indexes_only_temporary_datasets(roots, monkeypatch):
+    """A temporary path is looked up among datasets recorded in temporary directories only: the full index lists and
+    resolves every registered directory (minutes on the busy HDD), none of which can hold a temporary path."""
+    data = roots / 'data_nvme' / 'ds'
+    data.mkdir()
+    (data / 'a.jsonl').write_text('{}\n')
+    dr.record_dataset('tmp-ds', data, kind='trajectories', format='x', include=['*.jsonl'])
+    reg = dr.load(fresh=True)
+    reg.datasets['far'] = {'id': 'far', 'path': '/nonexistent-hdd/far', 'include': ['x-*/y']}
+    listed = []
+    real_listdir = dr.os.listdir
+    monkeypatch.setattr(dr.os, 'listdir', lambda d: listed.append(str(d)) or real_listdir(d))
+    assert reg.find(data / 'a.jsonl')['id'] == 'tmp-ds'
+    assert reg.find(roots / 'elsewhere' / 'b') is None
+    assert 'far' not in reg._temp.datasets and not any('nonexistent-hdd' in d for d in listed)

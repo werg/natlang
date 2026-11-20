@@ -13,6 +13,8 @@ Stages (each reads the previous stage's output under WORK; read-only on every so
            and, for student episodes, the exact actor prompt/sample token ids of each call (renderer check only).
            A JOLT+ teacher attempt's success enters as `rl-own` (`role: teacher`) in student form
            (`rl/jolt.py student_episode`: guidance turn and the guidance policy's calls removed).
+           `--october-teacher GROUP.jsonl.zst` turns October per-call teacher rows (`--october-model` filters) into
+           `teacher` episodes (task row from the rows' source turns, held closure out) for the replay to verify.
   replay   each episode's task runs again under this checkout's runtime (`task_rollouts.prepare`, `run_bonsai_queue.py`,
            `task_rollouts.score`, the teacher_gen path) against a replay server that answers every model request with
            the recorded reply of the same call (matched by its visible messages); WORK/replay/<key>/rollouts.jsonl is the
@@ -159,9 +161,101 @@ def build_inputs(args):
                         *[a.split('=', 1)[1].split(',')[0] for a in getattr(args, 'aux', None) or []]] if p]
 
 
+def october_group(path):
+    return Path(path).name.split('.')[0]
+
+
+TRAJECTORY_ID = re.compile(r'"trajectory_id"\s*:\s*"([^"]+)"')
+
+
+def october_task_rows(source_files, wanted):
+    """{trajectory: task row} from the October sources the rows were rebuilt from: each source turn carries its task as
+    `task.program_ir` (natlang.program/2, the cases.jsonl row form); one streamed pass per file, parsing only the turns
+    of wanted trajectories."""
+    rows, left = {}, set(wanted)
+    for source in source_files:
+        for line in zstd_lines(source):
+            if not left:
+                return rows
+            match = TRAJECTORY_ID.search(line[:2000])
+            if match is None or match.group(1) not in left:
+                continue
+            program = ((json.loads(line).get('task') or {}).get('program_ir'))
+            if program:
+                rows[match.group(1)] = program
+                left.discard(match.group(1))
+    return rows
+
+
+def october_teacher_episodes(path, models, held_manifest, c):
+    """Teacher episodes of one October group file (sft-sources-20261117/october/GROUP.jsonl.zst, per-call rows rebuilt
+    for the current runtime; `models`: the provenance models kept, all when empty): rows grouped by trajectory in decision
+    order, the task row read back from the turns' source files, held closure and unadmitted fixtures dropped. Each
+    becomes a `teacher` episode the replay stage verifies like a teacher_gen success. Two passes (a group is GBs of
+    JSON): the first counts each trajectory's rows, the second holds a trajectory's raw lines until it is complete."""
+    from teacher_admission import fixture_task
+    from teacher_provenance import SELF_HOSTED
+    group = october_group(path)
+    counts, sources = collections.Counter(), {}
+    for line in zstd_lines(path):
+        provenance = json.loads(line).get('provenance') or {}
+        c['rows'] += 1
+        if models and provenance.get('model') not in models:
+            c['rows_other_model'] += 1
+            continue
+        counts[provenance['trajectory']] += 1
+        sources.setdefault(provenance['trajectory'], provenance['source_file'])
+    data_registry.require_registered(sorted(set(sources.values())))
+    tasks = october_task_rows(sorted(set(sources.values())), counts)
+    by_id = {}
+    for task in tasks.values():
+        by_id.setdefault(task['id'], task)
+    excluded = held_excluded_ids(held_manifest, by_id, held_closure(held_manifest)) if by_id else set()
+    pending = collections.defaultdict(list)
+    for line in zstd_lines(path):
+        provenance = json.loads(line).get('provenance') or {}
+        trajectory = provenance.get('trajectory')
+        if trajectory not in counts:
+            continue
+        pending[trajectory].append(line)
+        if len(pending[trajectory]) < counts[trajectory]:
+            continue
+        rows = [json.loads(raw) for raw in pending.pop(trajectory)]
+        c['trajectories'] += 1
+        rows.sort(key=lambda r: int(r['id'].rsplit(':', 1)[1]))
+        if [int(r['id'].rsplit(':', 1)[1]) for r in rows] != list(range(len(rows))):
+            c['decision_gaps'] += 1   # replayed anyway: a missing recorded call ends its replay
+        task = tasks.get(trajectory)
+        if task is None:
+            c['no_task_row'] += 1
+            continue
+        if task['id'] != rows[0].get('task_id'):
+            c['task_row_mismatch'] += 1
+            continue
+        if task['id'] in excluded:
+            c['held_excluded'] += 1
+            continue
+        if fixture_task(task):
+            c['fixture_not_admitted'] += 1
+            continue
+        c['episodes'] += 1
+        model = rows[0]['provenance'].get('model')
+        turns = [semantic_turn({'messages': r['messages'], 'tools': r['tools'], 'target': r['target'],
+                                'invocation_id': r['provenance'].get('invocation'),
+                                'usage': {'completion_tokens': r['provenance'].get('target_tokens')}}, False)
+                 for r in rows]
+        yield {'key': f'october-teacher:{group}:{trajectory}', 'source': 'teacher', 'run': 'october:' + group,
+               'group': group, 'sample': 0, 'seed': None, 'task_id': task['id'],
+               'family': rows[0].get('family') or task.get('family'),
+               'teacher': {'model_id': model, 'provider': SELF_HOSTED.get(model, 'self-hosted-vllm'),
+                           'origin': 'october:' + group, 'source_file': rows[0]['provenance']['source_file']},
+               'base_rank': None, 'task': task, 'root_mode': 'student', 'turns': turns, 'execution_graph_events': 0}
+
+
 def extract(args):
     data_registry.require_registered([*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                                      *(getattr(args, 'live_run', None) or [])])
+                                      *(getattr(args, 'live_run', None) or []),
+                                      *(getattr(args, 'october_teacher', None) or [])])
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
     episodes_out = work / f'{args.out_name}.jsonl.zst'
@@ -260,6 +354,11 @@ def extract(args):
                                             'manifest_record': record, 'pool': str(Path(pool).resolve())}}
                               if admission else {}),
                            'execution_graph_events': len(row.get('execution_graph') or [])})
+    for path in getattr(args, 'october_teacher', None) or []:
+        for episode in october_teacher_episodes(path, getattr(args, 'october_model', None) or (), args.held_manifest,
+                                                census.setdefault('october-teacher:' + october_group(path),
+                                                                  collections.Counter())):
+            out.write(episode)
     for path in getattr(args, 'live_run', []) or []:
         from live_teacher_sources import load_episode
         episode = load_episode(path)
@@ -277,9 +376,10 @@ def extract(args):
         (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
     summary = {k: dict(v) for k, v in census.items()}
     (work / f'{args.out_name}-extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
-                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': getattr(args, 'live_run', [])}, indent=1) + '\n')
+                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': getattr(args, 'live_run', []),
+                                                    'october_teacher': getattr(args, 'october_teacher', None) or []}, indent=1) + '\n')
     record_work(work, [*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                       *(getattr(args, 'live_run', None) or [])])
+                       *(getattr(args, 'live_run', None) or []), *(getattr(args, 'october_teacher', None) or [])])
     print(json.dumps(summary, indent=1))
 
 
@@ -2289,6 +2389,11 @@ def main():
     e.add_argument('--live-trajectory-out', metavar='OUTPUT.jsonl.zst',
                    help='also export verified open goals as standalone canonical trajectory IR')
     e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')
+    e.add_argument('--october-teacher', action='append', default=[], metavar='GROUP.jsonl.zst',
+                   help='October per-call rows (sft-sources-20261117/october) as teacher episodes for replay')
+    e.add_argument('--october-model', action='append', default=[], metavar='MODEL_ID',
+                   help='keep only these provenance models of --october-teacher rows (default: all)')
+    e.add_argument('--held-manifest', help='held closure for --october-teacher (default: the registry role held-eval)')
     r = sub.add_parser('replay')
     r.add_argument('--work', required=True)
     r.add_argument('--runtime-repo', help='checkout (a pin) whose runtime, collector and oracle replay (default: this one)')
