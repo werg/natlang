@@ -185,17 +185,17 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 72 open goals across six workspace templates, with 58
-training goals and 14 source-separated holdouts. The same Base entry point
+The catalog declares 91 open goals across six workspace templates, with 71
+training goals and 20 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 17 | Public evidence and document recovery, authorized CDP changes and readback, and declared suite verification |
+| Examples | 27 | Public evidence and document recovery, authorized CDP changes and readback, declared suite verification, and publishing readiness and receipt recovery |
 | Personal | 15 | `workspace-live-declared-test-suite`, `personal-live-mission-planning`, and `personal-live-mission-facility` with board discovery, revision-bound changes, competing edits, prerequisites, and durable handoffs |
-| System | 16 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles |
+| System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 5 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes |
 | Google Workspace | 7 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition |
@@ -209,17 +209,29 @@ references use the managed terminal driver and an owned hub. Packaged
 deployment selectors also need an installed server package configured
 through `VIBESTUDIO_MANAGED_DEPLOYMENT_PACKAGE`.
 
+The publishing cases reuse `workspace-publication-preflight` and
+`workspace-live-publication-revision`. The harness binds an actual renderer
+and website package to an observed workspace revision. It checks readiness
+and the exact local publication journal without issuing an external publish.
+The public-research holdouts use source groups for W3C image accessibility
+and Unicode canonical comparison, separate from the training cases about
+reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/images/decorative/),
+[Unicode normalization](https://www.unicode.org/faq/normalization.html)
+
 To check the archive of reference results against the pinned catalog,
 preserve the managed `trajectory ... --full --json` files and run:
 
 ```sh
-python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS"
+python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS" \
+  --baseline docs/research/vibestudio-open-goal-baseline.jsonl
 ```
 
 The audit lists missing cases and binds accepted proofs to the current goal
-hash and the run's owned context. Add `--require-complete` to make any
-missing reference fail the check. Use `--family` to scope it to a particular
-catalog family. Reference executions do not produce teacher data.
+hash and the run's owned context. With the baseline, it reports the remaining
+corpus shortfall and families without a verified holdout. Add
+`--require-complete` to make those gaps or any missing reference fail the
+check. For a single family, pass `--family` in place of `--baseline`.
+Reference executions do not produce teacher data.
 
 The first Personal and System live reference runs passed all five planning
 cases and exposed missing target dependencies in five native executions.
@@ -240,8 +252,18 @@ All 21 Mission Control and operator additions passed their managed reference
 checks. The archive binds the nine board results, four terminal profile
 results, and eight deployment results to the pinned goal and owned context.
 The deployment run used the installed regular server package at version
-0.1.105. Across the 72-case catalog, the current archive verifies 58 goals.
+0.1.105. The subsequent Examples run passed eleven more document, browser,
+and suite cases. All nine recovery references passed against the managed
+PubSub and scratch services, including a stale cursor, a concurrent message,
+and incomplete replay. All eight publishing cases passed against the managed
+website renderer, package builder, and local journal. The reference archive
+verifies 86 of the 91 declared goals. The public-research checks require a
+working search provider. The
+managed test reached the default DuckDuckGo provider, which rejected its
+automated searches. Configure Tavily, Brave, or Exa in the managed workspace
+before running the public-research references.
+
 Bounded Luna provider probes on Tick and Pop returned expired OAuth. The
 live teacher capture through learner assembly remains unverified.
-Pop reproduced the 51-case catalog byte for byte from the pushed host and
-System Testing revisions.
+Pop reproduced the prior 72-case catalog byte for byte from the pushed host
+and System Testing revisions.

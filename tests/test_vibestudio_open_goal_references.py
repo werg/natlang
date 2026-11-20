@@ -1,7 +1,9 @@
 import gzip
 import json
 
-from scripts.vibestudio.audit_open_goal_references import audit, fingerprint
+import pytest
+
+from scripts.vibestudio.audit_open_goal_references import audit, corpus_floor, fingerprint
 
 
 def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
@@ -37,6 +39,13 @@ def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
         return audit(catalog, [tmp_path], {'mission'})['verified']
 
     assert verified_count() == 1
+    result = audit(catalog, [tmp_path], {'mission'})
+    assert result['families']['mission'] == {
+        'train': 1, 'held': 0, 'verified_train': 1, 'verified_held': 0,
+    }
+    assert result['families_without_verified_holdout'] == ['mission']
+    catalog.write_text(catalog.read_text().replace('"split": "train"', '"split": "test"'))
+    assert audit(catalog, [tmp_path], {'mission'})['families_without_verified_holdout'] == []
     proof['goal'] = 'Review a different shift.'
     assert verified_count() == 0
     proof['goal'], proof['contextId'] = goal, 'ctx-replacement'
@@ -44,3 +53,17 @@ def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
     proof['contextId'] = 'ctx-original'
     diagnostics['natlangTeacher'] = {'calls': []}
     assert verified_count() == 0
+
+
+def test_corpus_floor_comes_from_the_pinned_baseline(tmp_path):
+    baseline = tmp_path / 'baseline.jsonl'
+    snapshot = {
+        'schema': 'vibestudio.open-goal-inventory/1',
+        'agentic_baseline': 12,
+        'minimum_distinct_open_goals': 24,
+    }
+    baseline.write_text(json.dumps(snapshot) + '\n')
+    assert corpus_floor(baseline) == 24
+    baseline.write_text(json.dumps({**snapshot, 'minimum_distinct_open_goals': 12}) + '\n')
+    with pytest.raises(ValueError, match='Invalid pinned baseline'):
+        corpus_floor(baseline)

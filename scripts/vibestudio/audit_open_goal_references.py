@@ -4,6 +4,7 @@ import argparse
 import gzip
 import hashlib
 import json
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -62,13 +63,37 @@ def audit(catalog_path, roots, families):
                 continue
             proofs[scenario] = {'path': str(path), 'checks': sorted(checks)}
 
+    coverage = defaultdict(lambda: {
+        'train': 0, 'held': 0, 'verified_train': 0, 'verified_held': 0,
+    })
+    for scenario, row in selected.items():
+        bucket = 'train' if row['split'] == 'train' else 'held'
+        family = coverage[row['family']]
+        family[bucket] += 1
+        family[f'verified_{bucket}'] += scenario in proofs
+
     return {
         'catalog_sha256': hashlib.sha256(catalog_bytes).hexdigest(),
         'selected': len(selected),
         'verified': len(proofs),
         'missing': sorted(selected.keys() - proofs.keys()),
+        'families': dict(sorted(coverage.items())),
+        'families_without_verified_holdout': sorted(
+            family for family, counts in coverage.items() if not counts['verified_held']
+        ),
         'proofs': proofs,
     }
+
+
+def corpus_floor(baseline):
+    with baseline.open(encoding='utf-8') as stream:
+        snapshot = json.loads(stream.readline())
+    size = snapshot.get('agentic_baseline')
+    floor = snapshot.get('minimum_distinct_open_goals')
+    if (snapshot.get('schema') != 'vibestudio.open-goal-inventory/1' or
+            type(size) is not int or size <= 0 or floor != 2 * size):
+        raise ValueError(f'Invalid pinned baseline at {baseline}')
+    return floor
 
 
 if __name__ == '__main__':
@@ -76,8 +101,18 @@ if __name__ == '__main__':
     parser.add_argument('catalog', type=Path)
     parser.add_argument('roots', nargs='+', type=Path)
     parser.add_argument('--family', action='append', default=[])
+    parser.add_argument('--baseline', type=Path, help='audit the full corpus against the pinned inventory floor')
     parser.add_argument('--require-complete', action='store_true')
     args = parser.parse_args()
+    if args.baseline and args.family:
+        parser.error('--baseline audits the full corpus')
     result = audit(args.catalog, args.roots, set(args.family))
+    shortfall = 0
+    missing_holdout = False
+    if args.baseline:
+        floor = corpus_floor(args.baseline)
+        shortfall = max(0, floor - result['verified'])
+        missing_holdout = bool(result['families_without_verified_holdout'])
+        result.update(minimum_verified_goals=floor, remaining_verified_goals=shortfall)
     print(json.dumps(result, indent=2))
-    raise SystemExit(int(args.require_complete and bool(result['missing'])))
+    raise SystemExit(int(args.require_complete and bool(result['missing'] or shortfall or missing_holdout)))
