@@ -166,6 +166,7 @@ python scripts/neuralese_data/sft_sources.py build --work "$WORK" \
   --out "$LEARNER_READY" --tokenizer "$TOKENIZER_DIR" --base-rates '' \
   --held-manifest "$HELD_MANIFEST" \
   --open-goals-only --no-default-teacher-pool --min-open-goal-share 0.8 \
+  --think-treatment none \
   --live-holdout-registry "$GOAL_CATALOG" --val-episodes 0
 ```
 
@@ -485,14 +486,16 @@ verification pending.
 Google's evidence is registered as
 `vibestudio-open-goal-google-setup-reference-14-20261120`.
 
-The staged catalog reached 701 goals with 171 held-out cases. It adds
+The staged catalog reached 797 goals with 193 held-out cases. It adds
 capability and skill provenance, durable task recovery, client diagnostics,
 GitHub readiness, workspace assembly, scheduled automation recovery,
 owned HTTP research, compound native eval handoffs, linked vault work,
-retained provider approvals, local incident drafts, and build provenance.
-The 681-goal checkpoint had distinct texts after normalizing quoted literals
+retained provider approvals, local incident drafts, build provenance,
+template migration, local execution width, retained dictation, Adventure
+journeys, and specialist handoffs.
+The 777-goal checkpoint had distinct texts after normalizing quoted literals
 and numbers. All 842 legacy assignment entries remained byte-identical.
-The 551-goal checkpoint had zero training ID or source-group overlaps with
+The 777-goal checkpoint had zero training ID or source-group overlaps with
 the digest-checked held-v2 and held-v3 cases.
 
 Thirteen selected model-free checks passed across Examples, Personal,
@@ -501,10 +504,11 @@ after the runtime delivered committed state updates to headless panels and
 the test granted reload authority for the authorized renderer. The next
 managed run added 35 Examples, 22 Personal, 27 Spectrolite, and 57 System
 proofs. The combined audit covers 525 distinct goals, including 117 held-out
-goals. The full reference matrix peaked at 9.5 GiB on Tick.
-The 12 new held-out research and editing goals passed source checks through
-the native page extractor and cache client. Their managed browser checks
-are queued.
+goals before the assembly and research reruns. The full reference matrix
+peaked at 9.5 GiB on Tick. Fifteen assembly reruns and all 12 new held-out
+research and editing goals passed in managed Vibestudio. Those research
+cases use the native page extractor and retained cache. The current audit
+covers 552 distinct goals, including 133 held-out goals.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
