@@ -215,6 +215,8 @@ capability labels and set a floor of **2,164 distinct open goals**. The five
 goals from the new lane do not enlarge the baseline. The 253
 `harness-review` cases remain inventory items until their model paths are
 confirmed. The three TestKit suites are recorded separately.
+The audit reports evidence for all inventory labels. The 151 labels on
+the pinned agentic tests determine agentic capability coverage.
 
 A baseline case counts when it starts a direct agent, declares an agent
 orchestration, submits model turns in an orchestrator, or is registered as a
@@ -589,4 +591,7 @@ The 970-goal release passed the full host commit gate and was pushed. The
 gate peaked at 6.1 GiB on Tick. Pop reproduced catalog SHA-256
 `9a50046d00060f9b0825e6c1fdaa77b9cda04104898f5378ae2cbecbb8f5b6df`
 and verified the same 450-selector list in the new release directory.
-Its first managed verification batch targets additional cases.
+`train-cases-no-device.txt` contains the 440 selectors that require neither
+a terminal device nor a deployment package. Its SHA-256 is
+`a62a11e916d1754840e5d2716f89ea91cb995947c80f14afa8e975cedbd3d292`.
+The first managed verification batch targets additional cases.

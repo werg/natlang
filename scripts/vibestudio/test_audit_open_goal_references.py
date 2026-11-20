@@ -1,8 +1,41 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from audit_open_goal_references import write_train_cases
+from audit_open_goal_references import inventory_coverage, write_train_cases
+
+
+class CapabilityCoverageTest(unittest.TestCase):
+    def test_requires_each_agentic_origin_and_reports_auxiliary_cases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = root / 'baseline.jsonl'
+            crosswalk = root / 'coverage.json'
+            baseline.write_text(''.join(json.dumps({
+                'kind': 'system-test', 'origin': origin, 'capability': capability,
+            }) + '\n' for origin, capability in (
+                ('managed-teacher', 'managed'),
+                ('direct-agent', 'direct'),
+                ('agent-orchestration', 'orchestrated'),
+                ('harness-review', 'review'),
+                ('open-user-goal', 'new-goal'),
+                ('testkit', 'testkit'),
+            )))
+            crosswalk.write_text(json.dumps({
+                'schema': 'vibestudio.open-goal-coverage/2',
+                'families': {'scope': {'capabilities': ['direct'], 'skills': []}},
+                'cases': {'open-goal-scope': {'capabilities': {'direct': ['independentReadback']}}},
+            }))
+            report = inventory_coverage({
+                'families': {'workspace-open-user-goal-scope': {}},
+                'cases': {'open-goal-scope': {'family': 'workspace-open-user-goal-scope'}},
+                'proofs': {'open-goal-scope': {'checks': ['independentReadback']}},
+            }, baseline, crosswalk)['capabilities']
+            self.assertEqual(report['agentic_baseline'], ['direct', 'managed', 'orchestrated'])
+            self.assertEqual(report['agentic_without_verified_reference_links'], ['managed', 'orchestrated'])
+            self.assertEqual(report['without_verified_reference_links'],
+                             ['managed', 'new-goal', 'orchestrated', 'review', 'testkit'])
 
 
 class TrainSelectorTest(unittest.TestCase):

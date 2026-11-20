@@ -9,6 +9,11 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path
 
+if __package__:
+    from .open_goal_inventory import AGENTIC_BASELINE_ORIGINS
+else:
+    from open_goal_inventory import AGENTIC_BASELINE_ORIGINS
+
 
 def fingerprint(goal):
     return hashlib.sha256(json.dumps(goal, ensure_ascii=False).encode()).hexdigest()
@@ -219,6 +224,14 @@ def inventory_coverage(result, baseline, crosswalk, installed=None):
             } for kind, items in matched.items()
         },
     }
+    required_capabilities = {
+        row['capability'] for row in rows
+        if row['kind'] == 'system-test' and row['origin'] in AGENTIC_BASELINE_ORIGINS
+    }
+    report['capabilities']['agentic_baseline'] = sorted(required_capabilities)
+    report['capabilities']['agentic_without_verified_reference_links'] = sorted(
+        required_capabilities - exercised['capabilities'].keys()
+    )
     if installed:
         report['installed_skills'] = {
             'sha256': hashlib.sha256(inventory_bytes).hexdigest(),
@@ -272,7 +285,7 @@ if __name__ == '__main__':
         result['inventory_coverage'] = coverage
         missing_coverage = bool(
             coverage['unmapped_families'] or
-            coverage['capabilities']['without_verified_reference_links'] or
+            coverage['capabilities']['agentic_without_verified_reference_links'] or
             coverage['skills']['without_verified_reference_links']
         )
         if args.installed_skills:

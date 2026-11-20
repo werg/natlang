@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 
-import yaml
+AGENTIC_BASELINE_ORIGINS = frozenset({'direct-agent', 'agent-orchestration', 'managed-teacher'})
 
 
 def git(repo, *args):
@@ -35,6 +35,8 @@ def case_origin(case, registered):
 
 
 def inventory(host, templates, catalog, teacher_registry):
+    import yaml
+
     host_pin = git(host, 'rev-parse', 'HEAD').strip()
     registry = json.loads(git(host, 'show', f'{host_pin}:templates/registry.json'))['templates']
     templates_by_repo = {repository(row['url']): row['id'] for row in registry}
@@ -94,7 +96,7 @@ def inventory(host, templates, catalog, teacher_registry):
                                                if 'system-testing' in source_sets[workspace] and required <= paths],
                       **({'declared_workspace': registered['workspace'], 'source_groups': registered['sourceGroups']}
                          if registered else {})})
-    baseline = sum(case['origin'] in {'direct-agent', 'agent-orchestration', 'managed-teacher'} for case in cases)
+    baseline = sum(case['origin'] in AGENTIC_BASELINE_ORIGINS for case in cases)
     header = {'kind': 'snapshot', 'schema': 'vibestudio.open-goal-inventory/1', 'pins': pins,
               'workspace_sources': source_sets, 'skill_sources': len(skills), 'system_tests': len(cases),
               'agentic_baseline': baseline, 'minimum_distinct_open_goals': 2 * baseline,
