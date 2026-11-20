@@ -72,6 +72,9 @@ The current importer accepted all five archived seed-v3 assignment captures,
 retaining 124 supervised calls under their original task identities. A build
 that uses all five episodes needs at least 20 distinct verified open goals
 and at least four times the selected non-open weighted target mass.
+The mixed smoke imported all six trajectories and rejected publication at
+16.7% distinct open goals and 10.4% weighted open targets. The five archived
+episodes remain registered as `vibestudio-live-workflow-seed-20261118-v3`.
 
 The minimum applies both to distinct admitted goals divided by all
 training trajectories and to the weighted target tokens from their
@@ -436,8 +439,8 @@ and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
 open-goal shares were 100% for this one-goal smoke. Its Tick unit peaked at
 7.3 GiB over 3 minutes 10 seconds. No campaign or training was launched.
 
-The 462-goal staged catalog preserves all 343 released rows exactly. It
-includes 104 held-out goals. Its new lanes cover terminal discovery and
+The [462-goal release](vibestudio-open-goal-pop-pins-462.tsv) preserves all
+343 previous rows exactly. It includes 104 held-out goals. Its new lanes cover terminal discovery and
 recovery, reconciliation against local and incoming revisions, retained
 scratch evidence, Spectrolite knowledge and renderer recovery, native unit
 rollout, and Google onboarding. All 14 Google onboarding references passed
@@ -447,6 +450,15 @@ covers 334 distinct goals including 70 held-out goals, with further managed
 verification pending.
 Google's evidence is registered as
 `vibestudio-open-goal-google-setup-reference-14-20261120`.
+
+The 551-goal staged catalog adds broader capability and skill provenance,
+durable task recovery, client diagnostics, and GitHub readiness. Thirteen
+selected model-free checks passed across Examples, Personal, Spectrolite,
+and System. The combined reference audit covers 377 goals, including 83
+held-out goals. All 842 legacy assignment entries remain byte-identical.
+The staged goals have 551 distinct texts after normalizing quoted literals
+and numbers. Their declared training IDs and source groups have zero overlap
+with the digest-checked held-v2 and held-v3 cases.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
