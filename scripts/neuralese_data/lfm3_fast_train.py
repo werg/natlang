@@ -880,17 +880,16 @@ def _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_
     for batch in batches:
         prefixes, items, leaf_parent = [], [], []
 
-        def walk(node, parent):
+        stack = [(node, -1) for node in reversed(batch)]     # iterative: see prefix_levels
+        while stack:
+            node, parent = stack.pop()
             if 'index' in node:
                 items.append((node['index'], node['start']))
                 leaf_parent.append(parent)
-                return
+                continue
             prefixes.append((node, parent))
             here = len(prefixes) - 1
-            for child in node['children']:
-                walk(child, here)
-        for node in batch:
-            walk(node, -1)
+            stack.extend((child, here) for child in reversed(node['children']))
         prefix_ids = [ids_of(node['first'], node['start'], node['end']) for node, _ in prefixes]
 
         def forward(ids, lengths=None, imports=None):
@@ -941,6 +940,28 @@ def prefix_parts(nodes, limit):
     return _pack([unit for node in nodes for unit in units(node)], _prefix_tokens, max(1, limit))
 
 
+def prefix_levels(nodes):
+    """(levels, continuations, wholes) of a ``prefix_tree`` forest: the prefix nodes by depth (copies that get their parent
+    and later their ``segment``), the leaves under a prefix as (index, start, parent) and the whole sequences as
+    (index, start, None), each in tree order. Iterative on purpose: the recursive nested function this was had itself in
+    its closure, a reference cycle that kept ``levels`` and through it every node's FP32 ``segment`` (7-8 GB per part) alive
+    until Python's cycle collector ran, which on the learner's heap is rare: the parts of a step stacked on each other
+    (policy pass 60 GB allocated, 13-19 GB of it freed only by the end-of-step ``gc.collect``, grpo-v4-run2 step 24)."""
+    levels, continuations, wholes = [], [], []
+    stack = [(node, 0, None) for node in reversed(nodes)]
+    while stack:
+        node, depth, parent = stack.pop()
+        if 'index' in node:
+            (wholes if parent is None else continuations).append((node['index'], node['start'], parent))
+            continue
+        node = dict(node, parent=parent)
+        while len(levels) <= depth:
+            levels.append([])
+        levels[depth].append(node)
+        stack.extend((child, depth + 1, node) for child in reversed(node['children']))
+    return levels, continuations, wholes
+
+
 def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True,
                     mode='levels', batch_tokens=None, retained_gb=None):
     """Compute a ``prefix_tree``'s sequences packed, each shared prefix once, with exactly the whole sequences' gradients.
@@ -989,20 +1010,7 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
     # key (= value) width summed over the full-attention layers: the history rows a continuation's attention saves
     full = sum(layer.self_attn.k_proj.weight.shape[0] for layer, key in zip(layers, _layer_keys(model))
                if key == ('attention', -1))
-    levels, continuations, wholes = [], [], []
-
-    def walk(node, depth, parent):
-        if 'index' in node:
-            (wholes if parent is None else continuations).append((node['index'], node['start'], parent))
-            return
-        node = dict(node, parent=parent)
-        while len(levels) <= depth:
-            levels.append([])
-        levels[depth].append(node)
-        for child in node['children']:
-            walk(child, depth + 1, node)
-    for node in nodes:
-        walk(node, 0, None)
+    levels, continuations, wholes = prefix_levels(nodes)
 
     def past_of(node):
         chain = []

@@ -66,12 +66,15 @@ def call_of(node_name):
 class RLEpisodes:
     """Admitted RL episodes for one trainer input: graphs, the registered objective and their rollouts."""
 
-    def __init__(self, engine, rollouts, workdir, *, mode='grpo', min_quality=1., policy_loss=None, privileged=None):
+    def __init__(self, engine, rollouts, workdir, *, mode='grpo', min_quality=1., policy_loss=None, privileged=None,
+                 second_close='context'):
         """``mode`` 'grpo': the group-relative policy objective under ``policy_loss`` (rl.policy_math declaration;
         clipped-ratio/1 keeps the historical clipped objective; JOLT+ admits every scored group and, with a
         ``privileged`` source, adds each episode's privileged twin); 'rft': global supervision of whole successful
         episodes (quality >= ``min_quality``) through every producer/consumer dependency, Neuralese included,
-        whatever the group's spread."""
+        whatever the group's spread. ``second_close`` 'context' (default): a reply's second ``</think>`` and what
+        follows it up to the action are never reinforced (rl.native_replay.prepare_objective, DECISIONS 2026-11-19);
+        'train' opts out."""
         from ..rl.native_replay import invocation_behavior_policy, prepare_objective
         from ..rl.graph_replay import save_bundle
         from ..model.native_artifact import encode_native_tensor_artifact
@@ -95,7 +98,8 @@ class RLEpisodes:
         graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=fetch_block,
                                          block_bundle=workdir / 'bundle' / 'manifest.json', behavior_policy=policy,
                                          mode=mode, min_quality=min_quality,
-                                         policy_loss=policy_loss if mode == 'grpo' else None, privileged=privileged)
+                                         policy_loss=policy_loss if mode == 'grpo' else None, privileged=privileged,
+                                         second_close=self._second_close_ids(engine, second_close))
         path = workdir / 'objective.json'
         path.write_text(json.dumps(spec, sort_keys=True))
         self.objective = {'kind': 'native-policy', 'path': str(path), 'sha256': sha256_file_hex_cached(path)}
@@ -104,6 +108,15 @@ class RLEpisodes:
         self.graphs = graphs
         self.advantages = {graph['id']: spec['rows'][graph['id']]['advantage'] for graph in graphs}
         self.skipped = len(self.rollouts) - len(graphs)
+
+    @staticmethod
+    def _second_close_ids(engine, second_close):
+        if second_close not in ('context', 'train'):
+            raise TuneMathError("second_close is 'context' or 'train'")
+        if second_close == 'train':
+            return None
+        from ..train.reply_format import second_close_ids
+        return second_close_ids(engine.tokenizer)
 
     def rollout(self, graph):
         return self.by_episode[graph['id']]

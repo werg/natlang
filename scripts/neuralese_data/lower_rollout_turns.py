@@ -193,7 +193,9 @@ def decision_turns(row, stats, states=None):
                      'chosen': sample['chosen'], 'temperature': sample['temperature'],
                      'scores': np.array(sampling['decision_sample']['log_probs'], dtype=np.float32),
                      'behavior_logq': float(sample['behavior_logps'][sample['chosen']]),
-                     'policy': sampling['policy']['checkpoint_sha256']})
+                     'policy': sampling['policy']['checkpoint_sha256'],
+                     # the weights actually served (``episode_turns``)
+                     'served': (sampling.get('actor_export') or {}).get('sha256')})
     stats['decision_rows'] += len(rows)
     return rows
 

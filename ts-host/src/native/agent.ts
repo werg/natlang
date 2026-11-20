@@ -1,4 +1,5 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
+import { SECOND_THINK_CLOSE } from './tool-markup.js';
 import { renderAuthoredTextGuidance } from '../guidance/program.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { guidanceForCall, type AuthoredTextGuidance, type NativeProgramGuidance, type ProgramGuidance } from '../guidance/program.js';
@@ -1659,6 +1660,8 @@ export class NativeToolAgent {
     if (turnNode && typeof recorded === 'string') activeRecorder()?.linkNativeTurn?.(recorded, turnNode);
     session.runtime.checkInterruption();
     if (reservation?.limit != null && response.completion_tokens !== undefined && response.completion_tokens > reservation.limit) return budgetStop();
+    if (response.malformed_call) return fail(response.malformed_call === SECOND_THINK_CLOSE ?
+      'the generated choice closed its reasoning a second time.' : 'the generated choice held tool-call markup.');
     if (response.truncated || response.protocol_failure || response.calls?.length || response.raw_calls?.length || typeof response.text !== 'string')
       return fail('the generated choice must be complete JSON text');
     let value: unknown;
@@ -2238,9 +2241,16 @@ export class NativeToolAgent {
         continue;
       }
       if (response.malformed_call) {
-        // A tool call that could not be read ran nothing. The reply stays in the history as it was sampled, answered
-        // with what was wrong; it counts as a reply without an action.
-        messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
+        // A tool call that could not be read, or a reply that closed its reasoning twice, ran nothing. The reply stays
+        // in the history as it was sampled, answered with what was wrong; it counts as a reply without an action. Calls
+        // the server did read (a second close before a complete call) stay in the reply, each answered with the sentence.
+        const unrun = (response.raw_calls ?? []).map((original, i) => {
+          const call = original as Record<string, unknown>;
+          return { ...call, id: typeof call.id === 'string' && call.id ? call.id : `call_${turns}_${i}` };
+        });
+        if (unrun.length) messages.push({ role: 'assistant', content: response.text ?? '', tool_calls: unrun, ...thought(response.reasoning) },
+          ...unrun.map(call => ({ role: 'tool', tool_call_id: String(call.id), content: response.malformed_call! })));
+        else messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
           { role: 'user', content: response.malformed_call });
         if (++repliesWithoutAction >= 4) {
           session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: turns,

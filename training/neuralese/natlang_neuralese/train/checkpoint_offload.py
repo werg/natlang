@@ -34,6 +34,7 @@ external disk. The checkpoint policy only detaches from the independent owner; e
 """
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import fcntl
 import fnmatch
@@ -65,6 +66,10 @@ KEEP_MARKER = '.keep-on-nvme'
 # text warm-up continues from its verified best, causal bootstrap and trajectories pin or resume theirs: not listed.
 PRUNABLE_SCHEMAS = ('natlang.neuralese-direct/1',)
 OWNER_UNIT = 'natlang-checkpoint-offload-owner'
+# Staged moves are their own job schema in their own queue (``move_queue_root``) served by their own owner unit: an
+# owner of older code skips unknown schemas but would idle on them forever, never on another queue.
+MOVE_SCHEMA = 'natlang.checkpoint-move-job/1'
+JOB_SCHEMAS = ('natlang.checkpoint-offload-job/1', MOVE_SCHEMA)
 OWNER_IDLE_SECONDS = 2.0
 
 
@@ -207,13 +212,14 @@ class CheckpointCopySuperseded(RuntimeError):
     pass
 
 
-def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX, cancel=None) -> dict:
+def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX, cancel=None, commit=None) -> dict:
     """Durably copy the exact opened source, checking its identity, size and SHA-256.
 
     Atomic pathname replacement by training does not invalidate that intact
     snapshot. Its receipt retains the opened file's identity; mirror_current
     and the archive link swap still refuse to treat it as a newer checkpoint.
-    An in-place source change fails and removes the partial copy.
+    An in-place source change fails and removes the partial copy. ``commit(partial, dest)`` replaces the final
+    ``os.replace`` (a staged move checks, under its lock, that the copy is still wanted before it lands).
     """
     path, dest = Path(path), Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +250,7 @@ def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX, cancel=None) -> dic
         digest = source_hash.hexdigest()
         if partial.stat().st_size != before.st_size or file_sha256(partial, cancel=cancel) != digest:
             raise RuntimeError(f'verification failed for {path}')
-        os.replace(partial, dest)
+        (commit or os.replace)(partial, dest)
     except BaseException:
         partial.unlink(missing_ok=True)
         raise
@@ -711,7 +717,7 @@ def _owner_unit(root: Path) -> str:
     return OWNER_UNIT + '-' + hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:10]
 
 
-def _enqueue(root: Path, path: Path, role: str, prune, settings: OffloadSettings) -> dict:
+def _enqueue(root: Path, path: Path, role: str, prune, settings: OffloadSettings, extra: dict | None = None) -> dict:
     """Hard-link the exact completed checkpoint inode and atomically replace its pending generation."""
     identity = _identity(path.stat())
     key = _queue_key(path)
@@ -722,11 +728,11 @@ def _enqueue(root: Path, path: Path, role: str, prune, settings: OffloadSettings
     if _identity(pinned) != identity:
         pin.unlink(missing_ok=True)
         raise RuntimeError('checkpoint changed while creating immutable offload pin')
-    job = {'schema': 'natlang.checkpoint-offload-job/1', 'id': job_id, 'key': key,
+    job = {'schema': MOVE_SCHEMA if role == 'move' else 'natlang.checkpoint-offload-job/1', 'id': job_id, 'key': key,
            'path': str(path), 'pin': str(pin), 'role': role, 'prune': prune,
            'source_identity': identity, 'source_bytes': pinned.st_size,
            'mirror_root': str(settings.mirror_root), 'settings': settings.record(),
-           'queue_root': str(root), 'created': time.time()}
+           'queue_root': str(root), 'created': time.time(), **(extra or {})}
     descriptor = root / 'pending' / f'{key}.json'
     try:
         old = json.loads(descriptor.read_text())
@@ -866,20 +872,23 @@ def _process_queue_once(root: Path, *, settings=None, copier=None) -> dict | Non
     for descriptor in _queue_files(root):
         try:
             job = json.loads(descriptor.read_text())
-            if job.get('schema') != 'natlang.checkpoint-offload-job/1' or descriptor.stem != job.get('key'):
+            if job.get('schema') not in JOB_SCHEMAS or descriptor.stem != job.get('key'):
                 continue
-            decoded.append((0 if job.get('role') == 'latest' else 1, -float(job.get('created', 0)), descriptor, job))
+            decoded.append((0 if job.get('role') in ('latest', 'move') else 1, -float(job.get('created', 0)),
+                            descriptor, job))
         except (OSError, ValueError):
             continue
     if not decoded:
         return None
     _, _, descriptor, job = min(decoded)
-    event_path = Path(job['path']).parent / 'checkpoint-offload.jsonl'
+    # a move logs beside its target, unless retention removed the target's directory meanwhile
+    log_dir = Path(job.get('dest') or job['path']).parent
+    event_path = (log_dir if log_dir.is_dir() else root) / 'checkpoint-offload.jsonl'
     active_path = root / 'active' / f"{job['key']}.json"
     _durable_json(active_path, {'schema': 'natlang.checkpoint-offload-active/1',
                                 'id': job['id'], 'pin': job['pin'], 'started': time.time()})
     try:
-        event = _offload_pinned(job, settings, copier=copier)
+        event = _move_pinned(job) if job.get('role') == 'move' else _offload_pinned(job, settings, copier=copier)
         with open(event_path, 'a') as stream:
             stream.write(json.dumps(dict(event, time=time.time())) + '\n')
             stream.flush()
@@ -1018,6 +1027,20 @@ class CheckpointOffloader:
         except Exception as error:  # checkpoint publication remains successful
             self._event({'event': 'checkpoint_offload_failed', 'path': str(path), 'error': repr(error)})
 
+    def submit_move(self, staged, target, staging: 'StagingSettings') -> None:
+        """Queue the move of a staged NVMe file to its external target (``staged_write``). Never raises: a move that
+        could not be queued is found again by ``sweep_staging``; the target keeps reading the NVMe copy meanwhile."""
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            with open(self.root / 'launch.lock', 'a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                _enqueue(self.root, Path(staged), 'move', False, self.settings,
+                         extra={'dest': str(target), 'staging': asdict(staging)})
+                if self.launch:
+                    _launch_owner(self.root)
+        except Exception as error:
+            self._event({'event': 'checkpoint_move_failed', 'path': str(target), 'error': repr(error)})
+
     def wait(self, timeout: float | None = None) -> bool:
         """Explicit synchronous drain for tests/operators; training handoffs never call it."""
         deadline = None if timeout is None else time.monotonic() + timeout
@@ -1064,9 +1087,6 @@ def _owner_cli() -> int:
         return 0 if drain_offloader(None) else 1
     parser.error('choose --owner-loop or --drain')
 
-
-if __name__ == '__main__':
-    raise SystemExit(_owner_cli())
 
 
 def _within_a_run(path: Path) -> bool:
@@ -1155,3 +1175,337 @@ def policy_record(out) -> dict:
     reason = mirror_unavailable(probe, settings)
     return dict(settings.record(), mirror=None if reason else str(mirror_path(probe, settings).parent),
                 unavailable=reason)
+
+
+
+# Staged writes to the external disk (owner 2026-11-18) -----------------------------------------------------------
+# A large file whose target is the external HDD (~60 MB/s) is written to the NVMe first: ``staged_write`` writes it to
+# ``<staging root>/<target path>``, fsyncs it and publishes it at the target as a symlink to that NVMe copy (one
+# atomic rename on the HDD), then queues a move. The move owner (this module's owner loop on ``move_queue_root``, its
+# own memory-ledger unit, so it outlives the writer) copies the pinned inode to the HDD with a streamed SHA-256, re-reads
+# and verifies it, and, under the staged file's lock and only if the target still links to that same NVMe file,
+# replaces the link by the copy and deletes the NVMe file. A reader (resume, glob, held eval) sees the target path the
+# whole time: the NVMe copy until the move lands, then the HDD copy. A stop or resume depends only on the NVMe write.
+#
+# Retention removes staged files with ``discard`` (the link and the NVMe copy). A newer generation of the same target
+# supersedes a pending or running move. Leftovers of a crash are swept (``sweep_staging``, on every staged write): a
+# writer's partial file whose process is gone, a staged file nothing links to; a staged file whose move was never
+# queued is queued. When the NVMe would drop under its floor or already holds ``max_files`` staged files, or the target
+# is not on the external disk, the write goes to the target directly as before (atomic rename).
+# Settings: NATLANG_EXTERNAL_STAGING=0 opts out; NATLANG_EXTERNAL_STAGING_ROOT (default <data_nvme>/natlang-external-
+# staging), NATLANG_EXTERNAL_STAGING_TARGETS (os.pathsep list of slow roots, default <data_hdd>),
+# NATLANG_EXTERNAL_STAGING_FLOOR_GB (40), NATLANG_EXTERNAL_STAGING_MAX_FILES (2).
+STAGE_PARTIAL = '.stage-partial-'
+ORPHAN_SECONDS = 600.0
+
+
+@dataclass
+class StagingSettings:
+    enabled: bool = True
+    root: str = ''
+    targets: tuple = ()
+    floor_bytes: int = 40 * GIB
+    max_files: int = 2
+
+    @classmethod
+    def from_env(cls) -> 'StagingSettings':
+        env = os.environ.get
+        targets = env('NATLANG_EXTERNAL_STAGING_TARGETS') or str(_paths().root('data_hdd'))
+        return cls(enabled=env('NATLANG_EXTERNAL_STAGING', '1').strip().lower() not in ('0', 'off', 'false', 'no'),
+                   root=env('NATLANG_EXTERNAL_STAGING_ROOT') or str(_paths().resolve('data_nvme', 'natlang-external-staging')),
+                   targets=tuple(t for t in targets.split(os.pathsep) if t),
+                   floor_bytes=int(float(env('NATLANG_EXTERNAL_STAGING_FLOOR_GB', '40')) * GIB),
+                   max_files=int(env('NATLANG_EXTERNAL_STAGING_MAX_FILES', '2')))
+
+
+def move_queue_root() -> Path:
+    return Path(os.environ.get('NATLANG_CHECKPOINT_MOVE_QUEUE') or queue_root() / 'moves')
+
+
+def staged_path(target, settings: StagingSettings) -> Path:
+    return Path(settings.root) / str(_absolute(target)).lstrip('/')
+
+
+@contextlib.contextmanager
+def _stage_lock(staged: Path):
+    """The cross-process lock of one staged file: publication, the move's commit and ``discard`` never interleave."""
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    with open(staged.with_name(f'.{staged.name}.lock'), 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def _device(path: Path) -> int:
+    for candidate in (path, *path.parents):
+        try:
+            return candidate.stat().st_dev
+        except FileNotFoundError:
+            continue
+    raise FileNotFoundError(path)
+
+
+def _staged_files(root: Path) -> tuple[list[Path], int]:
+    """Published staged files (not partials, pins or locks) and the number of distinct NVMe inodes held (pins and
+    partials included: each is a file on the NVMe)."""
+    staged, inodes = [], set()
+    for directory, _, names in os.walk(root):
+        for name in names:
+            path = Path(directory) / name
+            if name.endswith('.lock'):
+                continue
+            try:
+                st = path.lstat()
+            except OSError:
+                continue
+            inodes.add(st.st_ino)
+            if not name.startswith('.'):
+                staged.append(path)
+    return staged, len(inodes)
+
+
+def staging_unavailable(target, settings: StagingSettings, expected_bytes: int = 0) -> str | None:
+    """Why ``target`` is written directly instead of staged on the NVMe, or None."""
+    if not settings.enabled:
+        return 'staging disabled'
+    target = _absolute(target)
+    roots = [Path(os.path.realpath(t)) for t in settings.targets]
+    if not any(r == target or r in target.parents for r in roots):
+        return 'target is not on the external disk'
+    root = Path(settings.root)
+    if root == target or root in target.parents:
+        return 'target is inside the staging root'
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        if _device(target) == root.stat().st_dev:
+            return 'target is on the staging filesystem'
+        _, held = _staged_files(root)
+        if held >= settings.max_files:
+            return f'{held} files already on the NVMe staging root (max {settings.max_files})'
+        free = shutil.disk_usage(root).free
+        if free - int(expected_bytes) < settings.floor_bytes:
+            return f'NVMe floor: {free} bytes free, {int(expected_bytes)} to write, floor {settings.floor_bytes}'
+    except OSError as error:
+        return 'staging root unusable: ' + repr(error)
+    return None
+
+
+def _target_of(staged: Path, settings: StagingSettings) -> Path:
+    return Path('/') / staged.relative_to(settings.root)
+
+
+def _slow_root_present(target: Path, settings: StagingSettings) -> bool:
+    """The external root holding ``target`` is there: a directory on another filesystem than the staging root (an
+    unmounted mountpoint is an empty directory on the NVMe's filesystem)."""
+    for root in (Path(os.path.realpath(t)) for t in settings.targets):
+        if root == target or root in target.parents:
+            try:
+                return root.is_dir() and _device(root) != Path(settings.root).stat().st_dev
+            except OSError:
+                return False
+    return False
+
+
+def _links_to(target: Path, staged: Path, settings: StagingSettings) -> bool | None:
+    """True/False whether ``target`` is the link to ``staged``; None when that cannot be told (the external disk is not
+    mounted: its files are not gone, only out of sight)."""
+    try:
+        return os.readlink(target) == str(staged)
+    except OSError:
+        if not _slow_root_present(target, settings):
+            return None
+        return False
+
+
+def sweep_staging(settings: StagingSettings | None = None, *, queue=None) -> list[dict]:
+    """Crash leftovers of staged writes: partial files of dead writers and staged files nothing links to are deleted;
+    a linked staged file without a queued move is queued. Returns the events."""
+    settings = settings or StagingSettings.from_env()
+    root = Path(settings.root)
+    if not root.is_dir():
+        return []
+    events, queued = [], None
+    for directory, _, names in os.walk(root):
+        for name in names:
+            path = Path(directory) / name
+            if name.startswith('.') and STAGE_PARTIAL in name:
+                pid = name.rsplit(STAGE_PARTIAL, 1)[1]
+                try:
+                    os.kill(int(pid), 0)
+                    continue
+                except ProcessLookupError:
+                    pass
+                except (OSError, ValueError):
+                    continue
+                path.unlink(missing_ok=True)
+                events.append({'event': 'staged_partial_removed', 'path': str(path)})
+                continue
+            if name.startswith('.'):
+                continue
+            target = _target_of(path, settings)
+            with _stage_lock(path):
+                linked = _links_to(target, path, settings)
+                if linked is None or not path.exists():
+                    continue
+                if not linked:
+                    try:
+                        if time.time() - path.lstat().st_ctime < ORPHAN_SECONDS:
+                            continue
+                    except OSError:
+                        continue
+                    path.unlink(missing_ok=True)
+                    events.append({'event': 'staged_orphan_removed', 'path': str(path), 'target': str(target)})
+                    continue
+            if queued is None:
+                mq = Path(queue or move_queue_root())
+                queued = {p.stem for p in (mq / 'pending').glob('*.json')} | {p.stem for p in (mq / 'active').glob('*.json')}
+            if _queue_key(path) not in queued:
+                mover(queue).submit_move(path, target, settings)
+                events.append({'event': 'staged_move_requeued', 'path': str(path), 'target': str(target)})
+    for event in events:
+        print(json.dumps(event), flush=True)
+    return events
+
+
+class StagedFile:
+    """What ``staged_write`` yields: ``path`` to write; after the block, where it went and how long it took."""
+
+    def __init__(self, target: Path, path: Path, staged: Path | None, reason: str | None):
+        self.target, self.path, self.staged, self.reason = target, path, staged, reason
+        self.bytes, self.seconds = 0, 0.0
+
+    def record(self) -> dict:
+        return {'target': str(self.target), 'staged': str(self.staged) if self.staged else None,
+                'direct_reason': self.reason, 'bytes': self.bytes, 'seconds': round(self.seconds, 1)}
+
+
+@contextlib.contextmanager
+def staged_write(target, *, expected_bytes: int = 0, settings: StagingSettings | None = None, record=True):
+    """Write a large file whose target may be the external disk: yields a ``StagedFile`` whose ``path`` the caller
+    writes completely; on a clean exit the file is fsynced and published at ``target`` atomically (staged on the NVMe
+    and moved in the background, or directly when staging does not apply). An exception removes the partial file and
+    leaves ``target`` as it was. ``record``: log the write for the memory ledger's stop grace."""
+    settings = settings or StagingSettings.from_env()
+    target = _absolute(target)
+    try:
+        sweep_staging(settings)
+    except Exception as error:  # never fails a write
+        print(json.dumps({'event': 'staging_sweep_failed', 'error': repr(error)[:300]}), flush=True)
+    reason = staging_unavailable(target, settings, expected_bytes)
+    staged = None if reason else staged_path(target, settings)
+    final = staged or target
+    final.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handle = StagedFile(target, final.with_name(f'.{final.name}{STAGE_PARTIAL}{os.getpid()}'), staged, reason)
+    started = time.time()
+    try:
+        yield handle
+        with open(handle.path, 'rb') as stream:
+            os.fsync(stream.fileno())
+            _drop(stream)  # unified memory (GB10): the written pages are the same RAM as CUDA allocations
+        handle.bytes = handle.path.stat().st_size
+        if staged is None:
+            os.replace(handle.path, target)
+            _fsync_dir(target.parent)
+        else:
+            with _stage_lock(staged):
+                os.replace(handle.path, staged)
+                _fsync_dir(staged.parent)
+                link = target.with_name(target.name + LINK_SUFFIX)
+                link.unlink(missing_ok=True)
+                os.symlink(staged, link)
+                os.replace(link, target)
+                _fsync_dir(target.parent)
+    except BaseException:
+        handle.path.unlink(missing_ok=True)
+        raise
+    handle.seconds = time.time() - started
+    if staged is not None:
+        mover().submit_move(staged, target, settings)
+    if record:
+        from .trajectory_state import record_checkpoint_write
+        record_checkpoint_write(target, handle.bytes, handle.seconds)
+    print(json.dumps({'event': 'staged_write', **handle.record()}), flush=True)
+
+
+def discard(path, settings: StagingSettings | None = None) -> None:
+    """Delete a file or directory tree that may hold staged writes: each link into the staging root takes its NVMe
+    copy with it (``shutil.rmtree`` or ``unlink`` alone would leave the NVMe copy to the orphan sweep)."""
+    settings = settings or StagingSettings.from_env()
+    path = Path(path)
+    root = Path(settings.root)
+
+    def drop_link(link: Path) -> None:
+        try:
+            dest = Path(os.readlink(link))
+        except OSError:
+            return
+        if root in dest.parents:
+            with _stage_lock(dest):
+                link.unlink(missing_ok=True)
+                dest.unlink(missing_ok=True)
+        else:
+            link.unlink(missing_ok=True)
+    if path.is_dir() and not path.is_symlink():
+        for child in sorted(path.rglob('*')):
+            if child.is_symlink():
+                drop_link(child)
+        shutil.rmtree(path, ignore_errors=True)
+    elif path.is_symlink():
+        drop_link(path)
+    else:
+        path.unlink(missing_ok=True)
+
+
+def _move_pinned(job: dict) -> dict:
+    """One queued move: verified copy of the pinned staged inode to its target, then, under the staged file's lock and
+    only while the target still links to that same NVMe file, the copy replaces the link and the NVMe file goes."""
+    staged, pin, target = Path(job['path']), Path(job['pin']), Path(job['dest'])
+    settings = StagingSettings(**{**job['staging'], 'targets': tuple(job['staging']['targets'])})
+    if pin.parent != staged.parent or not pin.name.startswith(f'.{staged.name}.offload-pin-'):
+        raise ValueError('move job pin is not an adjacent staged snapshot')
+    if not pin.is_file() or _identity(pin.stat()) != list(job['source_identity']):
+        raise RuntimeError(f'immutable staged pin is missing or changed: {pin}')
+    base = {'path': str(staged), 'dest': str(target), 'queue_job_id': job['id']}
+
+    def current() -> bool:
+        try:
+            return os.readlink(target) == str(staged) and _identity(staged.stat()) == list(job['source_identity'])
+        except OSError:
+            return False
+    if not current():
+        if _links_to(target, staged, settings) is False:   # nothing links to it any more (retention, a rewrite)
+            with _stage_lock(staged):
+                if _links_to(target, staged, settings) is False:
+                    staged.unlink(missing_ok=True)
+        return {'event': 'checkpoint_move_discarded', **base}
+    clean_stale(target.parent, older_than=1800.0)
+    started = time.time()
+
+    def commit(partial, dest):
+        with _stage_lock(staged):
+            if not current():
+                raise CheckpointCopySuperseded(f'{target} no longer links to this staged generation')
+            os.replace(partial, dest)
+            staged.unlink(missing_ok=True)
+            _fsync_dir(staged.parent)
+    record = verified_copy(pin, target, cancel=lambda: not current(), commit=commit)
+    return {'event': 'checkpoint_moved', **base, 'bytes': record['bytes'], 'sha256': record['sha256'],
+            'seconds': round(time.time() - started, 1)}
+
+
+_MOVER: 'CheckpointOffloader | None' = None
+
+
+def mover(queue=None) -> 'CheckpointOffloader':
+    """The process's move-queue producer (its own queue and owner unit)."""
+    global _MOVER
+    if queue is not None:
+        return CheckpointOffloader(queue=queue, launch=False)
+    with _OFFLOADER_GUARD:
+        if _MOVER is None:
+            _MOVER = CheckpointOffloader(queue=move_queue_root(), launch=True)
+        return _MOVER
+
+
+if __name__ == '__main__':
+    raise SystemExit(_owner_cli())

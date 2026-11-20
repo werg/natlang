@@ -345,6 +345,37 @@ def test_k2_kl_gradient_stays_linear_on_tail_tokens():
     grpo.kl_stats(sums, torch.tensor(.1))                 # a decision (0-dim)
     assert sums['ref_dlogp_over_5'] == 1 and sums['ref_dlogp_max'] == pytest.approx(10.5)
     assert sums['kl'] == pytest.approx(float(sum(math.exp(x) - x - 1 for x in (0., 10.5, -.2, .1))), rel=1e-5)
+    assert sums['kl_k2'] == pytest.approx(sum(.5 * x * x for x in (0., 10.5, -.2, .1)), rel=1e-5)
+    assert sums['kl_k3_max'] == pytest.approx(math.exp(10.5) - 11.5, rel=1e-5)   # one token is ~all of the k3 sum
+    assert sums['kl_k3_max'] / sums['kl'] > .99 and sums['ref_dlogp_pos_max'] == pytest.approx(10.5)
+
+
+def test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero_on_policy():
+    import torch
+    torch.manual_seed(0)
+    vocab, close = 11, 3
+    h = torch.randn(40, 8)
+    weight = torch.randn(vocab, 8)
+    positions = torch.arange(5, 35)
+    logits = (h[positions] @ weight.T).log_softmax(-1)
+    targets = torch.multinomial(logits.exp(), 1, generator=torch.Generator().manual_seed(1))[:, 0]
+    target_logp = logits.gather(1, targets[:, None])[:, 0]
+    p_close = grpo.close_probability(h, positions, weight, targets, target_logp, close, chunk=7)
+    assert p_close.tolist() == pytest.approx(logits[:, close].exp().tolist(), rel=1e-4)
+    mask = torch.ones(len(targets), dtype=torch.bool)
+    # a reinforced close raises the close logit; a pushed-down continuation raises it too (by its p_close)
+    one = torch.tensor([.1, .2, .3])
+    assert grpo.close_push(torch.ones(1), torch.tensor([close]), torch.tensor([.3]), close, torch.tensor([True])) \
+        == pytest.approx(.7)
+    assert grpo.close_push(-torch.ones(1), torch.tensor([0]), torch.tensor([.3]), close, torch.tensor([True])) \
+        == pytest.approx(.3)
+    assert grpo.close_push(torch.ones(3), torch.tensor([0, 1, 2]), one, close, torch.tensor([True, False, True])) \
+        == pytest.approx(-.4)
+    # on policy, a coefficient that does not depend on the draw pushes nothing in expectation
+    draws = torch.multinomial(logits.exp(), 4000, replacement=True, generator=torch.Generator().manual_seed(2))
+    pushes = [grpo.close_push(torch.ones(len(targets)), draws[:, j], logits[:, close].exp(), close, mask)
+              for j in range(draws.shape[1])]
+    assert abs(np.mean(pushes)) < 4 * np.std(pushes) / math.sqrt(len(pushes))
 
 
 def test_tail_guard_masks_only_tail_tokens_of_positive_episodes():
@@ -539,6 +570,27 @@ def test_behaviour_summary_and_shift():
     assert not behaviour_probe.shifted(behaviour_probe.summary(step8))   # no start measurement: no flag
 
 
+def test_behaviour_end_of_turn_after_a_short_answer():
+    """Probe v2's end-of-turn rows: p(<|im_end|>) where the start policy ended a short answer, against the start's own
+    values (its measurement, else the probe file's ``end_start``); a mean drop beyond 1 nat flags behaviour_shift
+    (grpo-v4-run2 step 12: -0.07 to -13.6 nats on gap-v1's short-answer rows, DECISIONS 2026-11-19)."""
+    import math
+    import behaviour_probe
+    base = {'sampled_logp': [-0.65], 'entropy': [0.76], 'close_per_1k': [0.2], 'close_logp': [-0.3]}
+    start = {**base, 'end_logp': [-0.1, -2.5], 'reclose_logp': [-5.0, -3.0]}
+    same = behaviour_probe.summary(start, start)
+    assert same['end_logp'] == pytest.approx(-1.3) and same['end_logp_change'] == 0 and not behaviour_probe.shifted(same)
+    assert same['reclose_p'] == pytest.approx((math.exp(-5) + math.exp(-3)) / 2, abs=1e-5) and 'reclose_logp' not in same
+    drift = {**base, 'end_logp': [-0.07, -13.6], 'reclose_logp': [-2.7, -0.04]}
+    moved = behaviour_probe.summary(drift, start)
+    assert moved['end_logp_change'] == pytest.approx(-5.535) and moved['end_logp_min'] == -13.6
+    assert behaviour_probe.shifted(moved) and moved['logp_change'] == 0
+    # A start measured before the probe had these rows: the probe's own start values.
+    probe = {'end_start': {'end_logp': [-0.1, -2.5], 'reclose_logp': [-5.0, -3.0]}}
+    assert behaviour_probe.summary(drift, base, probe)['end_logp_change'] == pytest.approx(-5.535)
+    assert 'end_logp_change' not in behaviour_probe.summary(drift, base)   # nothing to compare with: no change, no flag
+
+
 def test_replay_bench_keeps_short_groups_only(tmp_path):
     import zstandard
     from types import SimpleNamespace
@@ -615,6 +667,51 @@ def test_a_failed_moment_offload_write_keeps_the_moments_resident(tmp_path):
     assert torch.equal(tensors[0], torch.arange(10., device='cuda'))
 
 
+def test_moments_a_resume_loaded_go_out_to_the_offload_file_and_come_back_exactly(tmp_path):
+    """offload_loaded_moments: a resume's resident moments are put out at once (the first step after a resume kept them
+    resident: +13.6 GB, grpo-v4-run2 step 23); a fresh run before its first optimizer step has none and puts nothing."""
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
+    masters = {'a': torch.randn(64, 33, device='cuda', requires_grad=True), 'b': torch.randn(9, device='cuda', requires_grad=True)}
+    optimizer = torch.optim.AdamW(list(masters.values()), lr=1e-3, fused=True)
+    offload = grpo.MomentOffload(tmp_path / 'moments.offload', staging_mb=1)
+    assert grpo.offload_loaded_moments(offload, optimizer, masters, list(masters)) is False
+    assert not offload.out and offload.thread is None
+    for p in masters.values():
+        p.grad = torch.randn_like(p)
+    optimizer.step()
+    expected = [t.clone() for t in grpo.moment_tensors(optimizer, masters, list(masters))]
+    assert grpo.offload_loaded_moments(offload, optimizer, masters, list(masters)) is True
+    offload.wait()
+    assert offload.out and all(t.untyped_storage().nbytes() == 0 for t in grpo.moment_tensors(optimizer, masters, list(masters)))
+    offload.get()
+    for t, e in zip(grpo.moment_tensors(optimizer, masters, list(masters)), expected):
+        assert torch.equal(t.view(torch.int32), e.view(torch.int32))
+
+
+def test_free_cuda_cache_returns_what_the_garbage_collection_frees(monkeypatch):
+    """A tensor kept alive only by a reference cycle is freed by ``gc.collect`` into PyTorch's cache: an ``empty_cache``
+    that ran first left it reserved (the post-optimizer read of grpo-v4-run2: 31-43 GB reserved, 24 GB live)."""
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('needs CUDA')
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
+    gc.disable()
+    try:
+        cycle = [torch.empty(256 << 20, dtype=torch.uint8, device='cuda')]
+        cycle.append(cycle)
+        del cycle
+        legacy = grpo.free_cuda_cache(collect=False)           # the cycle is still alive: nothing to return
+        assert legacy['gc_freed_gb'] == 0 and legacy['reserved_gb'] >= 0.25
+        fixed = grpo.free_cuda_cache(collect=True)
+        assert fixed['gc_freed_gb'] >= 0.24 and fixed['reserved_gb'] < 0.1
+    finally:
+        gc.enable()
+
+
 def test_state_saver_writes_a_safetensors_file_that_loads_back_exactly(tmp_path, monkeypatch):
     torch = pytest.importorskip('torch')
     if not torch.cuda.is_available():
@@ -627,3 +724,46 @@ def test_state_saver_writes_a_safetensors_file_that_loads_back_exactly(tmp_path,
     saver.wait()
     loaded = load_file(str(tmp_path / 'state.safetensors'))
     assert set(loaded) == set(tensors) and all(torch.equal(loaded[k], tensors[k].cpu()) for k in tensors)
+
+
+def test_a_second_think_close_and_what_follows_up_to_the_action_are_never_reinforced():
+    import exp0_sft
+    import torch
+    CLOSE, CALL, END = 124902, 125019, 124900
+    reply = [5, 6, CLOSE, 7, 8, CLOSE, 9, CALL, 3, END]            # reasoning </think> prose </think> ws <tool_call> ... end
+    mask = exp0_sft.second_close_mask(reply, CLOSE, {CALL, END})
+    assert mask.tolist() == [1, 1, 1, 1, 1, 0, 0, 1, 1, 1]
+    assert exp0_sft.second_close_mask([5, CLOSE, CALL, END], CLOSE, {CALL, END}) is None
+    assert exp0_sft.second_close_mask([CLOSE, 10, 11, 10, CLOSE], CLOSE, {CALL, END}).tolist() == [1, 1, 1, 1, 0]
+    chain = {'segs': [(3, 4, {'sample': np.array([5, CLOSE, CALL, END])}), (9, 10, {'sample': np.array(reply)})]}
+    bad = grpo.malformed_close_targets(chain, 0.8, CLOSE, {CALL, END})
+    assert bad.tolist() == [False] * 4 + [False] * 5 + [True, True] + [False] * 3
+    assert not grpo.malformed_close_targets(chain, -0.8, CLOSE, {CALL, END}).any()   # a failure still pushes it down
+    per_token = torch.tensor([0.5] * 4 + [-1.] * 10)                                  # reasoning RL rows carry their own
+    assert not grpo.malformed_close_targets(chain, per_token, CLOSE, {CALL, END}).any()
+    assert grpo.malformed_close_targets({'segs': chain['segs'][:1]}, 0.8, CLOSE, {CALL, END}) is None
+
+
+def test_mask_second_close_is_a_load_time_context_mask():
+    import exp0_sft
+
+    class Tok:
+        def convert_tokens_to_ids(self, token):
+            return {'</think>': 124902}[token]
+
+        def get_vocab(self):
+            return {'</think>': 124902, '<tool_call>': 125019, '<|im_end|>': 124900}
+    row = {'sample': np.array([5, 124902, 7, 124902, 125019, 124900])}
+    chains = [{'segs': [(2, 6, row)]}]
+    assert exp0_sft.mask_second_close(chains, Tok()) == 1 and row['weight'].tolist() == [1, 1, 1, 0, 1, 1]
+    assert exp0_sft.mask_second_close(chains, Tok()) == 0                       # idempotent
+
+
+def test_decision_token_kl_anchors_the_chosen_options_shared_tokens():
+    import torch
+    token = torch.tensor([-0.1, -0.2, -11.0], requires_grad=True)     # </think> "book" <|im_end|> of the chosen option
+    ref = torch.tensor([-0.1, -0.3, -0.05])
+    grpo.decision_token_kl(token, ref, 0.05, 'k2', 0.5).backward()
+    grad = token.grad.tolist()
+    assert grad[0] == pytest.approx(0.) and grad[2] == pytest.approx(-0.05 * 10.95 * 0.5)   # descent raises <|im_end|>
+    assert grad[1] == pytest.approx(0.05 * 0.1 * 0.5)

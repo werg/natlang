@@ -117,15 +117,41 @@ POOLS = [resolve_str('data_hdd', 'natlang-rl-composed-20261103', 'memetic-progra
          # 2026-11-18 round 11 (TASK_SUPPLY_20261118.md section 6): 205 authored tasks, typed Neuralese and depth 3 pushed
          resolve_str('data_hdd', 'natlang-rl-task-supply-20261118b', 'cases.jsonl'),
          # 2026-11-18 round 12 (TASK_SUPPLY_20261118.md section 7): 210 authored tasks, 12 new families
-         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118c', 'cases.jsonl')]
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118c', 'cases.jsonl'),
+         # 2026-11-18 round 13 (TASK_SUPPLY_20261118.md section 8): 130 authored tasks, 8 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118d', 'cases.jsonl'),
+         # 2026-11-18 round 14 (TASK_SUPPLY_20261118.md section 9): 127 authored tasks, 9 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118e', 'cases.jsonl'),
+         # 2026-11-18 round 15 (TASK_SUPPLY_20261118.md section 10): 121 authored tasks, 8 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118f', 'cases.jsonl'),
+         # 2026-11-18 round 16 (TASK_SUPPLY_20261118.md section 11): 88 authored tasks, 6 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261118g', 'cases.jsonl'),
+         # 2026-11-19 round 17 (TASK_SUPPLY_20261118.md section 12): 103 authored tasks, 7 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119', 'cases.jsonl'),
+         # 2026-11-19 round 18 (TASK_SUPPLY_20261118.md section 13): 130 authored tasks, 8 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119b', 'cases.jsonl'),
+         # 2026-11-19 round 19 (TASK_SUPPLY_20261118.md section 14): 105 authored tasks, 9 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119c', 'cases.jsonl'),
+         # 2026-11-19 round 20 (TASK_SUPPLY_20261118.md section 15): 114 authored tasks, 8 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261119d', 'cases.jsonl'),
+         # 2026-11-20 round 21 (TASK_SUPPLY_20261118.md section 16): 74 authored tasks, 5 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261120', 'cases.jsonl'),
+         # 2026-11-20 round 22 (TASK_SUPPLY_20261118.md section 17): 43 authored tasks, 3 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261120b', 'cases.jsonl'),
+         # 2026-11-20 round 23 (TASK_SUPPLY_20261118.md section 18): 130 authored tasks, 8 new families
+         resolve_str('data_hdd', 'natlang-rl-task-supply-20261120c', 'cases.jsonl')]
 # held-v3 (2026-11-13; plans/neuralese/HELD_V3_20261113.md): held-v2 with its wrong/ambiguous-oracle and exposed tasks
 # replaced; its exclusion also covers held-v2 (manifest `also_excludes`), so no v2 held task enters training either.
 HELD = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3', 'manifest.json')
-# Start-policy calls scored after every step (behaviour_probe.py; built from grpo-v2-run1's version-0 groups)
-BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v1.json')
+# Start-policy calls scored after every step (behaviour_probe.py): v1's 48 reasoning calls, and from 2026-11-19 (v2) 24
+# end-of-turn rows from the start policy's decision readouts
+BEHAVIOUR_PROBE = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v2', 'behaviour-probe-v2.json')
 # sft_sources WORKs of verified teacher successes (TeacherDemos): teacher-gen pool-v1 and pool-v2-rich replayed under
-# the 2026-11-18 runtime first, then the 2026-11-17 SFT corpus WORK (pool-v1, replayed at aa1bd8467)
-SD_TEACHER_SOURCES = [resolve_str('data_nvme', 'sft-teacher-demos-20261118'), resolve_str('data_nvme', 'sft-sources-20261117')]
+# the 2026-11-18 runtime first, then the 2026-11-17 SFT corpus WORK (pool-v1, replayed at aa1bd8467), then the
+# 2026-11-19 gap campaign (teacher-gen-20261119/gap-v1: task supply rounds and tasks the student rarely solves), which
+# its refresh loop re-extracts and replays as episodes arrive (a run reads the sources when it starts or resumes)
+SD_TEACHER_SOURCES = [resolve_str('data_nvme', 'sft-teacher-demos-20261118'), resolve_str('data_nvme', 'sft-sources-20261117'),
+                      resolve_str('data_nvme', 'sft-teacher-demos-20261119')]
 # Pool rows known to be wrong (an oracle's expected answer, a garbled task): every *.jsonl here is excluded by default.
 ERRATA = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'pool-errata')
 
@@ -775,6 +801,7 @@ def load_group(collector, group, stats):
     from natlang_neuralese.common.jsonio import read_jsonl
     from lower_rollout_turns import decision_turns, episode_turns
     from natlang_neuralese.rl.jolt import student_form
+    from natlang_neuralese.rl.rollout_math import budget_stopped_rollout, truncated_rollout
     info = collector.groups[group]
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
@@ -798,6 +825,16 @@ def load_group(collector, group, stats):
         collector.episodes += 1
         if reward is None or row.get('unscored'):
             stats['episodes_unscored'] += 1
+            continue
+        if truncated_rollout(row) and getattr(getattr(collector, 'args', None), 'truncated_episodes', 'drop') == 'drop':
+            # a reply cut by a token cap (finish_reason 'length') ends the episode for the cap, not for what the policy
+            # did: its reward would push the cut reasoning down ("stop sooner"). It is neither ranked nor trained
+            # (overlong filtering, DECISIONS 2026-11-19). The 40-call budget is a task outcome and still scores 0.
+            stats['episodes_truncated'] += 1
+            continue
+        if budget_stopped_rollout(row) and getattr(getattr(collector, 'args', None), 'budget_stop_episodes', 'train') == 'drop':
+            # --budget-stop-episodes drop (opt-in): the 40-call budget treated as a length cap (overlong filtering)
+            stats['episodes_budget_stopped'] += 1
             continue
         quality = float(reward['quality'])
         graded = reward.get('graded')
@@ -1244,7 +1281,9 @@ def stream_tensors_to_file(handle, tensors, staging, stream):
 
 class StateSaver:
     """FP32 masters and AdamW moments streamed GPU -> pinned staging -> file in a background thread. The caller waits
-    (``wait``) before the next optimizer step changes them."""
+    (``wait``) before the next optimizer step changes them. A target on the external disk is written to the NVMe and
+    moved in the background (checkpoint_offload.staged_write: the HDD write took 330-350 s for 21 GB, and a stop in that
+    window lost the step); the write is logged for the memory ledger's stop grace."""
 
     def __init__(self, staging_mb=64):     # the file write, not the copy, bounds the save: 512 MB staging bought nothing
         import torch
@@ -1265,16 +1304,15 @@ class StateSaver:
         names = list(tensors)
         layout = [(name, 'F32', tuple(tensors[name].shape), tensors[name].numel() * 4) for name in names]
         header, _, _ = safetensors_header(layout, metadata)
+        from natlang_neuralese.train.checkpoint_offload import staged_write
 
         def run():
             started = time.time()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            partial = path.with_suffix('.partial')
-            with partial.open('wb') as handle:
-                handle.write(header)
-                stream_tensors_to_file(handle, [tensors[name] for name in names], self.staging, self.stream)
-            os.replace(partial, path)
-            self.last = {'path': str(path), 'seconds': round(time.time() - started, 1)}
+            with staged_write(path, expected_bytes=len(header) + sum(item[3] for item in layout)) as target:
+                with target.path.open('wb') as handle:
+                    handle.write(header)
+                    stream_tensors_to_file(handle, [tensors[name] for name in names], self.staging, self.stream)
+            self.last = {'path': str(path), 'seconds': round(time.time() - started, 1), **target.record()}
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
 
@@ -1365,6 +1403,23 @@ class MomentOffload:
         self.out = False
         self.last['get_s'] = round(time.time() - started, 1)
         return time.time() - started
+
+
+def moment_tensors(optimizer, masters, live):
+    """AdamW's moments in the order MomentOffload writes them."""
+    return [optimizer.state[masters[name]][key] for name in live for key in ('exp_avg', 'exp_avg_sq')]
+
+
+def offload_loaded_moments(offload, optimizer, masters, live):
+    """Put moments that are resident on the GPU out to the offload file (True), unless there are none yet (a fresh run
+    before its first optimizer step). A resume loads them with the training state; left resident they stayed through the
+    whole first step, collection and learner phase (+13.6 GB; grpo-v4-run2 step 23, the first after a resume: 67 GB
+    allocated against 54 in the steps after it, MemFree 3 GB, 0.8M swapped pages, the policy pass 1121 s against 820 s).
+    ``offload.get`` restores them bit for bit before the optimizer step."""
+    if not all('exp_avg' in optimizer.state.get(masters[name], {}) for name in live):
+        return False
+    offload.put(moment_tensors(optimizer, masters, live))
+    return True
 
 
 class ReferenceWeights:
@@ -1470,6 +1525,27 @@ def release_host_memory():
         pass
 
 
+def free_cuda_cache(collect=True):
+    """Return the learner's cached CUDA blocks to the system, after the Python garbage collection when ``collect``
+    (``--no-learner-gc`` opts out): tensors kept alive only by reference cycles (closures, exception frames) are freed by
+    ``gc.collect`` and land in PyTorch's cache, so an ``empty_cache`` that ran before it left them reserved: the
+    post-optimizer read was 31-43 GB reserved against 24 GB of live tensors (grpo-v4-run2 steps 20-24) until the moment
+    offload's own ``empty_cache`` minutes later, which is when the actor's memory comes back. The cycle found so far was
+    ``run_prefix_tree``'s recursive ``walk`` (``lfm3_fast_train.prefix_levels`` is iterative now); a nonzero
+    ``gc_freed_gb`` in ``cuda_cache_release`` after that fix names another one. Returns the figures for train.jsonl: what
+    the collection freed, allocated, and reserved before and after."""
+    import torch
+    started = time.time()
+    before = torch.cuda.memory_allocated()
+    if collect:
+        release_host_memory()
+    mid, reserved = torch.cuda.memory_allocated(), torch.cuda.memory_reserved()
+    torch.cuda.empty_cache()
+    gb = lambda n: round(n / 2**30, 2)
+    return {'gc_freed_gb': gb(before - mid), 'allocated_gb': gb(mid), 'reserved_before_gb': gb(reserved),
+            'reserved_gb': gb(torch.cuda.memory_reserved()), 'seconds': round(time.time() - started, 2)}
+
+
 def host_pinned_gb():
     """Pinned host memory PyTorch's caching host allocator owns (GB, active and cached blocks)."""
     try:
@@ -1509,7 +1585,9 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
                optimizer_pruned_keys=['training'],
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
                                  'training_checkpoint_bytes': 0, 'step': int(state['step'])})
-    torch.save(out, path)
+    from natlang_neuralese.train.checkpoint_offload import staged_write   # NVMe first, then moved (StateSaver)
+    with staged_write(path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
+        torch.save(out, target.path)
     return None
 
 
@@ -1910,21 +1988,26 @@ def discounted(rewards, gamma):
     return sum((gamma ** i) * (r or 0.) for i, r in enumerate(rewards))
 
 
-def rrl_advantages(returns, closed, min_std):
+def rrl_advantages(returns, closed, min_std, unclosed='drop'):
     """Advantages of one group's samples (None: the group's reasoning does not train) and the reason. A sample that
-    never closed its reasoning produced no action: it ties with the group's worst closed sample. A group whose returns
-    spread less than ``min_std`` nats per token has nothing to rank: the normalization would turn noise-sized
-    differences into full-size advantages."""
+    never closed its reasoning hit the token cap and produced no action: its score says the cap cut it, not that its
+    reasoning was worse. ``unclosed`` 'drop' (default; DAPO's overlong filtering): it gets no advantage (None at its
+    place) and the group is normalized over its closed samples alone; pushing a cut block down would teach "close
+    earlier" directly (grpo-v4-run2's ``</think>`` hazard, DECISIONS 2026-11-19). 'floor' (before 2026-11-19): it ties
+    with the group's worst closed sample and trains. A group whose returns spread less than ``min_std`` nats per token
+    has nothing to rank: the normalization would turn noise-sized differences into full-size advantages."""
     scored = [r for r, c in zip(returns, closed) if c]
     if not scored:
         return None, 'none_closed'
     floor = min(scored)
-    values = [r if c else floor for r, c in zip(returns, closed)]
+    keep = [c or unclosed != 'drop' for c in closed]
+    values = [r if c else floor for r, c, k in zip(returns, closed, keep) if k]
     mean = sum(values) / len(values)
     std = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
     if len(values) < 2 or std < max(min_std, 1e-6):
         return None, 'low_spread'
-    return [(v - mean) / std for v in values], None
+    it = iter((v - mean) / std for v in values)
+    return [next(it) if k else None for k in keep], None
 
 
 def rrl_rows(name, context, sample, action, action_weight, reasoning_advantage, action_advantage):
@@ -1943,7 +2026,7 @@ def rrl_rows(name, context, sample, action, action_weight, reasoning_advantage, 
     return rows
 
 
-def rrl_episodes(groups, reasoning_weight, action_weight):
+def rrl_episodes(groups, reasoning_weight, action_weight, unclosed='drop'):
     """The learner items of the step's reasoning RL groups: [(episode, role)] (one episode per sample: its think block
     at ``reasoning_weight * A`` and the teacher action at ``action_weight``; a group without spread trains its actions
     only) and the telemetry counters."""
@@ -1951,7 +2034,7 @@ def rrl_episodes(groups, reasoning_weight, action_weight):
     for group in groups:
         samples = group['samples']
         advantages, reason = rrl_advantages([s['return'] for s in samples], [s['closed'] for s in samples],
-                                            group['min_std'])
+                                            group['min_std'], unclosed)
         stats['groups'] += 1
         stats['samples'] += len(samples)
         stats['unclosed'] += sum(not s['closed'] for s in samples)
@@ -1979,6 +2062,9 @@ def rrl_episodes(groups, reasoning_weight, action_weight):
         else:
             stats['groups_trained'] += 1
         for k, (sample, advantage) in enumerate(zip(samples, advantages)):
+            if unclosed == 'drop' and not sample['closed']:
+                stats['unclosed_dropped'] += 1     # cut by the token cap: neither ranked nor trained
+                continue
             name = f"rrl-{group['id']}-{k}"
             rows = rrl_rows(name, group['context'], sample, group['action'], group.get('action_weight'),
                             reasoning_weight * advantage, action_weight)
@@ -2632,13 +2718,76 @@ def kl_term(d, estimator):
     return 0.5 * d * d if estimator == 'k2' else d.exp() - d - 1
 
 
+def malformed_close_targets(chain, advantage, close_id, stop_ids):
+    """Bool per target of ``chain`` (torch, or None when there is none): a reply's second and later ``</think>`` and
+    the tokens after each up to the action (``exp0_sft.second_close_mask``) where the advantage is positive. Malformed
+    output is never reinforced (``--second-close context``); a negative advantage still pushes it down. ``advantage``: a
+    number or a per-token tensor (``token_advantage``)."""
+    import torch
+    import exp0_sft
+    masks = [exp0_sft.second_close_mask(row['sample'], close_id, stop_ids) for _, _, row in chain['segs']]
+    if all(m is None for m in masks):
+        return None
+    bad = torch.from_numpy(np.concatenate([np.ones(n, np.float32) if m is None else m
+                                           for m, (_, n, _) in zip(masks, chain['segs'])]) == 0)
+    if torch.is_tensor(advantage):
+        return bad & (advantage.detach().cpu() > 0)
+    return bad if advantage > 0 else torch.zeros_like(bad)
+
+
+def decision_token_kl(token_logp, ref_logp, beta, estimator, token_scale):
+    """The KL term on a sampled decision's chosen option, token by token (``--decision-token-kl``, default): those tokens
+    are what the actor emitted, and the option softmax (the decision's policy and KL terms) does not see any token all
+    options share (``</think>``, quotes, ``<|im_end|>``), so only this anchors their absolute probabilities, as the KL
+    term anchors every sampled chain token (same beta, same per-token loss factor; grpo-v4-run2's policy drifted 6-13
+    nats on ``<|im_end|>`` after short answers by step 12, DECISIONS 2026-11-19)."""
+    return beta * kl_term(ref_logp - token_logp, estimator).sum() * token_scale
+
+
 def kl_stats(sums, d):
-    """Telemetry of one batch of ``d``: the k3 KL estimate, |d|, its max and the units past 5 nats."""
+    """Telemetry of one batch of ``d`` (ref - policy logp): the k3 KL estimate, the k2 mean the loss trains (d^2 / 2),
+    the largest single-token k3 term (k3 = e^d - d - 1 grows exponentially in d: one token where the policy sits 14
+    nats below the start policy adds e^14 = 1.2M and alone made grpo-v4-run2 step 13's kl_mean 1.14 while |d| stayed
+    at 0.058; ``kl_k3_max_share`` says how much of the k3 sum one token is), |d|, its max, the most positive d (policy
+    below the reference) and the units past 5 nats."""
     d = d.detach()
-    sums['kl'] += (d.exp() - d - 1).sum().item()
+    k3 = d.exp() - d - 1
+    sums['kl'] += k3.sum().item()
+    sums['kl_k2'] += (0.5 * d * d).sum().item()
+    if d.numel():
+        sums['kl_k3_max'] = max(sums['kl_k3_max'], k3.max().item())
+        sums['ref_dlogp_pos_max'] = max(sums['ref_dlogp_pos_max'], d.max().item())
     sums['ref_abs_dlogp'] += d.abs().sum().item()
     sums['ref_dlogp_over_5'] += int((d.abs() > 5).sum())
     sums['ref_dlogp_max'] = max(sums['ref_dlogp_max'], d.abs().max().item() if d.numel() else 0.)
+
+
+def close_probability(h, positions, weight, targets, target_logp, close_id, chunk=4096):
+    """p(``</think>``) at each target row (no grad): exp(z_close - z_target + log p(target)), i.e. the softmax's own
+    normalizer recovered from the target's logit and the log-probability the loss already computed (two dot products a
+    row, no second softmax over the vocabulary). ``h[positions]`` are the hidden rows that predict ``targets``."""
+    import torch
+    with torch.no_grad():
+        w_close = weight[close_id].float()
+        out = []
+        for a in range(0, positions.shape[0], chunk):
+            rows = h[positions[a:a + chunk]].float()
+            z_y = (rows * weight[targets[a:a + chunk]].float()).sum(-1)
+            out.append((rows @ w_close - z_y + target_logp[a:a + chunk].detach().float()).exp().clamp(max=1.))
+        return torch.cat(out) if out else torch.zeros(0, device=h.device)
+
+
+def close_push(coefficient, targets, p_close, close_id, mask):
+    """First-order push of one term on the ``</think>`` logit over the ``mask`` positions (reasoning tokens):
+    sum_t c_t (1[y_t = close] - p_close_t), c_t the term's -dLoss/dlogp(y_t) (policy: weight * A * token factor; KL:
+    beta * d for k2). Positive: the step raises the close logit where the policy reasons. On-policy the unweighted sum is
+    zero in expectation, so a term's push is its correlation of c with reasoning that closes earlier or later than the
+    policy's own hazard predicts (grpo-v4-run2 2026-11-20: the probe's hazard sits at the points right after the policy
+    names its next action)."""
+    import torch
+    with torch.no_grad():
+        delta = (targets == close_id).float() - p_close
+        return float((coefficient.float() * delta)[mask].sum())
 
 
 def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
@@ -2662,6 +2811,19 @@ def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
 
 
 RATIO_FREE_ROLES = ('sd_teacher', 'replay')   # chains without actor log-probabilities (rho = 1)
+
+
+def student_sampled_targets(chain):
+    """Per target of ``chain`` (bool array): whether the student sampled it, so that its likelihood is the one under its
+    top-p nucleus. Not sampled by the student: teacher demonstrations (``sd_teacher``), the reasoning-RL term's teacher
+    actions (rows ``rrl == 'action'``, and the carried search chains' action rows marked ``teacher``) and replay-corpus rows that are not the student's own (operator seeds, consumers'
+    dataset answers; ``exp0_sft.student_sampled`` reads the corpus chain's source). Everything else (episodes, SD replay
+    of own and JOLT+ successes, reasoning-RL reasoning, own Neuralese graph rows) was sampled by the actor."""
+    import exp0_sft
+    role = chain.get('role')
+    if role == 'sd_teacher' or (role == 'replay' and not exp0_sft.student_sampled(chain)):
+        return np.zeros(sum(n for _, n, _ in chain['segs']), bool)
+    return np.concatenate([np.full(n, row.get('rrl') != 'action' and not row.get('teacher')) for _, n, row in chain['segs']])
 
 
 def token_advantage(chain, device):
@@ -2770,6 +2932,27 @@ def grad_spike(work, grad_norm, factor=5., min_steps=1):
         return {}
     r = grad_norm / statistics.median(norms)
     return {'grad_norm_vs_median': round(r, 2), 'grad_spike': r > factor}
+
+
+def save_step_chains(directory, step, chains, scales, keep):
+    """The step's exact learner batch (``--save-step-chains``): every chain with its advantage, role, row weights and
+    actor log-probabilities, and its per-token loss factor (``token_scale``), pickled and zstd-compressed to
+    ``directory/step-NNNNN.pkl.zst``; only the newest ``keep`` stay. Offline per-term diagnostics (the gradient of each
+    term against a behaviour direction, DECISIONS 2026-11-19) then run on the batches the run actually trained, which
+    the reasoning-RL samples and the SD buffer otherwise never leave memory for. Returns the file's size in MB."""
+    import pickle
+    import zstandard
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f'step-{step:05d}.pkl.zst'
+    record = {'step': step, 'chains': [{**chain, 'token_scale': scales[chain['episode']][0]} for chain in chains]}
+    data = zstandard.ZstdCompressor(level=3, threads=-1).compress(pickle.dumps(record, protocol=pickle.HIGHEST_PROTOCOL))
+    partial = path.with_suffix('.part')
+    partial.write_bytes(data)
+    os.replace(partial, path)
+    for old in sorted(directory.glob('step-*.pkl.zst'))[:-keep] if keep > 0 else ():
+        old.unlink()
+    return round(len(data) / 2**20, 1)
 
 
 def think_mask(sample, close_id):
@@ -3127,7 +3310,11 @@ def train(args):
     branch_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')
     resume_path = Path(args.resume_state) if args.resume_state else state_path
     if args.resume and not args.resume_state and not resume_path.exists() and args.branch_states:
-        resume_path = max(branch_root.glob('state-step-*.safetensors'), default=resume_path)
+        # a state still on the NVMe is a link there (staged_write); one whose NVMe copy was lost is skipped
+        resume_path = max((p for p in branch_root.glob('state-step-*.safetensors') if p.exists()), default=resume_path)
+    if args.resume and resume_path.is_symlink() and not resume_path.exists():
+        raise SystemExit(f'{resume_path} links to {os.readlink(resume_path)}, which is gone (a staged NVMe copy lost before '
+                         'its move): pass --resume-state with another state rather than starting fresh')
     if args.resume and resume_path.exists():
         from safetensors import safe_open
         with safe_open(str(resume_path), 'pt', device='cuda') as handle:
@@ -3195,6 +3382,10 @@ def train(args):
     saver = StateSaver()
     # AdamW moments on disk outside the optimizer step (MomentOffload; --keep-moments-resident opts out)
     offload = None if args.keep_moments_resident else MomentOffload(work / 'adam-moments.offload')
+
+    if offload is not None:
+        # A resume loaded the moments onto the GPU: out to the file now, as after every step (see offload_loaded_moments)
+        offload_loaded_moments(offload, optimizer, masters, live)
     if args.replay:
         collector = ReplayCollector(args, work, first_group=first_group)
     else:
@@ -3228,9 +3419,12 @@ def train(args):
     versions_live = {'actor': step}
     probes = probe_chains(args) if args.probe_turns else []
     think_close = None   # the reasoning-close token id: splits the logged gradient mass into reasoning and reply tokens
+    second_close_stops = set()
     try:
         from tokenizers import Tokenizer
-        think_close = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json')).token_to_id('</think>')
+        _tokenizer = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json'))
+        think_close = _tokenizer.token_to_id('</think>')
+        second_close_stops = {i for i in (_tokenizer.token_to_id(t) for t in exp0_sft.SECOND_CLOSE_STOPS) if i is not None}
     except Exception as error:
         log_line(log, {'event': 'no </think> id: grad_mass_share is not logged', 'error': repr(error)[:200]})
 
@@ -3296,11 +3490,32 @@ def train(args):
             t = time.time()
             behaviour_start_path.write_text(json.dumps(behaviour_probe.measure(model, behaviour)) + '\n')
             log_line(log, {'event': 'behaviour probe start', 'calls': len(behaviour['calls']),
-                           **behaviour_probe.summary(json.loads(behaviour_start_path.read_text())),
+                           **behaviour_probe.summary(json.loads(behaviour_start_path.read_text()), probe=behaviour),
                            'seconds': round(time.time() - t, 1)})
         else:
             log_line(log, {'event': 'behaviour probe: no start measurement (resumed); copy the start run\'s '
                                     'behaviour-start.json to compare'})
+    if (behaviour is not None and behaviour.get('end_calls') and behaviour_start_path.exists() and reference is not None
+            and not json.loads(behaviour_start_path.read_text()).get('end_logp')):
+        # A start measured before the probe had end-of-turn rows (a resume onto probe v2): the start policy's values from
+        # the KL reference weights (the start policy), put into the start measurement once.
+        # Telemetry never stops the run: a failure is logged and the probe file's end_start stands in.
+        t = time.time()
+        reference.load_into(live)
+        try:
+            end = behaviour_probe.measure_end(model, behaviour)
+        except Exception as error:
+            end = None
+            log_line(log, {'event': 'behaviour probe start: end of turn not measured', 'error': repr(error)[:300]})
+        finally:
+            ReferenceWeights.restore(live, masters)
+        if end is not None:
+            start_record = json.loads(behaviour_start_path.read_text())
+            start_record.update(end)
+            behaviour_start_path.write_text(json.dumps(start_record) + '\n')
+            log_line(log, {'event': 'behaviour probe start: end of turn from the reference weights',
+                           'calls': len(end['end_logp']), 'end_logp': round(float(np.mean(end['end_logp'])), 4),
+                           'seconds': round(time.time() - t, 1)})
     log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
                    'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
                    'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
@@ -3313,6 +3528,7 @@ def train(args):
         thread.start()
 
     checkpoint_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')   # off the busy NVMe by default
+    from natlang_neuralese.train.checkpoint_offload import discard
     # every trained episode is kept (compressed) beside the checkpoints: the w5 lesson (AGENTS.md: pruned bundles lost 85
     # successful episodes); '-' keeps none
     rollouts_archive = None if args.rollouts_dir == '-' else Path(args.rollouts_dir or checkpoint_root.parent / 'rollouts')
@@ -3356,7 +3572,7 @@ def train(args):
         for old in checkpoints[:-2]:
             number = int(old.name.split('-')[1])
             if number not in held_steps and number > args.keep_checkpoints_until and old.exists():
-                shutil.rmtree(old)
+                discard(old)          # the directory and the NVMe copy of a checkpoint not yet moved
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
@@ -3681,7 +3897,8 @@ def train(args):
             # reasoning RL against fixed teacher actions (ReasoningRL): each sample's reasoning at its group-normalized
             # action likelihood, the teacher action after it as a ratio-free cross-entropy
             rrl_groups, rrl_dropped, carried = reasoning_rl.take(step, args.reasoning_rl_groups, args.max_staleness)
-            rrl_items, rrl_stats = rrl_episodes(rrl_groups, args.reasoning_rl_weight, args.reasoning_rl_action_weight)
+            rrl_items, rrl_stats = rrl_episodes(rrl_groups, args.reasoning_rl_weight, args.reasoning_rl_action_weight,
+                                                 args.reasoning_rl_unclosed)
             rrl_stats['groups_stale'] = rrl_dropped
             rrl_stats['carried_chains'] = len(carried)
             for episode, role in rrl_items:
@@ -3775,6 +3992,14 @@ def train(args):
         # learner
         torch.cuda.reset_peak_memory_stats()
         cuda_peaks = {}                   # per learner phase: allocated / reserved peak (GB) and this process's host memory
+        cache_release = {}                # per cache release (free_cuda_cache): what gc freed, allocated, reserved
+        peak_events = {}                  # per pass: the leaf batches where the allocated peak grew by >= 1 GB
+
+        def note_peak(name, tokens, chains_in_batch):
+            peak = torch.cuda.max_memory_allocated() / 2**30      # monotone within a phase (phase_peak resets it)
+            events = peak_events.setdefault(name, [])
+            if len(events) < 16 and (not events or peak >= events[-1]['allocated_gb'] + 1):
+                events.append({'allocated_gb': round(peak, 1), 'batch_tokens': int(tokens), 'chains': chains_in_batch})
 
         def phase_peak(name):
             cuda_peaks[name] = {'allocated': round(torch.cuda.max_memory_allocated() / 2**30, 1),
@@ -3801,6 +4026,9 @@ def train(args):
         teacher_log_rho = []   # per-chain arrays of the teacher tokens' log rho (``teacher_rho_summary``)
         rng = random.Random(args.seed + step)
         rng.shuffle(chains)
+        if args.save_step_chains > 0:
+            record['step_chains_mb'] = save_step_chains(work / 'step-chains', step + 1, chains, scales,
+                                                        args.save_step_chains)
         # Shared prefixes (the system prompt across groups, a group's opening prompt, an episode's earlier calls) are
         # computed once per pass and every batch is packed: a prefix tree over the step's chains (`--share-prefix-tokens`;
         # chains reading imported native state stay whole), exact gradients (lfm3_fast_train.run_prefix_tree).
@@ -3861,12 +4089,14 @@ def train(args):
             imports = lfm3_fast_train.passthrough_tensors(plan, 'cuda', stored)
             options = sum(counts)
 
-            def scores_of(net):
+            def scores_of(net, tokens=False):
                 token = -exp0_sft.token_nll(net, forward(net, ids, lengths, imports), positions, targets)
-                return torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+                scores = torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+                return (scores, token, owner) if tokens else scores
             return ids, counts, scores_of
 
         ref_scores_of = []                # per decision batch: the start policy's option scores
+        ref_tokens_of = []                # and its per-token log-probabilities (--decision-token-kl)
         if reference is not None:
             # the reference pass: the policy module with the start policy's weights (ReferenceWeights), chains and
             # decisions, before any gradient exists; then the policy's own weights back from its masters
@@ -3879,13 +4109,16 @@ def train(args):
                     logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets).detach()
                     for (index, _), part in zip(items, logp.split(counts)):
                         refs[index] = part
+                    note_peak('reference', len(ids), len(items))
                 with torch.enable_grad():
                     run_tree(reference_leaves, backward=False)
                 for batch in batches:
                     ids, _, scores_of = decision_inputs(batch)
                     exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
                     with torch.enable_grad():
-                        ref_scores_of.append(scores_of(model).detach())
+                        ref_scores, ref_tokens, _ = scores_of(model, tokens=True)
+                        ref_scores_of.append(ref_scores.detach())
+                        ref_tokens_of.append(ref_tokens.detach())
                 for p in live.values():
                     p.grad = None
             finally:
@@ -3894,7 +4127,8 @@ def train(args):
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
             phase_peak('reference')
             if not args.keep_learner_cache:
-                torch.cuda.empty_cache()  # the reference pass's cached blocks: the FP32 gradients would stack on them
+                # the reference pass's cached blocks: the FP32 gradients would stack on them
+                cache_release['reference'] = free_cuda_cache(not args.no_learner_gc)
         allocate_grads()
         record['episodes_in_flight']['policy_start'] = collector.running
         policy_started = time.time()
@@ -3912,10 +4146,20 @@ def train(args):
                 logp_rows, policy_rows = -nll, -nucleus_nll
                 sums['outside_nucleus'] += int(outside.sum())
                 sums['nucleus_log_mass'] += (logp_rows.detach() - policy_rows.detach()).sum().item()
+                if args.non_student_loss == 'full':
+                    # a target the student never sampled (teacher demonstration, the reasoning-RL teacher action, an
+                    # operator seed) is data, not a draw from the nucleus: its likelihood is the full softmax
+                    sampled = torch.from_numpy(np.concatenate([student_sampled_targets(chains[index])
+                                                               for index, _ in items])).to(nll.device)
+                    policy_rows = torch.where(sampled, policy_rows, logp_rows)
+                    sums['non_student_tokens'] += int((~sampled).sum())
             else:
                 logp_rows = policy_rows = -exp0_sft.token_nll(model, h, positions, targets)
+            # p(</think>) at every target row for the per-term close push (``close_push``; --no-close-push opts out)
+            p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close)
+                            if args.close_push and think_close is not None else None)
             loss = 0.
-            for (index, _), logp, policy_logp in zip(items, logp_rows.split(counts), policy_rows.split(counts)):
+            for k, ((index, _), logp, policy_logp) in enumerate(zip(items, logp_rows.split(counts), policy_rows.split(counts))):
                 chain = chains[index]
                 actor, row_weight = behaviour_logp(chain, logp)
                 token_scale = scales[chain['episode']][0]
@@ -3929,6 +4173,11 @@ def train(args):
                                                  None if chain.get('role') == 'replay' else args.tail_logp_floor)
                     if row_weight is not None:
                         weight = weight * row_weight
+                    if args.second_close == 'context' and think_close is not None:
+                        bad = malformed_close_targets(chain, advantage, think_close, second_close_stops)
+                        if bad is not None:
+                            weight = weight.masked_fill(bad.to(weight.device), 0.)
+                            sums['second_close_masked'] += int(bad.sum())
                     # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
                     # split into reasoning and post-</think> tokens
                     mass = token_scale * abs(advantage) * weight * (1 - policy_logp.detach().exp())
@@ -3937,11 +4186,19 @@ def train(args):
                     sums['mass_think'] += mass[thinking].sum().item()
                     sums['mass_post_think'] += mass[~thinking].sum().item()
                     sums['tail_masked'] += int(tail.sum())
+                    if p_close_rows is not None:
+                        chain_targets, chain_p_close = targets.split(counts)[k], p_close_rows.split(counts)[k]
+                        sums['close_push:' + (chain.get('role') or 'student')] += close_push(
+                            token_scale * advantage * weight, chain_targets, chain_p_close, think_close, thinking)
                 loss_terms = -(weight * advantage * policy_logp)
                 if ref is not None:
                     d = ref - logp
                     loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
                     kl_stats(sums, d)
+                    if p_close_rows is not None:   # the KL term's -dLoss/dlogp: beta * d (k2), beta * (e^d - 1) (k3)
+                        pull = d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1
+                        sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
+                                                            chain_p_close, think_close, thinking)
                 loss = loss + loss_terms.sum() * token_scale
                 if chain.get('role') == RRL_ROLE:
                     # the teacher actions' likelihood after the student's reasoning, and learner-actor agreement on the
@@ -3974,7 +4231,8 @@ def train(args):
                 rho_post_max = max(rho_post_max, weight.max().item())
             loss.backward()
             forward_tokens += len(ids)
-            del h, logp_rows, policy_rows, loss
+            note_peak('policy', len(ids), len(items))
+            del h, logp_rows, policy_rows, loss, p_close_rows
             if time.time() - progress_mark > 300:
                 progress_mark = time.time()
                 log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
@@ -3993,7 +4251,8 @@ def train(args):
             t = time.time()
             ref_scores = ref_scores_of[batch_index] if reference is not None else None
             exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
-            scores = scores_of(model)
+            scores, token_logp, owner = scores_of(model, tokens=True)
+            ref_tokens = ref_tokens_of[batch_index] if reference is not None else None
             terms, start = [], 0
             for item, k in zip(batch, counts):
                 row = item['row']
@@ -4017,7 +4276,14 @@ def train(args):
                     d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
                     term = term + args.kl_beta * kl_term(d, args.kl_estimator)
                     kl_stats(sums, d)
-                terms.append(term * decision_scale)
+                term = term * decision_scale
+                if ref_tokens is not None and args.decision_token_kl:
+                    chosen = owner == start + row['chosen']
+                    term = term + decision_token_kl(token_logp[chosen], ref_tokens[chosen], args.kl_beta, args.kl_estimator,
+                                                    scales[item['episode']][0])
+                    kl_stats(sums, ref_tokens[chosen] - token_logp[chosen])
+                    sums['decision_token_kl_tokens'] += int(chosen.sum())
+                terms.append(term)
                 sums['decision_rho'] += rho.item()
                 sums['decision_abs_log_rho'] += log_rho.abs().item()
                 sums['decision_logpi'] += logpi.item()
@@ -4026,7 +4292,7 @@ def train(args):
                 start += k
             torch.stack(terms).sum().backward()
             forward_tokens += len(ids)
-            del scores, terms
+            del scores, terms, token_logp
             torch.cuda.synchronize()
             phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
         if batches:
@@ -4044,7 +4310,7 @@ def train(args):
             # reused by nothing the optimizer allocates and stacked the moments on top (grpo-v4-run1 step 2: optimizer
             # reserved 74 GB with 31.5 allocated)
             if not args.keep_learner_cache:
-                torch.cuda.empty_cache()
+                cache_release['optimizer'] = free_cuda_cache(not args.no_learner_gc)
             phase['moments_in'] = offload.get()   # bit-exact read back of the moments the last step wrote out
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -4054,6 +4320,8 @@ def train(args):
             # overwrite the only training state with it: drop this step's update, keep the weights
             release_grads()
             torch.cuda.empty_cache()
+            if offload is not None:
+                offload_loaded_moments(offload, optimizer, masters, live)   # read back above for the dropped step: out again
             sync.restore(step)            # a released actor resumes on the weights it served
             collector.active_slots = args.slots
             log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
@@ -4081,9 +4349,11 @@ def train(args):
         phase_peak('optimizer')
         # Hand the learner phase's cached activation blocks back for the collect phase: on unified memory PyTorch's cache is
         # system RAM, and grpo-v2-run1 held ~56 GB of it while 32 slots collected (guard stop 2026-11-14 04:56, swap).
-        torch.cuda.empty_cache()
-        release_host_memory()
+        cache_release['collect'] = free_cuda_cache(not args.no_learner_gc)
+        if args.no_learner_gc:
+            release_host_memory()
         record['cuda_reserved_collect_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
+        record['cuda_cache_release'] = cache_release
         torch.cuda.reset_peak_memory_stats()   # the behaviour probe's peak is its own, not the optimizer's carried reserve
         elements = sum(p.numel() for p in live.values())
         record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
@@ -4093,7 +4363,7 @@ def train(args):
         if behaviour is not None:
             t = time.time()
             start = json.loads(behaviour_start_path.read_text()) if behaviour_start_path.exists() else None
-            record['behaviour'] = behaviour_probe.summary(behaviour_probe.measure(model, behaviour), start)
+            record['behaviour'] = behaviour_probe.summary(behaviour_probe.measure(model, behaviour), start, behaviour)
             record['behaviour_shift'] = behaviour_probe.shifted(record['behaviour'])
             phase['behaviour_probe'] = time.time() - t
             phase_peak('behaviour_probe')
@@ -4121,7 +4391,7 @@ def train(args):
             if branch is not None:     # each step's state, the last N kept: controls branch from any of them
                 saver.wait()
                 for old in sorted(branch_root.glob('state-step-*.safetensors'))[:-(args.branch_states - 1) or None]:
-                    old.unlink()
+                    discard(old)      # the file, or the link and its NVMe copy while the move is pending
             tensors = {}
             for name in live:
                 st = optimizer.state[masters[name]]
@@ -4133,8 +4403,7 @@ def train(args):
                                              'next_group': collector.next_group, 'source_sha256': source_sha})
         if offload is not None:
             record['moment_offload'] = dict(offload.last) or None   # the previous step's put and this step's get
-            offload.put([optimizer.state[masters[name]][key] for name in live for key in ('exp_avg', 'exp_avg_sq')],
-                        after=saver)
+            offload.put(moment_tensors(optimizer, masters, live), after=saver)
         learner_seconds = sum(v for k, v in phase.items()
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
         n_dec = max(1, len(decisions))
@@ -4144,10 +4413,15 @@ def train(args):
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, lr_data_scale=round(data_scale, 4),
             grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
+            second_close_masked=int(sums['second_close_masked']), decision_token_kl_tokens=int(sums['decision_token_kl_tokens']),
+            close_push={key.split(':', 1)[1]: round(1e6 * value, 3) for key, value in sums.items()
+                        if key.startswith('close_push:')} or None,
+            kl_k2_mean=round(sums['kl_k2'] / units, 7), kl_k3_max_share=round(sums['kl_k3_max'] / sums['kl'], 4) if sums['kl'] > 0 else None,
+            ref_dlogp_pos_max=round(sums['ref_dlogp_pos_max'], 3),
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
             grad_moment_cosine=None if cosine is None else round(cosine, 5),
-            top_p=args.top_p, outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
+            top_p=args.top_p, non_student_tokens=int(sums['non_student_tokens']), outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
             nucleus_mass_mean=round(math.exp(sums['nucleus_log_mass'] / max(1, loss_tokens)), 5),
             tail_logp_floor=args.tail_logp_floor, tail_masked_fraction=round(sums['tail_masked'] / max(1, loss_tokens), 6),
             tail_masked_decisions=sums['tail_masked_decisions'],
@@ -4178,7 +4452,7 @@ def train(args):
             learner_phase_slots=args.learner_phase_slots,
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
             previous_state_save=saver.last, cuda_peak_gb=max([v['allocated'] for v in cuda_peaks.values()], default=None),
-            cuda_peak_by_phase_gb=cuda_peaks, host_pinned_gb=host_pinned_gb(),
+            cuda_peak_by_phase_gb=cuda_peaks, cuda_peak_events=peak_events, host_pinned_gb=host_pinned_gb(),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         record.update(grad_spike(work, grad_norm))
         if record.get('grad_spike'):
@@ -4242,6 +4516,9 @@ def main():
                         'the wait). --no-actor-release keeps the actor resident')
     t.add_argument('--actor-release-tags', default='kv_cache,weights,cuda_graph',
                    help='SGLang memory types released (the weights are reloaded from the mapped file on resume)')
+    t.add_argument('--no-learner-gc', action='store_true',
+                   help='release the learner\'s CUDA cache before the garbage collection as before (default: gc.collect '
+                        'first, so blocks freed by cycle collection are returned too; free_cuda_cache)')
     t.add_argument('--keep-learner-cache', action='store_true',
                    help='keep PyTorch\'s cached blocks across learner phases (default: empty the cache after the reference '
                         'pass and before the AdamW moments are read back, so the gradients and the moments do not stack '
@@ -4367,6 +4644,30 @@ def main():
     t.add_argument('--reasoning-rl-max-tokens', type=int, default=8192,
                    help='reasoning tokens per sample at most (a sample that has not closed by then ties with its '
                         'group\'s worst)')
+    t.add_argument('--second-close', choices=('context', 'train'), default='context',
+                   help="a reply's second and later </think> and the tokens after each up to the action: context (default; "
+                        'never reinforced at a positive advantage, in every learner row: episodes, SD, reasoning RL, replay, '
+                        'teacher demonstrations; exp0_sft.second_close_mask); train: as any token (before 2026-11-19)')
+    t.add_argument('--no-close-push', dest='close_push', action='store_false',
+                   help="train.jsonl close_push: each term's first-order push on the </think> logit over the reasoning "
+                        'tokens it trains (policy roles and the KL term, x1e6; grpo.close_push). Positive raises the '
+                        'behaviour probe\'s close hazard; on by default')
+    t.add_argument('--no-decision-token-kl', dest='decision_token_kl', action='store_false',
+                   help="sampled decisions: no per-token KL on the chosen option's tokens (only the KL of the option "
+                        'softmax, which ignores the tokens all options share; before 2026-11-19)')
+    t.add_argument('--truncated-episodes', choices=('drop', 'train'), default='drop',
+                   help="an episode with a reply cut by a token cap (finish_reason 'length'): drop (default) leaves it out of "
+                        "its group's advantages and of training; train: it scores and trains like any other (before "
+                        '2026-11-19). The call budget (--max-model-requests) is an outcome either way')
+    t.add_argument('--budget-stop-episodes', choices=('drop', 'train'), default='train',
+                   help='an episode that ended on the model-request budget (--max-model-requests; outcome '
+                        'budget_exhaustion): train (default) scores it 0 like any failure; drop leaves it out of its '
+                        'group\'s advantages and of training, as overlong filtering does for a token cap '
+                        '(rollout_math.budget_stopped_rollout). Held evaluation counts it as a failure either way')
+    t.add_argument('--reasoning-rl-unclosed', choices=('drop', 'floor'), default='drop',
+                   help='a reasoning-RL sample that hit --reasoning-rl-max-tokens without closing: drop (default) leaves it '
+                        "out of its group's advantages and of training (overlong filtering: a cut block pushed down teaches "
+                        '"close earlier"); floor: it ties with the worst closed sample and trains (before 2026-11-19)')
     t.add_argument('--reasoning-rl-min-std', type=float, default=0.01,
                    help='a group whose returns (nats per action token) spread less trains only its actions')
     t.add_argument('--reasoning-rl-workers', type=int, default=8,
@@ -4447,6 +4748,11 @@ def main():
                         '(common.sampling.RL_TOP_P; 1.0: untruncated). The policy term scores the sampled token under the '
                         "learner's own nucleus (lfm3_fast_train.linear_nll_nucleus); calls sampled under another top_p are "
                         'refused (skip_other_sampling_law)')
+    t.add_argument('--non-student-loss', choices=('full', 'nucleus'), default='full',
+                   help='with --top-p < 1: targets the student never sampled (teacher demonstrations, the reasoning-RL '
+                        'teacher actions, non-own replay-corpus rows; grpo.student_sampled_targets) train the full-softmax '
+                        "log-probability (default), the student's own samples the nucleus one; nucleus: every target the "
+                        'nucleus one (before 2026-11-18)')
     t.add_argument('--tail-logp-floor', type=float, default=-7.,
                    help='where the actor sampled a token (or decision option) with log-probability below this and the '
                         "episode's advantage is positive, the policy term has zero weight (the KL term stays); 0: off")
@@ -4462,7 +4768,12 @@ def main():
                         'the rest stay context): fewer forward tokens a step for some variance; 1: all')
     t.add_argument('--behaviour-probe', default=BEHAVIOUR_PROBE,
                    help='start-policy calls scored after every step (behaviour_probe.py): the policy on the start policy\'s own '
-                        'samples (sampled-token logp change), entropy, </think> hazard; logged as "behaviour", flagged as behaviour_shift; "-": off')
+                        'samples (sampled-token logp change), entropy, </think> hazard, and (v2) p(<|im_end|>) after short answers '
+                        '(end_logp, end_logp_change, reclose_p); logged as "behaviour", flagged as behaviour_shift; "-": off')
+    t.add_argument('--save-step-chains', type=int, default=4,
+                   help="keep the exact learner batch of each of the last N steps in WORK/step-chains/step-N.pkl.zst (chains, "
+                        'advantages, roles, row weights, actor logp, per-token loss factor; tens of MB a step) for offline '
+                        'per-term diagnostics; 0: off')
     t.add_argument('--branch-states', type=int, default=0,
                    help='keep the FP32 training state of each of the last N steps in CHECKPOINT_DIR/state-step-N.safetensors '
                         '(about 21 GB each), so a control can --resume-state from any of them; 0: off')
@@ -4476,7 +4787,9 @@ def main():
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
-    t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints)')
+    t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints). Native checkpoints '
+                   'and FP32 states aimed at the external disk are written to the NVMe and moved in the background '
+                   '(checkpoint_offload.staged_write; NATLANG_EXTERNAL_STAGING=0 writes them directly)')
     t.add_argument('--resume', action='store_true')
     t.add_argument('--keep-rollouts', action='store_true', help='keep group directories (and every actor store block)')
     t.add_argument('--rollouts-dir', help="each lowered group's rollouts.jsonl, zstd-compressed, before its directory is "

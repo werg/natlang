@@ -1632,8 +1632,25 @@ def _empty_text_writes(turns):
             and write['source_capture'].get('payload_stop') == write['source_capture'].get('payload_start')]
 
 
+def second_close_queries(replay, close_id, stop_ids):
+    """Graph positions (``query``) of the reply tokens ``train.reply_format.second_close_mask`` leaves out: each turn's
+    own tokens (sampled and forced, in order) are one reply."""
+    from ..train.reply_format import second_close_mask
+    replies = {}
+    for action in replay.input_actions:
+        replies.setdefault(action['turn'], []).append(action)
+    masked = set()
+    for actions in replies.values():
+        actions.sort(key=lambda action: action['query'])
+        mask = second_close_mask([action['token_id'] for action in actions], close_id, stop_ids)
+        if mask is not None:
+            masked.update(action['query'] for action, keep in zip(actions, mask) if not keep)
+    return frozenset(masked)
+
+
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
-                      min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None):
+                      min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None,
+                      truncated='drop', second_close=None, budget_stop='train'):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
@@ -1646,7 +1663,11 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     lineage checkpoints; their score-centered/JOLT+ terms need an importance correction (tis or mis).
     Episodes sampled from an export in another engine (``actor_export`` in the capture, e.g. SGLang) bind
     ``engine_guard`` (``DEFAULT_ENGINE_GUARD`` when None): the learner recomputes their tokens under its own forward,
-    rejects an episode beyond the guard's bounds and corrects the rest with the loss's importance weights."""
+    rejects an episode beyond the guard's bounds and corrects the rest with the loss's importance weights.
+    ``second_close`` ((``</think>`` id, action-start ids): ``train.reply_format.second_close_ids``; None: off) leaves
+    out the sampled tokens of a reply's second and later ``</think>`` and what follows each up to its action
+    (``train.reply_format.second_close_mask``) wherever they would be reinforced: in every rft episode and in grpo
+    episodes with a positive advantage. A negative advantage still pushes them down (grpo's ``--second-close context``)."""
     from .policy_math import policy_loss_declaration, objective_policy_loss
     from .actors import actor_declaration
     actors = actor_declaration(actors, learner_identity=identity)
@@ -1658,7 +1679,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
     from .episode_graph import whole_episode_turns
-    from .rollout_math import group_advantages, rollout_return
+    from .rollout_math import budget_stopped_rollout, group_advantages, rollout_return, truncated_rollout
     from ..serve.store import native_state_id
     if behavior_policy is not None:
         validate_invocation_behavior_policy(behavior_policy,identity)
@@ -1675,6 +1696,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     for rollout in rollouts:
         if rollout.get('reward') is None:
             continue
+        if truncated == 'drop' and truncated_rollout(rollout):
+            continue     # a reply cut by a token cap: neither ranked nor trained (``truncated`` 'train' opts out)
+        if budget_stop == 'drop' and budget_stopped_rollout(rollout):
+            continue     # ended on the model-request budget, with ``budget_stop`` 'drop' (opt-in): neither ranked nor trained
         _require_scored_training_episode(rollout,identity,actors=actors)
         key = (rollout['task_id'], rollout.get('group'))
         if jolt is not None:
@@ -1730,9 +1755,12 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             identifier = episode_key
             if identifier in objective_rows:
                 raise ValueError('native RL episodes duplicated without distinct sampling provenance')
+            malformed = (second_close_queries(replay, *second_close)
+                         if second_close is not None and (mode == 'rft' or (advantage or 0.) > 0) else frozenset())
             weights = [0.] * replay.plan.token_count
             for action in replay.actions:
-                weights[action['query']+1] = 1.
+                if action['query'] not in malformed:
+                    weights[action['query']+1] = 1.
             nodes = []
             for node, offset in zip(replay.plan.invocations, replay.plan.offsets):
                 value = invocation_dict(node)
@@ -1757,6 +1785,8 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 for action, queries in zip(decisions, jolt_row.pop('decision_twin_queries', None) or ()):
                     if queries is not None:
                         action['twin_options'] = queries
+            if malformed:
+                actions = [action for action in actions if action['query'] not in malformed]
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
             if policy_loss is not None:
                 require_policy_loss_actions(actions, policy_loss)
@@ -1778,6 +1808,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                    if mode == 'rft' and rollout['reward'].get('neuralese_bonus') else {}),
                 **({'jolt': jolt_row} if jolt_row is not None else {}),
                 **({'protocol_failures':replay.protocol_failures} if replay.protocol_failures else {}),
+                **({'second_close_masked': len(malformed)} if malformed else {}),
                 'external_consumption_receipts': replay.external_receipts or {},
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
                 'task_id': rollout['task_id'], 'sample': rollout.get('sample'),

@@ -3,6 +3,29 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-19 — a reply that closes its reasoning a second time is answered with a one-sentence error; nothing in it runs
+
+grpo-v4-run2's policy learned to write a second `</think>` after a short answer instead of ending its turn (0.6-0.96 of
+the end-of-turn position by step 12; DECISIONS 2026-11-19 07:30 and 08:20). Every engine splits a reply at its first
+close: the managed llama-server and the page through the fork's chat parser (`common/chat-auto-parser-generator.cpp`:
+reasoning `until("</think>")`, then content), the Python native engine and the SGLang actor through `serve/chat.py`
+`build_message` and the streaming split in `serve/http.py`. The second close then reached the runtime inside the
+content, the reply's calls ran and the episode could be rewarded for the malformed form. Now the shared chat adapter
+(`ts-host/src/model/chat-completion.ts`, every engine's client; the check is `secondThinkClose` in
+`native/tool-markup.ts`) marks a complete reply whose content (after the split) or reasoning holds `</think>` as a
+malformed turn: nothing runs, the reply stays in the history as sampled (its text, reasoning and any calls the server
+read, rendered under `preserve_thinking` exactly as generated), and each call is answered, or a user message follows
+when it had none, with: "Your last reply closed its reasoning a second time, so nothing ran; close the reasoning once,
+then make your tool call and end the reply." It counts as a reply without an action (four in a row end the call as
+`model_incomplete: no_action`). A generated decision (no scorer) with a second close fails as
+`decision-generation-invalid: the generated choice closed its reasoning a second time.` A reply cut off at its length
+limit is checked once its continuation completes. A server that does not split reasoning leaves a whole leading
+`<think>…</think>` block in the content; that block's close counts as the first. Opt-out: `NATLANG_SECOND_THINK_CLOSE=content`
+(or `secondThinkClose: 'content'` on the chat adapter). The learners never reinforce the form either (grpo and exp0_sft
+`--second-close context`, program tune `rl_second_close`). Tests: `ts-host/test/chat-completion.test.mjs`,
+`agent-reply-calls.test.mjs`, `tests/neuralese/test_lfm3_format.py::test_a_second_think_close_reaches_the_client_in_the_content`.
+Enters RL and held eval at the next pin; changes the held series (ts-host tree).
+
 ### 2026-11-16 — the same memory bound for folder `python`, folder `bash` and callable-folder module code
 
 The other in-process hosts of model-written code in the shared collectors now take the eval bound's one setting

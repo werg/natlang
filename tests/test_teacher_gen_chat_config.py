@@ -34,3 +34,54 @@ def test_provider_teacher_runs_the_pi_transport_without_http_controls(tmp_path):
                 {'model_id': 'm', 'provider': 'openai-codex', 'api_key_env': 'K'}):
         with pytest.raises(ValueError):
             teacher_gen.make_teacher(bad)
+
+
+def _manifest(work, records):
+    import json
+    work.mkdir(parents=True, exist_ok=True)
+    (work / 'manifest.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
+
+
+def _record(task_id, teacher, outcome, reward):
+    return {'task_id': task_id, 'teacher': {'model_id': teacher},
+            'episodes': [{'outcome': outcome, 'reward': reward}]}
+
+
+def test_gap_selection_tiers_and_failed_by(tmp_path):
+    import json
+    _manifest(tmp_path / 'old', [_record('solved', 'haiku', 'task_success', 1.0),
+                                 _record('failed', 'haiku', 'semantic_mismatch', 0.0),
+                                 _record('rare', 'luna', 'budget_exhaustion', 0.0),
+                                 _record('often', 'luna', 'semantic_mismatch', 0.0)])
+    coverage = teacher_gen.teacher_coverage([tmp_path / 'old'])
+    assert coverage['solved']['success'] and coverage['failed']['failed_by'] == {'haiku'}
+    group = tmp_path / 'run' / 'groups' / 'g000001'
+    group.mkdir(parents=True)
+    (group / 'rewards.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in [
+        {'task_id': 'often', 'reward': 1.0}, {'task_id': 'often', 'reward': 1.0},
+        {'task_id': 'often', 'reward': 0.0, 'jolt_role': 'teacher'},
+        {'task_id': 'supply-often', 'reward': 1.0}, {'task_id': 'rare', 'reward': 0.0}]))
+    rates = teacher_gen.student_rates({'rare': {'successes': 1, 'scored': 4}}, [str(tmp_path / 'run/groups/g*')])
+    assert rates['often'] == (2, 2) and rates['rare'] == (1, 5)
+    rank = teacher_gen.gap_rank(coverage, rates, {'supply', 'supply-often'}, 0.25)
+    tiers = {i: rank({'id': i}) for i in ('solved', 'failed', 'rare', 'often', 'supply', 'supply-often', 'untried')}
+    assert tiers == {'solved': None, 'failed': 3, 'rare': 0, 'often': None, 'supply': 1, 'supply-often': 1,
+                     'untried': 2}
+    rows = [{'id': i, 'family': f} for i, f in (('failed', 'a'), ('rare', 'b'), ('supply', 'a'), ('untried', 'c'),
+                                                ('solved', 'a'))]
+    assert [r['id'] for r in teacher_gen.order_tasks(rows, rank, 1)] == ['rare', 'supply', 'untried', 'failed']
+
+
+def test_task_a_teacher_failed_goes_to_another_teacher_first(tmp_path):
+    import json
+    from types import SimpleNamespace
+    tasks = [{'row': {'id': 'x'}, 'base_rank': 'teacher_failed', 'failed_by': ['haiku']},
+             {'row': {'id': 'y'}, 'base_rank': 'teacher_failed'},
+             {'row': {'id': 'z'}, 'base_rank': 'teacher_failed', 'failed_by': ['haiku', 'luna']}]
+    (tmp_path / 'tasks.jsonl').write_text(''.join(json.dumps(t) + '\n' for t in tasks))
+    haiku, luna = (SimpleNamespace(model_id=m, cool_until=0., failures=0) for m in ('haiku', 'luna'))
+    generator = teacher_gen.Generator(SimpleNamespace(work=str(tmp_path), limit=0, shard=(0, 1)), [haiku, luna])
+    assert generator._take(haiku) == 1          # x passed on, y taken
+    assert generator._take(luna) == 0           # luna takes the passed x first
+    assert generator._take(haiku) == 2          # every teacher failed z: no one to pass it to
+    assert generator._take(luna) is None

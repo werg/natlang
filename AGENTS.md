@@ -243,8 +243,9 @@ is the plan this approach came from.
   `max_running`; longest-expected-first dispatch within a sample, `held-pop.log`; POP_HELD_THROUGHPUT_20261117.md).
 - **Sentinels** (`train.jsonl`): `grad_spike` (> 5x the run's median grad_norm), `reasoning_shift`, k3 `kl_mean` with
   `ref_dlogp_max`, rho statistics, and the behaviour probe after every step (`behaviour_probe.py`,
-  `ops/grpo-v2/behaviour-probe-v1.json`: logp change, entropy and `</think>` hazard on 48 start-policy calls, ~42 s,
-  flagged as `behaviour_shift`). `cuda_peak_by_phase_gb` gives each phase's memory peak.
+  `ops/grpo-v2/behaviour-probe-v2.json`: logp change, entropy and `</think>` hazard on 48 start-policy calls, and
+  p(`<|im_end|>`) after 24 short decision answers (`end_logp_change`, `reclose_p`; 10.6k more tokens), flagged as
+  `behaviour_shift`). `cuda_peak_by_phase_gb` gives each phase's memory peak.
 - **Learner bench** (minutes): `grpo.py train --replay ROLLOUTS --replay-max-group-tokens 16000 --min-groups 6
   --max-groups 6 --max-steps 6 --keep-checkpoints-until 6`; `--advantage-control shuffle|zero` are reward-free
   controls; `--replay-schedule` replays a run's exact batches. The 2026-11-15 hunt's runs are in `ops/grpo-v2/hunt/`.

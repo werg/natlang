@@ -642,7 +642,11 @@ def replay_episode(args, server, episode, env):
 
 
 def replay(args):
-    return replay_episodes(args, all_episodes(Path(args.work)))
+    """Replay the extracted episodes that have no verdict in WORK/replay.jsonl yet: a periodic re-extraction of a growing
+    teacher pool replays only its new episodes and appends each verdict once."""
+    path = Path(args.work) / 'replay.jsonl'
+    done = {json.loads(line).get('key') for line in path.open() if line.strip()} if path.exists() else set()
+    return replay_episodes(args, (e for e in all_episodes(Path(args.work)) if e['key'] not in done))
 
 
 def replay_episodes(args, episodes):

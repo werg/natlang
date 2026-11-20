@@ -1,4 +1,5 @@
 """Real native graph replay matches the actor's incremental sampling inputs."""
+import collections
 import copy
 from types import SimpleNamespace
 
@@ -147,15 +148,12 @@ def test_native_replay_uses_captured_normalized_guidance_mask():
     torch.testing.assert_close(logps, behavior, atol=0, rtol=0)
 
 
-def test_native_policy_objective_prepares_whole_episode_and_uses_supplied_forward(tmp_path, monkeypatch):
-    import json
-    from natlang_neuralese.rl.native_replay import prepare_objective, NativePolicyObjective
-    from natlang_neuralese.data.native_graph import parse_graph
-    model, roles, identity, _, block, turns = actor_rollout('lfm')
-    # Keep both outcomes in the group to obtain a genuine relative-policy signal.
+def objective_episodes(turns, identity, rewards=(1, 0)):
+    """A scored group of ``turns``' episode (one sample per reward) with packet-bound source custody; both outcomes
+    in the group give a genuine relative-policy signal."""
+    import hashlib
     raw_turns = [{'messages': [], 'target': {}, 'invocation_id': turn['graph_turn'],
                   'sampling': turn['sampling'], 'replay': {'raw_calls_retained': True}} for turn in turns]
-    import hashlib
     packet_row = b'{"id":"train-task","source_groups":["sms_spam:source-world"],"source_ids":["sms_spam:source-row"],"source_revisions":["sms_spam/v1"]}\n'
     packet_sha = hashlib.sha256(packet_row).hexdigest()
     packet_row_sha = hashlib.sha256(packet_row).hexdigest()
@@ -167,9 +165,47 @@ def test_native_policy_objective_prepares_whole_episode_and_uses_supplied_forwar
                  'source_groups':['sms_spam:source-world'], 'source_revisions':['sms_spam/v1'],
                  'source_custody':copy.deepcopy(source_custody), 'sample': sample, 'split': 'train', 'group': 'g',
                  'reward': {'quality': reward}, 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']},
-                 'turns': copy.deepcopy(raw_turns)} for sample, reward in enumerate((1, 0))]
+                 'turns': copy.deepcopy(raw_turns)} for sample, reward in enumerate(rewards)]
     from test_rl_episode_graph import attach_execution_graph
     attach_execution_graph(episodes)
+    return episodes, packet_row_sha
+
+
+def test_a_second_think_close_is_never_reinforced_in_whole_episode_replay():
+    """Program tune trains whole sampled turns: a reply's second close (here token 11 stands for </think>, 2 for the
+    end of turn) and what follows it up to the action leave a positive-advantage or rft episode's actions and target
+    weights; a negative advantage still pushes them down; ``second_close`` None opts out (DECISIONS 2026-11-19)."""
+    from natlang_neuralese.rl.native_replay import prepare_objective
+    _, roles, identity, _, block, turns = actor_rollout('lfm')
+    consumer = turns[0]['sampling']
+    first, end = consumer['samples']
+    consumer['samples'] = [dict(first, index=0), dict(first, index=1, token_id=12), dict(first, index=2),
+                           dict(first, index=3, token_id=13), dict(end, index=4)]
+    episodes, _ = objective_episodes(turns, identity)
+    run = lambda mode='grpo', second_close=(11, {2}): prepare_objective(copy.deepcopy(episodes), identity=identity,
+        roles=roles, fetch_block=lambda key: block, mode=mode, second_close=second_close)
+    graphs, spec = run()
+    rows = [spec['rows'][graph['id']] for graph in graphs]
+    win, loss = sorted(rows, key=lambda row: -row['advantage'])
+    assert win['advantage'] > 0 > loss['advantage']
+    assert len(loss['actions']) == 10 and 'second_close_masked' not in loss
+    assert len(win['actions']) == 8 and win['second_close_masked'] == 2
+    left_out = collections.Counter(a['token_id'] for a in loss['actions']) - collections.Counter(a['token_id'] for a in win['actions'])
+    assert left_out == {11: 1, 13: 1}, 'the second close and what follows it; the first close, text and end keep weight'
+    weights = {graph['id']: sum(sum(node['target_weights']) for node in graph['nodes']) for graph in graphs}
+    assert sorted(weights.values()) == [8, 10]
+    _, opted_out = run(second_close=None)
+    assert all(len(row['actions']) == 10 for row in opted_out['rows'].values())
+    _, rft = run(mode='rft')
+    assert [len(row['actions']) for row in rft['rows'].values()] == [8]
+
+
+def test_native_policy_objective_prepares_whole_episode_and_uses_supplied_forward(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.rl.native_replay import prepare_objective, NativePolicyObjective
+    from natlang_neuralese.data.native_graph import parse_graph
+    model, roles, identity, _, block, turns = actor_rollout('lfm')
+    episodes, packet_row_sha = objective_episodes(turns, identity)
     graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=lambda key: block)
     assert len(graphs) == 2 and all(len(graph['nodes']) == 2 for graph in graphs)
     assert all('sms_spam:source-world' in graph['source_groups'] for graph in graphs)

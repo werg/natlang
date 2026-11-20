@@ -3854,3 +3854,812 @@ step-3 state on pin a0981794b (reasoning RL walk/rewrite, guidance-leak fix 5038
 the operators newline after `<|im_end|>`). The SFT checkpoint's own held eval is skipped (the probe already decides
 against it; Pop finishes the base on the new answer protocol). The val-own investigator now hunts the hazard; a rebuilt
 warm-up runs only once its cause is fixed.
+
+## 2026-11-18: task supply round 13, `natlang-rl-task-supply-20261118d` (130 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 130 train rows in 8 new families (round 13, w244-w250, and the round-11 leftover w224). Built
+  on the coordinator's request without waiting for w243, which goes into the next source.
+- **Constructs:** folder reducers 76%, decide 66%, depth 3 60%, iterateOn 45%, typed Neuralese 31%.
+- **Repetition:** 0 program texts or functional programs shared with the 35,422-row pool; top structure 14%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 25 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r13`.
+- **When it enters:** grpo-v4-run2 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: task supply round 14, `natlang-rl-task-supply-20261118e` (127 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 127 train rows in 9 new families (round 14 w251-w258 and w243).
+- **Constructs:** folder reducers 76%, decide 58%, depth 3 63%, iterateOn 57%, typed Neuralese 53%.
+- **Repetition:** 0 program texts or functional programs shared with the 35,552-row pool; top structure 12%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 40 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r14`.
+- **Finding:** dataset seeds with free-text span answers (Qasper, MuSiQue) lose most tasks to the blind solve; GSM8K
+  loses a third to wording. Round 15 authors only closed-set answers.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: task supply round 15, `natlang-rl-task-supply-20261118f` (121 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 121 train rows in 8 new families (round 15, w259-w266, incl. WikiSQL train tables).
+- **Constructs:** folder reducers 84%, decide 69%, depth 3 62%, iterateOn 62%, typed Neuralese 49%.
+- **Audit:** closed-set answers only; the blind solve agreed on all 196 admitted tasks.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related after dropping 56 rows, closure
+  passed. Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r15`.
+- **Finding:** custody's `inputs:` binding ties sibling worlds that share identical root inputs; 31 train rows were lost
+  this way over rounds 14-15. Round 16 authors make every world's root inputs distinct.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18 19:00, sft-v4-run1 `</think>` hazard 1.03 vs 0.55: where it comes from (SFT-row investigation)
+
+**Observation.** run3's start probe: the warm-up checkpoint's hazard 1.032/1k vs the base's 0.546, close_logp -0.210 vs
+-0.268, sampled_logp -0.633 vs -0.569, entropy 0.649 vs 0.661. Reproduced forward-only (1.019 vs 0.543).
+
+**Where the hazard rose.** It is not spread out. The top 200 of 32,560 probe positions carry 100% of the increase, and
+the top 20 carry 81%. They are the points where the student has just named its next action: "Let's search. I",
+"Let me try calling read_code for ... Use", "Let's do that. Use". At those points p(`</think>`) went from 0.1-0.6 to
+0.25-0.84. The median logit shift elsewhere is +1.2, on probabilities around 1e-7, which adds nothing to the mean.
+The checkpoint closes its reasoning as soon as it has picked an action.
+
+**Mechanical check of the trainer (pin d7d7b0a38 code, real rows, fast path, prefix tree `levels`, packing at the run's
+8,134 tokens):**
+- Rows tested: 25 chains (teacher with masked reasoning, own, graph with imports, operators, readout rows), 10 packed
+  leaf rows.
+- Label shift: every target equals the next input token in its own document, and no target crosses a document or
+  prefix boundary.
+- Weights: per target they equal the chains' intended weights. No chain is missing or computed twice.
+- Masked `</think>`: 21 present in teacher rows and 6 in operator rows, 0 trained. Own and graph closes are trained, as
+  intended.
+- Gradient: zero-weight rows get exactly zero gradient through the fused NLL, and its gradient matches an fp32
+  cross-entropy reference (1% relative error, bf16).
+- `</think>` (124902) is one of the interface's special ids, so its embedding row is frozen; grafting the base row
+  into the checkpoint changes nothing.
+- Result: no mechanical defect found in this scope.
+
+**Every trained `</think>` in sft-warmup-20261118-v1 (offline):**
+- Own successes: 576 closes, of which 18 are readout rows at position 0 and 6 are second closes in one reply. Reasoning
+  before them p10/p25/p50/p75 = 83 / 408 / 1,750 / 4,460 characters; 109 under 200 characters.
+- Graph rows: 165 closes, p50 2,194 characters, 12 under 200.
+- Teacher, operators and live rows: 0 trained closes and no trained token inside a think block.
+- Own and graph lengths are near the base's held p50 of 1,919. They were sampled by policies whose probe hazard equals
+  the base's (grpo-v3-run1 steps 1-10: 0.52-0.55). No source trains a systematically early close.
+
+**Which sources push the hazard (forward/backward at the base, small units beside run2):**
+- First-order effect of one epoch, -<grad H, grad L_source>, per unit LR:
+  - teacher actions +28.0
+  - own +4.85 (reasoning tokens +3.4, own `</think>` +1.7, after-close -0.3)
+  - graph +1.6
+  - readout rows +0.055
+  - operators -0.13
+
+  Teacher actions dominate because of their mass, although their per-token alignment is the weakest (cos -0.010).
+  This is against the prior that masked reasoning gives `</think>` no direction: through shared weights it does.
+- On-policy null, H on 24 probe calls and SFT on the other 24 base samples: +98 per token. Own +21, teacher +27,
+  graph +106.
+- The direction is generic: full-softmax NLL on the base's own samples raises the hazard as much as anything in the
+  warm-up.
+- Fresh-AdamW first step, lr·sign(g) at 1e-4 per source (forward probe after it):
+  - teacher 3.03, operators 1.62, readout rows 11.0
+  - base on-policy samples: full NLL 2.59, nucleus NLL 0.03
+- At 3e-4:
+  - base samples: full 4.0, nucleus 0.0004
+  - own: full 21.1, nucleus 0.24
+  - graph: full 22.2, nucleus 0.45
+- A sign step removes magnitude, so the readout rows' 11.0 says their direction is steep. In the mix they carry about
+  0.2% of the first-order effect.
+
+**Reading.**
+- The 18 readout rows and the batch order do not account for the doubling.
+- No row defect or trainer bug was found that does.
+- The hazard is a fragile statistic, a mean of probabilities dominated by about 200 decision points. Every SFT
+  direction tested raises it, the student's own samples included, as long as they are trained with the full-softmax
+  NLL.
+- First principles fit this: the student sampled its replies at top-p 0.95. Their likelihood is the
+  nucleus-renormalized one, and the full NLL of such samples is not zero in expectation on the student's own
+  distribution. It drains the tail into the nucleus and so raises every candidate inside it, `</think>` at decision
+  points among them.
+- GRPO's policy term already uses the nucleus NLL. exp0_sft did not.
+
+**Fix (default, opt-out):** `exp0_sft --student-top-p 0.95`. Own successes and own graph rows (`student_sampled`:
+source `rl` / `rl-neuralese-graph`, or a chain's `sampled` flag) train the NLL under each row's top-p nucleus
+(`targets_nll`, one pass of `linear_nll_nucleus`); validation uses the same objective. `--student-top-p 1` restores the
+full softmax. Also `--checkpoint-at-max-steps` for short ablations. Test:
+`test_exp0_student_sampled_chains_take_the_nucleus_nll_and_others_the_full_softmax`.
+
+**What this does not settle.** The teacher-action share is the largest first-order contributor, and the nucleus objective
+does not touch it. A rebuilt warm-up therefore still needs a guard on the student's reasoning distribution, either
+with a KL term to the base on the student's own reasoning positions (exp0_sft has no reference pass) or by reading the
+probe during training. Measurements cut short: the first-order nucleus-vs-full dot (the ledger preempted the unit
+three times behind a queued 40 GB job), the teacher-with-reasoning vs empty-think comparison (`teachervar.py`, written,
+not run) and real per-source short trainings.
+
+**Ready to run (the supervisor decides when):** `ops/sft-v4/ablation/run.sh PIN [ARMS]`. Each arm is 10 exp0_sft steps from
+the base on the full run's schedule (peak LR reached), then probe v1, about 15 min at ~80 GB. Arms:
+- full-old (the run's objective)
+- full-new (nucleus, masks, stratified)
+- teacher
+- own
+- own-nucleus
+- graph
+- operators
+
+Per-source chain files are in the same directory. This is the causal test the gradient numbers stand in for.
+
+**2026-11-18 19:30, SFT warm-up parked; teacher actions enter on-policy (supervisor).** The hazard hunt (19:00 entry)
+found no trainer defect. The doubled `</think>` hazard comes from the objective: full-vocabulary CE on the student's
+own nucleus-sampled tokens sharpens toward likely tokens, `</think>` among them at decision points (fixed: exp0_sft
+`--student-top-p 0.95`, 160f62715), and teacher actions push it through shared weights by sheer mass (no fix yet).
+A separate warm-up would need the per-source ablation (about 80 GB, so run2 pauses about 2 h) and a reasoning guard
+before it is safe. Meanwhile the warm-up's content, teacher actions, already trains on-policy in grpo-v4-run2: reasoning
+RL puts the student's own reasoning before each teacher action (action CE 0.05) and feeds its best chains to SD, while
+the per-step behaviour probe guards the hazard (0.54-0.55 through step 3). So run2 continues, and the warm-up and its
+ablation (ops/sft-v4/ablation/run.sh) run only in a natural DGX gap or if run2's held results stall.
+
+**2026-11-18 19:40, grpo: each target trains under the law that produced it (SFT-row investigation; default on).**
+- **The audit.** Every trained token path in `grpo.py` already went through `train_leaves`, and with `--top-p` < 1
+  its policy term used the nucleus log-probability for every chain: episodes, SD replay (own, JOLT+, search-carried,
+  rewrite), reasoning-RL, replay corpora and teacher demos. The student's own samples were therefore already right.
+- **The defect.** Rows the student never sampled got the nucleus log-probability too.
+- **Fix (`--non-student-loss full`, default; `nucleus` opts out).** These train the full-softmax log-probability:
+  - teacher demonstrations (`sd_teacher`);
+  - the reasoning-RL teacher actions (`rrl == 'action'` rows, and the `teacher` action rows of carried search
+    chains);
+  - replay-corpus rows that are not the student's own (operator seeds and answers; own Neuralese graph rows keep the
+    nucleus, `exp0_sft.student_sampled`).
+
+  `grpo.student_sampled_targets` is the rule. `train.jsonl` records `non_student_tokens`, and `nucleus_mass_mean`
+  still averages over every target.
+- **Program-tune.** Its `rl` and `rft` objectives already score actions under the recorded sampling law
+  (`rl/native_replay.token_action_logps`: temperature and the sampler's allowed set). Nothing produces own turns for
+  its full-softmax `sft` rows.
+- **When it enters.** grpo-v4-run2 takes this at its next resume.
+
+## 2026-11-18: task supply round 16, `natlang-rl-task-supply-20261118g` (88 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 88 train rows in 6 new families (round 16, w269-w274).
+- **Constructs:** folder reducers 88%, decide 51%, depth 3 65%, iterateOn 42%, typed Neuralese 41%.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related on the first build, closure passed.
+  Held worlds registered as `natlang-rl-authored-{dev,confirmation}-20261118r16`.
+- **Finding confirmed:** giving every world distinct root inputs removed the custody `inputs:` binding (0 rows lost,
+  against 15-16 in each of the two previous rounds).
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-18: large writes aimed at the external disk go to the NVMe first, then move (owner request; default on)
+
+- **Why.** grpo's `StateSaver` streamed each ~21 GB FP32 state straight to `/mnt/external` (HDD, 330-350 s). A stop
+  in that window lost the step twice today; the 900 s stop grace was a stopgap. grpo also never logged its state
+  writes, so the ledger gave its family the unmeasured 90 s grace.
+- **Mechanism (`train/checkpoint_offload.staged_write`, the existing offload's queue, verified copy and ledger
+  owner).** The file is written and fsynced on the NVMe, then published at its target path as a symlink to that
+  copy. A move job is queued on its own queue (`<offload queue>/moves`) with its own owner unit, so older-code owners
+  never see it. The owner copies the pinned inode to the HDD and re-reads it to verify the SHA-256. Under a
+  cross-process lock, and only while the target still links to that NVMe generation, it replaces the link and
+  deletes the NVMe copy. Readers (resume glob, Pop held eval, probes) see the same path throughout. A stop or resume
+  depends only on the NVMe write. Smoke on the DGX: 2 GB written in 3.8 s and moved in 45 s with the SHA checked; a
+  21 GB state now takes ~40 s instead of ~340 s.
+- **Retention and resume.** `--branch-states` and native-checkpoint pruning call `discard`, which removes the link
+  and its NVMe copy. A newer generation supersedes a pending or running move. The resume lookup skips a dangling
+  state link. Every staged write sweeps crash leftovers: partials of dead writers, staged files nothing links to
+  (never while the HDD is unmounted), and linked files that were never queued.
+- **Bounds and opt-out.** At most 2 staged files and at least 40 GB free on the NVMe, else the write goes direct
+  (atomic). `NATLANG_EXTERNAL_STAGING=0` opts out.
+- **Stop grace.** Every staged write is logged to `CHECKPOINT_WRITES`. The ledger's grace now uses the family's own
+  last 5 large writes (`family_write_throughput`), falling back to the all-writer median.
+- **Covered:** grpo FP32 states (branch and `training-state`), grpo native checkpoints, exp0_sft checkpoints.
+- **Left out, with reasons:**
+  - rollout archives: ~1-2 MB per group;
+  - held-eval outputs: small JSON under the NVMe work dir;
+  - `MomentOffload`: work dir on the NVMe;
+  - trajectory_state checkpoints: already written on the NVMe and mirrored by the offload;
+  - data-build sinks (`neuralese_data/common.py` Sink): streamed over hours, paced by conversion, no stop dependency;
+  - `ReferenceWeights`: written once at startup and re-read every step, so moving it would put every read on the HDD.
+- **When it enters.** grpo-v4-run2 takes this at its next resume on a pin from this commit. Its explicit 900 s
+  `--stop-seconds` can then drop to the measured grace if the step-boundary wait allows.
+
+## 2026-11-19: teacher gap campaign `teacher-gen-20261119/gap-v1` (teacher demonstrations keep flowing)
+
+- **Why.** `teacher-gen-20261115/pool-v2-rich` ran out of tasks (17,184 of 17,184 with a verdict); relaunches only
+  retried deferred tasks. Tasks added since (supply rounds 20261117..20261118g, 2,421 eligible) and the
+  `ext_codebase-*` families grpo-v4-run2 trains on (`--exclude-family-regex "(?!)"`; teacher_gen still hard-coded their
+  exclusion) had no teacher episode at all. Reasoning RL and `TeacherDemos` only use tasks with a verified success.
+- **Selection (`teacher_gen.py --covered-by`, new).** Every eligible pool task (grpo.POOLS, held-v3/v2 closure, errata;
+  ext_codebase included) without a teacher success in pool-v1, pool-v2-rich or pool-progtune-decisions, in tiers:
+  (0) the student rarely solves it (pass rate <= 0.25 over the base rates plus every grpo-v2..v4 group's student
+  samples, `--student-groups`, `--rare-rate`); (1) supply rounds (`--priority-pool`); (2) no teacher tried it;
+  (3) a teacher failed it. Tasks the student solves more often than 0.25 and that are not supply are left out. A task an
+  earlier teacher failed goes to a different teacher first (`failed_by`). Tiers (`gap-v1/inputs.json`, of 33,728
+  eligible): student_rare 280, priority_pool 2,394, teacher_untried 4,319, teacher_failed 10,793 (17,786 tasks).
+- **Teachers (probed 2026-11-19).** Haiku 5.5 (anthropic, effort medium: extended thinking, `reasoning_content` kept),
+  Luna (openai-codex; token expires ~11-26, after which its episodes defer and it backs off), Nemotron 3 Ultra on the
+  NVIDIA endpoint (2 slots, reasoning kept), Gemini 3.5 Flash-Lite (1 slot). Left out: OpenRouter's free Nemotron
+  (429 `free-models-per-day`: the 1,000-request daily quota is spent, ~25 episodes/day) and Gemini 3.7 Flash
+  (requests time out).
+- **Running.** Ledger unit `tgen-gap-v1` (low, 7 GB, resumable: a preempted unit is requeued and relaunched; `run.sh`).
+  `launch.sh` loops teacher_gen passes (each retries its deferred tasks) while a pass adds verdicts.
+- **Into grpo.** `sft-teacher-demos-20261119` (ledger unit `tdemos-refresh-20261119b`, `refresh.sh`) re-extracts the
+  campaign's successes and replays them under pin 72e4874d0 every 2 h; `sft_sources replay` now takes only keys without
+  a verdict. `grpo.SD_TEACHER_SOURCES` lists it third: grpo-v4-run2 takes it at its next resume on a pin from
+  72e4874d0 or later (TeacherDemos reads the sources at start). A future SFT build reads the same WORK.
+
+## 2026-11-19 01:40, grpo-v4-run2 `</think>` hazard 0.54 -> 0.67 (steps 5-9): which terms push it (hazard investigation)
+
+**Observation.** Behaviour probe close_per_1k flat at 0.54-0.55 through step 5, then 0.560 / 0.587 / 0.616 / 0.670 at
+steps 6-9 (pin e1a76a58e from step 6: `--non-student-loss full`, 80 slots / 96 running from step 7, task round 16);
+probe sampled-logp change turns negative from step 7 (-0.001 -> -0.004) and entropy rises; kl_mean 0.0005 -> 0.0021
+as the LR warms to 4.5e-6.
+
+**Method.** gH = gradient of the probe hazard at the base (/home/werg/data/tmp-hazard-gH.pt, the 11-18 hunt), u = gH
+preconditioned by run2's own AdamW second moment at step 9 (state-step-00009), so dH_T ~ -lr <u, grad L_T> for a
+term's share of a step's token-normalized loss. Scripts: scratchpad `hz2/stateprobe.py`, `hz2/termdots.py`,
+`hz2/thinkbias.py` (session 4c9bd489).
+
+**Results.**
+- Linearization check: AdamW rebuilt from the states reproduces the step 8 -> 9 update exactly (cos 1.0000); <gH,
+  update> predicts +0.097 for an observed +0.054 (same sign and order; gH is the base's).
+- The step-9 gradient alone points the other way: one-step share -0.019 (full Adam weight -0.12). The rise at step 9
+  comes from momentum (m_8: u.m_8 = -17.6k vs u.g_9 = +26.5k), i.e. from batches of earlier steps; grad_moment_cosine
+  has been negative at steps 6-9. A rise therefore keeps going for a few steps after its source stops.
+- Per term (step-8 checkpoint, run2 data):
+  - GRPO policy term, 4 groups of steps 7-9 (32 episodes, 270k tokens): +0.205 for those 4 groups alone, as large as
+    a whole step's update, with large cancellation inside it: think tokens of positive episodes -2.07 and of
+    negative episodes +2.62 per 1e6 units of loss mass; post-think tokens +0.34 either side. Pushing down a failed
+    episode's reasoning raises the hazard; reinforcing a successful one lowers it.
+  - Teacher actions (sd_teacher; standing in for the reasoning-RL action rows, same weight 0.05): +0.79 per 1e6 units
+    with the full softmax, +0.38 with the nucleus logp. At run2's ~3k units of teacher mass a step: about +0.002 /
+    +0.001 per step. `--non-student-loss full` doubles this term, but the term is one to two orders too small to
+    explain +0.03-0.05 a step.
+  - Advantage-weighted reasoning tokens (all 264 archived groups, offline): sum_t A_t over think tokens is negative
+    in every phase (relative -0.06 at steps 1-2, -0.23 at steps 3-5, -0.13 at steps 6-7, -0.07 at steps 8-9):
+    failing episodes carry more reasoning tokens (more calls, budget stops), and under `--loss-norm token` that is a
+    net push down on reasoning. It was largest at steps 3-5, when the hazard was flat, so it alone does not predict
+    the onset; with momentum and the LR ramp it can contribute to the later rise.
+- Reading: no term changed at step 6 that moves the hazard by the observed amount. The GRPO policy term dominates
+  the hazard direction by magnitude and its sign changes from batch to batch; the pin change (non-student full)
+  measures as about +0.001 per step.
+
+**Not checked.** Reasoning-RL reasoning rows (their samples never leave memory), SD own successes (none in the 4
+sampled groups), the replay corpora (unit stopped for memory; weight 0.05 and ~2-60k tokens bound them near the teacher
+term), the KL term (it pulls toward the base), sampled decisions (grad mass share ~0), u computed from the
+base's gH (not the step-8 policy), and per-step GRPO batches before step 7.
+
+**Action (default on, opt-out).** `grpo.py --save-step-chains N` (default 4; 0 off) keeps each step's exact learner
+batch (chains, advantages, roles, row weights, actor logp, per-token loss factor) in WORK/step-chains, so the next
+per-term measurement runs on the batches actually trained, reasoning RL and SD included. Test:
+`test_save_step_chains_keeps_the_exact_batch_with_its_loss_factors_and_only_the_newest_steps`.
+
+**Run2.** No resume flag change for the hazard on this evidence: `--non-student-loss` stays `full` (its share is
+~0.001/step). The step-8 held eval on Pop is the judge; if close_per_1k keeps rising after warm-up ends (step 10),
+measure per term on the saved batches (needs a resume on a pin with this commit).
+
+## 2026-11-19 04:30, grpo-v4-run2 hazard, step 11's exact batch per term (hazard investigation, follow-up)
+
+**Observation.** close_per_1k 0.670 (step 9) -> 0.735 (step 10, LR peak 5e-6) -> 0.761 (step 11); kl_mean 0.0021 ->
+0.0050 -> 0.0065.
+
+**Method.** `--save-step-chains` batch of step 11 (543 chains), policy step-10 checkpoint, each term written exactly as
+train_leaves writes it (behaviour_logp, token_advantage, policy_weight, non-student full, k2 KL at 0.02 against base
+logp, token_scale). Direction u = base hazard gradient / sqrt(v) of state 9 (the base gH file was deleted
+meanwhile, so no current-policy gH and no step-10 preconditioner). Subsample: 3 of 20 GRPO groups (x6.7), 60 of 184
+reasoning-RL chains (x3.2 by coefficient mass), every sd_teacher and replay chain; the KL over the selected chains.
+Script: scratchpad `hz2/termdots2.py`; 64 min at 6.4 GB.
+
+**dH per step (linear, close_per_1k units).**
+- GRPO pos think -0.45, pos post -0.05, neg think -0.07, neg post +0.00. Three groups, so this is mostly noise.
+- reasoning-RL reasoning: negative-advantage samples **+0.127**, positive -0.017; reasoning-RL teacher actions -0.022.
+- KL **-0.042**. It has the largest cosine with the hazard direction of any term (0.16; the others 0.001-0.04).
+- sd_teacher -0.0003, replay operators +0.0003, replay neuralese-graph -0.005. No SD own chains were in step 11.
+
+**Reading.**
+- The predicted total (-0.53) has the wrong sign against the observed +0.026. The 3-group GRPO subsample and the stale
+  base direction make the step total unreliable; per-term signs of the small, consistent terms are the usable part.
+- Teacher/replay rows and the non-student full softmax are negligible again (<= 0.005), as on 11-18 data.
+- The one term that raised the hazard in this batch is pushing down reasoning-RL samples with low teacher-action
+  likelihood. It is asymmetric: neg and pos carry the same coefficient mass (0.0097 vs 0.0109 in the sample;
+  0.034 vs 0.031 over the step), but the neg side moves the hazard 7x more. The lone unclosed 8192-token sample (A = -1)
+  was not in the subsample.
+- KL is the only term that reliably pulls the hazard back. At 0.02 it is outweighed once the LR is at its peak (KL
+  rose 2.4x at step 10).
+
+**Not checked.** A current-policy hazard gradient; the other 17 GRPO groups; per-chain attribution inside
+reasoning-RL neg (length or content); held-v3 at step 10 (running on Pop).
+
+**Recommendation for the resume (flags, no default change):** `--kl-beta 0.05` (2.5x the pull the measurement shows,
+about -0.10 a step, more than the observed +0.03-0.06 rise) and `--reasoning-rl-weight 0.5` (halves the one
+hazard-raising term). Keep `--non-student-loss full`. Revert either flag if step-10/12 held results fall; read
+close_per_1k and kl_mean over the next 2 steps; if the hazard still rises, measure step N's batch again with all GRPO
+groups and a gH at the current policy.
+
+## 2026-11-19 05:20, overlong filtering: samples and episodes cut by a token cap are neither ranked nor trained (default on)
+
+- **Why (first principles; coordinator, from the run2 hazard hunt).** A reasoning-RL think block that hits
+  `--reasoning-rl-max-tokens` without closing produced no action. It used to tie with the group's worst closed
+  sample and train at a negative advantage over every one of its tokens (up to 8,192), which teaches "close
+  earlier" directly: the classic truncation bias that DAPO's overlong filtering removes. run2 step 10 had 12 such
+  samples, the step whose hazard and KL jumped; step 11 had 1, at A = -1 over 8,192 tokens.
+- **Reasoning RL (`--reasoning-rl-unclosed drop`, default; `floor` opts out).** `rrl_advantages` normalizes a group
+  over its closed samples only (None at the unclosed ones), and `rrl_episodes` trains no row of an unclosed sample;
+  `reasoning_rl.unclosed_dropped` counts them. Carried search chains already kept unclosed blocks at weight 0.
+- **GRPO term (`--truncated-episodes drop`, default; `train` opts out).** An episode with any call whose sampling
+  finish_reason is 'length' leaves its group before advantages, SD and training (`lowering.episodes_truncated`). The
+  40-request budget is a task outcome and still scores 0; the 3600 s wall clock already leaves episodes unscored.
+  run2 so far: 0 of 30,155 sampled calls ended at 'length', so this changes nothing today; it guards any per-call or
+  per-episode token cap.
+- **Everywhere the mechanism lives.** One rule, `rl/rollout_math.truncated_rollout`: grpo `load_group` and program
+  tune's `native_replay.prepare_objective` (`truncated='drop'`, 'train' opts out). Not applicable: exp0_sft and SD
+  replay train verified successes only; held eval scores and never trains.
+- **Tests:** `test_rrl_advantages_drop_unclosed_samples_by_default`,
+  `test_rrl_episodes_leave_unclosed_samples_untrained_by_default`,
+  `test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained`; the 'floor' behaviour keeps its old tests.
+- **When it enters.** grpo-v4-run2 at the resume after the one that applies `--kl-beta 0.05 --reasoning-rl-weight 0.5`.
+
+## 2026-11-19 07:30, grpo-v4-run2 step 13 kl_mean 1.14: the k3 statistic and a dozen teacher tokens; the policy now writes a second `</think>` after short answers (sentinel diagnosis)
+
+- **Cause of the number.** `kl_mean` is the k3 estimate (`e^d - d - 1`, d = ref - policy logp), whatever
+  `kl_estimator` says the loss uses. Over step 13's saved batch (forward pass, base vs step-12 weights), the k3 sum is
+  1.19M from `sd_teacher` rows, 1.6k from reasoning RL and 135 from replay. The 1.19M comes from about a dozen tokens with
+  d = +10.6 to +12.4: `<|im_end|>` after short JSON answers ("Answer this call now, without tools. Reply with exactly
+  one of these JSON values...": reply `</think>"book"<|im_end|>`) in the new gap-v1 teacher demos
+  (teacher-gen-20261119/gap-v1, 74 sd_teacher chains at step 13 against 9 at step 12; SD_TEACHER_SOURCES since
+  72e4874d0). With 1.07M units, e^12.4 / 1.07M ~ 0.2 a token. |d| mean is unchanged because these are about a dozen of 1M tokens. Not a
+  denominator change (loss tokens 1.92M -> 1.07M), not mismatched references, not decisions (step 13 decisions' k3 sum
+  2.7). The trained k2 term on those tokens is beta*d ~ 0.6 per token (pulls `<|im_end|>` back up), with no grad spike (1.13x
+  median).
+- **What is real.** p(`<|im_end|>`) after `</think>"answer"` in those calls: base -0.0 to -2.5, step 4 and step 8 the
+  same, step 10 -0.08 to -5.8, step 12 -0.07 to -13.6. The policy puts 0.6-0.96 on a second `</think>` there instead.
+  This is the probe's rising `</think>` hazard showing up as a format break. The student's own reply ends are unaffected:
+  actor logp of the final `<|im_end|>` is -0.02 to -0.04 across all 264 archived groups. Its own answer calls run as
+  constrained decisions, whose option softmax does not depend on tokens all options share (`</think>`, quotes,
+  `<|im_end|>`), so nothing in them anchors that absolute probability. The student's own trained rows hold 6-11
+  replies a step with a second `</think>` after visible prose, most at positive advantage. Held-v3 at step 10 (other
+  series): 51.0% vs 54.1%, delta -3.1 pts, p 0.17; ran-out +2.5 pts (p 0.12).
+- **Fix (telemetry, default).** `kl_stats` also logs `kl_k2_mean` (the mean the loss trains), `kl_k3_max_share` (the
+  largest single token's share of the k3 sum) and `ref_dlogp_pos_max` (largest d with the policy below the reference).
+  `kl_mean` stays the k3 estimate for continuity. Test: extended `test_k2_kl_gradient_stays_linear_on_tail_tokens`.
+- **Run2.** No stop and no rollback on the KL number: the trained term is ordinary, and the gap-v1 teacher rows plus
+  `--kl-beta 0.05` push exactly these tokens back. The second-`</think>` drift is the open problem: it is the
+  `</think>` hazard, and step 12 already had it, before the step-13 flags. Watch `<|im_end|>` on these rows at the
+  next checkpoint (scratchpad `hz2/imendprobe.py`, one 6.5 GB unit). Not yet found: which term teaches
+  `"answer"` -> `</think>`. Reasoning-RL blocks never end in an answer (0 of 608 rows at steps 11-13).
+
+## 2026-11-19 08:20, a second `</think>` is never reinforced; sampled decisions get a per-token KL on the chosen option (defaults)
+
+Both changes follow from the 07:30 diagnosis: the policy put 0.6-0.96 on a second `</think>` after short answers by step 12.
+They are first-principles fixes, made without first learning which of the two candidates causes the drift.
+
+- **Second close (`--second-close context`, default; `train` opts out; exp0_sft `--second-close` likewise).** A reply's
+  second and later `</think>` and the tokens after each up to the action (`<tool_call>`, end of turn) are malformed
+  output (`exp0_sft.second_close_mask`).
+  - grpo: `malformed_close_targets` zeroes their policy weight where the advantage is positive, in every learner row
+    (episodes, SD own/search/rewrite, reasoning RL, replay corpora, teacher demonstrations). A negative advantage still
+    pushes them down, and the KL term stays, as for tail tokens. `train.jsonl` `second_close_masked` counts them.
+  - exp0_sft: `context_masks` (load time) zeroes them in every chain.
+  - run2 data: 6-11 such replies a step, mostly at positive advantage.
+- **Decisions (`--decision-token-kl`, default; `--no-decision-token-kl` opts out).** The chosen option's tokens are what
+  the actor emitted, but the option softmax (the decision's policy and KL terms) cannot see a token that all options
+  share. `decision_token_kl` adds the k2 KL on each chosen-option token at the same beta and per-token factor as chain
+  tokens; the reference pass keeps per-token option log-probabilities. This is the standard per-emitted-token KL; a
+  likelihood term at the advantage would only add noise to tokens the reward does not distinguish. `train.jsonl`
+  `decision_token_kl_tokens` counts the tokens.
+- **Left out.**
+  - Program tune (`rl/native_replay`): its rl/rft rows train whole sampled turns too. It is not running now; it gets
+    the same mask at its next use.
+  - A one-sentence runtime error that teaches the fix (`teach in errors`). The serving layer of all four engines splits
+    reasoning at the first close (`serve/http.py` 614-620 for the native engine), and the ts-host agent then takes the
+    content. Rejecting a second close is a protocol change on every engine plus a skills update: bigger than this
+    cycle; queued.
+- **Tests:** `test_a_second_think_close_and_what_follows_up_to_the_action_are_never_reinforced`,
+  `test_mask_second_close_is_a_load_time_context_mask`, `test_decision_token_kl_anchors_the_chosen_options_shared_tokens`;
+  `test_exp0_context_masks...` updated.
+- **Resume flags for run2:** none needed (both are defaults on a pin at this commit); keep `--kl-beta 0.05
+  --reasoning-rl-weight 0.5`.
+
+## 2026-11-19 10:00, the second `</think>`: the runtime answers it, program tune masks it, the probe watches it every step (defaults)
+
+Follow-up to 08:20, which left the runtime error and program tune out.
+
+- **Inventory (who splits a reply at `</think>` and who consumes it).** Every engine splits at the first close and
+  returns the rest, a second close included, as content: the managed llama-server and the page through the fork's
+  autoparser (`common/chat-auto-parser-generator.cpp` 133-167; the page loads with thinking off, so the prompt's own
+  `<think></think>` is the parsed block and any generated close is a second one), the Python native engine and the
+  SGLang actor through `serve/chat.py` `build_message` and the stream split in `serve/http.py` 613-620. All four reach
+  the runtime through one client, the shared chat adapter (`ts-host/src/model/chat-completion.ts`;
+  `browser/local-model.ts` 387 for the page, `model/neuralese-server.ts` 672 and `openai-compatible.ts` 108 for the
+  servers). Held eval and the RL collectors run that runtime. Learners: grpo and exp0_sft (08:20), program tune
+  (`rl/native_replay`).
+- **Runtime (default; `NATLANG_SECOND_THINK_CLOSE=content` or the adapter's `secondThinkClose: 'content'` opts out).**
+  A complete reply whose content or reasoning still holds `</think>` (a server that splits nothing leaves a leading
+  `<think>…</think>` block, whose close counts as the first) is a malformed turn: nothing runs, the reply and any calls
+  the server read stay in the history as sampled, and each call (or a user message) is answered "Your last reply closed
+  its reasoning a second time, so nothing ran; close the reasoning once, then make your tool call and end the reply."
+  It counts as a reply without an action. A generated decision fails as `decision-generation-invalid`. No engine code
+  changed. Skills `natlang-integration/references/recovery.md`, `MODEL_FACING_CHANGES.md`, `ENGINE_PARITY.md` updated.
+  Model-facing: it changes the held scoring series (ts-host tree) at the next pin.
+- **Program tune (default; recipe `rl_second_close: 'train'` opts out).** One mask implementation for every learner,
+  `natlang_neuralese.train.reply_format.second_close_mask` (exp0_sft re-exports it; grpo uses it through exp0_sft).
+  `prepare_objective(second_close=...)` drops those sampled tokens from rft episodes and positive-advantage grpo episodes
+  (actions and target weights); rows record `second_close_masked`.
+- **Probe (default `--behaviour-probe` v2).** `ops/grpo-v2/behaviour-probe-v2.json` (sha 4c240119) = v1's 48 calls
+  unchanged plus 24 distinct end-of-turn rows (14 tasks, 10.3k tokens): decision readouts the start policy answered
+  (served export 5ca8a8b1, `</think>"VALUE"<|im_end|>`) in the version-0 groups of grpo-v2 run1/run2, grpo-v3-run1 and
+  grpo-v4-run2 (sibling episodes repeat a decision exactly; each distinct row once).
+  Each step `train.jsonl` `behaviour` logs `end_logp` (mean log p(`<|im_end|>`) where the start ended), `end_logp_min`,
+  `reclose_p` (mean p of a second `</think>` there) and `end_logp_change` (vs the start); a drop beyond 1 nat sets
+  `behaviour_shift`. A resumed run whose `behaviour-start.json` predates the rows measures the start's values once from
+  its KL reference weights (a failure there is logged, never fatal); the file's `end_start` (HF base 40ebe0aa, the
+  start's backbone without the marker rows) stands in otherwise. Replaces scratchpad `hz2/imendprobe.py`.
+  - **The base already writes a second close here.** On these rows the base's end_logp is mean -2.64 (0.0 to -7.2) and
+    its mean p(`</think>`) at that position 0.41 (0.94 on row 0). These are decision options, whose reasoning closes at
+    once (`</think>` first, which the base scores about -21; MODEL_FACING_CHANGES 2026-11-13 "GRPO trains sampled
+    decision calls"): after that forced empty think block the base often closes again after the answer (why is not
+    established; one reading is that it takes the answer for reasoning). The run2 drift (07:30: teacher
+    rows of this form, base -0.0 to -2.5, step 12 to -13.6) pushed the same position further.
+  - **Numerics.** `measure_end` packs all rows into one fixed layout (`END_PACK_TOKENS`, whatever the caller's pack):
+    the fused kernels' BF16 rounding depends on the pack's shape and moves a row by up to ~0.4 nats on these tail
+    tokens (row 0: FP32 -4.44, HF BF16 -3.94, fused -4.17 in a 4-row pack and -4.56 in the 24-row pack; packing itself
+    is exact: the row alone equals it within its pack). Start and now therefore use one layout.
+- **Run2.** Not stopped. At its next resume (on a pin at or after this commit) pass `--behaviour-probe
+  .../ops/grpo-v2/behaviour-probe-v2.json` (its recorded args name v1) and read `behaviour.end_logp_change` per step.
+- **Tests:** `chat-completion.test.mjs` (second close: malformed, calls kept, unsplit block, cut-off reply, opt-out),
+  `agent-reply-calls.test.mjs`, `test_lfm3_format.py::test_a_second_think_close_reaches_the_client_in_the_content`,
+  `test_native_rl_replay.py::test_a_second_think_close_is_never_reinforced_in_whole_episode_replay`,
+  `test_grpo_learner.py::test_behaviour_end_of_turn_after_a_short_answer`.
+- **Not checked.** The fork's parser on a real page build (read from code); the resume-time reference measurement in
+  grpo (`measure_end` itself ran on the GPU: 24 rows, 6 s, 3.7 GB); the error's effect on episodes (the next pin's
+  collection shows how often it fires: count trace replies whose text holds `</think>`); whether fresh-init's backbone
+  equals the HF weights bit for bit (the `end_start` stand-in assumes it).
+
+**2026-11-19 13:00, grpo-v4-run2: reasoning-RL weight back to 1.0 (supervisor).** The `</think>` drift has reversed
+since the overlong filter (e7694b4f3), the second-close mask and decision-token KL (1f65fc747) and the runtime error
+(4df956771): hazard 0.81 at step 12 -> 0.49 at step 21 (base 0.55), end-of-turn logp -1.38 (base -2.62), reclose
+p 0.004. Held-v3 step 16 vs the new-protocol base: 54.9% vs 54.1% (+0.8, p 0.75), ran-out 2.3% vs 6.5%. The halving
+of reasoning RL (03:30) was a counterweight to the term the step-11 measurement found pushing the hazard; its main
+mechanism (unclosed samples at -1) is now filtered, so the full weight returns at the next step boundary, with
+`--kl-beta 0.05` kept. The per-step sentinels (close_per_1k, end_logp) guard it: if either moves back toward the
+drift for two steps, the weight returns to 0.5.
+
+## 2026-11-19 13:10, storage: /mnt/external freed from 80 GB to 439 GB (storage agent)
+
+grpo-v4-run2 writes ~21 GB states and 3.4 GB checkpoints to /mnt/external, which had 80 GB free against the 50 GB
+floor. Deleted only weight/state files (checkpoint.pt, safetensors, adam-moments offloads, reserved-pending files, CAS
+blobs) of retired or discarded lines; their logs, configs, reports and rollouts stay. Checked first: no open file
+descriptors, no systemd unit, launcher, POOLS entry or teacher_gen argument names them, and the string tables of the
+run2 step-20 checkpoint and of fresh-init 5ff07638 name no deleted path (fresh-init's provenance names only
+natlang-lfm3-data-20261028 and natlang-data-repair-20261026-v4b, both kept). Exact list:
+`ops/storage/delete-20261119-external.sh`.
+- **bf95-lowlr-1105 lineage (retired 2026-11-12; no w5 checkpoint beat the base), ~178 GB:** w2-w5 learner checkpoints
+  under natlang-active-lineage, native67-ffn-candidate-v2-1102 (the chain's parent; the SFT-window controller that
+  re-hashed it is gone), w3/w4 actor stores and actor views under lfm3-rl-dgx-20261029-ops and dgx-ops-archive.
+- **Discarded GRPO weights, ~35 GB:** grpo-v2-archive run1 FP32 state, grpo-v2 hunt lrS5w2 step 5, grpo-v1 run2 steps
+  4-5, grpo-v4-run1 step 1.
+- **dgx-ops-archive, ~55 GB:** sft-v3 run1/run1-cont checkpoints (superseded; cause found 11-18), restore-smoke and
+  grpo-v4 packbench weights and AdamW offloads.
+- **Cloud corrected-mix lineage (CoreWeave gone; bf95-based), ~92 GB:** checkpoints, reserved-pending files, .cas blobs
+  and the .cloud delta under natlang-lfm3-cloud-corrected-20261103.
+Kept: natlang-grpo-v4 (run2 checkpoints and states, run1 rollouts/groups that teacher_gen reads), fresh-init, sft-v4
+(held base of run2, ablation, its run1 checkpoint), all task-supply/composed/bgkit-kr pools, bgkit-data, development
+data, teacher outputs (incl. broad-graphs teacher-mine work-v3, 59 GB, the next candidate if space runs short), all
+rollouts. Dangling NVMe symlink left: ops/native67-ffn-candidate-v2-1102/checkpoint.pt.
+
+## 2026-11-19 16:00, grpo-v4-run2 memory drive: a reference cycle kept the prefix parts' FP32 segments alive; resumed moments stayed resident (memory agent)
+
+- **Question (owner):** are opportunities left to free memory without losing speed? Method: train.jsonl phase peaks, a 15 s
+  sampler (per process-group PSS/anon, per-process CUDA by nvidia-smi, cgroup, meminfo) over collection, learner phase and
+  the step boundary, and the code of each phase.
+- **Where the memory goes (step 24, a normal step; unit budget 105.6, ledger peak 104.1 at step 23):**
+  collection: CUDA 32 GB (learner 10.3 = BF16 3.4 + FP32 masters 6.8; actor 21.6 = weights 5.5, KV 11.2, graphs 1.6, rest),
+  host cgroup 31-36 GB (nodes 14 in 17 processes, queue supervisors 2.6 in 86, learner 5.5 anon + 3.8 tmpfs weights, SGLang
+  scheduler/detokenizer/launcher 3.8, front 1.5, page cache 1); outside the unit slab 8-10 GB, page cache 6-14 GB, MemFree 36.
+  Learner phase: actor 2 GB, learner 31 (reference pass start) -> 55 -> 68 GB reserved (policy 60.6 allocated, optimizer
+  44.0 allocated against 30.6 of live tensors), cgroup 27: MemFree 6 GB. Step boundary: the learner kept **43.5 GB reserved
+  for 3 minutes** (24 GB live) while the actor resumed (+20.6 GB): 92 GB total.
+- **Cause 1 (shipped): a reference cycle in `run_prefix_tree`.** The recursive nested `walk` had itself in its closure; the
+  closure's `levels` led to every prefix node's `segment` (FP32 keys/values and grads, ~7.3 GB per part), so a finished
+  part's segments lived until Python's cycle collector ran, which on the learner's heap it rarely does. `--prefix-retained-gb 8`
+  therefore bounded one part, not the pass: 2-3 parts stacked (the 13-19 GB `reserved - live` at the step boundary, freed by
+  the end-of-step `gc.collect`, which ran after `empty_cache`; the reference pass 40 GB allocated with no gradients or
+  moments). `lfm3_fast_train.prefix_levels` is iterative; tree-mask's walk too. Test: no `Segment` survives with gc off (fails
+  on the recursive walk); the SFT trainer shares the function. Expected: reference/policy peaks -7 to -15 GB, the step-boundary
+  window ~24 GB reserved instead of 43.
+- **Cause 2 (shipped): moments a resume loaded stayed resident through the first step.** Steps after each of the 9 resumes:
+  peak 53-72 GB against 41-55 for the others; step 23: 1121 s policy pass against 820 s, MemFree 3 GB, 0.8M swapped pages.
+  `offload_loaded_moments` puts them out at once (-13.6 GB).
+- **Shipped with it:** `free_cuda_cache` (gc.collect, then empty_cache; `--no-learner-gc` opts out) at the three
+  learner cache releases, with `cuda_cache_release` (`gc_freed_gb` names any further cycle), `cuda_peak_events` (leaf batches
+  where the allocated peak grew by 1 GB) in train.jsonl; shared collector servers recycle past `--recycle-rss-mb`
+  (1536; `NATLANG_COLLECTOR_RECYCLE_RSS_MB=0` opts out): a node server sat at 5.1 GB (2.3 GB external after one invocation)
+  until it had served 64 invocations.
+- **Not changed, with reasons:** SGLang KV stays 12 GB (non-evictable use peaks at 56% of 1.8M tokens, but 80 episodes x ~30k
+  context exceed the pool: the radix cache is what it holds); `--activation-gb` stays (ACT 12 buys 5.8% of the policy pass).
+- **Checked and small:** replay corpora in the learner 0.56 GB (int32 arrays), per-episode supervisor 31 MB (imports 10),
+  node baseline ~0.25 GB + 30 MB per episode, inductor workers (fork, 0.4 GB PSS), ReferenceWeights holds no resident copy.
+- **Not checked:** what the remaining 20-25 GB of learner transients are once the cycle is gone (the new events say); the pool
+  rows in the learner heap (450 MB of JSONL, estimated 1.5 GB as dicts); freeing the learner's BF16 params during collection
+  (3.4 GB, blocked by the local held-eval path that re-snapshots them) and masters (6.8 GB); the 3.8 GB tmpfs weights copy
+  (SGLang's disk update path); kernel slab 8-10 GB (no root). Resume on a pin of this commit reads all of it at step 1.
+
+## 2026-11-19: task supply round 17, `natlang-rl-task-supply-20261119` (103 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 103 train rows in 7 new families (round 17 w275-w282 plus w267), admitted on 2026-11-18 by a
+  supervisor that then went idle before building the source; picked up as orphaned work.
+- **Constructs:** folder reducers 85%, decide 84%, depth 3 73%, iterateOn 50%, typed Neuralese 31%; 52 programs, none
+  shared with the pool.
+- **Separation checks:** held-v3 verify 0/0 (also with exposure), custody 0 related, closure passed. Held worlds
+  registered as `natlang-rl-authored-{dev,confirmation}-20261119r17`.
+- **Run2 evidence used for round 18:** authored groups pass 0.41 with 75% in band, but 15% of authored episodes end on
+  the 40-call budget; the round-18 brief caps each world at 24 model calls and shifts the level mix slightly easier.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-19: task supply round 18, `natlang-rl-task-supply-20261119b` (130 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 130 train rows in 8 new families (round 18 plus the w268/w277/w280 leftovers), one seeded from
+  TAT-QA train.
+- **Change in authoring:** each world is capped at 24 model calls, because 15% of run2's authored episodes hit the
+  40-call budget.
+- **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 32 rows (w283/w284 shared root inputs
+  across programs), closure passed. Held worlds `natlang-rl-authored-{dev,confirmation}-20261119r18`.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-19: task supply round 19, `natlang-rl-task-supply-20261119c` (105 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 105 train rows in 9 new families (round 19 and w290).
+- **Separation checks:** held-v3 verify 0/0, custody 0 related after dropping 19 rows that shared root inputs with
+  held siblings, closure passed. Held worlds are `natlang-rl-authored-{dev,confirmation}-20261119r19`.
+- **Authoring rule added for round 20:** every task of a batch gets distinct root inputs, asserted in the generator.
+  Rounds 18 and 19 lost 51 train rows to shared inputs. The round-20 brief also requires the final newline of every
+  written file to be stated, because 20 round-19 tasks were held back for leaving it open.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+## 2026-11-19: task supply round 20, `natlang-rl-task-supply-20261119d` (114 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 114 train rows in 8 new families, one of them seeded from FinQA train.
+- **Separation checks:** held-v3 verify 0/0. Custody found 0 related rows on the first build, because every task now
+  has distinct root inputs. Closure passed. Held worlds are `natlang-rl-authored-{dev,confirmation}-20261119r20`.
+- **Supply across rounds 17-20:** 452 train rows in 32 new families.
+- **When it enters:** grpo-v4 takes it at its next resume on a pin from this commit. `--pool` without it opts out.
+
+**2026-11-19 20:40, grpo-v4-run2: 96 slots, ledger budget 84 GB (supervisor).** After the prefix-tree cycle and
+resume-moments fixes (fa14f6e06, 453d55153) run2's unit peaked at 58.5 GB over a full collect+learn cycle (learner
+CUDA peak 52.9 GB reserved at step 26, from 68-76 GB). The 99 GB budget kept the low-priority teacher campaign
+(tgen-gap-v1) preempted or queued most of the day and left 1-4 GB ledger headroom. At the next step boundary run2
+takes 16 more collector slots (80 -> 96, matching 96 running; ~0.3 GB each) and a budget of 84 GB: ~20 GB margin over
+the measured peak, and the freed ledger room runs the teacher campaign continuously beside the >= 15 GB probe headroom.
+If a peak passes ~80 GB the budget goes back up at the next boundary.
+
+## 2026-11-20 05:00, sft-v5: SFT/RFT on every verified teacher demonstration and own success, then GRPO from it (next experiment after grpo-v4-run2)
+
+**Why this experiment and not more GRPO.**
+- grpo-v4-run2 (plain GRPO from the base, LR 5e-6) has run 34 steps (~30 h). Held-v3 against the base (54.1%):
+  +1.0 / -3.1 / -0.2 / +0.8 / 0 / -2.7 / -2.2 pts at steps 4 / 10 / 12 / 16 / 20 / 26 / 30. Training reward
+  0.49-0.69 with no trend. Every step trained exactly `--min-groups` 24, so the run is collection-bound at ~190
+  episodes an hour.
+- A larger LR or batch does not change that bound. A larger batch at fixed actor throughput makes steps longer and
+  buys no more signal per hour. A larger LR was tried: grpo-v2 regressed at 1e-5.
+- The verified teacher demonstrations are offline signal, no collection needed. sft-v4-run1 trained 3,961 of them in
+  1.7 h (95M chain tokens). Its NLL on 40 unseen-task teacher episodes fell 0.65 -> 0.30 and was still falling while
+  the LR decayed. There are now ~3x as many episodes: gap-v1 added 8,372 exact-replayed successes, mostly on tasks the
+  student solves at most 25% of the time or that no earlier teacher solved.
+- **sft-v4-run1 was never held-measured.** It was rejected on the behaviour probe's `</think>` hazard (1.03 vs 0.55).
+  Run2 shows that the hazard does not predict held: hazard 0.735 / 0.81 / 0.69 / 0.55 / 0.49 / 0.66 at steps
+  10 / 12 / 16 / 20 / 26 / 30, held deltas -3.1 / -0.2 / +0.8 / 0 / -2.7 / -2.2. Its two lowest held results came at
+  hazard 0.735 and 0.49.
+- sft-v3's -16 pts had its own mechanism: trained teacher think blocks cut per-call reasoning from 1,919 to 350 chars
+  and raised ran-out. Since 250723952, teacher think blocks and narration are context.
+- The fixes that the 11-18 hunt found are in:
+  - nucleus NLL on the student's own rows (`--student-top-p 0.95`; own hazard push 21 -> 0.24 in the sign-step test);
+  - stratified batches (val-own rose exactly while peak-LR steps were teacher-only);
+  - context masks (decision readouts, wrapped backend refusals, the token after `<|im_end|>`);
+  - the second-close mask.
+- **Not run: the hazard ablation (ops/sft-v4/ablation/run.sh, ~2 h at 80 GB).** It measures the hazard, which run2
+  shows does not track held, so no outcome of it would change this decision. The held eval of the SFT checkpoint is
+  the judge.
+
+**Data: `runs/sft-mix-20261120-v1`** (ops/sft-v5/build.sh; WORK /home/werg/data/sft-sources-20261120).
+- **Sources:**
+  - every teacher pool: pool-v1, pool-v2-rich, pool-progtune-decisions, gap-v1;
+  - own successes of grpo-v3-run1 and grpo-v4-run2 through its latest group (grpo-v2 and grpo-v4-run1 out, as in v1).
+- **Replay:**
+  - Earlier exact-replay verdicts are reused through links (ops/sft-v5/seed_replays.py). Those are 43989d8ba/ae1f7dacb
+    for sft-sources-20261118 and 72e4874d0 for the gap-v1 demos. All three have today's answer protocol.
+  - New episodes replay under run2's pin 43c6b8ccd.
+- **Build:** the v1 recipe, with these changes:
+  - teacher forward budget 180M (was 90M), so about twice the distinct tasks, still breadth-first;
+  - own loss share 0.25 (was 0.2), the anchor for the student's reasoning, now under the nucleus NLL;
+  - aux unchanged: neuralese-graph 0.05, operators 0.03, live all.
+- **Result** (`build.json`; preflight on pin 43c6b8ccd: sha, held overlap 0, every import with its producer):
+  - teacher: 24,558 successes extracted, 22,233 exact replays; 7,688 admitted over 8,318 tasks; 12,121 over the
+    forward budget, 1,961 over the wrapper share, 405 near-duplicates;
+  - own: 8,473 extracted, 7,118 exact; 126 admitted (grpo-v3-run1 31, grpo-v4-run2 95); 2,153 from excluded runs,
+    1,134 over the loss share;
+  - loss shares: teacher actions 67.8%, own 24.0%, graph 5.1%, operators 3.0%, live 0.1%;
+  - size: 34,682 sequences, 191.9M forward tokens, 6.23M weighted target tokens, about 194 steps at 32k;
+  - concentration: top 10 tasks 5.6% of the loss, largest task 40k tokens;
+  - teacher producers by loss: Haiku 39.7%, Luna 27.5%, Nemotron 4.9%;
+  - registered and published as `sft-mix-20261120-v1` (manifest sha 3f87c647).
+
+**Recipe:**
+- exp0_sft from base 5ff07638, 1 epoch.
+- 32k weighted target tokens per step.
+- LR 5e-6 peak, 8 warm-up steps, cosine to 10%, clip 1.0, activation 16 GB.
+- Defaults: nucleus NLL on own rows, stratified, context masks, second-close mask.
+- val-own and val-teacher every 20 steps.
+- Ledger unit `sft-v5-run1`, 72 GB, high priority.
+
+Then **grpo-v5-run1** starts from the checkpoint on the same pin:
+- run2's bundle and flags: `--kl-beta 0.1` (reference = the SFT checkpoint; run2's value since step 37, after which its hazard turned), `--reasoning-rl-weight 0.5`, SD 0.1,
+  JOLT+, memetic 0.02, replay corpora, Neuralese variants, probe v2;
+- 96 slots, budget 92 GB, LR 5e-6, warm-up 10;
+- held evals on Pop back to back, 2 samples, each paired with the base measured on this pin (`ops/sft-v5/held/base`,
+  run on Pop while the SFT trains).
+
+**GRPO stage, the `</think>` hazard (revised 13:00 after hazard investigation 3, entry 12:00 below).**
+- **What I first did, and why I reverted it.**
+  - On the first hazard report (failed episodes' reasoning pushed down under token normalization), 3124af06c made
+    budget-stopped episodes neither ranked nor trained by default.
+  - The offline split on run2's last 300 groups had them at 8% of episodes, 28.2k tokens each, and A*T -4.2M of a
+    -2.1M net.
+  - Investigation 3 scored groups under their own policy versions. GRPO's push on `</think>` is noise around zero, and
+    budget stops pushed both ways across phases.
+  - That removes the premise. Dropping them also gives up GRPO's only direct push against running out (held ran-out
+    6.5% at base).
+  - **So the default is back to `train`.** `--budget-stop-episodes drop` (grpo) and `budget_stop='drop'` (program-tune
+    `prepare_objective`) stay as opt-ins, through the shared rule `rollout_math.budget_stopped_rollout`, with their
+    test.
+- **Loss normalization stays `token`** (the constant normalization of Dr. GRPO, unbiased). `episode` was measured as
+  a bias toward shorter reasoning on 11-14.
+- **Reasoning RL** is the one steady push, because its reward selects closing right after naming the action.
+  - grpo-v5-run1 uses run2's present counterweights: `--kl-beta 0.1` and `--reasoning-rl-weight 0.5`.
+  - No reward counter yet. Shorter reasoning has not cost held pass rate in run2 (median characters per call
+    2,096 -> 1,650 with pass rate flat), so a new reward term would have no held evidence behind it.
+  - Rule, read from the new `close_push` telemetry: if `close_push.reasoning_rl` stays positive while the probe
+    hazard rises for 3 consecutive steps, the reasoning-RL weight drops to 0.25 at the next resume. If a held result
+    then shows a ran-out or pass-rate loss with the hazard, the term goes to 0.
+- **Pin:** launch.sh pins origin/main at launch (>= 9072c42cc, with `close_push`).
+
+GRPO's `behaviour-start.json` is the SFT checkpoint's probe. Compare it with run2's `behaviour-start.json` (base),
+which is telemetry, not a gate.
+
+**Launch (the moment grpo-v4-run2 is stopped):** `/home/werg/data/lfm3-rl-dgx-20261029/ops/sft-v5/launch.sh`. It pins
+origin/main, then `drive.sh` does pin -> SFT -> Pop base in parallel -> GRPO -> judge. Progress is in
+`ops/sft-v5/run1/drive.log`.
+
+**Wall time:**
+- The data is built and published (build ran beside run2: 04:49-11:20, about 3.5 h of it preempted).
+- After the switch:
+  - pin, about 10 min;
+  - SFT about 3.5 h (sft-v4-run1 ran 95M forward tokens in 1.7 h, about 15k/s; this is 192M), plus validation every
+    20 steps;
+  - the Pop base runs in parallel, 1.6-4 h;
+  - GRPO's first checkpoint about 1 h after the SFT ends, its held result 2.5-4 h later.
+- First verdict about 7-9 h after the switch. GRPO then makes about one step an hour.
+
+**Criteria (declared before the run).** All held-v3 results are 2 samples, paired with the base on this pin.
+- **Expected:** the first held checkpoint (step 1-2, about the SFT checkpoint) is +3 to +6 pts, ran-out at or below
+  the base's.
+- **Success:**
+  - the first held result is >= base + 3 pts, or
+  - any held result by GRPO step 24 is >= base + 4 pts at p < 0.05,
+  - in either case with ran-out no more than 2 pts above the base's.
+- **Failure:** the first held result is below base - 4 pts at p < 0.05. `drive.sh` then stops grpo-v5-run1 by itself
+  and resumes grpo-v4-run2 from its state on its pin, and the diagnosis starts (degradation means bug). Any later
+  held result below base - 4 at p < 0.05 with no known cause also stops it (standing rule).
+- **Neutral:** the first held result is within +-3. GRPO continues; if no held result by step 24 reaches base + 2,
+  the SFT stage bought nothing measurable and the next experiment is chosen from that.
+
+**Smokes run beside run2 (no GPU training fits in the ~15 GB headroom):**
+- `seed_replays.py` on the real WORKs;
+- the data build itself;
+- `launch-sft.sh PREFLIGHT_ONLY=1` against the built chains on pin 43c6b8ccd: sha, held overlap, imports, size and
+  wall-time estimate;
+- `bash -n` of drive.sh.
+
+`ops/grpo-v4/launch-grpo.sh` now takes `CKPT_DIR`; its default is unchanged, so run2's resumes are unaffected.
+
+**Not checked:**
+- an exp0_sft step on this file (same format and trainer as sft-v4-run1, which trained cleanly);
+- `systemd-run --user` from inside the drive's ledger unit (the 11-18 drive used `systemctl --user` the same way);
+- the automatic run2 resume path in step 5 (it is the exact resume command of 2026-11-19 with budget 92).
+
+## 2026-11-20 12:00, grpo-v4-run2 `</think>` hazard, second wave (steps 27-37): where it sits, which terms push it (hazard investigation 3)
+
+**Observation.** Probe close_per_1k 0.54 (steps 1-5), up to 0.81 (12), down to 0.47-0.49 (21-26), up every step to 0.99
+(37), 0.96 (38, `--kl-beta 0.1` from 37). Held-v3 pass rate flat (51-55% vs 54.1%).
+
+**Where it sits (forward-only, probe calls one by one, base / step 12 / 24 / 38 = 0.543 / 0.801 / 0.467 / 0.952,
+reproducing the probe).** The top 1% of the 32,560 reasoning positions carry all of the step-38 increase. They are
+the ~40 positions where the base already had p(`</think>`) >= 0.01, right after the policy names its next action
+("... Let me call read_code for "qualify".", "Let's search."): mean log ratio there +1.3 to +1.6 nats at step 38, +0.8
+to +1.2 at 12, ~0 at 24; elsewhere a uniform +0.38 (step 38). At those points the base went on reasoning ("But I don't
+...", "Perhaps there are ...") and step 38 closes (p 0.19 -> 0.71, 0.07 -> 0.48, ...).
+
+**It is real behaviour on held tasks.** Median reasoning characters per call on held-v3 (same tasks, 2 samples): base
+2096, step 1 2151, 4 2071, 10 1720, 12 1650, 16 1817, 20 2082, 26 2178, 30 1782, 32 1676, 36 1651 (partial). Against
+the probe hazard at the same steps r = -0.97. Pass rate did not move with it.
+
+**Mechanism: what trains the close logit at those points.** Every term pushes it by sum_t c_t (1[y_t = close] - p_close,t)
+(c = the term's -dLoss/dlogp). On policy the unweighted sum is zero, so a term's push is the correlation of its
+coefficient with reasoning that closes earlier or later than the policy's own hazard.
+- No law mismatch at the close token. Step 37's exact batch (step-chains) under its own pre-step weights (step-00036):
+  student calls close 694 times against sum q_close 699.7 (learner nucleus; -0.8%), reasoning-RL samples 194 against
+  193.0.
+- Per term on step 37's batch (x1e6 token-factor units; bootstrap SE over episodes / reasoning-RL groups; KL from a
+  second pass under the base weights):
+  - GRPO episodes +7.8 +- 9.5 (failed episodes +8.6, successes -0.8);
+  - reasoning RL (weight 0.5) +4.7 +- 2.3: samples that go on past a decision point score lower on the teacher
+    action's likelihood, so the term's own objective selects closing right after naming the action;
+  - replay -0.01, sd_teacher 0 (its closes carry weight 0);
+  - KL (beta 0.1, k2) -8.3 (GRPO rows -5.3, reasoning RL -3.1), the only restoring term, proportional to the drift.
+  - Net +4.3 at hazard 0.96: the rise had slowed to +0.03 at step 37.
+  - Step 38's batch (under step-00036 weights, two versions stale): GRPO -13.5 +- 7.7, reasoning RL +2.2 +- 1.3,
+    replay -0.08, sd +0.05. The hazard fell 0.028 at step 38. The sign of the summed push matches the probe's move at
+    both steps. GRPO changed sign between the two steps; reasoning RL was positive at both (+4.7, +2.2 at weight 0.5).
+- GRPO's push is noise around zero, not a steady drive. Archived groups sampled by exactly one actor version, each under
+  that version's checkpoint (16/20/22 in the fall, 26/30/32/36 in the rise): push per group -0.77 +- 0.66 (29 groups,
+  fall) and +0.50 +- 0.49 (42 groups, rise), with the on-policy identity at 0 in both (-0.05 +- 0.09, 0.00 +- 0.08 per
+  episode). In the fall successes went on reasoning past decision points (task_success contribution -12), in the rise
+  they closed there (+15). One step's GRPO SE (~9.5) is twice reasoning RL's mean push.
+- Reading of the waves: reasoning RL pushes up at every step, in proportion to its weight. Before step 13 its unclosed
+  samples at A = -1 added a direct "close earlier" push (DECISIONS 11-19 04:30; filtered since). The KL term pulls back
+  in proportion to the drift, and GRPO adds a batch-dependent random walk that Adam's momentum stretches over ~10 steps.
+  The phases line up: rrl 1.0 and the unclosed push in steps 6-12 (rise); rrl 0.5, filter and KL 0.05 in 13-22
+  (fall, GRPO negative); rrl 1.0 from 23 (rise from 24-27, GRPO positive); rrl 0.5 from 31 (still rising: GRPO
+  positive and momentum); KL 0.1 from 37 (turned at 38). The size is not predicted: the logit push is first-order at
+  the trained positions, without Adam's preconditioning.
+
+**Ruled out, with evidence.**
+- Probe: reproduced with unpacked forwards (above).
+- New task rounds 17-20: at most 3 groups a step from step 27 (about 5% of groups).
+- Budget-stopped episodes: step 37 had none and still pushed +7.8. Across the phases their contribution is mixed
+  (-13.6 fall, -7.9 rise). Main drops them by default since 3124af06c (not on run2's pin).
+- Optimizer and resumes: bf16_changed_step_fraction is continuous across all 15 resumes (0.030-0.038 a step). The higher
+  grad_norm on the first step after a resume comes with that step's smaller reused batch (381-430 sequences against
+  600-875).
+- The prefix-tree walk rewrite at step 26 (453d55153): same pre-order, read and covered by its test.
+- KL reference: run2-state/reference-bf16.safetensors was written at the run's start (11-18 09:54) from base 5ff07638.
+- Second close: reclose_p 0.0001-0.0004 through the second wave; second_close_masked 0-11 a step as before.
+
+**Not checked.** The decision terms and decision-token KL on `</think>` (they act at the reply's first position, not at
+the probe's positions). SD own/search/rewrite rows (none in step 37, +0.05 in step 38). The reasoning-RL push at steps
+13-36 (its samples exist only in the last four step-chains; steps 35-36 were not measured). A gradient-level (Adam-preconditioned) attribution. The KL term's push in the
+fall phase.
+
+**Verdict.** This agent found no learner bug in its scope: the close-token identity, the per-term pushes on the exact
+batch, resumes, reference and probe. The drift is a direction that reasoning RL's objective selects and that GRPO's
+batch noise moves both ways, held by the KL term. A second, independent investigation is still owed before a "not a bug"
+verdict.
+
+**Action (default on, opt-out).** `train.jsonl` `close_push`: each term's push on the `</think>` logit over the
+reasoning tokens it trains, per role (student, reasoning_rl, sd, sd_teacher, replay, teacher) and for the KL term
+(`grpo.close_probability`, `grpo.close_push`; p(`</think>`) comes from the target's logit and log-probability, two dot
+products a row). The next hazard move is attributed from the step's own record, without hours of offline forward passes.
+`--no-close-push` opts out. Test: `test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero_on_policy`.
+Scripts: scratchpad `hz3/` (session 4c9bd489): poshaz.py, closepush{,2,3}.py, phase.py.
+
+**2026-11-20 12:20, grpo-v4-run2 stopped; sft-v5 launched (supervisor).** run2 ran 40 steps from the base without a
+held gain: held-v3 deltas -3.1 to +2.3 vs the new-protocol base (54.1%), last two +1.2 (step 32, p 0.65) and +2.3
+(step 36, 56.45%, p 0.30), ran-out at or below the base's since step 30. Collection-bound at 24 groups (~190
+episodes) an hour, so more steps of the same buy little per hour. The `</think>` hazard rise is explained by two
+independent investigations as reasoning RL's objective (no learner bug in scope; DECISIONS 2026-11-20 12:00). sft-v5
+(plan and criteria in its DECISIONS entry) launched on pin f9664edfe (includes close_push 9072c42cc): SFT/RFT on 7,688
+verified teacher episodes + own successes from the base, then grpo-v5-run1. run2's last states (39, 40) and held
+checkpoints 26-40 stay on /mnt/external as the fallback that sft-v5's drive resumes on a failure verdict.
+
+## 2026-11-20: task supply round 21, `natlang-rl-task-supply-20261120` (74 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 74 train rows in 5 new families. Authoring now asserts answer variety: no return value answers
+  more than 25% of a batch, and sibling worlds have distinct answers. 68 of the 74 answers are distinct.
+- **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
+  `natlang-rl-authored-{dev,confirmation}-20261120r21`.
+- **Timing:** this round lands before grpo-v5-run1 pins. Three more batches go into round 22.
+- **Opt-out:** `--pool` without this source.
+
+## 2026-11-20: task supply round 22, `natlang-rl-task-supply-20261120b` (43 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** the 3 round-21 leftover batches, built separately so they land before grpo-v5-run1 pins.
+- **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
+  `natlang-rl-authored-{dev,confirmation}-20261120r22`.
+- **Opt-out:** `--pool` without this source.
+
+## 2026-11-20: task supply round 23, `natlang-rl-task-supply-20261120c` (130 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 130 train rows in 8 new families, with 127 distinct answers.
+- **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
+  `natlang-rl-authored-{dev,confirmation}-20261120r23` and `-20261120r23b`.
+- **Total supply so far:** rounds 17-23 add 699 train rows in 48 new families.
+- **Opt-out:** `--pool` without this source.

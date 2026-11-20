@@ -8,7 +8,7 @@
 import type { DecisionScorer, ModelContentPart, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { nativeProtocolFailure } from '../native/native-protocol.js';
 import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
-import { TOOL_MARKUP } from '../native/tool-markup.js';
+import { SECOND_THINK_CLOSE, secondThinkClose, TOOL_MARKUP } from '../native/tool-markup.js';
 import { parseNativeXmlCalls } from './native-xml-calls.js';
 import { promptLogprobRequest, scoresFromPromptLogprobs, type PromptLogprobResponse } from './decision-scoring.js';
 import { NATIVE_XML_POLICY_SHA256 } from './native-xml-policy.js';
@@ -68,10 +68,24 @@ export type ChatCompletionOptions = {
    * with `continue` is sent that way; other adapters refuse it.
    */
   continuesReplies?: boolean;
+  /**
+   * A reply that closed its reasoning a second time (`secondThinkClose`): 'error' (default) answers it with
+   * `SECOND_THINK_CLOSE` as a malformed turn, nothing run; 'content' reads it as before 2026-11-19 (its calls run, the
+   * close stays in the text). Default from `NATLANG_SECOND_THINK_CLOSE` where the host has an environment.
+   */
+  secondThinkClose?: 'error' | 'content';
 };
 
+function secondThinkCloseSetting(options: ChatCompletionOptions): 'error' | 'content' {
+  const configured = options.secondThinkClose ??
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_SECOND_THINK_CLOSE;
+  if (configured === undefined || configured === '' || configured === 'error') return 'error';
+  if (configured === 'content') return 'content';
+  throw new RangeError(`NATLANG_SECOND_THINK_CLOSE must be error or content, not ${JSON.stringify(configured)}`);
+}
+
 /** Tool-call markup (Qwen-style XML or <tool_call> tags, LFM2's pythonic call markers) left in a reply's text. */
-export { TOOL_MARKUP } from '../native/tool-markup.js';
+export { SECOND_THINK_CLOSE, secondThinkClose, TOOL_MARKUP } from '../native/tool-markup.js';
 class LeakedCall extends Error {}
 
 /**
@@ -247,6 +261,7 @@ function decodeArguments(value: unknown): Json {
 export function chatCompletionModelTurn(transport: ChatTransport, options: ChatCompletionOptions = {}) {
   const forward = options.toolAliases ?? {};
   const reverse = Object.fromEntries(Object.entries(forward).map(([source, target]) => [target, source]));
+  const rejectSecondClose = secondThinkCloseSetting(options) === 'error';
   return async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions: ModelTurnOptions = {}): Promise<ModelTurn> => {
     // Deltas carry the runtime's tool names; a re-sent request first voids the deltas of the attempt before it.
     const observer = turnOptions.onDelta;
@@ -384,6 +399,16 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       const protocolFailure=nativeProtocolFailure(body);
       if(protocolFailure)return finish({calls:[],text:contentText(message?.content),
         protocol_failure:protocolFailure,...counts(),raw_response:body});
+      // A complete reply that closed its reasoning twice is malformed output, whatever it holds after: nothing runs, it
+      // keeps its text and sampled calls for the history and is answered with one sentence (`SECOND_THINK_CLOSE`). A
+      // reply cut off at its length limit is still in progress; its continuation is checked whole.
+      if (rejectSecondClose && !truncated) {
+        const reasoning = message?.reasoning_content ?? message?.reasoning;
+        if (secondThinkClose(contentText(message?.content), reasoning))
+          return finish({ calls: [], text: contentText(message?.content), malformed_call: SECOND_THINK_CLOSE,
+            ...(rawCalls?.length ? { raw_calls: rawCalls } : {}),
+            ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}), ...counts(), raw_response: body });
+      }
       try {
         const calls: [string, Json][] = (rawCalls ?? []).map((raw, index) => {
           const fn = raw.function as Json | undefined;

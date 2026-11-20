@@ -1220,3 +1220,17 @@ def test_launch_prioritizes_training_io_above_bulk_conversion(monkeypatch, prior
     ledger.launch(spec)
     command = next(c for c in seen if c[0] == 'systemd-run')
     assert all(item in command for item in expected)
+
+
+def test_stop_grace_follows_the_family_s_own_recent_write_rate():
+    hdd = [{'unit': 'grpo-v4-run2', 'bytes': 21e9, 'seconds': 350} for _ in range(5)]
+    nvme = [{'unit': 'grpo-v4-run2', 'bytes': 21e9, 'seconds': 70} for _ in range(5)]
+    other = [{'unit': 'natlang-mellum-qat-foundation-150000', 'bytes': 47e9, 'seconds': 250}]
+    rates = ledger.family_write_throughput(hdd + nvme + other)
+    assert rates[ledger.family('grpo-v4-run2.service')] == 21e9 / 70     # the last writes: staged on the NVMe
+    sizes = ledger.family_state_bytes(hdd + nvme + other)
+    grace = ledger.grace_seconds('grpo-v4-run2.service', {}, sizes, rates)
+    assert grace == ledger.GRACE_SLACK + ledger.GRACE_MARGIN * 70
+    # a family without writes of its own falls back to the all-writer median
+    assert ledger.grace_seconds('natlang-unknown-210556.service', {}, {'natlang-unknown': 1e9}, rates) == \
+        ledger.GRACE_SLACK + ledger.GRACE_MARGIN * 1e9 / rates[None]

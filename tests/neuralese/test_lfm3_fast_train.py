@@ -620,6 +620,24 @@ def test_exp0_stratified_steps_carry_the_whole_sets_source_mix():
     assert max(abs(share - own_share) for share in shares(random_steps)) > 0.17
 
 
+def test_exp0_student_sampled_chains_take_the_nucleus_nll_and_others_the_full_softmax(monkeypatch):
+    import exp0_sft
+    import numpy as np
+
+    def chain(round_name, **extra):
+        return {'ids': np.zeros(4, np.int32), 'segs': [(1, 2, {'sample': np.zeros(2, np.int32)})], 'task': 't',
+                'round': round_name, **extra}
+    own, graph, teacher, ops = chain('rl:x'), chain('rl-neuralese-graph:y'), chain('teacher:z'), chain('0')
+    assert [exp0_sft.student_sampled(c) for c in (own, graph, teacher, ops)] == [True, True, False, False]
+    assert not exp0_sft.student_sampled(chain('rl:x', sampled=False))
+    mask = exp0_sft.sampled_mask([teacher, own], 'cpu')
+    assert mask.tolist() == [False, False, True, True]
+    monkeypatch.setattr(exp0_sft, 'token_nll', lambda m, h, p, t: torch.full((4,), 1.))
+    monkeypatch.setattr(exp0_sft, 'token_nll_nucleus', lambda m, h, p, t, top_p: (torch.full((4,), 1.), torch.full((4,), .5), None))
+    assert exp0_sft.targets_nll(None, None, None, None, mask, 0.95).tolist() == [1., 1., .5, .5]
+    assert exp0_sft.targets_nll(None, None, None, None, mask, 1.).tolist() == [1.] * 4
+    assert exp0_sft.targets_nll(None, None, None, None, exp0_sft.sampled_mask([teacher, ops], 'cpu'), 0.95).tolist() == [1.] * 4
+
 def test_exp0_context_masks_zero_an_empty_think_lead_and_targets_after_the_end_token():
     import exp0_sft
     import numpy as np
@@ -639,7 +657,7 @@ def test_exp0_context_masks_zero_an_empty_think_lead_and_targets_after_the_end_t
     sampled = {'sample': np.array([4, 0, 2, 3], np.int32)}                    # plan </think> "A" <|im_end|>
     chains = [{'ids': np.zeros(5, np.int32), 'segs': [(1, len(r['sample']), r)], 'task': 't', 'round': 'r'}
               for r in (readout, operator, sampled)]
-    assert exp0_sft.context_masks(chains, Tok()) == {'empty_think_rows': 2, 'after_end_rows': 1}
+    assert exp0_sft.context_masks(chains, Tok()) == {'empty_think_rows': 2, 'after_end_rows': 1, 'second_close_rows': 0}
     assert readout['weight'].tolist() == [0, 1, 1]
     assert operator['weight'].tolist() == [0, 1, 1, 0]
     assert 'weight' not in sampled
@@ -845,6 +863,64 @@ def test_prefix_parts_bound_prefix_tokens_and_keep_every_leaf_once():
             walk(node)
     assert sorted(leaves) == list(range(6)) and len(parts) == 3
     assert lfm3_fast_train.prefix_parts(nodes, 1000) == [nodes]
+
+
+def _recursive_levels(nodes):
+    """The recursive walk ``prefix_levels`` replaced (its closure held itself: a reference cycle)."""
+    levels, continuations, wholes = [], [], []
+
+    def walk(node, depth, parent):
+        if 'index' in node:
+            (wholes if parent is None else continuations).append((node['index'], node['start'], parent))
+            return
+        node = dict(node, parent=parent)
+        while len(levels) <= depth:
+            levels.append([])
+        levels[depth].append(node)
+        for child in node['children']:
+            walk(child, depth + 1, node)
+    for node in nodes:
+        walk(node, 0, None)
+    return levels, continuations, wholes
+
+
+def _same_levels(a, b):
+    def shape(levels):    # nodes compare by their fields; parents by identity of position
+        return [[(n['start'], n['end'], n['first'], len(n['children']), None if n['parent'] is None else (n['parent']['start'], n['parent']['end']))
+                 for n in level] for level in levels]
+    assert shape(a[0]) == shape(b[0])
+    key = lambda items: [(i, s, None if p is None else (p['start'], p['end'])) for i, s, p in items]
+    assert key(a[1]) == key(b[1]) and key(a[2]) == key(b[2])
+
+
+def test_prefix_levels_equal_the_recursive_walk_in_tree_order():
+    leaf = lambda i, start: {'start': start, 'index': i}
+    nodes = [{'start': 0, 'end': 4, 'first': 0, 'children': [
+        {'start': 4, 'end': 10, 'first': 0, 'children': [leaf(0, 10), leaf(1, 10)]},
+        {'start': 4, 'end': 9, 'first': 2, 'children': [leaf(2, 9), {'start': 9, 'end': 12, 'first': 3, 'children': [leaf(3, 12), leaf(6, 12)]}]},
+        leaf(4, 4)]}, leaf(5, 0), {'start': 0, 'end': 3, 'first': 7, 'children': [leaf(7, 3), leaf(8, 3)]}]
+    _same_levels(lfm3_fast_train.prefix_levels(nodes), _recursive_levels(nodes))
+    assert lfm3_fast_train.prefix_levels([]) == ([], [], [])
+
+
+def test_prefix_tree_keeps_no_cycle_that_holds_its_fp32_segments():
+    """The retained-bytes bound (``prefix_parts``) holds only if a part's segments are freed when it returns: a reference
+    cycle in the pass kept them until the cycle collector ran, so the parts of a step stacked (grpo-v4-run2 step 24:
+    60 GB allocated, 13-19 GB of it garbage)."""
+    import gc
+    seqs, caps = _shared_sequences()
+    _, model = _pair()
+    weights = [torch.randn(len(s) - c, model.config.hidden_size) for s, c in zip(seqs, caps)]
+    per_token = lfm3_fast_train.retained_bytes_per_token(model)
+    gc.collect()
+    gc.disable()
+    try:
+        for backward in (True, False):
+            _, _, plan = _tree_run(model, seqs, caps, weights, 12, backward=backward, retained_gb=3 * per_token / 2**30)
+            assert plan['parts'] > 1
+            assert not [o for o in gc.get_objects() if isinstance(o, lfm3_fast_train.Segment)]
+    finally:
+        gc.enable()
 
 
 def test_prefix_tree_in_parts_gives_the_same_gradients():

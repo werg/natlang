@@ -1,4 +1,5 @@
 """Fixed corpora trained in every GRPO step (`--replay-corpus`: operator rows, whole-graph Neuralese episodes)."""
+import collections
 import pickle
 import sys
 from pathlib import Path
@@ -88,3 +89,88 @@ def test_a_leading_empty_think_block_is_context_and_reasoned_replies_keep_every_
     assert kept.think_masked == 0 and 'weight' not in kept.groups['a'][0]['segs'][0][2]
     with pytest.raises(SystemExit):
         grpo.ReplayCorpus(f'ops={path},think=maybe', set(), 7, log=lambda r: None)
+
+
+def test_student_sampled_targets_split_teacher_and_corpus_data_from_the_students_own_samples():
+    def chain(role, round_name='rl:x', rrl=None):
+        rows = [{'sample': np.zeros(2, np.int32), **({'teacher': True} if r == 'teacher-row' else {'rrl': r} if r else {})}
+                for r in (rrl or [None])]
+        return {'ids': np.zeros(8, np.int32), 'segs': [(1 + 2 * i, 2, row) for i, row in enumerate(rows)],
+                'task': 't', 'round': round_name, 'role': role}
+    sampled = grpo.student_sampled_targets
+    assert sampled(chain('student')).tolist() == [True, True]
+    assert sampled(chain('sd')).tolist() == [True, True]
+    assert sampled(chain('teacher')).tolist() == [True, True]              # JOLT+ attempts: the actor sampled them
+    assert sampled(chain('sd_teacher', 'teacher:pool')).tolist() == [False, False]
+    assert sampled(chain('replay', 'rl-neuralese-graph:e')).tolist() == [True, True]   # own graph rows
+    assert sampled(chain('replay', '0')).tolist() == [False, False]                   # operator seeds and answers
+    rrl = chain(grpo.RRL_ROLE, rrl=['reasoning', 'action'])
+    assert sampled(rrl).tolist() == [True, True, False, False]           # the teacher action after the student's reasoning
+    carried = chain('sd', 'rrl-carried-x', rrl=[None, 'teacher-row'])     # carried search chain: reasoning, teacher action
+    assert sampled(carried).tolist() == [True, True, False, False]
+
+
+def test_save_step_chains_keeps_the_exact_batch_with_its_loss_factors_and_only_the_newest_steps(tmp_path):
+    import pickle
+    import zstandard
+    chain = {'ids': np.arange(6, dtype=np.int32), 'segs': [(2, 3, {'sample': np.arange(3, dtype=np.int32),
+                                                                   'logp': np.full(3, -0.5, np.float32)})],
+             'advantage': -0.7, 'episode': 0, 'role': 'student'}
+    for step in (1, 2, 3):
+        grpo.save_step_chains(tmp_path, step, [chain], {0: (1 / 300, 0.)}, keep=2)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['step-00002.pkl.zst', 'step-00003.pkl.zst']
+    record = pickle.loads(zstandard.ZstdDecompressor().decompress((tmp_path / 'step-00003.pkl.zst').read_bytes()))
+    saved = record['chains'][0]
+    assert record['step'] == 3 and saved['token_scale'] == 1 / 300 and saved['advantage'] == -0.7
+    assert saved['segs'][0][2]['logp'].tolist() == [-0.5] * 3 and 'token_scale' not in chain
+
+
+def test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained(tmp_path, monkeypatch):
+    import json
+    import types
+    import lower_rollout_turns
+    from natlang_neuralese.rl.rollout_math import truncated_rollout
+    monkeypatch.setattr(lower_rollout_turns, 'episode_turns', lambda row, stats, states=None: [])
+    monkeypatch.setattr(lower_rollout_turns, 'decision_turns', lambda row, stats, states=None: [])
+
+    def row(finish, quality):
+        return {'task_id': 't', 'reward': {'quality': quality},
+                'turns': [{'sampling': {'finish_reason': 'stop'}}, {'sampling': {'finish_reason': finish}}]}
+    rows = [row('stop', 1.), row('length', 0.), row('stop', 0.)]
+    assert [truncated_rollout(r) for r in rows] == [False, True, False]
+    assert not truncated_rollout({'turns': [{'sampling': None}]})       # a decision call records no finish reason
+    (tmp_path / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    for mode, kept in (('drop', [1., 0.]), ('train', [1., 0., 0.])):
+        collector = types.SimpleNamespace(args=types.SimpleNamespace(top_p=0.95, truncated_episodes=mode),
+                                          groups={0: {'dir': tmp_path, 'task_id': 't', 'versions': [0]}},
+                                          states=None, generated=0, episodes=0)
+        stats = collections.Counter()
+        _, episodes, _ = grpo.load_group(collector, 0, stats)
+        assert [e['quality'] for e in episodes] == kept
+        assert stats['episodes_truncated'] == (1 if mode == 'drop' else 0)
+
+
+def test_episodes_ended_on_the_request_budget_train_by_default_and_drop_on_request(tmp_path, monkeypatch):
+    import json
+    import types
+    import lower_rollout_turns
+    from natlang_neuralese.rl.rollout_math import budget_stopped_rollout
+    monkeypatch.setattr(lower_rollout_turns, 'episode_turns', lambda row, stats, states=None: [])
+    monkeypatch.setattr(lower_rollout_turns, 'decision_turns', lambda row, stats, states=None: [])
+
+    def row(outcome, quality):
+        return {'task_id': 't', 'outcome': outcome, 'reward': {'quality': quality},
+                'turns': [{'sampling': {'finish_reason': 'stop'}}]}
+    rows = [row('task_success', 1.), row('budget_exhaustion', 0.), row('semantic_mismatch', 0.)]
+    assert [budget_stopped_rollout(r) for r in rows] == [False, True, False]
+    assert not budget_stopped_rollout({'outcome': 'budget_exhaustion', 'reward': None})   # wall clock: unscored
+    (tmp_path / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    for mode, kept in (('drop', [1., 0.]), ('train', [1., 0., 0.])):
+        collector = types.SimpleNamespace(args=types.SimpleNamespace(top_p=0.95, truncated_episodes='drop',
+                                                                     budget_stop_episodes=mode),
+                                          groups={0: {'dir': tmp_path, 'task_id': 't', 'versions': [0]}},
+                                          states=None, generated=0, episodes=0)
+        stats = collections.Counter()
+        _, episodes, _ = grpo.load_group(collector, 0, stats)
+        assert [e['quality'] for e in episodes] == kept
+        assert stats['episodes_budget_stopped'] == (1 if mode == 'drop' else 0)

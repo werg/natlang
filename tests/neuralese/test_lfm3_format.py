@@ -114,6 +114,22 @@ def test_xml_call_round_trips_through_real_tokens(tokenizer, code):
 
 
 @needs_lfm3
+def test_a_second_think_close_reaches_the_client_in_the_content(tokenizer):
+    """The Python native engine and the SGLang actor split a reply at its first </think> (`build_message`); a second
+    close stays in the content, where the runtime answers it with its one-sentence error (ts-host
+    `native/tool-markup.ts` `secondThinkClose`; DECISIONS 2026-11-19)."""
+    ids = tokenizer('Pick one.</think>"book"</think><|im_end|>', add_special_tokens=False).input_ids
+    close = tokenizer.convert_tokens_to_ids('</think>')
+    assert ids.count(close) == 2
+    parsed = build_message(tokenizer.decode(ids, skip_special_tokens=False), [], tools=EVAL_TOOLS)
+    assert parsed['reasoning_content'] == 'Pick one.' and parsed['content'] == '"book"</think>'
+    reply = tokenizer('Go.</think>Done.</think><tool_call>\n<function=eval>\n<parameter=code>\n1\n</parameter>\n'
+                      '</function>\n</tool_call><|im_end|>', add_special_tokens=False).input_ids
+    parsed = build_message(tokenizer.decode(reply, skip_special_tokens=False), [], tools=EVAL_TOOLS)
+    assert parsed['reasoning_content'] == 'Go.' and '</think>' in parsed['content'] and len(parsed['tool_calls']) == 1
+
+
+@needs_lfm3
 def test_typed_values_reasoning_and_several_calls(tokenizer):
     value = {'a': 'é', 'b': [1, None, 2.5], 'c': {'d': False}}
     message = {'role': 'assistant', 'reasoning_content': 'think about it', 'content': 'Calling.', 'tool_calls': [

@@ -94,6 +94,9 @@ class Recipe:
     # The "rl" policy loss (rl.policy_math.policy_loss_declaration). None: the shared default for a new or continued
     # fit (JOLT+); an in-flight fit resuming its own state keeps the loss it was bound with (`bound_rl_policy_loss`).
     rl_policy_loss: dict | None = None
+    # "rl"/"rft" episodes: a reply's second </think> and what follows it up to the action are never reinforced
+    # ('context', default since 2026-11-19; tune.rl.RLEpisodes); 'train' opts out.
+    rl_second_close: str = 'context'
 
     @classmethod
     def from_json(cls, value):
@@ -126,6 +129,8 @@ class Recipe:
             raise TuneMathError('objectives is a nonempty list of sft, rl and rft')
         if type(recipe.rft_min_quality) not in (int, float) or not 0 < recipe.rft_min_quality <= 1:
             raise TuneMathError('rft_min_quality is a quality in (0, 1]')
+        if recipe.rl_second_close not in ('context', 'train'):
+            raise TuneMathError("rl_second_close is 'context' or 'train'")
         if recipe.rl_policy_loss is not None:
             from ..rl.policy_math import policy_loss_declaration
             try:
@@ -308,7 +313,8 @@ class JointTrainer:
                 self.episodes[kind] = RLEpisodes(engine, rollouts, Path(workdir) / kind if kind == 'rft' else workdir,
                                                  mode='grpo' if kind == 'rl' else 'rft', min_quality=recipe.rft_min_quality,
                                                  policy_loss=self.rl_policy_loss if kind == 'rl' else None,
-                                                 privileged=privileged if kind == 'rl' else None)
+                                                 privileged=privileged if kind == 'rl' else None,
+                                                 second_close=recipe.rl_second_close)
             self._admit_rl()
         available = target_parameters(engine.shared_model)
         self.targets, self.target_classes = module_map(sorted(available), classes=recipe.target_classes)
@@ -387,9 +393,10 @@ class JointTrainer:
 
     @property
     def input_sha256(self):
-        # The step budget is where to stop, not what a step does: extending it continues the same run.
+        # The step budget is where to stop, not what a step does: extending it continues the same run. What
+        # `rl_second_close` masks is in the episodes' graphs (their target weights), so it binds through their digest.
         recipe = {key: value for key, value in self.recipe.as_json().items()
-                  if key not in ('steps', 'epochs', 'rl_policy_loss')}
+                  if key not in ('steps', 'epochs', 'rl_policy_loss', 'rl_second_close')}
         # The effective RL loss binds the input; the historical clipped loss keeps pre-2026-10-28 inputs unchanged.
         loss = self.rl_policy_loss if 'rl' in self.episodes and self.rl_policy_loss != LEGACY_RL_POLICY_LOSS else None
         return canonical_json_sha256_hex({'manifest': self.manifest, 'recipe': recipe,

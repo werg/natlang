@@ -474,3 +474,158 @@ def test_files_of_a_published_corpus_snapshot_are_never_linked(layout, monkeypat
     best = write(out / 'best-checkpoint.pt')
     event = co.offload_one(best, 'archive', co.OffloadSettings.from_env(), copier=co.local_copy)
     assert 'pinned by corpus manifest held.json' in event['reason'] and not best.is_symlink()
+
+
+# Staged writes to the external disk (checkpoint_offload.staged_write) ---------------------------------------------
+@pytest.fixture
+def staging(tmp_path, monkeypatch):
+    hdd, nvme = tmp_path / 'hdd', tmp_path / 'nvme-staging'
+    hdd.mkdir()
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING', '1')
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_ROOT', str(nvme))
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_TARGETS', str(hdd))
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_FLOOR_GB', '0')
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_MAX_FILES', '2')
+    real_device = co._device
+    monkeypatch.setattr(co, '_device', lambda p: -1 if hdd == Path(p) or hdd in co._absolute(p).parents
+                        else real_device(p))
+    mover = co.CheckpointOffloader(queue=tmp_path / 'moves', launch=False)
+    monkeypatch.setattr(co, '_MOVER', mover)
+    monkeypatch.setenv('NATLANG_CHECKPOINT_MOVE_QUEUE', str(tmp_path / 'moves'))
+    from natlang_neuralese.train import trajectory_state
+    monkeypatch.setattr(trajectory_state, 'CHECKPOINT_WRITES', str(tmp_path / 'writes.jsonl'))
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT', 'grpo-v9-run1')
+    return hdd / 'run' / 'checkpoints', nvme, mover, tmp_path / 'writes.jsonl'
+
+
+def nvme_files(nvme):
+    return sorted(p for p in nvme.rglob('*') if p.is_file() and not p.name.endswith('.lock'))
+
+
+def test_a_staged_write_reads_from_the_nvme_until_the_move_replaces_the_link(staging):
+    out, nvme, mover, writes = staging
+    target = out / 'state-step-00004.safetensors'
+    data = os.urandom(1 << 20)
+    with co.staged_write(target, expected_bytes=len(data)) as handle:
+        assert nvme in handle.path.parents and not target.exists()
+        handle.path.write_bytes(data)
+    staged = co.staged_path(target, co.StagingSettings.from_env())
+    assert target.is_symlink() and Path(os.readlink(target)) == staged and target.read_bytes() == data
+    assert sorted(out.glob('state-step-*.safetensors')) == [target]   # retention and resume see it
+    row = json.loads(writes.read_text().splitlines()[-1])
+    assert row['unit'] == 'grpo-v9-run1' and row['bytes'] == len(data) and row['path'] == str(target)
+    assert mover.wait(5)
+    assert mover.events[-1]['event'] == 'checkpoint_moved' and mover.events[-1]['sha256'] == sha(target)
+    assert target.is_file() and not target.is_symlink() and target.read_bytes() == data
+    assert nvme_files(nvme) == [] and not list(out.glob('*.offload.part'))
+
+
+def test_staging_opt_out_floor_and_file_cap_write_directly(staging, monkeypatch):
+    out, nvme, mover, _ = staging
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING', '0')
+    with co.staged_write(out / 'a.pt') as handle:
+        handle.path.write_bytes(b'a')
+    assert handle.reason == 'staging disabled' and (out / 'a.pt').read_bytes() == b'a' and not (out / 'a.pt').is_symlink()
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING', '1')
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_FLOOR_GB', str(10**9))
+    with co.staged_write(out / 'b.pt', expected_bytes=1) as handle:
+        handle.path.write_bytes(b'b')
+    assert handle.reason.startswith('NVMe floor') and not (out / 'b.pt').is_symlink()
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_FLOOR_GB', '0')
+    for name in ('c.pt', 'd.pt', 'e.pt'):
+        with co.staged_write(out / name) as handle:
+            handle.path.write_bytes(name.encode())
+    assert (out / 'c.pt').is_symlink() and (out / 'd.pt').is_symlink()
+    assert not (out / 'e.pt').is_symlink() and 'already on the NVMe' in handle.reason
+    with co.staged_write(nvme.parent / 'elsewhere.pt') as handle:   # not on the external disk
+        handle.path.write_bytes(b'x')
+    assert handle.reason == 'target is not on the external disk'
+    assert mover.wait(5) and nvme_files(nvme) == [] and (out / 'd.pt').read_bytes() == b'd.pt'
+
+
+def test_a_failed_write_leaves_the_target_and_no_partial(staging):
+    out, nvme, mover, _ = staging
+    target = out / 'checkpoint.pt'
+    with co.staged_write(target) as handle:
+        handle.path.write_bytes(b'old')
+    with pytest.raises(RuntimeError):
+        with co.staged_write(target) as handle:
+            handle.path.write_bytes(b'half')
+            raise RuntimeError('killed mid-write')
+    assert target.read_bytes() == b'old' and not handle.path.exists()
+    assert mover.wait(5) and target.read_bytes() == b'old' and nvme_files(nvme) == []
+
+
+def test_a_newer_generation_supersedes_the_pending_move(staging):
+    out, nvme, mover, _ = staging
+    target = out / 'training-state.safetensors'
+    for data in (b'one', b'two'):
+        with co.staged_write(target) as handle:
+            handle.path.write_bytes(data)
+    assert mover.wait(5)
+    assert target.read_bytes() == b'two' and not target.is_symlink() and nvme_files(nvme) == []
+
+
+def test_a_move_whose_target_was_rewritten_during_the_copy_does_not_land(staging, monkeypatch):
+    out, nvme, mover, _ = staging
+    target = out / 'state.safetensors'
+    with co.staged_write(target) as handle:
+        handle.path.write_bytes(b'staged')
+    real_copy = co.verified_copy
+
+    def rewrite_first(path, dest, **kw):   # a direct (unstaged) write of a newer generation lands mid-copy
+        monkeypatch.setenv('NATLANG_EXTERNAL_STAGING', '0')
+        with co.staged_write(target) as h:
+            h.path.write_bytes(b'newer')
+        return real_copy(path, dest, **kw)
+    monkeypatch.setattr(co, 'verified_copy', rewrite_first)
+    event = co._process_queue_once(mover.root)
+    assert event['event'] == 'checkpoint_offload_superseded'
+    assert target.read_bytes() == b'newer' and not list(out.glob('*.offload.part'))
+
+
+def test_discard_takes_the_nvme_copy_with_the_link(staging, monkeypatch):
+    out, nvme, mover, _ = staging
+    monkeypatch.setenv('NATLANG_EXTERNAL_STAGING_MAX_FILES', '3')
+    for step in (1, 2):
+        with co.staged_write(out / f'state-step-{step:05d}.safetensors') as handle:
+            handle.path.write_bytes(b's')
+    native = out / 'step-00002' / 'checkpoint.pt'
+    with co.staged_write(native) as handle:
+        handle.path.write_bytes(b'n')
+    (native.parent / 'sha256.txt').write_text('x\n')
+    co.discard(out / 'state-step-00001.safetensors')
+    co.discard(native.parent)
+    assert not native.parent.exists() and not os.path.lexists(out / 'state-step-00001.safetensors')
+    assert mover.wait(5)
+    assert [e['event'] for e in mover.events].count('checkpoint_move_discarded') == 2
+    assert nvme_files(nvme) == [] and (out / 'state-step-00002.safetensors').read_bytes() == b's'
+
+
+def test_the_sweep_removes_crash_leftovers_and_requeues_unqueued_moves(staging, monkeypatch):
+    out, nvme, mover, _ = staging
+    settings = co.StagingSettings.from_env()
+    with co.staged_write(out / 'kept.pt') as handle:
+        handle.path.write_bytes(b'k')
+    with co.staged_write(out / 'orphan' / 'checkpoint.pt') as handle:
+        handle.path.write_bytes(b'o')
+    import shutil
+    shutil.rmtree(out / 'orphan')                                  # a plain rmtree leaves the NVMe copy behind
+    for descriptor in (mover.root / 'pending').glob('*.json'):     # a crash between publication and queueing
+        job = json.loads(descriptor.read_text())
+        Path(job['pin']).unlink()
+        descriptor.unlink()
+    dead = co.staged_path(out / 'x.pt', settings)
+    dead = dead.with_name(f'.{dead.name}{co.STAGE_PARTIAL}999999999')
+    dead.write_bytes(b'partial of a dead writer')
+    monkeypatch.setattr(co, 'ORPHAN_SECONDS', 0.0)
+    real_present = co._slow_root_present
+    monkeypatch.setattr(co, '_slow_root_present', lambda *a: False)   # the external disk unmounted: nothing is orphaned
+    assert {e['event'] for e in co.sweep_staging(settings, queue=mover.root)} == {'staged_partial_removed',
+                                                                                 'staged_move_requeued'}
+    assert len([p for p in nvme_files(nvme) if not p.name.startswith('.')]) == 2   # kept and orphan
+    monkeypatch.setattr(co, '_slow_root_present', real_present)
+    events = {e['event'] for e in co.sweep_staging(settings, queue=mover.root)}
+    assert events == {'staged_orphan_removed'}
+    assert mover.wait(5) and (out / 'kept.pt').read_bytes() == b'k' and not (out / 'kept.pt').is_symlink()
+    assert nvme_files(nvme) == []

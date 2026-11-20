@@ -1042,6 +1042,20 @@ def policy_id_of(binding):
     return f'{sha}+{canonical_json_sha256_hex(adapters["stack"])}'
 
 
+def _read_info(client, attempts=None, wait=20.0):
+    """The actor's identity, retried: one connect timeout to a freshly started remote actor (seen over the tailnet
+    on 2026-11-19) must not throw away its checkpoint copy and startup. NATLANG_HELD_INFO_ATTEMPTS=1 opts out."""
+    import time, urllib.error
+    attempts = attempts or int(os.environ.get('NATLANG_HELD_INFO_ATTEMPTS', '6'))
+    for attempt in range(attempts):
+        try:
+            return json.loads(client.get_bytes('/v1/neuralese/info'))
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(wait)
+
+
 def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
             max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
             top_p=None, order='longest-first', duration_priors=()):
@@ -1055,7 +1069,7 @@ def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BA
     from ..common.code_provenance import code_provenance, repository_root
     out, manifest = Path(out), Path(manifest)
     for url, _ in endpoints:
-        info = json.loads(NativeActorClient(url, timeout=10).get_bytes('/v1/neuralese/info'))
+        info = _read_info(NativeActorClient(url, timeout=10))
         binding = info.get('rl_policy_binding') or {}
         if policy_id_of(binding) != policy_id:
             raise ValueError(f'{url} serves {str(policy_id_of(binding))[:80]}, not {policy_id[:80]}')

@@ -134,3 +134,242 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Checks.** held-v3 verify 0 shared ids and 0 shared groups, also with exposure; custody 0 related; closure passed.
 - **Next.** w224 (round-11 leftover, requalified) and round 13 (w243-w250, `AUTHOR_BRIEF_ROUND13.md` with the
   round-12 cue-word lessons) go into the next source.
+
+## 8. Round 13: `natlang-rl-task-supply-20261118d` (130 rows)
+
+- **Batches.** Haiku authors w244-w250 worked from `AUTHOR_BRIEF_ROUND13.md` (round-12 cue-word lessons). w224
+  (round-11 leftover) was finished by a replacement author after its first author went idle.
+- **Admitted:** 191 tasks in 8 families. The Sonnet blind solve held back 3 ambiguous tasks (w246 duplicate
+  replacement reviewer, w247 "Outdoor seat" not an outdoor cue, w250 hyphenated whole-word match).
+- **Not in this source:** w243 (GSM8K worksheet grader) was still qualifying; it goes into the next source
+  (coordinator: build without waiting).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r13`.
+- **Source rows.** Train rows of w224 and w244-w250, minus 10 w249 rows custody binds to held sibling worlds and the
+  15 earlier custody rows. **Result: 130 rows in 8 families.**
+- **Constructs:** folder reducers 76%, decide 66%, call depth >= 3 60%, iterateOn 45%, typed Neuralese results 31%;
+  124 of 130 rows carry two or more held constructs.
+- **Repetition** (against all six earlier POOLS, 35,422 rows): 57 distinct programs (53.2 effective), 28 structures
+  (19.9 effective), top structure 14%, top-10 instructions 24%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+- **Next.** Round 14 (w251-w258, `AUTHOR_BRIEF_ROUND14.md`: smoke fragment keys, per-batch construct planning,
+  hyphen word splits, per-world data to avoid custody binding) and w243 go into the next source.
+
+## 9. Round 14: `natlang-rl-task-supply-20261118e` (127 rows)
+
+- **Batches.** Haiku authors w251-w258 (`AUTHOR_BRIEF_ROUND14.md`) and w243 from round 13. The grpo-v4 pin moved to
+  `pin-a0981794b756` mid-round (the old qualify runtime was pruned); authors relaunched queued qualifies on it.
+- **Admitted:** 211 tasks in 9 families. The blind solve held back 22: MuSiQue (w255) 11 of 20 for several defensible
+  exact spans, GSM8K (w243) 8 of 24 for dataset wording with two readings, w254 2 cue/format near-misses. Lesson
+  (`AUTHOR_BRIEF_ROUND15.md`): closed-set answers only; free-text span seeds are not worth authoring.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r14`.
+- **Source rows.** Train rows of w243 and w251-w258, minus 15 w256 rows custody binds to held sibling worlds (shared
+  world data) and the 25 earlier custody rows. **Result: 127 rows in 9 families.**
+- **Constructs:** folder reducers 76%, decide 58%, call depth >= 3 63%, iterateOn 57%, typed Neuralese results 53%;
+  124 of 127 rows carry two or more held constructs.
+- **Repetition** (against all seven earlier POOLS, 35,552 rows): 61 distinct programs (56.1 effective), 25 structures
+  (20.1 effective), top structure 12%, top-10 instructions 24%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+- **Next.** Round 15 (w259-w266, closed answers only; WikiSQL train seed with SQL-executed answers).
+
+## 10. Round 15: `natlang-rl-task-supply-20261118f` (121 rows)
+
+- **Batches.** Haiku authors w259-w266 (`AUTHOR_BRIEF_ROUND15.md`: closed-set answers only, after free-span dataset
+  seeds lost most tasks in round 14). WikiSQL train tables seed w259, with answers computed by executing each item's SQL.
+- **Admitted:** all 196 tasks in 8 families; the Sonnet blind solve agreed on every task and flagged none, the first
+  clean round.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r15`.
+- **Source rows.** Train rows of w259-w266 minus 16 rows (w260 x8, w265 x8) whose root `inputs` equal a held sibling
+  world's (custody `inputs:` binding) and the 40 earlier custody rows. **Result: 121 rows in 8 families.**
+  Round 16's brief now requires world-specific root inputs (`common/custody.py world_bindings`).
+- **Constructs:** folder reducers 84%, decide 69%, call depth >= 3 62%, iterateOn 62%, typed Neuralese results 49%;
+  118 of 121 rows carry two or more held constructs.
+- **Repetition** (against all eight earlier POOLS, 35,679 rows): 56 distinct programs (52.3 effective), 26 structures
+  (19.2 effective), top structure 12%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+
+## 11. Round 16: `natlang-rl-task-supply-20261118g` (88 rows)
+
+- **Batches.** Haiku authors w269-w274 (`AUTHOR_BRIEF_ROUND16.md`, with the custody addendum requiring world-specific
+  root inputs). w267 (bAbI) and w268 were still generating or qualifying and go into the next source.
+- **Admitted:** 135 tasks in 6 families. Held back 6: w270 x2 (a "not a complaint" note containing the cue word;
+  one medical note naming two members), w271/w273 x1 each (ambiguous scope of a helper sentence), w274 irv-c (about
+  36 model calls, near the 40-call episode budget).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261118r16`.
+- **Source rows.** Train rows of w269-w274. Custody found 0 related rows on the first build: the world-specific root
+  inputs removed the `inputs:` binding that cost 15-16 rows in each of rounds 14 and 15. **Result: 88 rows in 6
+  families.**
+- **Constructs:** folder reducers 88%, decide 51%, call depth >= 3 65%, iterateOn 42%, typed Neuralese results 41%;
+  86 of 88 rows carry two or more held constructs.
+- **Repetition** (against all nine earlier POOLS, 35,800 rows): 44 distinct programs (41.0 effective), 24 structures
+  (20.3 effective), top structure 10%, top-10 instructions 34%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+
+## 12. Round 17: `natlang-rl-task-supply-20261119` (103 rows)
+
+- **Batches.** Haiku authors w275-w282 (`AUTHOR_BRIEF_ROUND17.md`) and the round-16 leftover w267 (bAbI train). The
+  round-17 supervisor admitted 7 batches on 2026-11-18 and then went idle without building the source; the task-supply
+  agent of 2026-11-19 picked it up (orphaned work, ~22 h).
+- **Admitted:** w267 16, w275 21, w276 24, w278 24, w279 25, w281 24, w282 28 (Sonnet blind solve: all agree, none
+  ambiguous). w277 (theater seats) passed novelty and its blind solve (26/26) on 2026-11-19 and goes into round 18.
+  w268 (one smoke type mismatch) and w280 (three wrong answers equal to the reference) failed qualification and are
+  being repaired for round 18.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r17` (26 + 33 rows).
+- **Source rows.** Train rows of w267-w282 not already in POOLS; custody 0 related on the first build.
+  **Result: 103 rows in 7 families** (museum exhibit rotation 18, procurement three-way match 17, water quality
+  compliance 16, energy net metering 15, crop rotation 15, hospital bed allocation 14, bAbI counting/lists 8).
+- **Constructs:** folder reducers 85%, decide 84%, call depth >= 3 73%, iterateOn 50%, typed Neuralese results 31%;
+  101 of 103 rows carry two or more held constructs. Levels 31 / 44 / 28 (L1 / L2 / L3).
+- **Repetition** (against all ten earlier POOLS, 35,888 rows): 52 distinct programs (48.5 effective), 25 structures
+  (16.3 effective), top structure 21%, top-10 instructions 29%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed. The final checks now take
+  the repetition reference set from `grpo.POOLS` (`round18/final_checks.sh`), so a new source is never left out.
+- **Pass-band estimate.** Not measured on an engine (the DGX trains). grpo-v4-run2's 221 authored groups so far:
+  binary pass 0.41, 75% of groups in the 0.1-0.9 band, 16% all-fail, 9% all-pass, and 15% of episodes ending on the
+  40-call budget. These families follow the same design, so a similar share in band is expected.
+
+## 13. Round 18: `natlang-rl-task-supply-20261119b` (130 rows)
+
+- **Batches.** Haiku authors w283-w290 (`AUTHOR_BRIEF_ROUND18.md`: at most 24 model calls per world after run2 showed
+  15% of authored episodes ending on the 40-call budget, a slightly easier level mix, round-17 lessons), plus the
+  leftovers w277 (theater seats), w268 (dental recall, repaired smoke children) and w280 (court docket, repaired
+  wrong answers that equalled the reference). w288 is seeded from TAT-QA **train** (arithmetic items recomputed in the
+  generator, group `tatqa:<table uid>`). w290 (DNS zone review) was admitted after the build and goes into round 19.
+- **Blind solve.** Sonnet agreed on every task of every batch, and 32 flagged tasks were held back: w280 12 ("the 5
+  characters after the date" includes the separating space), w287 5 (r2/r10 file order, a cue inside a reason that
+  argues against it, register.md rewrite unstated), w286 3 (an argument's source unstated), w284 3 (output contract vs
+  step on a count), w288 1 (rounding order unstated), plus w277 `seat-hold-reply-03` (prefix match H-1/H-10, from the
+  earlier supervisor's blind solve).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r18` (38 + 38 rows).
+- **Custody left out 32 rows**: all train rows of w283 (ferry deck loading) and w284 (blood bank matching). Their
+  programs share one root-inputs object per world letter (`{"sailing": "N-0615-a"}` for every program's world a), so
+  each train row is bound to a held row of another program. The round-16 rule said distinct inputs per sibling world;
+  round 20's brief makes it distinct inputs per task across the whole batch.
+- **Result: 130 rows in 8 families** (theater seats 21, package upgrades 21, kitchen tickets 19, dental recall 19,
+  translation dispatch 16, TAT-QA calculations 14, archive accessions 13, court docket 7).
+- **Constructs:** folder reducers 92%, decide 62%, call depth >= 3 62%, iterateOn 46%, typed Neuralese results 26%,
+  skills 7%; 126 of 130 rows carry two or more held constructs. Levels 41 / 56 / 33.
+- **Repetition** (against all 11 earlier POOLS, 35,991 rows): 57 distinct programs (53.5 effective), 23 structures
+  (18.4 effective), top structure 11%, top-10 instructions 25%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related after the drop; closure passed.
+- **Pass-band estimate.** Not measured on an engine. The same design gives 75% of run2's authored groups in band; the
+  24-call cap should cut the 15% budget-exhaustion share, which moves pass rates up toward the band's middle.
+
+## 14. Round 19: `natlang-rl-task-supply-20261119c` (105 rows)
+
+- **Batches.** Haiku authors w291-w299 (`AUTHOR_BRIEF_ROUND19.md`: argument sources named, zero-padded file names,
+  counts defined once, rounding stated, rewritten files named) and w290 from round 18. w295 (MSR SQA train seed)
+  produced no batch: the author found only 11 sequences whose turns map to one explicit column/value rule that
+  reproduces the gold, too few for 8 programs; it was replaced by w299 (bike repair queue, 7 programs after its
+  author could not find why one program's reference replay failed).
+- **Blind solve.** Sonnet agreed on every task; 27 flagged tasks were held back: w292 9 and w294 3 (unstated final
+  newline of written files), w290 8 (final newline; "approved by ticket" and "Frozen" cue near-misses), w294 4 more
+  (waitlist rewrite unstated, stale swap repliers), w296 2 (duty length before or after a delay), w299 1 (a repeated
+  job counted once or per listing).
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r19` (18 + 22 rows).
+- **Custody left out 19 rows** (w291 8, w294 6, w299 4, w298 1) whose root inputs equal a held sibling's. The round-20
+  brief requires distinct inputs for every task of a batch, asserted in the generator.
+- **Result: 105 rows in 9 families** (dunning letters 17, ski school 13, crew duty limits 13, seed bank 12, rail yard
+  12, bike repair 11, DNS zone review 10, garden plots 9, orchestra library 8).
+- **Constructs:** folder reducers 79%, decide 57%, call depth >= 3 54%, iterateOn 42%, typed Neuralese results 34%,
+  Neuralese fan-in 29%; 95 of 105 rows carry two or more held constructs. Levels 26 / 50 / 29.
+- **Repetition** (against all 12 earlier POOLS, 36,121 rows): 61 distinct programs (56.7 effective), 26 structures
+  (20.3 effective), top structure 14%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related after the drop; closure passed.
+- **Note.** w296's author added inert `Remark:` lines and unused inputs so sibling worlds pass the near-duplicate
+  gate; they are distractors the programs ignore. Round 20 forbids this padding.
+
+## 15. Round 20: `natlang-rl-task-supply-20261119d` (114 rows)
+
+- **Batches.** Haiku authors w300-w307 (`AUTHOR_BRIEF_ROUND20.md`: distinct root inputs for every task of a batch,
+  final newline of every written file stated, rewritten files named, no character offsets, repeated list items
+  defined, no inert padding). w304 is seeded from FinQA **train**: each item's `qa.program` re-executed in the
+  generator, steps rewritten as numbered natural-language steps, group `finqa:<id>`.
+- **Blind solve.** Sonnet agreed on every task; 27 flagged tasks were held back: w304 8 ("earlier figure" while the
+  question names the later year first), w302 6 (one name for two lists; a step's scope under a branch), w303 5 (cue
+  case-sensitivity unstated; a header line's newline), w306 3 and w301 2 (a file's final newline, zero-padded day).
+  The newline rule cut the newline flags from 20 in round 19 to 6.
+- **w301** later regenerated its batch to 29 tasks (`qualified-2`) after its first set was admitted; the admitted
+  rows are the blind-solved `qualified-1` set, and `qualified-2` was not admitted.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261119r20` (31 + 25 rows).
+- **Custody: 0 related on the first build.** Distinct inputs per task removed the binding that cost 32 and 19 rows in
+  rounds 18 and 19.
+- **Result: 114 rows in 8 families** (kennel boarding 19, snow plow routes 18, marathon results 18, lost and found
+  15, exam seating 12, brewery log 12, tool library 11, FinQA program desk 9).
+- **Constructs:** folder reducers 83%, decide 54%, call depth >= 3 48%, iterateOn 53%, typed Neuralese results 40%,
+  Neuralese fan-in 36%; 107 of 114 rows carry two or more held constructs. Levels 32 / 55 / 27 (L0-1 / L2 / L3).
+- **Repetition** (against all 13 earlier POOLS, 36,226 rows): 52 distinct programs (48.9 effective), 24 structures
+  (17.1 effective), top structure 14%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
+- **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+
+## 16. Round 21: `natlang-rl-task-supply-20261120` (74 rows)
+
+- **Brief** (`AUTHOR_BRIEF_ROUND21.md`): answer variety, after the coordinator noted that bAbI count tasks mostly
+  answered "one". The root return value must not be the answer of more than 25% of a batch's tasks, and sibling worlds
+  must not share it. Counts must span 0-5, and every label must be some world's answer. The generator asserts this and
+  the supervisor rechecks it before admission (`round21/answer_variety.py`). Rounds 18-20 already had varied answers
+  (22-24 distinct answers per 24-task batch), so the rule mostly guards future dataset seeds.
+- **Batches admitted:** w310 talk scheduling, w312 school bus roster, w313 housekeeping board, w314 board-game cafe,
+  w315 license seat audit.
+  - w309 (orchard spray schedule) was refused by the author model's content filter and replaced by w316.
+  - w308, w311 and w316 were still in progress at the build. They go into round 22 so this round lands before
+    grpo-v5-run1 pins.
+  - The authoring gate allows 5 concurrent units now (was 3), since sft-v5 leaves ~30 GB of ledger headroom.
+- **Blind solve.** Sonnet agreed on every task. 18 flagged tasks were held back:
+  - w310 7: whether the next slot is tried when the first has no room;
+  - w313 3: a destination value with a trailing slash;
+  - w314 3: an undefined argument;
+  - w312 2: an unchecked capacity, and a change to the current value.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261120r21` (15 + 17 rows).
+- **Result: 74 rows in 5 families**, with 68 distinct answers (the top answer appears 4 times).
+- **Constructs:** folder reducers 84%, decide 46%, depth 3 43%, iterateOn 55%, typed Neuralese 39%, skills 15%.
+  64 of the 74 rows carry 2+ held constructs.
+- **Repetition** (against all 14 earlier POOLS, 36,340 rows): 37 programs (34.5 effective). No program text and no
+  functional program is shared with the pool.
+- **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
+
+## 17. Round 22: `natlang-rl-task-supply-20261120b` (43 rows)
+
+- **Batches.** These are the round-21 batches still in progress when round 21 was built: w308 (parcel lockers), w311
+  (car rental returns) and w316 (farmers market stalls). They were built as their own round so that they land before
+  grpo-v5-run1 pins. The round-22 brief authors (w317-w324, `AUTHOR_BRIEF_ROUND22.md`) go into round 23.
+- **Blind solve.** 14 tasks were held back:
+  - w308 6: an "otherwise" step whose scope was unstated, a missing "otherwise nothing" clause, and a title that
+    contradicts its rule;
+  - w311 5: a helper that reads rates it is not given, and a waiver counted on a zero fee;
+  - w316 3: real disagreements. The author files late cancellation notices under `late/`, while the program text
+    moves every cancellation to `done/`.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261120r22` (5 + 10 rows).
+- **Result: 43 rows in 3 families**, with 42 distinct answers.
+- **Constructs:** folder reducers 81%, decide 65%, depth 3 49%, iterateOn 40%, typed Neuralese 42%.
+- **Repetition:** 20 programs, none shared with the 36,414-row pool.
+- **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
+
+## 18. Round 23: `natlang-rl-task-supply-20261120c` (130 rows)
+
+- **Batches.** Haiku authors w317-w324, briefed by `AUTHOR_BRIEF_ROUND22.md`. The brief adds the round-21 lessons:
+  state the fallback when a pick fails, define every argument, never put a slash inside destination names, apply
+  every stated capacity, and say whether a no-op update counts.
+  - Families: ice rink sessions, community fridge log, recording studio bookings, dog walking groups, print shop
+    queue, youth referee assignments, bookstore consignment, apartment maintenance tickets.
+- **Blind solve.** Sonnet agreed on every task, apart from one solver slip that it fixed itself. 34 flagged tasks
+  were held back. The causes were:
+  - two "otherwise" branches written in sequence;
+  - one name used both for a flag and for a counter;
+  - opening-hour boundaries;
+  - a "within" capacity boundary;
+  - a variable used after its loop ends;
+  - a file read order left unstated;
+  - a benign note that contains a spoil cue;
+  - a word-fragment cue ("injur");
+  - a conditional reply treated as an acceptance;
+  - a run name that is confused with an area.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261120r23` (19 + 16 rows) and
+  `-20261120r23b` (w323's 2 + 1 rows).
+- **Result: 130 rows in 8 families**, with 127 distinct answers.
+- **Constructs:**
+  - folder reducers 89%, decide 73%, depth 3 57%, iterateOn 69%, typed Neuralese 49%;
+  - 126 of 130 rows carry 2+ held constructs;
+  - levels 35 / 59 / 36.
+- **Repetition** against all 16 earlier POOLS (36,457 rows): 58 programs (53.9 effective), 28 structures. No program
+  text and no functional program is shared with the pool.
+- **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.

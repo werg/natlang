@@ -96,6 +96,21 @@ test('a reply whose tool call could not be read stays in the history with what w
   assert.equal(feedback.content, 'The tool call in your last reply left a parameter open or gave one twice, so nothing ran; send the call again, complete.');
 });
 
+test('a reply that closed its reasoning twice keeps its calls in the history, each answered with the sentence; none ran', async () => {
+  const sentence = 'Your last reply closed its reasoning a second time, so nothing ran; close the reasoning once, then make your tool call and end the reply.';
+  const raw = [{ id: 'c7', type: 'function', function: { name: 'return_result', arguments: '{"status":"success","value":"early"}' } }];
+  let seen, turns = 0;
+  const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request => {
+    if (turns++ === 0) return { calls: [], raw_calls: raw, text: 'Hello.</think>', reasoning: 'Greet.', malformed_call: sentence };
+    seen = request.messages;
+    return { calls: [['return_result', { status: 'success', value: 'done' }]] };
+  } });
+  assert.equal(await runtime.run(() => greet()('Ada')), 'done', 'the call of the malformed reply did not run');
+  const [reply, answer] = seen.slice(-2);
+  assert.deepEqual([reply.role, reply.content, reply.reasoning_content, reply.tool_calls], ['assistant', 'Hello.</think>', 'Greet.', raw]);
+  assert.deepEqual([answer.role, answer.tool_call_id, answer.content], ['tool', 'c7', sentence]);
+});
+
 test('a record result sent as JS-literal text is one return_result call in the history, and is the result', async () => {
   const value = '{ action: "order", customer: "Wen", pence: 280 }';
   const runtime = createNatlangRuntime({ seed: { mode: 'backend' }, model: async request =>
