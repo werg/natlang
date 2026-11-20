@@ -115,6 +115,16 @@ def corpus_floor(baseline):
     return floor
 
 
+def write_train_cases(destination, result):
+    """Write exact training selectors backed by the accepted managed references."""
+    cases = sorted(scenario for scenario in result['proofs']
+                   if result['cases'][scenario]['split'] == 'train')
+    if not cases:
+        raise ValueError('No independently verified training goals in the selected catalog')
+    with destination.open('x', encoding='utf-8') as stream:
+        stream.write('\n'.join(cases) + '\n')
+
+
 def write_evidence_bundle(destination, result, inputs):
     """Copy the accepted evidence and the audit inputs into one portable directory."""
     if destination.exists():
@@ -237,6 +247,7 @@ if __name__ == '__main__':
     parser.add_argument('--coverage', type=Path, help='crosswalk from goal families to the pinned inventory')
     parser.add_argument('--installed-skills', type=Path, help='live skill inventory from the managed workspace probe')
     parser.add_argument('--bundle-out', type=Path, help='new directory for accepted reference evidence and audit inputs')
+    parser.add_argument('--train-cases-out', type=Path, help='new file with accepted train selectors, one per line')
     parser.add_argument('--require-complete', action='store_true')
     args = parser.parse_args()
     if args.baseline and args.family:
@@ -277,5 +288,7 @@ if __name__ == '__main__':
             'coverage.json': args.coverage,
             'installed-skills.json': args.installed_skills,
         })
+    if args.train_cases_out and (not args.require_complete or not incomplete):
+        write_train_cases(args.train_cases_out, result)
     print(json.dumps(result, indent=2))
     raise SystemExit(int(args.require_complete and incomplete))

@@ -169,6 +169,32 @@ python scripts/neuralese_data/sft_sources.py build --work "$WORK" \
 Check both open-goal shares in `build.json` and retain the corresponding
 capture, IR, and learner chains. A one-case smoke verifies data flow.
 
+### Bounded multi-case capture
+
+Generate a capture list against the exact release catalog and the managed
+reference evidence. Add `--family` to choose a verified family.
+
+```bash
+cd "$NATLANG_CHECKOUT"
+python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" \
+  "$MANAGED_REFERENCES" --train-cases-out "$TRAIN_CASES"
+mapfile -t scenarios < "$TRAIN_CASES"
+case_args=()
+for scenario in "${scenarios[@]}"; do case_args+=(--case "$scenario"); done
+```
+
+Pass `"${case_args[@]}"` to the ledgered collector command above in place of
+the single `--case` selector and give the capture a fresh output directory.
+The collector runs cases serially within each workspace and baseline. On
+releases that support `--cases-per-instance`, the collector starts a fresh
+instance after 12 cases by default. A lower value trades more startups for
+shorter-lived workspaces.
+
+Register the complete capture directory and pass each accepted
+`cases/CASE/verified/manifest.json` with its own `--live-run` flag in one
+extraction. A case that fails leaves its logs in its own directory. Retry it
+with a fresh output directory and import the accepted manifests together.
+
 ## Capability coverage
 
 The [pinned baseline](vibestudio-open-goal-baseline.jsonl) contains 60 skill
@@ -456,20 +482,26 @@ verification pending.
 Google's evidence is registered as
 `vibestudio-open-goal-google-setup-reference-14-20261120`.
 
-The staged catalog also covers capability and skill provenance, durable task
-recovery, client diagnostics, GitHub readiness, workspace assembly, and
-scheduled automation recovery. Its 594 goals include 136 held-out cases.
-Their texts are distinct after normalizing quoted literals and numbers. All
-842 legacy assignment entries remain byte-identical. The 551-goal checkpoint
-has zero training ID or source-group overlaps with the digest-checked held-v2
-and held-v3 cases.
+The staged catalog reached 701 goals with 171 held-out cases. It adds
+capability and skill provenance, durable task recovery, client diagnostics,
+GitHub readiness, workspace assembly, scheduled automation recovery,
+owned HTTP research, compound native eval handoffs, linked vault work,
+retained provider approvals, local incident drafts, and build provenance.
+The 681-goal checkpoint had distinct texts after normalizing quoted literals
+and numbers. All 842 legacy assignment entries remained byte-identical.
+The 551-goal checkpoint had zero training ID or source-group overlaps with
+the digest-checked held-v2 and held-v3 cases.
 
 Thirteen selected model-free checks passed across Examples, Personal,
 Spectrolite, and System. Both previously failing visual recovery checks passed
 after the runtime delivered committed state updates to headless panels and
-the test granted reload authority for the authorized renderer. The combined
-audit covers 384 goals, including 85 held-out goals. The research and
-research-to-edit families still lack verified held cases.
+the test granted reload authority for the authorized renderer. The next
+managed run added 35 Examples, 22 Personal, 27 Spectrolite, and 57 System
+proofs. The combined audit covers 525 distinct goals, including 117 held-out
+goals. The full reference matrix peaked at 9.5 GiB on Tick.
+The 12 new held-out research and editing goals passed source checks through
+the native page extractor and cache client. Their managed browser checks
+are queued.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
@@ -485,3 +517,6 @@ separate model-serving job at the time of staging.
 The 462-goal release also reproduced byte for byte on Pop under
 `/home/werg/vibestudio-worktrees/open-goal-release-462.9AiHlQ`. Its catalog
 SHA-256 is `5811f79d83aea9db793c1e6825735b98a9ef5447a60fe2434a7b2d8c2464470f`.
+That directory includes `train-cases.txt` with 292 selectors backed by managed
+proofs and matched to its catalog. Seven of those selectors require an
+installed deployment package.
