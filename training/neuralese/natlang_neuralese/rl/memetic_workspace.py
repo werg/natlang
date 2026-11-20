@@ -35,6 +35,7 @@ import re
 import subprocess
 import sys
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
@@ -330,11 +331,39 @@ def native_identity(info):
     return {key: state[key] for key in IDENTITY}
 
 
-def guidance_binding(server, out, program_id, text, function=None):
+def put_state_closure(server, build_dir, state_id):
+    """PUT a tune build's state and the artifacts its derivation names (``artifacts/*.nnt``, ``states/*.nzs``) to the
+    actor's store, dependencies first (the actor verifies a derived state's lineage on import)."""
+    build = Path(build_dir)
+    files = [*sorted((build / 'artifacts').glob('*.nnt')), *sorted((build / 'states').glob('*.nzs'))]
+    pending = [path for path in files if path.stem != state_id] + [build / 'states' / f'{state_id}.nzs']
+    for _ in range(len(pending) + 1):
+        failed = []
+        for path in pending:
+            kind = 'native-states' if path.suffix == '.nzs' else 'native-tensor-artifacts'
+            request = urllib.request.Request(f"{server.rstrip('/')}/v1/neuralese/{kind}/{path.stem}", data=path.read_bytes(),
+                                             method='PUT', headers={'content-type': 'application/octet-stream'})
+            try:
+                urllib.request.urlopen(request, timeout=900).read()
+            except urllib.error.HTTPError:
+                failed.append(path)   # a dependency not there yet: next pass
+        if not failed:
+            return
+        if len(failed) == len(pending):
+            raise ValueError(f'the actor refused {[path.name for path in failed]}')
+        pending = failed
+
+
+def guidance_binding(server, out, program_id, text, function=None, state=None):
     """``natlang.memetic-program-guidance/1`` for ``text``: written as a native state by the actor's producer, its bytes
-    archived under ``out/states`` (the runtime imports the exact stored state)."""
+    archived under ``out/states`` (the runtime imports the exact stored state). ``state`` ({id, build}): a refined state
+    of ``text`` from a tune build (``refine_guidance``), put on the actor with its lineage instead of the text write."""
     identity = native_identity(request_json(server, '/v1/neuralese/info'))
-    written = request_json(server, '/v1/neuralese/native-states/write-text', {'text': text, 'type': 'Neuralese<ProgramGuidance>'})
+    if state is not None:
+        put_state_closure(server, state['build'], state['id'])
+        written = {'id': state['id']}
+    else:
+        written = request_json(server, '/v1/neuralese/native-states/write-text', {'text': text, 'type': 'Neuralese<ProgramGuidance>'})
     state_id = written.get('id')
     if not isinstance(state_id, str) or not STATE_ID.fullmatch(state_id):
         raise ValueError('the actor returned no exact native state id for the guidance')
@@ -380,7 +409,7 @@ def collection_evaluator(spec):
         with (workers / f"{entry['key']}.log").open('a') as log:
             subprocess.run(command, cwd=REPO, stdout=log, stderr=subprocess.STDOUT, check=False)
 
-    def evaluate(cases, guidance, *, name, samples=None):
+    def evaluate(cases, guidance, *, name, samples=None, states=None):
         out = Path(spec['out']) / 'evals' / name
         with locked(out):
             if (out / 'summary.json').exists():
@@ -397,7 +426,8 @@ def collection_evaluator(spec):
             entries = list(read_jsonl(collection / 'queue.jsonl'))
             binding = None
             if guidance:
-                bindings = [guidance_binding(endpoint, out, spec['program']['id'], entry['text'], entry['function'])
+                bindings = [guidance_binding(endpoint, out, spec['program']['id'], entry['text'], entry['function'],
+                                             (states or {}).get(entry['function']))
                             for entry in guidance]
                 binding = bindings[0] if len(bindings) == 1 and 'function' not in bindings[0] else bindings
                 write_json_durable(out / 'program-guidance.json', binding)
@@ -436,10 +466,75 @@ def collection_evaluator(spec):
             scored = [reward for _, _, reward in results if reward is not None]
             summary = {'success': sum(scored) / len(scored) if scored else 0., 'scored': len(scored),
                        'rollouts': len(results), 'results': [(world, result) for world, result, _ in results],
-                       'dir': str(out), 'samples': group}
+                       'rewards': [reward for _, _, reward in results], 'dir': str(out), 'samples': group}
             write_json_durable(out / 'summary.json', summary)
             return summary
     return evaluate
+
+
+# ---- refinement of committed guidance states ---------------------------------------------------------------------------
+def guidance_rows(reports, guidance, bindings):
+    """``natlang.tune-turn/v1`` rows of the guidance states from support reports' verified successes (reward 1): each
+    call whose prompt imported one of the states, with the state replaced by its text (ts-host
+    scripts/tune-turns-from-results.mjs, the tune pool import's action evidence)."""
+    states = [{'id': binding['native_state_id'], 'text': entry['text'],
+               'binding': 'guidance:' + (entry['function'] or '*')} for entry, binding in zip(guidance, bindings)]
+    rows = [{'row': result, 'reward': reward} for report in reports
+            for (_, result), reward in zip(report.get('results') or [], report.get('rewards') or [])
+            if result is not None and reward == 1]
+    if not rows:
+        return []
+    node = os.environ.get('NATLANG_NODE') or 'node'
+    done = subprocess.run([node, str(REPO / 'ts-host/scripts/tune-turns-from-results.mjs')], cwd=REPO, check=True,
+                          input=json.dumps({'rows': rows, 'states': states, 'component': 'memetic-guidance'}),
+                          capture_output=True, text=True)
+    return [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
+
+
+def refine_guidance(spec, reports, guidance, bindings, out):
+    """The committed guidance states refined by gradient on the support worlds' verified rows: the same soft-state
+    training every primed state gets (`natlang_neuralese.tune.build`: each state primed from its text at its position in
+    a real call, then trained with the CSPD recipe on the frozen backbone). ``spec['refine']``: {checkpoint (the actor's
+    exact weights), steps, lr, batch_rows, device, dtype}. Returns {function: {id, build}} or {} (no verified rows), and
+    the record of what was done."""
+    settings = spec['refine']
+    rows = guidance_rows(reports, guidance, bindings)
+    record = {'rows': len(rows)}
+    if not rows:
+        return {}, {**record, 'skipped': 'no verified support rows import the guidance'}
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'turns.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    names = sorted({row['binding'] for row in rows})
+    manifest = {'schema': 'natlang.adapters/v1', 'program': {'id': spec['program']['id'], 'buildHash': 'memetic-guidance'},
+                'base': {}, 'tree': [{'id': 'tree:', 'level': 'tree', 'path': '', 'parent': None}],
+                'bindings': [{'id': name, 'component': 'memetic-guidance', 'definitionId': name, 'contextId': None,
+                              'origin': 'named', 'ancestry': ['tree:'], 'semanticHash': hashlib.sha256(name.encode()).hexdigest()}
+                             for name in names],
+                'artifacts': [], 'families': [], 'memberships': [], 'scales': {}, 'validatedReductions': [],
+                'fallback': 'base', 'receipts': {}}
+    plan = {'manifest': manifest, 'rows': 'turns.jsonl', 'softStates': True, 'label': 'memetic-guidance-refine',
+            'recipe': {'ranks': {'tree': 0, 'folder': 0, 'lambda': 0}, 'steps': int(settings.get('steps', 20)),
+                       'batch_rows': int(settings.get('batch_rows', 4)), 'prompt_weight': 0.,
+                       'state_optimizer': {'name': 'adam', 'learning_rate': float(settings.get('lr', 1e-3))}},
+            'student': {'name': 'actor', 'checkpoint': settings['checkpoint'],
+                        'engine': {'device': settings.get('device', 'cuda'), 'dtype': settings.get('dtype', 'bfloat16')}}}
+    write_json_durable(out / 'plan.json', plan)
+    build = out / 'build'
+    subprocess.run([sys.executable, '-m', 'natlang_neuralese.tune.build', '--plan', str(out / 'plan.json'), '--out', str(build)],
+                   cwd=REPO, check=True, env={**os.environ, 'PYTHONPATH': os.pathsep.join(
+                       [str(REPO / 'training/neuralese'), str(REPO), os.environ.get('PYTHONPATH', '')])})
+    result = json.loads((build / 'result.json').read_text())
+    # The refined state is read by the actor only when it was trained on the actor's exact weights.
+    init = json.loads((build / 'soft-init.json').read_text())
+    live = native_identity(request_json(spec['endpoint'], '/v1/neuralese/info'))
+    if any({key: record['init']['actor'].get(key) for key in IDENTITY} != live for record in init.values()):
+        raise ValueError('the refinement checkpoint is not the actor\'s exact weights')
+    states = {}
+    for item in result['softStates']:
+        function = item['binding'].removeprefix('guidance:')
+        states[None if function == '*' else function] = {'id': item['state'], 'build': str(build)}
+    return states, {**record, 'build': str(build), 'states': {str(key): value['id'] for key, value in states.items()}}
 
 
 # ---- preparation -------------------------------------------------------------------------------------------------------
@@ -680,6 +775,8 @@ class Workspace:
         elif candidate['ids']:
             query = self._run(self.spec['query'], candidate, 'query-' + canonical_json_sha256_hex(candidate)[:16],
                               self.spec['settings']['query_samples'])
+            if self.spec.get('refine') and candidate['guidance']:
+                query = self._refined_query(candidate, query)
         else:
             query = {'success': prepared['baselines']['none']['success']}
         quality, anchor, gain, cost = memetic_reward(
@@ -691,9 +788,38 @@ class Workspace:
                               'query_success': query['success'], 'committed': committed, 'candidate': candidate,
                               'baselines': prepared['baselines'], 'defects': self.state['defects'],
                               'evaluations': self.state['evaluations'], 'leak_refused': bool(leak),
-                              'query_dir': query.get('dir'), 'score_path': str(cached)}}
+                              'query_dir': query.get('dir'), 'score_path': str(cached),
+                              **({'refine': query['refine']} if 'refine' in query else {})}}
         write_json_durable(cached, result)
         return result
+
+    def _refined_query(self, candidate, query):
+        """Refine the committed guidance states on the support worlds' verified rows (``refine_guidance``) and keep the
+        refined states only when they do better than the text-written states on the same query (confirmation) worlds
+        and seeds; otherwise the text-written result stands. Both arms are recorded."""
+        key = canonical_json_sha256_hex(candidate)[:16]
+        guidance = candidate['guidance']
+        evaluations = [item for item in self.state['evaluations'] if item['ids'] == candidate['ids']]
+        reports = [json.loads((Path(item['dir']) / 'summary.json').read_text()) for item in evaluations
+                   if item.get('dir') and (Path(item['dir']) / 'summary.json').exists()]
+        bindings = json.loads((Path(query['dir']) / 'program-guidance.json').read_text())
+        bindings = bindings if isinstance(bindings, list) else [bindings]
+        try:
+            states, record = refine_guidance(self.spec, reports, guidance, bindings, self.out / 'refine' / key)
+        except (subprocess.CalledProcessError, ValueError, KeyError, OSError) as error:
+            return {**query, 'refine': {'error': str(error)[:500], 'kept': False}}
+        if not states:
+            return {**query, 'refine': {**record, 'kept': False}}
+        refined = self._run_states(self.spec['query'], candidate, 'query-refined-' + key,
+                                   self.spec['settings']['query_samples'], states)
+        kept = refined['success'] > query['success']
+        record = {**record, 'kept': kept, 'text_success': query['success'], 'refined_success': refined['success'],
+                  'refined_dir': refined.get('dir')}
+        return {**(refined if kept else query), 'refine': record}
+
+    def _run_states(self, cases, candidate, name, samples, states):
+        changed = [apply_changes(case, candidate['files']) for case in cases]
+        return self.evaluate_cases(changed, candidate['guidance'], name=name, samples=samples, states=states)
 
 
 def serve(stdin=sys.stdin, stdout=None):
