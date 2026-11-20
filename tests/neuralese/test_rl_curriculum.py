@@ -459,6 +459,9 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
     assert low<=primary['delta']<=high and primary['permutation_p']<.2
     same=held_eval.compare(first,first)['primary']
     assert same['delta']==0 and same['permutation_p']==1.0
+    assert report['complete'] and not any('incomplete' in w for w in report['warnings'])
+    cut=held_eval.compare(first,{**second,'complete':False})   # a stopped measurement's partial result: never a verdict
+    assert not cut['complete'] and 'incomplete measurement: second' in cut['warnings']
     def served(result,kv):
         return {**result,'actor':{'info':{'serving_engine':{'engine':'sglang','dtype':'bfloat16','projection':'vendor',
                 'kv_cache_dtype':kv,'overlap_schedule':False,'fork':{'commit':'f'}},'actor_export':{'format':'x'}}}}

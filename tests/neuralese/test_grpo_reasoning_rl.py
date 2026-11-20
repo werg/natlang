@@ -384,3 +384,31 @@ def test_teacher_demos_take_keeps_separate_counters(monkeypatch):
     item = demos.by_task['t'][0]
     assert item['rrl_uses'] == 1 and item['uses'] == 0       # the SD replay's counter is untouched
     assert math.isclose(out[0]['reward'], 1.0)
+
+
+def test_a_request_failing_at_stop_is_abandoned_quietly(monkeypatch):
+    """The actor goes with a stopping run and takes in-flight requests with it (grpo-v4-run2: 114 'request failed'
+    events, all at stops): counted apart, not logged as actor failures, and the worker exits."""
+    logged = []
+    rrl = sampler()
+    rrl.log = logged.append
+    stop = threading.Event()
+    segment = {'calls': trajectory(), 'source': 'jolt', 'task_id': 't', 'key': 1, 'mode': 'whole'}
+    monkeypatch.setattr(rrl, '_next', lambda: segment)
+
+    def run(seg, emit):
+        rrl.collector.stop.set()
+        raise ConnectionError('Remote end closed connection without response')
+    monkeypatch.setattr(rrl, 'run', run)
+    monkeypatch.setattr(rrl, '_idle', lambda: False)
+    rrl._loop(stop)                                           # returns instead of retrying
+    assert rrl.counts['abandoned_at_stop'] == 1 and rrl.counts['failures'] == 0 and logged == []
+
+
+def test_reasoning_rl_seed_differs_per_resume():
+    a, b = sampler(), sampler()
+    assert a.rng.random() == b.rng.random()
+    args = a.args
+    c = grpo.ReasoningRL(args, 'http://sglang', CLOSE, [END], [], [100], a.collector, None, log=lambda r: None,
+                         first_group=57)
+    assert c.rng.random() != sampler().rng.random()
