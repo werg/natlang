@@ -526,6 +526,14 @@ goals. It exercises the production startup cache, retained build record
 parser, reconnect and trust handling, and mobile lease reconciliation
 through local fixture ports. Android hardware and real-server transport
 remain separate verification work.
+The 1,129-goal source stage adds quiet API readiness, native agent-action
+recovery, retained image candidates, durable notifications, and workspace
+sharing. It preserves the historical assignments and includes 271 held
+goals. The source checks cover typed lambda linking, exact outcome proofs
+and source-group separation. The image fixtures exercise retained outputs.
+The notification and sharing fixtures exercise durable records and scoped
+decisions. Provider generation, desktop toasts, and live account changes
+require their own evidence.
 The 777-goal checkpoint had distinct texts after normalizing quoted literals
 and numbers. All 842 legacy assignment entries remained byte-identical.
 The 777-goal checkpoint had zero training ID or source-group overlaps with
@@ -594,4 +602,14 @@ and verified the same 450-selector list in the new release directory.
 `train-cases-no-device.txt` contains the 440 selectors that require neither
 a terminal device nor a deployment package. Its SHA-256 is
 `a62a11e916d1754840e5d2716f89ea91cb995947c80f14afa8e975cedbd3d292`.
-The first managed verification batch targets additional cases.
+The managed release batch passed 47 of 48 references and peaked at 9.5 GiB.
+The combined audit now has 650 verified goals, including 176 held-out goals.
+The proofs are registered as `vibestudio-open-goal-verified-release-970-20261121`.
+Use `train-cases-474.txt` for the expanded list on Pop or
+`train-cases-no-device-464.txt` to omit terminal-device and deployment
+requirements. The files have SHA-256
+`4cb74dd485d39ea03df01bdd9747da723bb309207c55fcd8d84f3e104a5c128e`
+and `3932ba18d0d4060af83b9db6baa95bd330ad8bfd25d989214a35a3b92687255f`,
+respectively. The package-review failure exposed a mismatch with Build V2's
+internal dependency validation. The next source release shares that rule
+and explains the blocked plan to the caller.
