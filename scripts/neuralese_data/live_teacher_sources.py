@@ -1,7 +1,8 @@
 """Admission of observed live Natlang work; effects are verified, never called portable replays."""
 import hashlib
 import json
-from collections import Counter
+import re
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import sha256_file_hex
@@ -104,6 +105,24 @@ def observed_graph(details, ancestry, scopes, exclusions):
     ]
 
 
+def verify_observed_child_inventory(records):
+    if not any(record.get('graph_custody') is not None for record in records.values()):
+        return
+    children = defaultdict(set)
+    for call_id, record in records.items():
+        children[record['parent_call_id']].add(call_id)
+    for call_id, record in records.items():
+        custody = record.get('graph_custody')
+        declared = custody.get('child_call_ids') if isinstance(custody, dict) else None
+        if (not isinstance(declared, list) or not all(isinstance(child, str) and child for child in declared) or
+                custody.get('schema') != 'natlang.call-graph-chronology/1' or
+                not record.get('task_id') or custody.get('task_id') != record['task_id'] or
+                not isinstance(custody.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', custody['sha256']) or
+                len(declared) != len(children[call_id]) or set(declared) != children[call_id] or
+                any(records[child].get('task_id') != record['task_id'] for child in children[call_id])):
+            raise ValueError('observed workspace call graph differs from recorded child inventory')
+
+
 def load_episode(path):
     path = Path(path).resolve()
     spec = json.loads(path.read_text())
@@ -196,6 +215,7 @@ def load_episode(path):
                 set(inputs) != {'goal'} or ref.get('complete') is not True or
                 ref.get('bytes') != goal_size or ref.get('hash') != goal_digest):
             raise ValueError('open goal does not match the actual root invocation')
+        verify_observed_child_inventory(records)
     ancestry = {}
     for call_id in records:
         chain, current = [], call_id

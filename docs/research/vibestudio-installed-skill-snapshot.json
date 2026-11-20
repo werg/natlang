@@ -1,0 +1,1106 @@
+{
+  "baselinePins": {
+    "base": "b85383ccd0d6a77618bde26190ef72b3765a31b3",
+    "examples": "a1008466c38809099f983d968713e28b44a049e8",
+    "google-workspace": "f942d4b0309a02c7ea1c73b63b77697014d0a355",
+    "host": "561df97d87c54c33a408e4b41178eb3392112e0c",
+    "news": "d6e3772e4893a49189c1dcbc6cb62d566e5742ee",
+    "personal": "7e096eca86aa54d8dedcfe31498b49a6df6615ff",
+    "spectrolite": "ccf088388d957bcd30eaa0e3ba1af5d28a4445a0",
+    "system": "faac2a0971b241d5c855c5d871413b6a8a93a7c8",
+    "system-testing": "c92040aeb847d3d5e5bb66fdcaa567448db1dae6"
+  },
+  "complete": true,
+  "compositionLayers": [
+    "base",
+    "system-testing"
+  ],
+  "instantiableWorkspaces": [
+    "personal",
+    "system",
+    "examples",
+    "google-workspace",
+    "news",
+    "spectrolite"
+  ],
+  "managedReportSha256": "670020ad1eb8f500544a81321338407a62fecf9aeec7ae1753244a030ba3f03f",
+  "mechanism": "workspace.listSkills+workspace.readSkill",
+  "pins": {
+    "base": "e3121749fa86b71d2bf14c27096cc3881dc75f0f",
+    "examples": "52be2b04bd6b702ece460e91c4bdb30157e7f6d7",
+    "google-workspace": "5497073e9776aae1b94c4ae2b14e7bc7839e4802",
+    "host": "d1847010d0e86f2094ad34643f52abda3f98e1b1",
+    "news": "b53effcfd14b54ff56a9bd68d937c8c1fb07533a",
+    "personal": "ce9635764b4a03885b2d64558b268bfa9472325d",
+    "spectrolite": "079d5cc4b36a51fe025ac70a2f836d2aa44b5c91",
+    "system": "8a47059998131a653feb9e0d67e4684d6d4c5ff8",
+    "system-testing": "de29785b9d4430ff2493fb0b432ed5dcf2609fa3"
+  },
+  "schema": "vibestudio.installed-skill-inventory/1",
+  "workspaces": [
+    {
+      "matchesPinnedSources": true,
+      "observed": {
+        "skills": [
+          {
+            "expectedSource": "base:extensions/git-bridge/SKILL.md",
+            "sha256": "42131894cb966b3951fb50b4c2dc1e7f6bb013b5255653809e1c4ee04ab8b6da"
+          },
+          {
+            "expectedSource": "base:extensions/pdf-ingest/SKILL.md",
+            "sha256": "263497a68f38b1a945939f5942e834eba74fdd5011a99a92f223c5913034c0b0"
+          },
+          {
+            "expectedSource": "base:extensions/speech/SKILL.md",
+            "sha256": "54256e91b48145712a29ce31d2428e0ec34e4e0858fb8fb0cd5f0defb39af03a"
+          },
+          {
+            "expectedSource": "base:extensions/test-runner/SKILL.md",
+            "sha256": "715bcdbee939dda3dffda481838dde2a2002173cb497aaef29d279806c8c30ad"
+          },
+          {
+            "expectedSource": "base:packages/agentic-chat/SKILL.md",
+            "sha256": "48273470cea6913756657336132224916bf7a70ef306f7280a1e4bc7e0b2da90"
+          },
+          {
+            "expectedSource": "base:packages/agentic-do/SKILL.md",
+            "sha256": "e64ebaae109ab7c246d043c85cfb752305eea0ef147ccf34885b15dd3da27f32"
+          },
+          {
+            "expectedSource": "base:packages/agentic-protocol/SKILL.md",
+            "sha256": "18d5235e135b0caa551030e60cbb51869a985f17cf625f1cc22fab82bbe720c8"
+          },
+          {
+            "expectedSource": "base:packages/testkit/SKILL.md",
+            "sha256": "c9ea9998072b7ffa8ee6135d1bd8f08ade417a32d46ff0444a2a7cf167d2c837"
+          },
+          {
+            "expectedSource": "base:panels/chat/SKILL.md",
+            "sha256": "ce6825b841fb1ff7049c41c4462762dda33bb7e8fac54cd9e53831c594d30bec"
+          },
+          {
+            "expectedSource": "base:skills/agentic-development/SKILL.md",
+            "sha256": "4e926f61110fb21c667240c37693f323bddb63fba7b89ff125f94866ca6b8e68"
+          },
+          {
+            "expectedSource": "base:skills/agents/SKILL.md",
+            "sha256": "9f2bc193fecdf1ffef270d18148a0ca1d49cd82dfcdabdd1cab26f675110156e"
+          },
+          {
+            "expectedSource": "base:skills/api-integrations/SKILL.md",
+            "sha256": "890fdc336fda160f8118e946301ca952475d00325704562ced8d544455eba870"
+          },
+          {
+            "expectedSource": "base:skills/architecture/SKILL.md",
+            "sha256": "27fff6ec73fff5f10ecbd9bc9cf63b1b1161aa1411495df4f11a4896bc6001b2"
+          },
+          {
+            "expectedSource": "base:skills/automations/SKILL.md",
+            "sha256": "0a8ef6e812c60a40fbc656757df032b7bda3ebbf02daf01adddb3a9a659de230"
+          },
+          {
+            "expectedSource": "base:skills/capabilities/SKILL.md",
+            "sha256": "b57844fffbb2e977cb7fc229e0aa8d6658ab54ef18ab44e6d5aceb4c152aba47"
+          },
+          {
+            "expectedSource": "base:skills/extensiondev/SKILL.md",
+            "sha256": "661a1fdcaeb383cca28b5590ee0f1249b075d0efcff967d2a02c56d8aca24e66"
+          },
+          {
+            "expectedSource": "base:skills/gad-context/SKILL.md",
+            "sha256": "3eaab364611d117d55a7db1f09cccf11121dbfc4ff599f6aa8f56c30c1bcbd97"
+          },
+          {
+            "expectedSource": "base:skills/messaging/SKILL.md",
+            "sha256": "3fbf37d11900238084e272c9cbf12f026921c56e8e2332086faf511ae1343fab"
+          },
+          {
+            "expectedSource": "base:skills/natlang-authoring/SKILL.md",
+            "sha256": "2bffa8c136e392016fcfee7b9513ec99accf1a3260d932a0881d1115e5123a20"
+          },
+          {
+            "expectedSource": "base:skills/open-session-recovery/SKILL.md",
+            "sha256": "c5c4a516cf136d6ad8aef1faa4835b08756ae33e3f16689c4acbab0568479740"
+          },
+          {
+            "expectedSource": "base:skills/open-user-goal/SKILL.md",
+            "sha256": "5fecf07eefba9f93d3d251cf3abcd499392b73cecaac8e0d5bee67ac13f6e2a2"
+          },
+          {
+            "expectedSource": "base:skills/phone-setup/SKILL.md",
+            "sha256": "6dc6afae4f5801740ae82fb39138851eed339a9e11a6d4786c3dc90621f19998"
+          },
+          {
+            "expectedSource": "base:skills/problem-reporting/SKILL.md",
+            "sha256": "fcffd72ed9e8c28a4af10aed90db34e1d474351b7a14f24d398178391757265a"
+          },
+          {
+            "expectedSource": "base:skills/provenance-orientation/SKILL.md",
+            "sha256": "d8ee2a44900a81bd325fe8d9347539df39137753a80eab88e1ceb920892cb39b"
+          },
+          {
+            "expectedSource": "base:skills/sandbox/SKILL.md",
+            "sha256": "62ea7fc769938b3d4578fd254937c056a30f5217b964a79d1750208a03c56634"
+          },
+          {
+            "expectedSource": "base:skills/templates/SKILL.md",
+            "sha256": "b1d741a0b8abc124587e767885a8f3af9619833306fd0fa0a429b71df6c3cf59"
+          },
+          {
+            "expectedSource": "base:skills/tendrils/SKILL.md",
+            "sha256": "9523be58987f7d108fb4700f6adc5a3d6d02ad5bb0fe52605711065728be03b3"
+          },
+          {
+            "expectedSource": "base:skills/terminal-apps/SKILL.md",
+            "sha256": "ace7fb935ed094722105a36f41609e0fdebe56094b48a0bc3cadfa8d4de26d0d"
+          },
+          {
+            "expectedSource": "base:skills/terminal/SKILL.md",
+            "sha256": "cedb055ea956264a7532aac30130004494c03291b07a18890783a62b83e32e9c"
+          },
+          {
+            "expectedSource": "base:skills/vibestudio-vcs/SKILL.md",
+            "sha256": "4eb841b3a4b54496cfc740bd025ed532dea3af668300b030a3c98b2fd471537a"
+          },
+          {
+            "expectedSource": "base:skills/visualize/SKILL.md",
+            "sha256": "f447bbc9d4508d1764dc4cbf634229105482568784f8505ccf24cf5f4d84c71e"
+          },
+          {
+            "expectedSource": "base:skills/web-research/SKILL.md",
+            "sha256": "a09d56275805dd564410ac1ad66f28840c4ea60a5a5e8701159dc82b51dd1788"
+          },
+          {
+            "expectedSource": "base:skills/website-publishing/SKILL.md",
+            "sha256": "ce90e916cc6d127f3d8f086be0db26c6f6f1cb36b99dd5c8184ef9dfece7c0cc"
+          },
+          {
+            "expectedSource": "base:skills/workspace-dev/SKILL.md",
+            "sha256": "1d0271f2183afc97036a1069d8f8943ecadaac2cc924f3591f0961896dbb6c7c"
+          },
+          {
+            "expectedSource": "base:workers/agent-worker/SKILL.md",
+            "sha256": "de02fe631256217a45004b24d54074c3f9fd12e9643f7b60dc7b12f8b3f7d39c"
+          },
+          {
+            "expectedSource": "base:workers/pubsub-channel/SKILL.md",
+            "sha256": "22d96ef9bc9baf44c5e7c8dd2fb2a45aa7ac54f48bc546a24fa1c938df4d3e00"
+          },
+          {
+            "expectedSource": "personal:about/collection/SKILL.md",
+            "sha256": "2ce18e82bd27540c7f9941aa03f845b7eb99a58b7eb964099455b5578badb383"
+          },
+          {
+            "expectedSource": "personal:extensions/browser-data/SKILL.md",
+            "sha256": "fb92784abff462c3a7e04be3289f39b84863f488cb0a4e97ac2a22fff01f07f6"
+          },
+          {
+            "expectedSource": "personal:panels/tour/SKILL.md",
+            "sha256": "cc3ec03144c571ad9bcf43dc63c345f4f065dacf5e239f9f0b7acfe6a55cb03e"
+          },
+          {
+            "expectedSource": "personal:skills/github/SKILL.md",
+            "sha256": "d750104bbf68a650d3fac62a01c4768744ea3d5a85dc5d24993633bfb24347be"
+          },
+          {
+            "expectedSource": "personal:skills/memory/SKILL.md",
+            "sha256": "48619a821b0c2a49a06c534e98eb3f1af86c1f10a373d85bef58bf01bd1ad36d"
+          },
+          {
+            "expectedSource": "personal:skills/onboarding/SKILL.md",
+            "sha256": "ee42e9b73ec11118ad24d1b7e179ef8c13679f9e4821eb4adf6a6d85dba7c184"
+          },
+          {
+            "expectedSource": "personal:skills/open-personal-artifacts/SKILL.md",
+            "sha256": "6c56a0c67215b676489d3a1701a9fb909212fd7d71d13035105dd3d7a2b9f1c5"
+          },
+          {
+            "expectedSource": "personal:skills/open-personal-goal/SKILL.md",
+            "sha256": "cee241e797793b5cf36da1a4803b47a6801704c09bed60baf5f3bdfe5937867e"
+          },
+          {
+            "expectedSource": "personal:workers/explorer-agent/SKILL.md",
+            "sha256": "d3d2fb3774b6a3508bd53c2a35917d5d7f336b45cd6e28ebd5365f5907daf2be"
+          },
+          {
+            "expectedSource": "personal:workers/mission-control-store/SKILL.md",
+            "sha256": "a916c1ead6c8850810dd9b8a49ac2787f3cae3d11242833b619572e3e2bb6843"
+          },
+          {
+            "expectedSource": "system-testing:packages/agentic-session/SKILL.md",
+            "sha256": "9ed44d302629a23e0fd3a4cf146ae398c62af678d670dc4b44e42d40e4c508a9"
+          },
+          {
+            "expectedSource": "system-testing:skills/mobile-system-testing/SKILL.md",
+            "sha256": "9b07306614e0db0a324c4ab05a34ddb472e2a4c63a1bfa600f50cc949d592618"
+          }
+        ]
+      },
+      "workspace": "personal"
+    },
+    {
+      "matchesPinnedSources": true,
+      "observed": {
+        "skills": [
+          {
+            "expectedSource": "base:extensions/git-bridge/SKILL.md",
+            "sha256": "42131894cb966b3951fb50b4c2dc1e7f6bb013b5255653809e1c4ee04ab8b6da"
+          },
+          {
+            "expectedSource": "base:extensions/pdf-ingest/SKILL.md",
+            "sha256": "263497a68f38b1a945939f5942e834eba74fdd5011a99a92f223c5913034c0b0"
+          },
+          {
+            "expectedSource": "base:extensions/speech/SKILL.md",
+            "sha256": "54256e91b48145712a29ce31d2428e0ec34e4e0858fb8fb0cd5f0defb39af03a"
+          },
+          {
+            "expectedSource": "base:extensions/test-runner/SKILL.md",
+            "sha256": "715bcdbee939dda3dffda481838dde2a2002173cb497aaef29d279806c8c30ad"
+          },
+          {
+            "expectedSource": "base:packages/agentic-chat/SKILL.md",
+            "sha256": "48273470cea6913756657336132224916bf7a70ef306f7280a1e4bc7e0b2da90"
+          },
+          {
+            "expectedSource": "base:packages/agentic-do/SKILL.md",
+            "sha256": "e64ebaae109ab7c246d043c85cfb752305eea0ef147ccf34885b15dd3da27f32"
+          },
+          {
+            "expectedSource": "base:packages/agentic-protocol/SKILL.md",
+            "sha256": "18d5235e135b0caa551030e60cbb51869a985f17cf625f1cc22fab82bbe720c8"
+          },
+          {
+            "expectedSource": "base:packages/testkit/SKILL.md",
+            "sha256": "c9ea9998072b7ffa8ee6135d1bd8f08ade417a32d46ff0444a2a7cf167d2c837"
+          },
+          {
+            "expectedSource": "base:panels/chat/SKILL.md",
+            "sha256": "ce6825b841fb1ff7049c41c4462762dda33bb7e8fac54cd9e53831c594d30bec"
+          },
+          {
+            "expectedSource": "base:skills/agentic-development/SKILL.md",
+            "sha256": "4e926f61110fb21c667240c37693f323bddb63fba7b89ff125f94866ca6b8e68"
+          },
+          {
+            "expectedSource": "base:skills/agents/SKILL.md",
+            "sha256": "9f2bc193fecdf1ffef270d18148a0ca1d49cd82dfcdabdd1cab26f675110156e"
+          },
+          {
+            "expectedSource": "base:skills/api-integrations/SKILL.md",
+            "sha256": "890fdc336fda160f8118e946301ca952475d00325704562ced8d544455eba870"
+          },
+          {
+            "expectedSource": "base:skills/architecture/SKILL.md",
+            "sha256": "27fff6ec73fff5f10ecbd9bc9cf63b1b1161aa1411495df4f11a4896bc6001b2"
+          },
+          {
+            "expectedSource": "base:skills/automations/SKILL.md",
+            "sha256": "0a8ef6e812c60a40fbc656757df032b7bda3ebbf02daf01adddb3a9a659de230"
+          },
+          {
+            "expectedSource": "base:skills/capabilities/SKILL.md",
+            "sha256": "b57844fffbb2e977cb7fc229e0aa8d6658ab54ef18ab44e6d5aceb4c152aba47"
+          },
+          {
+            "expectedSource": "base:skills/extensiondev/SKILL.md",
+            "sha256": "661a1fdcaeb383cca28b5590ee0f1249b075d0efcff967d2a02c56d8aca24e66"
+          },
+          {
+            "expectedSource": "base:skills/gad-context/SKILL.md",
+            "sha256": "3eaab364611d117d55a7db1f09cccf11121dbfc4ff599f6aa8f56c30c1bcbd97"
+          },
+          {
+            "expectedSource": "base:skills/messaging/SKILL.md",
+            "sha256": "3fbf37d11900238084e272c9cbf12f026921c56e8e2332086faf511ae1343fab"
+          },
+          {
+            "expectedSource": "base:skills/natlang-authoring/SKILL.md",
+            "sha256": "2bffa8c136e392016fcfee7b9513ec99accf1a3260d932a0881d1115e5123a20"
+          },
+          {
+            "expectedSource": "base:skills/open-session-recovery/SKILL.md",
+            "sha256": "c5c4a516cf136d6ad8aef1faa4835b08756ae33e3f16689c4acbab0568479740"
+          },
+          {
+            "expectedSource": "base:skills/open-user-goal/SKILL.md",
+            "sha256": "5fecf07eefba9f93d3d251cf3abcd499392b73cecaac8e0d5bee67ac13f6e2a2"
+          },
+          {
+            "expectedSource": "base:skills/phone-setup/SKILL.md",
+            "sha256": "6dc6afae4f5801740ae82fb39138851eed339a9e11a6d4786c3dc90621f19998"
+          },
+          {
+            "expectedSource": "base:skills/problem-reporting/SKILL.md",
+            "sha256": "fcffd72ed9e8c28a4af10aed90db34e1d474351b7a14f24d398178391757265a"
+          },
+          {
+            "expectedSource": "base:skills/provenance-orientation/SKILL.md",
+            "sha256": "d8ee2a44900a81bd325fe8d9347539df39137753a80eab88e1ceb920892cb39b"
+          },
+          {
+            "expectedSource": "base:skills/sandbox/SKILL.md",
+            "sha256": "62ea7fc769938b3d4578fd254937c056a30f5217b964a79d1750208a03c56634"
+          },
+          {
+            "expectedSource": "base:skills/templates/SKILL.md",
+            "sha256": "b1d741a0b8abc124587e767885a8f3af9619833306fd0fa0a429b71df6c3cf59"
+          },
+          {
+            "expectedSource": "base:skills/tendrils/SKILL.md",
+            "sha256": "9523be58987f7d108fb4700f6adc5a3d6d02ad5bb0fe52605711065728be03b3"
+          },
+          {
+            "expectedSource": "base:skills/terminal-apps/SKILL.md",
+            "sha256": "ace7fb935ed094722105a36f41609e0fdebe56094b48a0bc3cadfa8d4de26d0d"
+          },
+          {
+            "expectedSource": "base:skills/terminal/SKILL.md",
+            "sha256": "cedb055ea956264a7532aac30130004494c03291b07a18890783a62b83e32e9c"
+          },
+          {
+            "expectedSource": "base:skills/vibestudio-vcs/SKILL.md",
+            "sha256": "4eb841b3a4b54496cfc740bd025ed532dea3af668300b030a3c98b2fd471537a"
+          },
+          {
+            "expectedSource": "base:skills/visualize/SKILL.md",
+            "sha256": "f447bbc9d4508d1764dc4cbf634229105482568784f8505ccf24cf5f4d84c71e"
+          },
+          {
+            "expectedSource": "base:skills/web-research/SKILL.md",
+            "sha256": "a09d56275805dd564410ac1ad66f28840c4ea60a5a5e8701159dc82b51dd1788"
+          },
+          {
+            "expectedSource": "base:skills/website-publishing/SKILL.md",
+            "sha256": "ce90e916cc6d127f3d8f086be0db26c6f6f1cb36b99dd5c8184ef9dfece7c0cc"
+          },
+          {
+            "expectedSource": "base:skills/workspace-dev/SKILL.md",
+            "sha256": "1d0271f2183afc97036a1069d8f8943ecadaac2cc924f3591f0961896dbb6c7c"
+          },
+          {
+            "expectedSource": "base:workers/agent-worker/SKILL.md",
+            "sha256": "de02fe631256217a45004b24d54074c3f9fd12e9643f7b60dc7b12f8b3f7d39c"
+          },
+          {
+            "expectedSource": "base:workers/pubsub-channel/SKILL.md",
+            "sha256": "22d96ef9bc9baf44c5e7c8dd2fb2a45aa7ac54f48bc546a24fa1c938df4d3e00"
+          },
+          {
+            "expectedSource": "system-testing:packages/agentic-session/SKILL.md",
+            "sha256": "9ed44d302629a23e0fd3a4cf146ae398c62af678d670dc4b44e42d40e4c508a9"
+          },
+          {
+            "expectedSource": "system-testing:skills/mobile-system-testing/SKILL.md",
+            "sha256": "9b07306614e0db0a324c4ab05a34ddb472e2a4c63a1bfa600f50cc949d592618"
+          },
+          {
+            "expectedSource": "system:clients/desktop-browser/SKILL.md",
+            "sha256": "e61b1ffa336ae4e8b823fd3665c86bc9a63f4ccb2acc6db6d931f447224b5f26"
+          },
+          {
+            "expectedSource": "system:clients/mobile-browser/SKILL.md",
+            "sha256": "1b17e54d8e2331ce09169c2f61d8d40cdc58f5474eb9dbf9989769e7f5dde6b2"
+          },
+          {
+            "expectedSource": "system:extensions/mobile-debug/SKILL.md",
+            "sha256": "b706aac927f06ee605e9627304afdb3ce56a1afc58af5c67f5d8c5838b677ad2"
+          },
+          {
+            "expectedSource": "system:extensions/react-native/SKILL.md",
+            "sha256": "dac8eaa59bbba47a5267ab6062341a0c08aff5b64d2d31cfc65735e1900197e3"
+          },
+          {
+            "expectedSource": "system:skills/clientdev/SKILL.md",
+            "sha256": "5435247deed3d8bf9af41bfbf6a355226e18c4c070b74b205250e8b8a57df7f3"
+          },
+          {
+            "expectedSource": "system:skills/local-models/SKILL.md",
+            "sha256": "68e0a6b780a7f4f539747e3c939fe37bc4119113d87616d80a4f73fabf801295"
+          },
+          {
+            "expectedSource": "system:skills/open-system-operations/SKILL.md",
+            "sha256": "9cf3612dfdb1936162cfde015297b45c5d0d6005b55381918ee3b5461d4fe55c"
+          },
+          {
+            "expectedSource": "system:skills/performance/SKILL.md",
+            "sha256": "62dbe3339ee4c996db1c85a9dfcc41414a56b3dfed980174a8a1fc665713412f"
+          },
+          {
+            "expectedSource": "system:skills/remote-access/SKILL.md",
+            "sha256": "065c5daeb5a5e9347829cde333aef8882e6580ae2c9e2d55763bc98c38c80456"
+          },
+          {
+            "expectedSource": "system:skills/server-logs/SKILL.md",
+            "sha256": "6a4acda4f7cd4309ed7650ad4b7fc7ae41ce1e6c0cc9e25791ede867d50fb714"
+          }
+        ]
+      },
+      "workspace": "system"
+    },
+    {
+      "matchesPinnedSources": true,
+      "observed": {
+        "skills": [
+          {
+            "expectedSource": "base:extensions/git-bridge/SKILL.md",
+            "sha256": "42131894cb966b3951fb50b4c2dc1e7f6bb013b5255653809e1c4ee04ab8b6da"
+          },
+          {
+            "expectedSource": "base:extensions/pdf-ingest/SKILL.md",
+            "sha256": "263497a68f38b1a945939f5942e834eba74fdd5011a99a92f223c5913034c0b0"
+          },
+          {
+            "expectedSource": "base:extensions/speech/SKILL.md",
+            "sha256": "54256e91b48145712a29ce31d2428e0ec34e4e0858fb8fb0cd5f0defb39af03a"
+          },
+          {
+            "expectedSource": "base:extensions/test-runner/SKILL.md",
+            "sha256": "715bcdbee939dda3dffda481838dde2a2002173cb497aaef29d279806c8c30ad"
+          },
+          {
+            "expectedSource": "base:packages/agentic-chat/SKILL.md",
+            "sha256": "48273470cea6913756657336132224916bf7a70ef306f7280a1e4bc7e0b2da90"
+          },
+          {
+            "expectedSource": "base:packages/agentic-do/SKILL.md",
+            "sha256": "e64ebaae109ab7c246d043c85cfb752305eea0ef147ccf34885b15dd3da27f32"
+          },
+          {
+            "expectedSource": "base:packages/agentic-protocol/SKILL.md",
+            "sha256": "18d5235e135b0caa551030e60cbb51869a985f17cf625f1cc22fab82bbe720c8"
+          },
+          {
+            "expectedSource": "base:packages/testkit/SKILL.md",
+            "sha256": "c9ea9998072b7ffa8ee6135d1bd8f08ade417a32d46ff0444a2a7cf167d2c837"
+          },
+          {
+            "expectedSource": "base:panels/chat/SKILL.md",
+            "sha256": "ce6825b841fb1ff7049c41c4462762dda33bb7e8fac54cd9e53831c594d30bec"
+          },
+          {
+            "expectedSource": "base:skills/agentic-development/SKILL.md",
+            "sha256": "4e926f61110fb21c667240c37693f323bddb63fba7b89ff125f94866ca6b8e68"
+          },
+          {
+            "expectedSource": "base:skills/agents/SKILL.md",
+            "sha256": "9f2bc193fecdf1ffef270d18148a0ca1d49cd82dfcdabdd1cab26f675110156e"
+          },
+          {
+            "expectedSource": "base:skills/api-integrations/SKILL.md",
+            "sha256": "890fdc336fda160f8118e946301ca952475d00325704562ced8d544455eba870"
+          },
+          {
+            "expectedSource": "base:skills/architecture/SKILL.md",
+            "sha256": "27fff6ec73fff5f10ecbd9bc9cf63b1b1161aa1411495df4f11a4896bc6001b2"
+          },
+          {
+            "expectedSource": "base:skills/automations/SKILL.md",
+            "sha256": "0a8ef6e812c60a40fbc656757df032b7bda3ebbf02daf01adddb3a9a659de230"
+          },
+          {
+            "expectedSource": "base:skills/capabilities/SKILL.md",
+            "sha256": "b57844fffbb2e977cb7fc229e0aa8d6658ab54ef18ab44e6d5aceb4c152aba47"
+          },
+          {
+            "expectedSource": "base:skills/extensiondev/SKILL.md",
+            "sha256": "661a1fdcaeb383cca28b5590ee0f1249b075d0efcff967d2a02c56d8aca24e66"
+          },
+          {
+            "expectedSource": "base:skills/gad-context/SKILL.md",
+            "sha256": "3eaab364611d117d55a7db1f09cccf11121dbfc4ff599f6aa8f56c30c1bcbd97"
+          },
+          {
+            "expectedSource": "base:skills/messaging/SKILL.md",
+            "sha256": "3fbf37d11900238084e272c9cbf12f026921c56e8e2332086faf511ae1343fab"
+          },
+          {
+            "expectedSource": "base:skills/natlang-authoring/SKILL.md",
+            "sha256": "2bffa8c136e392016fcfee7b9513ec99accf1a3260d932a0881d1115e5123a20"
+          },
+          {
+            "expectedSource": "base:skills/open-session-recovery/SKILL.md",
+            "sha256": "c5c4a516cf136d6ad8aef1faa4835b08756ae33e3f16689c4acbab0568479740"
+          },
+          {
+            "expectedSource": "base:skills/open-user-goal/SKILL.md",
+            "sha256": "5fecf07eefba9f93d3d251cf3abcd499392b73cecaac8e0d5bee67ac13f6e2a2"
+          },
+          {
+            "expectedSource": "base:skills/phone-setup/SKILL.md",
+            "sha256": "6dc6afae4f5801740ae82fb39138851eed339a9e11a6d4786c3dc90621f19998"
+          },
+          {
+            "expectedSource": "base:skills/problem-reporting/SKILL.md",
+            "sha256": "fcffd72ed9e8c28a4af10aed90db34e1d474351b7a14f24d398178391757265a"
+          },
+          {
+            "expectedSource": "base:skills/provenance-orientation/SKILL.md",
+            "sha256": "d8ee2a44900a81bd325fe8d9347539df39137753a80eab88e1ceb920892cb39b"
+          },
+          {
+            "expectedSource": "base:skills/sandbox/SKILL.md",
+            "sha256": "62ea7fc769938b3d4578fd254937c056a30f5217b964a79d1750208a03c56634"
+          },
+          {
+            "expectedSource": "base:skills/templates/SKILL.md",
+            "sha256": "b1d741a0b8abc124587e767885a8f3af9619833306fd0fa0a429b71df6c3cf59"
+          },
+          {
+            "expectedSource": "base:skills/tendrils/SKILL.md",
+            "sha256": "9523be58987f7d108fb4700f6adc5a3d6d02ad5bb0fe52605711065728be03b3"
+          },
+          {
+            "expectedSource": "base:skills/terminal-apps/SKILL.md",
+            "sha256": "ace7fb935ed094722105a36f41609e0fdebe56094b48a0bc3cadfa8d4de26d0d"
+          },
+          {
+            "expectedSource": "base:skills/terminal/SKILL.md",
+            "sha256": "cedb055ea956264a7532aac30130004494c03291b07a18890783a62b83e32e9c"
+          },
+          {
+            "expectedSource": "base:skills/vibestudio-vcs/SKILL.md",
+            "sha256": "4eb841b3a4b54496cfc740bd025ed532dea3af668300b030a3c98b2fd471537a"
+          },
+          {
+            "expectedSource": "base:skills/visualize/SKILL.md",
+            "sha256": "f447bbc9d4508d1764dc4cbf634229105482568784f8505ccf24cf5f4d84c71e"
+          },
+          {
+            "expectedSource": "base:skills/web-research/SKILL.md",
+            "sha256": "a09d56275805dd564410ac1ad66f28840c4ea60a5a5e8701159dc82b51dd1788"
+          },
+          {
+            "expectedSource": "base:skills/website-publishing/SKILL.md",
+            "sha256": "ce90e916cc6d127f3d8f086be0db26c6f6f1cb36b99dd5c8184ef9dfece7c0cc"
+          },
+          {
+            "expectedSource": "base:skills/workspace-dev/SKILL.md",
+            "sha256": "1d0271f2183afc97036a1069d8f8943ecadaac2cc924f3591f0961896dbb6c7c"
+          },
+          {
+            "expectedSource": "base:workers/agent-worker/SKILL.md",
+            "sha256": "de02fe631256217a45004b24d54074c3f9fd12e9643f7b60dc7b12f8b3f7d39c"
+          },
+          {
+            "expectedSource": "base:workers/pubsub-channel/SKILL.md",
+            "sha256": "22d96ef9bc9baf44c5e7c8dd2fb2a45aa7ac54f48bc546a24fa1c938df4d3e00"
+          },
+          {
+            "expectedSource": "system-testing:packages/agentic-session/SKILL.md",
+            "sha256": "9ed44d302629a23e0fd3a4cf146ae398c62af678d670dc4b44e42d40e4c508a9"
+          },
+          {
+            "expectedSource": "system-testing:skills/mobile-system-testing/SKILL.md",
+            "sha256": "9b07306614e0db0a324c4ab05a34ddb472e2a4c63a1bfa600f50cc949d592618"
+          }
+        ]
+      },
+      "workspace": "examples"
+    },
+    {
+      "matchesPinnedSources": true,
+      "observed": {
+        "skills": [
+          {
+            "expectedSource": "base:extensions/git-bridge/SKILL.md",
+            "sha256": "42131894cb966b3951fb50b4c2dc1e7f6bb013b5255653809e1c4ee04ab8b6da"
+          },
+          {
+            "expectedSource": "base:extensions/pdf-ingest/SKILL.md",
+            "sha256": "263497a68f38b1a945939f5942e834eba74fdd5011a99a92f223c5913034c0b0"
+          },
+          {
+            "expectedSource": "base:extensions/speech/SKILL.md",
+            "sha256": "54256e91b48145712a29ce31d2428e0ec34e4e0858fb8fb0cd5f0defb39af03a"
+          },
+          {
+            "expectedSource": "base:extensions/test-runner/SKILL.md",
+            "sha256": "715bcdbee939dda3dffda481838dde2a2002173cb497aaef29d279806c8c30ad"
+          },
+          {
+            "expectedSource": "base:packages/agentic-chat/SKILL.md",
+            "sha256": "48273470cea6913756657336132224916bf7a70ef306f7280a1e4bc7e0b2da90"
+          },
+          {
+            "expectedSource": "base:packages/agentic-do/SKILL.md",
+            "sha256": "e64ebaae109ab7c246d043c85cfb752305eea0ef147ccf34885b15dd3da27f32"
+          },
+          {
+            "expectedSource": "base:packages/agentic-protocol/SKILL.md",
+            "sha256": "18d5235e135b0caa551030e60cbb51869a985f17cf625f1cc22fab82bbe720c8"
+          },
+          {
+            "expectedSource": "base:packages/testkit/SKILL.md",
+            "sha256": "c9ea9998072b7ffa8ee6135d1bd8f08ade417a32d46ff0444a2a7cf167d2c837"
+          },
+          {
+            "expectedSource": "base:panels/chat/SKILL.md",
+            "sha256": "ce6825b841fb1ff7049c41c4462762dda33bb7e8fac54cd9e53831c594d30bec"
+          },
+          {
+            "expectedSource": "base:skills/agentic-development/SKILL.md",
+            "sha256": "4e926f61110fb21c667240c37693f323bddb63fba7b89ff125f94866ca6b8e68"
+          },
+          {
+            "expectedSource": "base:skills/agents/SKILL.md",
+            "sha256": "9f2bc193fecdf1ffef270d18148a0ca1d49cd82dfcdabdd1cab26f675110156e"
+          },
+          {
+            "expectedSource": "base:skills/api-integrations/SKILL.md",
+            "sha256": "890fdc336fda160f8118e946301ca952475d00325704562ced8d544455eba870"
+          },
+          {
+            "expectedSource": "base:skills/architecture/SKILL.md",
+            "sha256": "27fff6ec73fff5f10ecbd9bc9cf63b1b1161aa1411495df4f11a4896bc6001b2"
+          },
+          {
+            "expectedSource": "base:skills/automations/SKILL.md",
+            "sha256": "0a8ef6e812c60a40fbc656757df032b7bda3ebbf02daf01adddb3a9a659de230"
+          },
+          {
+            "expectedSource": "base:skills/capabilities/SKILL.md",
+            "sha256": "b57844fffbb2e977cb7fc229e0aa8d6658ab54ef18ab44e6d5aceb4c152aba47"
+          },
+          {
+            "expectedSource": "base:skills/extensiondev/SKILL.md",
+            "sha256": "661a1fdcaeb383cca28b5590ee0f1249b075d0efcff967d2a02c56d8aca24e66"
+          },
+          {
+            "expectedSource": "base:skills/gad-context/SKILL.md",
+            "sha256": "3eaab364611d117d55a7db1f09cccf11121dbfc4ff599f6aa8f56c30c1bcbd97"
+          },
+          {
+            "expectedSource": "base:skills/messaging/SKILL.md",
+            "sha256": "3fbf37d11900238084e272c9cbf12f026921c56e8e2332086faf511ae1343fab"
+          },
+          {
+            "expectedSource": "base:skills/natlang-authoring/SKILL.md",
+            "sha256": "2bffa8c136e392016fcfee7b9513ec99accf1a3260d932a0881d1115e5123a20"
+          },
+          {
+            "expectedSource": "base:skills/open-session-recovery/SKILL.md",
+            "sha256": "c5c4a516cf136d6ad8aef1faa4835b08756ae33e3f16689c4acbab0568479740"
+          },
+          {
+            "expectedSource": "base:skills/open-user-goal/SKILL.md",
+            "sha256": "5fecf07eefba9f93d3d251cf3abcd499392b73cecaac8e0d5bee67ac13f6e2a2"
+          },
+          {
+            "expectedSource": "base:skills/phone-setup/SKILL.md",
+            "sha256": "6dc6afae4f5801740ae82fb39138851eed339a9e11a6d4786c3dc90621f19998"
+          },
+          {
+            "expectedSource": "base:skills/problem-reporting/SKILL.md",
+            "sha256": "fcffd72ed9e8c28a4af10aed90db34e1d474351b7a14f24d398178391757265a"
+          },
+          {
+            "expectedSource": "base:skills/provenance-orientation/SKILL.md",
+            "sha256": "d8ee2a44900a81bd325fe8d9347539df39137753a80eab88e1ceb920892cb39b"
+          },
+          {
+            "expectedSource": "base:skills/sandbox/SKILL.md",
+            "sha256": "62ea7fc769938b3d4578fd254937c056a30f5217b964a79d1750208a03c56634"
+          },
+          {
+            "expectedSource": "base:skills/templates/SKILL.md",
+            "sha256": "b1d741a0b8abc124587e767885a8f3af9619833306fd0fa0a429b71df6c3cf59"
+          },
+          {
+            "expectedSource": "base:skills/tendrils/SKILL.md",
+            "sha256": "9523be58987f7d108fb4700f6adc5a3d6d02ad5bb0fe52605711065728be03b3"
+          },
+          {
+            "expectedSource": "base:skills/terminal-apps/SKILL.md",
+            "sha256": "ace7fb935ed094722105a36f41609e0fdebe56094b48a0bc3cadfa8d4de26d0d"
+          },
+          {
+            "expectedSource": "base:skills/terminal/SKILL.md",
+            "sha256": "cedb055ea956264a7532aac30130004494c03291b07a18890783a62b83e32e9c"
+          },
+          {
+            "expectedSource": "base:skills/vibestudio-vcs/SKILL.md",
+            "sha256": "4eb841b3a4b54496cfc740bd025ed532dea3af668300b030a3c98b2fd471537a"
+          },
+          {
+            "expectedSource": "base:skills/visualize/SKILL.md",
+            "sha256": "f447bbc9d4508d1764dc4cbf634229105482568784f8505ccf24cf5f4d84c71e"
+          },
+          {
+            "expectedSource": "base:skills/web-research/SKILL.md",
+            "sha256": "a09d56275805dd564410ac1ad66f28840c4ea60a5a5e8701159dc82b51dd1788"
+          },
+          {
+            "expectedSource": "base:skills/website-publishing/SKILL.md",
+            "sha256": "ce90e916cc6d127f3d8f086be0db26c6f6f1cb36b99dd5c8184ef9dfece7c0cc"
+          },
+          {
+            "expectedSource": "base:skills/workspace-dev/SKILL.md",
+            "sha256": "1d0271f2183afc97036a1069d8f8943ecadaac2cc924f3591f0961896dbb6c7c"
+          },
+          {
+            "expectedSource": "base:workers/agent-worker/SKILL.md",
+            "sha256": "de02fe631256217a45004b24d54074c3f9fd12e9643f7b60dc7b12f8b3f7d39c"
+          },
+          {
+            "expectedSource": "base:workers/pubsub-channel/SKILL.md",
+            "sha256": "22d96ef9bc9baf44c5e7c8dd2fb2a45aa7ac54f48bc546a24fa1c938df4d3e00"
+          },
+          {
+            "expectedSource": "google-workspace:skills/google-drive/SKILL.md",
+            "sha256": "8ee0d0e4511b776e5c298ac116ecde4b5992c6b9fbd446903b5824e5bbff4e51"
+          },
+          {
+            "expectedSource": "google-workspace:skills/google-workspace/SKILL.md",
+            "sha256": "2c406a1aab4617d9bdb93f9b5268c937abaec502d3215254819996bf100771bc"
+          },
+          {
+            "expectedSource": "google-workspace:skills/open-calendar-goal/SKILL.md",
+            "sha256": "74cafbc0c04a383f83b708f0577c48ae2af350171a1f8eeb1b7bee3c4eeb15e3"
+          },
+          {
+            "expectedSource": "google-workspace:skills/open-gmail-goal/SKILL.md",
+            "sha256": "1453dc019f6fac92926e2ae0b9c76360f434471554606d8b739f7834511c5f27"
+          },
+          {
+            "expectedSource": "google-workspace:workers/gmail-agent/SKILL.md",
+            "sha256": "ad9c357ee8854015baea7686d1141c6587142cf051a35a4c0d0a3053ac7a5772"
+          },
+          {
+            "expectedSource": "system-testing:packages/agentic-session/SKILL.md",
+            "sha256": "9ed44d302629a23e0fd3a4cf146ae398c62af678d670dc4b44e42d40e4c508a9"
+          },
+          {
+            "expectedSource": "system-testing:skills/mobile-system-testing/SKILL.md",
+            "sha256": "9b07306614e0db0a324c4ab05a34ddb472e2a4c63a1bfa600f50cc949d592618"
+          }
+        ]
+      },
+      "workspace": "google-workspace"
+    },
+    {
+      "matchesPinnedSources": true,
+      "observed": {
+        "skills": [
+          {
+            "expectedSource": "base:extensions/git-bridge/SKILL.md",
+            "sha256": "42131894cb966b3951fb50b4c2dc1e7f6bb013b5255653809e1c4ee04ab8b6da"
+          },
+          {
+            "expectedSource": "base:extensions/pdf-ingest/SKILL.md",
+            "sha256": "263497a68f38b1a945939f5942e834eba74fdd5011a99a92f223c5913034c0b0"
+          },
+          {
+            "expectedSource": "base:extensions/speech/SKILL.md",
+            "sha256": "54256e91b48145712a29ce31d2428e0ec34e4e0858fb8fb0cd5f0defb39af03a"
+          },
+          {
+            "expectedSource": "base:extensions/test-runner/SKILL.md",
+            "sha256": "715bcdbee939dda3dffda481838dde2a2002173cb497aaef29d279806c8c30ad"
+          },
+          {
+            "expectedSource": "base:packages/agentic-chat/SKILL.md",
+            "sha256": "48273470cea6913756657336132224916bf7a70ef306f7280a1e4bc7e0b2da90"
+          },
+          {
+            "expectedSource": "base:packages/agentic-do/SKILL.md",
+            "sha256": "e64ebaae109ab7c246d043c85cfb752305eea0ef147ccf34885b15dd3da27f32"
+          },
+          {
+            "expectedSource": "base:packages/agentic-protocol/SKILL.md",
+            "sha256": "18d5235e135b0caa551030e60cbb51869a985f17cf625f1cc22fab82bbe720c8"
+          },
+          {
+            "expectedSource": "base:packages/testkit/SKILL.md",
+            "sha256": "c9ea9998072b7ffa8ee6135d1bd8f08ade417a32d46ff0444a2a7cf167d2c837"
+          },
+          {
+            "expectedSource": "base:panels/chat/SKILL.md",
+            "sha256": "ce6825b841fb1ff7049c41c4462762dda33bb7e8fac54cd9e53831c594d30bec"
+          },
+          {
+            "expectedSource": "base:skills/agentic-development/SKILL.md",
+            "sha256": "4e926f61110fb21c667240c37693f323bddb63fba7b89ff125f94866ca6b8e68"
+          },
+          {
+            "expectedSource": "base:skills/agents/SKILL.md",
+            "sha256": "9f2bc193fecdf1ffef270d18148a0ca1d49cd82dfcdabdd1cab26f675110156e"
+          },
+          {
+            "expectedSource": "base:skills/api-integrations/SKILL.md",
+            "sha256": "890fdc336fda160f8118e946301ca952475d00325704562ced8d544455eba870"
+          },
+          {
+            "expectedSource": "base:skills/architecture/SKILL.md",
+            "sha256": "27fff6ec73fff5f10ecbd9bc9cf63b1b1161aa1411495df4f11a4896bc6001b2"
+          },
+          {
+            "expectedSource": "base:skills/automations/SKILL.md",
+            "sha256": "0a8ef6e812c60a40fbc656757df032b7bda3ebbf02daf01adddb3a9a659de230"
+          },
+          {
+            "expectedSource": "base:skills/capabilities/SKILL.md",
+            "sha256": "b57844fffbb2e977cb7fc229e0aa8d6658ab54ef18ab44e6d5aceb4c152aba47"
+          },
+          {
+            "expectedSource": "base:skills/extensiondev/SKILL.md",
+            "sha256": "661a1fdcaeb383cca28b5590ee0f1249b075d0efcff967d2a02c56d8aca24e66"
+          },
+          {
+            "expectedSource": "base:skills/gad-context/SKILL.md",
+            "sha256": "3eaab364611d117d55a7db1f09cccf11121dbfc4ff599f6aa8f56c30c1bcbd97"
+          },
+          {
+            "expectedSource": "base:skills/messaging/SKILL.md",
+            "sha256": "3fbf37d11900238084e272c9cbf12f026921c56e8e2332086faf511ae1343fab"
+          },
+          {
+            "expectedSource": "base:skills/natlang-authoring/SKILL.md",
+            "sha256": "2bffa8c136e392016fcfee7b9513ec99accf1a3260d932a0881d1115e5123a20"
+          },
+          {
+            "expectedSource": "base:skills/open-session-recovery/SKILL.md",
+            "sha256": "c5c4a516cf136d6ad8aef1faa4835b08756ae33e3f16689c4acbab0568479740"
+          },
+          {
+            "expectedSource": "base:skills/open-user-goal/SKILL.md",
+            "sha256": "5fecf07eefba9f93d3d251cf3abcd499392b73cecaac8e0d5bee67ac13f6e2a2"
+          },
+          {
+            "expectedSource": "base:skills/phone-setup/SKILL.md",
+            "sha256": "6dc6afae4f5801740ae82fb39138851eed339a9e11a6d4786c3dc90621f19998"
+          },
+          {
+            "expectedSource": "base:skills/problem-reporting/SKILL.md",
+            "sha256": "fcffd72ed9e8c28a4af10aed90db34e1d474351b7a14f24d398178391757265a"
+          },
+          {
+            "expectedSource": "base:skills/provenance-orientation/SKILL.md",
+            "sha256": "d8ee2a44900a81bd325fe8d9347539df39137753a80eab88e1ceb920892cb39b"
+          },
+          {
+            "expectedSource": "base:skills/sandbox/SKILL.md",
+            "sha256": "62ea7fc769938b3d4578fd254937c056a30f5217b964a79d1750208a03c56634"
+          },
+          {
+            "expectedSource": "base:skills/templates/SKILL.md",
+            "sha256": "b1d741a0b8abc124587e767885a8f3af9619833306fd0fa0a429b71df6c3cf59"
+          },
+          {
+            "expectedSource": "base:skills/tendrils/SKILL.md",
+            "sha256": "9523be58987f7d108fb4700f6adc5a3d6d02ad5bb0fe52605711065728be03b3"
+          },
+          {
+            "expectedSource": "base:skills/terminal-apps/SKILL.md",
+            "sha256": "ace7fb935ed094722105a36f41609e0fdebe56094b48a0bc3cadfa8d4de26d0d"
+          },
+          {
+            "expectedSource": "base:skills/terminal/SKILL.md",
+            "sha256": "cedb055ea956264a7532aac30130004494c03291b07a18890783a62b83e32e9c"
+          },
+          {
+            "expectedSource": "base:skills/vibestudio-vcs/SKILL.md",
+            "sha256": "4eb841b3a4b54496cfc740bd025ed532dea3af668300b030a3c98b2fd471537a"
+          },
+          {
+            "expectedSource": "base:skills/visualize/SKILL.md",
+            "sha256": "f447bbc9d4508d1764dc4cbf634229105482568784f8505ccf24cf5f4d84c71e"
+          },
+          {
+            "expectedSource": "base:skills/web-research/SKILL.md",
+            "sha256": "a09d56275805dd564410ac1ad66f28840c4ea60a5a5e8701159dc82b51dd1788"
+          },
+          {
+            "expectedSource": "base:skills/website-publishing/SKILL.md",
+            "sha256": "ce90e916cc6d127f3d8f086be0db26c6f6f1cb36b99dd5c8184ef9dfece7c0cc"
+          },
+          {
+            "expectedSource": "base:skills/workspace-dev/SKILL.md",
+            "sha256": "1d0271f2183afc97036a1069d8f8943ecadaac2cc924f3591f0961896dbb6c7c"
+          },
+          {
+            "expectedSource": "base:workers/agent-worker/SKILL.md",
+            "sha256": "de02fe631256217a45004b24d54074c3f9fd12e9643f7b60dc7b12f8b3f7d39c"
+          },
+          {
+            "expectedSource": "base:workers/pubsub-channel/SKILL.md",
+            "sha256": "22d96ef9bc9baf44c5e7c8dd2fb2a45aa7ac54f48bc546a24fa1c938df4d3e00"
+          },
+          {
+            "expectedSource": "news:panels/news/SKILL.md",
+            "sha256": "dff07fdc029a94013e0ef14c478f3a63949069d6487a3a548d42ad5a276ca3c4"
+          },
+          {
+            "expectedSource": "system-testing:packages/agentic-session/SKILL.md",
+            "sha256": "9ed44d302629a23e0fd3a4cf146ae398c62af678d670dc4b44e42d40e4c508a9"
+          },
+          {
+            "expectedSource": "system-testing:skills/mobile-system-testing/SKILL.md",
+            "sha256": "9b07306614e0db0a324c4ab05a34ddb472e2a4c63a1bfa600f50cc949d592618"
+          }
+        ]
+      },
+      "workspace": "news"
+    },
+    {
+      "matchesPinnedSources": true,
+      "observed": {
+        "skills": [
+          {
+            "expectedSource": "base:extensions/git-bridge/SKILL.md",
+            "sha256": "42131894cb966b3951fb50b4c2dc1e7f6bb013b5255653809e1c4ee04ab8b6da"
+          },
+          {
+            "expectedSource": "base:extensions/pdf-ingest/SKILL.md",
+            "sha256": "263497a68f38b1a945939f5942e834eba74fdd5011a99a92f223c5913034c0b0"
+          },
+          {
+            "expectedSource": "base:extensions/speech/SKILL.md",
+            "sha256": "54256e91b48145712a29ce31d2428e0ec34e4e0858fb8fb0cd5f0defb39af03a"
+          },
+          {
+            "expectedSource": "base:extensions/test-runner/SKILL.md",
+            "sha256": "715bcdbee939dda3dffda481838dde2a2002173cb497aaef29d279806c8c30ad"
+          },
+          {
+            "expectedSource": "base:packages/agentic-chat/SKILL.md",
+            "sha256": "48273470cea6913756657336132224916bf7a70ef306f7280a1e4bc7e0b2da90"
+          },
+          {
+            "expectedSource": "base:packages/agentic-do/SKILL.md",
+            "sha256": "e64ebaae109ab7c246d043c85cfb752305eea0ef147ccf34885b15dd3da27f32"
+          },
+          {
+            "expectedSource": "base:packages/agentic-protocol/SKILL.md",
+            "sha256": "18d5235e135b0caa551030e60cbb51869a985f17cf625f1cc22fab82bbe720c8"
+          },
+          {
+            "expectedSource": "base:packages/testkit/SKILL.md",
+            "sha256": "c9ea9998072b7ffa8ee6135d1bd8f08ade417a32d46ff0444a2a7cf167d2c837"
+          },
+          {
+            "expectedSource": "base:panels/chat/SKILL.md",
+            "sha256": "ce6825b841fb1ff7049c41c4462762dda33bb7e8fac54cd9e53831c594d30bec"
+          },
+          {
+            "expectedSource": "base:skills/agentic-development/SKILL.md",
+            "sha256": "4e926f61110fb21c667240c37693f323bddb63fba7b89ff125f94866ca6b8e68"
+          },
+          {
+            "expectedSource": "base:skills/agents/SKILL.md",
+            "sha256": "9f2bc193fecdf1ffef270d18148a0ca1d49cd82dfcdabdd1cab26f675110156e"
+          },
+          {
+            "expectedSource": "base:skills/api-integrations/SKILL.md",
+            "sha256": "890fdc336fda160f8118e946301ca952475d00325704562ced8d544455eba870"
+          },
+          {
+            "expectedSource": "base:skills/architecture/SKILL.md",
+            "sha256": "27fff6ec73fff5f10ecbd9bc9cf63b1b1161aa1411495df4f11a4896bc6001b2"
+          },
+          {
+            "expectedSource": "base:skills/automations/SKILL.md",
+            "sha256": "0a8ef6e812c60a40fbc656757df032b7bda3ebbf02daf01adddb3a9a659de230"
+          },
+          {
+            "expectedSource": "base:skills/capabilities/SKILL.md",
+            "sha256": "b57844fffbb2e977cb7fc229e0aa8d6658ab54ef18ab44e6d5aceb4c152aba47"
+          },
+          {
+            "expectedSource": "base:skills/extensiondev/SKILL.md",
+            "sha256": "661a1fdcaeb383cca28b5590ee0f1249b075d0efcff967d2a02c56d8aca24e66"
+          },
+          {
+            "expectedSource": "base:skills/gad-context/SKILL.md",
+            "sha256": "3eaab364611d117d55a7db1f09cccf11121dbfc4ff599f6aa8f56c30c1bcbd97"
+          },
+          {
+            "expectedSource": "base:skills/messaging/SKILL.md",
+            "sha256": "3fbf37d11900238084e272c9cbf12f026921c56e8e2332086faf511ae1343fab"
+          },
+          {
+            "expectedSource": "base:skills/natlang-authoring/SKILL.md",
+            "sha256": "2bffa8c136e392016fcfee7b9513ec99accf1a3260d932a0881d1115e5123a20"
+          },
+          {
+            "expectedSource": "base:skills/open-session-recovery/SKILL.md",
+            "sha256": "c5c4a516cf136d6ad8aef1faa4835b08756ae33e3f16689c4acbab0568479740"
+          },
+          {
+            "expectedSource": "base:skills/open-user-goal/SKILL.md",
+            "sha256": "5fecf07eefba9f93d3d251cf3abcd499392b73cecaac8e0d5bee67ac13f6e2a2"
+          },
+          {
+            "expectedSource": "base:skills/phone-setup/SKILL.md",
+            "sha256": "6dc6afae4f5801740ae82fb39138851eed339a9e11a6d4786c3dc90621f19998"
+          },
+          {
+            "expectedSource": "base:skills/problem-reporting/SKILL.md",
+            "sha256": "fcffd72ed9e8c28a4af10aed90db34e1d474351b7a14f24d398178391757265a"
+          },
+          {
+            "expectedSource": "base:skills/provenance-orientation/SKILL.md",
+            "sha256": "d8ee2a44900a81bd325fe8d9347539df39137753a80eab88e1ceb920892cb39b"
+          },
+          {
+            "expectedSource": "base:skills/sandbox/SKILL.md",
+            "sha256": "62ea7fc769938b3d4578fd254937c056a30f5217b964a79d1750208a03c56634"
+          },
+          {
+            "expectedSource": "base:skills/templates/SKILL.md",
+            "sha256": "b1d741a0b8abc124587e767885a8f3af9619833306fd0fa0a429b71df6c3cf59"
+          },
+          {
+            "expectedSource": "base:skills/tendrils/SKILL.md",
+            "sha256": "9523be58987f7d108fb4700f6adc5a3d6d02ad5bb0fe52605711065728be03b3"
+          },
+          {
+            "expectedSource": "base:skills/terminal-apps/SKILL.md",
+            "sha256": "ace7fb935ed094722105a36f41609e0fdebe56094b48a0bc3cadfa8d4de26d0d"
+          },
+          {
+            "expectedSource": "base:skills/terminal/SKILL.md",
+            "sha256": "cedb055ea956264a7532aac30130004494c03291b07a18890783a62b83e32e9c"
+          },
+          {
+            "expectedSource": "base:skills/vibestudio-vcs/SKILL.md",
+            "sha256": "4eb841b3a4b54496cfc740bd025ed532dea3af668300b030a3c98b2fd471537a"
+          },
+          {
+            "expectedSource": "base:skills/visualize/SKILL.md",
+            "sha256": "f447bbc9d4508d1764dc4cbf634229105482568784f8505ccf24cf5f4d84c71e"
+          },
+          {
+            "expectedSource": "base:skills/web-research/SKILL.md",
+            "sha256": "a09d56275805dd564410ac1ad66f28840c4ea60a5a5e8701159dc82b51dd1788"
+          },
+          {
+            "expectedSource": "base:skills/website-publishing/SKILL.md",
+            "sha256": "ce90e916cc6d127f3d8f086be0db26c6f6f1cb36b99dd5c8184ef9dfece7c0cc"
+          },
+          {
+            "expectedSource": "base:skills/workspace-dev/SKILL.md",
+            "sha256": "1d0271f2183afc97036a1069d8f8943ecadaac2cc924f3591f0961896dbb6c7c"
+          },
+          {
+            "expectedSource": "base:workers/agent-worker/SKILL.md",
+            "sha256": "de02fe631256217a45004b24d54074c3f9fd12e9643f7b60dc7b12f8b3f7d39c"
+          },
+          {
+            "expectedSource": "base:workers/pubsub-channel/SKILL.md",
+            "sha256": "22d96ef9bc9baf44c5e7c8dd2fb2a45aa7ac54f48bc546a24fa1c938df4d3e00"
+          },
+          {
+            "expectedSource": "system-testing:packages/agentic-session/SKILL.md",
+            "sha256": "9ed44d302629a23e0fd3a4cf146ae398c62af678d670dc4b44e42d40e4c508a9"
+          },
+          {
+            "expectedSource": "system-testing:skills/mobile-system-testing/SKILL.md",
+            "sha256": "9b07306614e0db0a324c4ab05a34ddb472e2a4c63a1bfa600f50cc949d592618"
+          }
+        ]
+      },
+      "workspace": "spectrolite"
+    }
+  ]
+}

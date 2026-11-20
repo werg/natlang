@@ -5,7 +5,7 @@
  */
 import { Folder } from '../native/scoped-fs.js';
 import { hexDigest } from '../native/hash.js';
-import { graphCustodyDigest } from './graph-custody.js';
+import { graphCustodyMatches } from './graph-custody.js';
 import { currentFrame, runInFrame } from '../runtime/context.js';
 import type { NatlangRuntime } from '../runtime/runtime.js';
 import type { CallRecord, EffectRecord, ValueRef } from './types.js';
@@ -44,14 +44,8 @@ export function subtreeEffects(store: ValueSource, record: CallRecord): Recorded
     const children = store.children(current.call_id);
     const ids = children.map(child => child.call_id);
     if (new Set(ids).size !== ids.length) throw new ReplayDivergence('call store repeats a child identity');
-    const custody = current.graph_custody;
-    if (custody) {
-      if (custody.schema !== 'natlang.call-graph-chronology/1' || custody.task_id !== current.task_id ||
-          !Array.isArray(custody.child_call_ids) || new Set(custody.child_call_ids).size !== custody.child_call_ids.length ||
-          custody.child_call_ids.length !== ids.length || custody.child_call_ids.some(id => !ids.includes(id)) ||
-          custody.sha256 !== graphCustodyDigest(current.task_id, current.call_id, current.parent_call_id, custody.child_call_ids, current.effects))
-        throw new ReplayDivergence('captured child inventory differs from stored call graph');
-    }
+    if (current.graph_custody && !graphCustodyMatches(current, ids))
+      throw new ReplayDivergence('captured child inventory differs from stored call graph');
     for (const id of ids) {
       const child = store.call(id);
       if (!child || child.parent_call_id !== current.call_id) throw new ReplayDivergence('recorded child call is missing or has another parent');

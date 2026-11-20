@@ -145,6 +145,21 @@ def test_open_goal_excludes_a_proposed_action_without_execution_evidence(tmp_pat
         live.load_episode(path)
 
 
+def test_open_goal_binds_the_full_recorded_child_inventory(tmp_path):
+    path, spec, detail, verification = fixture(tmp_path)
+    open_goal(detail, spec, verification)
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    custody = {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'internal-task',
+               'sha256': '1' * 64, 'child_call_ids': ['missing-crisp-attempt']}
+    detail['record']['graph_custody'] = custody
+    rewrite(tmp_path, spec, detail, verification)
+    with pytest.raises(ValueError, match='recorded child inventory'):
+        live.load_episode(path)
+    custody['child_call_ids'] = []
+    rewrite(tmp_path, spec, detail, verification)
+    assert live.load_episode(path)['trajectory_ir']['outcome']['invocation_ledger'][0]['graph_custody'] == custody
+
+
 @pytest.mark.parametrize('mutation', ['owner', 'definition', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage', 'instance'])
 def test_rehashed_wrong_scope_effect_or_target_is_rejected(tmp_path, mutation):
     path, spec, detail, verification = fixture(tmp_path)

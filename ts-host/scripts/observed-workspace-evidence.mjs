@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { graphCustodyMatches } from '../dist/calls/graph-custody.js';
 
 async function readBound(binding, root) {
   if (!binding?.path || !/^[a-f\d]{64}$/u.test(binding.sha256 ?? ''))
@@ -10,6 +11,34 @@ async function readBound(binding, root) {
   if (createHash('sha256').update(bytes).digest('hex') !== binding.sha256)
     throw new Error(`observed workspace artifact changed: ${binding.path}`);
   return bytes;
+}
+
+export function verifyObservedCallTree(records, root) {
+  const byId = new Map();
+  const children = new Map();
+  for (const record of records) {
+    if (byId.has(record.call_id)) throw new Error('observed call graph repeats an invocation');
+    byId.set(record.call_id, record);
+    const group = children.get(record.parent_call_id) ?? [];
+    group.push(record.call_id);
+    children.set(record.parent_call_id, group);
+  }
+  const hasCustody = records.some(record => record.graph_custody != null);
+  const pending = [root];
+  const seen = new Set();
+  while (pending.length) {
+    const id = pending.pop();
+    const call = byId.get(id);
+    const ids = children.get(id) ?? [];
+    if (!call || seen.has(id) || (id === root && call.parent_call_id !== null))
+      throw new Error('observed call graph has invalid parent links');
+    if (hasCustody && (!graphCustodyMatches(call, ids) ||
+        ids.some(child => byId.get(child).task_id !== call.task_id)))
+      throw new Error('observed call graph differs from recorded child inventory');
+    seen.add(id);
+    pending.push(...ids);
+  }
+  if (seen.size !== records.length) throw new Error('observed call graph contains unreachable invocations');
 }
 
 /** Verify the on-disk artifacts before allowing the generic native exporter to use an observed capture. */
@@ -46,11 +75,16 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const callFiles = new Map(manifest.calls.map(artifact => [artifact.path, artifact]));
   const roots = new Set(receipt.root_call_ids);
   const goal = row.task.interaction?.goal;
+  const records = [];
   if (roots.size !== 1 || typeof goal !== 'string' || !goal.trim())
     throw new Error('observed open goal requires one verified goal-only root');
   for (const call of row.outcome.invocation_ledger) {
     const original = JSON.parse(await readBound(call.artifact, root));
     const record = original.record;
+    records.push({
+      call_id: record.call_id, parent_call_id: record.parent_call_id, task_id: record.task_id,
+      graph_custody: record.graph_custody, effects: record.effects,
+    });
     if (!equal(call.artifact, callFiles.get(call.artifact.path)) ||
         original.callId !== call.call_id || !equal(call.scope, captureScopes.get(call.call_id)) ||
         ['call_id', 'owner_kind', 'owner_key', 'run_id'].some(key => original.summary[key] !== call.scope[key]) ||
@@ -96,4 +130,5 @@ export async function verifyObservedWorkspaceEvidence(row) {
   }
   if (captureScopes.size || callFiles.size || decisions.size || roots.size)
     throw new Error('observed trajectory does not cover the full verified call tree');
+  verifyObservedCallTree(records, receipt.root_call_ids[0]);
 }

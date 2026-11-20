@@ -11,6 +11,9 @@ The rollout for each case records the root and every observed child invocation,
 including attempts that failed and the resulting state. Admission requires
 independent readback of the actual world. A case added to the task catalog
 contributes zero training examples until a qualifying trajectory is captured.
+When the runtime records the child inventory, admission checks every
+invocation against it. The native materializer verifies its digest against
+the original call artifacts before projecting training targets.
 
 ## Running the open-goal lane
 
@@ -21,7 +24,8 @@ From the Vibestudio checkout, list the cases with
 It uses the configured teacher and the chosen workspace's real runtime. Use
 `--assignments` to select the historical assigned workflows.
 
-In the Natlang checkout, ingest each captured training manifest with
+In the Natlang checkout, record each immutable capture directory in the data
+registry, then ingest each captured training manifest with
 `scripts/neuralese_data/sft_sources.py extract --work WORK --live-run MANIFEST`
 using the Neuralese Python environment. Pass all captures for the extraction
 together or use distinct `--out-name episodes-NAME` values. Extraction stores
@@ -98,10 +102,15 @@ copies. Activate that Python environment before running the commands below.
 The learner needs the tokenizer and chat template from the starting model.
 Only tokenizer assets are loaded for assembly. Use that machine's held-v3
 manifest for `HELD_MANIFEST`, with the referenced held-v2 exclusion available.
-Use a fresh work directory and a fresh learner output directory.
+Place the capture, work, and learner output directories under a configured
+logical data root. Use fresh directories and set a unique `SMOKE_DATASET_ID`
+for this capture.
 
 ```sh
 cd "$NATLANG_CHECKOUT"
+python scripts/data_registry.py record --id "$SMOKE_DATASET_ID" \
+  --path "$CAPTURE_DIRECTORY" --kind teacher-demos \
+  --format 'natlang.live-teacher-task/1 with bound Vibestudio evidence'
 python scripts/neuralese_data/sft_sources.py extract --work "$WORK" \
   --live-run "$CAPTURE_DIRECTORY/verified/manifest.json" \
   --live-trajectory-out "$WORK/smoke.native.jsonl.zst"
@@ -155,6 +164,29 @@ python scripts/vibestudio/open_goal_inventory.py \
   --out "$BASELINE_OUTPUT"
 ```
 
+From the clean Vibestudio checkout, use the installed-skill probe under the
+memory ledger to reconcile the six workspace skill catalogs with the pinned
+sources. It starts one managed workspace at a time and reads its actual
+skill list and documents through the agent CLI. The report records Base and
+System Testing as composition layers.
+
+```sh
+node --import tsx "$NATLANG_CHECKOUT/scripts/vibestudio/open_goal_installed_skills.mjs" \
+  --host "$VIBESTUDIO_CHECKOUT" --templates "$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
+  --baseline "$NATLANG_CHECKOUT/docs/research/vibestudio-open-goal-baseline.jsonl" \
+  --out "$SKILL_INVENTORY"
+```
+
+Use `--plan` to inspect the predicted catalog without starting a workspace.
+For a one-workspace smoke, pass `--workspace examples`. The report sets
+`complete` only when the live catalogs of all six templates match their
+expected source owners, document digests, and visible metadata.
+
+The pinned managed inventory matched 254 visible entries across all six
+workspaces, representing 64 distinct source documents. The snapshot records
+the exact revisions and original report digest. Re-run the probe after
+adding skills. [Pinned managed inventory](vibestudio-installed-skill-snapshot.json)
+
 | Capability | Evidence in the first cases | Gap |
 | --- | --- | --- |
 | Discover relevant state | The agent chooses search queries and sources, discovers workspace files, and inspects the live DOM and visible controls in an owned panel | Provider accounts, remote devices, and discovery across panels and workspaces |
@@ -185,20 +217,20 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 91 open goals across six workspace templates, with 71
-training goals and 20 source-separated holdouts. The same Base entry point
+The catalog declares 279 open goals across six workspace templates, with 218
+training goals and 61 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 27 | Public evidence and document recovery, authorized CDP changes and readback, declared suite verification, and publishing readiness and receipt recovery |
-| Personal | 15 | `workspace-live-declared-test-suite`, `personal-live-mission-planning`, and `personal-live-mission-facility` with board discovery, revision-bound changes, competing edits, prerequisites, and durable handoffs |
-| System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
+| Examples | 70 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing, native PDF evidence, and Natlang program discovery, compilation and stale source recovery |
+| Personal | 74 | Declared tests, Mission Control, browser-library-to-collection work, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
+| System | 41 | Declared tests, hub and terminal operations, retained conversations and cursor recovery, and Host diagnostic windows across boots, failures and owned incident handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
-| Spectrolite | 5 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes |
-| Google Workspace | 7 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition |
+| Spectrolite | 21 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence across pages before continuing to an authorized vault edit or hold |
+| Google Workspace | 61 | Drive inventory and checkpoint review, retained Gmail compose recovery, Calendar resource windows, and compound Gmail-to-Drive goals that confirm approvals and linked assets before an authorized handoff. |
 
 Google's qualification uses the real installed Drive client against a bounded
 test transport. News and Spectrolite use the live workspace services for
@@ -213,25 +245,66 @@ The publishing cases reuse `workspace-publication-preflight` and
 `workspace-live-publication-revision`. The harness binds an actual renderer
 and website package to an observed workspace revision. It checks readiness
 and the exact local publication journal without issuing an external publish.
+Eight owned preview goals add bounded provider uploads, interrupted
+submission, idempotent retry, hosted-file readback, and approval holds. They
+use the installed publisher and durable Host journal with a disposable
+provider. The direct provider and journal probe passed. Managed renderer
+and RPC verification is tracked in the case evidence audit.
 The public-research holdouts use source groups for W3C image accessibility
 and Unicode canonical comparison, separate from the training cases about
 reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/images/decorative/),
 [Unicode normalization](https://www.unicode.org/faq/normalization.html)
 
-To check the archive of reference results against the pinned catalog,
-preserve the managed `trajectory ... --full --json` files and run:
+To verify a goal against the managed workspace, run its model-free oracle.
+Pass `--case` to select goals or `--family` to verify a family from the pinned
+catalog. The command groups cases by workspace and baseline, runs one owned
+instance at a time, saves each full reference trajectory, and stops the
+instance before moving to the next group.
+
+```sh
+python3 scripts/memory_ledger.py run \
+  --unit vibe-open-goal-reference --budget-gb "$REFERENCE_BUDGET_GB" \
+  --reserve-gb "$REFERENCE_RESERVE_GB" --hold-budget --no-resumable \
+  --workdir "$NATLANG_CHECKOUT" \
+  --env "VIBESTUDIO_TEMPLATE_CHECKOUTS=$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
+  --env "VIBESTUDIO_MAX_CONCURRENT_BUILDS=1" \
+  -- python3 scripts/vibestudio/qualify_open_goals.py \
+  --host "$VIBESTUDIO_CHECKOUT" --catalog "$GOAL_CATALOG" \
+  --out "$REFERENCE_RESULTS" --case open-goal-reconcile-workshop-update
+```
+
+To audit the saved reference results against the pinned catalog, run:
 
 ```sh
 python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS" \
-  --baseline docs/research/vibestudio-open-goal-baseline.jsonl
+  --baseline docs/research/vibestudio-open-goal-baseline.jsonl \
+  --coverage docs/research/vibestudio-open-goal-coverage.json
 ```
 
 The audit lists missing cases and binds accepted proofs to the current goal
-hash and the run's owned context. With the baseline, it reports the remaining
-corpus shortfall and families without a verified holdout. Add
+hash and the run's owned context. It records each accepted archive's digest
+and the reported System Testing build version. With the baseline, it reports
+the remaining corpus shortfall and families without a verified holdout. Add
 `--require-complete` to make those gaps or any missing reference fail the
 check. For a single family, pass `--family` in place of `--baseline`.
-Reference executions do not produce teacher data.
+Use `--bundle-out NEW_DIRECTORY` to save the catalog, audit inputs,
+and accepted reference traces together. Each copied archive is checked
+against the audit's digest, and the saved report uses paths relative to the
+bundle. Keep these reference bundles with the corpus verification evidence.
+Teacher exports and learner assembly use their own capture directories.
+
+The crosswalk identifies likely skill sources and baseline capabilities by
+family. Coverage credit requires an explicit case link and every named check
+in that case's accepted reference archive. The report lists the exact cases
+that support each capability and skill. It also lists every inventory entry
+that still needs evidence.
+
+Pass `--installed-skills "$SKILL_INVENTORY"` to match these links against the
+skills observed in each managed workspace. For the full corpus,
+`--require-complete` requires both inventories, live observations from all
+six workspaces, and at least one verified reference link for each baseline
+capability and skill. Each installed skill also needs a reference from its
+own workspace.
 
 The first Personal and System live reference runs passed all five planning
 cases and exposed missing target dependencies in five native executions.
@@ -255,15 +328,33 @@ The deployment run used the installed regular server package at version
 0.1.105. The subsequent Examples run passed eleven more document, browser,
 and suite cases. All nine recovery references passed against the managed
 PubSub and scratch services, including a stale cursor, a concurrent message,
-and incomplete replay. All eight publishing cases passed against the managed
-website renderer, package builder, and local journal. The reference archive
-verifies 86 of the 91 declared goals. The public-research checks require a
-working search provider. The
-managed test reached the default DuckDuckGo provider, which rejected its
-automated searches. Configure Tavily, Brave, or Exa in the managed workspace
-before running the public-research references.
+and incomplete replay. All eight initial publishing cases passed against the managed
+website renderer, package builder, and local journal. The managed PDF
+checks verified the missing-page hold, and two compound references passed
+in the original Spectrolite renderer. All 15 Gmail references passed against
+native retained compose history and the owned provider transport. The public-research checks
+require a working search provider. The managed test reached the default DuckDuckGo provider,
+which rejected its automated searches. Configure Tavily, Brave, or Exa in
+the managed workspace before running the public-research references.
 
-Bounded Luna provider probes on Tick and Pop returned expired OAuth. The
-live teacher capture through learner assembly remains unverified.
+All 39 Calendar and Gmail-to-Drive cases passed. All nine browser-library and
+collection cases passed, including concurrent changes. The first archive
+history run passed six cases and exposed a canonical VCS snapshot ordering
+failure in 18 fixtures. The fixture now orders paths with the same comparator
+as the VCS protocol, and all 18 passed on rerun. Four owned-preview hold
+cases passed. Four effectful references exposed loss of typed bytes in a
+native filesystem relay. The transport fix passed the direct supervisor
+and native worker regression tests, and all four managed preview cases
+passed on rerun.
+All 15 authoring and 16 System diagnostics references passed in managed
+workspaces. The preserved evidence bundle
+`vibestudio-open-goal-reference-223-20261120` includes the 279-goal catalog,
+223 accepted references, and 47 verified holdouts.
+
+The synthetic assembly check ran with an isolated data registry and the
+configured learner tokenizer. It produced one trajectory and 24 supervised
+tokens, with both open-goal shares at 100%. Bounded Luna provider probes on
+Tick and Pop returned expired OAuth. The live teacher capture through
+learner assembly remains unverified.
 Pop reproduced the prior 72-case catalog byte for byte from the pushed host
 and System Testing revisions.
