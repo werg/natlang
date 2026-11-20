@@ -5228,3 +5228,78 @@ held scoring series is unchanged: this is training data and objective only.
   catalog now lists 181 datasets (148 shown); every one of the old 155 non-run datasets is registered.
   `training/data-registry-coverage-20261120.json` is that baseline; `tests/test_data_registry_ratchet.py` (check-main
   --quick, on the DGX) and `scripts/data_registry.py check --baseline` require it covered.
+
+## 2026-11-20 18:30, soft prompt states for operators and memetic guidance, per-lambda states end to end (soft-states strand)
+
+Owner question: "Are we using soft prompts for operators as well and for our memetic learning? And do we have per lambda
+soft prompts?" Owner framing: Neuralese is a primed soft prompt of sorts. Neuralese spans, soft instruction and skill
+states, memetic guidance states and operator states are one family: native states primed from text (or written by a
+producer call), then shaped by training. One mechanism and one format for all of them; differences live in data.
+Before this work, only program tuning trained soft states (per binding, not in use yet). Memetic guidance states were
+bare text writes from position 0 and never trained. Operators sent their prompt as text. Main GRPO/SFT trains full
+weights.
+
+**Inventory (mechanism: a native state standing where its text stood in a call).**
+- Producers of the states: `tune/soft.py` (`initialize_soft_states`, `native_init_body`), the system-prompt bank
+  (`system-prompts.ts`, `neuralese-system-prompt-bank.mjs`), memetic `guidance_binding` (`write-text`), view/operator
+  writes (`native.capture`).
+- Consumers: kernel.ts (binding states), agent.ts `softened` (prompt bank) and `runtimeProgramGuidance` (guidance).
+- Engines: managed fork, page, Python native engine, SGLang actor.
+- Learners: `tune.trainer` soft states; GRPO/SFT `write_sources`/`passthrough_plan`.
+- Held identity: `held_eval.series`.
+
+**Built (default on where a build exists; opt-outs named).**
+1. *Operators.*
+   - Each runtime operator has its own state of view's body: binding `prompt:view@<operator>`, a scoped prompt-bank entry
+     (`system-prompts.ts` `scopedBank`).
+   - Trained by the one soft-state fit (`tune.build`, rank 0 = frozen backbone, CSPD prefix share 0.5) on verified
+     operator rows (`scripts/neuralese_data/operator_soft_states.py`). Gold and checked seeds count as verified;
+     mechanical seeds bear the answer and enter only with `--admit-mechanical`.
+   - Served by the collector from `NATLANG_NEURALESE_PROMPT_STATES=BUILD` (`off` opts out). `operator-stage.sh` passes
+     `$S/soft/build` to held-base and grpo by default; `PROMPT_STATES=off` opts out.
+   - The operator call's in-context capture keeps the imported state on every engine:
+     - Python and SGLang: `native.capture` `prompt_segments`. The SGLang capture equals the Python capture tensor for
+       tensor (test).
+     - Fork and page: `grammarCapture` re-sends the messages.
+   - The learners read a producer document's own stored import as fixed context (`write_sources`, `passthrough_plan`).
+     Before, such a source was dropped.
+   - A prompt-state build is its own held series (`held_eval.series` `prompt_states`).
+2. *Memetic guidance.*
+   - With `refine: {checkpoint, steps, lr}` in the episode spec, the committed guidance states are refined as tune soft
+     states (binding `guidance:<function|*>`).
+   - Rows: the support worlds' verified calls that imported the state, with the text in its place
+     (`ts-host/scripts/tune-turns-from-results.mjs`, the tune pool's action evidence).
+   - The checkpoint must be the actor's exact weights; this is checked.
+   - The refined states run on the same query (confirmation) worlds and seeds and are kept only when their success is
+     higher. Both arms are recorded in the outcome (`memetic.refine`). Off unless set: each refinement is a GPU fit
+     beside the actor.
+3. *Per-lambda states* (gaps found by the inventory, all fixed):
+   - Pool imports gave instruction text only to named lambdas; inline lambdas now get their rendered text
+     (`renderedInstructions`).
+   - An interpolating lambda's two texts failed the build. It now gets its state for its most frequent exact text.
+     Other renderings stay text under the stack, in training and serving alike (before: a failed fit, or an untuned
+     call).
+   - A row without its binding's instruction text (judge readouts, operator calls) aborted the whole fit; it now keeps
+     its text.
+   - Training replaced `"body\n"` and serving replaced the whole body: one newline apart. Both now use the trimmed body
+     the opening message shows.
+   - Batched decision readouts took soft-state modes from the flush caller's context; they now take them from the
+     asking call.
+   - A soft-only (rank 0) release was refused on the managed fork; it is now served.
+   - Still no binding (unchanged; recorded in TUNING.md): lambdas written in eval code, host cells and `fn.in()`
+     rebinds.
+
+**Data reality.**
+- First operator rows: `/home/werg/data/natlang-operator-soft-20261120/turns-v1.jsonl`, 64 cases per source: 448
+  verified rows, all compact-value (checked seeds).
+- compact-params has none: its cases carry only mechanical seeds. extract cases are mostly not compacted at the runtime
+  page (34k not compacted).
+- Verified compact-params rows have to come from consumer success in rollouts collected under `learned-compaction`.
+  No such rollouts exist yet: compaction is crisp by default.
+
+**Not done.**
+- The first fit `softop-fit-1` is queued behind grpo-v5 and its held eval (24 GB, medium): plan-v1, base 5ff07638,
+  120 steps x 8 rows. Its result goes below when it runs.
+- The text-written memetic guidance state is still a bare write from position 0. The refined arm primes in context, but
+  the default arm does not.
+- Pop held runs need the build directory on Pop.
