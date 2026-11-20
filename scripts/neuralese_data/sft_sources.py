@@ -33,6 +33,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from unicodedata import normalize
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -74,9 +75,12 @@ class ZstdWriter:
         self.writer.write((json.dumps(row, ensure_ascii=False) + '\n').encode())
         self.rows += 1
 
-    def close(self):
+    def close(self, *, publish=True):
         self.writer.close()   # ends the frame and closes the file
-        os.replace(self.partial, self.path)
+        if publish:
+            os.replace(self.partial, self.path)
+        else:
+            self.partial.unlink()
 
 
 # ---- extract ---------------------------------------------------------------------------------------------------------
@@ -1301,6 +1305,10 @@ def load_aux(part, tokenizer, held):
             for (task, _), members in units.items()]
 
 
+def open_goal_key(goal):
+    return ' '.join(normalize('NFKC', goal).lower().split())
+
+
 def mix_report(chains, episodes, aux_report):
     """Per part (source or aux name): chains, forward and weighted target tokens and their shares; loss concentration
     over tasks (top 10 tasks, top 1% of tasks, the largest task)."""
@@ -1308,10 +1316,8 @@ def mix_report(chains, episodes, aux_report):
     parts = collections.defaultdict(collections.Counter)
     per_task = collections.Counter()
     trajectory_weights = collections.Counter()
-    from unicodedata import normalize
-
     goals = {
-        chain_id: ' '.join(normalize('NFKC', episode['open_goal']).lower().split())
+        chain_id: open_goal_key(episode['open_goal'])
         for episode in episodes for chain_id in episode.get('open_goal_chains', ())
     }
     goal_weights = collections.Counter()
@@ -1344,6 +1350,18 @@ def mix_report(chains, episodes, aux_report):
                 'weighted_target_share': sum(goal_weights.values()) / total_w,
             },
             'aux': aux_report}
+
+
+def publish_sft_rows(rows, mix, minimum_open_goal_share):
+    if minimum_open_goal_share is not None:
+        report = mix['open_user_goals']
+        report['distinct_goal_share'] = report['distinct_goals'] / max(1, report['trajectories'])
+        report['required_share'] = minimum_open_goal_share
+        if (report['distinct_goal_share'] < minimum_open_goal_share or
+                report['weighted_target_share'] < minimum_open_goal_share):
+            rows.close(publish=False)
+            raise SystemExit(f'Open user goal minimum not met: {json.dumps(report, sort_keys=True)}')
+    rows.close()
 
 
 def build(args):
@@ -1406,14 +1424,15 @@ def build(args):
     unique = []
     seen_goals = set()
     for c in core:
-        if c.get('open_goal') in seen_goals:
+        goal = open_goal_key(c['open_goal']) if c.get('open_goal') else None
+        if goal in seen_goals:
             funnel[c['source']]['repeated_open_goal'] += 1
         elif dedup.seen(c['signature']):
             funnel[c['source']]['near_duplicate'] += 1
         else:
             unique.append(c)
-            if c.get('open_goal'):
-                seen_goals.add(c['open_goal'])
+            if goal is not None:
+                seen_goals.add(goal)
 
     constructs = {task_id: task_constructs(task) for task_id, task in tasks.items()}
 
@@ -1723,7 +1742,6 @@ def build(args):
         task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
     episode_sizes.save()
 
-    rows_out.close()
     chains = all_chains
     mix = mix_report(chains, sft_episodes, aux_report)
     minimum_open_goal_share = getattr(args, 'min_open_goal_share', None)
@@ -1731,13 +1749,7 @@ def build(args):
             task.get('source') == 'observed-live-workspace' and
             task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values())):
         minimum_open_goal_share = 0.8
-    if minimum_open_goal_share is not None:
-        report = mix['open_user_goals']
-        report['distinct_goal_share'] = report['distinct_goals'] / max(1, report['trajectories'])
-        report['required_share'] = minimum_open_goal_share
-        if (report['distinct_goal_share'] < minimum_open_goal_share or
-                report['weighted_target_share'] < minimum_open_goal_share):
-            raise SystemExit(f'Open user goal minimum not met: {json.dumps(report, sort_keys=True)}')
+    publish_sft_rows(rows_out, mix, minimum_open_goal_share)
     rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
         pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)

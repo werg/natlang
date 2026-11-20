@@ -326,6 +326,26 @@ def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
     assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8}
 
 
+@pytest.mark.parametrize(('distinct', 'weighted'), [(3, 0.9), (4, 0.79), (4, 0.8)])
+def test_only_an_admitted_open_goal_mix_replaces_published_rows(tmp_path, distinct, weighted):
+    path = tmp_path / 'rows.jsonl.zst'
+    prior = s.ZstdWriter(path)
+    prior.write({'id': 'previous-admitted-build'})
+    prior.close()
+    next_rows = s.ZstdWriter(path)
+    next_rows.write({'id': 'attempted-build'})
+    report = {'open_user_goals': {'distinct_goals': distinct, 'trajectories': 5,
+                                  'weighted_target_share': weighted}}
+    if distinct == 4 and weighted == 0.8:
+        s.publish_sft_rows(next_rows, report, 0.8)
+        assert [json.loads(row)['id'] for row in s.zstd_lines(path)] == ['attempted-build']
+    else:
+        with pytest.raises(SystemExit, match='Open user goal minimum not met'):
+            s.publish_sft_rows(next_rows, report, 0.8)
+        assert [json.loads(row)['id'] for row in s.zstd_lines(path)] == ['previous-admitted-build']
+    assert not next_rows.partial.exists()
+
+
 def test_vibestudio_holdout_closes_over_source_group_siblings(tmp_path):
     from live_teacher_sources import open_goal_fingerprint
 
