@@ -70,7 +70,8 @@ SCHEMA = 'natlang.filled-reasoning/1'
 MIN_ROOM = 256            # reasoning tokens a step must have room for, else it keeps an empty block
 HINT_HEADER = ('Verified reference for this call and the calls after it (training only):\n\n'
                'The replies that follow your reasoning, and what came back from each:\n')
-HINT_PHRASES = re.compile(r'verified reference|training only|reference (?:reply|replies|answer|action)|'
+HINT_PHRASES = re.compile(r'verified reference|training only|\bthe reference\b|reference (?:reply|replies|answer|action)|'
+                          r'replies that follow|what came back|'
                           r'(?:given|provided|upcoming) (?:reply|replies|answer|action)s?\b|\bthe hint\b', re.I)
 TOOL_TAGS = re.compile(r'</?(?:tool_call|tool_response|function(?:=[^>]*)?|parameter(?:=[^>]*)?)>')
 LEAK_WINDOW, LEAK_STEP, LEAK_SHORT = 40, 8, 12
@@ -488,6 +489,26 @@ class Filler:
                 'settings': settings(self.args), 'chains': out_chains}
 
 
+def load_rates(paths):
+    """{task id: (successes, scored)} from rate files ({id: {successes, scored}}); later files win."""
+    rates = {}
+    for path in paths:
+        for task_id, v in json.loads(Path(path).read_text()).items():
+            if v.get('scored'):
+                rates[task_id] = (v['successes'], v['scored'])
+    return rates
+
+
+def prefer(episodes, rates):
+    """Episodes of tasks the student fails first (measured 0), then unmeasured tasks, then by pass rate (stable)."""
+    def rank(e):
+        s, n = rates.get(e['task_id'], (None, 0))
+        if not n:
+            return (1, 0.)
+        return (0, 0.) if s == 0 else (2, s / n)
+    return sorted(episodes, key=rank)
+
+
 def settings(args):
     return {k: getattr(args, k) for k in ('unhinted', 'hinted', 'hint_horizon', 'score_horizon', 'max_tokens', 'band',
                                           'close_floor', 'min_improvement', 'ratio_floor', 'top_p', 'max_len')}
@@ -527,6 +548,8 @@ def generate(args):
     done = done_keys(out)
     todo = [e for e in episodes if e['key'] not in done]
     random.Random(args.seed).shuffle(todo)
+    if args.prefer_rates:
+        todo = prefer(todo, load_rates(args.prefer_rates))
     if args.limit:
         todo = todo[:args.limit]
     actor = Actor(args.sglang, args.front, args.polite, args.max_inflight, args.min_inflight, args.max_running)
@@ -538,6 +561,7 @@ def generate(args):
     log = (out / 'generate.log').open('a')
     log.write(json.dumps(run) + '\n')
     log.flush()
+    record_fills(out, works, held)   # registered from the start: a cycle stops generation without a clean exit
     print(json.dumps({k: run[k] for k in ('episodes', 'done', 'todo', 'policy')}), flush=True)
     write_lock = threading.Lock()
     fills = (out / 'fills.jsonl').open('a')
@@ -667,7 +691,8 @@ def build(args):
     from natlang_neuralese.common.code_provenance import code_provenance
     corpus = Path(args.corpus)
     corpus.mkdir(parents=True, exist_ok=True)
-    data_registry.require_registered([args.out])
+    starts = [json.loads(l) for l in (Path(args.out) / 'generate.log').open() if '"event": "start"' in l]
+    record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'])   # the fills as built
     records = list(read_fills(args.out))
     renderers = {}
     chains, counts = [], collections.Counter()
@@ -891,6 +916,11 @@ def audit(args):
 
 
 def main():
+    args = build_parser().parse_args()
+    {'generate': generate, 'status': status, 'build': build, 'audit': audit}[args.command](args)
+
+
+def build_parser():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='command', required=True)
     g = sub.add_parser('generate')
@@ -922,6 +952,8 @@ def main():
     g.add_argument('--top-p', type=float, default=0.95)
     g.add_argument('--seed', type=int, default=0)
     g.add_argument('--limit', type=int, default=0)
+    g.add_argument('--prefer-rates', action='append', default=[],
+                   help='task pass rates ({id: {successes, scored}}): episodes of failed tasks first, then unmeasured')
     g.add_argument('--max-failures', type=int, default=200)
     s = sub.add_parser('status')
     s.add_argument('--out', required=True)
@@ -945,8 +977,7 @@ def main():
     a.add_argument('--max-tool-syntax', type=float, default=0.1)
     a.add_argument('--max-nll-ratio', type=float, default=1.5)
     a.add_argument('--seed', type=int, default=0)
-    args = p.parse_args()
-    {'generate': generate, 'status': status, 'build': build, 'audit': audit}[args.command](args)
+    return p
 
 
 if __name__ == '__main__':

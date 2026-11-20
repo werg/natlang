@@ -139,6 +139,9 @@ def select(args):
     report = {'eligible': len(rows), 'held_excluded': excluded, 'rated': len(rates), 'group_dirs': len(dirs),
               'tiers': counts, 'selected': len(ordered), 'families': len({r.get('family') for r in ordered})}
     out.with_suffix('.report.json').write_text(json.dumps(report, indent=1) + '\n')
+    # the rates the order came from (filled_reasoning generate --prefer-rates: teacher episodes of failed tasks first)
+    out.with_suffix('.rates.json').write_text(json.dumps({k: {'successes': s, 'scored': n} for k, (s, n) in rates.items()},
+                                                         sort_keys=True) + '\n')
     log({'event': 'selected', **report})
 
 
@@ -440,12 +443,24 @@ class Cycle:
         actor = json.loads((self.collect_dir / 'actor.json').read_text())
         if actor['checkpoint_sha256'] != self.start_sha:
             raise SystemExit('collect actor serves another policy')
-        self.ledger(f'{self.a.name}-fill', 6, 'medium',
-                    self.py('filled_reasoning.py', 'generate', '--out', self.a.fill, '--sglang', actor['sglang'],
-                            '--front', actor['url'], '--render-tokenizer', self.work / 'tokenizer',
-                            '--export', actor['export'], '--polite', '--max-running', self.a.slots),
-                    self.dir / 'fill.log', detach=True)
+        self.ledger(f'{self.a.name}-fill', 6, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True)
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
+
+    def fill_command(self, actor):
+        """filled_reasoning.py generate on the collect actor: the seed WORKs then the grpo-sd-teacher role's (first
+        WORK wins a key), teacher episodes of the tasks the student fails first (the select stage's rates: failed, then
+        unmeasured, then by rate; the frontier mix trains teacher trajectories there), and a fixed share of the actor
+        (``--fill-inflight`` draws in flight while collection keeps every slot busy, up to twice that when it does not;
+        spare-slot-only draws would starve beside a 128-slot collection)."""
+        from natlang_neuralese.common import data_registry
+        works = list(dict.fromkeys([*map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
+        rates = self.dir / 'tasks.rates.json'
+        return self.py('filled_reasoning.py', 'generate', '--out', self.a.fill, '--sglang', actor['sglang'],
+                       '--front', actor['url'], '--render-tokenizer', self.work / 'tokenizer', '--export', actor['export'],
+                       '--polite', '--max-running', self.a.slots, '--min-inflight', self.a.fill_inflight,
+                       '--max-inflight', 2 * self.a.fill_inflight, '--workers', self.a.fill_inflight,
+                       *[x for w in works for x in ('--work', w)],
+                       *(('--prefer-rates', rates) if rates.exists() else ()))
 
     def stop_unit(self, unit):
         subprocess.run([*LEDGER, 'cancel', '--unit', unit])
@@ -684,6 +699,8 @@ def main():
     y.add_argument('--slots', type=int, default=128)
     y.add_argument('--kv-gb', type=int, default=12)
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
+    y.add_argument('--fill-inflight', type=int, default=16,
+                   help='filled-reasoning draws kept in flight on the collect actor (twice that when it has spare slots)')
     y.add_argument('--no-teacher-campaign', action='store_true')
     y.add_argument('--replay-workers', type=int, default=8)
     y.add_argument('--teacher-budget', type=int, default=180_000_000)

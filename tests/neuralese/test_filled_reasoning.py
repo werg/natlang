@@ -104,3 +104,64 @@ def test_aux_replaces_names_the_episode_a_filled_unit_stands_in_for():
     assert sft_sources.replaced_round(part, {'round': 'filled:teacher:pool:t1:0'}) == 'teacher:pool:t1:0'
     assert sft_sources.replaced_round(part, {'round': 'filled:rl:run:g1'}) is None
     assert sft_sources.replaced_round(sft_sources.parse_aux('ops=/x.pkl'), {'round': 'filled:teacher:a'}) is None
+
+
+def test_episode_walk_against_a_scripted_engine(monkeypatch):
+    """Filler.episode end to end on a scripted SGLang: draws (natlang_top_k records), prefill scores with input and
+    ``</think>`` logprobs, the hint turn, gates, length-banded choice, filled history; then filled_rows rebuilds it."""
+    import base64
+    import types
+    import pytest
+    from natlang_neuralese.common.paths import root
+    tok_path = root('data_nvme') / 'sft-sources-20261120b' / 'tokenizer' / 'tokenizer.json'
+    if not tok_path.exists():
+        pytest.skip('no LFM3 tokenizer on this machine')
+    from tokenizers import Tokenizer
+    from natlang_neuralese.serve.sglang_actor import TOP_K_KEY
+    tok = Tokenizer.from_file(str(tok_path))
+    close, im_start, im_end = (tok.token_to_id(t) for t in ('</think>', '<|im_start|>', '<|im_end|>'))
+    enc = lambda text: list(tok.encode(text, add_special_tokens=False).ids)   # noqa: E731
+    prompt = enc('<|im_start|>system\nsys<|im_end|>\n<|im_start|>user\ntask<|im_end|>\n<|im_start|>assistant\n<think>')
+    action1, action2 = enc('\n\nread the file') + [im_end], enc('\n\nreturn it') + [im_end]
+    suffix = enc('\n<|im_start|>tool\nfile body<|im_end|>\n<|im_start|>assistant\n<think>')
+    rows = [{'id': 'a', 'invocation': 'i', 'index': 0, 'prompt': np.array(prompt, np.int32),
+             'sample': np.array(enc('teacher plan') + [close] + action1, np.int32)}]
+    rows.append({'id': 'b', 'invocation': 'i', 'index': 1,
+                 'prompt': np.array(prompt + list(rows[0]['sample']) + suffix, np.int32),
+                 'sample': np.array([close] + action2, np.int32)})
+    [chain] = exp0_sft.chains_of([{'task_id': 't', 'round': 'teacher:k', 'rows': rows}])
+    long_block = enc(' I should look at the file before answering, then return what it holds.') * 3 + [close]
+    leaky_block = enc(' the reference says read the file') + [close]
+    record = base64.b64encode(np.float32(-0.5).tobytes() + np.int32(0).tobytes() + np.float16(0).tobytes()).decode()
+    seen = {'hinted_prompts': 0}
+
+    def post(path, body, **_):
+        ids, params = body['input_ids'], body['sampling_params']
+        if params.get('max_new_tokens', 1) > 1:      # a draw: hinted prompts leak, plain ones reason at length
+            hinted = 'Verified reference' in tok.decode(ids, skip_special_tokens=False)
+            seen['hinted_prompts'] += hinted
+            out = leaky_block if hinted else long_block
+            return {'output_ids': out, 'meta_info': {TOP_K_KEY: [record] * len(out)}}
+        if not body.get('return_logprob'):
+            return {}
+        start = body['logprob_start_len']
+        n = len(ids) - start
+        empty = ids[start + 1] == close            # the scored block is the empty one
+        lp = -1.0 if empty else -0.2           # actions are likelier after reasoning than after an empty block
+        return {'meta_info': {'input_token_logprobs': [[lp, i, None] for i in ids[start:]],
+                              'input_token_ids_logprobs': [[[-1.0, close, None]] for _ in range(n)]}}
+    actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None, policy=lambda: {'p': 1})
+    args = types.SimpleNamespace(unhinted=2, hinted=2, hint_horizon=3, hint_response_chars=1500, hint_max_tokens=6000,
+                                 score_horizon=1, max_tokens=512, max_len=32000, band=(0.67, 1.5), close_floor=0.01,
+                                 min_improvement=0.0, ratio_floor=None, top_p=0.95, seed=0)
+    filler = fr.Filler(args, actor, tok, [im_end], [])
+    renderer = types.SimpleNamespace(chains=lambda item: ([chain], None), tokenizer_dir='tok')
+    out = filler.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+    calls = out['chains'][0]['calls']
+    assert seen['hinted_prompts'] == 4 and [c['kind'] for c in calls] == ['filled', 'filled']
+    assert all(c['origin'] == 'unhinted' for c in calls)          # the hinted blocks leaked the hint: rejected
+    hinted = [x for c in calls for x in c['candidates'] if x['origin'] == 'hinted']
+    assert hinted and all(x['leak'] and 'leak' in x['rejected'] for x in hinted)
+    built = fr.filled_rows(fr.calls_of(chain, close), calls, close, 'filled:teacher:k')
+    assert list(built[0]['sample']) == long_block + action1
+    assert list(built[1]['prompt']) == prompt + long_block + action1 + suffix   # the filled block is history
