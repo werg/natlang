@@ -360,6 +360,13 @@ The local delivery verifier checks the sender's observer role and each
 recipient's agent role using their exact IDs and handles. Seven visual recovery
 cases passed controlled renderer checks and are registered in the same catalog.
 
+The 16 native eval recovery goals, including both held-out goals, passed
+managed verification. They cover cancelled and failed evaluations, exact
+retry of the original source and inputs, prior-result fallback, and verified
+scratch handoff. The 333-goal catalog preserves the prior 317 entries.
+The managed collector now passes the registered goal directly as the Natlang
+root's sole argument. Outcome verification also checks the registered goal.
+
 The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised
 tokens, with both open-goal shares at 100%. Bounded Luna provider probes on

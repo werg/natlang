@@ -1,6 +1,10 @@
 {
   "schema": "vibestudio.open-goal-coverage/2",
   "families": {
+    "eval-handoff": {
+      "capabilities": ["workspace-live-eval-recovery", "eval-lifecycle", "workspace-scratch-handoff"],
+      "skills": ["base:skills/sandbox/SKILL.md"]
+    },
     "program-run": {
       "capabilities": ["runtime-live-program-receipts"],
       "skills": ["base:skills/natlang-authoring/SKILL.md"]
@@ -107,6 +111,16 @@
     }
   },
   "cases": {
+    "open-goal-eval-handoff-restart-shelter-current-after-empty-cancel": {
+      "capabilities": {
+        "workspace-live-eval-recovery": ["keptOriginalEvalReceipts", "boundIndependentBlobReadback", "authorizedExactEvalRetry"],
+        "eval-lifecycle": ["keptOriginalEvalReceipts", "replayedSameNativeIdentity", "authorizedExactEvalRetry"]
+      },
+      "skills": { "base:skills/sandbox/SKILL.md": ["keptOriginalEvalReceipts", "authorizedExactEvalRetry"] }
+    },
+    "open-goal-eval-handoff-select-prior-vintage-with-new-complete-copy": {
+      "capabilities": { "workspace-scratch-handoff": ["boundIndependentBlobReadback", "verifiedRetainedEvalScratch", "protectedOwnedEvalContext"] }
+    },
     "open-goal-program-run-ferry-stale-then-current": {
       "capabilities": { "runtime-live-program-receipts": ["ranAuthorizedSamples", "verifiedNativeOutputReceipts", "verifiedSignedOutput"] },
       "skills": { "base:skills/natlang-authoring/SKILL.md": ["inspectedCurrentCallable", "verifiedNativeOutputReceipts"] }
