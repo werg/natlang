@@ -164,7 +164,9 @@ def start_release():
     """Give reclamation its own memory limit, outside the waiter or guard's cgroup."""
     idle = ['ionice', '-c3'] if shutil.which('ionice') else []
     own_unit = ['systemd-run', '--user', '--quiet', '--pipe', '--wait', '--collect', '--unit', 'natlang-cache-reclaim',
-                '-p', 'MemoryMax=26G', '-p', 'MemorySwapMax=0']
+                '-p', 'MemoryMax=26G', '-p', 'MemorySwapMax=0', '-p', f'RuntimeMaxSec={2 * RELEASE_SECONDS}']
+    own_unit += [f'--setenv={name}={os.environ[name]}'
+                 for name in ('NATLANG_MEMORY_LEDGER', 'NATLANG_CACHE_ROOTS') if name in os.environ]
     with contextlib.suppress(OSError):
         return subprocess.Popen(own_unit + idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
                                 stdout=subprocess.PIPE, text=True, start_new_session=True)

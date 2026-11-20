@@ -172,6 +172,7 @@ def test_the_guard_runs_one_walk_at_a_time_backs_off_after_a_poor_one_and_skips_
     assert len(started) == 1 and started[0][-1] == 'release-cache'
     assert started[0][:2] == ['systemd-run', '--user']
     assert 'natlang-cache-reclaim' in started[0] and 'MemoryMax=26G' in started[0]
+    assert f'RuntimeMaxSec={2 * ledger.RELEASE_SECONDS}' in started[0]
 
 
 def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(monkeypatch, tmp_path):
