@@ -554,9 +554,57 @@ class Registry:
             self._index = index
         return self._index
 
+    def _lexical(self):
+        """(key -> dataset id of datasets whose includes are literal, glob bases): the registry's own paths, no
+        filesystem call (``find``'s fast path)."""
+        if getattr(self, '_lexical_index', None) is None:
+            keys, bases, roots = {}, [], {}
+            for ident, ds in self.datasets.items():
+                try:
+                    p = absolute(ds['path'])
+                except (ValueError, KeyError):
+                    continue
+                include = ds.get('include') or []
+                if ds.get('include_manifest') or any(c in part for pattern in include for c in '*?[' for part in [pattern]):
+                    fixed = []
+                    for pattern in include or ['']:
+                        for part in Path(pattern).parts:
+                            if any(c in part for c in '*?['):
+                                break
+                            fixed.append(part)
+                        bases.append(os.path.normpath(str(p.joinpath(*fixed) if fixed else p)))
+                        fixed = []
+                    roots.setdefault(os.path.normpath(str(p)), ident)   # the dataset's own directory names it
+                    continue
+                for target in ([p / pattern for pattern in include] if include else [p]):
+                    keys.setdefault(os.path.normpath(str(target)), ident)
+            self._lexical_index = keys, bases, roots
+        return self._lexical_index
+
     def find(self, path) -> dict | None:
         """The dataset whose directory (or file) contains PATH: longest path wins; checked on the given and the
-        resolved path, so a ``runs/`` link and its target find the same entry."""
+        resolved path, so a ``runs/`` link and its target find the same entry. Fast path first: a dataset with literal
+        includes naming PATH or an ancestor, when no glob dataset's base lies between that match and PATH (no
+        filesystem call; building the full index lists and resolves every dataset directory, minutes under HDD load)."""
+        given = os.path.normpath(os.path.abspath(str(path)))
+        keys, bases, roots = self._lexical()
+        if given in roots and given not in keys:
+            return self.datasets[roots[given]]
+        probe = given
+        while True:
+            if probe in keys:
+                between = [b for b in bases if (b + os.sep).startswith(probe + os.sep) and
+                           (given + os.sep).startswith(b + os.sep)]
+                if not between:
+                    return self.datasets[keys[probe]]
+                break
+            parent = os.path.dirname(probe)
+            if parent == probe:
+                break
+            probe = parent
+        return self._find_full(path)
+
+    def _find_full(self, path) -> dict | None:
         candidates = {os.path.normpath(os.path.abspath(str(path)))}
         try:
             candidates.add(os.path.realpath(path))

@@ -280,3 +280,25 @@ def test_leading_wildcard_include_claims_only_matching_entries(roots):
     reg = dr.load(repo=repo, fresh=True)
     assert reg.find(repo / 'runs' / 'succ-v1' / 'x.jsonl')['id'] == 'legacy'
     assert reg.find(repo / 'runs' / 'other' / 'cases.jsonl') is None
+
+
+def test_find_takes_the_lexical_fast_path_and_agrees_with_the_full_index(roots, monkeypatch):
+    work = roots / 'data_nvme' / 'work'
+    pool(work / 'episodes.jsonl', ['a'])
+    pool(work / 'sub' / 'inner.jsonl', ['b'])
+    literal = roots / 'data_nvme' / 'lit'
+    pool(literal / 'cases.jsonl', ['c'])
+    dr.record_dataset('work', work, kind='trajectories', format='f', include=['*.jsonl'])
+    dr.record_dataset('lit', literal, kind='rl-tasks', format='f')
+    dr.record_dataset('inner', work / 'sub', kind='rl-tasks', format='f', include=['*.jsonl'])
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    inner = work / 'sub' / 'inner.jsonl'
+    full = {p: (reg._find_full(p) or {}).get('id') for p in (literal / 'cases.jsonl', literal, work, work / 'sub', inner)}
+    calls = []
+    monkeypatch.setattr(reg, '_find_full', lambda p: calls.append(p) or {'id': full.get(p)})
+    # literal datasets and a glob dataset's own directory: no filesystem index
+    assert reg.find(literal / 'cases.jsonl')['id'] == 'lit' and reg.find(literal)['id'] == 'lit'
+    assert reg.find(work)['id'] == 'work' and reg.find(work / 'sub')['id'] == full[work / 'sub'] == 'inner'
+    assert not calls
+    # a file a glob dataset claims is the full index's question
+    assert reg.find(inner)['id'] == full[inner] == 'inner' and calls == [inner]
