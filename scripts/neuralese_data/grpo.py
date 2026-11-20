@@ -5450,9 +5450,10 @@ def main():
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--held-remote', choices=('pop',), help="measure held on Pop's GPU in parallel with training instead of "
                    'pausing collection on the training actor (pop_held_loop)')
-    t.add_argument('--held-remote-gb', type=float, default=11.,
-                   help="with --held-remote: ledger budget of each evaluation's own DGX unit (its collector processes: "
-                        '0.26-0.4 GB per slot, as ops/grpo-v4/pop-held.sh claims)')
+    t.add_argument('--held-remote-gb', type=float, default=5.,
+                   help="with --held-remote: ledger budget of each evaluation's own DGX unit (its collector processes "
+                        'share node processes; grpo-v5 step 1 at 20 slots peaked at 3.6 GB, and 11 GB kept step 3 queued '
+                        'beside the learner)')
     t.add_argument('--held-remote-inline', action='store_true',
                    help='with --held-remote: run each evaluation inside this process (before 2026-11-20; a restart kills '
                         'it) instead of its own ledger unit that survives restarts')
