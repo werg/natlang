@@ -52,6 +52,7 @@ import re
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -243,11 +244,22 @@ class Actor:
         self.policy_at, self.policy_value = 0., None
         self.counts = collections.Counter()
 
-    def post(self, path, body, timeout=7200):
-        request = urllib.request.Request(self.url + path, data=json.dumps(body).encode(),
-                                         headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read())
+    def post(self, path, body, timeout=7200, down_for=4 * 3600):
+        """POST to SGLang; a refused connection (a training run releases its actor during the learner phase, and
+        restarts it at resumes) waits and retries for up to ``down_for`` seconds."""
+        deadline = time.time() + down_for
+        while True:
+            request = urllib.request.Request(self.url + path, data=json.dumps(body).encode(),
+                                             headers={'Content-Type': 'application/json'})
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    return json.loads(response.read())
+            except urllib.error.URLError as error:
+                refused = isinstance(getattr(error, 'reason', None), (ConnectionRefusedError, ConnectionResetError))
+                if not refused or time.time() > deadline:
+                    raise
+                self.counts['actor_down_waits'] += 1
+                time.sleep(15)
 
     def get(self, url, timeout=10):
         with urllib.request.urlopen(url, timeout=timeout) as response:
@@ -497,13 +509,12 @@ def done_keys(out):
 def generate(args):
     from tokenizers import Tokenizer
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.common.paths import resolve_str
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     works = args.work or default_works()
     held = args.held_manifest or data_registry.role_path('held-eval')
     data_registry.consume([*works, held], run=f'filled-reasoning:{out}', how='teacher episodes to fill')
-    export = Path(resolve_str(args.export))
+    export = Path(args.export)
     tokenizer = Tokenizer.from_file(str(export / 'tokenizer.json'))
     # the rendering tokenizer must be the served one (ids pass through unchanged)
     if sha256_file(Path(args.render_tokenizer) / 'tokenizer.json') != sha256_file(export / 'tokenizer.json'):
@@ -872,7 +883,7 @@ def audit(args):
               'funnel': {k: dict(v) for k, v in funnel.items()}}
     (out / 'audit.json').write_text(json.dumps(report, indent=1) + '\n')
     (out / 'treatment.json').write_text(json.dumps(treatment, indent=1, sort_keys=True) + '\n')
-    data_registry.record_dataset(data_registry.dataset_id(out, 'teacher-think-treatment'), out, kind='metadata',
+    data_registry.record_dataset(data_registry.dataset_id(out, 'teacher-think-treatment'), out, kind='index',
                                  include=['audit.json', 'treatment.json'], inputs=works,
                                  format=f'{TREATMENT_SCHEMA}: treatment.json (sft_sources.ThinkTreatment), audit.json',
                                  license='derived', producer={'script': 'scripts/neuralese_data/filled_reasoning.py'})
