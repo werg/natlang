@@ -117,8 +117,25 @@ def code_constants():
                 out[name] = {'line': node.lineno, 'value': [p for p in map(_resolve_call, node.value.elts) if p]}
             else:
                 out[name] = {'line': node.lineno, 'value': _resolve_call(node.value)}
+    # The trainer may name its default data through registry roles instead of constants (data_registry.role_paths):
+    # read those roles for whatever the file no longer lists.
+    roles = {'POOLS': ('grpo-pool', True), 'MEMETIC_TASKS': ('grpo-memetic-tasks', False), 'SD_TEACHER_SOURCES': ('grpo-sd-teacher', True), 'HELD': ('held-eval', False)}
+    for name, (role, many) in roles.items():
+        if name in out:
+            continue
+        try:
+            from natlang_neuralese.common import data_registry
+            v = data_registry.role_paths(role) if many else data_registry.role_path(role)
+        except Exception:
+            continue
+        out[name] = {'line': None, 'role': role, 'value': list(v) if many else v}
     _CODE.update(sig=s, v=out)
     return out
+
+
+def _cref(entry, name):
+    """Where the trainer names a dataset: 'grpo.py:108 POOLS', or 'registry role grpo-pool'."""
+    return f"registry role {entry['role']}" if entry.get('role') else f"grpo.py:{entry['line']} {name}"
 
 
 def _slug(path):
@@ -133,7 +150,7 @@ def task_pools():
     for p in c.get('POOLS', {}).get('value', []):
         d = os.path.dirname(p)
         name = os.path.basename(d) if os.path.basename(d) != os.path.basename(os.path.dirname(d)) else os.path.basename(d)
-        pools.append({'id': f'pool:{name}', 'path': p, 'title': name, 'line': c['POOLS']['line']})
+        pools.append({'id': f'pool:{name}', 'path': p, 'title': name, 'line': c['POOLS']['line'], 'ref': _cref(c['POOLS'], 'POOLS')})
     return pools
 
 
@@ -353,15 +370,15 @@ def _build_catalog():
     c = code_constants()
     # RL task pools in POOLS
     for pool in task_pools():
-        out.append({**_task_pool_ds(pool['path'], pool['title'], 'RL task pools', code_ref=f"grpo.py:{pool['line']} POOLS"), 'id': pool['id']})
+        out.append({**_task_pool_ds(pool['path'], pool['title'], 'RL task pools', code_ref=pool['ref']), 'id': pool['id']})
     mt = (c.get('MEMETIC_TASKS') or {}).get('value')
     if mt:
-        out.append({**_task_pool_ds(mt, os.path.basename(os.path.dirname(mt)), 'RL task pools', code_ref=f"grpo.py:{c['MEMETIC_TASKS']['line']} MEMETIC_TASKS"),
+        out.append({**_task_pool_ds(mt, os.path.basename(os.path.dirname(mt)), 'RL task pools', code_ref=_cref(c['MEMETIC_TASKS'], 'MEMETIC_TASKS')),
                     'id': 'memetic-tasks-' + os.path.basename(os.path.dirname(mt)).split('-')[-1]})
     held = (c.get('HELD') or {}).get('value')
     if held:
         d = os.path.dirname(held)
-        out.append({**_task_pool_ds(d + '/cases.jsonl', 'held-v3 (the held-out set)', 'Held-out (protected)', code_ref=f"grpo.py:{c['HELD']['line']} HELD", protected=True),
+        out.append({**_task_pool_ds(d + '/cases.jsonl', 'held-v3 (the held-out set)', 'Held-out (protected)', code_ref=_cref(c['HELD'], 'HELD'), protected=True),
                     'id': 'held-v3', 'manifest': held,
                     'note': 'View only. 256 tasks paired against the base policy; training excludes these ids and their split groups (held_eval.exclusion_ids).'})
     er = (c.get('ERRATA') or {}).get('value')
@@ -391,7 +408,7 @@ def _build_catalog():
         for hd in sorted(glob.glob(d + '/held/step-*/result.json')):
             h = os.path.dirname(hd)
             out.append({'id': f"held-eval:{r['run']}:{os.path.basename(h)}", 'title': f"{r['run']} {os.path.basename(h)}", 'group': 'Held-out evaluations (protected)',
-                        'kind': 'held', 'reader': 'held-eval', 'path': h, 'protected': True, 'parts': [{'id': 'samples', 'title': 'Episodes'}],
+                        'kind': 'held', 'reader': 'held-eval', 'path': h, 'protected': True, 'parts': [{'id': 'tasks', 'title': 'Per task vs base'}, {'id': 'samples', 'title': 'Episodes'}],
                         'format': 'held eval directory (result.json, row-RRR/sample-KK/results.jsonl native traces)', 'run': r['run'], 'hidden': True})
     # teacher-gen campaigns
     for tc in teacher_campaigns():
@@ -428,7 +445,7 @@ def _build_catalog():
                   'records': [x for x in s.get('side', []) if os.path.exists(f'{d}/{x}')], 'source': 'catalog_sources.json'},
                   'relations': {k: s[k] for k in ('superseded_by',) if s.get(k)}, 'consumers_note': s.get('consumers_note')}
             if os.path.normpath(d) in sd_set:
-                ds['code_consumer'] = f"grpo.py:{c['SD_TEACHER_SOURCES']['line']} SD_TEACHER_SOURCES (TeacherDemos, self-distillation)"
+                ds['code_consumer'] = f"{_cref(c['SD_TEACHER_SOURCES'], 'SD_TEACHER_SOURCES')} (TeacherDemos, self-distillation)"
             files = s.get('files') or ({'tasks': s['file']} if s.get('file') else {})
             if s['reader'] == 'sft-mix':
                 files = {'rows': 'rows.jsonl.zst', 'cases': 'cases.jsonl'}
@@ -486,11 +503,52 @@ def dataset(ds_id):
     raise QueryError(f'unknown dataset {ds_id}', 'not_found')
 
 
+WHAT = {'rl-tasks': 'RL tasks with exact oracles (natlang programs, worlds, expected results)',
+        'held': 'Held-out evaluation data: never trained on, view only',
+        'run': 'GRPO run: per-step selection, sampled groups and episodes, held evals',
+        'teacher-demos': 'Teacher attempts on pool tasks, with outcomes',
+        'trajectories': 'Episodes: every model call with context, reply, tool calls and sampled tokens',
+        'sft-rows': 'SFT rows: one model call each, context (weight 0) and trained target',
+        'chains': 'Learner-ready chains (token ids with trained segments)',
+        'corpus': 'Upstream source data, before conversion into tasks or rows',
+        'index': 'Index or registry over other datasets'}
+
+
+def describe(ds):
+    """(one-line description, how the catalog found it) in plain words."""
+    prov = ds.get('provenance') or {}
+    what = ds.get('description') or WHAT.get(ds.get('kind'), '')
+    if ds.get('reader') == 'teacher-gen':
+        what = 'Teacher-generation campaign: tasks drawn from RL pools, teacher episodes and outcomes'
+    elif ds.get('reader') == 'sft-mix':
+        what = 'Built SFT mix: per-call rows from teacher demos, own RL successes and operators, with loss shares'
+    ref = prov.get('code_ref') or ''
+    if ref:
+        name = ref.split()[-1] if not ref.startswith('registry role') else ref.split()[-1]
+        found = {'POOLS': 'trainer task pools (grpo.py POOLS)', 'grpo-pool': 'registry role grpo-pool (trainer default pools)', 'MEMETIC_TASKS': 'trainer memetic tasks (grpo.py)', 'HELD': 'trainer held set (grpo.py HELD)',
+                 'ERRATA': 'trainer errata directory (grpo.py)'}.get(name, f'registry role {name}' if ref.startswith('registry role') else f'trainer constant {name}')
+    elif prov.get('registry'):
+        found = 'corpus registry'
+    elif ds.get('reader') == 'grpo-run':
+        found = 'run directory (runs.jsonl)'
+    elif ds.get('reader') == 'teacher-gen':
+        found = 'teacher-gen campaign directory'
+    elif prov.get('source') == 'catalog_sources.json':
+        found = 'hand list (catalog_sources.json)'
+    elif ds.get('reader') == 'registry':
+        found = 'the registry file itself'
+    else:
+        found = 'run records'
+    return what, found
+
+
 def _card(ds):
     keep = ('id', 'title', 'group', 'kind', 'reader', 'path', 'protected', 'size_bytes', 'rows', 'rows_estimated', 'mtime', 'missing', 'consumers',
             'relations', 'consumers_note', 'note', 'run', 'hidden')
     out = {k: ds.get(k) for k in keep if ds.get(k) is not None}
     prov = ds.get('provenance') or {}
+    out['what'], out['found_via'] = describe(ds)
+    out['format'] = ds.get('format')
     out['provenance_brief'] = {'registered': bool(prov.get('registry')), 'code_ref': prov.get('code_ref'), 'producer': prov.get('producer'),
                                'records': prov.get('records'), 'license': (prov.get('registry') or {}).get('license_provenance') or (prov.get('registry') or {}).get('license')}
     return out
@@ -507,11 +565,16 @@ def data_catalog(_):
 def data_dataset(inp):
     ds = dict(dataset(inp.get('ds')))
     ds.pop('parts_map', None)
+    ds['what'], ds['found_via'] = describe(ds)
     if ds['reader'] == 'grpo-run':
         from data_items import rollout_archive, run_args
         args, rec = run_args(ds['path'])
         ds['args'] = args
+        ds['settings'] = (rec or {}).get('args') or {}
         ds['code'] = (rec or {}).get('code')
+        ds['started'] = (rec or {}).get('started')
+        pj = read_json(ds['path'] + '/pool.json', {})
+        ds['errata_files'] = [p.get('path') for p in pj.get('excluded_errata') or []]
         ds['rollouts'] = rollout_archive(ds['path'])
     if ds.get('manifest'):
         m = read_json(ds['manifest'], {})

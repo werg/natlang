@@ -14,7 +14,7 @@ const S = {
   acked: store('ops.acked') || {}, slots: store('ops.slots') || {}, tab: 'overview', sel: new Set(), selTouched: false,
   smooth: store('ops.smooth') ?? 0.3, logy: false, extra: store('ops.extra') || '', tables: new Set(), open: new Set(), showAcked: false,
   q: '', procMachine: 'all', procState: 'live', evAll: false, hold: false, sent: 0, route: '', gate: null,
-  dui: { forms: {}, taskTab: {}, file: {}, traj: { reasoning: true, context: true, results: true }, tokens: {}, cmp: [] },
+  dui: { forms: {}, taskTab: {}, file: {}, traj: { reasoning: false, context: false, results: false, ...(store('ops.traj') || {}) }, tokens: {}, cmp: [] },
 };
 const runLink = id => h('a', { class: 'btn sm', href: dl.run(id), title: 'Steps, selected groups, episodes and held evals of this run' }, 'Training data');
 const TABS = [['overview', 'Overview'], ['training', 'Training'], ['data', 'Training data'], ['held', 'Held-out'], ['units', 'Units'], ['machines', 'Machines'], ['teachers', 'Teachers'], ['backlog', 'Queue & fallow'], ['investigations', 'Investigations'], ['inbox', 'Inbox']];
@@ -304,8 +304,10 @@ function held() {
     const sig = x.p != null && x.p < 0.05, cls = sig ? (x.delta_pts > 0 ? 'sig-good' : 'sig-bad') : '';
     rows.append(h('tr', { class: cls }, h('td', {}, h('span', { class: 'swatch', style: `background:${slotVar(slotOf(r.id))}` }), h('a', { href: dl.ds('grpo:' + r.id.replace(/\./g, '/'), { part: 'held' }) }, r.id)), h('td', { class: 'n' }, x.held_dir ? h('a', { href: dl.ds(`held-eval:${r.id.replace(/\./g, '/')}:${x.held_dir}`), title: 'Every held episode of this evaluation (view only)' }, x.step) : x.step), h('td', { class: 'n' }, h('b', {}, signed(x.delta_pts, 1)), ' pts'),
       h('td', { class: 'n' }, x.ci_lo != null ? `[${signed(100 * x.ci_lo, 1)}, ${signed(100 * x.ci_hi, 1)}]` : '—'), h('td', { class: 'n' }, fmt(x.p, 2)),
-      h('td', { class: 'n' }, num(x.first_rate) ? `${(100 * x.first_rate).toFixed(1)}% → ${(100 * x.second_rate).toFixed(1)}%` : '—'), h('td', { class: 'n' }, `${x.tasks_up ?? '—'} up / ${x.tasks_down ?? '—'} down`),
-      h('td', { class: 'n' }, fmt(x.mcnemar_p, 2)), h('td', { class: 'n' }, num(x.loop_rate_delta) ? signed(100 * x.loop_rate_delta, 1, ' pts') : '—'), h('td', { class: 'n' }, `${x.ran ?? '?'}/${x.of ?? '?'}${x.complete ? '' : ' (partial)'}`), h('td', {}, sig ? h('span', { class: `chip ${x.delta_pts > 0 ? 'ok' : 'crit'}` }, x.delta_pts > 0 ? '✔ gain' : '✖ regression') : h('span', { class: 'chip' }, 'not significant'))));
+      h('td', { class: 'n' }, num(x.first_rate) ? `${(100 * x.first_rate).toFixed(1)}% → ${(100 * x.second_rate).toFixed(1)}%` : '—'), h('td', { class: 'n' }, x.held_dir ? [h('a', { href: dl.ds(`held-eval:${r.id.replace(/\./g, '/')}:${x.held_dir}`, { 'f.direction': 'improved' }), title: 'Tasks that passed more often than on the start policy' }, `${x.tasks_up ?? '—'} up`), ' / ',
+        h('a', { href: dl.ds(`held-eval:${r.id.replace(/\./g, '/')}:${x.held_dir}`, { 'f.direction': 'regressed' }), title: 'Tasks that passed less often: open their episodes' }, `${x.tasks_down ?? '—'} down`)] : `${x.tasks_up ?? '—'} up / ${x.tasks_down ?? '—'} down`),
+      h('td', { class: 'n' }, fmt(x.mcnemar_p, 2)), h('td', { class: 'n' }, num(x.loop_rate_delta) ? signed(100 * x.loop_rate_delta, 1, ' pts') : '—'), h('td', { class: 'n' }, `${x.ran ?? '?'}/${x.of ?? '?'}${x.complete ? '' : ' (partial)'}`), h('td', {}, sig ? h('span', { class: `chip ${x.delta_pts > 0 ? 'ok' : 'crit'}` }, x.delta_pts > 0 ? '✔ gain' : '✖ regression') : h('span', { class: 'chip' }, 'not significant'),
+        x.held_dir && x.delta_pts < 0 ? h('a', { class: 'btn sm', style: 'margin-left:6px', href: dl.ds(`held-eval:${r.id.replace(/\./g, '/')}:${x.held_dir}`, { 'f.direction': 'regressed' }) }, 'Regressed episodes') : null)));
   }
   v.append(h('div', { class: 'card', style: 'margin-top:14px' }, h('header', {}, h('h2', {}, 'Every paired held evaluation')), h('div', { class: 'scroll', style: 'max-height:none' }, h('table', {}, h('thead', {}, h('tr', {}, ['run', 'step', 'change', '95% CI', 'p', 'pass rate base → policy', 'tasks', 'McNemar p', 'ran-out Δ', 'ran / of', 'verdict'].map((c, i) => h('th', { class: i > 0 && i < 10 ? 'n' : '' }, c)))), rows))));
   return v;
@@ -453,6 +455,7 @@ $('view').addEventListener('focusout', () => { if (softPending) { softPending = 
 function unanswered() { const ib = src?.inbox.get(); return ib ? ib.asks.filter(a => a.kind !== 'ack_alert' && !ib.answers.some(x => x.ask === editRef(a.operationId))).length : 0; }
 function chrome(hv) {
   const pill = $('health'), ic = pill.querySelector('.ic');
+  pill.hidden = !src;
   pill.className = `pill ${hv.level}`; ic.textContent = hv.level === 'ok' ? '✔' : hv.level === 'crit' ? '✖' : '▲'; $('health-text').textContent = hv.title;
   pill.onclick = () => go('overview');
   freshness();
@@ -460,27 +463,29 @@ function chrome(hv) {
 function freshness() {
   const el = $('fresh'), age = S.snap ? now() - S.snap.ts : null;
   el.className = `live ${age == null ? 'dead' : age < 90e3 ? 'fresh' : age < SNAP_STALE_MS * 2 ? 'stale' : 'dead'}`;
-  $('fresh-text').textContent = age == null ? 'no data yet' : `data ${dur(age / 1000)} old`;
+  $('fresh-text').textContent = !src ? 'not connected' : age == null ? 'connected, waiting for data' : `data ${dur(age / 1000)} old`;
 }
 function render() {
   const hv = health(S.snap, now(), S.acked);
   document.title = `${hv.level === 'ok' ? '✔' : hv.level === 'crit' ? '✖' : '▲'} natlang ops`;
   chrome(hv); tabs(hv);
+  $('tabs').hidden = !!S.gate;
   document.documentElement.style.setProperty('--hdr', `${document.querySelector('.top').offsetHeight}px`);
   const view = $('view'), keepScroll = window.scrollY;
   const detKey = (() => { const seen = new Map(); return d => { const t = (d.querySelector(':scope > summary')?.textContent || '').slice(0, 80); const n = (seen.get(t) || 0) + 1; seen.set(t, n); return `${t}#${n}`; }; });
   const openState = new Map(), k1 = detKey();
   view.querySelectorAll('details').forEach(d => openState.set(k1(d), d.open));
   const next = h('div', {});
-  const banner = S.tab === 'data' ? (hv.open.length ? h('div', { class: 'alertline' }, h('span', { class: `tone-${hv.level}` }, levelIcon(hv.level), ` ${hv.open.length} open alert${hv.open.length > 1 ? 's' : ''}: `), hv.open[0].text, ' ', h('a', { href: '#overview' }, 'Overview')) : null) : alertsView(hv);
+  const banner = S.gate || !src ? null : S.tab === 'data' ? (hv.open.length ? h('div', { class: 'alertline' }, h('span', { class: `tone-${hv.level}` }, levelIcon(hv.level), ` ${hv.open.length} open alert${hv.open.length > 1 ? 's' : ''}: `), hv.open[0].text, ' ', h('a', { href: '#overview' }, 'Overview')) : null) : alertsView(hv);
   if (banner) next.append(banner);
   if (S.gate) { next.append(S.gate); view.replaceChildren(next); return; }
-  if (!S.snap && S.tab !== 'data') next.append(h('div', { class: 'notice' }, 'Waiting for the first snapshot. If this stays, the exporter unit or the native ops participant is not running.'));
+  if (!S.snap && S.tab !== 'data') next.append(h('div', { class: 'notice' }, 'Connected. The first snapshot comes from the DGX within about 30 seconds. If nothing arrives in a minute, the exporter or the native ops participant on the DGX is not running.'));
   try { next.append((VIEWS[S.tab] || overview)(hv)); } catch (e) { next.append(h('div', { class: 'alert crit' }, `This section failed to draw: ${e.message}`)); console.error(e); }
   view.replaceChildren(next);
+  if (restoreTo != null && document.documentElement.scrollHeight > restoreTo + innerHeight * 0.5) { window.scrollTo({ top: restoreTo }); restoreTo = null; }
   const k2 = detKey();
   next.querySelectorAll('details').forEach(d => { const k = k2(d); if (openState.has(k)) d.open = openState.get(k); });
-  window.scrollTo({ top: keepScroll });
+  if (restoreTo == null) window.scrollTo({ top: keepScroll });
 }
 
 /* ---------- boot ---------- */
@@ -500,13 +505,61 @@ function fromHash() {
   if (TABS.some(([id]) => id === tab)) { S.tab = tab; S.route = rest.join('/'); }
 }
 fromHash();
-addEventListener('hashchange', () => { fromHash(); render(); window.scrollTo({ top: 0 }); });
+/* Back/forward restore the scroll position a route was left at; a link to a new route starts at the top; a change of
+   query only (filters, tabs, sort) keeps the position. Positions are restored once the route's data has drawn. */
+const scrollAt = new Map();
+let lastHash = location.hash, forward = false, restoreTo = null;
+document.addEventListener('click', e => { if (e.target.closest?.('a[href^="#"]')) forward = true; }, true);
+addEventListener('scroll', () => { scrollAt.set(location.hash, window.scrollY); }, { passive: true });
+addEventListener('hashchange', () => {
+  const path = h0 => h0.split('?')[0], samePath = path(location.hash) === path(lastHash);
+  lastHash = location.hash; fromHash(); render();
+  if (samePath) return;
+  if (!forward && scrollAt.has(location.hash)) { restoreTo = scrollAt.get(location.hash); window.scrollTo({ top: restoreTo }); } else { restoreTo = null; window.scrollTo({ top: 0 }); }
+  forward = false;
+});
+/* Keyboard: / search · j/k move through rows or calls · Enter opens the row · [ ] previous/next sample · Esc leaves a field · ? help */
+addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const inField = e.target.matches?.('input, textarea, select, [contenteditable]');
+  if (e.key === 'Escape' && inField) { e.target.blur(); return; }
+  if (inField) return;
+  if (e.key === '/') { const box = document.querySelector('.catside input[type=search], .datatools input[type=search]'); if (box) { e.preventDefault(); box.focus(); box.select(); } return; }
+  if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+  if (S.tab !== 'data') return;
+  const calls = [...document.querySelectorAll('section.call[id^="call-"]')];
+  if ((e.key === 'j' || e.key === 'k') && calls.length) {
+    const cur = document.querySelector('.callrail a.current')?.dataset.call;
+    const i = Math.max(0, Math.min(calls.length - 1, (cur == null ? -1 : Number(cur)) + (e.key === 'j' ? 1 : -1)));
+    calls[i].scrollIntoView({ block: 'start' }); document.querySelectorAll('.callrail a').forEach(x => x.classList.toggle('current', x.dataset.call === String(i))); return;
+  }
+  const rows = [...document.querySelectorAll('.kbrow')];
+  if ((e.key === 'j' || e.key === 'k') && rows.length) {
+    e.preventDefault();
+    let i = rows.findIndex(r => r.classList.contains('kbsel'));
+    i = i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + (e.key === 'j' ? 1 : -1)));
+    rows.forEach((r, k) => r.classList.toggle('kbsel', k === i)); rows[i].scrollIntoView({ block: 'nearest' }); return;
+  }
+  if (e.key === 'Enter') { const r = document.querySelector('.kbrow.kbsel'); if (r?.dataset.href) { forward = true; location.hash = r.dataset.href; } return; }
+  if (e.key === '[' || e.key === ']') {
+    const pills = [...document.querySelectorAll('.samplenav .sbtn')], i = pills.findIndex(x => x.classList.contains('on'));
+    const t = pills[i + (e.key === ']' ? 1 : -1)]; if (t) { forward = true; location.hash = t.getAttribute('href'); }
+  }
+});
+function toggleHelp() {
+  const old = document.getElementById('kbhelp'); if (old) { old.remove(); return; }
+  const k = x => h('kbd', {}, x);
+  document.body.append(h('div', { id: 'kbhelp', class: 'card kbhelp', role: 'dialog', 'aria-label': 'Keyboard shortcuts', onclick: e => { if (e.target.id === 'kbhelp' || e.target.tagName === 'BUTTON') toggleHelp(); } },
+    h('h3', {}, 'Keyboard'), h('dl', { class: 'kvgrid' }, [[k('/'), 'search or filter'], [[k('j'), k('k')], 'next / previous row, or call in an episode'], [k('Enter'), 'open the selected row'],
+      [[k('['), k(']')], 'previous / next sample of a group'], [k('Esc'), 'leave a text field'], [k('?'), 'this help']].map(([a1, b]) => [h('dt', {}, a1), h('dd', {}, b)])), h('button', { class: 'btn sm' }, 'Close')));
+}
 setInterval(freshness, 5000);
 setInterval(() => { if (!S.hold && S.tab !== 'data') render(); }, 60000);
 
 /** Start the dashboard on a connected source (session or preview). Before this, `gate` (the connection panel) is shown. */
 export function start(source) {
   src = source; S.gate = null;
+  if (src.kind === 'preview') document.querySelector('.top .brand')?.append(h('span', { class: 'chip warn previewchip', title: 'A local preview of the page over the DGX exporter files and data service. Edits made here stay in this preview server and are not applied.' }, 'local preview'));
   src.ticks.on(t => { if (t) void pull(t); });
   for (const c of [src.edits, src.inbox, src.pending]) c.on(() => { if (S.tab === 'data' || S.tab === 'inbox') softRender(); else schedule(); });
   void pull(null);

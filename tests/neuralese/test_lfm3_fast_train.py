@@ -989,3 +989,42 @@ def test_chosen_retained_bound_has_the_least_estimated_compute_and_exact_gradien
         for p in whole.parameters():
             p.grad = None
     assert split_seen
+
+
+def test_exp0_ambient_tm_step_with_shared_prefixes_equals_whole_chains():
+    """Ambient SFT on the fast path: the frozen teacher's rows through the prefix tree equal whole chains, the policy is
+    restored exactly after the teacher forward, and the TM step's loss and gradients match whole chains."""
+    import exp0_sft
+    chains = _sft_chains()
+    denominator = sum(exp0_sft.chain_mass(c) for c in chains)
+    _, whole = _pair()
+    _, tree = _pair()
+    teacher = {name: p.detach().clone() for name, p in whole.named_parameters()}
+    with torch.no_grad():
+        for p in whole.parameters():
+            p.add_(0.05 * torch.randn_like(p))
+    tree.load_state_dict(whole.state_dict())
+    results = {}
+    for label, model, share, mode in (('whole', whole, 0, 'levels'), ('levels', tree, 2, 'levels'),
+                                      ('tree-mask', tree, 2, 'tree-mask')):
+        live = dict(model.named_parameters())
+        masters = {name: p.detach().clone() for name, p in live.items()}
+
+        def restore(live=live, masters=masters):
+            with torch.no_grad():
+                torch._foreach_copy_(list(live.values()), [masters[name] for name in live])
+        rows = exp0_sft.ambient_teacher_rows(model, lfm3_fast_train.hidden, chains, live, teacher, restore, 13, 1.,
+                                             share, mode=mode, tree_batch_tokens=30)
+        assert all(torch.equal(p, masters[name]) for name, p in live.items())
+        model.zero_grad()
+        ambient = {'temperature': 2.5, 'head': teacher['lm_head.weight'] if 'lm_head.weight' in teacher
+                   else teacher['model.embed_tokens.weight'], 'rows': rows}
+        loss, _ = exp0_sft.step_backward(model, lfm3_fast_train.hidden, chains, denominator, 13, 1., share, mode=mode,
+                                         tree_batch_tokens=30, ambient=ambient)
+        results[label] = (rows, loss, ambient['kl'])
+        if label != 'whole':
+            for index in rows:
+                torch.testing.assert_close(rows[index], results['whole'][0][index], rtol=1e-4, atol=1e-5)
+            assert abs(loss - results['whole'][1]) <= 1e-5 * abs(results['whole'][1])
+            _grads_close(whole, tree, f'ambient {label}')
+    assert results['whole'][2] > 0

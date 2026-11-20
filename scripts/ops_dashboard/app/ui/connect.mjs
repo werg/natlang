@@ -80,6 +80,10 @@ export async function createConnection(ui) {
           ...(identity?.documentPath ? { documentPath: identity.documentPath } : {}), ...(identity?.publication ? { publicationId: identity.publication } : {}) },
         onOwnerReplaced() { ui.status('The session owner restarted. Reload to reconnect this device.', 'warn'); },
       });
+      try { return await mount(attachment); } catch (e) { await attachment.detach().catch(() => {}); throw e; }
+    },
+  };
+  async function mount(attachment) {
       const session = attachment.session;
       if (!window.tendril) throw Error('Open the published Tendriller page to install its runtime binding.');
       window.tendril.application.install(createApplicationBackend({ id: session.applicationId, session }));
@@ -98,8 +102,7 @@ export async function createConnection(ui) {
       return { kind: 'session', deviceId: session.deviceId, nativeDeviceId: configuration.nativeDeviceId,
         query: (q, input, opts) => client.query(q, input, opts), command: (n, i) => tracker.submit(n, i),
         retry: id => tracker.retry(id), dismiss: id => tracker.dismiss(id), edits, inbox, pending, ticks };
-    },
-  };
+  }
 }
 
 /** Preview source: the same interface over the local preview server (no session; commands are kept in its memory only). */

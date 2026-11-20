@@ -145,7 +145,7 @@ def test_code_constants_parse(tmp_path, monkeypatch):
 
 
 def test_live_grpo_constants_resolve():
-    """The catalog reads the trainer's real constants: every POOLS entry must resolve to a path."""
+    """The catalog reads the trainer's real default pools (grpo.py POOLS, or its registry role): each resolves to a path."""
     data_catalog._CODE.clear()
     c = data_catalog.code_constants()
     assert len(c['POOLS']['value']) >= 2 and all(p.endswith('cases.jsonl') for p in c['POOLS']['value'])

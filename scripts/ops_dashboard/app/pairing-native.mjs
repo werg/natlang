@@ -62,12 +62,14 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
   const transition = verified.bundle.generations.find(generation => generation.payload.transition.payload.transitionId === `pair-${id}`);
   // Resolve the original receipt before judging the newer selected generation.
   // Later revocation never triggers another admission of this key.
+  const auto = await restore(saved(id, 'commit'), true);
+  const autoCommitted = Boolean(auto?.ownerAuto);
   if (transition) {
-    if (!['committed', 'revoked'].includes(result.state))
+    if (!autoCommitted && !['committed', 'revoked'].includes(result.state))
       throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The host has not verified this exact reviewed control/account outcome. Preserve the pause and original transition.');
     const prepared = original ?? result.prepared;
     if (!prepared || await peerDigest(transition.payload.transition) !== await peerDigest(prepared.request) ||
-        !result.generation || await peerDigest(result.generation) !== await peerDigest(transition))
+        !autoCommitted && (!result.generation || await peerDigest(result.generation) !== await peerDigest(transition)))
       throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The original pairing receipt does not match the retained signed attempt. Keep ordering paused for reconciliation.');
     const control = verified.bundle.controls[transition.payload.controlRevision]?.payload;
     const expected = prepared.control;
@@ -79,9 +81,10 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
     await session.adopt(authority);
     await persist(saved(id, 'outcome'), { pairingId: id, generation: transition });
     if (pause) await session.resumeOrdering(pause.operationId);
-    onStatus({ pairingId: id, state: result.state, nextAction: result.nextAction });
-    return result;
+    onStatus({ pairingId: id, state: autoCommitted ? 'owner-enrolled' : result.state, nextAction: result.nextAction });
+    return autoCommitted ? { ...result, state: 'committed' } : result;
   }
+  if (autoCommitted) throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The owner enrollment was sent but is not yet in verified authority. Keep the pause; the next pass re-reads authority.');
   if (result.generation || ['committed', 'reconciliation_required'].includes(result.state))
     throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The host outcome is not present in verified authority. Preserve the pause and original request.');
   if (['denied', 'expired', 'stale'].includes(result.state)) {
@@ -131,6 +134,16 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
     if (typeof pairing.client.prepare !== 'function') throw fail('PAIRING_PREPARE_REQUIRED', 'The selected host and SDK must support review of the exact prepared transition.');
     result = assertPairingContext(await pairing.client.prepare(id, prepared, { signal }), pairing, id);
     if (result.preparedDigest !== digest) throw fail('PAIRING_PROPOSAL_CHANGED', 'The host did not retain this exact prepared proposal.');
+  }
+  // Owner enrollment (natlang ops, NATLANG_OPS_OWNER_AUTO_ENROLL=0 opts out): a request the host created for the
+  // application owner's own signed-in page session is the owner's explicit "add this browser" action. Select the exact
+  // prepared control change directly (the documented owner-device enroll path: grant + binding to the owner account)
+  // instead of waiting for a second confirmation on the service origin. Other accounts still need the service review.
+  if (result.state === 'pending' && pairing.ownerAutoEnroll && c.accountId && c.accountId === await pairing.ownerAutoEnroll.ownerAccountId()) {
+    await persist(saved(id, 'commit'), { pairingId: id, preparedDigest: digest, transitionId: prepared.request.payload.transitionId, ownerAuto: true });
+    await pairing.ownerAutoEnroll.select(prepared.request, prepared.control, { signal });
+    onStatus({ pairingId: id, state: 'owner-enrolling', nextAction: 'Selected the owner device enrollment; the next pass verifies authority and resumes ordering.', orderingPaused: true });
+    return { ...result, state: 'approved' };
   }
   if (['approved', 'committing'].includes(result.state)) {
     // This local marker precedes any possibly lost HTTP send. The durable

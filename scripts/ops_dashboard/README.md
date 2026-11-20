@@ -61,6 +61,16 @@ Publish a UI change (one owner of the signer at a time: stop ops-peer first, res
 
     node build.mjs && npx tendril --session $PWD/session.mjs --mode own publish ~/.local/share/tendriller/natlang-ops-app/page --operation ops-release-N
 
+**First connection (owner).** Opening the page while signed out lands on Tendriller sign-in (page admission). Signed in, the page shows
+one step at a time with one primary action: *Request access for this browser* (creates the browser's device key and a pairing
+request bound to the signed-in account). The native participant prepares the exact control change and, when the request belongs
+to the application owner's account (`host.info().owner_account_id`), selects it directly: the documented owner-device enroll path
+(`pairing-native.mjs` owner enrollment; `NATLANG_OPS_OWNER_AUTO_ENROLL=0` opts out). The page retries the connection every few
+seconds and opens the dashboard by itself. If that fails, the page offers the tendriller.dev review link after 45 s.
+Tendriller's own pairing flow requires that review: approval is a POST from the service origin with a one-time CSRF token
+issued to the owner's service session (`server/src/device-pairing.ts` `reviewDevicePairing`). The review page is `frame-ancestors
+'none'` and has no return link to the app.
+
 Changing `domain.mjs` semantics needs a new definition version and a new application setup (`npm run create/init`), not a publish.
 First setup (done 2026-11-20): `npm install` of the kit packages, `npm run create -- https://tendriller.dev OWNER "natlang ops"`,
 `npm run init`, build, publish. Browser enrollment: the owner signs in on the page, chooses Request browser access, approves the

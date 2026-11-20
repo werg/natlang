@@ -780,6 +780,12 @@ def data_items(inp):
     if r in ('jsonl', 'sft-mix', 'teacher-gen', 'teacher-demos', 'held-set', 'held-eval'):
         p = (ds.get('parts_map') or {}).get(part) or ds.get('path')
         kind = (ds.get('part_kind') or {}).get(part) or ds.get('item_kind') or 'task'
+        if r == 'held-eval' and part == 'tasks':
+            rows = held_task_rows(ds['path'], held_base_dir(run_dir(ds['run'])))
+            q = (inp.get('q') or '').lower()
+            if q:
+                rows = [x for x in rows if q in x['id'].lower() or q in str(x['family']).lower()]
+            return {**_page(_filter(rows, inp), inp), 'facets': _facets(rows, ('direction', 'family'))}
         if r == 'held-eval' and part == 'samples':
             res = read_json(ds['path'] + '/result.json', {})
             rows = [{'id': f"{s.get('task_id')}#{s.get('sample')}", **{k: s.get(k) for k in ('task_id', 'family', 'level', 'sample', 'outcome', 'reward', 'completion_tokens', 'model_calls', 'finish_status')}} for s in res.get('samples') or []]
@@ -804,6 +810,7 @@ def _task_where(task_id):
         for loc, s in line_index(pool['path'], task_summary):
             if s.get('id') == task_id:
                 where['pools'].append({'ds': pool['id'], 'path': pool['path']})
+                where.setdefault('family', s.get('family'))
                 break
     for p in glob.glob(OPS + '/pool-errata/*.jsonl'):
         for r in jsonl(p):
@@ -860,7 +867,13 @@ def data_item(inp):
             return step_detail(d, int(iid))
     if r == 'held-eval':
         tid, _, sample = str(iid).partition('#')
-        return held_trace(ds['path'], tid, sample)
+        base = part == 'base'
+        path = held_base_dir(run_dir(ds['run'])) if base else ds['path']
+        if not path:
+            raise QueryError('this run records no start-policy held result to compare against', 'not_found')
+        out = held_trace(path, tid, sample)
+        out.update(id=f'{tid}#{sample or 0}', task_id=out.get('task_id') or tid, sample=int(sample or 0), side='base policy (start)' if base else ds['title'], held=True)
+        return out
     if r == 'teacher-gen' and part == 'tasks':
         rec, loc = jsonl_item(ds['parts_map']['tasks'], manifest_summary, iid)
         tdir = f"{ds['path']}/episodes/t{int(rec.get('index') or 0):06d}"
@@ -889,6 +902,46 @@ def data_item(inp):
     out['ref'] = f'{p}@{loc}'
     out['digest'] = digest
     return out
+
+
+def held_base_dir(d):
+    """The start-policy held result a run's evals compare against (grpo.py: --held-base, --held-baseline, held/step-00000[-pop])."""
+    _, rec = run_args(d)
+    full = (rec or {}).get('args') or {}
+    for p in (full.get('held_base'), os.path.dirname(full['held_baseline']) if full.get('held_baseline') else None,
+              d + '/held/step-00000-pop', d + '/held/step-00000'):
+        if p and os.path.exists(os.path.join(p, 'result.json')):
+            return p
+    return None
+
+
+def _held_by_task(res):
+    out = {}
+    for x in res.get('samples') or []:
+        t = out.setdefault(x.get('task_id'), {'family': x.get('family'), 'ran': 0, 'pass': 0, 'samples': []})
+        ran = x.get('ran', True) is not False and x.get('outcome') != 'unresolved'
+        t['ran'] += ran
+        t['pass'] += x.get('outcome') == 'task_success'
+        t['samples'].append([x.get('sample'), x.get('outcome') if ran else 'not run'])
+    return out
+
+
+def held_task_rows(path, base):
+    """Per held task: base and policy passes, the change in points, and each sample's outcome on both sides."""
+    P = _held_by_task(read_json(path + '/result.json', {}))
+    B = _held_by_task(read_json(base + '/result.json', {})) if base else {}
+    rows = []
+    for tid, p in P.items():
+        q = B.get(tid)
+        pr = p['pass'] / p['ran'] if p['ran'] else None
+        br = q['pass'] / q['ran'] if q and q['ran'] else None
+        ch = None if pr is None or br is None else round(100 * (pr - br), 1)
+        rows.append({'id': tid, 'task_id': tid, 'family': p['family'], 'base': f"{q['pass']}/{q['ran']}" if q else None, 'policy': f"{p['pass']}/{p['ran']}" if p['ran'] else None,
+                     'change_pts': ch, 'direction': 'not run' if pr is None else 'no base' if br is None else 'regressed' if ch < 0 else 'improved' if ch > 0 else 'unchanged',
+                     'base_samples': q['samples'] if q else [], 'policy_samples': p['samples']})
+    order = {'regressed': 0, 'improved': 1, 'unchanged': 2, 'no base': 3, 'not run': 4}
+    rows.sort(key=lambda r: (order[r['direction']], r['change_pts'] or 0, r['id']))
+    return rows
 
 
 def held_trace(path, task_id, sample):
@@ -926,7 +979,10 @@ def step_detail(d, step):
         b['trained_tokens'] += c['trained_tokens']
     groups = sorted({c['round'] for c in chains or [] if isinstance(c['round'], int) and c['role'] == 'student'})
     decisions = jsonl(f'{d}/decisions/step-{step:05d}.jsonl', 500)
-    return {'kind': 'step', 'id': step, 'selection': sel, 'chains': chains, 'by_role': by_role,
+    steps = train_steps(d)
+    flags = [k for k in ('grad_spike', 'behaviour_shift', 'reasoning_shift') if rec.get(k)]
+    return {'kind': 'step', 'id': step, 'selection': sel, 'chains': chains, 'by_role': by_role, 'flags': flags,
+            'last_step': max((x.get('step') or 0 for x in steps), default=step),
             'groups': [f'g{g:06d}' for g in groups], 'decisions': [{k: x.get(k) for k in ('group', 'task_id', 'stale', 'advantage', 'chosen', 'options', 'log_rho')} for x in decisions[:200]],
             'unknown': ([] if sc else ['This step\'s learner batch (step-chains) is no longer kept: only the last 4 steps are saved. '
                                        'Groups trained here can be approximated from groups/*/versions.json.']) +
@@ -961,6 +1017,62 @@ def data_tokens(inp):
     return sampled_tokens(turn, adv[eps.index(e)], float(args.get('tail-logp-floor', -7)))
 
 
+def _selection_verdicts(tid, where):
+    """Why each GRPO run did or did not draw this task, from its pool.json and launch arguments (grpo.py selection rule:
+    pass rate from the latest scored group, else base-pass-rates.json; band picks inside the pass band, the explore share
+    draws unmeasured tasks)."""
+    import re as _re
+    from data_catalog import grpo_runs
+    fam = where.get('family')
+    errata_files = {e['file'] for e in where.get('errata', [])}
+    out = []
+    for run in grpo_runs():
+        d = run['path']
+        pj = read_json(d + '/pool.json', {})
+        _, rec = run_args(d)
+        a = (rec or {}).get('args') or {}
+        sel = pj.get('selection') or {}
+        band, explore = sel.get('band') or a.get('pass_band') or [0.1, 0.9], sel.get('explore', a.get('explore', 0.4))
+        pools = {os.path.dirname(p.get('path') or '') for p in pj.get('pools') or []}
+        in_pool = any(os.path.dirname(p['path']) in pools for p in where.get('pools', []))
+        run_errata = {os.path.basename(p.get('path') or '') for p in pj.get('excluded_errata') or []}
+        groups = [g for g in group_rows(d) if g['task_id'] == tid]
+        v = {'ds': run['id'], 'run': run['run'], 'band': band, 'explore': explore, 'in_pool': in_pool, 'groups': [
+            {'group': g['group'], 'n': g['n'], 'pass': (g['outcomes'] or {}).get('task_success', 0), 'mean': g['mean'], 'spread': g['spread']} for g in groups]}
+        rx = pj.get('excluded_family_regex')
+        if where.get('held'):
+            v.update(state='excluded', why='Held-out task (held-v3/v2 or its split group): every run excludes it.')
+        elif not in_pool and groups:
+            v.update(state='drawn', why=f"Sampled in {len(groups)} group{'s' if len(groups) > 1 else ''}, but no cataloged pool holds this task id now (its pool file was rebuilt or retired since).")
+        elif not in_pool:
+            v.update(state='absent', why="Not in any of this run's task pools.")
+        elif errata_files & run_errata:
+            v.update(state='excluded', why=f"Excluded by pool errata at this run's start ({', '.join(sorted(errata_files & run_errata))}).")
+        elif rx and fam and _re.search(rx, fam):
+            v.update(state='excluded', why=f'Family {fam} matches the excluded-family pattern {rx}.')
+        else:
+            last = groups[-1] if groups else None
+            br = where.get('base_rate')
+            if last:
+                rate, src_ = last['outcomes'].get('task_success', 0) / max(1, last['n']), f"its latest group {last['group']}"
+            elif br and br.get('scored', 0) >= (sel.get('min_scored') or 2):
+                rate, src_ = br['successes'] / br['scored'], 'the base pass rates'
+            else:
+                rate, src_ = None, None
+            v['rate'], v['rate_source'] = rate, src_
+            if rate is None:
+                v.update(state='explore', why=f'Unmeasured: drawn only by the exploration share ({round(100 * explore)}% of draws, ordered by family).')
+            elif band[0] <= rate <= band[1]:
+                v.update(state='band', why=f'Pass rate {rate:.2f} from {src_} is inside the pass band {band[0]}-{band[1]}: a candidate for band picks ({round(100 * (1 - explore))}% of draws).')
+            else:
+                v.update(state='out', why=f"Pass rate {rate:.2f} from {src_} is {'above' if rate > band[1] else 'below'} the pass band {band[0]}-{band[1]}: band picks skip it and exploration draws only unmeasured tasks.")
+            if errata_files - run_errata:
+                v['later'] = f"Pool errata added since this run started ({', '.join(sorted(errata_files - run_errata))}) exclude it at the next start or resume."
+        out.append(v)
+    out.sort(key=lambda v: (not v['groups'], v['run']), reverse=False)
+    return out
+
+
 @handler('data.task_refs')
 def data_task_refs(inp):
     """Everywhere a task appears: pools, held, errata, base rate, GRPO groups, teacher campaigns, SFT mixes."""
@@ -972,6 +1084,7 @@ def data_task_refs(inp):
         for g in group_rows(os.path.join(OPS, run['run'])):
             if g['task_id'] == tid:
                 where['groups'].append({'ds': run['id'], 'group': g['group'], 'mean': g['mean'], 'n': g['n'], 'spread': g['spread']})
+    where['runs'] = _selection_verdicts(tid, where)
     where['teacher'] = []
     for c in teacher_campaigns():
         p = c['parts_map'].get('tasks')

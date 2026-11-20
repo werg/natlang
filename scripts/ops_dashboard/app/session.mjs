@@ -53,6 +53,9 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
           // The retained owner signs in place. No identity/private key is
           // exported to terminal attachments, browser pages or helper files.
           signTransition: payload => signTransitionRequest(payload, device.identity),
+          ownerAutoEnroll: process.env.NATLANG_OPS_OWNER_AUTO_ENROLL === '0' ? null : {
+            ownerAccountId: async () => { const info = await host.info(); return typeof info.owner_account_id === 'string' ? info.owner_account_id : null; },
+            select: (request, control) => host.peers.selectGeneration(request, { control }) },
           client: createDevicePairingClient({ url: handle.api + '/peers/pairing',
             headers: { Authorization: `Bearer ${handle.token}` },
             fetch: (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.any([
