@@ -5342,3 +5342,45 @@ its periodic reclamation. Both paths submit the same named transient
 service with its own memory limit. Host and discrete-GPU jobs use the usual
 available-memory admission. The explicit `release-cache` command remains
 available, and `--no-cuda-cache-reclaim` opts out of automatic reclamation.
+
+**2026-11-20 21:40, follow-ups (soft-states strand).**
+- *Operator fit memory: 22 GB -> 11.5 GB.* The first run (`softop-fit-2`) held 15 GB of CUDA (not capped by the cgroup)
+  plus 7.8 GB of host. The causes, in order:
+  - rows up to 120k characters: compact-value sites hold the whole tool output, so the activation peak followed the
+    longest row;
+  - the mmapped 9.5 GB checkpoint's page cache charged to the job;
+  - the checkpoint's 5.5 GB training state (faa2fe339 drops it).
+  Cuts:
+  - operator turns cap rows at 40k characters (`--max-chars`, ~10k tokens; 330 of 448 rows kept);
+  - `tune.build`/`tune.learned` evict the checkpoint's page cache once the weights are on the device
+    (`cuda_context.drop_file_cache`) and create the CUDA context and compact first (`prepare_gpu`). Under today's
+    fragmentation (0 MB free in blocks of order 8 or more) the first two attempts failed to create a context;
+  - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+  The backbone was already frozen (`requires_grad_(False)`) and layer recompute was already on (`graph_loss`
+  `checkpoint_layers`).
+  `softop-fit-5` (plan-v2, base 5ff07638, 120 steps x 8 rows, `build-v2`): CUDA peak 7.5 GB allocated (8.5 GB
+  reserved), host RSS 3.0 GB, ledger 11.5 GB; about 60 s a step beside grpo-v5. It restarted at step 0 because the row
+  set changed: the old state binds the old rows, and 24 steps were lost. Steps 1-4 mean row loss: 1.68, 1.66, 0.79,
+  0.99. The held-out arms (view's text / primed state / trained state, paired NLL on test-split operator rows:
+  `operator_soft_states.py evaluate`) run when it ends. The base checkpoint is being copied byte for byte to NVMe
+  (`natlang-operator-soft-20261120/base/`, same sha256, so the same native identity): loads from `/mnt/external` took
+  7 minutes under today's disk load.
+- *Every static member primed in its real call.*
+  - Program guidance (memetic or authored) was a bare text write from position 0. The first call that reads a
+    guidance now primes it in its own opening (`native.init-body` through `neuralese.prime`; ts-host agent.ts), and
+    later calls reuse that state.
+  - A trained (refined) state is read as it is. `NATLANG_GUIDANCE_PRIMING=text` opts out. Test:
+    `native-program-guidance.test.mjs`.
+  - Memetic refinement rows now find the guidance by its place (the `<natlang_program_guidance>` block and the call's
+    function), not by state ID.
+  - Inventory of bare writes left:
+    - `writeLiterals` and `runtime.ts` Neuralese slots are produced values (input-specific). Their in-place capture
+      in the producing reply is the open OPERATORS_RESTORE §3.6 decision: producer documents grow from 8-91 tokens to
+      whole calls.
+    - `tune/learned/growth.py` writes a component's retrieval key. It is compared with keys written the same way and
+      never imported into a call.
+    - The `tune/soft.py` and `initBodyInContext` placeholders are re-primed in context immediately.
+- *Push gate.* `tests/test_data_registry_ratchet.py::test_registry_covers_what_the_catalog_found_before_it` (in
+  check-main `--quick`) walks `/mnt/external` source-storage trees through `Registry._paths()` glob expansion. With sda
+  at 88% utilisation and about 2 s per read today, it ran over an hour and was killed (exit 143 after 4,094 s). A quick
+  gate should not depend on HDD walks; this is for the data-registry strand.
