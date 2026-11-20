@@ -4421,3 +4421,128 @@ CUDA peak 52.9 GB reserved at step 26, from 68-76 GB). The 99 GB budget kept the
 takes 16 more collector slots (80 -> 96, matching 96 running; ~0.3 GB each) and a budget of 84 GB: ~20 GB margin over
 the measured peak, and the freed ledger room runs the teacher campaign continuously beside the >= 15 GB probe headroom.
 If a peak passes ~80 GB the budget goes back up at the next boundary.
+
+## 2026-11-20 05:00, sft-v5: SFT/RFT on every verified teacher demonstration and own success, then GRPO from it (next experiment after grpo-v4-run2)
+
+**Why this experiment and not more GRPO.**
+- grpo-v4-run2 (plain GRPO from the base, LR 5e-6) has run 34 steps (~30 h). Held-v3 against the base (54.1%):
+  +1.0 / -3.1 / -0.2 / +0.8 / 0 / -2.7 / -2.2 pts at steps 4 / 10 / 12 / 16 / 20 / 26 / 30. Training reward
+  0.49-0.69 with no trend. Every step trained exactly `--min-groups` 24, so the run is collection-bound at ~190
+  episodes an hour.
+- A larger LR or batch does not change that bound. A larger batch at fixed actor throughput makes steps longer and
+  buys no more signal per hour. A larger LR was tried: grpo-v2 regressed at 1e-5.
+- The verified teacher demonstrations are offline signal, no collection needed. sft-v4-run1 trained 3,961 of them in
+  1.7 h (95M chain tokens). Its NLL on 40 unseen-task teacher episodes fell 0.65 -> 0.30 and was still falling while
+  the LR decayed. There are now ~3x as many episodes: gap-v1 added 8,372 exact-replayed successes, mostly on tasks the
+  student solves at most 25% of the time or that no earlier teacher solved.
+- **sft-v4-run1 was never held-measured.** It was rejected on the behaviour probe's `</think>` hazard (1.03 vs 0.55).
+  Run2 shows that the hazard does not predict held: hazard 0.735 / 0.81 / 0.69 / 0.55 / 0.49 / 0.66 at steps
+  10 / 12 / 16 / 20 / 26 / 30, held deltas -3.1 / -0.2 / +0.8 / 0 / -2.7 / -2.2. Its two lowest held results came at
+  hazard 0.735 and 0.49.
+- sft-v3's -16 pts had its own mechanism: trained teacher think blocks cut per-call reasoning from 1,919 to 350 chars
+  and raised ran-out. Since 250723952, teacher think blocks and narration are context.
+- The fixes that the 11-18 hunt found are in:
+  - nucleus NLL on the student's own rows (`--student-top-p 0.95`; own hazard push 21 -> 0.24 in the sign-step test);
+  - stratified batches (val-own rose exactly while peak-LR steps were teacher-only);
+  - context masks (decision readouts, wrapped backend refusals, the token after `<|im_end|>`);
+  - the second-close mask.
+- **Not run: the hazard ablation (ops/sft-v4/ablation/run.sh, ~2 h at 80 GB).** It measures the hazard, which run2
+  shows does not track held, so no outcome of it would change this decision. The held eval of the SFT checkpoint is
+  the judge.
+
+**Data: `runs/sft-mix-20261120-v1`** (ops/sft-v5/build.sh; WORK /home/werg/data/sft-sources-20261120).
+- **Sources:**
+  - every teacher pool: pool-v1, pool-v2-rich, pool-progtune-decisions, gap-v1;
+  - own successes of grpo-v3-run1 and grpo-v4-run2 through its latest group (grpo-v2 and grpo-v4-run1 out, as in v1).
+- **Replay:**
+  - Earlier exact-replay verdicts are reused through links (ops/sft-v5/seed_replays.py). Those are 43989d8ba/ae1f7dacb
+    for sft-sources-20261118 and 72e4874d0 for the gap-v1 demos. All three have today's answer protocol.
+  - New episodes replay under run2's pin 43c6b8ccd.
+- **Build:** the v1 recipe, with these changes:
+  - teacher forward budget 180M (was 90M), so about twice the distinct tasks, still breadth-first;
+  - own loss share 0.25 (was 0.2), the anchor for the student's reasoning, now under the nucleus NLL;
+  - aux unchanged: neuralese-graph 0.05, operators 0.03, live all.
+- FUNNEL
+
+**Recipe:**
+- exp0_sft from base 5ff07638, 1 epoch.
+- 32k weighted target tokens per step.
+- LR 5e-6 peak, 8 warm-up steps, cosine to 10%, clip 1.0, activation 16 GB.
+- Defaults: nucleus NLL on own rows, stratified, context masks, second-close mask.
+- val-own and val-teacher every 20 steps.
+- Ledger unit `sft-v5-run1`, 72 GB, high priority.
+
+Then **grpo-v5-run1** starts from the checkpoint on the same pin:
+- run2's bundle and flags: `--kl-beta 0.05` (reference = the SFT checkpoint), `--reasoning-rl-weight 0.5`, SD 0.1,
+  JOLT+, memetic 0.02, replay corpora, Neuralese variants, probe v2;
+- 96 slots, budget 92 GB, LR 5e-6, warm-up 10;
+- held evals on Pop back to back, 2 samples, each paired with the base measured on this pin (`ops/sft-v5/held/base`,
+  run on Pop while the SFT trains).
+
+**GRPO stage: episodes ended on the 40-call budget are neither ranked nor trained (`--budget-stop-episodes drop`,
+default from this commit; `train` opts out).**
+- **What it addresses.** The run2 hazard investigation found one large net push, with a consistent sign over steps
+  32-35: the policy term pushes down the reasoning tokens of failed episodes. Under `--loss-norm token`, failures
+  carry far more sampled tokens than successes.
+- **Offline split on run2's archive** (last 300 groups, 212 with spread, graded A, scratchpad `budgetmass.py`):
+  - net sum of A x sampled tokens: -2.11M (positive side +8.05M);
+  - budget stops: 149 episodes (8%) at 28.2k tokens each, A*T -4.21M, twice the net;
+  - wrong answers (`semantic_mismatch`): 678 episodes at 13.1k tokens, -5.80M;
+  - successes: 844 episodes at 11.5k tokens, +8.04M;
+  - repetition and invalid actions: -0.16M together.
+  - Without the budget stops the net is about +2.1M. Wrong answers and successes are of similar length, so the rest
+    is the reward's own signal.
+- **Why this form.** It is overlong filtering (DAPO), the standard treatment of episodes a length cap cut unfinished.
+  We already apply it to token caps (`truncated_rollout`, 11-19). The request budget is the same cap counted in calls.
+  The 0 reflects the cap rather than an answer, and it is spread over every token of an unfinished run.
+- **Loss normalization stays `token`.** That is the constant normalization (Dr. GRPO), the unbiased one.
+  `--loss-norm episode` (each episode at A_i / T_i, original GRPO) was the default on 11-13 and measured as a bias
+  toward shorter reasoning (E[A Tbar / T] z +8.8, DECISIONS 2026-11-14), the same symptom from the other side.
+- **Not filtered:** loop failures (`repetition`, 2 of 1,692 episodes) and wrong answers, which are real outcomes.
+- **What is given up:** GRPO no longer pushes directly against running out. Held eval still counts a budget stop as
+  a failure, and the criteria below bound ran-out.
+- **Where the mechanism lives:**
+  - one rule, `rollout_math.budget_stopped_rollout` (scored `budget_exhaustion`; a wall-clock stop is already
+    unscored);
+  - grpo `load_group` (`episodes_budget_stopped` in stats) and program tune's `native_replay.prepare_objective`
+    (`budget_stop='drop'`), the two places that already apply `truncated_rollout`.
+  - Not applicable: exp0_sft, SD replay and reasoning RL train verified successes or teacher actions only
+    (no budget-stopped episode reaches them); held eval scores and never trains.
+- **Test:** `test_episodes_ended_on_the_request_budget_are_neither_ranked_nor_trained`.
+- **Run2:** not changed (the owner stops it); grpo-v5-run1 has it as a pin default.
+
+GRPO's `behaviour-start.json` is the SFT checkpoint's probe. Compare it with run2's `behaviour-start.json` (base),
+which is telemetry, not a gate.
+
+**Launch (the moment grpo-v4-run2 is stopped):** `/home/werg/data/lfm3-rl-dgx-20261029/ops/sft-v5/launch.sh`. It pins
+origin/main, then `drive.sh` does pin -> SFT -> Pop base in parallel -> GRPO -> judge. Progress is in
+`ops/sft-v5/run1/drive.log`.
+
+**Wall time:** WALLTIME
+
+**Criteria (declared before the run).** All held-v3 results are 2 samples, paired with the base on this pin.
+- **Expected:** the first held checkpoint (step 1-2, about the SFT checkpoint) is +3 to +6 pts, ran-out at or below
+  the base's.
+- **Success:**
+  - the first held result is >= base + 3 pts, or
+  - any held result by GRPO step 24 is >= base + 4 pts at p < 0.05,
+  - in either case with ran-out no more than 2 pts above the base's.
+- **Failure:** the first held result is below base - 4 pts at p < 0.05. `drive.sh` then stops grpo-v5-run1 by itself
+  and resumes grpo-v4-run2 from its state on its pin, and the diagnosis starts (degradation means bug). Any later
+  held result below base - 4 at p < 0.05 with no known cause also stops it (standing rule).
+- **Neutral:** the first held result is within +-3. GRPO continues; if no held result by step 24 reaches base + 2,
+  the SFT stage bought nothing measurable and the next experiment is chosen from that.
+
+**Smokes run beside run2 (no GPU training fits in the ~15 GB headroom):**
+- `seed_replays.py` on the real WORKs;
+- the data build itself;
+- `launch-sft.sh PREFLIGHT_ONLY=1` against the built chains on pin 43c6b8ccd: sha, held overlap, imports, size and
+  wall-time estimate;
+- `bash -n` of drive.sh.
+
+`ops/grpo-v4/launch-grpo.sh` now takes `CKPT_DIR`; its default is unchanged, so run2's resumes are unaffected.
+
+**Not checked:**
+- an exp0_sft step on this file (same format and trainer as sft-v4-run1, which trained cleanly);
+- `systemd-run --user` from inside the drive's ledger unit (the 11-18 drive used `systemctl --user` the same way);
+- the automatic run2 resume path in step 5 (it is the exact resume command of 2026-11-19 with budget 92).

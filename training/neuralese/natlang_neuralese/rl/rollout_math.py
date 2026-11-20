@@ -36,6 +36,17 @@ def truncated_rollout(rollout: dict) -> bool:
     return any((turn.get('sampling') or {}).get('finish_reason') == 'length' for turn in rollout.get('turns') or ())
 
 
+def budget_stopped_rollout(rollout: dict) -> bool:
+    """Whether a scored episode ended on the model-request budget (outcome ``budget_exhaustion``; a wall-clock stop is
+    unscored). Such an episode was cut by an episode-length cap, the call-count form of a token cap: it scores 0 and is
+    the longest kind (grpo-v4-run2, last 300 groups: 8% of episodes, 28k sampled tokens each against 11.5k for
+    successes), so under token normalization it carried twice the step's net push-down on sampled reasoning (A*T -4.2M
+    of a net -2.1M) spread over every token of an unfinished run. Learners leave it out of advantages and training by
+    default (overlong filtering, as ``truncated_rollout``; DECISIONS 2026-11-20 sft-v5). Held evaluation still counts
+    it as a failure."""
+    return rollout.get('outcome') == 'budget_exhaustion' and rollout.get('reward') is not None
+
+
 def rollout_return(rollout: dict) -> float:
     """An admitted episode's return: its task-outcome ``quality`` plus any recorded Neuralese-use bonus
     (rl.task_rollouts.score). ``quality`` alone stays the success signal."""

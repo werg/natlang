@@ -795,7 +795,7 @@ def load_group(collector, group, stats):
     from natlang_neuralese.common.jsonio import read_jsonl
     from lower_rollout_turns import decision_turns, episode_turns
     from natlang_neuralese.rl.jolt import student_form
-    from natlang_neuralese.rl.rollout_math import truncated_rollout
+    from natlang_neuralese.rl.rollout_math import budget_stopped_rollout, truncated_rollout
     info = collector.groups[group]
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
@@ -825,6 +825,12 @@ def load_group(collector, group, stats):
             # did: its reward would push the cut reasoning down ("stop sooner"). It is neither ranked nor trained
             # (overlong filtering, DECISIONS 2026-11-19). The 40-call budget is a task outcome and still scores 0.
             stats['episodes_truncated'] += 1
+            continue
+        if budget_stopped_rollout(row) and getattr(getattr(collector, 'args', None), 'budget_stop_episodes', 'drop') == 'drop':
+            # ended on the 40-call budget: an episode-length cap, cut unfinished. Its 0 over ~2.5x a success's tokens
+            # was the step's main net push-down on sampled reasoning under token normalization (rollout_math
+            # .budget_stopped_rollout). Neither ranked nor trained; held eval still counts it as a failure.
+            stats['episodes_budget_stopped'] += 1
             continue
         quality = float(reward['quality'])
         graded = reward.get('graded')
@@ -4604,6 +4610,11 @@ def main():
                    help="an episode with a reply cut by a token cap (finish_reason 'length'): drop (default) leaves it out of "
                         "its group's advantages and of training; train: it scores and trains like any other (before "
                         '2026-11-19). The call budget (--max-model-requests) is an outcome either way')
+    t.add_argument('--budget-stop-episodes', choices=('drop', 'train'), default='drop',
+                   help='an episode that ended on the model-request budget (--max-model-requests; outcome '
+                        'budget_exhaustion): drop (default) leaves it out of its group\'s advantages and of training, as '
+                        'overlong filtering does for a token cap (rollout_math.budget_stopped_rollout); train: it scores 0 '
+                        'and trains (before 2026-11-20). Held evaluation counts it as a failure either way')
     t.add_argument('--reasoning-rl-unclosed', choices=('drop', 'floor'), default='drop',
                    help='a reasoning-RL sample that hit --reasoning-rl-max-tokens without closing: drop (default) leaves it '
                         "out of its group's advantages and of training (overlong filtering: a cut block pushed down teaches "

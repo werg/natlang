@@ -148,3 +148,29 @@ def test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained(tmp_path, mo
         _, episodes, _ = grpo.load_group(collector, 0, stats)
         assert [e['quality'] for e in episodes] == kept
         assert stats['episodes_truncated'] == (1 if mode == 'drop' else 0)
+
+
+def test_episodes_ended_on_the_request_budget_are_neither_ranked_nor_trained(tmp_path, monkeypatch):
+    import json
+    import types
+    import lower_rollout_turns
+    from natlang_neuralese.rl.rollout_math import budget_stopped_rollout
+    monkeypatch.setattr(lower_rollout_turns, 'episode_turns', lambda row, stats, states=None: [])
+    monkeypatch.setattr(lower_rollout_turns, 'decision_turns', lambda row, stats, states=None: [])
+
+    def row(outcome, quality):
+        return {'task_id': 't', 'outcome': outcome, 'reward': {'quality': quality},
+                'turns': [{'sampling': {'finish_reason': 'stop'}}]}
+    rows = [row('task_success', 1.), row('budget_exhaustion', 0.), row('semantic_mismatch', 0.)]
+    assert [budget_stopped_rollout(r) for r in rows] == [False, True, False]
+    assert not budget_stopped_rollout({'outcome': 'budget_exhaustion', 'reward': None})   # wall clock: unscored
+    (tmp_path / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    for mode, kept in (('drop', [1., 0.]), ('train', [1., 0., 0.])):
+        collector = types.SimpleNamespace(args=types.SimpleNamespace(top_p=0.95, truncated_episodes='drop',
+                                                                     budget_stop_episodes=mode),
+                                          groups={0: {'dir': tmp_path, 'task_id': 't', 'versions': [0]}},
+                                          states=None, generated=0, episodes=0)
+        stats = collections.Counter()
+        _, episodes, _ = grpo.load_group(collector, 0, stats)
+        assert [e['quality'] for e in episodes] == kept
+        assert stats['episodes_budget_stopped'] == (1 if mode == 'drop' else 0)
