@@ -119,6 +119,24 @@ def test_tune_build_emits_free_tune_boundaries_after_each_commit(tmp_path):
     assert boundaries[1]['nodesBefore'] == boundaries[0]['nodesAfter']
 
 
+def test_a_segmented_fit_ends_where_one_run_ends(tmp_path):
+    # --segment-steps bounds a long fit's per-process host memory (2026-11-20); its resumes must change nothing
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.tune.build import main as build, SEGMENT_EXIT
+    engine = engine_fixture(tmp_path, 'lfm')
+    rows = rows_for(engine, 'bx', 3)
+    (tmp_path / 'rows.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    plan = tmp_path / 'plan.json'
+    plan.write_text(json.dumps({'manifest': manifest_for(engine), 'rows': 'rows.jsonl', 'label': 'fit',
+                                'student': {'name': 'lfm', 'checkpoint': str(tmp_path / 'native.pt')},
+                                'recipe': {'steps': 3, 'batch_rows': 2, 'prompt_weight': 0}}))
+    assert build(['--plan', str(plan), '--out', str(tmp_path / 'whole')]) == 0
+    codes = [build(['--plan', str(plan), '--out', str(tmp_path / 'seg'), '--segment-steps', '1']) for _ in range(4)]
+    assert codes[:2] == [SEGMENT_EXIT, SEGMENT_EXIT] and codes[2] == 0
+    whole, seg = (json.loads((tmp_path / d / 'result.json').read_text()) for d in ('whole', 'seg'))
+    assert whole['artifacts'] == seg['artifacts']   # content-addressed: identical adapters
+
+
 def test_revision_plans_select_what_each_operator_changes(tmp_path):
     import pytest
     from natlang_neuralese.tune.learned import LearnedOptimizerError
