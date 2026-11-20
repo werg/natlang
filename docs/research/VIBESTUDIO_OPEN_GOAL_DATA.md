@@ -527,3 +527,7 @@ SHA-256 is `5811f79d83aea9db793c1e6825735b98a9ef5447a60fe2434a7b2d8c2464470f`.
 That directory includes `train-cases.txt` with 292 selectors backed by managed
 proofs and matched to its catalog. Seven of those selectors require an
 installed deployment package.
+The [updated 462-goal pins](vibestudio-open-goal-pop-pins-462-fixed.tsv) add
+headless state delivery, exact capture proof checks, and bounded teacher
+instances. Pop reproduced the same catalog and train list under
+`/home/werg/vibestudio-worktrees/open-goal-release-462-fixed.XA8cN7`.
