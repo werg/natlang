@@ -14,7 +14,7 @@ def fingerprint(goal):
     return hashlib.sha256(json.dumps(goal, ensure_ascii=False).encode()).hexdigest()
 
 
-def audit(catalog_path, roots, families):
+def read_catalog(catalog_path):
     catalog_bytes = catalog_path.read_bytes()
     catalog = {}
     digests = set()
@@ -32,7 +32,11 @@ def audit(catalog_path, roots, families):
                 raise ValueError(f'Open-goal source group crosses splits: {group}')
         catalog[scenario] = row
         digests.add(goal_hash)
+    return catalog_bytes, catalog
 
+
+def audit(catalog_path, roots, families):
+    catalog_bytes, catalog = read_catalog(catalog_path)
     selected = {key: row for key, row in catalog.items() if not families or row['family'] in families}
     if not selected or families - {row['family'] for row in selected.values()}:
         raise ValueError('No matching catalog entries for one or more selected families')
