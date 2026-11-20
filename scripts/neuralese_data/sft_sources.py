@@ -252,9 +252,26 @@ def october_teacher_episodes(path, models, held_manifest, c):
                'base_rank': None, 'task': task, 'root_mode': 'student', 'turns': turns, 'execution_graph_events': 0}
 
 
+def live_manifest_paths(manifests, capture_roots):
+    paths = [Path(path).resolve() for path in manifests]
+    for directory in capture_roots:
+        root = Path(directory).resolve()
+        candidates = [root / 'verified/manifest.json',
+                      *sorted((root / 'cases').glob('*/verified/manifest.json'))]
+        discovered = [path.resolve() for path in candidates if path.is_file()]
+        if not discovered:
+            raise ValueError(f'No verified live teacher manifests under {root}')
+        if any(not path.is_relative_to(root) for path in discovered):
+            raise ValueError(f'Verified live teacher manifest escapes the capture directory {root}')
+        paths.extend(discovered)
+    return list(dict.fromkeys(map(str, paths)))
+
+
 def extract(args):
+    live_runs = live_manifest_paths(getattr(args, 'live_run', None) or [],
+                                    getattr(args, 'live_capture_root', None) or [])
     data_registry.require_registered([*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                                      *(getattr(args, 'live_run', None) or []),
+                                      *live_runs,
                                       *(getattr(args, 'october_teacher', None) or [])])
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
@@ -359,7 +376,7 @@ def extract(args):
                                                 census.setdefault('october-teacher:' + october_group(path),
                                                                   collections.Counter())):
             out.write(episode)
-    for path in getattr(args, 'live_run', []) or []:
+    for path in live_runs:
         from live_teacher_sources import load_episode
         episode = load_episode(path)
         if episode.get('trajectory_ir'):
@@ -376,10 +393,10 @@ def extract(args):
         (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
     summary = {k: dict(v) for k, v in census.items()}
     (work / f'{args.out_name}-extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
-                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': getattr(args, 'live_run', []),
+                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': live_runs,
                                                     'october_teacher': getattr(args, 'october_teacher', None) or []}, indent=1) + '\n')
     record_work(work, [*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                       *(getattr(args, 'live_run', None) or []), *(getattr(args, 'october_teacher', None) or [])])
+                       *live_runs, *(getattr(args, 'october_teacher', None) or [])])
     print(json.dumps(summary, indent=1))
 
 
@@ -2376,6 +2393,8 @@ def main():
     e.add_argument('--teacher', action='append', default=[], metavar='POOL_DIR')
     e.add_argument('--live-run', action='append', default=[], metavar='MANIFEST',
                    help='verified observed workspace/CDP task; captured contexts only, no portable replay claim')
+    e.add_argument('--live-capture-root', action='append', default=[], metavar='CAPTURE_DIR',
+                   help='discover verified manifests in a single or multi-case live teacher capture directory')
     e.add_argument('--live-trajectory-out', metavar='OUTPUT.jsonl.zst',
                    help='also export verified open goals as standalone canonical trajectory IR')
     e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')

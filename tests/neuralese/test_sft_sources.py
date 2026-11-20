@@ -21,6 +21,34 @@ SYSTEM = {'role': 'system', 'content': 'old system prompt'}
 USER = {'role': 'user', 'content': 'task'}
 
 
+def test_live_capture_root_discovery_keeps_verified_manifests_in_order(tmp_path):
+    single = tmp_path / 'single' / 'verified' / 'manifest.json'
+    first = tmp_path / 'batch' / 'cases' / 'first' / 'verified' / 'manifest.json'
+    second = tmp_path / 'batch' / 'cases' / 'second' / 'verified' / 'manifest.json'
+    for path in (single, second, first):
+        path.parent.mkdir(parents=True)
+        path.touch()
+    (tmp_path / 'batch' / 'cases' / 'failed').mkdir()
+
+    assert s.live_manifest_paths([single], [tmp_path / 'single', tmp_path / 'batch']) == [
+        str(single), str(first), str(second),
+    ]
+
+
+def test_live_capture_root_requires_contained_verified_manifests(tmp_path):
+    capture = tmp_path / 'batch'
+    capture.mkdir()
+    with pytest.raises(ValueError, match='No verified live teacher manifests'):
+        s.live_manifest_paths([], [capture])
+
+    outside = tmp_path / 'unrelated'
+    outside.mkdir()
+    (outside / 'manifest.json').touch()
+    (capture / 'verified').symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError, match='escapes the capture directory'):
+        s.live_manifest_paths([], [capture])
+
+
 def test_replay_serves_recorded_replies_by_visible_history():
     first = turn([SYSTEM, USER], calls=[('eval', '{"code":"1"}')])
     call = {'role': 'assistant', 'content': '', 'tool_calls': [

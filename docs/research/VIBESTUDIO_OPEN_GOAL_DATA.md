@@ -194,10 +194,11 @@ releases that support `--cases-per-instance`, the collector starts a fresh
 instance after 12 cases by default. A lower value trades more startups for
 shorter-lived workspaces.
 
-Register the complete capture directory and pass each accepted
-`cases/CASE/verified/manifest.json` with its own `--live-run` flag in one
-extraction. A case that fails leaves its logs in its own directory. Retry it
-with a fresh output directory and import the accepted manifests together.
+Register each complete capture directory and pass it to extraction with
+`--live-capture-root "$CAPTURE_DIRECTORY"`. The importer discovers the
+verified manifests and validates each before converting it to trajectory IR.
+A case that fails leaves its logs in its own directory. Retry it with a
+fresh output directory and pass both roots in the same extraction.
 
 ## Capability coverage
 
@@ -471,7 +472,8 @@ call compared the original text, proposed change, current text, and fresh
 evidence. The final readback confirmed both the requested revision and the
 coedit. All five independent checks passed. The capture is registered as
 `vibestudio-open-goal-luna-smoke-reconcile-20261120-cqppvh`.
-The native trajectory IR yielded nine learner chains, 1,735 target tokens,
+The native trajectory IR records 24 sampled turns across nine invocations,
+with five call levels on its longest path. It yielded nine learner chains, 1,735 target tokens,
 and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
 open-goal shares were 100% for this one-goal smoke. The learner's CPU input
 loader packed all nine chains and reproduced the weighted target count.

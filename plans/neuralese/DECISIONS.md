@@ -5765,3 +5765,18 @@ measured uncapped peak: 15 GB CUDA + 3.3 GB RSS, budget 19 GB.
 - Targeted importer and builder suites passed 67 tests. The learner's CPU
   schedule receipt is registered as
   `vibestudio-luna-open-goal-post-mask-exposure-smoke-20261120`.
+
+### 2026-11-21 — stage the first broad verified goal release
+
+- Pop reproduced the pinned 777-goal Vibestudio release. Its managed evidence
+  qualified 430 training selectors and 142 held-out goals at release. Keep the
+  exact catalog and independently accepted reference evidence together in the
+  registry under `vibestudio-open-goal-verified-release-777-20261121`.
+- Bulk capture import accepts registered capture directories. It discovers
+  verified manifests and uses the existing native trajectory conversion and
+  masking path. The archived Luna smoke imports once even when the same
+  manifest is specified directly and discovered in the directory. It records
+  nine invocations across five call levels and 24 sampled turns.
+- The 970-goal source stage preserves 842 historical assignments. Its 234
+  held goals remain source-separated. Managed evidence is required before the
+  new scenarios enter a capture list.
