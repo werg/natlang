@@ -11,6 +11,9 @@ The rollout for each case records the root and every observed child invocation,
 including attempts that failed and the resulting state. Admission requires
 independent readback of the actual world. A case added to the task catalog
 contributes zero training examples until a qualifying trajectory is captured.
+When the runtime records the child inventory, admission checks every
+invocation against it. The native materializer verifies its digest against
+the original call artifacts before projecting training targets.
 
 ## Running the open-goal lane
 
@@ -214,17 +217,17 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 248 open goals across six workspace templates, with 193
-training goals and 55 source-separated holdouts. The same Base entry point
+The catalog declares 279 open goals across six workspace templates, with 218
+training goals and 61 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 55 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, owned preview publishing, and native PDF text, layout and raster evidence |
+| Examples | 70 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing, native PDF evidence, and Natlang program discovery, compilation and stale source recovery |
 | Personal | 74 | Declared tests, Mission Control, browser-library-to-collection work, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
-| System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
+| System | 41 | Declared tests, hub and terminal operations, retained conversations and cursor recovery, and Host diagnostic windows across boots, failures and owned incident handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 21 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence across pages before continuing to an authorized vault edit or hold |
 | Google Workspace | 61 | Drive inventory and checkpoint review, retained Gmail compose recovery, Calendar resource windows, and compound Gmail-to-Drive goals that confirm approvals and linked assets before an authorized handoff. |
@@ -252,8 +255,25 @@ and Unicode canonical comparison, separate from the training cases about
 reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/images/decorative/),
 [Unicode normalization](https://www.unicode.org/faq/normalization.html)
 
-To check the archive of reference results against the pinned catalog,
-preserve the managed `trajectory ... --full --json` files and run:
+To verify a goal against the managed workspace, run its model-free oracle.
+Pass `--case` to select goals or `--family` to verify a family from the pinned
+catalog. The command groups cases by workspace and baseline, runs one owned
+instance at a time, saves each full reference trajectory, and stops the
+instance before moving to the next group.
+
+```sh
+python3 scripts/memory_ledger.py run \
+  --unit vibe-open-goal-reference --budget-gb "$REFERENCE_BUDGET_GB" \
+  --reserve-gb "$REFERENCE_RESERVE_GB" --hold-budget --no-resumable \
+  --workdir "$NATLANG_CHECKOUT" \
+  --env "VIBESTUDIO_TEMPLATE_CHECKOUTS=$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
+  --env "VIBESTUDIO_MAX_CONCURRENT_BUILDS=1" \
+  -- python3 scripts/vibestudio/qualify_open_goals.py \
+  --host "$VIBESTUDIO_CHECKOUT" --catalog "$GOAL_CATALOG" \
+  --out "$REFERENCE_RESULTS" --case open-goal-reconcile-workshop-update
+```
+
+To audit the saved reference results against the pinned catalog, run:
 
 ```sh
 python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS" \
@@ -321,9 +341,15 @@ All 39 Calendar and Gmail-to-Drive cases passed. All nine browser-library and
 collection cases passed, including concurrent changes. The first archive
 history run passed six cases and exposed a canonical VCS snapshot ordering
 failure in 18 fixtures. The fixture now orders paths with the same comparator
-as the VCS protocol, and all 18 passed on rerun. The preserved 166-case bundle,
-`vibestudio-open-goal-reference-166-20261120`, includes the 240-goal catalog
-used for those checks and re-audits from its copied evidence.
+as the VCS protocol, and all 18 passed on rerun. Four owned-preview hold
+cases passed. Four effectful references exposed loss of typed bytes in a
+native filesystem relay. The transport fix passed the direct supervisor
+and native worker regression tests, and all four managed preview cases
+passed on rerun.
+All 15 authoring and 16 System diagnostics references passed in managed
+workspaces. The preserved evidence bundle
+`vibestudio-open-goal-reference-223-20261120` includes the 279-goal catalog,
+223 accepted references, and 47 verified holdouts.
 
 The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised

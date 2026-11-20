@@ -5317,3 +5317,13 @@ Migrated: sync_training_corpora, custody (protected packets), storage_retention 
 manifest paths now), the ops catalog, data_registry, the held and render registration scripts, and the inventories.
 The ratchet asserts three things: no single registry file, no entry over 1 MB, and no code naming the retired file.
 grpo-v5-run1 runs from its pin and is unaffected; grpo roles resolve to the same 18 pools and held-v3.
+
+### 2026-11-20 — Preserve complete observed Vibestudio calls
+
+Open-goal SFT verifies the runtime's recorded child inventory when present.
+Every runtime child, including a crisp step or failed attempt, must resolve
+inside the captured tree. The TypeScript materializer also verifies the
+runtime's digest over that inventory and the recorded effects. Both entry
+points continue to bind the original call artifacts to the independent
+workspace outcome. These checks protect training evidence from an export
+that loses an invocation while retaining the final answer.

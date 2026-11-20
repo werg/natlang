@@ -1,6 +1,10 @@
 {
   "schema": "vibestudio.open-goal-coverage/2",
   "families": {
+    "authoring": {
+      "capabilities": ["workspace-natlang-authoring", "runtime-live-program-receipts"],
+      "skills": ["base:skills/natlang-authoring/SKILL.md"]
+    },
     "browser": {
       "capabilities": ["panels"],
       "skills": ["base:packages/testkit/SKILL.md"]
@@ -81,12 +85,29 @@
       "capabilities": ["workspace-live-declared-test-suite"],
       "skills": ["base:extensions/test-runner/SKILL.md", "system-testing:skills/system-testing/SKILL.md"]
     },
+    "system-diagnostics": {
+      "capabilities": ["system-live-host-log-audit", "system-live-incident-continuation", "system-live-saved-log-cursor"],
+      "skills": ["system:skills/server-logs/SKILL.md"]
+    },
     "workspace-edit": {
       "capabilities": ["filesystem"],
       "skills": ["base:skills/open-user-goal/SKILL.md"]
     }
   },
   "cases": {
+    "open-goal-authoring-cinema-absent-scope-limits": {
+      "capabilities": {
+        "workspace-natlang-authoring": ["observedCurrentCompiler", "verifiedAuthoringFindings"]
+      },
+      "skills": {
+        "base:skills/natlang-authoring/SKILL.md": ["discoveredAuthoringRecords", "observedCurrentCompiler", "verifiedAuthoringFindings"]
+      }
+    },
+    "open-goal-authoring-fuel-console-entry-revision": {
+      "capabilities": {
+        "runtime-live-program-receipts": ["observedCurrentCompiler", "rejectedStaleAuthoringReceipt"]
+      }
+    },
     "open-goal-accelerate-source-checks-with-chicago-slot-protected": {
       "capabilities": {
         "news-live-ownership": ["verifiedAuthorizedChanges", "verifiedCadence", "verifiedReaderViews"]
@@ -126,6 +147,24 @@
       "skills": {
         "base:workers/pubsub-channel/SKILL.md": ["boundNativeReplay", "exactReplayScope"],
         "system-testing:packages/agentic-session/SKILL.md": ["discoveredRetainedSources", "verifiedRecoveryHandoff"]
+      }
+    },
+    "open-goal-diagnostics-archive-retry-completed": {
+      "capabilities": {
+        "system-live-incident-continuation": ["selectedExactDiagnosticWindows", "boundNativeDiagnosticReadback", "groundedDiagnosticCitations", "verifiedDiagnosticHandoff"]
+      }
+    },
+    "open-goal-diagnostics-past-boot-and-current-availability": {
+      "capabilities": {
+        "system-live-saved-log-cursor": ["selectedExactDiagnosticWindows", "preservedDiagnosticBootCoverage", "boundNativeDiagnosticReadback"]
+      }
+    },
+    "open-goal-diagnostics-quiet-after-failed-webhook": {
+      "capabilities": {
+        "system-live-host-log-audit": ["boundNativeDiagnosticReadback", "reconciledDiagnosticFinding", "groundedDiagnosticCitations"]
+      },
+      "skills": {
+        "system:skills/server-logs/SKILL.md": ["boundNativeDiagnosticReadback", "reconciledDiagnosticFinding", "groundedDiagnosticCitations"]
       }
     },
     "open-goal-evaluate-council-production-transfer": {
