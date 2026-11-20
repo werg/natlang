@@ -10,6 +10,7 @@ import { sourceQualityClearanceProblems } from '../dist/teacher/source-quality-c
 import { canonical } from '../dist/adaptation/identity.js';
 import { hexDigest } from '../dist/native/hash.js';
 import { fileDigest, jsonlRows } from './jsonl-stream.mjs';
+import { verifyObservedWorkspaceEvidence } from './observed-workspace-evidence.mjs';
 
 const {values, positionals: positional} = parseArgs({allowPositionals:true, options:{replace:{type:'boolean'}, 'direct-answers':{type:'boolean'}, 'pending-decisions':{type:'boolean'}, 'decision-review':{type:'string'}, 'source-quality-review':{type:'string'}}});
 const [inputPath, outputPath] = positional;
@@ -131,6 +132,8 @@ const handle = await open(staged, 'wx');
 let authoredHandle, accepted = 0, rejected = 0, partial = 0, turns = 0, approvedTurns = 0, replayedTurns = 0, authoredActions = 0;
 try { for await (const row of jsonlRows(input)) {
   seen.add(row.id);
+  if (row.provenance?.execution_kind === 'observed-live-workspace')
+    await verifyObservedWorkspaceEvidence(row);
   if (verifiedQualityReview) {
     const program = row.task?.program_ir;
     const entry = verifiedQualityReview.review.programs.find(item => item.program_id === program?.id);

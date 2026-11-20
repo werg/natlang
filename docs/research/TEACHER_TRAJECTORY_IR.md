@@ -2,7 +2,7 @@
 
 ## Canonical native pipeline
 
-New collection and materialization run entirely in Node on the canonical
+Native fixture collection and materialization run in Node on the canonical
 TypeScript host:
 
 ```bash
@@ -27,6 +27,13 @@ not copied into the next segment.
 coverage program and Studio application, rescans for new sources between waves,
 and resumes per-case atomic jobs after interruption. See
 `ts-host/TEACHER_MATERIALIZATION.md` for the native record contract.
+
+Vibestudio open goals use the same native trajectory and training-decision
+versions with an observed workspace execution source. The live importer binds
+the trajectory to the exact call tree, provider exchanges, and independent
+workspace outcome. The native materializer checks those source artifacts
+before emitting eligible generation decisions. See
+[Vibestudio open user goal data](VIBESTUDIO_OPEN_GOAL_DATA.md).
 
 ## Legacy trajectory migration (historical)
 

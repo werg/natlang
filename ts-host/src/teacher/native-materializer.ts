@@ -15,6 +15,7 @@ import { formatType, parseType, type Type } from '../native/types.js';
 import { writtenReturnResult } from '../native/pseudo-call.js';
 import { stagedResultBody } from '../native/staged-result.js';
 import { authenticateNativeXmlTurn } from '../model/native-xml-custody.js';
+import { materializeObservedWorkspace, OBSERVED_WORKSPACE_EXECUTION } from './observed-workspace.js';
 
 // The materializer reads two explicitly identified source dialects: exact
 // historical receipts remain reusable, and current collectors emit native
@@ -2010,6 +2011,15 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
   for (const candidate of input) {
     const row = validateRow(candidate);
     const rowDigest = nativeRowDigest(row);
+    if (row.provenance.execution_kind === OBSERVED_WORKSPACE_EXECUTION) {
+      if (options.candidateSelectionOnly || options.pendingDecisionCandidates ||
+          options.decisionHolds?.some(hold => hold.trajectory_id === row.id) ||
+          options.decisionApprovals?.some(approval => approval.trajectory_id === row.id))
+        throw new Error('observed workspace decisions use the independent live outcome admission');
+      turns.push(...materializeObservedWorkspace(row, rowDigest));
+      acceptedRows++;
+      continue;
+    }
     const reviewedHolds = new Map<number, NativeDecisionHold>();
     for (const hold of options.decisionHolds ?? []) if (hold.trajectory_id === row.id) {
       if (hold.source_row_sha256 !== rowDigest) throw new Error(`semantic review source hash mismatch: ${row.id}`);

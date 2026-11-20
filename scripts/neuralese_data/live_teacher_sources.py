@@ -1,9 +1,13 @@
 """Admission of observed live Natlang work; effects are verified, never called portable replays."""
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import sha256_file_hex
+
+NATIVE_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1'
+OBSERVED_WORKSPACE = 'observed-live-workspace'
 
 
 def bound_file(binding, root):
@@ -18,7 +22,7 @@ def bound_file(binding, root):
 def failed_action_turns(detail):
     """Generation ordinals containing failed actions, joined only by original tool-call IDs."""
     errors = [event for event in detail.get('events') or []
-              if event.get('kind') == 'action' and event.get('outcome') == 'error']
+              if event.get('kind') == 'action' and event.get('outcome') in {'error', 'rejected', 'blocked', 'budget'}]
     if not errors:
         return {}
     failed_ids = {event.get('tool_call_id') for event in errors}
@@ -35,6 +39,63 @@ def failed_action_turns(detail):
             raise ValueError('failed live action does not match exactly one captured generation')
         excluded.setdefault(owners[ident][0], []).append(ident)
     return excluded
+
+
+def observed_training_turns(trajectory):
+    """Project the supervised executor decisions from an observed native trajectory."""
+    if (trajectory.get('version') != NATIVE_TRAJECTORY_VERSION or
+            trajectory.get('provenance', {}).get('execution_kind') != OBSERVED_WORKSPACE or
+            trajectory.get('outcome', {}).get('accepted') is not True):
+        raise ValueError('unsupported observed workspace trajectory')
+    turns = []
+    for decision in trajectory['trajectory']:
+        if not decision['training_admission']['approved']:
+            continue
+        assistant = decision['assistant']
+        target = {'role': 'assistant', 'content': assistant['content']}
+        if assistant['reasoning']:
+            target['reasoning_content'] = assistant['reasoning']
+        if assistant['raw_calls']:
+            target['tool_calls'] = assistant['raw_calls']
+        invocation = decision['invocation_id']
+        parent = decision['parent_invocation_id']
+        turns.append({'messages': decision['context'], 'tools': decision['tools_offered'], 'target': target,
+                      'invocation_id': invocation, 'function': decision['function'],
+                      'definition_id': decision['definition_id'], 'parent_invocation': parent,
+                      'invocation_role': 'child' if parent else 'root', 'live_exchange': decision['live_exchange']})
+    return turns
+
+
+def observed_decision(binding, record, ancestry, index, exchange, assistant=None, denial=None):
+    invocation = record['call_id']
+    request = exchange.get('request') or {}
+    gateway = ((exchange.get('reply') or {}).get('raw_response') or {}).get('vibestudio')
+    return {
+        'phase': 'action' if exchange['kind'] == 'generation' else exchange['kind'],
+        'invocation_id': invocation, 'parent_invocation_id': record['parent_call_id'],
+        'function': record['definition']['name'], 'definition_id': record['definition']['id'],
+        'context': request.get('messages'), 'tools_offered': request.get('tools') or [],
+        'assistant': assistant, 'error': exchange.get('error'),
+        'training_admission': {'approved': denial is None, **({'reason': denial} if denial else {})},
+        'live_exchange': {'call_artifact': binding, 'ordinal': index, 'gateway': gateway,
+                          'root_call_id': ancestry[invocation][0], 'call_ancestry': ancestry[invocation],
+                          'target_source': 'actual-model-reply', 'student_sampling_claimed': False},
+    }
+
+
+def observed_graph(details, ancestry, scopes, exclusions):
+    """Keep each invocation's own event ordering and original resource receipts."""
+    return [
+        {'call_id': record['call_id'], 'parent_call_id': record['parent_call_id'],
+         'parent_action_index': record.get('parent_action_index'),
+         'definition': record['definition'], 'executor': record['executor'], 'outcome': record.get('outcome'),
+         'root_call_id': ancestry[record['call_id']][0], 'artifact': binding, 'scope': scopes[record['call_id']],
+         'inputs': record.get('inputs'), 'output': record.get('output'), 'effects': record.get('effects') or [],
+         'started_at': record.get('started_at'), 'ended_at': record.get('ended_at'),
+         'graph_custody': record.get('graph_custody'), 'events': detail.get('events') or [],
+         'excluded_failed_action_turns': {str(k): v for k, v in exclusions.get(record['call_id'], {}).items()}}
+        for binding, detail in details for record in [detail['record']]
+    ]
 
 
 def load_episode(path):
@@ -139,17 +200,25 @@ def load_episode(path):
             chain.append(current)
             current = records[current]['parent_call_id']
         ancestry[call_id] = list(reversed(chain))
-    exclusions = {}
+    exclusions, decisions = {}, []
     for binding, detail in details:
         record = detail['record']
         call_id = record['call_id']
-        if record['executor']['kind'] == 'crisp' or record.get('outcome') != 'done':
+        selected_executor = record['executor']['kind'] != 'crisp' and record.get('outcome') == 'done'
+        if not selected_executor and interaction is None:
             continue  # exact mechanism and failed attempts remain evidence, never successful demonstration targets
         exclusions[call_id] = failed_action_turns(detail)
+        actions = [event for event in detail.get('events') or [] if event.get('kind') == 'action']
+        counts = Counter(event.get('tool_call_id') for event in actions)
+        successful_actions = {event.get('tool_call_id') for event in actions
+                              if counts[event.get('tool_call_id')] == 1 and event.get('outcome') in {'ok', 'completed'}}
         for index, exchange in enumerate(record.get('model_turns') or []):
             if exchange.get('schema') != 'natlang.model-exchange/1':
                 raise ValueError('unsupported live model exchange')
             if exchange.get('kind') != 'generation' or exchange.get('error'):
+                if interaction is not None:
+                    decisions.append(observed_decision(binding, record, ancestry, index, exchange,
+                                                       denial='score or interrupted model exchange'))
                 continue
             request, reply = exchange['request'], exchange.get('reply')
             if not isinstance(reply, dict) or not isinstance(request.get('messages'), list):
@@ -184,6 +253,21 @@ def load_episode(path):
                 target['reasoning_content'] = reasoning
             if calls:
                 target['tool_calls'] = calls
+            if interaction is not None:
+                denial = ('executor did not complete' if not selected_executor else
+                          'decision contains a failed action' if index in exclusions[call_id] else
+                          'decision contains an action without execution evidence'
+                          if any(call['id'] not in successful_actions for call in original_calls) else
+                          'empty model response' if not text and not calls else None)
+                decisions.append(observed_decision(
+                    binding, record, ancestry, index, exchange,
+                    {'content': text, 'reasoning': reasoning, 'calls': [
+                        {'id': call['id'], 'source_tool': call['name'], 'arguments': call['arguments']}
+                        for call in original_calls],
+                     'raw_calls': calls}, denial))
+                if denial is None:
+                    models.add(gateway['model'])
+                continue
             if index in exclusions[call_id]:
                 continue  # failed action remains raw evidence and later zero-weight history, never a target
             if not target['content'] and not target.get('tool_calls'):
@@ -197,16 +281,31 @@ def load_episode(path):
                 'live_exchange': {'call_artifact': binding, 'ordinal': index, 'gateway': gateway,
                                   'root_call_id': ancestry[call_id][0], 'call_ancestry': ancestry[call_id],
                                   'target_source': 'actual-model-reply', 'student_sampling_claimed': False}})
-    if seen != set(scopes) or not turns:
-        raise ValueError('workflow call coverage incomplete or has no generated executor targets')
     task = {key: spec[key] for key in ('id', 'family', 'split', 'source_namespace', 'source_ids', 'source_groups', 'source_revisions')}
-    task['source'] = 'observed-live-workspace'
+    task['source'] = OBSERVED_WORKSPACE
+    source = {'path': str(path), 'sha256': sha256_file_hex(path)}
+    episode_key = f'live:{spec["id"]}:{source["sha256"]}'
+    trajectory = None
     if interaction is not None:
         task['interaction'] = interaction
-    return {'key': f'live:{spec["id"]}:{sha256_file_hex(path)}', 'source': 'teacher', 'run': str(path),
+        trajectory = {
+            'version': NATIVE_TRAJECTORY_VERSION, 'id': episode_key, 'task': task,
+            'provenance': {'collection_role': 'teacher', 'execution_kind': OBSERVED_WORKSPACE,
+                           'code': spec['code'], 'model_id': ','.join(sorted(models)),
+                           'source_manifest': source, 'verification': spec['verification']},
+            'outcome': {'accepted': True, 'status': verification['status'], 'world': world, 'checks': checks,
+                        'root_call_ids': attested_roots,
+                        'invocation_ledger': observed_graph(details, ancestry, scopes, exclusions)},
+            'trajectory': decisions,
+        }
+        turns = observed_training_turns(trajectory)
+    if not turns:
+        raise ValueError('workflow call coverage incomplete or has no generated executor targets')
+    return {'key': episode_key, 'source': 'teacher', 'run': str(path),
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,
             'teacher': {'model_id': ','.join(sorted(models))},
-            'verification_mode': 'observed-live', 'live_source': {'path': str(path), 'sha256': sha256_file_hex(path)},
+            'verification_mode': 'observed-live', 'live_source': source,
+            **({'trajectory_ir': trajectory} if trajectory is not None else {}),
             'world': world, 'call_tree': [
                 {'call_id': r['call_id'], 'parent_call_id': r['parent_call_id'], 'executor': r['executor']['kind'],
                  'outcome': r.get('outcome'), 'root_call_id': ancestry[r['call_id']][0], 'artifact': binding,

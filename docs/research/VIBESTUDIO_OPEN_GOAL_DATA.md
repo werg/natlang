@@ -23,7 +23,20 @@ case IDs. It uses the configured teacher and the chosen workspace's real runtime
 In the Natlang checkout, ingest each captured training manifest with
 `scripts/neuralese_data/sft_sources.py extract --work WORK --live-run MANIFEST`
 using the Neuralese Python environment. Pass all captures for the extraction
-together or use distinct `--out-name episodes-NAME` values. Assemble the SFT
+together or use distinct `--out-name episodes-NAME` values. Extraction stores
+the verified open-goal call tree and model decisions as
+`natlang.teacher_trajectory.native/1`. The SFT build derives its targets from
+that IR after comparing it with the original captured records. Rejected
+actions, unexecuted proposals, unsuccessful invocations, and score calls
+remain evidence. Only eligible generation decisions carry supervised weight.
+
+Pass `--live-trajectory-out teacher.native.jsonl.zst` at extraction to export
+standalone IR. Decompress it to JSONL and pass it to the Natlang TypeScript
+host's `scripts/materialize-native-teacher.mjs` with the original manifest and
+its bound artifacts in place. The materializer checks their digests and
+projects standard `natlang.teacher_training_turn.native/1` targets.
+
+Assemble the SFT
 mixture with `sft_sources.py build`, passing `--min-open-goal-share 0.8` to
 enforce the contract even when extraction admitted no live Vibestudio cases.
 The build automatically applies the minimum when verified Vibestudio live data
@@ -85,4 +98,4 @@ python scripts/vibestudio/open_goal_inventory.py \
 | Execute independently verifiable work | Public evidence is read from the live cache. A workspace revision is independently read back | Publishing, deployment, integration changes, UI state, and durable cross-service outcomes |
 | Recover safely | A concurrent file edit makes the agent reread, replan, and verify a revision that retains the competing edit | Service interruptions, partial commits, delegated work, and follow-up goals across sessions |
 | Generalize to fresh goals | A source group ties related public tasks together | Real user-goal intake and held source groups for every capability family |
-| Train from trajectories | Captured live exchange context is validated and assembled into per-call SFT targets | A live capture projection into the canonical semantic trajectory IR and measured results on held open goals |
+| Train from trajectories | The SFT importer and native materializer consume observed call trees in canonical trajectory IR | A live teacher smoke through the complete pipeline and measured results on held open goals |

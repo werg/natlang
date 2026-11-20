@@ -126,7 +126,14 @@ def rl_rollout_files(run_dir, archive_dir):
 def extract(args):
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
-    out = ZstdWriter(work / f'{args.out_name}.jsonl.zst')
+    episodes_out = work / f'{args.out_name}.jsonl.zst'
+    native_out = getattr(args, 'live_trajectory_out', None)
+    if native_out:
+        native_out = Path(native_out)
+        if not native_out.name.endswith('.jsonl.zst') or native_out.resolve() == episodes_out.resolve():
+            raise ValueError('live trajectory output needs a distinct .jsonl.zst path')
+    out = ZstdWriter(episodes_out)
+    native_lines = ZstdWriter(native_out) if native_out else None
     census = collections.OrderedDict()
     group_rates = collections.defaultdict(lambda: [0, 0])     # task -> [successes, scored] over all student groups
     for spec in args.rl:
@@ -218,9 +225,15 @@ def extract(args):
     for path in getattr(args, 'live_run', []) or []:
         from live_teacher_sources import load_episode
         episode = load_episode(path)
+        if episode.get('trajectory_ir'):
+            if native_lines:
+                native_lines.write(episode['trajectory_ir'])
+            del episode['turns']  # the learner reads the decision targets from the native trajectory
         out.write(episode)
         census.setdefault('observed-live', collections.Counter())['admitted_tasks'] += 1
     out.close()
+    if native_lines:
+        native_lines.close()
     if args.rl:
         rates = {k: {'successes': s, 'scored': n} for k, (s, n) in sorted(group_rates.items())}
         (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
@@ -245,6 +258,9 @@ def all_episodes(work):
                 episode = json.loads(line)
                 if episode['key'] not in seen:
                     seen.add(episode['key'])
+                    if episode.get('trajectory_ir'):
+                        from live_teacher_sources import observed_training_turns
+                        episode['turns'] = observed_training_turns(episode['trajectory_ir'])
                     yield episode
 
 
@@ -1389,7 +1405,10 @@ def build(args):
     def turns_of(c):
         if c.get('verification_mode') == 'observed-live':
             from live_teacher_sources import load_episode
-            return load_episode(c['live_source']['path'])['turns']
+            source = c['live_source']
+            if sha256_file(source['path']) != source['sha256']:
+                raise ValueError('observed live source changed before rendering')
+            return load_episode(source['path'])['turns']
         return replayed_turns(work, c['name'])
 
     episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, args.teacher_think, args.teacher_lead_in,
@@ -1973,6 +1992,8 @@ def main():
     e.add_argument('--teacher', action='append', default=[], metavar='POOL_DIR')
     e.add_argument('--live-run', action='append', default=[], metavar='MANIFEST',
                    help='verified observed workspace/CDP task; captured contexts only, no portable replay claim')
+    e.add_argument('--live-trajectory-out', metavar='OUTPUT.jsonl.zst',
+                   help='also export verified open goals as standalone canonical trajectory IR')
     e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')
     r = sub.add_parser('replay')
     r.add_argument('--work', required=True)

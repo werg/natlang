@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -80,9 +81,7 @@ def test_actual_context_and_tool_ids_are_preserved_without_score_targets(tmp_pat
     assert s.replay_episode(None, None, episode, None)['exact'] is False
 
 
-@pytest.mark.parametrize('mutation', [None, 'goal', 'extra-input', 'unattested'])
-def test_open_goal_has_to_match_the_original_goal_only_call(tmp_path, mutation):
-    path, spec, detail, verification = fixture(tmp_path)
+def open_goal(detail, spec, verification):
     goal = 'Bring the workshop update in line with the approved notes.'
     encoded = json.dumps(goal).encode()
     interaction = {'kind': 'open-user-goal', 'goal': goal, 'program': 'skills/open-user-goal/runUserGoal.nl'}
@@ -91,6 +90,14 @@ def test_open_goal_has_to_match_the_original_goal_only_call(tmp_path, mutation):
     detail['record']['definition']['name'] = 'runUserGoal'
     detail['record']['inputs'] = {'goal': {'complete': True, 'bytes': len(encoded),
                                           'hash': hashlib.sha256(encoded).hexdigest()}}
+    return interaction
+
+
+@pytest.mark.parametrize('mutation', [None, 'goal', 'extra-input', 'unattested'])
+def test_open_goal_has_to_match_the_original_goal_only_call(tmp_path, mutation):
+    path, spec, detail, verification = fixture(tmp_path)
+    interaction = open_goal(detail, spec, verification)
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
     if mutation == 'goal':
         interaction['goal'] = verification['interaction']['goal'] = 'Substituted goal'
     elif mutation == 'extra-input':
@@ -103,6 +110,39 @@ def test_open_goal_has_to_match_the_original_goal_only_call(tmp_path, mutation):
             live.load_episode(path)
     else:
         assert live.load_episode(path)['task']['interaction'] == interaction
+
+
+def test_open_goal_sft_uses_native_trajectory_and_retains_rejected_actions(tmp_path):
+    path, spec, detail, verification = recovery_fixture(tmp_path)
+    interaction = open_goal(detail, spec, verification)
+    detail['events'][0]['outcome'] = 'rejected'
+    detail['events'].append({'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-recovery-id'})
+    detail['record']['model_turns'].append({**detail['record']['model_turns'][0], 'kind': 'score'})
+    rewrite(tmp_path, spec, detail, verification)
+    episode = live.load_episode(path)
+    ir = episode['trajectory_ir']
+    assert ir['version'] == 'natlang.teacher_trajectory.native/1'
+    assert ir['task']['interaction'] == interaction
+    assert ir['outcome']['invocation_ledger'][0]['events'] == detail['events']
+    assert [turn['training_admission']['approved'] for turn in ir['trajectory']] == [False, True, False]
+    assert ir['trajectory'][0]['assistant']['calls'][0]['id'] == 'actual-tool-id'
+    assert episode['turns'][0]['target']['tool_calls'][0]['id'] == 'actual-recovery-id'
+    assert episode['turns'][0]['messages'][-1]['content'] == 'write failed'
+    native_out = tmp_path / 'teacher.native.jsonl.zst'
+    s.extract(SimpleNamespace(work=tmp_path, out_name='episodes-live', rl=[], teacher=[], live_run=[path.as_posix()],
+                              live_trajectory_out=native_out))
+    assert json.loads(next(s.zstd_lines(native_out))) == ir
+    assert 'turns' not in json.loads(next(s.zstd_lines(tmp_path / 'episodes-live.jsonl.zst')))
+    admitted = list(s.verified_episodes(tmp_path, collections.defaultdict(collections.Counter)))
+    assert admitted[0][0] == episode
+
+
+def test_open_goal_excludes_a_proposed_action_without_execution_evidence(tmp_path):
+    path, spec, detail, verification = fixture(tmp_path)
+    open_goal(detail, spec, verification)
+    rewrite(tmp_path, spec, detail, verification)
+    with pytest.raises(ValueError, match='no generated executor targets'):
+        live.load_episode(path)
 
 
 @pytest.mark.parametrize('mutation', ['owner', 'definition', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage', 'instance'])
