@@ -938,3 +938,54 @@ def test_prefix_tree_in_parts_gives_the_same_gradients():
     for index in expected:
         torch.testing.assert_close(actual[index], expected[index], rtol=1e-4, atol=1e-5)
     _grads_close(whole, split, 'prefix tree in parts')
+
+
+def test_levels_plan_reports_what_the_pass_recomputes():
+    """``levels_plan`` is the pass's own schedule: the run's batch counts and recomputed layer-tokens are the plan's."""
+    seqs, caps = _shared_sequences()
+    _, model = _pair()
+    weights = [torch.randn(len(s) - c, model.config.hidden_size) for s, c in zip(seqs, caps)]
+    nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
+    per_layer = lfm3_fast_train.ACTIVATION_BYTES_PER_TOKEN_LAYER
+    for budget in (None, 6 * per_layer / 2**30, 1.):
+        plan = lfm3_fast_train.levels_plan(model, nodes, lambda i, s: len(seqs[i]) - s, 12, budget)
+        _, _, stats = _tree_run(model, seqs, caps, weights, 12, budget=budget)
+        assert stats['prefix_batches'] == sum(len(level) for level in plan['prefix_batches'])
+        assert stats['leaf_batches'] == len(plan['leaf_batches'])
+        assert stats['recomputed_prefix_layer_tokens'] == plan['recomputed_prefix_layer_tokens']
+        assert stats['recomputed_leaf_layer_tokens'] == plan['recomputed_leaf_layer_tokens']
+        layers = len(model.model.layers)
+        assert plan['cost'] == (3 * layers * lfm3_fast_train.tree_tokens(nodes, [len(s) for s in seqs])
+                                + plan['recomputed_prefix_layer_tokens'] + plan['recomputed_leaf_layer_tokens'])
+
+
+def test_chosen_retained_bound_has_the_least_estimated_compute_and_exact_gradients():
+    """The default ``retained_gb`` (negative: ``choose_retained_gb``) takes the candidate bound with the least
+    ``levels_plan`` cost over its parts, and the pass in those parts keeps the whole tree's outputs and gradients."""
+    seqs, caps = _shared_sequences()
+    _, whole = _pair()
+    weights = [torch.randn(len(s) - c, whole.config.hidden_size) for s, c in zip(seqs, caps)]
+    nodes = lfm3_fast_train.prefix_tree(seqs, caps, 2)
+    tokens = lambda i, s: len(seqs[i]) - s
+    assert lfm3_fast_train.choose_retained_gb(whole, nodes, tokens, 12, None) == lfm3_fast_train.PREFIX_RETAINED_GB
+    per_token = lfm3_fast_train.retained_bytes_per_token(whole)
+    split_seen = False
+    for budget in (8 * per_token / 2**30, 20 * per_token / 2**30, 60 * per_token / 2**30):
+        chosen = lfm3_fast_train.choose_retained_gb(whole, nodes, tokens, 12, budget)
+
+        def cost(gb):
+            return sum(lfm3_fast_train.levels_plan(whole, part, tokens, 12, budget)['cost']
+                       for part in lfm3_fast_train._parts(whole, nodes, gb))
+        assert all(cost(chosen) <= cost(budget * share) for share in lfm3_fast_train.RETAINED_SHARES)
+        _, auto = _pair()
+        auto.load_state_dict(whole.state_dict())
+        expected, _, _ = _tree_run(whole, seqs, caps, weights, 12, budget=budget)
+        actual, batches, plan = _tree_run(auto, seqs, caps, weights, 12, budget=budget, retained_gb=-1)
+        split_seen |= plan.get('parts', 1) > 1
+        assert sorted(i for b in batches for i, _ in b) == list(range(len(seqs)))
+        for index in expected:
+            torch.testing.assert_close(actual[index], expected[index], rtol=1e-4, atol=1e-5)
+        _grads_close(whole, auto, f'chosen retained bound at {budget}')
+        for p in whole.parameters():
+            p.grad = None
+    assert split_seen

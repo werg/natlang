@@ -343,7 +343,8 @@ def test_teacher_demonstrations_default_on_with_an_opt_out(monkeypatch):
 
 
 def test_prefix_retained_memory_is_bounded_by_default(monkeypatch):
-    assert parsed(monkeypatch).prefix_retained_gb == 8.
+    assert parsed(monkeypatch).prefix_retained_gb == -1.          # the least-compute bound (choose_retained_gb)
+    assert parsed(monkeypatch, '--prefix-retained-gb', '8').prefix_retained_gb == 8.
     assert parsed(monkeypatch, '--prefix-retained-gb', '0').prefix_retained_gb == 0.
 
 

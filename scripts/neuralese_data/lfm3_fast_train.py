@@ -780,10 +780,15 @@ def set_checkpointing(model, tokens, activation_gb):
     ``activation_gb``: a checkpointed layer costs one extra forward (a third of its compute), an unchecked one its
     activations. Returns the number of recomputed layers."""
     layers = model.model.layers
-    free = int(min(len(layers), activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * max(1, tokens))))
+    count = recomputed_layers(len(layers), tokens, activation_gb)
     for index, layer in enumerate(layers):
-        layer.gradient_checkpointing = index >= free
-    return len(layers) - free
+        layer.gradient_checkpointing = index >= len(layers) - count
+    return count
+
+
+def recomputed_layers(layers, tokens, activation_gb):
+    """How many of ``layers`` a ``tokens`` sequence recomputes under ``activation_gb`` (``set_checkpointing``'s rule)."""
+    return layers - int(min(layers, activation_gb * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * max(1, tokens))))
 
 
 def _pack(items, size, limit):
@@ -987,30 +992,31 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
     ``retained_gb`` (levels; None or 0: unbounded) bounds what the prefixes keep until their backward
     (``retained_bytes_per_token`` per prefix token): a step's forest over it runs as ``prefix_parts``, one after the
     other, each to its own prefixes' backward (shared ancestors recomputed once per part). Unbounded, a 24-48-group GRPO
-    step kept every prefix of the step at once (grpo-v4-run1 step 1: the unit passed 110 GB, DECISIONS 2026-11-18)."""
+    step kept every prefix of the step at once (grpo-v4-run1 step 1: the unit passed 110 GB, DECISIONS 2026-11-18).
+    Negative: the bound with the least estimated compute under ``activation_gb`` (``choose_retained_gb``), reported as
+    ``retained_limit_gb`` when the forest splits."""
+    if mode == 'levels' and retained_gb is not None and retained_gb < 0:
+        retained_gb = choose_retained_gb(model, nodes, tokens, pack_tokens, activation_gb)
     if mode == 'levels' and retained_gb and nodes:
-        limit = int(retained_gb * 2**30 // retained_bytes_per_token(model))
-        if sum(_prefix_tokens(n) for n in nodes) > limit:
-            parts = prefix_parts(nodes, limit)
-            if len(parts) > 1:
-                plans = [run_prefix_tree(model, part, ids_of, leaf, tokens, pack_tokens, activation_gb, backward, mode,
-                                         batch_tokens) for part in parts]
-                merged = {key: sum(p[key] for p in plans) for key in ('prefix_batches', 'leaf_batches', 'prefix_tokens',
-                                                                       'recomputed_prefix_layer_tokens')}
-                return {**merged, 'parts': len(parts), 'retained_gb': round(max(p['retained_gb'] for p in plans), 2),
-                        'leaf_gb': min((p['leaf_gb'] for p in plans if p['leaf_gb'] is not None), default=None)}
+        parts = _parts(model, nodes, retained_gb)
+        if len(parts) > 1:
+            plans = [run_prefix_tree(model, part, ids_of, leaf, tokens, pack_tokens, activation_gb, backward, mode,
+                                     batch_tokens) for part in parts]
+            merged = {key: sum(p[key] for p in plans) for key in ('prefix_batches', 'leaf_batches', 'prefix_tokens',
+                                                                   'recomputed_prefix_layer_tokens',
+                                                                   'recomputed_leaf_layer_tokens')}
+            return {**merged, 'parts': len(parts), 'retained_gb': round(max(p['retained_gb'] for p in plans), 2),
+                    'retained_limit_gb': round(retained_gb, 2),
+                    'leaf_gb': min((p['leaf_gb'] for p in plans if p['leaf_gb'] is not None), default=None)}
     if mode == 'tree-mask':
         if batch_tokens is None or batch_tokens <= 0:
             batch_tokens = None if activation_gb is not None else pack_tokens       # None: plan_tree_batches
         return _run_tree_mask(model, nodes, ids_of, leaf, tokens, batch_tokens, activation_gb)
     if mode not in ('levels', 'off'):
         raise ValueError(f'prefix tree mode {mode!r}: one of {PREFIX_TREE_MODES}')
+    plan = levels_plan(model, nodes, tokens, pack_tokens, activation_gb)
     layers = model.model.layers
-    hidden_size = model.config.hidden_size
-    # key (= value) width summed over the full-attention layers: the history rows a continuation's attention saves
-    full = sum(layer.self_attn.k_proj.weight.shape[0] for layer, key in zip(layers, _layer_keys(model))
-               if key == ('attention', -1))
-    levels, continuations, wholes = prefix_levels(nodes)
+    leaf_gb, effective = plan['leaf_gb'], plan['effective']
 
     def past_of(node):
         chain = []
@@ -1018,35 +1024,15 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
             chain.append(node['segment'])
             node = node['parent']
         return Past(reversed(chain))
-
-    def history(node):
-        return 0 if node is None else node['end']
-
-    prefix_batches = [_pack(level, lambda n: n['end'] - n['start'], pack_tokens) for level in levels]
-    leaf_batches = (_pack(wholes, lambda item: tokens(item[0], item[1]), pack_tokens)
-                    + _pack(continuations, lambda item: tokens(item[0], item[1]), pack_tokens))
-    bytes_gb = ACTIVATION_BYTES_PER_TOKEN_LAYER * len(layers) / 2**30
-
-    def effective(batch):       # leaf rows plus the history keys and values its attention layers save, in token units
-        rows = sum(tokens(index, start) for index, start, _ in batch)
-        past = sum(history(parent) for _, _, parent in batch)
-        return rows + past * full * 2 * 2 / (ACTIVATION_BYTES_PER_TOKEN_LAYER * len(layers))
-    prefix_tokens = sum(n['end'] - n['start'] for level in levels for n in level)
-    retained_gb = prefix_tokens * retained_bytes_per_token(model) / 2**30
-    leaf_gb = None if activation_gb is None else max(0., activation_gb - retained_gb)
-    spare_gb = None if activation_gb is None else max(
-        0., leaf_gb - max([effective(b) for b in leaf_batches] + [0]) * bytes_gb)
     grad = torch.is_grad_enabled()
     compiled = getattr(model, '_lfm3_fast', None) is not None and model._lfm3_fast['compile']
-    graphs, recomputed = [], 0
-    for level in prefix_batches:
-        for batch in level:
+    graphs = []
+    for level, counts in zip(plan['prefix_batches'], plan['prefix_recompute']):
+        for batch, count in zip(level, counts):
             lengths = [n['end'] - n['start'] for n in batch]
-            if spare_gb is not None:
-                count = set_checkpointing(model, sum(lengths), spare_gb)
-                recomputed += count * sum(lengths)
-                spare_gb = max(0., spare_gb - (len(layers) - count) * sum(lengths) * ACTIVATION_BYTES_PER_TOKEN_LAYER
-                               / 2**30)
+            if count is not None:
+                for index, layer in enumerate(layers):
+                    layer.gradient_checkpointing = index >= len(layers) - count
             ids = torch.cat([ids_of(n['first'], n['start'], n['end']) for n in batch])
             pasts = [past_of(n['parent']) for n in batch]
             _, segments = _hidden_past(model, ids, lengths, pasts, compiled, keep=True)
@@ -1058,7 +1044,7 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
                 node['segment'] = Segment(segment.length, [tuple(t.detach().requires_grad_(grad) for t in layer)
                                                            for layer in segment.layers])
             graphs.append((outputs, [t for n in batch for t in n['segment'].tensors()]) if backward and grad else None)
-    for batch in leaf_batches:
+    for batch in plan['leaf_batches']:
         items = [(index, start) for index, start, _ in batch]
         pasts = [Past() if parent is None else past_of(parent) for _, _, parent in batch]
 
@@ -1074,10 +1060,101 @@ def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_
         pairs = [(t, h.grad) for t, h in zip(outputs, held) if h.grad is not None]
         if pairs:
             torch.autograd.backward([t for t, _ in pairs], [g for _, g in pairs])
-    return {'prefix_batches': sum(len(level) for level in prefix_batches), 'leaf_batches': len(leaf_batches),
-            'prefix_tokens': prefix_tokens, 'retained_gb': round(retained_gb, 2),
-            'leaf_gb': None if leaf_gb is None else round(leaf_gb, 2),
-            'recomputed_prefix_layer_tokens': recomputed}
+    return {'prefix_batches': sum(len(level) for level in plan['prefix_batches']),
+            'leaf_batches': len(plan['leaf_batches']), 'prefix_tokens': plan['prefix_tokens'],
+            'retained_gb': round(plan['retained_gb'], 2), 'leaf_gb': None if leaf_gb is None else round(leaf_gb, 2),
+            'recomputed_prefix_layer_tokens': plan['recomputed_prefix_layer_tokens'],
+            'recomputed_leaf_layer_tokens': plan['recomputed_leaf_layer_tokens']}
+
+
+def _full_width(model):
+    """Key (= value) width summed over the full-attention layers: the history rows a continuation's attention saves."""
+    return sum(layer.self_attn.k_proj.weight.shape[0] for layer, key in zip(model.model.layers, _layer_keys(model))
+               if key == ('attention', -1))
+
+
+def _parts(model, nodes, retained_gb):
+    """The forest as ``prefix_parts`` of at most ``retained_gb`` retained prefix state ([nodes]: one part)."""
+    limit = int(retained_gb * 2**30 // retained_bytes_per_token(model))
+    return prefix_parts(nodes, limit) if sum(_prefix_tokens(n) for n in nodes) > limit else [nodes]
+
+
+def levels_plan(model, nodes, tokens, pack_tokens, activation_gb):
+    """The ``levels`` schedule of one part (no model call): its prefix batches by level with each batch's recomputed
+    layer count (None without a budget), its leaf batches [(index, start, parent)], the leaves' budget ``leaf_gb``
+    (``activation_gb`` minus what the prefixes retain) and ``effective(batch)`` (leaf rows plus the history keys and
+    values its attention layers save, in token units), the layer-tokens recomputed (the leaves' at ``leaf_gb``), and
+    ``cost``: the pass's layer-token forwards (a forward and backward is 3 per token and layer, a recomputed layer 1
+    more), what ``choose_retained_gb`` compares."""
+    layers = len(model.model.layers)
+    full = _full_width(model)
+    levels, continuations, wholes = prefix_levels(nodes)
+
+    def history(node):
+        return 0 if node is None else node['end']
+    prefix_batches = [_pack(level, lambda n: n['end'] - n['start'], pack_tokens) for level in levels]
+    leaf_batches = (_pack(wholes, lambda item: tokens(item[0], item[1]), pack_tokens)
+                    + _pack(continuations, lambda item: tokens(item[0], item[1]), pack_tokens))
+    bytes_gb = ACTIVATION_BYTES_PER_TOKEN_LAYER * layers / 2**30
+
+    def effective(batch):
+        rows = sum(tokens(index, start) for index, start, _ in batch)
+        past = sum(history(parent) for _, _, parent in batch)
+        return rows + past * full * 2 * 2 / (ACTIVATION_BYTES_PER_TOKEN_LAYER * layers)
+    prefix_tokens = sum(n['end'] - n['start'] for level in levels for n in level)
+    retained_gb = prefix_tokens * retained_bytes_per_token(model) / 2**30
+    leaf_gb = None if activation_gb is None else max(0., activation_gb - retained_gb)
+    spare_gb = None if activation_gb is None else max(
+        0., leaf_gb - max([effective(b) for b in leaf_batches] + [0]) * bytes_gb)
+    recompute, recomputed = [], 0
+    for level in prefix_batches:
+        counts = []
+        for batch in level:
+            size = sum(n['end'] - n['start'] for n in batch)
+            count = None
+            if spare_gb is not None:
+                count = recomputed_layers(layers, size, spare_gb)
+                recomputed += count * size
+                spare_gb = max(0., spare_gb - (layers - count) * size * ACTIVATION_BYTES_PER_TOKEN_LAYER / 2**30)
+            counts.append(count)
+        recompute.append(counts)
+    leaf_tokens, leaf_recomputed = 0, 0
+    for batch in leaf_batches:
+        size = sum(tokens(index, start) for index, start, _ in batch)
+        leaf_tokens += size
+        if leaf_gb is not None:
+            leaf_recomputed += recomputed_layers(layers, effective(batch), leaf_gb) * size
+    return {'levels': levels, 'prefix_batches': prefix_batches, 'prefix_recompute': recompute,
+            'leaf_batches': leaf_batches, 'effective': effective, 'leaf_gb': leaf_gb, 'prefix_tokens': prefix_tokens,
+            'retained_gb': retained_gb, 'recomputed_prefix_layer_tokens': recomputed,
+            'recomputed_leaf_layer_tokens': leaf_recomputed,
+            'cost': 3 * layers * (prefix_tokens + leaf_tokens) + recomputed + leaf_recomputed}
+
+
+PREFIX_RETAINED_GB = 8.        # the fixed bound without an activation budget (``choose_retained_gb``)
+RETAINED_SHARES = (1 / 32, 1 / 16, 1 / 8, 1 / 6, 1 / 4, 1 / 3, 1 / 2, 2 / 3)
+
+
+def choose_retained_gb(model, nodes, tokens, pack_tokens, activation_gb):
+    """The ``retained_gb`` (``run_prefix_tree``, levels) with the least estimated compute under ``activation_gb``.
+
+    What the prefixes retain until their backward comes out of the same budget as the leaves' saved activations, so a
+    large bound leaves the leaves little and recomputes most of their layers, a small one splits the forest into many
+    parts, each recomputing its shared ancestors. Each candidate (shares of ``activation_gb``) is scored by
+    ``levels_plan``'s cost summed over its parts; ties keep the larger bound (fewer parts). grpo-v4-run2 step 40 (ACT 12,
+    fixed 8 GB: 5 parts, 3.65 GB for leaves of median 11k tokens) recomputed 76% of the layer-tokens; at 3 GB 62%, about
+    -3% of the pass's compute at the same memory (GRPO_STEP_THROUGHPUT_20261117.md, 2026-11-20). Without a budget:
+    ``PREFIX_RETAINED_GB``."""
+    if activation_gb is None or activation_gb <= 0 or not nodes:
+        return PREFIX_RETAINED_GB
+    best = None
+    for share in sorted(RETAINED_SHARES, reverse=True):
+        gb = activation_gb * share
+        cost = sum(levels_plan(model, part, tokens, pack_tokens, activation_gb)['cost']
+                   for part in _parts(model, nodes, gb))
+        if best is None or cost < best[0]:
+            best = (cost, gb)
+    return best[1]
 
 
 # --- loss ------------------------------------------------------------------------------------------------------------

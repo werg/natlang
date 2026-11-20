@@ -508,11 +508,14 @@ def add_prefix_tree_args(parser):
                         help='shared prefixes: tree-mask (each batch one flattened forward, every token attending and '
                         'convolving along its own path), levels (level-by-level packed continuations over cached state), '
                         'off (every chain whole; as --share-prefix-tokens 0)')
-    parser.add_argument('--prefix-retained-gb', type=float, default=8.,
+    parser.add_argument('--prefix-retained-gb', type=float, default=-1.,
                         help='levels: what the shared prefixes keep until their backward (layer inputs, FP32 history keys '
                         'and values and their gradients), at most this; a larger step runs its prefix tree in parts '
                         '(lfm3_fast_train.prefix_parts, exact, shared ancestors recomputed per part). grpo-v4-run1 step 1 '
-                        'held 229k prefix tokens (~31 GB) at once; 0: unbounded')
+                        'held 229k prefix tokens (~31 GB) at once. It comes out of --activation-gb, so the default (-1) '
+                        'picks the bound with the least estimated compute, prefix copies vs leaf layer recompute '
+                        '(lfm3_fast_train.choose_retained_gb; 8 without an activation budget); N: a fixed bound (the '
+                        'earlier default was 8); 0: unbounded')
     parser.add_argument('--tree-batch-tokens', type=int, default=-1,
                         help='tree-mask batch cap (prefixes once plus their continuations); default: the cap with the least '
                         'estimated compute, prefix copies vs layer recompute (lfm3_fast_train.plan_tree_batches)')

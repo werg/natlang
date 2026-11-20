@@ -302,3 +302,44 @@ CPU share; long-reply RL collection should sit between the two.
 Next: an overlap-on arm in the 11-03 configuration at dbc51ddb72 (BF16 KV, `--disable-hybrid-swa-memory`, 32
 running); if clean, a ~500-turn overlap-on sample in the production configuration; then overlap on by default at the
 next pin with `--sglang-overlap-schedule` as the switch, with the learner's per-token rho statistics as the guard.
+
+
+## Learner phase per-token rate vs SFT (2026-11-20, grpo-v4-run2 steps 1-40)
+
+Question: step 40's policy pass ran 1.8k computed tok/s against sft-v5's ~4.8k on the same `lfm3_fast_train`.
+
+- **Step 40 is not the learner's rate.** Clean steps run the policy pass at 3.8-4.4k tok/s and the reference pass at
+  14-16.7k (`forward_tokens / phase_s`). The slow steps (policy 1.8-2.6k: 12, 23, 34, 36, 39, 40; reference 7-9k: 30,
+  33) each overlap a GPU diagnostic unit in the ledger's events (step 40's policy pass 11:10-11:50 with `hz3-phx`
+  10:34-12:15; step 39 with `hz3-push*/kl37*/phase`; 36 with `hz2-haz35`; 33-34 with `hz2-haz31b`; 30 with `hz2-end29`):
+  the GB10 time-slices processes (~45/45, above), so the learner ran at about half rate. Those steps also swapped
+  0.3-1.4M pages in (the diagnostics' memory). GPU work is conserved, so the diagnostics' cost shows up in whichever
+  phase they overlap; nothing in the learner to fix.
+- **The clean 1.2x to SFT is the workload.** Per computed token GRPO trains 65% loss tokens (2.77M of 4.25M at step 40)
+  against SFT's 11%: each runs the tied 128k-vocabulary head 4 times (forward, backward's logit recompute, dh, dW; 0.52
+  GFLOP each against ~2.9 for the body's forward) plus the nucleus top-k, ~11% of the pass. Leaves are long (median chain
+  11.3k tokens, max 45k) with only `leaf_gb` 3.65 at ACT 12 / retained 8, so 75% of the layer-tokens are recomputed
+  (~17% of the pass); the reference pass is a forward of the same tokens (~3.85x faster than the policy pass, as a
+  forward + recompute should be). Contexts are longer than SFT's (13k vs 5k mean), so attention is a larger share.
+- **Shipped: the prefixes' retained bound is chosen per step (`--prefix-retained-gb` default -1,
+  `lfm3_fast_train.choose_retained_gb`).** What the prefixes retain comes out of `--activation-gb`; the fixed 8 GB left
+  the leaves 3.65 GB on step 40. Each candidate bound (shares of the budget) is scored by `levels_plan`'s cost
+  (3 layer-token forwards per token plus recomputed layer-tokens, prefix copies of extra parts included) and the least
+  wins. On run2's archived step chains at ACT 12: step 40 8 -> 3 GB, 5 -> 11 parts, body compute -3.0%; step 37 -7.2%;
+  steps 38-39 -2.3 to -2.8%; at the same memory bound (retained + leaves <= ACT). Exact by construction (parts already
+  were); tests: the plan is what the pass ran, the chosen bound has the least cost, outputs and gradients equal the
+  unsplit tree. `--prefix-retained-gb 8` restores the old bound. Both learners (exp0_sft, grpo) take it.
+  `prefix_tree.recomputed_leaf_layer_tokens` and `retained_limit_gb` are now in train.jsonl.
+- **Memory for speed, not taken here (a launch flag):** ACT 12 -> 20 cuts the remaining body compute a further ~5%
+  (step 40: r 0.62 -> 0.43 with the chosen bound) for ~+8 GB of learner-phase peak; run2's unit peaked at 58.5 GB under
+  a 84-92 GB budget.
+- **Not changed, with reasons:** the reference pass is a necessary forward of the start policy at ~49 TFLOPS effective;
+  fusing it into the policy pass saves no FLOPs (different weights), caching cannot apply (every step trains fresh
+  samples), overlapping it with collection gains nothing on the time-sliced GB10. Keeping the head's logits between
+  forward and backward would save 1 of 4 head matmuls (~3%) for 256 KB per loss token, about what the same memory buys
+  as saved activations.
+- **Not checked:** a GPU timing of the new bound (the DGX had ~10 GB free beside sft-v5; the change is a schedule
+  whose cost is settled by first principles, and the next run's `phase_s` shows it); the 88 KB/token-layer activation
+  constant against the real peaks (step 40's policy peak 49 GB allocated vs ~29 budgeted: the gap is long single
+  leaves, the head chunks and history gathers, not modelled); per-chain `.item()` syncs in `train_leaves` (the 11-17
+  profile put all host gaps at 2.5%).

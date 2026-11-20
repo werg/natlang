@@ -4672,3 +4672,19 @@ catalog. SFT checks it against each capture and rejects prompts shared across
 train and held splits, alongside the existing source-group check. A stable
 scenario ID can survive a prompt edit, so an old capture must match the prompt
 as well as the scenario and source groups. This changes data admission only.
+
+## 2026-11-20 15:20, GRPO learner per-token rate: step 40's 1.8k tok/s was GPU sharing; the prefixes' retained bound is chosen per step (learner-speed review strand; default)
+
+- **Measured (run2 train.jsonl, steps 1-40):** clean steps run the policy pass at 3.8-4.4k computed tok/s and the
+  reference pass at 14-16.7k. Every slow step (policy 1.8-2.6k at 12, 23, 34, 36, 39, 40; reference 7-9k at 30, 33)
+  overlaps a GPU diagnostic unit (step 40 with `hz3-phx`, 39 with `hz3-*`, 33-36 with `hz2-haz31b/haz35`): GB10
+  time-slicing, not a learner defect. The clean 1.2x gap to sft-v5 (4.8k) is the workload: 65% of GRPO's computed
+  tokens are loss tokens through the 128k head (4 head matmuls each) vs SFT's 11%, 75% of leaf layer-tokens recomputed
+  (leaf_gb 3.65 for median 11k-token chains), longer contexts. Details: GRPO_STEP_THROUGHPUT_20261117.md (2026-11-20).
+- **Shipped:** `--prefix-retained-gb` default -1 picks the retained bound with the least estimated compute under the
+  activation budget (`lfm3_fast_train.choose_retained_gb`, `levels_plan`); exact (parts), same memory bound; -2.3 to
+  -7.2% body compute on run2's steps 37-40. Opt-out `--prefix-retained-gb 8`. Both learners. Enters grpo-v5-run1 (and
+  any SFT) at a resume on a pin of this commit.
+- **For the supervisor (launch flag):** ACT 12 -> 20 buys ~5% more of the policy pass for ~+8 GB learner-phase peak.
+  GPU diagnostics beside a run cost it their GPU time 1:1 whichever phase they overlap.
+
