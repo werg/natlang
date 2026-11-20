@@ -177,7 +177,7 @@ def frontier_collector(base):
 def wait_actor(url, sha, process, log_path, timeout=3600):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if process.poll() is not None:
+        if process is not None and process.poll() is not None:
             raise RuntimeError(f'actor exited with {process.returncode} (see {log_path})')
         try:
             with urllib.request.urlopen(url + '/v1/neuralese/info', timeout=10) as response:
@@ -220,21 +220,28 @@ def collect(args):
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
-    command, url = grpo.actor_command(g, work, sha)
-    with (work / 'actor.log').open('a') as handle:
-        actor = subprocess.Popen(command, cwd=REPO, env=grpo.pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
-                                 start_new_session=True)
+    actor = None
+    if args.actor:      # an actor already serving this policy (smokes, a shared engine): its attested sha must match
+        url = args.actor.rstrip('/')
+        wait_actor(url, sha, None, None, timeout=60)
+        sglang = None
+    else:
+        command, url = grpo.actor_command(g, work, sha)
+        with (work / 'actor.log').open('a') as handle:
+            actor = subprocess.Popen(command, cwd=REPO, env=grpo.pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
+                                     start_new_session=True)
+        wait_actor(url, sha, actor, work / 'actor.log')
+        sglang = url.rsplit(':', 1)[0] + ':' + str(args.actor_port + 1000)
 
     def stop_actor(*_):
-        if actor.poll() is None:
+        if actor is not None and actor.poll() is None:
             os.killpg(actor.pid, signal.SIGTERM)
     import atexit
     atexit.register(stop_actor)
-    wait_actor(url, sha, actor, work / 'actor.log')
     g.actor = url
-    sglang = url.rsplit(':', 1)[0] + ':' + str(args.actor_port + 1000)
     (work / 'actor.json').write_text(json.dumps({'url': url, 'sglang': sglang, 'checkpoint_sha256': sha,
-                                                 'export': str(work / 'actor' / 'sglang-hf'), 'pid': actor.pid}) + '\n')
+                                                 'export': str(work / 'actor' / 'sglang-hf'),
+                                                 'pid': actor.pid if actor else None}) + '\n')
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(g.top_p, capture=True)) + '\n')
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     collector = frontier_collector(grpo.Collector)(g, tasks, work, sha, REPO / 'ts-host',
@@ -674,6 +681,8 @@ def main():
     c.add_argument('--dynamic-sampling-max-spread', type=float, default=0.1,
                    help="grpo's early stop of a group whose first wave agrees (0: all k samples always)")
     c.add_argument('--actor-port', type=int, default=8470)
+    c.add_argument('--actor', help='use this running actor front (its attested policy must be --checkpoint) instead '
+                   'of launching one')
     c.add_argument('--actor-arg', action='append', default=[])
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
