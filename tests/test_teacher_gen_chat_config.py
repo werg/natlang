@@ -29,7 +29,8 @@ def test_provider_teacher_runs_the_pi_transport_without_http_controls(tmp_path):
     command = teacher_gen.queue_command(http, tmp_path, tmp_path / 'q.jsonl', tmp_path / 'j.jsonl')
     assert command[command.index('--chat-completions-url') + 1] == 'https://openrouter.ai/api/v1/chat/completions'
     assert command[command.index('--api-key-env') + 1] == 'K' and '--provider' not in command
-    assert teacher_gen.teacher_identity(http) == {'model_id': 'm', 'endpoint': 'https://openrouter.ai/api/v1'}
+    assert teacher_gen.teacher_identity(http) == {'model_id': 'm', 'provider': 'openrouter',
+                                                  'endpoint': 'https://openrouter.ai/api/v1'}
     for bad in ({'model_id': 'm'}, {'model_id': 'm', 'endpoint': 'http://x', 'provider': 'openai-codex'},
                 {'model_id': 'm', 'provider': 'openai-codex', 'api_key_env': 'K'}):
         with pytest.raises(ValueError):
@@ -85,3 +86,13 @@ def test_task_a_teacher_failed_goes_to_another_teacher_first(tmp_path):
     assert generator._take(luna) == 0           # luna takes the passed x first
     assert generator._take(haiku) == 2          # every teacher failed z: no one to pass it to
     assert generator._take(luna) is None
+
+
+def test_every_teacher_identity_names_its_provider():
+    for endpoint, provider in (('https://integrate.api.nvidia.com/v1', 'nvidia-nim'),
+                               ('https://generativelanguage.googleapis.com/v1beta/openai', 'google-gemini'),
+                               ('https://api.z.ai/api/paas/v4', 'zai'), ('http://127.0.0.1:8082/v1', 'local:8082'),
+                               ('https://example.org/v1', 'example.org')):
+        teacher = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': endpoint})
+        identity = teacher_gen.teacher_identity(teacher)
+        assert identity['provider'] == provider and identity['model_id'] == 'm' and identity['endpoint'] == endpoint

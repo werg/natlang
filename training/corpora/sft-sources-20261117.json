@@ -11,6 +11,6 @@
       "order": 1
     }
   },
-  "license": "teacher-generation episodes (claude-haiku-5-5, gpt-6-luna, nemotron-3-ultra, gemini, glm-4.7-flash; see the teacher-gen campaigns) replayed under the project runtime",
+  "license": "teacher-generation episodes (claude-haiku-5-5, gpt-6-luna, nemotron-3-ultra, gemini, glm-4.7-flash; see the teacher-gen campaigns) replayed under the project runtime; october/ rows: nvidia/Qwen3.6-35B-A3B-NVFP4 (self-hosted vLLM, qwen-s72, qwen-campaign, part of fallow-v13r2/student-projection), gpt-6-luna (luna-*), Qwen3-Coder-480B (SWE-rebench OpenHands), gpt-oss (OpenResearcher), CooperBench Codex/Qwen sessions, fallow-v13r2 mixed models; per-trajectory model and provider in teacher-provenance-20261120",
   "note": "Self-distillation teacher demonstrations (grpo TeacherDemos). A refreshed WORK grows in place: its snapshots are journal records (sft_sources extract/replay record one per refresh), and each run records the sha of what it read."
 }

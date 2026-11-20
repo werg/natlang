@@ -181,11 +181,29 @@ PROVIDER_FAILURE = 'provider request retry exhausted'
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
 
+# HTTP teacher endpoints by host -> the provider that served them (manifest records name a provider for every teacher)
+ENDPOINT_PROVIDERS = {'integrate.api.nvidia.com': 'nvidia-nim', 'openrouter.ai': 'openrouter',
+                      'generativelanguage.googleapis.com': 'google-gemini', 'api.z.ai': 'zai',
+                      'api.anthropic.com': 'anthropic', 'api.openai.com': 'openai'}
+
+
+def endpoint_provider(endpoint):
+    """The provider of an OpenAI-compatible teacher endpoint: a known host's name, `local:<port>` for a self-hosted
+    server on this machine, else the host itself."""
+    from urllib.parse import urlparse
+    url = urlparse(endpoint)
+    host = (url.hostname or '').lower()
+    if host in ('127.0.0.1', 'localhost', '0.0.0.0', '::1'):
+        return f'local:{url.port}' if url.port else 'local'
+    return ENDPOINT_PROVIDERS.get(host, host or None)
+
+
 def teacher_identity(teacher):
-    """What a manifest record names as its teacher: the model and its transport (HTTP endpoint or natlang provider)."""
+    """What a manifest record names as its teacher: the model, the provider that served it, and its transport (a natlang
+    Pi provider with its reasoning effort, or an HTTP endpoint)."""
     if teacher.provider:
         return {'model_id': teacher.model_id, 'provider': teacher.provider, 'reasoning_effort': teacher.reasoning_effort}
-    return {'model_id': teacher.model_id, 'endpoint': teacher.endpoint}
+    return {'model_id': teacher.model_id, 'provider': endpoint_provider(teacher.endpoint), 'endpoint': teacher.endpoint}
 
 
 def queue_command(teacher, work, queue_file, journal):
