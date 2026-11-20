@@ -927,7 +927,8 @@ def verified_episodes(work, funnel, extracted=None, sources=None):
             record = json.loads(line)
             if 'key' in record:
                 replays[record['key']] = record
-    admission_cache = {}
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    admission_cache, admission_digests = {}, {}
     for episode in all_episodes(work):
         if extracted is not None:
             extracted.add(episode['key'])
@@ -951,7 +952,9 @@ def verified_episodes(work, funnel, extracted=None, sources=None):
         if fixture_task(episode['task']):
             admission = episode.get('admission') or {}
             path = admission.get('path')
-            if not path or sha256_file(path) != admission.get('sha256'):
+            if path and path not in admission_digests:   # once per file (hashed per episode it read the HDD for minutes)
+                admission_digests[path] = sha256_file_hex_cached(path, trust_archive_receipt=False)
+            if not path or admission_digests[path] != admission.get('sha256'):
                 raise ValueError('fixture source admission missing or changed after extraction')
             cache_key = path, admission['sha256']
             if cache_key not in admission_cache:
@@ -1261,13 +1264,16 @@ class EpisodeSizes:
 
 
 def parse_aux(spec):
-    """``NAME=PATH[,share=S|all][,task_tokens=N][,think=context|train]``: a prebuilt chains file (operator rows,
-    Neuralese text/graph rows, live-workflow rows) taking ``share`` of the build's weighted target tokens (``all``: every
-    chain), each task's loss capped at ``task_tokens``; ``think`` context zero-weights a leading empty think block
-    (``exp0_sft.mask_empty_think``: written or dataset targets, e.g. operator seeds and consumer answers)."""
+    """``NAME=PATH[,share=S|all][,task_tokens=N][,think=context|train][,replaces=SOURCE]``: a prebuilt chains file
+    (operator rows, Neuralese text/graph rows, live-workflow rows, filled-reasoning rows) taking ``share`` of the build's
+    weighted target tokens (``all``: every chain), each task's loss capped at ``task_tokens``; ``think`` context
+    zero-weights a leading empty think block (``exp0_sft.mask_empty_think``: written or dataset targets, e.g. operator
+    seeds and consumer answers). ``replaces`` SOURCE: a unit whose round is ``<prefix>:<episode key>`` stands in for
+    that episode of SOURCE when the build admitted it, whose chains are then dropped (filled_reasoning.py rows: the same
+    teacher actions after the student's filled reasoning, never trained twice)."""
     name, rest = spec.split('=', 1)
     path, *options = rest.split(',')
-    part = {'name': name, 'path': path, 'share': 'all', 'task_tokens': 0, 'think': 'context'}
+    part = {'name': name, 'path': path, 'share': 'all', 'task_tokens': 0, 'think': 'context', 'replaces': None}
     for option in options:
         key, value = option.split('=', 1)
         if key == 'share':
@@ -1278,6 +1284,8 @@ def parse_aux(spec):
             if value not in ('context', 'train'):
                 raise ValueError(f'aux think {value!r}')
             part['think'] = value
+        elif key == 'replaces':
+            part['replaces'] = value
         else:
             raise ValueError(f'aux option {key!r} in {spec!r}')
     return part
@@ -1300,9 +1308,17 @@ def load_aux(part, tokenizer, held):
             part['held_dropped'] = part.get('held_dropped', 0) + 1
             continue
         units[(str(task), str(chain.get('round')))].append(chain)
-    return [{'task': task, 'chains': members,
+    return [{'task': task, 'round': round_, 'chains': members,
              'weighted': float(sum(chain_weights(chain, 'cpu').sum().item() for chain in members))}
-            for (task, _), members in units.items()]
+            for (task, round_), members in units.items()]
+
+
+def replaced_round(part, unit):
+    """The admitted episode (chain round) an aux unit stands in for (``parse_aux`` ``replaces``), or None."""
+    if not part.get('replaces') or ':' not in unit['round']:
+        return None
+    key = unit['round'].split(':', 1)[1]
+    return key if key.split(':', 1)[0] == part['replaces'] else None
 
 
 def open_goal_key(goal):
@@ -1370,7 +1386,7 @@ def build(args):
     import numpy as np
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from exp0_sft import MAX_LEN, chains_of, source_tokens
+    from exp0_sft import MAX_LEN, chain_mass, chains_of, source_tokens
     work, out = Path(args.work), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
@@ -1688,12 +1704,16 @@ def build(args):
     loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
     all_tokens = sum(sum(u['weighted'] for u in units) for part, units in loaded if part['share'] == 'all')
     total_tokens = (actions_tokens + all_tokens) / (1 - fixed_share)
-    aux_report = {}
+    aux_report, replaced_rounds = {}, {}
     for part, units in loaded:
         budget = None if part['share'] == 'all' else part['share'] * total_tokens
         rng.shuffle(units)
         taken, used, per_task = 0, collections.Counter(), collections.Counter()
         for unit in units:
+            why = frontier_drop(unit['task'], tiers, own_tasks) if frontier and part.get('replaces') else None
+            if why:   # a filled teacher episode of a task the policy solves: its own successes train instead
+                used[why] += 1
+                continue
             if budget is not None and taken + unit['weighted'] > budget:   # a unit that would overshoot: a smaller one may fit
                 used['over_share'] += 1
                 continue
@@ -1702,6 +1722,9 @@ def build(args):
                 continue
             per_task[unit['task']] += unit['weighted']
             taken += unit['weighted']
+            replaced = replaced_round(part, unit)
+            if replaced is not None:
+                replaced_rounds[(part['replaces'], replaced)] = part['name']
             used['units'] += 1
             used['chains'] += len(unit['chains'])
             used['forward_tokens'] += sum(len(chain['ids']) + source_tokens(chain) for chain in unit['chains'])
@@ -1712,6 +1735,21 @@ def build(args):
                                     'available_units': len(units), 'weighted_target_tokens': int(taken),
                                     'tasks': len(per_task), 'budget_tokens': None if budget is None else int(budget),
                                     'max_task_tokens': int(max(per_task.values(), default=0)), **used}
+
+    if replaced_rounds:   # episodes an aux unit stands in for (``replaces``): their own chains go
+        def replaced(chain):
+            return (chain.get('part'), str(chain.get('round'))) in replaced_rounds
+        dropped = [chain for chain in all_chains if replaced(chain)]
+        kept = [chain for chain in all_chains if not replaced(chain)]
+        for chain in dropped:
+            r = aux_report[replaced_rounds[(chain.get('part'), str(chain.get('round')))]]
+            r['replaced_chains'] = r.get('replaced_chains', 0) + 1
+            r['replaced_weighted_target_tokens'] = r.get('replaced_weighted_target_tokens', 0) + int(chain_mass(chain))
+            r.setdefault('replaced_episodes', set()).add(str(chain.get('round')))
+        for r in aux_report.values():
+            if 'replaced_episodes' in r:
+                r['replaced_episodes'] = len(r['replaced_episodes'])
+        all_chains[:] = kept
 
     # 4. the student's own verified successes (their reasoning included) up to their share, breadth-first over tasks,
     #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``)
