@@ -675,7 +675,7 @@ def train(args):
     student_top_p = 1. if args.stock_model else args.student_top_p
     if args.context_masks == 'on':
         from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(args.base)
+        tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)
         second = args.second_close == 'context'
         print(json.dumps({'context_masks': context_masks(chains, tokenizer, second),
                           **{f'context_masks:{name}': context_masks(c, tokenizer, second) for name, c in val_sets.items()}}),
