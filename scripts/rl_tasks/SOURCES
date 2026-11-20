@@ -59,3 +59,4 @@ bgkit-haystack bgkit_reading:haystack
 bgkit-pubmed bgkit_reading:pubmed
 bgkit-narrative bgkit_reading:narrative
 bgkit-memory bgkit_reading:memory
+git-history git_history:cases
