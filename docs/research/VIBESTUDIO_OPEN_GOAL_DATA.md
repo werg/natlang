@@ -213,12 +213,14 @@ record the prepared dependency key in the report. The adapter checks the
 requested state, target, suite, and filters, and the harness checks the
 workspace state again before issuing a receipt.
 
-Managed rechecks passed all five native executions, including the Mission
-Control form suite after its manifest declared the DOM environment and
-Testing Library peer. The managed News and Google Workspace reference runs passed all
-12 and all seven cases respectively, including their holdouts. Spectrolite
-navigation and held-out preview checks passed. The Spectrolite draft write
-persisted in VCS and still needs successful readback from the open editor.
+All 34 new goals passed managed reference checks. The result covers all
+10 Personal and System suite goals, all 12 News goals, all seven Drive
+goals, and all five Spectrolite goals, including the new holdouts. The
+Mission Control form suite passed after its manifest declared the DOM
+environment and Testing Library peer. The Spectrolite draft oracle
+verified the saved edit in the original live renderer and kept the
+committed document intact. The MDX exporter now honors the editor's
+setting to preserve authored imports without adding generated ones.
 Tick's bounded Luna provider probe returned expired OAuth, so the
 live teacher capture through learner assembly remains unverified.
 Pop reproduced the 51-case catalog byte for byte from the pushed host and
