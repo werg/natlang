@@ -365,8 +365,8 @@ configured learner tokenizer. It produced one trajectory and 24 supervised
 tokens, with both open-goal shares at 100%. Bounded Luna provider probes on
 Tick and Pop returned expired OAuth. The live teacher capture through
 learner assembly remains unverified.
-Pop reproduced the pinned 310-goal catalog byte for byte from clean detached
+Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
-under `/home/werg/vibestudio-worktrees/open-goal-release-310.xdtrKV` on Pop.
+under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
 `pins.tsv` records the exact revisions. The catalog SHA-256 is
-`fc0b0bc11ca23747cd86aa7711ff8fa2b2453aecd79aa948daf720912cb82b77`.
+`b2ed072ab3a9a57632ba1e2ab127ea953a6b2c6b402dd6291aff8cab0eaec5aa`.
