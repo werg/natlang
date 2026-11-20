@@ -397,8 +397,12 @@ root's sole argument. Outcome verification also checks the registered goal.
 
 The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised
-tokens, with both open-goal shares at 100%. Bounded Luna provider probes on
-Tick and Pop returned expired OAuth. The live teacher capture through
+tokens, with both open-goal shares at 100%. A one-reply Luna probe on Tick
+passed after sign-in. The first managed attempt exposed invalid service-scope
+paths in mounted packages, which were corrected. The next attempt loaded
+the joint program and reached the model gateway. The gateway call remained
+pending until the six-minute test deadline. The collector retained the
+failure trace and retired the owned instance. Live teacher capture through
 learner assembly remains unverified.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
