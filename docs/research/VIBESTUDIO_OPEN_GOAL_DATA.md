@@ -212,3 +212,13 @@ Native tests now request the declared dependency closure from the host and
 record the prepared dependency key in the report. The adapter checks the
 requested state, target, suite, and filters, and the harness checks the
 workspace state again before issuing a receipt.
+
+Managed rechecks passed four of the five native executions. The Mission
+Control form suite reached its selected test and exposed an undeclared
+Testing Library peer, which is now in the manifest. Its live recheck is
+pending. The managed News and Google Workspace reference runs passed all
+12 and all seven cases respectively, including their holdouts. Spectrolite
+navigation and held-out preview checks passed. The Spectrolite draft write
+persisted in VCS and still needs successful readback from the open editor.
+Tick's bounded Luna provider probe returned expired OAuth, so the
+live teacher capture through learner assembly remains unverified.
