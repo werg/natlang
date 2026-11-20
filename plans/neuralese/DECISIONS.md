@@ -5212,7 +5212,8 @@ held scoring series is unchanged: this is training data and objective only.
   unfitted programs from sft-sources-20261117 + 20261120 + the progtune teacher pool (replay-verified support
   successes only): rows/tasks verdict 1,280/159, tally 3,175/211, tree 740/113, multihop 11,718/508, searchqa
   12,568/700, iterate 7,146/600, retail 902/144, pubmed 5,301/368. Same recipe (60 x 8 rows). `progtune-fit-seq-3`
-  runs them one at a time (low, 20 GB, resumable) beside GRPO; each halves the GRPO actor's decode while it runs
+  runs them one at a time (low, 20 GB, resumable); beside grpo-v5's 92 GB the ledger leaves ~14 GB, so they queue until
+  memory frees (T4's next action: a sub-13 GB fit); each halves the GRPO actor's decode while it runs
   (11-18 measurement), ~35 min each.
 - **Not done:** the adapter arm and compare (no Pop window while grpo-v5 evaluates every new checkpoint back to back;
   if none opens before grpo-v5 ends, both arms move to a DGX actor then); T3 parity on this release (needs a GPU);
