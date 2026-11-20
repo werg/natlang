@@ -59,11 +59,13 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   rest never start (``wave_plan``, ``PassRatePrior``, ``Collector._after_wave``) and the slots go to other groups.
 * self-distillation: ``--sd-weight`` replays the run's own rare verified successes; ``--sd-teacher-weight`` adds verified
   teacher-pool successes of tasks in the pass band or all-fail as a ratio-free term (``TeacherDemos``).
-* reasoning RL against fixed teacher actions (``--reasoning-rl-weight``, default on; 0 opts out): a search along
-  teacher trajectory segments (JOLT+ teacher successes, ``TeacherDemos``) samples the student's own think blocks before
-  each teacher action, more where the action is hard to predict, carries the best forward as history and rewards each
-  by the teacher actions' likelihood after it (return-to-go); the teacher actions train as a ratio-free cross-entropy
-  and the carried chains join the SD replay (``ReasoningRL``, ``rrl_episodes``; the comment above ``RRL_ROLE``).
+* reasoning RL against fixed teacher actions (``--reasoning-rl-weight``, default on; 0 opts out): a walk along
+  teacher trajectories (JOLT+ teacher successes, ``TeacherDemos``) samples the student's own think blocks before each
+  teacher action and carries the best forward as history. Each block trains token by token on the forward KL from the
+  policy's privileged twin, which sees the teacher action (``--reasoning-rl-objective twin-fkl``, default since
+  2026-11-20); ``sequence`` instead rewards it by the teacher actions' likelihood after it (return-to-go), with search,
+  rewrites and carried SD chains. The teacher actions train as a ratio-free cross-entropy (``ReasoningRL``,
+  ``rrl_episodes``; the comment above ``RRL_ROLE``).
 
 * pin: the run executes from its own pinned copy of one commit (``scripts/pin_checkout.py create COMMIT W/pin-<c12>``,
   then launch ``W/pin-<c12>/scripts/neuralese_data/grpo.py`` with that copy as workdir); every child (actor, episodes,
@@ -1955,9 +1957,62 @@ def sd_teacher_tasks(collector, band):
 #   5. the carried chain (student reasoning that leads to the teacher's actions; a step whose best z did not score
 #      high keeps it as context) joins the self-distillation replay (``--sd-weight``) as source ``search``.
 # Within a group the action is fixed, so mean and summed log-probability rank alike and a no-reasoning baseline cancels.
+#
+# The objective (``--reasoning-rl-objective``; DECISIONS 2026-11-20 "reasoning RL without the future agreement bias").
+# 'sequence' (before 2026-11-20) trains each think block by its group-normalized return, the likelihood of the actions
+# after it: a sequence-level reward on z. Strauss, Fowl & Razin (arXiv 2611.23397, Lemma 1 / Prop. 1) show that such an
+# objective has a future agreement bias: it favours tokens after which the rest of the sequence agrees with the target,
+# whatever their own probability, and so short, formulaic continuations (over-refusal, early stops). Here that is
+# closing ``</think>`` right after naming the action (hazard investigation 3, DECISIONS 2026-11-20 12:00). Selecting
+# the best-scoring blocks for self-distillation (the carried ``search`` chains, the ``rewrite`` mode) is the same
+# selection. 'twin-fkl' (default) is the paper's myopic token-level objective with forward KL: at every position of
+# each sampled think block, KL(twin(. | x', z<t) || policy(. | x, z<t)), the twin being the policy itself with the
+# teacher action in a training guidance turn (x'; the OPSD form of Zhao et al., the teacher of the paper's code
+# base), computed on the actor (top-k + ``</think>`` input log-probabilities, ``twin_distributions``) and matched in
+# the learner (``twin_forward_kl``); the teacher action after a closed block keeps its cross-entropy (a token-level
+# term too). Each step draws one wave, every sample trains, the best return is still carried as history (context
+# only), and neither carried chains nor rewrites feed the SD replay unless asked for.
 RRL_ROLE = 'reasoning_rl'
 MIN_REASONING_ROOM = 256   # reasoning tokens a step must have room for, or the trajectory ends there
 RRL_SOURCES = ('jolt', 'demos')
+RRL_OBJECTIVES = ('twin-fkl', 'sequence')
+TWIN_HEADER = 'Verified reference for this call (training only):\n\nThe reply that follows your reasoning:\n'
+
+
+def rrl_objective(args):
+    """``--reasoning-rl-objective`` ('sequence' for an args object from before the flag)."""
+    return getattr(args, 'reasoning_rl_objective', 'sequence')
+
+
+def rrl_rewrite_share(args):
+    """``--reasoning-rl-rewrite-share``, defaulting by objective: 0.3 for 'sequence', 0 for 'twin-fkl' (a rewrite keeps
+    the blocks that score best, the sequence-level selection the twin objective removes)."""
+    share = getattr(args, 'reasoning_rl_rewrite_share', None)
+    if share is not None:
+        return share
+    return 0.3 if rrl_objective(args) == 'sequence' else 0.
+
+
+def rrl_carry_sd(args):
+    """Whether a walk's best chain joins the SD replay (``--reasoning-rl-carry-sd``; default on for 'sequence', off for
+    'twin-fkl', where the best-return chain is the sequence-level selection)."""
+    carry = getattr(args, 'reasoning_rl_carry_sd', None)
+    if carry is not None:
+        return carry == 'on'
+    return rrl_objective(args) == 'sequence'
+
+
+def twin_turn_ids(tokenizer, close_id):
+    """The twin's guidance turn as served-tokenizer ids (``twin_context``): header (``<|im_start|>system`` and
+    ``TWIN_HEADER``), footer (``<|im_end|>`` and a newline), the ``<|im_end|>`` and newline ids. The teacher action's
+    own ids go between header and footer unchanged (no detokenize/re-encode round trip)."""
+    def encode(text):
+        return list(tokenizer.encode(text, add_special_tokens=False).ids)
+    im_end, newline = tokenizer.token_to_id('<|im_end|>'), encode('\n')
+    if im_end is None or len(newline) != 1:
+        raise ValueError('the served tokenizer has no <|im_end|> or no single-token newline')
+    return {'header': encode('<|im_start|>system\n' + TWIN_HEADER), 'footer': [im_end] + newline, 'im_end': im_end,
+            'newline': newline[0], 'close': close_id}
 
 
 def split_reply(sample, close_id):
@@ -2115,6 +2170,35 @@ def rrl_episodes(groups, reasoning_weight, action_weight, unclosed='drop'):
     items, stats, lengths, centred = [], collections.Counter(), [], []
     for group in groups:
         samples = group['samples']
+        if group.get('objective') == 'twin-fkl':
+            # myopic: every sample's think block (closed or cut by the cap: each position is an on-policy prefix) at
+            # the forward KL to its twin, weight ``reasoning_weight``; no return-ranked advantage; the teacher action
+            # after a closed block as before
+            stats['groups'] += 1
+            stats['groups_twin'] += 1
+            stats['samples'] += len(samples)
+            stats['unclosed'] += sum(not s['closed'] for s in samples)
+            stats[f"source_{group['source']}"] += 1
+            stats[f"mode_{group.get('mode', 'whole')}"] += 1
+            stats[f"hard_{bool(group.get('hard'))}"] += 1
+            closed = [s for s in samples if s['closed']]
+            stats['reward_sum'] += sum(s['reward'] for s in closed)
+            stats['reward_count'] += len(closed)
+            stats['r0_sum'] += group.get('r0') or 0.
+            stats['r0_count'] += group.get('r0') is not None
+            for k, sample in enumerate(samples):
+                if 'twin_ids' not in sample:
+                    stats['twin_missing'] += 1
+                    continue
+                name = f"rrl-{group['id']}-{k}"
+                rows = rrl_rows(name, group['context'], sample, group['action'], group.get('action_weight'), 0.,
+                                action_weight)
+                rows[0].update(twin_ids=sample['twin_ids'], twin_logp=sample['twin_logp'], twin_weight=reasoning_weight)
+                items.append(({'task_id': group['task_id'], 'round': name, 'rows': rows, 'decisions': []}, RRL_ROLE))
+                stats['reasoning_tokens'] += len(sample['ids'])
+                stats['action_tokens'] += len(group['action']) if len(rows) > 1 else 0
+                stats['twin_close_sum'] += sample.get('twin_close_mean', 0.) * len(sample['ids'])
+            continue
         advantages, reason = rrl_advantages([s['return'] for s in samples], [s['closed'] for s in samples],
                                             group['min_std'], unclosed)
         stats['groups'] += 1
@@ -2178,6 +2262,11 @@ def rrl_record(stats, worker_counts, ready):
         out['length_return_corr'] = round(stats['length_return_corr'], 3)
     if stats.get('samples'):
         out['reasoning_tokens_per_sample'] = round(stats.get('reasoning_tokens', 0) / stats['samples'], 1)
+    if stats.get('groups_twin') and stats.get('reasoning_tokens'):
+        # the twin's mean p(</think>) over the trained think blocks (the learner logs the policy's beside it)
+        out['twin_close_mean'] = round(stats['twin_close_sum'] / stats['reasoning_tokens'], 5)
+    if stats.get('twin_missing'):
+        out['twin_missing'] = int(stats['twin_missing'])
     out['worker'] = dict(worker_counts)
     out['ready'] = ready
     return out
@@ -2205,9 +2294,14 @@ class ReasoningRL:
     points, so concurrent copies would each prefill it), and each scoring forward leaves the next step's history
     (z, action, tool output) in the radix cache for the draws that continue from it."""
 
-    def __init__(self, args, sglang_url, close_id, stop_ids, banned, markers, collector, demos, log=print, first_group=0):
+    def __init__(self, args, sglang_url, close_id, stop_ids, banned, markers, collector, demos, log=print, first_group=0,
+                 twin=None):
         self.args, self.url, self.close_id, self.collector, self.demos, self.log = (
             args, sglang_url, close_id, collector, demos, log)
+        # the privileged twin's turn (``twin_context``: header ids, footer ids, <|im_end|>, newline); None: no twin
+        self.twin = twin if rrl_objective(args) == 'twin-fkl' else None
+        if rrl_objective(args) == 'twin-fkl' and twin is None:
+            raise ValueError('--reasoning-rl-objective twin-fkl needs the twin turn ids')
         self.stops = sorted({close_id, *stop_ids})
         self.stop_ids = set(stop_ids)
         self.banned, self.markers = sorted(banned), set(markers)   # Neuralese role markers: the front's protocol
@@ -2237,7 +2331,7 @@ class ReasoningRL:
         out = []
         for run in runs:
             calls = run[:self.args.reasoning_rl_calls] if self.args.reasoning_rl_calls > 0 else run
-            mode = 'rewrite' if self.rng.random() < self.args.reasoning_rl_rewrite_share else 'whole'
+            mode = 'rewrite' if self.rng.random() < rrl_rewrite_share(self.args) else 'whole'
             if len(calls[0]['prompt']) + len(calls[0]['reply']) + MIN_REASONING_ROOM > self.args.max_sequence_tokens:
                 self.counts['segment_too_long'] += 1
                 continue
@@ -2364,6 +2458,34 @@ class ReasoningRL:
             out.append(float(sum(values) / length))
         return out
 
+    def _twin(self, context, action, samples):
+        """The privileged twin's next-token distributions over each sample's think block (``twin_distributions``): the
+        policy itself on ``context`` with the teacher action given in a training guidance turn (``twin_context``), the
+        same SGLang weights the draws came from, temperature 1 and no nucleus (input log-probabilities). The twin's
+        prompt is prefilled once first (SGLang keeps LFM3's conv state only at track points, so concurrent copies would
+        each prefill it); the samples then score on it in parallel."""
+        from concurrent.futures import ThreadPoolExecutor
+        twin = self.twin
+        action = [int(i) for i in action]
+        if action and action[-1] == twin['im_end']:
+            action = action[:-1]          # the footer closes the turn
+        prompt, found = twin_context(context, twin['header'] + action, twin['footer'], twin['im_end'], twin['newline'])
+        self.counts['twin_no_system_turn'] += int(not found)
+        self._post({'input_ids': prompt, 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1}})
+
+        def one(sample):
+            ids = list(sample['ids'])
+            result = self._post({'input_ids': prompt + ids, 'sampling_params': {'temperature': 0.0, 'max_new_tokens': 1},
+                                 'return_logprob': True, 'logprob_start_len': len(prompt) - 1,
+                                 'top_logprobs_num': self.args.reasoning_rl_twin_top_k,
+                                 'token_ids_logprob': [self.close_id]})
+            return twin_distributions(result['meta_info'], self.close_id, len(ids))
+        with ThreadPoolExecutor(max(1, len(samples))) as pool:
+            for sample, (ids, logp, close) in zip(samples, pool.map(one, samples)):
+                sample['twin_ids'], sample['twin_logp'] = ids, logp
+                sample['twin_close_mean'] = float(close.mean()) if len(close) else 0.
+                self.counts['twin_tokens'] += len(close)
+
     def closed_form(self, ids):
         """A think block as later history: as sampled when it closed; else without a trailing stop token and closed
         with ``</think>`` (context, never a sample)."""
@@ -2424,6 +2546,8 @@ class ReasoningRL:
                     continue
                 version = self.collector.version
                 samples, drawn = [], 0
+                if self.twin is not None:
+                    budget = a.reasoning_rl_wave   # myopic: every sample trains; no search for a high-scoring one
                 while drawn < budget:   # waves until one scores high (stop early) or the budget is spent
                     wave = min(a.reasoning_rl_wave, budget - drawn)
                     samples += self._samples(beam['context'], calls, t, wave, room)
@@ -2432,9 +2556,11 @@ class ReasoningRL:
                         break
                 if not samples:
                     continue
+                if self.twin is not None:
+                    self._twin(beam['context'], call['action'], samples)
                 self.counts['hard_samples' if hard else 'samples_ordinary'] += len(samples)
                 groups.append({'task_id': segment['task_id'], 'key': segment['key'], 'source': segment['source'],
-                               'mode': segment.get('mode', 'whole'),
+                               'mode': segment.get('mode', 'whole'), 'objective': rrl_objective(a),
                                'step': t, 'hard': hard, 'r0': r0[t], 'context': np.asarray(beam['context'], np.int32),
                                'action': call['action'], 'action_weight': call.get('action_weight'),
                                'samples': samples, 'version': version})
@@ -2452,7 +2578,8 @@ class ReasoningRL:
                     context += [int(i) for i in call['suffix']]
                 beams.append({'context': context, 'path': beam['path'] + [(beam['context'], sample)],
                               'return': beam['return'] + sample['reward']})
-        carried = self.carried(segment, max(beams, key=lambda b: b['return'])['path']) if beams and groups else None
+        carried = (self.carried(segment, max(beams, key=lambda b: b['return'])['path'])
+                   if beams and groups and rrl_carry_sd(a) else None)
         return groups, carried
 
     def carried(self, segment, path):
@@ -2936,6 +3063,110 @@ def close_push(coefficient, targets, p_close, close_id, mask):
     with torch.no_grad():
         delta = (targets == close_id).float() - p_close
         return float((coefficient.float() * delta)[mask].sum())
+
+
+def _twin_fkl_chunk(rows, weight, ids, teacher_logp, valid, targets, target_logp):
+    """Forward KL of one chunk (see ``twin_forward_kl``); ``rows`` the hidden rows predicting ``targets``."""
+    import torch
+    rows = rows.float()
+    z_y = (rows * weight[targets].float()).sum(-1)
+    z = torch.einsum('nd,nkd->nk', rows, weight[ids].float())
+    log_student = z - (z_y - target_logp.float())[:, None]           # log p_S(v) = z_v - log Z, log Z = z_y - log p_S(y)
+    p_teacher = teacher_logp.float().exp() * valid
+    p_student = log_student.clamp(max=0.).exp() * valid
+    teacher_tail = (1. - p_teacher.sum(-1)).clamp(min=0.)
+    student_tail = (1. - p_student.sum(-1)).clamp(min=1e-12)
+    inner = torch.where(valid > 0, p_teacher * (teacher_logp.float() - log_student), torch.zeros_like(log_student))
+    tail = torch.where(teacher_tail > 0, teacher_tail * (teacher_tail.clamp(min=1e-12).log() - student_tail.log()),
+                       torch.zeros_like(teacher_tail))
+    return inner.sum(-1) + tail
+
+
+def twin_forward_kl(h, positions, weight, targets, target_logp, ids, teacher_logp, chunk=1024):
+    """Token-level forward KL(twin || policy) at each target row (reasoning RL's myopic objective, Strauss, Fowl & Razin
+    arXiv 2611.23397 eq. 3 with D = FKL): the teacher is the policy's privileged twin, given as its top-k ids and
+    log-probabilities (``ids``/``teacher_logp`` (n, k), ``-inf`` pads). The KL is exact on the partition {the k ids, the
+    rest}: the twin's mass outside its top k is matched as one bucket, so tokens the twin did not list are neither
+    pushed to zero (a renormalized top-k teacher would sharpen the student) nor ignored. The student's log-probability of
+    an id needs no second softmax: ``z_v - z_y + log p(y)`` from the target's logit and the log-probability the loss
+    already computed (as ``close_probability``), so the cost is k dot products a row, chunk-checkpointed. Gradient on a
+    listed logit: p_S(v) - p_T(v) (the paper's eq. 4 for FKL: it vanishes only where the two agree)."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    valid = torch.isfinite(teacher_logp).float()
+    safe = torch.where(valid > 0, teacher_logp, torch.zeros_like(teacher_logp))
+    out = []
+    for a in range(0, positions.shape[0], chunk):
+        part = slice(a, a + chunk)
+        args = (h[positions[part]], weight, ids[part].long(), safe[part], valid[part], targets[part], target_logp[part])
+        out.append(checkpoint(_twin_fkl_chunk, *args, use_reentrant=False) if torch.is_grad_enabled()
+                   else _twin_fkl_chunk(*args))
+    return torch.cat(out) if out else torch.zeros(0, device=h.device)
+
+
+def twin_rows(chain, device):
+    """(ids (n, k), twin log-probabilities (n, k), scale (n,)) of ``chain``'s n targets for ``twin_forward_kl``, or None
+    when no row carries a twin. Rows with ``twin_ids``/``twin_logp`` (reasoning RL's sampled think blocks) get their
+    row's ``twin_weight`` as scale; every other target has scale 0 and ``-inf`` pads."""
+    import torch
+    rows = [(length, row) for _, length, row in chain['segs']]
+    if not any('twin_ids' in row for _, row in rows):
+        return None
+    width = max(np.asarray(row['twin_ids']).shape[1] for _, row in rows if 'twin_ids' in row)
+    ids, logp, scale = [], [], []
+    for length, row in rows:
+        if 'twin_ids' in row:
+            i, lp = np.asarray(row['twin_ids'], np.int64), np.asarray(row['twin_logp'], np.float32)
+            pad = width - i.shape[1]
+            ids.append(np.pad(i, ((0, 0), (0, pad))))
+            logp.append(np.pad(lp, ((0, 0), (0, pad)), constant_values=-np.inf))
+            scale.append(np.full(length, float(row.get('twin_weight', 1.)), np.float32))
+        else:
+            ids.append(np.zeros((length, width), np.int64))
+            logp.append(np.full((length, width), -np.inf, np.float32))
+            scale.append(np.zeros(length, np.float32))
+    return (torch.from_numpy(np.concatenate(ids)).to(device), torch.from_numpy(np.concatenate(logp)).to(device),
+            torch.from_numpy(np.concatenate(scale)).to(device))
+
+
+def twin_context(context, header, footer, im_end, newline):
+    """The privileged twin's prompt: ``context`` with one system turn (``header`` ids, the teacher action, ``footer``
+    ids) inserted after the leading system turn (its ``<|im_end|>`` and the newline after it), where the runtime places
+    a training guidance turn (rl/privileged_context ``PrivilegedRendering``); at the start when there is none. Returns
+    (ids, whether a leading turn was found)."""
+    context = [int(i) for i in context]
+    at, found = 0, False
+    if im_end in context:
+        at, found = context.index(im_end) + 1, True
+        if at < len(context) and context[at] == newline:
+            at += 1
+    return context[:at] + list(header) + list(footer) + context[at:], found
+
+
+def twin_distributions(meta, close_id, count):
+    """(ids (n, k+1) int32, log-probabilities (n, k+1) float32, twin p(``</think>``) (n,)) of the last ``count`` input
+    positions from an SGLang ``/generate`` answer with ``top_logprobs_num`` k and ``token_ids_logprob`` [close]: each
+    position's top k, plus ``</think>`` when the top k does not list it (a ``-inf`` pad otherwise), so the close
+    decision is always matched exactly."""
+    tops = (meta.get('input_top_logprobs') or [])[-count:] if count else []
+    closes = (meta.get('input_token_ids_logprobs') or [])[-count:] if count else []
+    if len(tops) != count or len(closes) != count:
+        raise RuntimeError('SGLang returned no input top logprobs for the twin')
+    k = max((len(t or ()) for t in tops), default=0)
+    ids = np.zeros((count, k + 1), np.int32)
+    logp = np.full((count, k + 1), -np.inf, np.float32)
+    close = np.zeros(count, np.float32)
+    for n, (top, extra) in enumerate(zip(tops, closes)):
+        entries = [(float(lp), int(i)) for lp, i, *_ in (top or ()) if lp is not None]
+        close_lp = next((float(lp) for lp, i, *_ in (extra or ()) if int(i) == close_id and lp is not None), None)
+        if close_lp is None:
+            raise RuntimeError('SGLang returned no </think> logprob for the twin')
+        if all(i != close_id for _, i in entries):
+            entries.append((close_lp, close_id))
+        for j, (lp, i) in enumerate(entries[:k + 1]):
+            ids[n, j], logp[n, j] = i, lp
+        close[n] = math.exp(close_lp)
+    return ids, logp, close
 
 
 def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
@@ -3703,8 +3934,9 @@ def train(args):
             if export_manifest.exists() else []
         from natlang_neuralese.model.shared_state import ROLE_MARKERS
         markers = [i for i in (served.token_to_id(m) for m in ROLE_MARKERS) if i is not None]   # Neuralese role markers
+        twin = twin_turn_ids(served, think_close) if args.reasoning_rl_objective == 'twin-fkl' else None
         reasoning_rl = ReasoningRL(args, sglang_url, think_close, stop_ids, banned, markers, collector, teacher_demos,
-                                   log=lambda r: log_line(log, r), first_group=first_group)
+                                   log=lambda r: log_line(log, r), first_group=first_group, twin=twin)
         if args.resume and rrl_ready_path is not None:
             restored = reasoning_rl.restore(rrl_ready_path, step)
             if restored:
@@ -3712,6 +3944,8 @@ def train(args):
         reasoning_rl.start(stop)
         log_line(log, {'event': 'reasoning rl', 'sources': reasoning_rl.sources, 'demo_tasks': len(reasoning_rl.demo_tasks),
                        'stop_ids': reasoning_rl.stops, 'banned': banned, 'markers': markers,
+                       'rewrite_share_effective': rrl_rewrite_share(args), 'carry_sd_effective': rrl_carry_sd(args),
+                       **({'twin_header_tokens': len(twin['header'])} if twin else {}),
                        **{k: v for k, v in vars(args).items() if k.startswith('reasoning_rl_')}})
 
     def write_native(step_number):
@@ -4492,6 +4726,28 @@ def train(args):
                         sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
                                                             chain_p_close, think_close, thinking)
                 loss = loss + loss_terms.sum() * token_scale
+                twin = twin_rows(chain, logp.device) if chain.get('role') == RRL_ROLE else None
+                if twin is not None:
+                    # reasoning RL's myopic objective (--reasoning-rl-objective twin-fkl): forward KL from the
+                    # privileged twin at each sampled think-block position (twin_forward_kl)
+                    t_ids, t_logp, t_scale = twin
+                    on = t_scale > 0
+                    chain_positions, chain_targets = positions.split(counts)[k], targets.split(counts)[k]
+                    fkl = twin_forward_kl(h, chain_positions[on], model.lm_head.weight, chain_targets[on], logp[on],
+                                          t_ids[on], t_logp[on])
+                    loss = loss + (t_scale[on] * fkl).sum() * token_scale
+                    with torch.no_grad():
+                        sums['twin_fkl'] += fkl.detach().sum().item()
+                        sums['twin_tokens'] += int(on.sum())
+                        teacher_close = torch.where(t_ids[on] == think_close, t_logp[on].exp(),
+                                                    torch.zeros_like(t_logp[on])).sum(-1)
+                        sums['twin_close_teacher'] += teacher_close.sum().item()
+                        if p_close_rows is not None:
+                            student_close = p_close_rows.split(counts)[k][on]
+                            sums['twin_close_student'] += student_close.sum().item()
+                            # its push on the </think> logit: -dLoss/dz_close = scale (p_twin - p_policy)
+                            sums['close_push:reasoning_rl_twin'] += float(
+                                (token_scale * t_scale[on] * (teacher_close - student_close)).sum())
                 if chain.get('role') == RRL_ROLE:
                     # the teacher actions' likelihood after the student's reasoning, and learner-actor agreement on the
                     # term's own samples
@@ -4732,7 +4988,12 @@ def train(args):
             **({'reasoning_rl': {**record['reasoning_rl'],
                                  'learner_action_logp': round(sums['rrl_action_logp'] / max(1, sums['rrl_action_tokens']), 4),
                                  'reasoning_abs_log_rho': round(sums['rrl_reasoning_abs_log_rho']
-                                                                / max(1, sums['rrl_reasoning_tokens']), 5)}}
+                                                                / max(1, sums['rrl_reasoning_tokens']), 5),
+                                 **({'twin_fkl_mean': round(sums['twin_fkl'] / sums['twin_tokens'], 5),
+                                     'twin_tokens': int(sums['twin_tokens']),
+                                     'twin_p_close_twin': round(sums['twin_close_teacher'] / sums['twin_tokens'], 6),
+                                     'twin_p_close_policy': round(sums['twin_close_student'] / sums['twin_tokens'], 6)}
+                                    if sums['twin_tokens'] else {})}}
                if 'reasoning_rl' in record else {}),
             replay_mean_logp={key.split(':', 1)[1]: round(sums[key] / max(1, sums['replay_tokens:' + key.split(':', 1)[1]]), 4)
                               for key in list(sums) if key.startswith('replay_logp:')} or None,
@@ -4923,13 +5184,27 @@ def main():
     t.add_argument('--reasoning-rl-weight', type=float, default=1.0,
                    help='reasoning RL against fixed teacher actions (ReasoningRL): a search along teacher trajectory '
                         'segments samples the student\'s own think blocks, rewarded by the teacher actions\' mean token '
-                        'log-probability after them (return-to-go); this scales their group-normalized advantage (0: off)')
+                        'log-probability after them (return-to-go); this scales their training term (0: off): the twin '
+                        'forward KL (--reasoning-rl-objective twin-fkl) or their group-normalized advantage (sequence)')
     t.add_argument('--reasoning-rl-action-weight', type=float, default=0.05,
                    help='the teacher action after each closed sampled think block as a ratio-free cross-entropy (0: the '
                         'reasoning term alone)')
-    t.add_argument('--reasoning-rl-rewrite-share', type=float, default=0.3,
-                   help='share of teacher invocations rewritten in parallel (ReasoningRL.rewrite: SD data); the rest '
-                        'are walked step by step on the student\'s own carried reasoning (RL groups and an SD chain)')
+    t.add_argument('--reasoning-rl-objective', choices=RRL_OBJECTIVES, default='twin-fkl',
+                   help='how sampled think blocks train: twin-fkl (default; 2026-11-20) the token-level forward KL from '
+                        'the privileged twin (the policy given the teacher action) at every position, myopic, without '
+                        'the future agreement bias of a sequence-level reward (arXiv 2611.23397); sequence (before): '
+                        'the group-normalized return (the teacher actions\' likelihood after the block). '
+                        '--reasoning-rl-weight scales either')
+    t.add_argument('--reasoning-rl-twin-top-k', type=int, default=32,
+                   help='twin-fkl: the twin\'s top-k log-probabilities per position (plus </think>); the rest of its '
+                        'mass is matched as one bucket')
+    t.add_argument('--reasoning-rl-carry-sd', choices=('on', 'off'), default=None,
+                   help='a walk\'s best-return chain joins the SD replay (source search); default on for sequence, off '
+                        'for twin-fkl (choosing the best-return chain is the sequence-level selection)')
+    t.add_argument('--reasoning-rl-rewrite-share', type=float, default=None,
+                   help='share of teacher invocations rewritten in parallel (ReasoningRL.rewrite: SD data of the '
+                        'best-scoring rewrites); the rest are walked step by step on the student\'s own carried '
+                        'reasoning. Default 0.3 for --reasoning-rl-objective sequence, 0 for twin-fkl')
     t.add_argument('--reasoning-rl-rewrite-rounds', type=int, default=4, help='rewrite rounds')
     t.add_argument('--reasoning-rl-rewrite-tokens', type=int, default=1024,
                    help='tokens of one rewrite continuation at most (it must close its think block)')
