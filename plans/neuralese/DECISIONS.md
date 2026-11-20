@@ -4630,3 +4630,12 @@ reasoning tokens it trains, per role (student, reasoning_rl, sd, sd_teacher, rep
 products a row). The next hazard move is attributed from the step's own record, without hours of offline forward passes.
 `--no-close-push` opts out. Test: `test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero_on_policy`.
 Scripts: scratchpad `hz3/` (session 4c9bd489): poshaz.py, closepush{,2,3}.py, phase.py.
+
+**2026-11-20 12:20, grpo-v4-run2 stopped; sft-v5 launched (supervisor).** run2 ran 40 steps from the base without a
+held gain: held-v3 deltas -3.1 to +2.3 vs the new-protocol base (54.1%), last two +1.2 (step 32, p 0.65) and +2.3
+(step 36, 56.45%, p 0.30), ran-out at or below the base's since step 30. Collection-bound at 24 groups (~190
+episodes) an hour, so more steps of the same buy little per hour. The `</think>` hazard rise is explained by two
+independent investigations as reasoning RL's objective (no learner bug in scope; DECISIONS 2026-11-20 12:00). sft-v5
+(plan and criteria in its DECISIONS entry) launched on pin f9664edfe (includes close_push 9072c42cc): SFT/RFT on 7,688
+verified teacher episodes + own successes from the base, then grpo-v5-run1. run2's last states (39, 40) and held
+checkpoints 26-40 stay on /mnt/external as the fallback that sft-v5's drive resumes on a failure verdict.
