@@ -74,8 +74,8 @@ auxiliary data are included in the denominator when selected.
 
 ### One-case smoke on Pop
 
-Use the existing verified release directory on Pop or recreate its detached
-worktrees from the [317-goal source pins](vibestudio-open-goal-pop-pins-317.tsv).
+Recreate the release's detached worktrees on Pop from the
+[343-goal source pins](vibestudio-open-goal-pop-pins-343.tsv).
 Set `RELEASE` to the desired directory. Run the following in Bash from Pop's
 Natlang checkout, using the ledger for the dependency installation.
 
@@ -97,7 +97,7 @@ while IFS=$'\t' read -r name sha; do
   fi
   test "$(git -C "$RELEASE/$name" rev-parse HEAD)" = "$sha"
   test -z "$(git -C "$RELEASE/$name" status --porcelain)"
-done < docs/research/vibestudio-open-goal-pop-pins-317.tsv
+done < docs/research/vibestudio-open-goal-pop-pins-343.tsv
 ```
 
 Install the host dependencies with `pnpm install --frozen-lockfile` from
@@ -395,8 +395,8 @@ scratch handoff. The 343-goal release adds these goals and ten Personal
 browser migration goals, preserving the prior 317 entries. The current
 reference evidence covers 307 released goals, including 63 held-out goals.
 It also covers 19 goals in staged catalogs. The evidence bundles are
-`vibestudio-open-goal-verified-317-20261120` and
-`vibestudio-open-goal-google-setup-verified-9-20261120`.
+`vibestudio-open-goal-reference-317-20261120` and
+`vibestudio-open-goal-google-setup-reference-9-20261120`.
 The managed collector now passes the registered goal directly as the Natlang
 root's sole argument. Outcome verification also checks the registered goal.
 
