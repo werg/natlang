@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from scripts.vibestudio.audit_open_goal_references import audit, corpus_floor, fingerprint
+from scripts.vibestudio.audit_open_goal_references import audit, corpus_floor, fingerprint, inventory_coverage
 
 
 def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
@@ -67,3 +67,31 @@ def test_corpus_floor_comes_from_the_pinned_baseline(tmp_path):
     baseline.write_text(json.dumps({**snapshot, 'minimum_distinct_open_goals': 12}) + '\n')
     with pytest.raises(ValueError, match='Invalid pinned baseline'):
         corpus_floor(baseline)
+
+
+def test_inventory_links_count_only_after_a_reference_pass(tmp_path):
+    baseline = tmp_path / 'baseline.jsonl'
+    baseline.write_text('\n'.join(map(json.dumps, [
+        {'kind': 'system-test', 'capability': 'retained-session'},
+        {'kind': 'system-test', 'capability': 'file-version'},
+        {'kind': 'skill', 'id': 'source:session'},
+    ])))
+    path = tmp_path / 'crosswalk.json'
+    mapping = {
+        'schema': 'vibestudio.open-goal-coverage/1',
+        'families': {'recovery': {'capabilities': ['retained-session'], 'skills': ['source:session']}},
+    }
+    path.write_text(json.dumps(mapping))
+    family = {'verified_train': 0, 'verified_held': 0}
+    report = {'families': {'workspace-open-user-goal-recovery': family}}
+    features = inventory_coverage(report, baseline, path)['capabilities']
+    assert features['unmapped'] == ['file-version']
+    assert features['verified_reference_links'] == []
+    family['verified_held'] = 1
+    assert inventory_coverage(report, baseline, path)['capabilities']['verified_reference_links'] == [
+        'retained-session',
+    ]
+    mapping['families']['recovery']['skills'] = ['unknown']
+    path.write_text(json.dumps(mapping))
+    with pytest.raises(ValueError, match='Unknown skills'):
+        inventory_coverage(report, baseline, path)

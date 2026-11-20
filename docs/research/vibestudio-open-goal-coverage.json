@@ -1,0 +1,77 @@
+{
+  "schema": "vibestudio.open-goal-coverage/1",
+  "families": {
+    "browser": {
+      "capabilities": ["panels"],
+      "skills": ["base:packages/testkit/SKILL.md"]
+    },
+    "calendar": {
+      "capabilities": [],
+      "skills": ["google-workspace:skills/google-workspace/SKILL.md"]
+    },
+    "gmail": {
+      "capabilities": ["google-live-gmail-compose-history", "google-live-compose-continuation"],
+      "skills": ["google-workspace:workers/gmail-agent/SKILL.md"]
+    },
+    "google": {
+      "capabilities": ["google-live-drive-checkpoint", "google-live-drive-inventory-sharing"],
+      "skills": ["google-workspace:skills/google-drive/SKILL.md"]
+    },
+    "news": {
+      "capabilities": ["news-live-ownership"],
+      "skills": ["news:panels/news/SKILL.md"]
+    },
+    "operator": {
+      "capabilities": ["system-live-remote-commission", "system-live-remote-deployment"],
+      "skills": ["base:skills/terminal/SKILL.md", "system:skills/remote-access/SKILL.md"]
+    },
+    "pdf": {
+      "capabilities": ["workspace-pdf-intake", "workspace-live-pdf-layout", "workspace-live-pdf-media-review"],
+      "skills": ["base:extensions/pdf-ingest/SKILL.md"]
+    },
+    "pdfVault": {
+      "capabilities": ["workspace-pdf-handoff", "spectrolite-live-revision-handoff"],
+      "skills": ["base:extensions/pdf-ingest/SKILL.md"]
+    },
+    "personal": {
+      "capabilities": ["personal-live-mission-facility", "personal-live-mission-planning"],
+      "skills": ["personal:workers/mission-control-store/SKILL.md"]
+    },
+    "personal-artifacts": {
+      "capabilities": ["personal-live-browser-library", "personal-live-collection"],
+      "skills": ["personal:about/collection/SKILL.md", "personal:extensions/browser-data/SKILL.md"]
+    },
+    "personal-history": {
+      "capabilities": ["workspace-verified-memory", "workspace-live-provenance-history"],
+      "skills": ["personal:skills/memory/SKILL.md", "base:skills/provenance-orientation/SKILL.md"]
+    },
+    "publication": {
+      "capabilities": ["workspace-publication-preflight", "workspace-live-publication-revision"],
+      "skills": ["base:skills/website-publishing/SKILL.md"]
+    },
+    "recovery": {
+      "capabilities": ["workspace-headless-session-replay", "workspace-live-transcript-cursor"],
+      "skills": ["base:workers/pubsub-channel/SKILL.md", "system-testing:packages/agentic-session/SKILL.md"]
+    },
+    "research": {
+      "capabilities": ["workspace-live-public-web-brief"],
+      "skills": ["base:skills/web-research/SKILL.md", "base:skills/open-user-goal/SKILL.md"]
+    },
+    "research-and-edit": {
+      "capabilities": ["workspace-live-research-handoff"],
+      "skills": ["base:skills/web-research/SKILL.md", "base:skills/open-user-goal/SKILL.md"]
+    },
+    "spectrolite": {
+      "capabilities": ["spectrolite-live-vault", "spectrolite-live-revision-handoff"],
+      "skills": []
+    },
+    "suite": {
+      "capabilities": ["workspace-live-declared-test-suite"],
+      "skills": ["base:extensions/test-runner/SKILL.md", "system-testing:skills/system-testing/SKILL.md"]
+    },
+    "workspace-edit": {
+      "capabilities": ["filesystem"],
+      "skills": ["base:skills/open-user-goal/SKILL.md"]
+    }
+  }
+}

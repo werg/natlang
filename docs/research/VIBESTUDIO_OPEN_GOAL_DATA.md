@@ -21,7 +21,8 @@ From the Vibestudio checkout, list the cases with
 It uses the configured teacher and the chosen workspace's real runtime. Use
 `--assignments` to select the historical assigned workflows.
 
-In the Natlang checkout, ingest each captured training manifest with
+In the Natlang checkout, record each immutable capture directory in the data
+registry, then ingest each captured training manifest with
 `scripts/neuralese_data/sft_sources.py extract --work WORK --live-run MANIFEST`
 using the Neuralese Python environment. Pass all captures for the extraction
 together or use distinct `--out-name episodes-NAME` values. Extraction stores
@@ -98,10 +99,15 @@ copies. Activate that Python environment before running the commands below.
 The learner needs the tokenizer and chat template from the starting model.
 Only tokenizer assets are loaded for assembly. Use that machine's held-v3
 manifest for `HELD_MANIFEST`, with the referenced held-v2 exclusion available.
-Use a fresh work directory and a fresh learner output directory.
+Place the capture, work, and learner output directories under a configured
+logical data root. Use fresh directories and set a unique `SMOKE_DATASET_ID`
+for this capture.
 
 ```sh
 cd "$NATLANG_CHECKOUT"
+python scripts/data_registry.py record --id "$SMOKE_DATASET_ID" \
+  --path "$CAPTURE_DIRECTORY" --kind teacher-demos \
+  --format 'natlang.live-teacher-task/1 with bound Vibestudio evidence'
 python scripts/neuralese_data/sft_sources.py extract --work "$WORK" \
   --live-run "$CAPTURE_DIRECTORY/verified/manifest.json" \
   --live-trajectory-out "$WORK/smoke.native.jsonl.zst"
@@ -203,8 +209,8 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 118 open goals across six workspace templates, with 92
-training goals and 26 source-separated holdouts. The same Base entry point
+The catalog declares 163 open goals across six workspace templates, with 128
+training goals and 35 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
@@ -212,11 +218,11 @@ them. The workspace and the reference checks are selected by the harness.
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
 | Examples | 35 | Public evidence and document recovery, authorized CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, and native PDF text, layout and raster evidence |
-| Personal | 15 | `workspace-live-declared-test-suite`, `personal-live-mission-planning`, and `personal-live-mission-facility` with board discovery, revision-bound changes, competing edits, prerequisites, and durable handoffs |
+| Personal | 48 | Declared tests, Mission Control, browser-library-to-collection goals, and archived decisions. The shared program checks historical authority across immutable milestones, and verifies recovered browser references and linked panel state. |
 | System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 9 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence before continuing to an authorized vault edit or hold |
-| Google Workspace | 22 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition. `google-live-gmail-compose-history` with retained drafts and read-only provider evidence for interrupted saves and delivery |
+| Google Workspace | 34 | Drive inventory and checkpoint review, retained Gmail compose recovery, and Calendar reconciliation across changing resource windows, with independently checked workspace handoffs. |
 
 Google's qualification uses the real installed Drive client against a bounded
 test transport. News and Spectrolite use the live workspace services for
@@ -241,7 +247,8 @@ preserve the managed `trajectory ... --full --json` files and run:
 
 ```sh
 python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS" \
-  --baseline docs/research/vibestudio-open-goal-baseline.jsonl
+  --baseline docs/research/vibestudio-open-goal-baseline.jsonl \
+  --coverage docs/research/vibestudio-open-goal-coverage.json
 ```
 
 The audit lists missing cases and binds accepted proofs to the current goal
@@ -251,6 +258,12 @@ the remaining corpus shortfall and families without a verified holdout. Add
 `--require-complete` to make those gaps or any missing reference fail the
 check. For a single family, pass `--family` in place of `--baseline`.
 Reference executions do not produce teacher data.
+
+The crosswalk links each current family to pinned skill sources and baseline
+capabilities. The audit reports missing links and which mapped capabilities
+have at least one archived reference. A family-level link records where the
+coverage applies, while individual test coverage still depends on the cases
+and their outcomes.
 
 The first Personal and System live reference runs passed all five planning
 cases and exposed missing target dependencies in five native executions.
@@ -277,8 +290,8 @@ PubSub and scratch services, including a stale cursor, a concurrent message,
 and incomplete replay. All eight publishing cases passed against the managed
 website renderer, package builder, and local journal. The managed PDF
 checks verified the missing-page hold, and two compound references passed
-in the original Spectrolite renderer. The two-case Gmail recheck verified
-retained draft identity and ambiguity handling. The public-research checks
+in the original Spectrolite renderer. All 15 Gmail references passed against
+native retained compose history and the owned provider transport. The public-research checks
 require a working search provider. The managed test reached the default DuckDuckGo provider,
 which rejected its automated searches. Configure Tavily, Brave, or Exa in
 the managed workspace before running the public-research references.

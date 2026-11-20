@@ -104,16 +104,60 @@ def corpus_floor(baseline):
     return floor
 
 
+def inventory_coverage(result, baseline, crosswalk):
+    rows = [json.loads(line) for line in baseline.read_text().splitlines()]
+    inventory = {
+        'capabilities': {row['capability'] for row in rows if row['kind'] == 'system-test'},
+        'skills': {row['id'] for row in rows if row['kind'] == 'skill'},
+    }
+    mapping = json.loads(crosswalk.read_text())
+    if mapping.get('schema') != 'vibestudio.open-goal-coverage/1':
+        raise ValueError('Expected an open-goal inventory crosswalk')
+    families = result['families']
+    matched = {kind: defaultdict(list) for kind in inventory}
+    for name, assignment in mapping['families'].items():
+        family = f'workspace-open-user-goal-{name}'
+        if family not in families:
+            raise ValueError(f'Unknown open-goal family in coverage crosswalk: {family}')
+        if assignment.keys() != inventory.keys() or not any(assignment.values()):
+            raise ValueError(f'Invalid coverage crosswalk entry: {family}')
+        for kind, references in assignment.items():
+            unknown = set(references) - inventory[kind]
+            if unknown:
+                raise ValueError(f'Unknown {kind} for {family}: {sorted(unknown)}')
+            for reference in references:
+                matched[kind][reference].append(family)
+    return {
+        'unmapped_families': sorted(set(families) - {
+            f'workspace-open-user-goal-{name}' for name in mapping['families']
+        }),
+        **{
+            kind: {
+                'mapped': dict(sorted(items.items())),
+                'unmapped': sorted(inventory[kind] - items.keys()),
+                'verified_reference_links': sorted(
+                    key for key, links in items.items() if any(
+                        families[family]['verified_train'] or families[family]['verified_held'] for family in links
+                    )
+                ),
+            } for kind, items in matched.items()
+        },
+    }
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('catalog', type=Path)
     parser.add_argument('roots', nargs='+', type=Path)
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--baseline', type=Path, help='audit the full corpus against the pinned inventory floor')
+    parser.add_argument('--coverage', type=Path, help='crosswalk from goal families to the pinned inventory')
     parser.add_argument('--require-complete', action='store_true')
     args = parser.parse_args()
     if args.baseline and args.family:
         parser.error('--baseline audits the full corpus')
+    if args.coverage and not args.baseline:
+        parser.error('--coverage requires --baseline')
     result = audit(args.catalog, args.roots, set(args.family))
     shortfall = 0
     missing_holdout = False
@@ -122,5 +166,10 @@ if __name__ == '__main__':
         shortfall = max(0, floor - result['verified'])
         missing_holdout = bool(result['families_without_verified_holdout'])
         result.update(minimum_verified_goals=floor, remaining_verified_goals=shortfall)
+    missing_coverage = False
+    if args.coverage:
+        coverage = inventory_coverage(result, args.baseline, args.coverage)
+        result['inventory_coverage'] = coverage
+        missing_coverage = bool(coverage['unmapped_families'])
     print(json.dumps(result, indent=2))
-    raise SystemExit(int(args.require_complete and bool(result['missing'] or shortfall or missing_holdout)))
+    raise SystemExit(int(args.require_complete and bool(result['missing'] or shortfall or missing_holdout or missing_coverage)))
