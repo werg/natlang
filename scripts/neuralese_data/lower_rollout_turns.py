@@ -237,6 +237,11 @@ def main():
     stats['sample_tokens'] = sum(len(r['sample']) for e in episodes for r in e['rows'])
     with args.out.open('wb') as handle:
         pickle.dump({'episodes': episodes, 'stats': dict(stats)}, handle, protocol=4)
+    from natlang_neuralese.common import data_registry
+    data_registry.record_dataset(data_registry.path_id('turns', args.out), args.out, kind='chains',
+                                 format='lowered per-call turns pickle {episodes, stats} (exp0_sft --turns, grpo --probe-turns)',
+                                 inputs=[str(d / 'rollouts.jsonl') for d in args.rounds], rows=len(episodes),
+                                 license='project-generated (own LFM3 policy samples)')
     print(json.dumps(dict(stats)))
 
 

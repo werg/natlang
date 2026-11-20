@@ -15,7 +15,8 @@ PRODUCERS = ['scripts/neuralese_data/grpo.py', 'scripts/neuralese_data/sft_sourc
              'scripts/neuralese_data/operator_rows.py', 'scripts/rl_tasks/admit_authored.py', 'scripts/rl_tasks/assemble.py',
              'scripts/rl_tasks/assemble_selection_pool.py', 'scripts/rl_tasks/build_supply.py',
              'scripts/rl_tasks/neuralese_variants.py', 'training/neuralese/natlang_neuralese/rl/memetic_tasks.py',
-             'training/neuralese/natlang_neuralese/rl/hindsight.py', 'training/neuralese/natlang_neuralese/rl/held_eval.py']
+             'training/neuralese/natlang_neuralese/rl/hindsight.py', 'training/neuralese/natlang_neuralese/rl/held_eval.py',
+             'scripts/neuralese_data/lower_rollout_turns.py']
 # Scripts that read training data for a run: each records the read (data_registry.consume) and so refuses
 # unregistered data.
 CONSUMERS = ['scripts/neuralese_data/grpo.py', 'scripts/neuralese_data/teacher_gen.py', 'scripts/neuralese_data/exp0_sft.py']

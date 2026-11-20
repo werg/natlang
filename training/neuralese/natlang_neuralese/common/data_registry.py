@@ -40,7 +40,6 @@ SNAPSHOT_SCHEMA = 'natlang.corpus-snapshot/1'
 GIT_REGISTRY = 'training/neuralese_corpora.json'
 GIT_MANIFESTS = 'training/corpus-manifests'
 PORTABLE_ROOTS = ('data_nvme', 'data_hdd', 'archive', 'models')
-HOSTS = {'mltick': 'dgx', 'pop-os': 'pop'}
 ALLOW_ENV = 'NATLANG_ALLOW_UNREGISTERED_DATA'
 # Kinds a dataset record may carry. Producers name one; the catalog groups by it.
 KINDS = ('rl-tasks', 'held', 'held-eval', 'teacher-demos', 'trajectories', 'rollouts', 'step-chains', 'sft-rows',
@@ -57,7 +56,8 @@ class UnregisteredData(RuntimeError):
 
 
 def machine() -> str:
-    return os.environ.get('NATLANG_MACHINE') or HOSTS.get(socket.gethostname(), socket.gethostname())
+    """The registry's owner name of this machine (``owner`` in the git layer): ``pop`` or ``dgx``."""
+    return os.environ.get('NATLANG_MACHINE') or ('pop' if 'pop' in socket.gethostname() else 'dgx')
 
 
 def registry_dir() -> Path:
