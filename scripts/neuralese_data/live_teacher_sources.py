@@ -10,6 +10,12 @@ NATIVE_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1'
 OBSERVED_WORKSPACE = 'observed-live-workspace'
 
 
+def open_goal_fingerprint(goal):
+    """Hash the JSON input value recorded by the Natlang runtime."""
+    encoded = json.dumps(goal, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    return len(encoded), hashlib.sha256(encoded).hexdigest()
+
+
 def bound_file(binding, root):
     path = Path(binding['path'])
     if not path.is_absolute():
@@ -184,11 +190,11 @@ def load_episode(path):
             raise ValueError('invalid open user goal attestation')
         root = records[attested_roots[0]]
         inputs = root.get('inputs') or {}
-        goal_bytes = json.dumps(interaction['goal'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        goal_size, goal_digest = open_goal_fingerprint(interaction['goal'])
         ref = inputs.get('goal') or {}
         if (root.get('definition', {}).get('name') != 'runUserGoal' or root.get('outcome') != 'done' or
                 set(inputs) != {'goal'} or ref.get('complete') is not True or
-                ref.get('bytes') != len(goal_bytes) or ref.get('hash') != hashlib.sha256(goal_bytes).hexdigest()):
+                ref.get('bytes') != goal_size or ref.get('hash') != goal_digest):
             raise ValueError('open goal does not match the actual root invocation')
     ancestry = {}
     for call_id in records:

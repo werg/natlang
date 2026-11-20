@@ -4663,3 +4663,12 @@ checkpoints 26-40 stay on /mnt/external as the fallback that sft-v5's drive resu
   `natlang-rl-authored-{dev,confirmation}-20261120r23` and `-20261120r23b`.
 - **Total supply so far:** rounds 17-23 add 699 train rows in 48 new families.
 - **Opt-out:** `--pool` without this source.
+
+## 2026-11-20: pin Vibestudio training admission to the user goal
+
+The Vibestudio teacher CLI defaults to open goals. Historical assignment runs
+require `--assignments`. The CLI emits a digest of the exact root prompt in the
+catalog. SFT checks it against each capture and rejects prompts shared across
+train and held splits, alongside the existing source-group check. A stable
+scenario ID can survive a prompt edit, so an old capture must match the prompt
+as well as the scenario and source groups. This changes data admission only.
