@@ -352,14 +352,13 @@ cases passed. Four effectful references exposed loss of typed bytes in a
 native filesystem relay. The transport fix passed the direct supervisor
 and native worker regression tests, and all four managed preview cases
 passed on rerun.
-All 15 authoring, 16 System diagnostics, 17 native execution, and 26
-Personal automation references passed in managed workspaces. The audit of
-the 317-goal catalog accepted 267 references, including 53 held goals.
-The first managed pass of the 14 local delivery references exposed a roster
-check that expected the addressed sender to register as an agent. The verifier
-now checks the sender's observer role and each recipient's agent role, using
-their exact IDs and handles. Seven visual recovery cases passed controlled
-renderer checks and are registered in the same catalog.
+All 15 authoring, 16 System diagnostics, 17 native execution, 26 Personal
+automation, and 14 local delivery references passed in managed workspaces.
+The audit of the 317-goal catalog accepted 281 references, including 57 held
+goals. Its evidence bundle is `vibestudio-open-goal-reference-281-20261120`.
+The local delivery verifier checks the sender's observer role and each
+recipient's agent role using their exact IDs and handles. Seven visual recovery
+cases passed controlled renderer checks and are registered in the same catalog.
 
 The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised
