@@ -88,10 +88,11 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-Recreate the release's detached worktrees on Pop from the
-[live Luna smoke pins](vibestudio-open-goal-pop-pins-luna.tsv).
-Set `RELEASE` to the desired directory. Run the following in Bash from Pop's
-Natlang checkout, using the ledger for the dependency installation.
+The [970-goal release](vibestudio-open-goal-pop-pins-970.tsv) is staged on Pop
+under `/home/werg/vibestudio-worktrees/open-goal-release-970.mmFw47`. To
+recreate detached worktrees, set `RELEASE` to a fresh directory and
+`RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
+dependency installation.
 
 ```bash
 set -euo pipefail
@@ -111,7 +112,7 @@ while IFS=$'\t' read -r name sha; do
   fi
   test "$(git -C "$RELEASE/$name" rev-parse HEAD)" = "$sha"
   test -z "$(git -C "$RELEASE/$name" status --porcelain)"
-done < docs/research/vibestudio-open-goal-pop-pins-luna.tsv
+done < "$RELEASE_PINS"
 ```
 
 Install the host dependencies with `pnpm install --frozen-lockfile` from
@@ -583,3 +584,9 @@ Pop release directory. That file has SHA-256
 The expanded proof archive is registered as
 `vibestudio-open-goal-verified-release-777-extended-20261121`.
 The managed follow-up peaked at 8.8 GiB on Tick.
+
+The 970-goal release passed the full host commit gate and was pushed. The
+gate peaked at 6.1 GiB on Tick. Pop reproduced catalog SHA-256
+`9a50046d00060f9b0825e6c1fdaa77b9cda04104898f5378ae2cbecbb8f5b6df`
+and verified the same 450-selector list in the new release directory.
+Its first managed verification batch targets additional cases.
