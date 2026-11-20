@@ -373,3 +373,69 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Repetition** against all 16 earlier POOLS (36,457 rows): 58 programs (53.9 effective), 28 structures. No program
   text and no functional program is shared with the pool.
 - **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
+
+## 19. Fallow K3: `natlang-rl-git-history-20261120` (736 rows), repository history with git as the oracle
+
+- **Input.** The bare repositories in `bgkit-data/repos` (12,083, full history). The first repository of each of 700
+  hash-ordered owners was staged to NVMe. The shared HDD was at 96% utilisation, and git's random reads stalled on it.
+  415 repositories had an object store of 0.2-25 MB. Of the 205 scanned, 120 fit the bounds: 5-800 files at the tip,
+  every patch under 250 KB, no submodule, and a snapshot of at most 12 MB.
+- **Model access.** No git service existed. The codebase sources serve a file snapshot (`repo`: files/read/search), so
+  this source adds a `git` service in the same form: TypeScript source with a JSON snapshot bound by SHA-256.
+  - It offers `info`, `log` (path, author, date, message-regex and max filters), `show` (numstat), `diff` (the patch),
+    `ls`, `cat` and `grep`.
+  - Each snapshot holds the newest 40 first-parent commits. A merge lists both parents, and its changes are taken
+    against its first parent.
+  - There is no blame and no pickaxe, so "which commit added this line" means a path-limited `log` followed by reading
+    patches.
+  - Assets: `natlang-rl-git-history-assets-20261120` (120 files, 231 MB) on NVMe; `NATLANG_RL_GIT_ASSETS` overrides
+    the path.
+- **Oracle.** Every gold value is the output of git run on the bare repository:
+  - `blame --porcelain`, kept only where the line is unique in the file and exactly one window patch adds it;
+  - `log --first-parent` over the window's range;
+  - `show --diff-merges=first-parent --name-only`, `diff --name-only --diff-filter`, `diff-tree --numstat`, and
+    `show rev:path` for the JSON values.
+  - Files larger than 200 KB in any version, or with more than 4,000 changed lines in one commit, are marked `-diff`
+    in a per-repository attributes file. git then reports them as binary itself.
+  - `log.mailmap=false`, so author names are as the commits record them.
+- **Families** (train rows; at most 7 per repository, one per kind before a kind repeats):
+
+  | family | rows | family | rows |
+  |---|---:|---|---:|
+  | last_change (author or UTC date) | 152 | line_origin | 73 |
+  | tree_delta (removed / added since a commit) | 114 | line_before | 65 |
+  | count_commits (dir, author, author+dir, date range, subject prefix, added/deleted a file) | 86 | file_created | 52 |
+  | commit_files | 82 | signature_before | 18 |
+  | churn ({added, deleted} over the window) | 80 | json_value_at | 14 |
+
+  665 distinct answers in 736 rows. Levels 1/2/3: 294/391/51. 66 patch-family rows use a `read_patch` Neuralese
+  helper framing (`Neuralese<string>` per commit patch).
+- **Qualification.**
+  - **Reference through the service:** `git_history_solve.mjs` solves every case with the `git` service alone, as the
+    model sees it, and must reach git's answer. 835/835 agreed.
+  - The smoke builds before that found 24 disagreements, all of them gold-side git semantics, and each was fixed:
+    - a merge's `show --name-only` printing a combined diff;
+    - `log -1 -- path` walking side branches;
+    - mode-only changes left out of the snapshot;
+    - mailmap renaming authors.
+  - **verify.mjs on grpo-v5-run1's pin runtime (f9664edfedb3):** 835 references accepted. 2,606 of 2,607 wrong controls
+    were rejected; the one accepted differed from gold only in letter case, and its case was dropped. 835 alias probes
+    were accepted. 834 rows kept.
+  - Test: `tests/test_rl_git_history_source.py` (a synthetic repository with a merge and a `-diff` file).
+- **Splits.** One unit per repository, assigned by hash: 106 train repositories (736 rows); held units dev 8 (56 rows)
+  and confirmation 6 (42 rows), registered as `natlang-rl-git-history-{dev,confirmation}-20261120`.
+- **Checks.**
+  - held-v3 verify 0/0, also with exposure.
+  - Custody 0 related, before and after the held packets were registered.
+  - LFM3 group closure passed. The exposure collector lists the pool (`.pre-git-history-20261120` keeps the previous
+    version).
+- **Repetition** against all 17 earlier POOLS (36,587 rows): 736 distinct instruction texts, none in the pool, and all
+  10 families new. Program structure is narrow: 2 structures (91% single-call service wrappers, 9% with the Neuralese
+  helper). Each family has 2 phrasings, and the diversity comes from the repositories and their histories.
+- **git_history.jsonl** (3,599 LLM-written free-form answers about 1,576 commits) is not converted: its answers have no
+  exact oracle. Its 38 repositories are among the mirrored repositories the builder can draw on.
+- **Not checked.**
+  - Base pass rates: the explore walk measures them.
+  - Episode length against the 40-call budget. A line-origin search reads up to one patch per commit that touched the
+    file.
+  - No blind solve: the gold is computed, not authored.

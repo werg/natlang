@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-git-history-confirmation-20261120",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-git-history-confirmation-20261120",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 505622,
+      "sha256": "fe7f60e2c0df3993aac9d363cd9ece5231619dd88b9a7db86c7d78bc01a286a5",
+      "lines": 42
+    }
+  ],
+  "bytes": 505622
+}

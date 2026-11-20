@@ -4817,3 +4817,18 @@ and the resume list.
   reads them yet.
 - Organizational findings and the producer-written registry proposal:
   `plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md`. The catalog reads such a registry first once it exists.
+
+## 2026-11-20: fallow K3, `natlang-rl-git-history-20261120` (736 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 736 train rows in 10 new families of repository-history questions over 106 bgkit-data
+  repositories, with 665 distinct answers. The model answers through a read-only `git` service over the newest 40
+  first-parent commits. Every gold value is git output on the bare repository.
+- **Checks:**
+  - Every case re-solved through its service to git's answer (835/835).
+  - verify.mjs on the grpo-v5-run1 pin runtime kept 834 of 835.
+  - held-v3 verify 0/0, custody 0 related, closure passed.
+  - Held units are `natlang-rl-git-history-{dev,confirmation}-20261120` (56 + 42 rows).
+- **Enters:** at grpo-v5-run1's next resume on a pin from this commit, as 10 more families in its
+  `--explore-order family` walk.
+- **Opt-out:** `--pool` without this source.
+
