@@ -144,6 +144,16 @@ def test_sync_publish_resolves_root_qualified_paths(roots):
     assert [(f['path'], f['sha256']) for f in snap['files']] == [(f['path'], f['sha256']) for f in value['files']]
 
 
+def test_a_pin_as_natlang_repo_keeps_runs_paths_in_the_canonical_checkout(roots, monkeypatch):
+    pin = roots / 'pin-abc'
+    pin.mkdir()
+    (pin / '.natlang-pin.json').write_text(json.dumps({'commit': 'abc', 'source': str(roots / 'repo')}))
+    monkeypatch.setenv('NATLANG_REPO', str(pin))
+    out = roots / 'repo' / 'runs' / 'mix-v2'
+    assert dr.canonical_repo() == roots / 'repo'
+    assert dr.portable(out) == 'runs/mix-v2' and dr.dataset_id(out, 'sft-rows') == 'mix-v2'
+
+
 def test_cli_check_reports_unregistered(roots, capsys):
     import data_registry as cli
     pool(roots / 'data_hdd' / 'p' / 'cases.jsonl', ['a'])

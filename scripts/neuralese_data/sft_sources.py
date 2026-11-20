@@ -144,7 +144,7 @@ def record_work(work, inputs):
 def record_built(out, args, schema):
     inputs = [args.work, getattr(args, 'held_manifest', None), getattr(args, 'base_rates', None),
               getattr(args, 'october', None), getattr(args, 'live_holdout_registry', None),
-              *(getattr(args, 'teacher_pool', None) or []),
+              *(getattr(args, 'teacher_pool', None) or []), *(getattr(args, 'prefer_unseen', None) or []),
               *[a.split('=', 1)[1].split(',')[0] for a in getattr(args, 'aux', None) or []]]
     data_registry.record_dataset(data_registry.dataset_id(out, 'sft-rows'), out, kind='sft-rows', format=f'{schema}: chains.pkl (exp0_sft --chains), '
                                  'rows.jsonl.zst, cases.jsonl, build.json', inputs=[i for i in inputs if i],

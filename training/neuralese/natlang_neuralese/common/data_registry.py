@@ -66,8 +66,16 @@ def registry_dir() -> Path:
 
 
 def canonical_repo() -> Path:
-    """The canonical checkout: repo-relative registry paths (``runs/...``) live there, also when a pin runs."""
-    return root('repo')
+    """The canonical checkout: repo-relative registry paths (``runs/...``) live there, also when a pin runs. A pin's
+    launch sets ``NATLANG_REPO`` to the pin (AGENTS.md "Pinning"); its ``.natlang-pin.json`` names the checkout it was
+    made from, which holds ``runs/``."""
+    repo = root('repo')
+    marker = repo / '.natlang-pin.json'
+    if marker.exists():
+        source = json.loads(marker.read_text()).get('source')
+        if source:
+            return Path(source)
+    return repo
 
 
 def code_repo() -> Path:
