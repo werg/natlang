@@ -5750,3 +5750,33 @@ measured uncapped peak: 15 GB CUDA + 3.3 GB RSS, budget 19 GB.
   roots cannot be registered: smokes set `NATLANG_ALLOW_UNREGISTERED_DATA=1` with their own `NATLANG_DATA_REGISTRY`.
 - **Not exercised:** pin, Pop held (pop-held.sh), the teacher campaign launch, launch-sft.sh, verdict: each wraps a
   launcher already used by sft-v5/v6, with argument shapes checked by reading and ruff (undefined names: none).
+
+### 2026-11-20 — count open Vibestudio goals at the learner boundary
+
+- Keep the minimum at 80% for distinct verified user goals and for weighted
+  target mass. Admission uses native trajectory IR and preserves historical
+  capture identities. The chain bundle now carries verified goal fingerprints
+  and the required share. The learner checks the actual planned selection
+  after its context masks and step limit, before it loads model weights.
+- The Luna smoke's nine chains pack to 1,712 weighted target tokens and both
+  shares are 100% when selected alone. The same build inputs with the five
+  historical captures are rejected at 16.7% distinct goals and 10.4%
+  weighted targets. The old artifacts stay registered for later mixtures.
+- Targeted importer and builder suites passed 67 tests. The learner's CPU
+  schedule receipt is registered as
+  `vibestudio-luna-open-goal-post-mask-exposure-smoke-20261120`.
+
+### 2026-11-21 — stage the first broad verified goal release
+
+- Pop reproduced the pinned 777-goal Vibestudio release. Its managed evidence
+  qualified 430 training selectors and 142 held-out goals at release. Keep the
+  exact catalog and independently accepted reference evidence together in the
+  registry under `vibestudio-open-goal-verified-release-777-20261121`.
+- Bulk capture import accepts registered capture directories. It discovers
+  verified manifests and uses the existing native trajectory conversion and
+  masking path. The archived Luna smoke imports once even when the same
+  manifest is specified directly and discovered in the directory. It records
+  nine invocations across five call levels and 24 sampled turns.
+- The 970-goal source stage preserves 842 historical assignments. Its 234
+  held goals remain source-separated. Managed evidence is required before the
+  new scenarios enter a capture list.

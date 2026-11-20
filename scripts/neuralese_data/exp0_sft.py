@@ -460,6 +460,34 @@ def chain_mass(chain):
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
 
 
+def open_goal_exposure(chains):
+    """Count distinct verified goals and training weight in the selected chains."""
+    goals, trajectories = set(), set()
+    open_mass = total_mass = 0.
+    for chain in chains:
+        mass = chain_mass(chain)
+        if mass <= 0:
+            continue
+        trajectories.add((chain.get('part'), chain.get('task'), chain.get('round')))
+        total_mass += mass
+        if goal := chain.get('open_goal_fingerprint'):
+            goals.add(goal)
+            open_mass += mass
+    return {
+        'distinct_goals': len(goals),
+        'trajectories': len(trajectories),
+        'weighted_target_share': open_mass / (total_mass or 1.),
+    }
+
+
+def check_open_goal_exposure(report, minimum):
+    report['distinct_goal_share'] = report['distinct_goals'] / max(1, report['trajectories'])
+    report['required_share'] = minimum
+    if min(report['distinct_goal_share'], report['weighted_target_share']) < minimum:
+        raise SystemExit(f'Open user goal minimum not met: {json.dumps(report, sort_keys=True)}')
+    return report
+
+
 def chain_loss_tokens(chain):
     return sum(length for _, length, _ in chain['segs'])
 
@@ -706,9 +734,13 @@ def ambient_teacher_rows(model, forward, chains, live, teacher, restore, pack_to
             p.grad = None
 
 
-def load_chains(path):
+def load_chain_bundle(path):
     with open(path, 'rb') as handle:
-        return pickle.load(handle)['chains']
+        return pickle.load(handle)
+
+
+def load_chains(path):
+    return load_chain_bundle(path)['chains']
 
 
 def validation_loss(model, forward, chains, pack_tokens=0, student_top_p=1.):
@@ -799,7 +831,8 @@ def train(args):
         for episode in episodes:
             by_task[episode['task_id']].append((sum(len(c['ids']) for c in chains_of([episode])), episode['round'], episode['sample'], episode))
         episodes = [item[-1] for task in sorted(by_task) for item in sorted(by_task[task], key=lambda x: x[:3])[:args.max_per_task]]
-    chains = load_chains(args.chains) if args.chains else chains_of(episodes)
+    bundle = load_chain_bundle(args.chains) if args.chains else {}
+    chains = bundle['chains'] if args.chains else chains_of(episodes)
     loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
     val_sets = {Path(path).stem: load_chains(path) for path in args.val_chains}
     student_top_p = 1. if args.stock_model else args.student_top_p
@@ -812,6 +845,18 @@ def train(args):
               flush=True)
     print(json.dumps({'episodes': len(episodes), 'sequences': len(chains), 'sequence_tokens': int(sum(len(c['ids']) for c in chains)),
                       'loss_tokens': int(loss_tokens), 'epochs': args.epochs}), flush=True)
+    order = 'stratified' if args.batch_order == 'auto' else args.batch_order
+    steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, order == 'grouped',
+                        stratified=order == 'stratified')
+    total = len(steps)
+    if args.max_steps:
+        steps = steps[:args.max_steps]
+    minimum = bundle.get('minimum_open_goal_share')
+    if minimum is not None and args.open_goal_mix_check == 'on':
+        if type(minimum) not in (float, int) or not 0. <= minimum <= 1.:
+            raise SystemExit('Invalid minimum open user goal share in the training chains')
+        report = open_goal_exposure(chains[index] for step in steps for index in step)
+        print(json.dumps({'planned_open_user_goals': check_open_goal_exposure(report, minimum)}), flush=True)
     model, state, special = load_model(args.checkpoint, args.base)
     state = {k: v for k, v in state.items() if k != 'training'}   # the source's optimizer state (5.5 GB host): never used
     # FP32 master weights live in the optimizer; the model computes in BF16 (as the actor does) and its BF16 gradients
@@ -866,12 +911,6 @@ def train(args):
         # the producer documents embed their span with the producer table, which is the embedding only without an adapter
         raise SystemExit(f'{importing} chains import Neuralese state: needs the fast path and a checkpoint without a '
                          f'producer adapter (has {adapter})')
-    order = 'stratified' if args.batch_order == 'auto' else args.batch_order
-    grouped = order == 'grouped'
-    steps = step_groups(chains, args.epochs, args.batch_loss_tokens, args.seed, grouped, stratified=order == 'stratified')
-    total = len(steps)
-    if args.max_steps:
-        steps = steps[:args.max_steps]
     print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens,
                       'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': order,
                       'ambient': {'p_clean': args.ambient_p_clean, 'temperature': args.ambient_temperature}}),
@@ -1101,6 +1140,8 @@ def main():
     p.add_argument('--seed', type=int, default=20261111)
     p.add_argument('--max-per-task', type=int, default=0)
     p.add_argument('--chains', help='prebuilt sequences pickle ({"chains": [...]}) instead of --turns')
+    p.add_argument('--open-goal-mix-check', choices=('on', 'off'), default='on',
+                   help='enforce the chain bundle minimum on the post-mask optimizer schedule')
     p.add_argument('--val-chains', action='append', default=[],
                    help='prebuilt validation sequences (repeatable, named by file stem): weighted NLL every --val-every steps')
     p.add_argument('--val-every', type=int, default=50)

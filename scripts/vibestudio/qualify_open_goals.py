@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the exact model-free Vibestudio references in a pinned open-goal catalog."""
 import argparse
+import json
 import re
 import signal
 import subprocess
@@ -9,11 +10,24 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
-from audit_open_goal_references import read_catalog
+from audit_open_goal_references import audit, read_catalog
 
 
-def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms):
+def terminal_startup_failure(log):
+    for line in reversed(log.read_text(errors='replace').splitlines()):
+        try:
+            result = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(result, dict) and result.get('error'):
+            return result.get('recoverable') is False
+    return False
+
+
+def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None):
     group = f'{workspace}@{baseline}' if baseline else workspace
+    if batch is not None:
+        group = f'{group}-{batch:03d}'
     output = destination / group
     output.mkdir()
     results = output / 'results'
@@ -29,8 +43,13 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
 
     print(f'{group} running {len(cases)} references in {instance}', flush=True)
     failures = 0
+    unavailable = False
     try:
-        invoke(['doctor', '--approve-startup', '--model', model], 'doctor.log', check=True)
+        try:
+            invoke(['doctor', '--approve-startup', '--model', model], 'doctor.log', check=True)
+        except subprocess.CalledProcessError:
+            unavailable = terminal_startup_failure(output / 'doctor.log')
+            raise
         args = ['run', *cases, '--json', '--concurrency', '1', '--model', model, '--out-dir', str(results)]
         if test_timeout_ms is not None:
             args += ['--test-timeout-ms', str(test_timeout_ms)]
@@ -40,9 +59,12 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
             raise ValueError(f'Expected one managed run in {results}, found {len(runs)}')
         run_id = runs[0].name
         for case in cases:
+            artifact_name = f'trajectory-{case}-full.json.gz'
+            archive = results / run_id / artifact_name
+            if archive.is_file() or (archive.parent / 'failure-evidence' / artifact_name).is_file():
+                continue
             status = invoke(['trajectory', run_id, case, '--full', '--json', '--out-dir', str(results)],
                             f'{case}.log')
-            archive = results / run_id / f'trajectory-{case}-full.json.gz'
             failures += bool(status) or not archive.is_file()
     except (subprocess.CalledProcessError, ValueError) as error:
         print(f'{group} {error}. Evidence is in {output}', file=sys.stderr, flush=True)
@@ -51,7 +73,7 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
         failures += bool(invoke(['stop'], 'stop.log'))
 
     print(f'{group} evidence in {output} ({failures} failed commands or missing artifacts)', flush=True)
-    return failures == 0
+    return failures == 0, unavailable
 
 
 def main():
@@ -61,17 +83,30 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--case', action='append', default=[])
+    parser.add_argument('--reuse-references', action='append', type=Path, default=[],
+                        metavar='RESULT_DIR',
+                        help='Skip goals already backed by an accepted managed reference in this directory')
     parser.add_argument('--model', default='openai-codex:gpt-6-luna')
+    parser.add_argument('--cases-per-instance', type=int, default=12,
+                        help='Recycle the managed workspace after this many cases (0 keeps one per workspace)')
     parser.add_argument('--test-timeout-ms', type=int)
     args = parser.parse_args()
     if args.test_timeout_ms is not None and args.test_timeout_ms <= 0:
         parser.error('--test-timeout-ms must be positive')
+    if args.cases_per_instance < 0:
+        parser.error('--cases-per-instance cannot be negative')
 
     source, catalog = read_catalog(args.catalog)
     chosen = {case: row for case, row in catalog.items()
               if (not args.case or case in args.case) and (not args.family or row['family'] in args.family)}
     if not chosen or set(args.case) - chosen.keys() or set(args.family) - {row['family'] for row in chosen.values()}:
         parser.error('Every requested case and family must match the pinned catalog')
+    if args.reuse_references:
+        previous = audit(args.catalog, args.reuse_references, set(args.family))['proofs']
+        pending = {case: row for case, row in chosen.items() if case not in previous}
+        print(f'Reusing {len(chosen) - len(pending)} verified references, {len(pending)} goals pending', flush=True)
+        chosen = pending
+
     groups = defaultdict(list)
     for case, row in chosen.items():
         workspace, baseline = row['workspace'], row.get('workspaceBaseline', '')
@@ -85,10 +120,18 @@ def main():
     destination.mkdir(parents=True)
     (destination / 'catalog.jsonl').write_bytes(source)
     all_passed = True
+    host = args.host.resolve()
     for (workspace, baseline), cases in groups.items():
-        passed = qualify_group(args.host.resolve(), workspace, baseline, cases, args.model, destination,
-                               args.test_timeout_ms)
-        all_passed &= passed
+        size = args.cases_per_instance or len(cases)
+        for index, offset in enumerate(range(0, len(cases), size), start=1):
+            passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
+                                                args.model, destination, args.test_timeout_ms,
+                                                batch=index if len(cases) > size else None)
+            all_passed &= passed
+            if unavailable:
+                print(f'{workspace} startup is unrecoverable for this baseline. See the doctor log.',
+                      file=sys.stderr, flush=True)
+                break
     return 0 if all_passed else 1
 
 

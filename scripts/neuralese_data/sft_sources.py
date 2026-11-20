@@ -259,9 +259,26 @@ def october_teacher_episodes(path, models, held_manifest, c):
                'base_rank': None, 'task': task, 'root_mode': 'student', 'turns': turns, 'execution_graph_events': 0}
 
 
+def live_manifest_paths(manifests, capture_roots):
+    paths = [Path(path).resolve() for path in manifests]
+    for directory in capture_roots:
+        root = Path(directory).resolve()
+        candidates = [root / 'verified/manifest.json',
+                      *sorted((root / 'cases').glob('*/verified/manifest.json'))]
+        discovered = [path.resolve() for path in candidates if path.is_file()]
+        if not discovered:
+            raise ValueError(f'No verified live teacher manifests under {root}')
+        if any(not path.is_relative_to(root) for path in discovered):
+            raise ValueError(f'Verified live teacher manifest escapes the capture directory {root}')
+        paths.extend(discovered)
+    return list(dict.fromkeys(map(str, paths)))
+
+
 def extract(args):
+    live_runs = live_manifest_paths(getattr(args, 'live_run', None) or [],
+                                    getattr(args, 'live_capture_root', None) or [])
     data_registry.require_registered([*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                                      *(getattr(args, 'live_run', None) or []),
+                                      *live_runs,
                                       *(getattr(args, 'october_teacher', None) or [])])
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
@@ -366,7 +383,7 @@ def extract(args):
                                                 census.setdefault('october-teacher:' + october_group(path),
                                                                   collections.Counter())):
             out.write(episode)
-    for path in getattr(args, 'live_run', []) or []:
+    for path in live_runs:
         from live_teacher_sources import load_episode
         episode = load_episode(path)
         if episode.get('trajectory_ir'):
@@ -383,10 +400,10 @@ def extract(args):
         (work / 'rl-group-rates.json').write_text(json.dumps(rates, indent=0) + '\n')
     summary = {k: dict(v) for k, v in census.items()}
     (work / f'{args.out_name}-extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
-                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': getattr(args, 'live_run', []),
+                                                    'rl': args.rl, 'teacher': args.teacher, 'live_runs': live_runs,
                                                     'october_teacher': getattr(args, 'october_teacher', None) or []}, indent=1) + '\n')
     record_work(work, [*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                       *(getattr(args, 'live_run', None) or []), *(getattr(args, 'october_teacher', None) or [])])
+                       *live_runs, *(getattr(args, 'october_teacher', None) or [])])
     print(json.dumps(summary, indent=1))
 
 
@@ -1549,29 +1566,19 @@ def open_goal_key(goal):
     return ' '.join(normalize('NFKC', goal).lower().split())
 
 
-def mix_report(chains, episodes, aux_report):
+def mix_report(chains, aux_report):
     """Per part (source or aux name): chains, forward and weighted target tokens and their shares; loss concentration
     over tasks (top 10 tasks, top 1% of tasks, the largest task)."""
-    from exp0_sft import chain_weights, source_tokens
+    from exp0_sft import chain_mass, open_goal_exposure, source_tokens
     parts = collections.defaultdict(collections.Counter)
     per_task = collections.Counter()
-    trajectory_weights = collections.Counter()
-    goals = {
-        chain_id: open_goal_key(episode['open_goal'])
-        for episode in episodes for chain_id in episode.get('open_goal_chains', ())
-    }
-    goal_weights = collections.Counter()
     for chain in chains:
-        weighted = float(chain_weights(chain, 'cpu').sum().item())
+        weighted = chain_mass(chain)
         p = parts[chain.get('part') or 'unknown']
         p['chains'] += 1
         p['forward_tokens'] += len(chain['ids']) + source_tokens(chain)
         p['weighted_target_tokens'] += weighted
         per_task[str(chain.get('task'))] += weighted
-        trajectory = (chain.get('part'), chain.get('task'), chain.get('round'))
-        trajectory_weights[trajectory] += weighted
-        if id(chain) in goals:
-            goal_weights[goals[id(chain)]] += weighted
     total_w = sum(p['weighted_target_tokens'] for p in parts.values()) or 1
     total_f = sum(p['forward_tokens'] for p in parts.values()) or 1
     ranked = sorted(per_task.values(), reverse=True)
@@ -1584,23 +1591,18 @@ def mix_report(chains, episodes, aux_report):
             'loss_concentration': {'top10_tasks_share': round(sum(ranked[:10]) / total_w, 4),
                                    'top1pct_tasks_share': round(sum(ranked[:top1]) / total_w, 4),
                                    'max_task_tokens': int(ranked[0]) if ranked else 0},
-            'open_user_goals': {
-                'distinct_goals': sum(weight > 0 for weight in goal_weights.values()),
-                'trajectories': sum(weight > 0 for weight in trajectory_weights.values()),
-                'weighted_target_share': sum(goal_weights.values()) / total_w,
-            },
+            'open_user_goals': open_goal_exposure(chains),
             'aux': aux_report}
 
 
 def publish_sft_rows(rows, mix, minimum_open_goal_share):
     if minimum_open_goal_share is not None:
-        report = mix['open_user_goals']
-        report['distinct_goal_share'] = report['distinct_goals'] / max(1, report['trajectories'])
-        report['required_share'] = minimum_open_goal_share
-        if (report['distinct_goal_share'] < minimum_open_goal_share or
-                report['weighted_target_share'] < minimum_open_goal_share):
+        from exp0_sft import check_open_goal_exposure
+        try:
+            check_open_goal_exposure(mix['open_user_goals'], minimum_open_goal_share)
+        except SystemExit:
             rows.close(publish=False)
-            raise SystemExit(f'Open user goal minimum not met: {json.dumps(report, sort_keys=True)}')
+            raise
     rows.close()
 
 
@@ -1780,10 +1782,12 @@ def build(args):
         episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows, 'source': source,
                    'open_goal': c.get('open_goal')}
         episode_chains = chains_of([episode])
-        if episode['open_goal']:
-            episode['open_goal_chains'] = [id(chain) for chain in episode_chains]
+        goal_fingerprint = (hashlib.sha256(open_goal_key(episode['open_goal']).encode()).hexdigest()
+                            if episode['open_goal'] else None)
         for chain in episode_chains:
             chain['part'] = source
+            if goal_fingerprint:
+                chain['open_goal_fingerprint'] = goal_fingerprint
         for row in rows:          # a chain holds its prompts in 'ids'; the per-row copies only cost memory
             row.pop('prompt', None)
         all_chains.extend(episode_chains)
@@ -2024,16 +2028,19 @@ def build(args):
     episode_sizes.save()
 
     chains = all_chains
-    mix = mix_report(chains, sft_episodes, aux_report)
+    mix = mix_report(chains, aux_report)
     minimum_open_goal_share = getattr(args, 'min_open_goal_share', None)
     if minimum_open_goal_share is None and (open_goals_only or any(
             task.get('source') == 'observed-live-workspace' and
-            task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values())):
+            task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values()) or
+            mix['open_user_goals']['distinct_goals']):
         minimum_open_goal_share = 0.8
     publish_sft_rows(rows_out, mix, minimum_open_goal_share)
     rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
-        pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
+        pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1',
+                     **({'minimum_open_goal_share': minimum_open_goal_share}
+                        if minimum_open_goal_share is not None else {})}, handle, protocol=4)
     os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
 
     # validation sets: up to --val-episodes left-over successes per kind on tasks the build does not train (own:
@@ -2421,6 +2428,8 @@ def main():
     e.add_argument('--teacher', action='append', default=[], metavar='POOL_DIR')
     e.add_argument('--live-run', action='append', default=[], metavar='MANIFEST',
                    help='verified observed workspace/CDP task; captured contexts only, no portable replay claim')
+    e.add_argument('--live-capture-root', action='append', default=[], metavar='CAPTURE_DIR',
+                   help='discover verified manifests in a single or multi-case live teacher capture directory')
     e.add_argument('--live-trajectory-out', metavar='OUTPUT.jsonl.zst',
                    help='also export verified open goals as standalone canonical trajectory IR')
     e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')

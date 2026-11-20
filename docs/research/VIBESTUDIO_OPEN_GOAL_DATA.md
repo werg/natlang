@@ -82,13 +82,17 @@ admitted chains divided by all weighted target tokens. Multiple attempts
 of one goal count once in the first numerator. An open-goal episode whose
 targets cannot all be rendered is excluded. Historical assignments and
 auxiliary data are included in the denominator when selected.
+The chain bundle retains each admitted goal's fingerprint and the required
+share. The learner checks the planned optimizer schedule after applying its
+context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-Recreate the release's detached worktrees on Pop from the
-[live Luna smoke pins](vibestudio-open-goal-pop-pins-luna.tsv).
-Set `RELEASE` to the desired directory. Run the following in Bash from Pop's
-Natlang checkout, using the ledger for the dependency installation.
+The [970-goal release](vibestudio-open-goal-pop-pins-970.tsv) is staged on Pop
+under `/home/werg/vibestudio-worktrees/open-goal-release-970.mmFw47`. To
+recreate detached worktrees, set `RELEASE` to a fresh directory and
+`RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
+dependency installation.
 
 ```bash
 set -euo pipefail
@@ -108,15 +112,16 @@ while IFS=$'\t' read -r name sha; do
   fi
   test "$(git -C "$RELEASE/$name" rev-parse HEAD)" = "$sha"
   test -z "$(git -C "$RELEASE/$name" status --porcelain)"
-done < docs/research/vibestudio-open-goal-pop-pins-luna.tsv
+done < "$RELEASE_PINS"
 ```
 
 Install the host dependencies with `pnpm install --frozen-lockfile` from
 `$RELEASE/host`. The detached checkout needs its own workspace dependency
 links. Set `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
-`VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_CHECKOUT` to
-`$RELEASE/natlang`. Set `LEDGER_CHECKOUT` to the checkout with the current
-memory ledger and choose a fresh `SMOKE_UNIT` for each attempt.
+`VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_RUNTIME_CHECKOUT`
+to `$RELEASE/natlang`. The last checkout supplies the release's vendored
+runtime. Set `LEDGER_CHECKOUT` to the checkout with the current memory
+ledger and choose a fresh `SMOKE_UNIT` for each attempt.
 
 Run one case at a time with the Natlang memory ledger. The collector starts
 and stops a managed workspace for the selected case and uses the configured
@@ -125,14 +130,14 @@ evaluation before starting a smoke. Run `scripts/memory_ledger.py status`
 and choose the host budget and reserve using that measurement.
 
 ```sh
-export VIBESTUDIO_TEMPLATE_CHECKOUTS NATLANG_REPO="$NATLANG_CHECKOUT"
+export VIBESTUDIO_TEMPLATE_CHECKOUTS NATLANG_REPO="$NATLANG_RUNTIME_CHECKOUT"
 cd "$VIBESTUDIO_CHECKOUT"
 pnpm --silent natlang:teacher --list > "$GOAL_CATALOG"
 python "$LEDGER_CHECKOUT/scripts/memory_ledger.py" run \
   --unit "$SMOKE_UNIT" --budget-gb "$SMOKE_BUDGET_GB" --host-max-gb "$SMOKE_BUDGET_GB" \
   --reserve-gb "$SMOKE_RESERVE_GB" --hold-budget --no-resumable --workdir "$VIBESTUDIO_CHECKOUT" \
   --env "VIBESTUDIO_TEMPLATE_CHECKOUTS=$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
-  --env "NATLANG_REPO=$NATLANG_CHECKOUT" \
+  --env "NATLANG_REPO=$NATLANG_RUNTIME_CHECKOUT" \
   --env "VIBESTUDIO_MAX_CONCURRENT_BUILDS=1" \
   -- pnpm natlang:teacher --case open-goal-reconcile-workshop-update \
   --approve-codex-session --test-timeout-ms 600000 --out "$CAPTURE_DIRECTORY"
@@ -144,6 +149,9 @@ catalog from Pop. The manifest's bound validation, call, and readback artifacts
 use paths relative to the manifest. Use a machine with the Neuralese Python
 environment and point `CAPTURE_DIRECTORY` and `GOAL_CATALOG` at the transferred
 copies. Activate that Python environment before running the commands below.
+Set `NATLANG_CHECKOUT` on the assembly machine to a separate Natlang data
+checkout at `b41e062e9` or a descendant. This version provides capture directory
+import and checks the open-goal share in the learner's actual step schedule.
 The learner needs the tokenizer and chat template from the starting model.
 Only tokenizer assets are loaded for assembly. Use that machine's held-v3
 manifest for `HELD_MANIFEST`, with the referenced held-v2 exclusion available.
@@ -153,6 +161,7 @@ for this capture.
 
 ```sh
 cd "$NATLANG_CHECKOUT"
+export NATLANG_REPO="$NATLANG_CHECKOUT"
 python scripts/data_registry.py record --id "$SMOKE_DATASET_ID" \
   --path "$CAPTURE_DIRECTORY" --kind teacher-demos \
   --format 'natlang.live-teacher-task/1 with bound Vibestudio evidence'
@@ -163,11 +172,39 @@ python scripts/neuralese_data/sft_sources.py build --work "$WORK" \
   --out "$LEARNER_READY" --tokenizer "$TOKENIZER_DIR" --base-rates '' \
   --held-manifest "$HELD_MANIFEST" \
   --open-goals-only --no-default-teacher-pool --min-open-goal-share 0.8 \
+  --think-treatment none \
   --live-holdout-registry "$GOAL_CATALOG" --val-episodes 0
 ```
 
 Check both open-goal shares in `build.json` and retain the corresponding
 capture, IR, and learner chains. A one-case smoke verifies data flow.
+
+### Bounded multi-case capture
+
+Generate a capture list against the exact release catalog and the managed
+reference evidence. Add `--family` to choose a verified family.
+
+```bash
+cd "$NATLANG_CHECKOUT"
+python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" \
+  "$MANAGED_REFERENCES" --train-cases-out "$TRAIN_CASES"
+mapfile -t scenarios < "$TRAIN_CASES"
+case_args=()
+for scenario in "${scenarios[@]}"; do case_args+=(--case "$scenario"); done
+```
+
+Pass `"${case_args[@]}"` to the ledgered collector command above in place of
+the single `--case` selector and give the capture a fresh output directory.
+The collector runs cases serially within each workspace and baseline. On
+releases that support `--cases-per-instance`, the collector starts a fresh
+instance after 12 cases by default. A lower value trades more startups for
+shorter-lived workspaces.
+
+Register each complete capture directory and pass it to extraction with
+`--live-capture-root "$CAPTURE_DIRECTORY"`. The importer discovers the
+verified manifests and validates each before converting it to trajectory IR.
+A case that fails leaves its logs in its own directory. Retry it with a
+fresh output directory and pass both roots in the same extraction.
 
 ## Capability coverage
 
@@ -178,6 +215,8 @@ capability labels and set a floor of **2,164 distinct open goals**. The five
 goals from the new lane do not enlarge the baseline. The 253
 `harness-review` cases remain inventory items until their model paths are
 confirmed. The three TestKit suites are recorded separately.
+The audit reports evidence for all inventory labels. The 151 labels on
+the pinned agentic tests determine agentic capability coverage.
 
 A baseline case counts when it starts a direct agent, declares an agent
 orchestration, submits model turns in an orchestrator, or is registered as a
@@ -303,8 +342,15 @@ reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/image
 To verify a goal against the managed workspace, run its model-free oracle.
 Pass `--case` to select goals or `--family` to verify a family from the pinned
 catalog. The command groups cases by workspace and baseline, runs one owned
-instance at a time, saves each full reference trajectory, and stops the
-instance before moving to the next group.
+instance at a time, and saves each full reference trajectory. It stops and
+recreates the instance every 12 cases by default to bound the lifetime of
+renderers, compiler caches, and test state. Completed batches retain their
+evidence if a later batch fails. Set `--cases-per-instance` to change the
+limit. A value of zero uses one instance per workspace and baseline.
+On a continuation, pass `--reuse-references RESULT_DIR` for each previous
+result or evidence bundle to skip cases whose existing managed outcome
+matches the exact current goal. Omit the option when retesting a changed
+fixture or verifier.
 
 ```sh
 python3 scripts/memory_ledger.py run \
@@ -434,7 +480,8 @@ call compared the original text, proposed change, current text, and fresh
 evidence. The final readback confirmed both the requested revision and the
 coedit. All five independent checks passed. The capture is registered as
 `vibestudio-open-goal-luna-smoke-reconcile-20261120-cqppvh`.
-The native trajectory IR yielded nine learner chains, 1,735 target tokens,
+The native trajectory IR records 24 sampled turns across nine invocations,
+with five call levels on its longest path. It yielded nine learner chains, 1,735 target tokens,
 and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
 open-goal shares were 100% for this one-goal smoke. The learner's CPU input
 loader packed all nine chains and reproduced the weighted target count.
@@ -453,20 +500,59 @@ verification pending.
 Google's evidence is registered as
 `vibestudio-open-goal-google-setup-reference-14-20261120`.
 
-The staged catalog also covers capability and skill provenance, durable task
-recovery, client diagnostics, GitHub readiness, workspace assembly, and
-scheduled automation recovery. Its 594 goals include 136 held-out cases.
-Their texts are distinct after normalizing quoted literals and numbers. All
-842 legacy assignment entries remain byte-identical. The 551-goal checkpoint
-has zero training ID or source-group overlaps with the digest-checked held-v2
-and held-v3 cases.
+The staged catalog reached 797 goals with 193 held-out cases. It adds
+capability and skill provenance, durable task recovery, client diagnostics,
+GitHub readiness, workspace assembly, scheduled automation recovery,
+owned HTTP research, compound native eval handoffs, linked vault work,
+retained provider approvals, local incident drafts, build provenance,
+template migration, local execution width, retained dictation, Adventure
+journeys, and specialist handoffs.
+The subsequent 898-goal stage adds local visual presentation, deployed actor
+and extension interfaces, Personal onboarding and tour handoffs, extension
+planning dossiers, and private Tendril route review. The Tendril checks
+exercise the real matcher and SQLite-backed Tendril state through a modeled
+channel transport. The managed transport still needs verification.
+The 970-goal stage also adds retained News evidence, binary asset recovery,
+and installed worker package integrity. It has 234 source-separated held
+goals. All 842 historical assignment entries still match byte for byte.
+The catalog has no ID or source-group overlap with the digest-checked held-v2
+and held-v3 snapshots, and no near pairs at the catalog's repetition threshold.
+The new News fixtures model article and schedule records. Binary asset
+recovery and worker package repair use the production semantic VCS engine in
+source replay. Their managed outcomes are tracked independently of source
+replay results.
+The 998-goal stage adds 28 mobile continuity goals, including six held
+goals. It exercises the production startup cache, retained build record
+parser, reconnect and trust handling, and mobile lease reconciliation
+through local fixture ports. Android hardware and real-server transport
+remain separate verification work.
+The 1,129-goal source stage adds quiet API readiness, native agent-action
+recovery, retained image candidates, durable notifications, and workspace
+sharing. It preserves the historical assignments and includes 271 held
+goals. The source checks cover typed lambda linking, exact outcome proofs
+and source-group separation. The image fixtures exercise retained outputs.
+The notification and sharing fixtures exercise durable records and scoped
+decisions. Provider generation, desktop toasts, and live account changes
+require their own evidence.
+The 777-goal checkpoint had distinct texts after normalizing quoted literals
+and numbers. All 842 legacy assignment entries remained byte-identical.
+The 777-goal checkpoint had zero training ID or source-group overlaps with
+the digest-checked held-v2 and held-v3 cases.
 
 Thirteen selected model-free checks passed across Examples, Personal,
 Spectrolite, and System. Both previously failing visual recovery checks passed
 after the runtime delivered committed state updates to headless panels and
-the test granted reload authority for the authorized renderer. The combined
-audit covers 384 goals, including 85 held-out goals. The research and
-research-to-edit families still lack verified held cases.
+the test granted reload authority for the authorized renderer. The next
+managed run added 35 Examples, 22 Personal, 27 Spectrolite, and 57 System
+proofs. The combined audit covers 525 distinct goals, including 117 held-out
+goals before the assembly and research reruns. The full reference matrix
+peaked at 9.5 GiB on Tick. Fifteen assembly reruns and all 12 new held-out
+research and editing goals passed in managed Vibestudio. Those research
+cases use the native page extractor and retained cache. The following
+reference run added 20 independently verified goals. These cover local
+incident drafts, provider and dictation continuity, scheduled recovery,
+client viewport recovery, and one template migration. The audited 777-goal
+release has 572 verified goals, including 142 held-out goals.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
@@ -482,3 +568,48 @@ separate model-serving job at the time of staging.
 The 462-goal release also reproduced byte for byte on Pop under
 `/home/werg/vibestudio-worktrees/open-goal-release-462.9AiHlQ`. Its catalog
 SHA-256 is `5811f79d83aea9db793c1e6825735b98a9ef5447a60fe2434a7b2d8c2464470f`.
+That directory includes `train-cases.txt` with 292 selectors backed by managed
+proofs and matched to its catalog. Seven of those selectors require an
+installed deployment package.
+The [updated 462-goal pins](vibestudio-open-goal-pop-pins-462-fixed.tsv) add
+headless state delivery, exact capture proof checks, and bounded teacher
+instances. Pop reproduced the same catalog and train list under
+`/home/werg/vibestudio-worktrees/open-goal-release-462-fixed.XA8cN7`.
+
+The [777-goal release pins](vibestudio-open-goal-pop-pins-777.tsv) passed
+the full host commit gate with a 5.8 GiB peak on Tick. Pop reproduced the
+catalog and verified the transferred 430-selector training list under
+`/home/werg/vibestudio-worktrees/open-goal-release-777.ArOkRz`.
+The catalog SHA-256 is
+`345666ab124bb2ed1f168920c35b6032a0b5657a0c7348fd7a7feda395d3110c`.
+The training selector SHA-256 is
+`a3ad8b55ed300d53345cfd76fdd42b678234a5ad88d7d35b5c9bdbd471afcfdc`.
+Seven selectors require an installed deployment package. The combined
+proof archive is registered as `vibestudio-open-goal-verified-release-777-20261121`.
+The follow-up verified all 31 previously failing references, including 16
+Adventure goals. The total is now 603 verified goals, including 153 held-out
+goals. The 450 training selectors are in `train-cases-450.txt` in the same
+Pop release directory. That file has SHA-256
+`b6b232cd3b31a35a63b8f8a7b7b85c3f7b1f77bc761ee61d6efdf96a0bf35b85`.
+The expanded proof archive is registered as
+`vibestudio-open-goal-verified-release-777-extended-20261121`.
+The managed follow-up peaked at 8.8 GiB on Tick.
+
+The 970-goal release passed the full host commit gate and was pushed. The
+gate peaked at 6.1 GiB on Tick. Pop reproduced catalog SHA-256
+`9a50046d00060f9b0825e6c1fdaa77b9cda04104898f5378ae2cbecbb8f5b6df`
+and verified the same 450-selector list in the new release directory.
+`train-cases-no-device.txt` contains the 440 selectors that require neither
+a terminal device nor a deployment package. Its SHA-256 is
+`a62a11e916d1754840e5d2716f89ea91cb995947c80f14afa8e975cedbd3d292`.
+The managed release batch passed 47 of 48 references and peaked at 9.5 GiB.
+The combined audit now has 650 verified goals, including 176 held-out goals.
+The proofs are registered as `vibestudio-open-goal-verified-release-970-20261121`.
+Use `train-cases-474.txt` for the expanded list on Pop or
+`train-cases-no-device-464.txt` to omit terminal-device and deployment
+requirements. The files have SHA-256
+`4cb74dd485d39ea03df01bdd9747da723bb309207c55fcd8d84f3e104a5c128e`
+and `3932ba18d0d4060af83b9db6baa95bd330ad8bfd25d989214a35a3b92687255f`,
+respectively. The package-review failure exposed a mismatch with Build V2's
+internal dependency validation. The next source release shares that rule
+and explains the blocked plan to the caller.
