@@ -90,10 +90,15 @@ python "$NATLANG_CHECKOUT/scripts/memory_ledger.py" run \
 ```
 
 Wait for the unit to exit successfully and keep the entire capture directory.
-The learner needs the actual tokenizer, chat template, and model type of the
-starting checkpoint. Only tokenizer assets are loaded for data assembly. Set
-`HELD_MANIFEST` to the machine's held-v3 manifest with its referenced exclusions
-available. Use a fresh work directory and a fresh learner output directory.
+For assembly on a different machine, copy that directory and the exact JSONL
+catalog from Pop. The manifest's bound validation, call, and readback artifacts
+use paths relative to the manifest. Use a machine with the Neuralese Python
+environment and point `CAPTURE_DIRECTORY` and `GOAL_CATALOG` at the transferred
+copies. Activate that Python environment before running the commands below.
+The learner needs the tokenizer and chat template from the starting model.
+Only tokenizer assets are loaded for assembly. Use that machine's held-v3
+manifest for `HELD_MANIFEST`, with the referenced held-v2 exclusion available.
+Use a fresh work directory and a fresh learner output directory.
 
 ```sh
 cd "$NATLANG_CHECKOUT"
