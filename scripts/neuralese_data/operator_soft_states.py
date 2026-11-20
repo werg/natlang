@@ -132,7 +132,6 @@ def evaluate(args):
     """Held-out check of a fit on test-split operator turns, forward only on the frozen backbone: the token-weighted NLL
     of each verified reply under view's text, under the state primed from it (the fit's initial state) and under the
     trained state, paired per row."""
-    import math
     import random
     import torch
     from natlang_neuralese.common.cuda_context import prepare_gpu
@@ -152,7 +151,8 @@ def evaluate(args):
         import_archive(engine, [build / 'artifacts'], [build / 'states'])
         turns = [json.loads(line) for line in Path(args.turns).read_text().splitlines() if line.strip()]
         random.Random(0).shuffle(turns)
-        turns = turns[:args.rows]
+        turns = turns[:args.rows] if args.rows else turns
+        lengths = [turn_chars(turn['messages'], turn['reply']['text']) for turn in turns]
         arms = {'text': None, 'primed': {key: record['state'] for key, record in init.items()},
                 'trained': dict(state['soft_states'])}
         losses = {arm: [] for arm in arms}
@@ -171,18 +171,35 @@ def evaluate(args):
                     loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=False,
                                          **({'external_blocks': blocks, 'external_identity': identity} if blocks else {}))
                 losses[arm].append(float(loss))
-    def paired(a, b):
-        diffs = [y - x for x, y in zip(losses[a], losses[b])]
-        mean = sum(diffs) / len(diffs)
-        sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / max(len(diffs) - 1, 1))
-        return {'mean_change': mean, 'se': sd / math.sqrt(len(diffs)), 'lower_rows': sum(d < 0 for d in diffs), 'rows': len(diffs)}
     report = {'build': str(build), 'turns': args.turns, 'rows': len(turns), 'step': state.get('step'),
-              'complete': result is not None, 'mean_nll': {arm: sum(v) / len(v) for arm, v in losses.items()},
-              'primed_vs_text': paired('text', 'primed'), 'trained_vs_primed': paired('primed', 'trained'),
-              'trained_vs_text': paired('text', 'trained')}
+              'complete': result is not None, 'long_chars': args.long_chars,
+              **paired_report(losses, range(len(turns)))}
+    # The fit's row cap (turns --max-chars) bounds what it trained on; report rows beyond it on their own so a state
+    # fit on short inputs is not credited or blamed for long ones on an average.
+    if args.long_chars:
+        for name, keep in (('short', lambda n: n <= args.long_chars), ('long', lambda n: n > args.long_chars)):
+            rows = [i for i, n in enumerate(lengths) if keep(n)]
+            if rows:
+                report[name] = {'rows': len(rows), **paired_report(losses, rows)}
     print(json.dumps(report, indent=1))
     if args.out:
-        Path(args.out).write_text(json.dumps({**report, 'losses': losses}, indent=1) + '\n')
+        Path(args.out).write_text(json.dumps({**report, 'losses': losses, 'chars': lengths}, indent=1) + '\n')
+
+
+def paired_report(losses, rows):
+    """Mean NLL per arm and paired changes (text -> primed -> trained) over the given row indices."""
+    import math
+    rows = list(rows)
+
+    def paired(a, b):
+        diffs = [losses[b][i] - losses[a][i] for i in rows]
+        mean = sum(diffs) / len(diffs)
+        sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / max(len(diffs) - 1, 1))
+        return {'mean_change': mean, 'se': sd / math.sqrt(len(diffs)), 'lower_rows': sum(d < 0 for d in diffs),
+                'rows': len(diffs)}
+    return {'mean_nll': {arm: sum(values[i] for i in rows) / len(rows) for arm, values in losses.items()},
+            'primed_vs_text': paired('text', 'primed'), 'trained_vs_primed': paired('primed', 'trained'),
+            'trained_vs_text': paired('text', 'trained')}
 
 
 def manifest_for(bindings, program_hash):
@@ -238,7 +255,9 @@ def main(argv=None):
     e.add_argument('--build', required=True)
     e.add_argument('--turns', required=True, help='test-split turns (turns --split test)')
     e.add_argument('--checkpoint', required=True)
-    e.add_argument('--rows', type=int, default=64)
+    e.add_argument('--rows', type=int, default=0, help='test turns evaluated (0: all)')
+    e.add_argument('--long-chars', type=int, default=40000,
+                   help='report rows above this many characters separately (the fit\'s row cap; 0: one pool)')
     e.add_argument('--device', default='cuda')
     e.add_argument('--dtype', default='bfloat16')
     e.add_argument('--out')
