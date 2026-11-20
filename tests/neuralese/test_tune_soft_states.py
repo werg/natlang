@@ -39,12 +39,26 @@ def test_states_are_placed_exactly_where_their_texts_were():
                                       {'type': 'text', 'text': ' t13'}]
     assert messages[2]['content'] == [{'type': 'native_state', 'id': 'nzs1_' + 'b' * 52}]
     assert placed == [soft_key('bx', 'instructions', None), soft_key('bx', 'skill', 'skills.s')]
+    # A row of the binding without its instruction text (a judge readout, an operator call) or with it twice keeps
+    # its text; so does a row whose text differs from the one the state was primed from (an interpolated lambda).
     missing = turn(messages=[{'role': 'user', 'content': 't12'}])
-    with pytest.raises(TuneMathError, match='occurs 0 times'):
-        place_states(missing, states)
-    twice = turn(messages=[{'role': 'user', 'content': INSTRUCTIONS + ' ' + INSTRUCTIONS}])
-    with pytest.raises(TuneMathError, match='occurs 2 times'):
-        place_states(twice, states)
+    assert place_states(missing, states)[1] == []
+    twice = turn(messages=[{'role': 'user', 'content': INSTRUCTIONS + ' ' + INSTRUCTIONS}], texts={'instructions': INSTRUCTIONS})
+    assert place_states(twice, states) == (twice['messages'], [])
+    key = soft_key('bx', 'instructions', None)
+    assert place_states(turn(), states, {key: 'other text'})[1] == []
+    assert place_states(turn(), states, {key: INSTRUCTIONS})[1] == [key]
+
+
+def test_an_interpolating_binding_gets_its_state_for_its_most_frequent_text(tmp_path):
+    engine = soft_engine(tmp_path)
+    rendered = lambda value: f't20 t21 {value}'
+    turns = [turn(root=f'r{index}', messages=[{'role': 'user', 'content': 't12 ' + rendered(value) + ' t13'}],
+                  texts={'instructions': rendered(value)}) for index, value in enumerate(['t22', 't23', 't23'])]
+    records = initialize_soft_states(engine, turns, skills=False)
+    record = records[soft_key('bx', 'instructions', None)]
+    assert record['textSha256'] == text_sha256(rendered('t23')) and record['calls'] == 2 and record['variants'] == 2
+    assert engine.store.get_native_state(record['state']).block.text == rendered('t23')
 
 
 def soft_engine(tmp_path):

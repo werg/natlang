@@ -98,7 +98,9 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
     from ..serve.targets import target_items
     from .soft import import_name, place_states, soft_items_to_node
     mine = {key: state for key, state in (soft or {}).items() if json.loads(key)[0] == turn['binding']}
-    messages, placed = place_states(turn, mine) if mine else (turn['messages'], [])
+    # Each state stands only for the exact text it was primed from (its block's text), as at serving.
+    state_texts = {key: engine.store.get_native_state(state).block.text for key, state in mine.items()}
+    messages, placed = place_states(turn, mine, state_texts) if mine else (turn['messages'], [])
     decision = turn.get('decision')
     if decision is not None:
         from ..serve.native_learning import decision_items
