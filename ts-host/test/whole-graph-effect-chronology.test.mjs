@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { subtreeEffects } from '../dist/calls/replay.js';
 import { graphCustodyDigest } from '../dist/calls/graph-custody.js';
 import { hexDigest } from '../dist/native/hash.js';
+import { verifyObservedCallTree } from '../scripts/observed-workspace-evidence.mjs';
 const ref=value=>({complete:true,value,hash:hexDigest(JSON.stringify(value)),bytes:new TextEncoder().encode(JSON.stringify(value)).byteLength});
 
 function graph(depth=24) {
@@ -25,6 +26,20 @@ test('authenticates every child and sorts actual task-wide requests beyond depth
   const effects=subtreeEffects(store,root);
   assert.equal(effects.length,24);
   assert.deepEqual(effects.map(effect=>effect.result),Array.from({length:24},(_,i)=>23-i));
+});
+
+test('observed captures authenticate the recorded child inventory before materialization', () => {
+  const { rows, root } = graph(2);
+  const child = rows.get('t/1');
+  verifyObservedCallTree([root, child], root.call_id);
+  assert.throws(() => verifyObservedCallTree([root], root.call_id), /recorded child inventory/);
+  assert.throws(() => verifyObservedCallTree([root, { ...child, graph_custody: undefined }], root.call_id),
+    /recorded child inventory/);
+  const stale = { ...child, effects: [{ ...child.effects[0], method: 'different' }] };
+  assert.throws(() => verifyObservedCallTree([root, stale], root.call_id), /recorded child inventory/);
+  const unsealedRoot = { ...root, graph_custody: undefined };
+  const disconnectedChild = { ...child, parent_call_id: child.call_id, graph_custody: undefined };
+  assert.throws(() => verifyObservedCallTree([unsealedRoot, disconnectedChild], root.call_id), /unreachable/);
 });
 
 test('missing children, duplicate chronology, and unknown historical cross-call order fail closed',()=>{
