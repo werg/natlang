@@ -85,6 +85,11 @@ def ops_tick(_):
             'events': _mtime_ms(OUT + '/events.jsonl'), 'edits': _mtime_ms(DATA + '/ops/data-edits/log.jsonl')}
 
 
+@handler('ops.paths')
+def ops_paths(_):
+    return {'telemetry': DASH + '/page-telemetry.jsonl'}
+
+
 @handler('ops.snapshot')
 def ops_snapshot(_):
     try:

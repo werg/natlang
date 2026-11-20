@@ -11,6 +11,8 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openSession } from './session.mjs';
+import { readFile, appendFile } from 'node:fs/promises';
+import { privateDirectory } from './local.mjs';
 import { startPairingWindow } from './pairing-native.mjs';
 import { TOPICS, encodeReply, validId, editRef, MAX_REPLY_CHUNKS, REPLY_TTL_MS } from './ops-protocol.mjs';
 
@@ -80,11 +82,26 @@ async function serveQueries(session, rpc, signal) {
   }
 }
 
+// The build of the page as last built for publication: ticks announce it so pinned tabs move to the selected release.
+const PAGE_DIR = process.env.NATLANG_OPS_BUILD ? pathToFileURL(process.env.NATLANG_OPS_BUILD.replace(/\/?$/, '/')) : new URL('../page/', privateDirectory);
+async function pageBuild() { try { return JSON.parse(await readFile(new URL('build.json', PAGE_DIR), 'utf8')).build; } catch { return null; } }
+
+/** Page telemetry: each connected page reports what it sent, received and drew (`ops/t`); logged here and kept in
+ * <dashboard>/page-telemetry.jsonl for the operators. */
+async function serveTelemetry(session, rpc, signal) {
+  const file = (await rpc('ops.paths', null).catch(() => null))?.telemetry;
+  for await (const sig of session.signals.subscribe({ topics: [TOPICS.telemetry], mode: 'all', signal })) {
+    const rec = { t: new Date().toISOString(), from: sig.authorId?.slice(0, 12), ...(sig.payload || {}) };
+    log({ page: { from: rec.from, seq: rec.seq, version: rec.version, build: rec.build?.build, visible: rec.visible, counts: rec.counts, events: (rec.events || []).slice(0, 12) } });
+    if (file) await appendFile(file, JSON.stringify(rec) + '\n').catch(() => {});
+  }
+}
+
 async function ticks(session, rpc, signal) {
   let last = null;          // log a tick failure when it changes (no reader connected is the normal idle state)
   while (!signal.aborted) {
     let err = null;
-    try { await sendPaced(session, TOPICS.tick, await rpc('ops.tick', null, 15000), { ttlMs: REPLY_TTL_MS }); }
+    try { await sendPaced(session, TOPICS.tick, { ...await rpc('ops.tick', null, 15000), page_build: await pageBuild() }, { ttlMs: REPLY_TTL_MS }); }
     catch (e) { err = e.code || e.message; }
     if (err !== last) { log({ tick: err || 'delivered' }); last = err; }
     await new Promise(r => setTimeout(r, 10000));
@@ -132,7 +149,7 @@ export async function runOpsPeer({ signal }) {
       await new Promise(r => setTimeout(r, 1000));
     }
   })();
-  const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
+  const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal), serveTelemetry(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
   let busy = false, again = false;
   const kick = async () => {
     if (busy) { again = true; return; }
