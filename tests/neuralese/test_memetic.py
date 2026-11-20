@@ -273,8 +273,8 @@ def test_refined_guidance_states_are_kept_only_when_the_query_worlds_confirm_the
     refined_state = {None: {'id': 'nzs1_' + 'r' * 52, 'build': str(tmp_path / 'build')}}
     seen = {}
 
-    def refine(spec_, reports, guidance, bindings, out):
-        seen.update(guidance=guidance, bindings=bindings)
+    def refine(spec_, reports, guidance, out):
+        seen.update(guidance=guidance)
         return refined_state, {'rows': 3}
     monkeypatch.setattr(mw, 'refine_guidance', refine)
     change = w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Read the question carefully and '
@@ -282,7 +282,7 @@ def test_refined_guidance_states_are_kept_only_when_the_query_worlds_confirm_the
     w.evaluate([change])
     w.commit([change], 'careful reading')
     outcome = w.score()['memetic']
-    assert seen['bindings'][0]['native_state_id'] == 'nzs1_' + 't' * 52, 'refined from the committed text-written state'
+    assert seen['guidance'] == [{'function': None, 'text': w.state['changes'][change]['text']}]
     runs = {call[0]: call for call in evaluator.calls}
     refined_run = next(call for name, call in runs.items() if name.startswith('query-refined-'))
     assert refined_run[1] == [f'w{i}' for i in range(4, 10)] and refined_run[-1] == refined_state, 'judged on the query worlds'
@@ -302,7 +302,7 @@ def test_guidance_rows_are_the_verified_calls_that_imported_the_state_with_its_t
     passed = {'id': 'row1', 'trajectory': [step()], 'outcome': {'status': 'done', 'oracle': {'accepted': True}}}
     report = {'results': [('w1', passed), ('w2', {**passed, 'id': 'row2'})], 'rewards': [1.0, 0.0]}
     guidance = [{'function': None, 'text': 'Check the weekday twice.'}]
-    rows = mw.guidance_rows([report], guidance, [{'native_state_id': state}])
+    rows = mw.guidance_rows([report], guidance)
     assert len(rows) == 1, 'only the verified success'
     [row] = rows
     assert row['binding'] == 'guidance:*' and row['texts'] == {'instructions': 'Check the weekday twice.'}

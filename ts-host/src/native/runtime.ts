@@ -1209,6 +1209,8 @@ export class TranscriptView {
 }
 
 export class NativeSession {
+  /** Program guidance written from its text, to be primed in this call once its opening exists (agent.ts). */
+  guidancePrime?: { placeholder: string; text: string; settle: (id: string) => void };
   completed = false;
   /**
    * Judges the refined slots (`Is<T, P>`) of a value before the session accepts it as the result or as a local. Set by

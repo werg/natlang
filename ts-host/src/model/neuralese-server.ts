@@ -311,7 +311,7 @@ export function requestNativeStateBindings(messages: readonly unknown[]): Native
   return bindings;
 }
 
-function materializeNativeStateSentinels(value: unknown, key?: string): unknown {
+export function materializeNativeStateSentinels(value: unknown, key?: string): unknown {
   if (Array.isArray(value)) {
     if (value.some(part => part && typeof part === 'object' && (part as Json).type === 'neuralese'))
       throw new TypeError('native chat content does not accept flat vector blocks');

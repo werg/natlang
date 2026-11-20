@@ -82,3 +82,15 @@ def ensure_context(device: str = 'cuda') -> None:
         sys.stdout.flush()
         sys.stderr.flush()
         os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
+
+
+def prepare_gpu(device: str = 'cuda', *, want_gb: float = 4.0) -> None:
+    """Before a model loads on the GB10: the CUDA context (``ensure_context``), then a compaction nudge when fewer than
+    ``want_gb`` of free memory sit in blocks of order >= 8 (weight copies fail with an out-of-memory under
+    fragmentation however much is free)."""
+    if not str(device).startswith('cuda'):
+        return
+    ensure_context(device)
+    free = high_order_free_mb()
+    if free is not None and free < want_gb * 1024:
+        print(json.dumps({'event': 'cuda_compact', 'high_order_free_mb': free, 'compact': compact(want_gb)}), flush=True)

@@ -20,6 +20,9 @@ what to change, whether a change helped, when to stop) are its own natural-langu
 
 Guidance reaches the evaluated program through the runtime's program-guidance channel: its text is written as a native
 state on the actor (``/v1/neuralese/native-states/write-text``) and bound as ``natlang.memetic-program-guidance/1``.
+That write is the placeholder: the runtime primes the guidance state at its real position in the first call that reads
+it (ts-host agent.ts ``runtimeProgramGuidance``, ``NATLANG_GUIDANCE_PRIMING=text`` opts out); a refined (trained) state
+is read as it is.
 
 Served as a JSON-lines world process (``ts-host/src/teacher/world-bridge.ts`` kind ``memetic``):
 ``python -m natlang_neuralese.rl.memetic_workspace serve``.
@@ -473,12 +476,13 @@ def collection_evaluator(spec):
 
 
 # ---- refinement of committed guidance states ---------------------------------------------------------------------------
-def guidance_rows(reports, guidance, bindings):
+def guidance_rows(reports, guidance):
     """``natlang.tune-turn/v1`` rows of the guidance states from support reports' verified successes (reward 1): each
-    call whose prompt imported one of the states, with the state replaced by its text (ts-host
-    scripts/tune-turns-from-results.mjs, the tune pool import's action evidence)."""
-    states = [{'id': binding['native_state_id'], 'text': entry['text'],
-               'binding': 'guidance:' + (entry['function'] or '*')} for entry, binding in zip(guidance, bindings)]
+    call whose opening carried a guidance state, with the state replaced by the text of the guidance that call reads
+    (ts-host scripts/tune-turns-from-results.mjs, the tune pool import's action evidence). The state is found by its
+    place, not its ID: the runtime primes guidance in the call that first uses it."""
+    states = [{'text': entry['text'], 'function': entry['function'], 'binding': 'guidance:' + (entry['function'] or '*')}
+              for entry in guidance]
     rows = [{'row': result, 'reward': reward} for report in reports
             for (_, result), reward in zip(report.get('results') or [], report.get('rewards') or [])
             if result is not None and reward == 1]
@@ -491,14 +495,14 @@ def guidance_rows(reports, guidance, bindings):
     return [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
 
 
-def refine_guidance(spec, reports, guidance, bindings, out):
+def refine_guidance(spec, reports, guidance, out):
     """The committed guidance states refined by gradient on the support worlds' verified rows: the same soft-state
     training every primed state gets (`natlang_neuralese.tune.build`: each state primed from its text at its position in
     a real call, then trained with the CSPD recipe on the frozen backbone). ``spec['refine']``: {checkpoint (the actor's
     exact weights), steps, lr, batch_rows, device, dtype}. Returns {function: {id, build}} or {} (no verified rows), and
     the record of what was done."""
     settings = spec['refine']
-    rows = guidance_rows(reports, guidance, bindings)
+    rows = guidance_rows(reports, guidance)
     record = {'rows': len(rows)}
     if not rows:
         return {}, {**record, 'skipped': 'no verified support rows import the guidance'}
@@ -802,10 +806,8 @@ class Workspace:
         evaluations = [item for item in self.state['evaluations'] if item['ids'] == candidate['ids']]
         reports = [json.loads((Path(item['dir']) / 'summary.json').read_text()) for item in evaluations
                    if item.get('dir') and (Path(item['dir']) / 'summary.json').exists()]
-        bindings = json.loads((Path(query['dir']) / 'program-guidance.json').read_text())
-        bindings = bindings if isinstance(bindings, list) else [bindings]
         try:
-            states, record = refine_guidance(self.spec, reports, guidance, bindings, self.out / 'refine' / key)
+            states, record = refine_guidance(self.spec, reports, guidance, self.out / 'refine' / key)
         except (subprocess.CalledProcessError, ValueError, KeyError, OSError) as error:
             return {**query, 'refine': {'error': str(error)[:500], 'kept': False}}
         if not states:
