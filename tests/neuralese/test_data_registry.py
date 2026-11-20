@@ -231,3 +231,13 @@ def test_consumers_include_runs_and_derived_datasets(roots):
     dr.consume([src], run='grpo:x', how='GRPO task pool')
     reg = dr.load(repo=roots / 'repo', fresh=True)
     assert [c['run'] for c in reg.consumers('src')] == ['grpo:x', 'dataset:derived']
+
+
+def test_named_file_dataset_directory_names_it(roots):
+    d = roots / 'data_nvme' / 'held'
+    pool(d / 'cases.jsonl', ['a'])
+    pool(d / 'runs' / 'r.jsonl', ['b'])
+    dr.record_dataset('held', d, kind='held', format='f', include=['cases.jsonl'])
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert reg.find(d)['id'] == 'held'
+    assert reg.find(d / 'runs' / 'r.jsonl') is None
