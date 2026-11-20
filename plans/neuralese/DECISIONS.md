@@ -5384,3 +5384,22 @@ available, and `--no-cuda-cache-reclaim` opts out of automatic reclamation.
   check-main `--quick`) walks `/mnt/external` source-storage trees through `Registry._paths()` glob expansion. With sda
   at 88% utilisation and about 2 s per read today, it ran over an hour and was killed (exit 143 after 4,094 s). A quick
   gate should not depend on HDD walks; this is for the data-registry strand.
+
+## 2026-11-20 20:00, program fits run beside grpo-v5 at 11.5 GB (fallow T4; program-tuning strand)
+
+- **Where the 18.6 GB went (profiled on verdict, ledger accounting).** Engine load: 4.75 GB host, of which 3.3 GB was
+  the checkpoint's training state (optimizer moments) that `load_native_engine` keeps for the service's in-place
+  optimizer step; first step +3.4 GB host, then ~+80 MB host per step (+4.8 GB over 60 steps); CUDA 6.0-6.3 GB. Ruled
+  out: CUDA charged twice (a 4 GiB CUDA allocation leaves cgroup anon unchanged), the fit store (bounded at 256 MiB),
+  lowered rows (0.3 GB for 1,280 rows), glibc retention (malloc_trim changes nothing).
+- **Fixes (defaults).** `load_native_engine(training_state=False)` in every tune entry (build, families, distill,
+  learned, apply, program_tune bank; faa2fe339). `tune.build --segment-steps N` ends the process every N steps
+  (state saved, exit 75) and a driver reruns it; the resume is exact (test: 1+1+1 segments give the same artifacts as
+  one 3-step run; 25cf760c6). The fit chain claims 13 GB at medium priority in 15-step segments.
+- **Measured:** verdict fit peak 11.5 GB at step 5 (was 18.6 GB over a whole fit), beside grpo-v5 (claim trimmed to
+  79 GB by the coordinator) and the soft-state fit.
+- **Push gate.** `check-main --quick` deselects `test_registry_covers_what_the_catalog_found_before_it`, which lists
+  every dataset directory (HDD included) and hung the gate 30+ min under the archive rsync's I/O (16b67b541); the full
+  check still runs it.
+- **Open:** the ~80 MB/step host growth's cause (segments bound it, they do not remove it); the 3.4 GB first-step host
+  jump (not CPU tensors of the fit's own; inductor/compile state is a candidate).
