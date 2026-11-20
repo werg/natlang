@@ -187,7 +187,7 @@ def main(argv=None):
     prepare_gpu(config.get('device', 'cpu'))   # GB10: context and large free blocks before the weights load
     with fit_store_context(config) as store:
         engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
-                                    dtype=engine_dtype(config), store=store)
+                                    dtype=engine_dtype(config), store=store, training_state=False)
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
         import_archive(engine,

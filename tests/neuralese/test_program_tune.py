@@ -239,3 +239,13 @@ def test_release_keeps_the_result_and_only_its_artifact_closure(tmp_path):
     assert sorted(p.stem for p in (out / 'artifacts').iterdir()) == sorted(i['artifact'] for i in result['artifacts'])
     served = load_native_engine(str(tmp_path / 'native.pt'), device=engine.device)
     assert [e['id'] for e in bind_adapter_release(served, out)] == [i['artifact'] for i in result['artifacts']]
+
+
+def test_fit_engines_do_not_keep_the_checkpoint_training_state(tmp_path):
+    # the training state (optimizer moments) held 3.3 GB of host memory through an LFM3 program fit (2026-11-20)
+    from natlang_neuralese.serve import load_native_engine
+    engine_fixture(tmp_path, 'lfm', service_template=True)
+    kept = load_native_engine(str(tmp_path / 'native.pt'), device='cpu')
+    dropped = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', training_state=False)
+    assert dropped.native_training_state == {}
+    assert kept.native_identity == dropped.native_identity

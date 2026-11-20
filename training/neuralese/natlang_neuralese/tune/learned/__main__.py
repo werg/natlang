@@ -59,7 +59,7 @@ def _engine(spec):
     prepare_gpu(spec.get('device', 'cpu'))   # GB10: context and large free blocks before the weights load
     from ...serve.store import TensorStore
     engine = load_native_engine(spec['checkpoint'], base=spec.get('base'), device=spec.get('device', 'cpu'),
-                                dtype=engine_dtype(spec))
+                                dtype=engine_dtype(spec), training_state=False)
     from .checkpointing import configure_adaptation_checkpointing
     configure_adaptation_checkpointing(engine, group)
     if spec.get('store'):
