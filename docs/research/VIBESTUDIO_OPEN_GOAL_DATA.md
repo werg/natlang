@@ -185,8 +185,8 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 51 open goals across six workspace templates, with 41
-training goals and 10 source-separated holdouts. The same Base entry point
+The catalog declares 72 open goals across six workspace templates, with 58
+training goals and 14 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
@@ -194,17 +194,32 @@ them. The workspace and the reference checks are selected by the harness.
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
 | Examples | 17 | Public evidence and document recovery, authorized CDP changes and readback, and declared suite verification |
-| Personal | 6 | `workspace-live-declared-test-suite` applied to Mission Control persistence, stale edits, lost links, draft retries, and browser route inspection |
-| System | 4 | `workspace-live-declared-test-suite` applied to model gateway readiness, image attempt recovery, and Natlang capture lineage |
+| Personal | 15 | `workspace-live-declared-test-suite`, `personal-live-mission-planning`, and `personal-live-mission-facility` with board discovery, revision-bound changes, competing edits, prerequisites, and durable handoffs |
+| System | 16 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 5 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes |
 | Google Workspace | 7 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition |
 
 Google's qualification uses the real installed Drive client against a bounded
 test transport. News and Spectrolite use the live workspace services for
-schedule and editor observations. News, Spectrolite, Drive, and suite cases
-have `open-goal-oracle-CASE` managed selectors for model-free references.
-These selectors exercise the outcome checks and produce no teacher data.
+schedule and editor observations. The managed `open-goal-oracle-CASE`
+selectors exercise those outcome checks with a reference execution. The
+Mission Control references use the real store in an owned context. Operator
+references use the managed terminal driver and an owned hub. Packaged
+deployment selectors also need an installed server package configured
+through `VIBESTUDIO_MANAGED_DEPLOYMENT_PACKAGE`.
+
+To check the archive of reference results against the pinned catalog,
+preserve the managed `trajectory ... --full --json` files and run:
+
+```sh
+python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS"
+```
+
+The audit lists missing cases and binds accepted proofs to the current goal
+hash and the run's owned context. Add `--require-complete` to make any
+missing reference fail the check. Use `--family` to scope it to a particular
+catalog family. Reference executions do not produce teacher data.
 
 The first Personal and System live reference runs passed all five planning
 cases and exposed missing target dependencies in five native executions.
@@ -213,7 +228,7 @@ record the prepared dependency key in the report. The adapter checks the
 requested state, target, suite, and filters, and the harness checks the
 workspace state again before issuing a receipt.
 
-All 34 new goals passed managed reference checks. The result covers all
+The first expansion passed 34 managed reference checks. The result covers all
 10 Personal and System suite goals, all 12 News goals, all seven Drive
 goals, and all five Spectrolite goals, including the new holdouts. The
 Mission Control form suite passed after its manifest declared the DOM
@@ -221,7 +236,12 @@ environment and Testing Library peer. The Spectrolite draft oracle
 verified the saved edit in the original live renderer and kept the
 committed document intact. The MDX exporter now honors the editor's
 setting to preserve authored imports without adding generated ones.
-Tick's bounded Luna provider probe returned expired OAuth, so the
+All 21 Mission Control and operator additions passed their managed reference
+checks. The archive binds the nine board results, four terminal profile
+results, and eight deployment results to the pinned goal and owned context.
+The deployment run used the installed regular server package at version
+0.1.105. Across the 72-case catalog, the current archive verifies 58 goals.
+Bounded Luna provider probes on Tick and Pop returned expired OAuth. The
 live teacher capture through learner assembly remains unverified.
 Pop reproduced the 51-case catalog byte for byte from the pushed host and
 System Testing revisions.
