@@ -5403,3 +5403,92 @@ available, and `--no-cuda-cache-reclaim` opts out of automatic reclamation.
   check still runs it.
 - **Open:** the ~80 MB/step host growth's cause (segments bound it, they do not remove it); the 3.4 GB first-step host
   jump (not CPU tensors of the fit's own; inductor/compile state is a candidate).
+
+## 2026-11-20 19:00, sft-v6 prepared: two refreshed mixes, launch and drive ready, not launched (sft-v6 prep strand)
+
+**Why now.** grpo-v5-run1's first held verdict (vs base 52.15% on pin f9664edfe) decides whether SFT-then-GRPO is the
+path. Whichever way it goes, the next SFT must launch without a data build in between, so both mixes are built now
+beside grpo-v5-run1 (CPU, ledger).
+
+**Data** (`ops/sft-v6/build.sh`, WORK `/home/werg/data/sft-sources-20261120b`, code and replay runtime from pin
+ab0b055d2 `ops/sft-v6/pin-ab0b055d2c6f`). The sft-v5 recipe unchanged (teacher forward budget 180M, own loss share
+0.25, task target cap 40k, aux graph 0.05 / operators 0.03 / live all, grpo-v2 and grpo-v4-run1 own successes out,
+seed 20261117), on every source verified since v5's extract (11-20 05:05):
+- *New since sft-v5's extract:* gap-v1 15,064 tasks / 8,732 successes (+408 tasks, +105 successes: tgen-gap-v1r
+  produced little today, see Luna below); grpo-v4-run2 1,018 groups / 3,975 successes (+134 groups, +537); grpo-v5-run1
+  48 groups / 217 successes (new). Task-supply rounds: no teacher-solved episodes exist (gap-v1's pool ends at
+  task-supply-20261118g). Replay: 1,669 new keys under pin ab0b055d2 (697 exact successes, 955 native-state skips),
+  the other 32,234 verdicts linked from v5's WORK and the gap-v1 demo refresh.
+- **`runs/sft-mix-20261120-v2`** (for SFT from the base; chains sha 369ba20b, registered by the build): 7,693 teacher +
+  117 own episodes (grpo-v3-run1, grpo-v4-run2, grpo-v5-run1 2) over 8,299 tasks; 34,680 sequences, 192.1M forward /
+  6.25M weighted target tokens (v1: 191.9M / 6.23M). Loss shares teacher 68.0%, own 23.8%, graph 5.1%, operators
+  3.1%, live 0.1%. Concentration: top 10 tasks 5.3% of the loss, largest task 38.6k tokens (v1 5.6%, 40.4k). Teacher
+  funnel 24,663 successes, 22,335 exact, 12,223 over the forward budget, 1,945 over the wrapper share, 405
+  near-duplicates; held overlap: 1 held-excluded at build, preflight checks it again at launch. **Delta vs v1:** 5,559
+  of 7,810 episodes shared, 2,251 new (pool-v1 801, gap-v1 781, pool-v2-rich 578, own 80, progtune 11), 2,176 new
+  tasks: the extra candidates shift the seeded selection, not only add to it. val-own/val-teacher 40 + 40 episodes.
+- **`runs/sft-mix-20261120-v2u`** (for SFT from a grpo-v5-run1 checkpoint): the same with `--prefer-unseen` v1.
+  Building (ops/sft-v6/build.log); its counts follow in a later commit.
+
+**`--prefer-unseen BUILD_OUT` (73f39c1e7, sft_sources build).** A checkpoint of grpo-v5-run1 descends from sft-v5, which
+trained v1's 7,814 episodes. SFT from it on the same selection would be a second epoch on them. With the flag, every
+episode v1 did not train comes before any it did at each per-task cap, family cap, wrapper share and the
+breadth-first forward budget, and v1's tasks stay out of the validation sets. Without the flag the selection is
+unchanged (test `test_prefer_unseen_...`, 29 passed). The aux parts (graph, operators, live) are prebuilt and repeat
+in both sets (8.4% of the loss).
+
+**Recipe.** exp0_sft as sft-v5 (1 epoch, 32k weighted target tokens a step, LR 5e-6, 8 warm-up, cosine to 10%, clip
+1.0, activation 16 GB, val-own and val-teacher every 20 steps, nucleus NLL on own rows, stratified, context and
+second-close masks) plus **Ambient SFT**, exp0_sft's default since 98c6eecdd (p_clean 0.75, T 2.5; the teacher is the
+start checkpoint). Ledger budget 80 GB: sft-v5-run1's measured unit peak 71.4 GB + 3.4 GB resident teacher + ~1.5 GB
+TM chunks. `SFT_EXTRA='--ambient-p-clean 1'` opts out.
+
+**Launch** (`ops/sft-v6/launch.sh`; `DRY=1` prints the resolved start and data):
+- `START=base` -> base 5ff07638 on `sft-mix-20261120-v2`;
+- `START=best` -> grpo-v5-run1's checkpoint with the highest complete paired held delta, on `sft-mix-20261120-v2u`;
+- `START=/path/checkpoint.pt` -> that checkpoint, on v2u (`DATA=` overrides).
+It pins origin/main at launch, then `drive.sh` (ledger unit `sft-v6-drive-*`): stops sft-v5's drive and guard and
+grpo-v5-run1 (state every step; resumable) -> pin -> SFT `sft-v6-run1` with the base on Pop in parallel
+(`ops/sft-v6/held/base`, 2 samples, this pin) -> `grpo-v6-run1` from the SFT checkpoint with grpo-v5-run1's flags
+(96 slots, budget 92, KL reference = the SFT checkpoint, held on Pop hourly vs the base) -> judge. `NO_GRPO=1` stops
+after the SFT checkpoint. The judge reads only compares whose result is complete (the f9664edfe partial-compare
+defect, review 17:00).
+
+**Criteria (declared before the run).** Held-v3, 2 samples, paired with the base on the sft-v6 pin.
+- *Success:* the first held result >= base + 3 pts, or any held result by GRPO step 24 >= base + 4 pts at p < 0.05;
+  ran-out no more than 2 pts above the base's. From a grpo-v5 checkpoint additionally: >= that checkpoint's own held
+  delta + 2 pts (cross-pin, warned), otherwise the SFT pass bought nothing over continuing grpo-v5-run1.
+- *Failure:* the first held result below base - 4 pts at p < 0.05. drive.sh stops grpo-v6-run1 and resumes
+  grpo-v5-run1 from its state on pin ff12e9ba7 (`FALLBACK=none` only stops); the diagnosis starts (degradation means
+  bug). Any later held result below base - 4 at p < 0.05 with no known cause also stops it (standing rule).
+- *Neutral:* within +-3; GRPO continues; no held result >= base + 2 by step 24 means the second SFT pass bought
+  nothing measurable.
+
+**grpo-v5-run1's first verdict arrived during this prep:** step 1 +4.3 pts (56.45% vs 52.15%), p 0.054, CI
+[-0.4, +8.8], ran-out +4.1 pts. The supervisor decides; `START=best` currently resolves to step-00001.
+
+**Wall time after launch:** stop + pin ~10 min; SFT ~3.3 h (sft-v5-run1: 184 steps, 10.9 ks train, 3 h 10 min unit
+wall for 192M forward tokens; Ambient adds ~25% on one step in four, ~+6%); the Pop base 1.6-4 h in parallel; GRPO's
+first checkpoint ~1 h after the SFT ends and its held result 2.5-4 h later. First verdict ~7-9 h after launch.
+
+**Found on the way.**
+- *Luna teacher dead since ~16:00:* gap-v1r deferred every gpt-6-luna task ("authentication token has expired")
+  though the copied token's exp was 11-26: the Codex CLI refreshed at 12:56 and rotation invalidated the copy.
+  Re-synced natlang's `openai-codex` credential from `~/.codex/auth.json` (exp 11-30 01:47 UTC). Any `codex` call that
+  refreshes kills the copy again; `natlang auth login openai-codex` (owner) gives a self-refreshing session.
+- *Rollout archives were not in the registry*, so `sft_sources extract --rl` refused them (the backfill had not reached
+  them). `ops/sft-v6/register_rollouts.py` records each archive missing from the registry under the backfill's id and
+  fields (it then skips them).
+- *The shared checkout's `data_registry.py` had an uncommitted half-edit* (`_stat_key` undefined) that crashed the
+  build; the build now runs its code from a pin (`ops/sft-v6/build-commit`).
+- *A pinned build could not record a `runs/` output* ("under no logical data root"): `canonical_repo()` followed
+  `NATLANG_REPO` into the pin. ca659b828 resolves it through the pin's `.natlang-pin.json` source (test); v2 was
+  recorded after the fact (`ops/sft-v6/record_v2.py`, the build's own record call).
+- *I/O pressure 55-73% (full 47-49%) all evening*: registry SQLite commits and `registry.find` walks over
+  /mnt/external sat minutes in D state; `test_sft_sources.py::test_extract_takes_teacher_successes_in_student_form`
+  stalled the same way (D state in `d_alloc_parallel` under /tmp; it passed in 6 s at 16:48). Not a code failure
+  found; registry strand informed through this entry.
+- *Low priority did not progress:* medium smokes preempted the build every 2-5 min (four restarts in 25 min, the
+  extract restarting each time). The build runs at medium (5 GB, CPU); it preempts only low units.
+- *Task-supply rounds 17-23 and git-history (~1,450 rows) have no teacher episodes:* gap-v1's pool ends at
+  task-supply-20261118g. A teacher campaign on them would bring those families into the next mix.
