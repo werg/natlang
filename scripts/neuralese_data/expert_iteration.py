@@ -447,6 +447,7 @@ class Cycle:
         if not (self.collect_dir / 'actor.json').exists():
             self.note(stage='fill', skipped='no actor')
             return
+        self.work_tokenizer()      # --render-tokenizer: the data stage made it only after the collection
         actor = json.loads((self.collect_dir / 'actor.json').read_text())
         if actor['checkpoint_sha256'] != self.start_sha:
             raise SystemExit('collect actor serves another policy')
@@ -491,6 +492,8 @@ class Cycle:
         covered = [*TEACHER_POOLS, *sorted(OPS.glob('ei/*/teacher'))]
         rare = [t for t, v in json.loads((self.dir / 'frontier.json').read_text())['tasks'].items()
                 if v['tier'] in ('never',) or v['successes'] / max(1, v['scored']) <= 0.25]
+        if not rare:     # teacher_gen --limit 0 means every task
+            return self.mark('teacher', frontier_tasks=0)
         command = [PY, str(self.pin / 'scripts/neuralese_data/teacher_gen.py'),
                    '--work', str(work), '--pause-below-available-gb', '25', '--exclude-family-regex', '(?!)',
                    *[x for c in covered if Path(c) != work and (Path(c) / 'manifest.jsonl').exists()
@@ -505,11 +508,14 @@ class Cycle:
         self.ledger(f'{self.a.name}-teacher', 7, 'low', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
         self.mark('teacher', frontier_tasks=len(rare), work=str(work))
 
+    def work_tokenizer(self):
+        self.work.mkdir(parents=True, exist_ok=True)
+        if not (self.work / 'tokenizer').exists():
+            os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', self.work / 'tokenizer')
+
     def data_stage(self):
         w = self.work
-        w.mkdir(parents=True, exist_ok=True)
-        if not (w / 'tokenizer').exists():
-            os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', w / 'tokenizer')
+        self.work_tokenizer()
         steps = []
         if self.a.seed_work:
             steps.append(['/usr/bin/python3', str(OPS / 'sft-v5' / 'seed_replays.py'), str(w), *self.a.seed_work])
