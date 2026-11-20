@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "teacher-reasoning-audit-20261120",
+  "owner": "dgx",
+  "path": "data_nvme:teacher-reasoning-audit-20261120",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 5018,
+      "sha256": "14f361500c514bd8a84e9062834c3541a2063956d866a3f091cd93a5ab8755d5"
+    },
+    {
+      "path": "treatment.json",
+      "bytes": 349,
+      "sha256": "fd5141272590f8294964e51c50c36b4171efacba7b47defc4f9c066d6c0f80d3"
+    }
+  ],
+  "bytes": 5367
+}
