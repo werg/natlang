@@ -5172,3 +5172,48 @@ applies: the twin's value is what only the privileged context knows, which is ex
 
 **Enters:** grpo-v5-run1's next resume on a pin >= 9744865da (with the resume list of the 17:00 review entry). The
 held scoring series is unchanged: this is training data and objective only.
+- *Incident, 16:13:* the check went live in the shared checkout before the backfill reached the teacher campaigns and the
+  exp1-rft pass rates: `tgen-gap-v1` (requeued after a 16:05 preemption) refused its `--covered-by` campaigns and
+  `--base-rates` and exited. Those were registered at once (campaigns declared ahead of their digests) and the campaign
+  resubmitted as `tgen-gap-v1r` (queued on memory). Lesson for the next strict check: backfill before the code is live.
+
+## 2026-11-20 17:00, program tuning (fallow T1/T2/T4): first LFM3 fit measured on route dev (base arm), 8 more fits queued beside grpo-v5 (program-tuning strand)
+
+- **State found.** The 11-18 `progtune-fit-route-2` had finished `ext_decisions_route` (all targets incl. MLP, free LoRA
+  rank 16, 60 steps x 8 of 480 support rows, BF16 base / FP32 adapter, factored; several ledger preemptions, resumed).
+  Mean row loss 1.00 (steps 1-10) -> 0.71 (steps 51-60). Nothing had been measured or recorded since.
+- **T4 measured:** ledger peak 18.6 GB (cgroup 10.0 GB + CUDA), ~33 min of GPU for 60 steps. Fits now claim 20 GB at
+  low priority (the old `fit-all.sh` asked 15).
+- **Defect fixed (default):** a fit's `tune.build` output holds every step's adapter and optimizer state (121 files,
+  12 GB for route); serving it copied all of it to Pop. `program_tune.py release` writes `fit/release` with the
+  byte-identical result.json (same policy id) and only the result's artifact closure (one 66 MB file); the bank reads
+  it too. Test `test_release_keeps_the_result_and_only_its_artifact_closure` (50cd1a951).
+- **Defect fixed (default, 0aa470279):** `pop_rl_actor.py start` still claimed 10.5 GB on Pop's ledger, which refused
+  it beside the gdm greeter (10.8 GiB free); serve-checkpoint had been fixed alone (935d119e9). Both now claim
+  `pop_sglang_budget_gb()` (10.0, `NATLANG_POP_HELD_BUDGET_GB` overrides); start keeps a 10.5 GB host cap
+  (`--host-max-gb`, the SGLang server runs uncontained) and waits 900 s for admission like serve-checkpoint. Test in
+  `test_pop_held_detached.py`.
+- **Route dev, base arm (Pop, pin f9664edfe harness, SGLang FP8 KV, 20 running, 2 samples, 155 tasks):** 252/310 =
+  81.3%, complete. The adapter arm did not run: its first three starts hit the 10.5 GB refusal above, and the retry
+  after the fix yielded Pop at 16:46 to grpo-v5's first checkpoint (held evals first). Result:
+  `/home/werg/data/program-tune-20261117/ext_decisions_route/eval/base-dev/result.json`. The base ceiling leaves at
+  most +19 pts for the adapter on this program.
+- **Pop sharing.** `progdev-window.sh` starts an arm only when `pop_free.py` reports no owed held work (sft-v5 base
+  complete, no popheld unit, no grpo-v5/v4 checkpoint newer than its last complete held step, no unfinished held
+  step); `progdev-yield.sh` stops the dev measurement and any of its actor starts within 10 s of a ready checkpoint
+  (grpo's loop polls every 60 s). held_eval resumes in the next window. grpo-v5's 16:49 "Pop does not serve" was its
+  own stop by `grpo-v5-run1-resume-r1` killing the checkpoint copy, after this strand had already yielded. During that
+  restart gap the guard (which then skipped inactive runs) read Pop as free and the adapter actor came up on Pop
+  (SGLang adapter slot, release attested: the serving path works on LFM3); its measurement was cancelled before
+  admission and grpo's serve-checkpoint replaces the actor. Fixed: grpo-v5 counts while it exists, and
+  `program-dev-pop.sh` re-checks the guard and measures only with `--policy-id` of the attested arm.
+- **T2 material:** splits for 5 more programs (`ext_bgkit_searchqa_reading`, `ext_composed_neuralese_iterate`,
+  `ext_composed_multihop_deep`, `ext_decisions_tree`, `ext_apigen-mt-retail_retail_service`) and fit rows for all
+  unfitted programs from sft-sources-20261117 + 20261120 + the progtune teacher pool (replay-verified support
+  successes only): rows/tasks verdict 1,280/159, tally 3,175/211, tree 740/113, multihop 11,718/508, searchqa
+  12,568/700, iterate 7,146/600, retail 902/144, pubmed 5,301/368. Same recipe (60 x 8 rows). `progtune-fit-seq-3`
+  runs them one at a time (low, 20 GB, resumable) beside GRPO; each halves the GRPO actor's decode while it runs
+  (11-18 measurement), ~35 min each.
+- **Not done:** the adapter arm and compare (no Pop window while grpo-v5 evaluates every new checkpoint back to back;
+  if none opens before grpo-v5 ends, both arms move to a DGX actor then); T3 parity on this release (needs a GPU);
+  a refit of route on its now 3x larger support data (433 tasks with verified successes in sft-sources-20261120).
