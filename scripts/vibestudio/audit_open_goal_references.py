@@ -104,12 +104,30 @@ def corpus_floor(baseline):
     return floor
 
 
-def inventory_coverage(result, baseline, crosswalk):
+def inventory_coverage(result, baseline, crosswalk, installed=None):
     rows = [json.loads(line) for line in baseline.read_text().splitlines()]
     inventory = {
         'capabilities': {row['capability'] for row in rows if row['kind'] == 'system-test'},
         'skills': {row['id'] for row in rows if row['kind'] == 'skill'},
     }
+    observed = {}
+    if installed:
+        inventory_bytes = installed.read_bytes()
+        live = json.loads(inventory_bytes)
+        expected_workspaces = set(rows[0]['workspace_sources']) - {'base'}
+        if (live.get('schema') != 'vibestudio.installed-skill-inventory/1' or
+                live.get('baselinePins') != rows[0].get('pins') or
+                live.get('mechanism') != 'workspace.listSkills+workspace.readSkill' or
+                set(live['instantiableWorkspaces']) != expected_workspaces):
+            raise ValueError('Expected live skill evidence for the same pinned baseline')
+        for workspace in live['workspaces']:
+            if workspace.get('matchesPinnedSources') is True:
+                observed[workspace['workspace']] = {
+                    skill['expectedSource'] for skill in workspace['observed']['skills']
+                }
+        if any(not isinstance(source, str) or not source for sources in observed.values() for source in sources):
+            raise ValueError('Installed skills must bind to pinned source identities')
+        inventory['skills'].update(set().union(*observed.values()))
     mapping = json.loads(crosswalk.read_text())
     if mapping.get('schema') != 'vibestudio.open-goal-coverage/1':
         raise ValueError('Expected an open-goal inventory crosswalk')
@@ -127,7 +145,7 @@ def inventory_coverage(result, baseline, crosswalk):
                 raise ValueError(f'Unknown {kind} for {family}: {sorted(unknown)}')
             for reference in references:
                 matched[kind][reference].append(family)
-    return {
+    report = {
         'unmapped_families': sorted(set(families) - {
             f'workspace-open-user-goal-{name}' for name in mapping['families']
         }),
@@ -143,6 +161,19 @@ def inventory_coverage(result, baseline, crosswalk):
             } for kind, items in matched.items()
         },
     }
+    if installed:
+        exercised = set(report['skills']['verified_reference_links'])
+        report['installed_skills'] = {
+            'sha256': hashlib.sha256(inventory_bytes).hexdigest(),
+            'missing_workspaces': sorted(expected_workspaces - observed.keys()),
+            'workspaces': {
+                workspace: {
+                    'observed': len(sources),
+                    'without_verified_reference_links': sorted(sources - exercised),
+                } for workspace, sources in sorted(observed.items())
+            },
+        }
+    return report
 
 
 if __name__ == '__main__':
@@ -152,12 +183,15 @@ if __name__ == '__main__':
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--baseline', type=Path, help='audit the full corpus against the pinned inventory floor')
     parser.add_argument('--coverage', type=Path, help='crosswalk from goal families to the pinned inventory')
+    parser.add_argument('--installed-skills', type=Path, help='live skill inventory from the managed workspace probe')
     parser.add_argument('--require-complete', action='store_true')
     args = parser.parse_args()
     if args.baseline and args.family:
         parser.error('--baseline audits the full corpus')
     if args.coverage and not args.baseline:
         parser.error('--coverage requires --baseline')
+    if args.installed_skills and not args.coverage:
+        parser.error('--installed-skills requires --coverage')
     result = audit(args.catalog, args.roots, set(args.family))
     shortfall = 0
     missing_holdout = False
@@ -168,8 +202,13 @@ if __name__ == '__main__':
         result.update(minimum_verified_goals=floor, remaining_verified_goals=shortfall)
     missing_coverage = False
     if args.coverage:
-        coverage = inventory_coverage(result, args.baseline, args.coverage)
+        coverage = inventory_coverage(result, args.baseline, args.coverage, args.installed_skills)
         result['inventory_coverage'] = coverage
         missing_coverage = bool(coverage['unmapped_families'])
+        if args.installed_skills:
+            installed = coverage['installed_skills']
+            missing_coverage |= bool(installed['missing_workspaces']) or any(
+                workspace['without_verified_reference_links'] for workspace in installed['workspaces'].values()
+            )
     print(json.dumps(result, indent=2))
     raise SystemExit(int(args.require_complete and bool(result['missing'] or shortfall or missing_holdout or missing_coverage)))

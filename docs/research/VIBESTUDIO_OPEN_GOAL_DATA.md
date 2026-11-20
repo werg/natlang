@@ -265,6 +265,11 @@ have at least one archived reference. A family-level link records where the
 coverage applies, while individual test coverage still depends on the cases
 and their outcomes.
 
+Pass `--installed-skills "$SKILL_INVENTORY"` to match these links against the
+skills observed in each managed workspace. In that mode `--require-complete`
+also requires live observations from all six workspaces and at least one
+verified reference link for each installed skill.
+
 The first Personal and System live reference runs passed all five planning
 cases and exposed missing target dependencies in five native executions.
 Native tests now request the declared dependency closure from the host and
