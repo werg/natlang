@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the exact model-free Vibestudio references in a pinned open-goal catalog."""
 import argparse
+import json
 import re
 import signal
 import subprocess
@@ -10,6 +11,17 @@ from collections import defaultdict
 from pathlib import Path
 
 from audit_open_goal_references import read_catalog
+
+
+def terminal_startup_failure(log):
+    for line in reversed(log.read_text(errors='replace').splitlines()):
+        try:
+            result = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(result, dict) and result.get('error'):
+            return result.get('recoverable') is False
+    return False
 
 
 def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None):
@@ -31,8 +43,13 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
 
     print(f'{group} running {len(cases)} references in {instance}', flush=True)
     failures = 0
+    unavailable = False
     try:
-        invoke(['doctor', '--approve-startup', '--model', model], 'doctor.log', check=True)
+        try:
+            invoke(['doctor', '--approve-startup', '--model', model], 'doctor.log', check=True)
+        except subprocess.CalledProcessError:
+            unavailable = terminal_startup_failure(output / 'doctor.log')
+            raise
         args = ['run', *cases, '--json', '--concurrency', '1', '--model', model, '--out-dir', str(results)]
         if test_timeout_ms is not None:
             args += ['--test-timeout-ms', str(test_timeout_ms)]
@@ -53,7 +70,7 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
         failures += bool(invoke(['stop'], 'stop.log'))
 
     print(f'{group} evidence in {output} ({failures} failed commands or missing artifacts)', flush=True)
-    return failures == 0
+    return failures == 0, unavailable
 
 
 def main():
@@ -95,10 +112,14 @@ def main():
     for (workspace, baseline), cases in groups.items():
         size = args.cases_per_instance or len(cases)
         for index, offset in enumerate(range(0, len(cases), size), start=1):
-            passed = qualify_group(host, workspace, baseline, cases[offset:offset + size],
-                                   args.model, destination, args.test_timeout_ms,
-                                   batch=index if len(cases) > size else None)
+            passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
+                                                args.model, destination, args.test_timeout_ms,
+                                                batch=index if len(cases) > size else None)
             all_passed &= passed
+            if unavailable:
+                print(f'{workspace} startup is unrecoverable for this baseline. See the doctor log.',
+                      file=sys.stderr, flush=True)
+                break
     return 0 if all_passed else 1
 
 

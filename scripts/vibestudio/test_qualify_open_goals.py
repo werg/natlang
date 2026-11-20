@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from qualify_open_goals import main
+from qualify_open_goals import main, terminal_startup_failure
 
 
 class QualificationBatchesTest(unittest.TestCase):
@@ -28,7 +28,7 @@ class QualificationBatchesTest(unittest.TestCase):
             argv = ['qualify_open_goals', '--host', str(root), '--catalog', str(catalog),
                     '--out', str(out)]
             with patch.object(sys, 'argv', argv), patch('qualify_open_goals.qualify_group',
-                                                         side_effect=[False, True, True]) as run:
+                    side_effect=[(False, False), (True, False), (True, False)]) as run:
                 self.assertEqual(main(), 1)
 
             calls = run.call_args_list
@@ -38,6 +38,17 @@ class QualificationBatchesTest(unittest.TestCase):
             self.assertEqual([case for call in calls for case in call.args[3]],
                              [f'open-goal-oracle-case-{index}' for index in range(14)])
             self.assertEqual((out / 'catalog.jsonl').read_bytes(), catalog.read_bytes())
+
+    def test_doctor_distinguishes_transient_and_terminal_setup_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'doctor.log'
+            log.write_text('[system-test] Created workspace\n'
+                           '{"error":"Missing immutable dependency", "recoverable":false}\n')
+            self.assertTrue(terminal_startup_failure(log))
+            log.write_text('{"error":"Timeout", "recoverable":true}\n')
+            self.assertFalse(terminal_startup_failure(log))
+            log.write_text('Interrupted before readiness response.\n')
+            self.assertFalse(terminal_startup_failure(log))
 
 
 if __name__ == '__main__':
