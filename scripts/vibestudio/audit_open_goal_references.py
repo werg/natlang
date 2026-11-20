@@ -61,7 +61,15 @@ def audit(catalog_path, roots, families):
                     not isinstance(proof.get('goal'), str) or
                     fingerprint(proof['goal']) != selected[scenario]['goalSha256']):
                 continue
-            proofs[scenario] = {'path': str(path), 'checks': sorted(checks)}
+            build = diagnostics.get('buildProvenance') or {}
+            with path.open('rb') as stream:
+                archive_sha256 = hashlib.file_digest(stream, 'sha256').hexdigest()
+            proofs[scenario] = {
+                'path': str(path),
+                'archive_sha256': archive_sha256,
+                'system_testing_effective_version': build.get('effectiveVersion'),
+                'checks': sorted(checks),
+            }
 
     coverage = defaultdict(lambda: {
         'train': 0, 'held': 0, 'verified_train': 0, 'verified_held': 0,

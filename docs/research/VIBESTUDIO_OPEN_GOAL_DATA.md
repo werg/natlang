@@ -203,8 +203,8 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 114 open goals across six workspace templates, with 89
-training goals and 25 source-separated holdouts. The same Base entry point
+The catalog declares 118 open goals across six workspace templates, with 92
+training goals and 26 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
@@ -215,7 +215,7 @@ them. The workspace and the reference checks are selected by the harness.
 | Personal | 15 | `workspace-live-declared-test-suite`, `personal-live-mission-planning`, and `personal-live-mission-facility` with board discovery, revision-bound changes, competing edits, prerequisites, and durable handoffs |
 | System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
-| Spectrolite | 5 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes |
+| Spectrolite | 9 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence before continuing to an authorized vault edit or hold |
 | Google Workspace | 22 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition. `google-live-gmail-compose-history` with retained drafts and read-only provider evidence for interrupted saves and delivery |
 
 Google's qualification uses the real installed Drive client against a bounded
@@ -245,8 +245,9 @@ python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERE
 ```
 
 The audit lists missing cases and binds accepted proofs to the current goal
-hash and the run's owned context. With the baseline, it reports the remaining
-corpus shortfall and families without a verified holdout. Add
+hash and the run's owned context. It records each accepted archive's digest
+and the reported System Testing build version. With the baseline, it reports
+the remaining corpus shortfall and families without a verified holdout. Add
 `--require-complete` to make those gaps or any missing reference fail the
 check. For a single family, pass `--family` in place of `--baseline`.
 Reference executions do not produce teacher data.
@@ -274,12 +275,11 @@ The deployment run used the installed regular server package at version
 and suite cases. All nine recovery references passed against the managed
 PubSub and scratch services, including a stale cursor, a concurrent message,
 and incomplete replay. All eight publishing cases passed against the managed
-website renderer, package builder, and local journal. The reference archive
-verifies 86 of the 91 declared goals. The public-research checks require a
-working search provider. The
-managed test reached the default DuckDuckGo provider, which rejected its
-automated searches. Configure Tavily, Brave, or Exa in the managed workspace
-before running the public-research references.
+website renderer, package builder, and local journal. The archive verifies
+86 of the initial 91 goals. The public-research checks require a working
+search provider. The managed test reached the default DuckDuckGo provider,
+which rejected its automated searches. Configure Tavily, Brave, or Exa in
+the managed workspace before running the public-research references.
 
 Bounded Luna provider probes on Tick and Pop returned expired OAuth. The
 live teacher capture through learner assembly remains unverified.
