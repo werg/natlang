@@ -502,6 +502,15 @@ and extension interfaces, Personal onboarding and tour handoffs, extension
 planning dossiers, and private Tendril route review. The Tendril checks
 exercise the real matcher and SQLite-backed Tendril state through a modeled
 channel transport. The managed transport still needs verification.
+The 970-goal stage also adds retained News evidence, binary asset recovery,
+and installed worker package integrity. It has 234 source-separated held
+goals. All 842 historical assignment entries still match byte for byte.
+The catalog has no ID or source-group overlap with the digest-checked held-v2
+and held-v3 snapshots, and no near pairs at the catalog's repetition threshold.
+The new News fixtures model article and schedule records. Binary asset
+recovery and worker package repair use the production semantic VCS engine in
+source replay. Their managed outcomes are tracked independently of source
+replay results.
 The 777-goal checkpoint had distinct texts after normalizing quoted literals
 and numbers. All 842 legacy assignment entries remained byte-identical.
 The 777-goal checkpoint had zero training ID or source-group overlaps with
@@ -516,8 +525,11 @@ proofs. The combined audit covers 525 distinct goals, including 117 held-out
 goals before the assembly and research reruns. The full reference matrix
 peaked at 9.5 GiB on Tick. Fifteen assembly reruns and all 12 new held-out
 research and editing goals passed in managed Vibestudio. Those research
-cases use the native page extractor and retained cache. The current audit
-covers 552 distinct goals, including 133 held-out goals.
+cases use the native page extractor and retained cache. The following
+reference run added 20 independently verified goals. These cover local
+incident drafts, provider and dictation continuity, scheduled recovery,
+client viewport recovery, and one template migration. The audited 777-goal
+release has 572 verified goals, including 142 held-out goals.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
@@ -540,3 +552,14 @@ The [updated 462-goal pins](vibestudio-open-goal-pop-pins-462-fixed.tsv) add
 headless state delivery, exact capture proof checks, and bounded teacher
 instances. Pop reproduced the same catalog and train list under
 `/home/werg/vibestudio-worktrees/open-goal-release-462-fixed.XA8cN7`.
+
+The [777-goal release pins](vibestudio-open-goal-pop-pins-777.tsv) passed
+the full host commit gate with a 5.8 GiB peak on Tick. Pop reproduced the
+catalog and verified the transferred 430-selector training list under
+`/home/werg/vibestudio-worktrees/open-goal-release-777.ArOkRz`.
+The catalog SHA-256 is
+`345666ab124bb2ed1f168920c35b6032a0b5657a0c7348fd7a7feda395d3110c`.
+The training selector SHA-256 is
+`a3ad8b55ed300d53345cfd76fdd42b678234a5ad88d7d35b5c9bdbd471afcfdc`.
+Seven selectors require an installed deployment package. The combined
+proof archive is registered as `vibestudio-open-goal-verified-release-777-20261121`.
