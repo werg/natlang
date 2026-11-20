@@ -318,7 +318,10 @@ def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
     first = chain('one', 'attempt1', 'teacher', 60)
     second = chain('one', 'attempt2', 'teacher', 20)
     auxiliary = chain('one', 'attempt1', 'aux', 20)
-    episodes = [{'open_goal': 'Update the notice', 'open_goal_chains': [id(first), id(second)]}]
+    episodes = [
+        {'open_goal': 'Update the notice', 'open_goal_chains': [id(first)]},
+        {'open_goal': 'ＵＰＤＡＴＥ   the notice', 'open_goal_chains': [id(second)]},
+    ]
     mix = s.mix_report([first, second, auxiliary], episodes, {})['open_user_goals']
     assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8}
 

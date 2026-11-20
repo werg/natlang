@@ -17,6 +17,10 @@
       "capabilities": ["google-live-drive-checkpoint", "google-live-drive-inventory-sharing"],
       "skills": ["google-workspace:skills/google-drive/SKILL.md"]
     },
+    "google-handoff": {
+      "capabilities": ["google-live-compose-continuation", "google-live-drive-checkpoint-handoff"],
+      "skills": ["google-workspace:workers/gmail-agent/SKILL.md", "google-workspace:skills/google-drive/SKILL.md"]
+    },
     "news": {
       "capabilities": ["news-live-ownership"],
       "skills": ["news:panels/news/SKILL.md"]

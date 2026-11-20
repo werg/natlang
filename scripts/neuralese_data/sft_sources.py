@@ -1290,7 +1290,12 @@ def mix_report(chains, episodes, aux_report):
     parts = collections.defaultdict(collections.Counter)
     per_task = collections.Counter()
     trajectory_weights = collections.Counter()
-    goals = {chain_id: episode['open_goal'] for episode in episodes for chain_id in episode.get('open_goal_chains', ())}
+    from unicodedata import normalize
+
+    goals = {
+        chain_id: ' '.join(normalize('NFKC', episode['open_goal']).lower().split())
+        for episode in episodes for chain_id in episode.get('open_goal_chains', ())
+    }
     goal_weights = collections.Counter()
     for chain in chains:
         weighted = float(chain_weights(chain, 'cpu').sum().item())

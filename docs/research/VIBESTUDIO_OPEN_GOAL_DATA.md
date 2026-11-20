@@ -209,20 +209,20 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 163 open goals across six workspace templates, with 128
-training goals and 35 source-separated holdouts. The same Base entry point
+The catalog declares 214 open goals across six workspace templates, with 165
+training goals and 49 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 35 | Public evidence and document recovery, authorized CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, and native PDF text, layout and raster evidence |
+| Examples | 47 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, and native PDF text, layout and raster evidence |
 | Personal | 48 | Declared tests, Mission Control, browser-library-to-collection goals, and archived decisions. The shared program checks historical authority across immutable milestones, and verifies recovered browser references and linked panel state. |
 | System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
-| Spectrolite | 9 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence before continuing to an authorized vault edit or hold |
-| Google Workspace | 34 | Drive inventory and checkpoint review, retained Gmail compose recovery, and Calendar reconciliation across changing resource windows, with independently checked workspace handoffs. |
+| Spectrolite | 21 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence across pages before continuing to an authorized vault edit or hold |
+| Google Workspace | 61 | Drive inventory and checkpoint review, retained Gmail compose recovery, Calendar resource windows, and compound Gmail-to-Drive goals that confirm approvals and linked assets before an authorized handoff. |
 
 Google's qualification uses the real installed Drive client against a bounded
 test transport. News and Spectrolite use the live workspace services for
@@ -287,7 +287,7 @@ The deployment run used the installed regular server package at version
 0.1.105. The subsequent Examples run passed eleven more document, browser,
 and suite cases. All nine recovery references passed against the managed
 PubSub and scratch services, including a stale cursor, a concurrent message,
-and incomplete replay. All eight publishing cases passed against the managed
+and incomplete replay. All eight initial publishing cases passed against the managed
 website renderer, package builder, and local journal. The managed PDF
 checks verified the missing-page hold, and two compound references passed
 in the original Spectrolite renderer. All 15 Gmail references passed against
@@ -296,7 +296,10 @@ require a working search provider. The managed test reached the default DuckDuck
 which rejected its automated searches. Configure Tavily, Brave, or Exa in
 the managed workspace before running the public-research references.
 
-Bounded Luna provider probes on Tick and Pop returned expired OAuth. The
-live teacher capture through learner assembly remains unverified.
+The synthetic assembly check ran with an isolated data registry and the
+configured learner tokenizer. It produced one trajectory and 24 supervised
+tokens, with both open-goal shares at 100%. Bounded Luna provider probes on
+Tick and Pop returned expired OAuth. The live teacher capture through
+learner assembly remains unverified.
 Pop reproduced the prior 72-case catalog byte for byte from the pushed host
 and System Testing revisions.
