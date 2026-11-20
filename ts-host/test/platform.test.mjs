@@ -7,6 +7,22 @@ import { createNatlangRuntime as createKernelRuntime } from '../dist/runtime/run
 
 const files = { 'double.nl': '---\nargs:\n  n: number\nreturns: number\n---\nDouble n.\n' };
 
+test('virtual callable folders load types re-exported through relative paths', async () => {
+  const program = loadVirtualNatlang({
+    'main.nl': '---\nreturns: null\n---\nRoute the request.\n',
+    'main/check.nl': '---\nargs:\n  value: Review\nreturns: Review\n---\nReturn the input.\n',
+    'main/types.ts': 'export * from "./mounted/types.js";\n',
+    'main/mounted/types.ts': 'export type { Review } from "../../shared/types.js";\n',
+    'shared/types.ts': 'export type Review = { reason: string };\n',
+  }, 'main.nl');
+  const runtime = createNatlangRuntime({ calls: false, agent: async session => {
+    const result = await session.applyAsync('eval', { code: 'return value' });
+    assert.ok(result.kind === 'ok' || result.kind === 'value');
+    assert.ok(session.finish());
+  } });
+  assert.deepEqual(await runtime.run(() => program.check({ reason: 'verified' })), { reason: 'verified' });
+});
+
 /** An agent that answers by evaluating `return n * 2` through the runtime's evaluator. */
 const doubler = async session => {
   const result = await session.applyAsync('eval', { code: 'return n * 2' });

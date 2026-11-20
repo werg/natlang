@@ -9,6 +9,7 @@
  */
 import { BUILTIN_SOURCES, builtinNames } from '../builtin/index.js';
 import { loadCallableFolder, type ItemRecord, type NatlangRecord, type SourceFiles } from './loader.js';
+import { joinSourcePath } from './source-path.js';
 import { namedCallable, type NatlangCallable } from './callable.js';
 import type { CallableDefinition } from './kernel.js';
 import { definitionKey } from '../calls/recorder.js';
@@ -17,7 +18,7 @@ const ROOT = '/natlang-builtin';
 
 /** The embedded files as loader file access: one flat folder. */
 const files: SourceFiles = {
-  join: (...parts) => parts.join('/').replace(/\/+/g, '/'),
+  join: joinSourcePath,
   dirname: path => path.slice(0, path.lastIndexOf('/')) || '/',
   basename: (path, extension) => { const base = path.slice(path.lastIndexOf('/') + 1);
     return extension && base.endsWith(extension) ? base.slice(0, -extension.length) : base; },

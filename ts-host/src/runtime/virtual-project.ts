@@ -6,6 +6,7 @@
 import { compileProject, type BuildResult, type ProjectFiles } from '../compiler/project.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { loadCallableFolder, loadNamedFunction, type SourceFiles } from './loader.js';
+import { joinSourcePath } from './source-path.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
 import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm } from './modules.js';
 import type { Platform } from './platform.js';
@@ -38,7 +39,7 @@ export function virtualProjectFiles(files: Record<string, string>, root = '/proj
 /** Loader access to in-memory files; display paths are relative to `root`. */
 export function virtualSourceFiles(files: Record<string, string>, root = '/project'): SourceFiles {
   const virtual = virtualProjectFiles(files, root);
-  return { join: (...parts) => parts.join('/').replace(/\/+/g, '/'),
+  return { join: joinSourcePath,
     dirname: path => path.slice(0, path.lastIndexOf('/')) || '/',
     basename: (path, extension) => { const base = path.slice(path.lastIndexOf('/') + 1); return extension && base.endsWith(extension) ? base.slice(0, -extension.length) : base; },
     extname: path => { const base = path.slice(path.lastIndexOf('/') + 1); const at = base.lastIndexOf('.'); return at > 0 ? base.slice(at) : ''; },
@@ -96,9 +97,8 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
       if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
       if (!specifier.startsWith('.')) throw new Error(`module ${specifier} is not available in this virtual project`);
       const base = path.slice(0, path.lastIndexOf('/'));
-      const joined = `${base}/${specifier}`.split('/').reduce<string[]>((parts, part) =>
-        part === '..' ? parts.slice(0, -1) : part === '.' || !part ? parts : [...parts, part], []).join('/');
-      const candidate = ['', '.js', '/index.js'].map(suffix => `/${joined.replace(/\.ts$/, '.js')}${suffix}`).find(item => item in result.outputs);
+      const joined = joinSourcePath(base || '/', specifier);
+      const candidate = ['', '.js', '/index.js'].map(suffix => `${joined.replace(/\.ts$/, '.js')}${suffix}`).find(item => item in result.outputs);
       if (!candidate) throw new Error(`cannot resolve ${specifier} from ${path}`);
       return load(candidate);
     };

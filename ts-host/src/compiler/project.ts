@@ -26,6 +26,7 @@ import { compileModule } from '../runtime/modules.js';
 import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError,
   type ItemRecord, type NatlangRecord } from '../runtime/loader.js';
 import type { SourceFiles } from '../runtime/loader.js';
+import { joinSourcePath as join, normalizeSourcePath as normalize } from '../runtime/source-path.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from './runtime-specifier.js';
 
 /** File access for the project compiler: the real filesystem on Node, virtual files in browsers. */
@@ -42,12 +43,6 @@ export interface ProjectFiles {
 }
 
 // POSIX path helpers (absolute paths); the Node adapter normalizes platform paths before calling in.
-const join = (...parts: string[]) => normalize(parts.filter(Boolean).join('/'));
-const normalize = (path: string) => {
-  const absolute = path.startsWith('/'), out: string[] = [];
-  for (const part of path.split('/')) { if (!part || part === '.') continue; if (part === '..') out.pop(); else out.push(part); }
-  return (absolute ? '/' : '') + out.join('/');
-};
 const dirname = (path: string) => { const at = path.lastIndexOf('/'); return at <= 0 ? '/' : path.slice(0, at); };
 const resolve = (...parts: string[]) => { let path = ''; for (const part of parts) path = part.startsWith('/') ? part : `${path}/${part}`; return normalize(path); };
 const relative = (from: string, to: string) => {
