@@ -24,6 +24,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 LINKED = ('runs', 'data', 'models', '.venv', '.venv-neuralese', '.venv-neuralese-audit', '.venv-decider-systempython')
+# Content-addressed model packages (14 GB of checkpoints keyed by sha256): linked like the data roots, never copied.
+SHARED = ('.natlang/packages/native-models',)
 SKIPPED = ('.local/', '.coordination/', '.development-source-snapshots/', '.pytest_cache/', '.ruff_cache/', '.claude/')
 
 
@@ -52,7 +54,13 @@ def create(commit, dest):
             if '/' in path.rstrip('/') and not target.exists():
                 target.symlink_to(source)
             continue
-        subprocess.run(['cp', '-a', '--no-target-directory', str(source).rstrip('/'), str(target).rstrip('/')], check=True)
+        inner = [s for s in SHARED if s.startswith(path.rstrip('/') + '/')]
+        subprocess.run(['rsync', '-a', *[f'--exclude=/{s[len(path.rstrip("/")) + 1:]}' for s in inner],
+                        str(source).rstrip('/') + ('/' if source.is_dir() else ''), str(target).rstrip('/')], check=True)
+        for s in inner:
+            if (REPO / s).exists():
+                (dest / s).parent.mkdir(parents=True, exist_ok=True)
+                (dest / s).symlink_to(REPO / s)
     for name in LINKED:
         if (REPO / name).exists() and not (dest / name).exists():
             (dest / name).symlink_to(REPO / name)
