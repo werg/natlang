@@ -12,6 +12,5 @@
     }
   },
   "runs_window_days": 3,
-  "machine_history_s": 120,
-  "teacher_pool": "ops/teacher-gen-20261115/pool-v1"
+  "machine_history_s": 120
 }

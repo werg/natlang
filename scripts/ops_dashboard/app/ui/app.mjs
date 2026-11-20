@@ -561,6 +561,8 @@ export function start(source) {
   src = source; S.gate = null;
   if (src.kind === 'preview') document.querySelector('.top .brand')?.append(h('span', { class: 'chip warn previewchip', title: 'A local preview of the page over the DGX exporter files and data service. Edits made here stay in this preview server and are not applied.' }, 'local preview'));
   src.ticks.on(t => { if (t) void pull(t); });
+  // a phone resumes a backgrounded page: read the current state at once rather than at the next tick
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pull(src.ticks.get()); });
   for (const c of [src.edits, src.inbox, src.pending]) c.on(() => { if (S.tab === 'data' || S.tab === 'inbox') softRender(); else schedule(); });
   void pull(null);
   setInterval(() => void pull(src.ticks.get()), 60000);      // ticks drive refreshes; this is the fallback

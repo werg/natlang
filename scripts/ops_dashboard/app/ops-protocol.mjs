@@ -50,16 +50,31 @@ export function createQueryClient(signals, { timeoutMs = 45000, onTick } = {}) {
     for await (const sig of signals.subscribe({ topics: [TOPICS.tick], mode: 'latest', signal: stop.signal })) onTick(sig.payload, sig);
   })().catch(() => {});
   let n = 0;
+  // One attempt: a fresh id, a short wait. A signal sent before the route to the native participant exists (right after
+  // connecting, or after the phone resumed the page) is not delivered and gets no answer, so attempts repeat until
+  // `timeoutMs` has passed; answers to abandoned attempts are ignored by id.
+  const attempt = (q, input, waitMs, signal) => {
+    const id = `${Date.now().toString(36)}-${(n++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { waiting.delete(id); reject(Object.assign(Error('no answer yet'), { code: 'attempt_timeout' })); }, waitMs);
+      const done = f => v => { clearTimeout(timer); f(v); };
+      waiting.set(id, { parts: [], got: 0, resolve: done(resolve), reject: done(reject) });
+      signal?.addEventListener('abort', () => { if (waiting.delete(id)) { clearTimeout(timer); reject(signal.reason); } }, { once: true });
+      signals.send(TOPICS.query, { id, q, input }, { ttlMs: REPLY_TTL_MS }).catch(e => { if (waiting.delete(id)) { clearTimeout(timer); reject(Object.assign(e, { retry: true })); } });
+    });
+  };
   return {
-    query(q, input = null, { signal } = {}) {
-      const id = `${Date.now().toString(36)}-${(n++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { waiting.delete(id); reject(Object.assign(Error(`No answer to ${q} within ${timeoutMs / 1000} s. Is the native ops participant running?`), { code: 'timeout' })); }, timeoutMs);
-        const done = f => v => { clearTimeout(timer); f(v); };
-        waiting.set(id, { parts: [], got: 0, resolve: done(resolve), reject: done(reject) });
-        signal?.addEventListener('abort', () => { if (waiting.delete(id)) { clearTimeout(timer); reject(signal.reason); } }, { once: true });
-        signals.send(TOPICS.query, { id, q, input }, { ttlMs: REPLY_TTL_MS }).catch(e => { if (waiting.delete(id)) { clearTimeout(timer); reject(e); } });
-      });
+    async query(q, input = null, { signal } = {}) {
+      const end = Date.now() + timeoutMs;
+      for (let k = 0; ; k++) {
+        const waitMs = Math.min(4000 * 2 ** Math.min(k, 3), Math.max(1000, end - Date.now()));
+        try { return await attempt(q, input, waitMs, signal); }
+        catch (e) {
+          if (signal?.aborted || !(e.code === 'attempt_timeout' || e.retry || e.code === 'busy') || Date.now() >= end)
+            throw e.code === 'attempt_timeout' ? Object.assign(Error(`No answer to ${q} from the DGX yet. Is the native ops participant running?`), { code: 'timeout' }) : e;
+          if (e.retry || e.code === 'busy') await new Promise(r => setTimeout(r, 1500));
+        }
+      }
     },
     close() { stop.abort(); for (const w of waiting.values()) w.reject(Error('closed')); waiting.clear(); },
   };

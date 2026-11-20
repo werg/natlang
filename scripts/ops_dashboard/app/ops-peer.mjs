@@ -48,24 +48,33 @@ function dataService({ signal }) {
   });
 }
 
+/** Send one signal, waiting out transport backpressure: a relay route stays busy while its previous frame is in flight,
+ * and Chronolog refuses (SIGNAL_BACKPRESSURE) rather than queueing, so consecutive reply chunks are paced here. */
+async function sendPaced(session, topic, payload, opts) {
+  for (let k = 0, wait = 25; ; k++, wait = Math.min(wait * 2, 1000)) {
+    try { return await session.signals.send(topic, payload, opts); }
+    catch (e) { if (e.code !== 'SIGNAL_BACKPRESSURE' && !/BACKPRESSURE/.test(e.message) || k >= 40) throw e; await new Promise(r => setTimeout(r, wait)); }
+  }
+}
+
 async function serveQueries(session, rpc, signal) {
   const inflight = { n: 0 };
   for await (const sig of session.signals.subscribe({ topics: [TOPICS.query], mode: 'all', signal })) {
     const { id, q, input } = sig.payload || {};
     if (!validId(id) || typeof q !== 'string' || q.length > 64) continue;
     if (q.startsWith('edits.') || q.startsWith('inbox.')) continue;          // native-only operations
-    if (inflight.n >= 6) { void session.signals.send(TOPICS.reply, { id, error: 'The data service is busy; retry in a moment.', code: 'busy' }, { ttlMs: REPLY_TTL_MS }); continue; }
+    if (inflight.n >= 6) { void sendPaced(session, TOPICS.reply, { id, error: 'The data service is busy; retry in a moment.', code: 'busy' }, { ttlMs: REPLY_TTL_MS }).catch(() => {}); continue; }
     inflight.n++;
     (async () => {
       const t0 = Date.now();
       try {
         const parts = await encodeReply(await rpc(q, input ?? null));
         if (parts.length > MAX_REPLY_CHUNKS) throw Object.assign(Error(`Answer too large (${parts.length} chunks); ask for a smaller page.`), { code: 'too_large' });
-        for (let i = 0; i < parts.length; i++) await session.signals.send(TOPICS.reply, { id, i, n: parts.length, z: parts[i] }, { ttlMs: REPLY_TTL_MS });
+        for (let i = 0; i < parts.length; i++) await sendPaced(session, TOPICS.reply, { id, i, n: parts.length, z: parts[i] }, { ttlMs: REPLY_TTL_MS });
         log({ query: q, ms: Date.now() - t0, chunks: parts.length, from: sig.authorId?.slice(0, 12) });
       } catch (e) {
         log({ query: q, error: e.message });
-        await session.signals.send(TOPICS.reply, { id, error: e.message.slice(0, 2000), code: e.code || 'error' }, { ttlMs: REPLY_TTL_MS }).catch(() => {});
+        await sendPaced(session, TOPICS.reply, { id, error: e.message.slice(0, 2000), code: e.code || 'error' }, { ttlMs: REPLY_TTL_MS }).catch(() => {});
       } finally { inflight.n--; }
     })();
   }
@@ -75,7 +84,7 @@ async function ticks(session, rpc, signal) {
   let last = null;          // log a tick failure when it changes (no reader connected is the normal idle state)
   while (!signal.aborted) {
     let err = null;
-    try { await session.signals.send(TOPICS.tick, await rpc('ops.tick', null, 15000), { ttlMs: REPLY_TTL_MS }); }
+    try { await sendPaced(session, TOPICS.tick, await rpc('ops.tick', null, 15000), { ttlMs: REPLY_TTL_MS }); }
     catch (e) { err = e.code || e.message; }
     if (err !== last) { log({ tick: err || 'delivered' }); last = err; }
     await new Promise(r => setTimeout(r, 10000));

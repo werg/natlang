@@ -274,6 +274,8 @@ def tail_run(st, path):
             continue
         if is_step(rec):
             steps.append(rec)
+        elif isinstance(rec, dict) and rec.get('event'):      # a run that has not finished a step yet still shows its phase
+            st['phase'] = {'event': str(rec['event'])[:80], 'step': rec.get('step')}
     return steps, os.path.getmtime(path)
 
 
@@ -370,10 +372,12 @@ def runs_summary(state, active_runs, now):
     rows = []
     held = state.get('held_rec', {})
     for run, st in state.get('runs', {}).items():
-        if 'max_step' not in st:
+        # runs without a finished step appear while they are fresh (starting up, first learner step)
+        if 'max_step' not in st and not (run in active_runs or (st.get('mtime') and now - st['mtime'] < 6 * 3600)):
             continue
         mine = sorted((h for k, h in held.items() if h['run_id'] == run), key=lambda h: h.get('step') or 0)
-        rows.append({'id': run, 'group': run.rsplit('.', 1)[0] if '.' in run else run, 'kind': st.get('kind'), 'steps': st['max_step'],
+        rows.append({'id': run, 'group': run.rsplit('.', 1)[0] if '.' in run else run, 'kind': st.get('kind') or ('grpo' if run.startswith('grpo') else 'other'), 'steps': st.get('max_step', 0),
+                     'phase': st.get('phase'),
                      'last_ts': ms(st['mtime']) if st.get('mtime') else None, 'active': run in active_runs,
                      'spark': st.get('spark', {}), 'held': mine})
     rows.sort(key=lambda r: (not r['active'], -(r['last_ts'] or 0)))
@@ -401,6 +405,17 @@ def read_jsonl_cached(path):
                 pass
         hit = _JSONL_CACHE[path] = (sig, rows)
     return hit[1]
+
+
+def active_teacher_pool():
+    """The teacher-generation campaign written most recently (ops/teacher-gen-*/<pool>/manifest.jsonl): discovered, not configured."""
+    cands = []
+    for p in glob.glob(os.path.join(DATA, 'ops', 'teacher-gen-*', '*', 'manifest.jsonl')):
+        try:
+            cands.append((os.path.getmtime(p), os.path.dirname(p)))
+        except OSError:
+            pass
+    return max(cands)[1] if cands else None
 
 
 def teacher_summary(pool, state, now):
@@ -777,7 +792,7 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
     except OSError:
         fallow = []
     try:
-        teachers = teacher_summary(TEACHER_POOL, state, now)
+        teachers = teacher_summary(TEACHER_POOL or active_teacher_pool(), state, now)
     except Exception as e:
         teachers = None
         errors.append(f'exporter: teacher summary failed: {clip(e, 120)}')
