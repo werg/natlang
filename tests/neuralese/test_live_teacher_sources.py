@@ -1,6 +1,7 @@
 """Observed workspace episodes share SFT admission without claiming portable replay."""
 import collections
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -77,6 +78,31 @@ def test_actual_context_and_tool_ids_are_preserved_without_score_targets(tmp_pat
     assert turn['live_exchange']['gateway']['context'] == detail['record']['model_turns'][0]['reply']['raw_response']['vibestudio']['context']
     assert 'native_sampling' not in turn
     assert s.replay_episode(None, None, episode, None)['exact'] is False
+
+
+@pytest.mark.parametrize('mutation', [None, 'goal', 'extra-input', 'unattested'])
+def test_open_goal_has_to_match_the_original_goal_only_call(tmp_path, mutation):
+    path, spec, detail, verification = fixture(tmp_path)
+    goal = 'Bring the workshop update in line with the approved notes.'
+    encoded = json.dumps(goal).encode()
+    interaction = {'kind': 'open-user-goal', 'goal': goal, 'program': 'skills/open-user-goal/runUserGoal.nl'}
+    spec['interaction'] = interaction
+    verification['interaction'] = copy.deepcopy(interaction)
+    detail['record']['definition']['name'] = 'runUserGoal'
+    detail['record']['inputs'] = {'goal': {'complete': True, 'bytes': len(encoded),
+                                          'hash': hashlib.sha256(encoded).hexdigest()}}
+    if mutation == 'goal':
+        interaction['goal'] = verification['interaction']['goal'] = 'Substituted goal'
+    elif mutation == 'extra-input':
+        detail['record']['inputs']['work'] = {}
+    elif mutation == 'unattested':
+        del verification['interaction']
+    rewrite(tmp_path, spec, detail, verification)
+    if mutation:
+        with pytest.raises(ValueError, match='open goal|interaction'):
+            live.load_episode(path)
+    else:
+        assert live.load_episode(path)['task']['interaction'] == interaction
 
 
 @pytest.mark.parametrize('mutation', ['owner', 'definition', 'eval-run', 'outer-run', 'effect', 'checks', 'kind', 'split', 'tool-id', 'tool-args', 'raw-id', 'text', 'coverage', 'instance'])

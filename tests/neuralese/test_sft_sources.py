@@ -309,6 +309,20 @@ def test_mix_report_gives_part_shares_and_task_concentration():
     assert report['tasks'] == 2
 
 
+def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
+    def chain(task, round_id, part, n):
+        row = {'sample': np.zeros(n, np.int32)}
+        return {'ids': np.zeros(n + 10, np.int32), 'segs': [(10, n, row)],
+                'task': task, 'round': round_id, 'part': part}
+
+    first = chain('one', 'attempt1', 'teacher', 60)
+    second = chain('one', 'attempt2', 'teacher', 20)
+    auxiliary = chain('one', 'attempt1', 'aux', 20)
+    episodes = [{'open_goal': 'Update the notice', 'open_goal_chains': [id(first), id(second)]}]
+    mix = s.mix_report([first, second, auxiliary], episodes, {})['open_user_goals']
+    assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8}
+
+
 def test_wrapper_cap_keeps_dataset_wrappers_to_their_share_of_the_selection():
     import collections
     import random

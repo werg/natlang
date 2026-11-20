@@ -1,4 +1,5 @@
 """Admission of observed live Natlang work; effects are verified, never called portable replays."""
+import hashlib
 import json
 from pathlib import Path
 
@@ -111,6 +112,22 @@ def load_episode(path):
     if (not isinstance(attested_roots, list) or not attested_roots or
             len(attested_roots) != len(set(attested_roots)) or roots != set(attested_roots)):
         raise ValueError('live call roots differ from independently verified roots')
+    interaction = spec.get('interaction')
+    if interaction != verification.get('interaction'):
+        raise ValueError('live task interaction differs from independent verification')
+    if interaction is not None:
+        if (not isinstance(interaction, dict) or interaction.get('kind') != 'open-user-goal' or
+                not isinstance(interaction.get('goal'), str) or not interaction['goal'].strip() or
+                interaction.get('program') != 'skills/open-user-goal/runUserGoal.nl' or len(roots) != 1):
+            raise ValueError('invalid open user goal attestation')
+        root = records[attested_roots[0]]
+        inputs = root.get('inputs') or {}
+        goal_bytes = json.dumps(interaction['goal'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        ref = inputs.get('goal') or {}
+        if (root.get('definition', {}).get('name') != 'runUserGoal' or root.get('outcome') != 'done' or
+                set(inputs) != {'goal'} or ref.get('complete') is not True or
+                ref.get('bytes') != len(goal_bytes) or ref.get('hash') != hashlib.sha256(goal_bytes).hexdigest()):
+            raise ValueError('open goal does not match the actual root invocation')
     ancestry = {}
     for call_id in records:
         chain, current = [], call_id
@@ -184,6 +201,8 @@ def load_episode(path):
         raise ValueError('workflow call coverage incomplete or has no generated executor targets')
     task = {key: spec[key] for key in ('id', 'family', 'split', 'source_namespace', 'source_ids', 'source_groups', 'source_revisions')}
     task['source'] = 'observed-live-workspace'
+    if interaction is not None:
+        task['interaction'] = interaction
     return {'key': f'live:{spec["id"]}:{sha256_file_hex(path)}', 'source': 'teacher', 'run': str(path),
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,
             'teacher': {'model_id': ','.join(sorted(models))},

@@ -918,6 +918,8 @@ def core_candidates(args, work, funnel, held):
                            'name': record['name'],
                            **({'live_source': record['live_source'], 'world': episode['world'], 'verification_mode': 'observed-live'}
                               if record.get('verification_mode') == 'observed-live' else {}),
+                           'open_goal': task['interaction']['goal']
+                           if record.get('verification_mode') == 'observed-live' and task.get('interaction') else None,
                            'guided': episode.get('role') == 'teacher',
                            'backend_workaround': backend_workaround(episode['turns']),
                            'signature': minhash(shingles(action_text(episode['turns'])))})
@@ -1187,6 +1189,9 @@ def mix_report(chains, episodes, aux_report):
     from exp0_sft import chain_weights, source_tokens
     parts = collections.defaultdict(collections.Counter)
     per_task = collections.Counter()
+    trajectory_weights = collections.Counter()
+    goals = {chain_id: episode['open_goal'] for episode in episodes for chain_id in episode.get('open_goal_chains', ())}
+    goal_weights = collections.Counter()
     for chain in chains:
         weighted = float(chain_weights(chain, 'cpu').sum().item())
         p = parts[chain.get('part') or 'unknown']
@@ -1194,6 +1199,10 @@ def mix_report(chains, episodes, aux_report):
         p['forward_tokens'] += len(chain['ids']) + source_tokens(chain)
         p['weighted_target_tokens'] += weighted
         per_task[str(chain.get('task'))] += weighted
+        trajectory = (chain.get('part'), chain.get('task'), chain.get('round'))
+        trajectory_weights[trajectory] += weighted
+        if id(chain) in goals:
+            goal_weights[goals[id(chain)]] += weighted
     total_w = sum(p['weighted_target_tokens'] for p in parts.values()) or 1
     total_f = sum(p['forward_tokens'] for p in parts.values()) or 1
     ranked = sorted(per_task.values(), reverse=True)
@@ -1206,6 +1215,11 @@ def mix_report(chains, episodes, aux_report):
             'loss_concentration': {'top10_tasks_share': round(sum(ranked[:10]) / total_w, 4),
                                    'top1pct_tasks_share': round(sum(ranked[:top1]) / total_w, 4),
                                    'max_task_tokens': int(ranked[0]) if ranked else 0},
+            'open_user_goals': {
+                'distinct_goals': sum(weight > 0 for weight in goal_weights.values()),
+                'trajectories': sum(weight > 0 for weight in trajectory_weights.values()),
+                'weighted_target_share': sum(goal_weights.values()) / total_w,
+            },
             'aux': aux_report}
 
 
@@ -1301,6 +1315,8 @@ def build(args):
             if source in OWN_SOURCES and context:
                 stats[source]['own_unsampled_think_calls'] += 1
             prompt, target = row['prompt'], row['sample']
+            if c.get('open_goal') and len(prompt) + len(target) > MAX_LEN:
+                return False
             rows.append(row)
             written.append({'id': row['id'], 'episode': c['key'], 'source': source, 'run': c['run'],
                             'task_id': c['task_id'], 'family': c['family'], 'domain': c['domain'],
@@ -1339,8 +1355,11 @@ def build(args):
         producers[producer]['think_context_calls'] += sum('weight' in r for r in rows)
         producers[producer]['reasoning_free_calls'] += sum(not (t['target'].get('reasoning_content') or '').strip()
                                                            for t in turns)
-        episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows, 'source': source}
+        episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows, 'source': source,
+                   'open_goal': c.get('open_goal')}
         episode_chains = chains_of([episode])
+        if episode['open_goal']:
+            episode['open_goal_chains'] = [id(chain) for chain in episode_chains]
         for chain in episode_chains:
             chain['part'] = source
         for row in rows:          # a chain holds its prompts in 'ids'; the per-row copies only cost memory
@@ -1379,7 +1398,8 @@ def build(args):
 
     def priority(c):
         p = base_rate(c['task_id'])
-        return (0 if constructs.get(c['task_id'], ((), False))[0] else 1, 0.5 if p is None else p, rng.random())
+        return (not bool(c.get('open_goal')), not bool(constructs.get(c['task_id'], ((), False))[0]),
+                0.5 if p is None else p, rng.random())
 
     # teacher successes, breadth-first under the forward-token budget (0: all of the capped pool)
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
@@ -1551,11 +1571,23 @@ def build(args):
 
     rows_out.close()
     chains = all_chains
+    mix = mix_report(chains, sft_episodes, aux_report)
+    minimum_open_goal_share = getattr(args, 'min_open_goal_share', None)
+    if minimum_open_goal_share is None and any(
+            task.get('source') == 'observed-live-workspace' and
+            task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values()):
+        minimum_open_goal_share = 0.8
+    if minimum_open_goal_share is not None:
+        report = mix['open_user_goals']
+        report['distinct_goal_share'] = report['distinct_goals'] / max(1, report['trajectories'])
+        report['required_share'] = minimum_open_goal_share
+        if (report['distinct_goal_share'] < minimum_open_goal_share or
+                report['weighted_target_share'] < minimum_open_goal_share):
+            raise SystemExit(f'Open user goal minimum not met: {json.dumps(report, sort_keys=True)}')
     rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
         pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
     os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
-    mix = mix_report(chains, sft_episodes, aux_report)
 
     # validation sets: up to --val-episodes left-over successes per kind on tasks the build does not train (own:
     # the student's reasoning, whose NLL rising shows drift; teacher: actions on unseen tasks)
@@ -1946,6 +1978,8 @@ def main():
     b.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
     b.add_argument('--no-default-teacher-pool', action='store_true',
                    help='live-only build: do not require coverage of the historical default teacher pool')
+    b.add_argument('--min-open-goal-share', type=float, choices=[0.8],
+                   help='require at least 80%% distinct open user goals and weighted targets, even with no such captures')
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))
     b.add_argument('--max-per-task', type=int, default=4,
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')
