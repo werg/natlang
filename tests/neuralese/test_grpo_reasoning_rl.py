@@ -426,3 +426,162 @@ def test_ready_searches_survive_a_stop_without_unserved_policies(tmp_path):
     assert resumed.ready[0]['samples'][0].tolist() == [3]
     rrl.save(None)                                            # persistence off: nothing written
     assert sampler().restore(tmp_path / 'missing.pkl', 4) == 0
+
+
+# ---------------------------------------------------------------- the twin objective (--reasoning-rl-objective twin-fkl)
+# Strauss, Fowl & Razin (arXiv 2611.23397): a sequence-level reward on the think block has a future agreement bias;
+# the default trains each position on the forward KL from the policy's privileged twin instead (myopic, token level).
+
+def fkl_inputs(seed=0, n=5, vocab=7, dim=4):
+    import torch
+    g = torch.Generator().manual_seed(seed)
+    h = torch.randn(n, dim, generator=g, requires_grad=True)
+    weight = torch.randn(vocab, dim, generator=g, requires_grad=True)
+    targets = torch.randint(0, vocab, (n,), generator=g)
+    teacher = torch.log_softmax(torch.randn(n, vocab, generator=g) * 2, -1)
+    return h, weight, targets, teacher
+
+
+def test_twin_forward_kl_is_the_exact_forward_kl_with_the_full_vocabulary():
+    import torch
+    h, weight, targets, teacher = fkl_inputs()
+    logits = h @ weight.T
+    target_logp = torch.log_softmax(logits, -1).gather(1, targets[:, None])[:, 0]
+    ids = torch.arange(7).repeat(5, 1)
+    got = grpo.twin_forward_kl(h, torch.arange(5), weight, targets, target_logp, ids, teacher)
+    exact = (teacher.exp() * (teacher - torch.log_softmax(logits, -1))).sum(-1)
+    assert torch.allclose(got, exact, atol=1e-5)
+    # its logit gradient is p_policy - p_twin (the paper's eq. 4 for FKL), through h and the logits' normalizer
+    z = logits.detach().requires_grad_(True)
+    zl = torch.log_softmax(z, -1)
+    assert grpo.twin_forward_kl(h, torch.arange(0), weight, targets[:0], target_logp[:0], ids[:0],
+                                teacher[:0]).numel() == 0
+    loss = (teacher.exp() * (teacher - zl)).sum()
+    loss.backward()
+    assert torch.allclose(z.grad, torch.softmax(logits.detach(), -1) - teacher.exp(), atol=1e-5)
+
+
+def test_twin_forward_kl_top_k_matches_the_rest_as_one_bucket_and_vanishes_at_agreement():
+    import torch
+    h, weight, targets, _ = fkl_inputs(1)
+    logits = (h @ weight.T).detach()
+    policy = torch.log_softmax(logits, -1)
+    target_logp = policy.gather(1, targets[:, None])[:, 0]
+    top = policy.topk(3, -1)
+    # the twin equals the policy: zero loss and zero gradient, though only 3 of 7 ids are listed
+    hh = h.detach().clone().requires_grad_(True)
+    tl = torch.log_softmax(hh @ weight.detach().T, -1).gather(1, targets[:, None])[:, 0]
+    got = grpo.twin_forward_kl(hh, torch.arange(5), weight.detach(), targets, tl, top.indices, top.values)
+    assert got.abs().max() < 1e-5
+    got.sum().backward()
+    assert hh.grad.abs().max() < 1e-4
+    # a different twin: the KL of the coarse partition {3 ids, rest}, never more than the full KL
+    teacher = torch.log_softmax(torch.randn(5, 7, generator=torch.Generator().manual_seed(9)) * 2, -1)
+    t_top = teacher.topk(3, -1)
+    coarse = grpo.twin_forward_kl(h.detach(), torch.arange(5), weight.detach(), targets, target_logp, t_top.indices,
+                                  t_top.values)
+    p_s = policy.exp().gather(1, t_top.indices)
+    p_t = t_top.values.exp()
+    rest_t, rest_s = 1 - p_t.sum(-1), 1 - p_s.sum(-1)
+    expected = (p_t * (t_top.values - p_s.log())).sum(-1) + rest_t * (rest_t.log() - rest_s.log())
+    assert torch.allclose(coarse, expected, atol=1e-5)
+    full = (teacher.exp() * (teacher - policy)).sum(-1)
+    assert (coarse <= full + 1e-5).all()
+    # -inf pads count for nothing
+    ids = torch.cat([t_top.indices, torch.zeros(5, 1, dtype=torch.long)], 1)
+    lp = torch.cat([t_top.values, torch.full((5, 1), float('-inf'))], 1)
+    padded = grpo.twin_forward_kl(h.detach(), torch.arange(5), weight.detach(), targets, target_logp, ids, lp)
+    assert torch.allclose(padded, coarse, atol=1e-6)
+
+
+def test_twin_distributions_always_list_the_close():
+    meta = {'input_top_logprobs': [None, [[-0.1, 4, None], [-2.5, CLOSE, None]], [[-0.2, 5, None], [-3.0, 6, None]]],
+            'input_token_ids_logprobs': [None, [[-2.5, CLOSE, None]], [[-4.0, CLOSE, None]]]}
+    ids, logp, close = grpo.twin_distributions(meta, CLOSE, 2)
+    assert ids.shape == (2, 3)
+    assert ids[0].tolist() == [4, CLOSE, 0] and np.isneginf(logp[0, 2])           # listed once, then a pad
+    assert ids[1].tolist() == [5, 6, CLOSE] and logp[1, 2] == np.float32(-4.0)     # appended from token_ids_logprob
+    assert np.allclose(close, np.exp([-2.5, -4.0]))
+
+
+def test_twin_context_inserts_a_turn_after_the_leading_system_turn():
+    IM_END, NL = 8, 10
+    ids, found = grpo.twin_context([1, 2, IM_END, NL, 5, 3], [90, 91, 30, 31], [IM_END, NL], IM_END, NL)
+    assert found and ids == [1, 2, IM_END, NL, 90, 91, 30, 31, IM_END, NL, 5, 3]
+    ids, found = grpo.twin_context([5, 3], [90], [IM_END, NL], IM_END, NL)
+    assert not found and ids == [90, IM_END, NL, 5, 3]
+
+
+class TwinSGLang(FakeSGLang):
+    """FakeSGLang that also answers the twin's top-logprob requests: the twin puts p 0.5 on </think> everywhere."""
+
+    def __call__(self, body):
+        if body.get('top_logprobs_num'):
+            with self.lock:
+                self.bodies.append(body)
+            n = len(body['input_ids']) - body['logprob_start_len'] - 1
+            top = [[math.log(0.5), CLOSE, None], [math.log(0.3), 50, None]]
+            return {'meta_info': {'input_top_logprobs': [None] + [top] * n,
+                                  'input_token_ids_logprobs': [None] + [[[math.log(0.5), CLOSE, None]]] * n}}
+        return super().__call__(body)
+
+
+def twin_sampler(**overrides):
+    rrl = sampler(**overrides)
+    rrl.args.reasoning_rl_objective = 'twin-fkl'
+    rrl.args.reasoning_rl_twin_top_k = 2
+    rrl.args.reasoning_rl_rewrite_share = None
+    return grpo.ReasoningRL(rrl.args, 'http://sglang', CLOSE, [END], [], [100], rrl.collector, None,
+                            log=lambda r: None, twin={'header': [90, 91], 'footer': [END, 10], 'im_end': END, 'newline': 10,
+                                                      'close': CLOSE})
+
+
+def test_twin_walk_trains_every_sample_on_its_twin_and_carries_no_sd_chain(monkeypatch):
+    rrl = twin_sampler()
+    calls = sorted(grpo.teacher_segments(trajectory(), CLOSE, set()), key=len)[1][:2]
+    # one wave of 2 per step, high or not (no search); the second sample of step 0 is cut by the cap
+    fake = TwinSGLang([[60, CLOSE], [61, 62], [50, CLOSE], [63, CLOSE]])
+    monkeypatch.setattr(rrl, '_post', fake)
+    groups, carried = rrl.run({'calls': calls, 'source': 'demos', 'task_id': 't', 'key': 'k'})
+    assert carried is None                                          # the best-return chain is not distilled
+    assert [len(g['samples']) for g in groups] == [2, 2] and all(g['objective'] == 'twin-fkl' for g in groups)
+    twin_bodies = [b for b in fake.bodies if b.get('top_logprobs_num')]
+    assert len(twin_bodies) == 4 and all(b['token_ids_logprob'] == [CLOSE] for b in twin_bodies)
+    # the twin's prompt: the guidance turn with the teacher action (its end of turn replaced by the footer) first
+    first = twin_bodies[0]['input_ids']
+    assert first[:6] == [90, 91, 30, END, 10, 1] and first[-2:] in ([60, CLOSE], [61, 62])
+    for g in groups:
+        for s in g['samples']:
+            assert s['twin_ids'].shape == (len(s['ids']), 3) and np.isclose(s['twin_close_mean'], 0.5)
+    for g in groups:
+        g.update(id=1, min_std=0.01)
+    items, stats = grpo.rrl_episodes(groups, 0.5, 0.05)
+    assert stats['groups_twin'] == 2 and len(items) == 4               # the unclosed sample trains too
+    for episode, role in items:
+        reasoning = episode['rows'][0]
+        assert reasoning['advantage'] == 0. and reasoning['twin_weight'] == 0.5
+        assert reasoning['twin_logp'].shape[0] == len(reasoning['sample'])
+    unclosed = [e for e, _ in items if e['rows'][0]['sample'].tolist() == [61, 62]][0]
+    assert len(unclosed['rows']) == 1                                # no teacher action after a cut block
+    record = grpo.rrl_record(stats, {}, 0)
+    assert record['groups_twin'] == 2 and np.isclose(record['twin_close_mean'], 0.5)
+
+
+def test_objective_defaults():
+    seq = SimpleNamespace(reasoning_rl_objective='sequence', reasoning_rl_rewrite_share=None, reasoning_rl_carry_sd=None)
+    twin = SimpleNamespace(reasoning_rl_objective='twin-fkl', reasoning_rl_rewrite_share=None, reasoning_rl_carry_sd=None)
+    assert grpo.rrl_rewrite_share(seq) == 0.3 and grpo.rrl_carry_sd(seq)
+    assert grpo.rrl_rewrite_share(twin) == 0. and not grpo.rrl_carry_sd(twin)
+    twin.reasoning_rl_rewrite_share, twin.reasoning_rl_carry_sd = 0.2, 'on'
+    assert grpo.rrl_rewrite_share(twin) == 0.2 and grpo.rrl_carry_sd(twin)
+    assert grpo.rrl_objective(SimpleNamespace()) == 'sequence'      # an args object from before the flag
+
+
+def test_twin_rows_align_with_chain_targets():
+    reasoning = {'twin_ids': np.array([[1, CLOSE], [2, 3]], np.int32), 'twin_logp': np.array([[-0.1, -2.], [-0.5, -1.]],
+                 np.float32), 'twin_weight': 0.5}
+    chain = {'segs': [(3, 2, reasoning), (5, 3, {'sample': np.array([1, 2, 3])})]}
+    ids, logp, scale = grpo.twin_rows(chain, 'cpu')
+    assert ids.shape == (5, 2) and scale.tolist() == [0.5, 0.5, 0, 0, 0]
+    assert np.isneginf(logp[2:].numpy()).all()
+    assert grpo.twin_rows({'segs': [(0, 2, {})]}, 'cpu') is None

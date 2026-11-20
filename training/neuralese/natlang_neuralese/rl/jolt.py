@@ -37,8 +37,16 @@ PRIVILEGED_SUFFIX = {'student': '#privileged', 'teacher': '#unprivileged'}
 # comparable magnitude. beta_T = 0.5: the reward-consistent teacher target pi_S exp(A/beta_T) tilts the
 # student's policy by at most about e^2 for |A| <= 1, keeping teacher guidance followable. Development
 # measurements tune both; they are recipe parameters.
-DEFAULT_JOLT = {'schema': JOLT_SCHEMA, 'beta_s': 1.0, 'beta_t': 0.5,
+# student_kl: the direction of the student episodes' twin term. 'forward' (default since 2026-11-20) is
+# KL(sg pi(.|s,c) || pi(.|s)): its logit gradient p - p~ vanishes only where student and twin agree, while the reverse
+# KL's gradient is weighted by the student's own probability and can vanish far from the twin, so it is slow to raise
+# tokens the student finds unlikely, i.e. to take up what only the privileged context knows (Strauss, Fowl & Razin,
+# arXiv 2611.23397, Prop. 2 / Thm. 2; DECISIONS 2026-11-20). 'reverse' (J_OPSD as first written) opts out. Teacher
+# attempts keep KL(pi(.|s,c) || sg pi(.|s)): that term keeps guidance within the student's reach, a mode-seeking
+# constraint by design.
+DEFAULT_JOLT = {'schema': JOLT_SCHEMA, 'beta_s': 1.0, 'beta_t': 0.5, 'student_kl': 'forward',
                 'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'tis', 'eps': 1e-6}}
+STUDENT_KL = ('forward', 'reverse')
 MAX_FEEDBACK_ATTEMPTS = 3
 MAX_FEEDBACK_CHARS = 800
 
@@ -50,13 +58,15 @@ def jolt_declaration(value):
     if not isinstance(value, dict) or value.get('schema') != JOLT_SCHEMA:
         return None
     if set(value) - set(DEFAULT_JOLT):
-        raise ValueError('jolt-plus/1 accepts only beta_s, beta_t and outcome')
+        raise ValueError('jolt-plus/1 accepts only beta_s, beta_t, student_kl and outcome')
     from .policy_math import policy_loss_declaration
     result = {**DEFAULT_JOLT, **value}
     outcome = policy_loss_declaration(result['outcome'])
     if outcome is None or outcome['schema'] != 'score-centered/1':
         raise ValueError('jolt-plus/1 outcome terms use the score-centered/1 estimator')
     result['outcome'] = outcome
+    if result['student_kl'] not in STUDENT_KL:
+        raise ValueError(f'jolt-plus/1 student_kl is one of {STUDENT_KL}')
     for name in ('beta_s', 'beta_t'):
         if type(result[name]) not in (int, float) or not math.isfinite(result[name]) or result[name] < 0:
             raise ValueError(f'jolt-plus/1 {name} must be a finite nonnegative number')
@@ -106,11 +116,44 @@ def reverse_kl(logits, twin_logits):
     return _ReverseKL.apply(logits, twin_logits.detach())
 
 
+class _ForwardKL(torch.autograd.Function):
+    """KL(sg q || p) from logits (q the twin), gradient p - q on the logits. Masked tokens (-inf in both laws)
+    contribute nothing."""
+    @staticmethod
+    def forward(ctx, logits, twin_logits):
+        z, t = logits.float(), twin_logits.float()
+        finite = torch.isfinite(z)
+        if bool((finite != torch.isfinite(t)).any()):
+            raise ValueError('JOLT+ twin and sampled view must share the exact token mask')
+        logp, logq = torch.log_softmax(z, -1), torch.log_softmax(t, -1)
+        p = torch.where(finite, logp.exp(), torch.zeros_like(z))
+        q = torch.where(finite, logq.exp(), torch.zeros_like(t))
+        kl = torch.where(finite & (q > 0), q * (logq - logp), torch.zeros_like(z)).sum(-1)
+        ctx.save_for_backward(p, q)
+        return kl
+
+    @staticmethod
+    def backward(ctx, grad):
+        p, q = ctx.saved_tensors
+        return grad[:, None] * (p - q), None
+
+
+def forward_kl(logits, twin_logits):
+    """KL(sg softmax(twin_logits) || softmax(logits)) per row; both are temperature-scaled masked logits."""
+    return _ForwardKL.apply(logits, twin_logits.detach())
+
+
+def twin_kl(direction):
+    """The twin term's divergence: ``forward_kl`` or ``reverse_kl`` (a declaration's ``student_kl``)."""
+    return forward_kl if direction == 'forward' else reverse_kl
+
+
 def jolt_terms(logits, twin_logits, labels, behavior_logp, top_ids, top_logq, advantage, *, beta, outcome,
-               masked, tail_q=None):
-    """Per-position JOLT+ loss pieces from scaled/masked logits: (outcome -A U, KL(p || sg p~), total, details)."""
+               masked, tail_q=None, kl='reverse'):
+    """Per-position JOLT+ loss pieces from scaled/masked logits: (outcome -A U, the twin KL (``kl`` 'reverse':
+    KL(p || sg p~); 'forward': KL(sg p~ || p)), total, details)."""
     from .policy_math import score_centered_surrogate
-    kl = reverse_kl(logits, twin_logits)
+    kl = twin_kl(kl)(logits, twin_logits)
     if advantage != 0:
         surrogate, details = score_centered_surrogate(torch.log_softmax(logits.float(), -1), labels, behavior_logp,
             top_ids, top_logq, importance=outcome['importance'], eps=outcome['eps'], masked=masked, tail_q=tail_q)
@@ -462,7 +505,8 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
         with torch.no_grad():  # the twin is a stop-gradient target; recomputed rather than stored
             twin = masked_logits(head(twin_states), temperature, allowed=allowed, banned=banned)
         outcome_loss, kl, total, details = jolt_terms(logits, twin, labels, behavior, ids, logq, advantage,
-            beta=beta, outcome=outcome, masked=bool(allowed is not None or banned), tail_q=tail_q)
+            beta=beta, outcome=outcome, masked=bool(allowed is not None or banned), tail_q=tail_q,
+            kl=declaration.get('student_kl', 'reverse') if role == 'student' else 'reverse')
         # Score-centering telemetry (head-mass excess, tail mass, rho, alpha, ...), empty for a zero-advantage episode.
         centering = (torch.stack([details[name].detach().float() for name in CENTERING_FIELDS]) if details
                      else torch.zeros(len(CENTERING_FIELDS), 0, device=logits.device))

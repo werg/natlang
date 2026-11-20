@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "held-v3",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v3",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 2937305,
+      "sha256": "f2cdc2e90ae520e58154ba1e39e45c05eae2a83aecdc0cc84410bff44d388498",
+      "lines": 256
+    },
+    {
+      "path": "engine.json",
+      "bytes": 1162,
+      "sha256": "951540fd91151c45cc6d990d5e0970cdd8292a97a725e92f7c33b173aba6be40"
+    },
+    {
+      "path": "exclusion-ids.json",
+      "bytes": 120458,
+      "sha256": "ce898e4908ee0e422dc3761aee35ff8fbd4022a5b6430f31f60f504126b61f77"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 105813,
+      "sha256": "4547106069df540d32b250782651143eb3e7ae60fc64e2b4ffef4e2b30fc3d11"
+    },
+    {
+      "path": "pin.sh",
+      "bytes": 885,
+      "sha256": "a982ac53e4d2bc1332ecc62aefbec17354869ca621e374e22755cb53e3c5c3cb"
+    },
+    {
+      "path": "reject-ids.jsonl",
+      "bytes": 87581,
+      "sha256": "ddeaf62962ecbdd19e1d961b9af1260d53f14c1d3ec01112a1306b2ad8179f45",
+      "lines": 386
+    },
+    {
+      "path": "replace-ids.jsonl",
+      "bytes": 4134,
+      "sha256": "75a16d3a79d8da4fab892d8fd411b43bbd4e7c8888162e267a64ed43d5adb700",
+      "lines": 14
+    }
+  ],
+  "bytes": 3257338
+}

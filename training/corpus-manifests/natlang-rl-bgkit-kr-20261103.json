@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-bgkit-kr-20261103",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-rl-bgkit-kr-20261103/natlang-rl-bgkit-kr-20261103",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 62976808,
+      "sha256": "7e047e956a0f305f34704c854dc409a91b868a4cd552e0a43e6fb50809e3e8b3",
+      "lines": 4734
+    },
+    {
+      "path": "diversity.json",
+      "bytes": 1182,
+      "sha256": "5430a0774b8cf71f262e4467316a866b39f88c5606532ae0d25b48a95ab45a56"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 1158838,
+      "sha256": "b65f6269dfc9977f478773045bc59d9843e34c8bb5f32d7a2047c2c874ab47c3"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1544,
+      "sha256": "be09b8d504f6141b40f1f6ee9b457fd1269e650595d6c9541934575232f13a75"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 2594,
+      "sha256": "cf7d8168c8478eed4f64de6ee84fb1b11b9f832130eeb3d61fa658e1134a5e8b"
+    }
+  ],
+  "bytes": 64140966
+}

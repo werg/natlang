@@ -76,10 +76,11 @@ def decision_log_policy(model, hidden, action, *, chunk_tokens=128, queries=None
 
 
 def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_loss, chunk_tokens=128,
-                          twin=None, beta=0.):
+                          twin=None, beta=0., student=True):
     """Per-decision loss terms [n] (same sign convention as the token terms) and summed KL telemetry.
 
-    ``twin``: per action, its options' twin-view queries (JOLT+ privileged twin) or None."""
+    ``twin``: per action, its options' twin-view queries (JOLT+ privileged twin) or None; ``student``: the episode's
+    JOLT+ role is student (its twin term takes the declaration's ``student_kl`` direction)."""
     from .policy_math import clipped_token_loss, score_centered_surrogate
     terms, kl_sum = [], 0.
     for index, action in enumerate(actions):
@@ -99,11 +100,13 @@ def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_los
             term = -float(advantage) * surrogate[0]
             queries = (twin or [None] * len(actions))[index]
             if policy_loss['schema'] == 'jolt-plus/1' and queries is not None and beta:
-                from .jolt import reverse_kl
+                from .jolt import twin_kl
                 with torch.no_grad():
                     twin_log = decision_log_policy(model, hidden.detach(), action, queries=queries,
                                                    chunk_tokens=chunk_tokens)
-                kl = reverse_kl(log_pi[None], twin_log[None])[0]
+                # a student's twin term in the declared direction (jolt-plus/1 student_kl); teachers keep reverse
+                direction = policy_loss.get('student_kl', 'reverse') if student else 'reverse'
+                kl = twin_kl(direction)(log_pi[None], twin_log[None])[0]
                 term = term + beta * kl
                 kl_sum += float(kl.detach())
         terms.append(term)

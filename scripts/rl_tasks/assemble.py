@@ -253,6 +253,15 @@ def main():
                               'added in v3 (tau-bench store databases) from this source\'s assets/ (override '
                               'NATLANG_RL_TASK_ASSETS_V3) when it holds any.'}
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=1) + '\n')
+    from natlang_neuralese.common import data_registry
+    data_registry.record_dataset(data_registry.dataset_id(out, 'rl-tasks'), out, kind='rl-tasks',
+                                 exclude=['held/*', 'assets/*'],
+                                 format='natlang.broad-rl-task-source/1: cases.jsonl (train), receipt.json, verification',
+                                 inputs=[str(b) for b in a.build], license='see receipt.json builds (upstream sources)')
+    for split in held:
+        data_registry.record_dataset(data_registry.path_id('held', Path(out) / 'held' / f'{split}.jsonl'),
+                                     Path(out) / 'held' / f'{split}.jsonl', kind='held', protected=True,
+                                     format='natlang.program/2 held tasks (never training)', inputs=[str(out)])
     print(json.dumps({'train': len(rows), 'held': {k: len(v) for k, v in held.items()}, 'dropped': dict(dropped),
                       'total': div['total']}, indent=1))
 

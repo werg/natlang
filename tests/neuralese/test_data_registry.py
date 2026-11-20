@@ -1,0 +1,233 @@
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO / 'scripts')]
+
+from natlang_neuralese.common import data_registry as dr  # noqa: E402
+
+
+@pytest.fixture
+def roots(tmp_path, monkeypatch):
+    for name in ('data_nvme', 'data_hdd', 'repo'):
+        (tmp_path / name).mkdir()
+        monkeypatch.setenv(f'NATLANG_{name.upper()}', str(tmp_path / name))
+    monkeypatch.setenv('NATLANG_DATA_REGISTRY', str(tmp_path / 'registry'))
+    monkeypatch.delenv(dr.ALLOW_ENV, raising=False)
+    monkeypatch.setattr(dr, '_DIGESTS', None)
+    monkeypatch.setattr(dr, '_LOADED', None)
+    repo = tmp_path / 'repo'
+    (repo / 'training').mkdir()
+    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'schema': 'x', 'corpora': []}))
+    return tmp_path
+
+
+def pool(path, ids):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(''.join(json.dumps({'id': i}) + '\n' for i in ids))
+    return path
+
+
+def test_portable_paths_round_trip(roots):
+    p = roots / 'data_hdd' / 'pool-a' / 'cases.jsonl'
+    assert dr.portable(p) == 'data_hdd:pool-a/cases.jsonl'
+    assert dr.absolute('data_hdd:pool-a/cases.jsonl') == p
+    assert dr.portable(roots / 'repo' / 'runs' / 'x') == 'runs/x'
+    with pytest.raises(ValueError):
+        dr.absolute('/abs/path')
+
+
+def test_record_dataset_writes_manifest_rows_and_provenance(roots):
+    d = roots / 'data_hdd' / 'pool-a'
+    pool(d / 'cases.jsonl', ['a', 'b', 'c'])
+    (d / 'build.json').write_text('{}')
+    rec = dr.record_dataset('pool-a', d, kind='rl-tasks', format='natlang.program/2 JSONL', include=['*.jsonl'],
+                            license='project-authored', inputs=[])
+    assert rec['rows'] == 3 and rec['files'] == 1 and rec['path'] == 'data_hdd:pool-a'
+    assert rec['producer']['code']['schema'] == 'natlang.code-provenance/1'
+    manifest = dr.stored_manifest(rec['manifest_sha256'])
+    assert [f['path'] for f in manifest['files']] == ['cases.jsonl'] and manifest['files'][0]['lines'] == 3
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert reg.find(d / 'cases.jsonl')['id'] == 'pool-a'
+    assert reg.datasets['pool-a']['layer'] == 'journal'
+
+
+def test_record_dataset_of_a_single_file_includes_only_it(roots):
+    d = roots / 'data_nvme' / 'x'
+    pool(d / 'a.jsonl', ['a'])
+    pool(d / 'b.jsonl', ['b'])
+    rec = dr.record_dataset('x-a', d / 'a.jsonl', kind='rl-tasks', format='f')
+    assert rec['include'] == ['a.jsonl'] and rec['files'] == 1
+
+
+def test_consume_refuses_unregistered_and_records_reads(roots, monkeypatch):
+    d = roots / 'data_hdd' / 'pool-a'
+    pool(d / 'cases.jsonl', ['a'])
+    stray = pool(roots / 'data_hdd' / 'stray' / 'cases.jsonl', ['z'])
+    dr.record_dataset('pool-a', d, kind='rl-tasks', format='f')
+    with pytest.raises(dr.UnregisteredData):
+        dr.consume([d / 'cases.jsonl', stray], run='grpo:test', how='GRPO task pool')
+    refs = dr.consume([d / 'cases.jsonl'], run='grpo:test', how='GRPO task pool', amount=1)
+    assert refs[0]['id'] == 'pool-a' and len(refs[0]['sha256']) == 64
+    monkeypatch.setenv(dr.ALLOW_ENV, '1')
+    refs = dr.consume([stray], run='grpo:test2', how='pool')
+    assert refs[0]['unregistered']
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert [c['run'] for c in reg.consumers('pool-a')] == ['grpo:test']
+    assert reg.consumption[-1]['allowed_unregistered'] is True
+
+
+def test_growing_dataset_files_and_snapshots(roots):
+    d = roots / 'data_hdd' / 'grpo-x' / 'rollouts'
+    dr.declare_dataset('grpo-rollouts-x', d, kind='rollouts', format='zst JSONL per group', inputs=[])
+    for i in range(3):
+        (d / f'g{i}.zst').write_bytes(b'x' * i)
+        dr.record_files('grpo-rollouts-x', [d / f'g{i}.zst'], d)
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert [f['path'] for f in reg.files('grpo-rollouts-x')] == ['g0.zst', 'g1.zst', 'g2.zst']
+    assert reg.find(d / 'g1.zst')['id'] == 'grpo-rollouts-x'
+
+
+def test_file_digest_cache_detects_change(roots):
+    p = pool(roots / 'data_nvme' / 'f.jsonl', ['a'])
+    first = dr.file_digest(p)
+    pool(p, ['a', 'b'])
+    second = dr.file_digest(p)
+    assert first['sha256'] != second['sha256'] and second['lines'] == 2
+
+
+def test_roles_come_from_the_git_layer_in_order(roots):
+    repo = roots / 'repo'
+    pool(roots / 'data_hdd' / 'p1' / 'cases.jsonl', ['a'])
+    pool(roots / 'data_hdd' / 'p2' / 'cases.jsonl', ['b'])
+    entries = [{'id': 'p2', 'owner': 'dgx', 'path': 'data_hdd:p2', 'roles': {'grpo-pool': {'order': 2, 'file': 'cases.jsonl'}}},
+               {'id': 'p1', 'owner': 'dgx', 'path': 'data_hdd:p1', 'roles': {'grpo-pool': {'order': 1, 'file': 'cases.jsonl'}}},
+               {'id': 'p3', 'owner': 'dgx', 'path': 'data_hdd:p3', 'retired': True,
+                'roles': {'grpo-pool': {'order': 0, 'file': 'cases.jsonl'}}}]
+    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': entries}))
+    assert dr.role_paths('grpo-pool', repo=repo) == [str(roots / 'data_hdd' / 'p1' / 'cases.jsonl'),
+                                                      str(roots / 'data_hdd' / 'p2' / 'cases.jsonl')]
+    # a journal snapshot of a git entry adds facts but never moves its pinned path or roles
+    dr.record_dataset('p1', roots / 'data_hdd' / 'p1', kind='rl-tasks', format='f')
+    reg = dr.load(repo=repo, fresh=True)
+    assert reg.datasets['p1']['layer'] == 'git+journal' and reg.datasets['p1']['rows'] == 1
+    assert reg.datasets['p1']['roles']['grpo-pool']['order'] == 1
+
+
+def test_git_entry_carries_producer_and_license(roots):
+    d = roots / 'data_hdd' / 'pool-a'
+    pool(d / 'cases.jsonl', ['a'])
+    rec = dr.record_dataset('pool-a', d, kind='rl-tasks', format='f', license='MIT', roles={'grpo-pool': {'order': 9}})
+    entry = dr.git_entry(rec)
+    assert entry['path'] == 'data_hdd:pool-a' and entry['license'] == 'MIT' and entry['roles'] == {'grpo-pool': {'order': 9}}
+    assert set(entry['producer']) == {'script', 'argv', 'git_commit', 'dirty', 'host'}
+
+
+def test_sync_publish_resolves_root_qualified_paths(roots):
+    import sync_training_corpora as sync
+    d = roots / 'data_hdd' / 'pool-a'
+    pool(d / 'cases.jsonl', ['a', 'b'])
+    (d / 'skip.tmp').write_text('x')
+    entry = {'id': 'pool-a', 'owner': 'dgx', 'path': 'data_hdd:pool-a', 'exclude_globs': ['*.tmp']}
+    out = roots / 'm.json'
+    value = sync.publish(roots / 'repo', entry, manifest_output=out)
+    assert [f['path'] for f in value['files']] == ['cases.jsonl'] and value['files'][0]['lines'] == 2
+    # the registry's own snapshot of the same directory lists the same files with the same digests
+    snap = dr.snapshot('pool-a', d, exclude=['*.tmp'])
+    assert [(f['path'], f['sha256']) for f in snap['files']] == [(f['path'], f['sha256']) for f in value['files']]
+
+
+def test_cli_check_reports_unregistered(roots, capsys):
+    import data_registry as cli
+    pool(roots / 'data_hdd' / 'p' / 'cases.jsonl', ['a'])
+    assert cli.main(['check', str(roots / 'data_hdd' / 'p')]) == 1
+    assert cli.main(['record', '--id', 'p', '--path', str(roots / 'data_hdd' / 'p'), '--kind', 'rl-tasks',
+                     '--format', 'f']) == 0
+    assert cli.main(['check', str(roots / 'data_hdd' / 'p' / 'cases.jsonl')]) == 0
+
+
+def test_inventory_is_discoverable_but_not_admitted(roots):
+    d = roots / 'data_hdd' / 'old-archive' / 'sub'
+    pool(d / 'cases.jsonl', ['a', 'b'])
+    rec = dr.record_inventory('archive-old', roots / 'data_hdd' / 'old-archive', note='x')
+    assert rec['admission'] == dr.INVENTORY and rec['files'] == 1
+    tree = dr.stored_manifest(rec['manifest_sha256'])['tree']
+    assert {t['path'] for t in tree} == {'.', 'sub'}
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert reg.find(d / 'cases.jsonl')['id'] == 'archive-old'
+    with pytest.raises(dr.UnregisteredData):
+        dr.consume([d / 'cases.jsonl'], run='r', how='h')
+    with pytest.raises(dr.UnregisteredData):
+        dr.require_registered([d / 'cases.jsonl'])
+    # recorded as a dataset of its own, the inner directory is admitted (the longest path wins)
+    dr.record_dataset('inner', d, kind='rl-tasks', format='f')
+    assert dr.consume([d / 'cases.jsonl'], run='r', how='h')[0]['id'] == 'inner'
+
+
+def test_dataset_ids_follow_where_data_lives(roots):
+    assert dr.dataset_id(roots / 'data_hdd' / 'natlang-rl-task-supply-x', 'rl-tasks') == 'natlang-rl-task-supply-x'
+    assert dr.dataset_id(roots / 'repo' / 'runs' / 'sft-mix-x', 'sft-rows') == 'sft-mix-x'
+    assert dr.dataset_id(roots / 'data_hdd' / 'grpo' / 'run1' / 'rollouts', 'grpo-rollouts') == 'grpo-rollouts-grpo-run1-rollouts'
+
+
+def test_promote_role_appends_after_current_members(roots, monkeypatch, capsys):
+    import data_registry as cli
+    repo = roots / 'repo'
+    pool(roots / 'data_hdd' / 'p1' / 'cases.jsonl', ['a'])
+    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': [
+        {'id': 'p1', 'owner': 'dgx', 'path': 'data_hdd:p1', 'roles': {'grpo-pool': {'order': 4, 'file': 'cases.jsonl'}}}]}))
+    pool(roots / 'data_hdd' / 'new' / 'cases.jsonl', ['b'])
+    dr.record_dataset('new', roots / 'data_hdd' / 'new', kind='rl-tasks', format='f', license='L')
+    monkeypatch.setattr(dr, 'code_repo', lambda: repo)
+    assert cli.main(['promote', 'new', '--role', 'grpo-pool', '--dry-run']) == 0
+    entry = json.loads(capsys.readouterr().out)[0]
+    assert entry['roles'] == {'grpo-pool': {'order': 5, 'file': 'cases.jsonl'}}
+    assert entry['path'] == 'data_hdd:new' and entry['license'] == 'L' and entry['kind'] == 'rl-tasks'
+
+
+def test_build_supply_records_the_source(roots, monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('build_supply', REPO / 'scripts/rl_tasks/build_supply.py')
+    bs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bs)
+    authoring = roots / 'data_hdd' / 'natlang-rl-authoring'
+    rows = [{'id': f't{i}', 'family': 'f', 'split': 'train'} for i in range(3)]
+    pool(authoring / 'admitted' / 'cases.jsonl', [])
+    (authoring / 'admitted' / 'cases.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    (authoring / 'admitted' / 'admissions.jsonl').write_text(json.dumps({'batch': 'w300/b1', 'admitted_case_ids': ['t0', 't1']}) + '\n')
+    dr.record_dataset('natlang-rl-authoring-admitted', authoring / 'admitted', kind='rl-tasks', format='f', closed=False)
+    existing = pool(roots / 'data_hdd' / 'old-pool' / 'cases.jsonl', ['t1'])
+    dr.record_dataset('old-pool', existing.parent, kind='rl-tasks', format='f')
+    monkeypatch.setattr(bs.grpo, 'default_pools', lambda: [str(existing)])
+    out = roots / 'data_hdd' / 'natlang-rl-task-supply-x'
+    bs.main([str(out), '--min-worker', '300', '--authoring', str(authoring)])
+    assert [json.loads(l)['id'] for l in open(out / 'cases.jsonl')] == ['t0']
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    ds = reg.datasets['natlang-rl-task-supply-x']
+    assert ds['kind'] == 'rl-tasks' and ds['rows'] == 1 and ds['license'].startswith('project-authored')
+    assert {i.get('id') for i in ds['inputs']} >= {'natlang-rl-authoring-admitted', 'old-pool'}
+
+
+def test_single_file_datasets_share_a_directory(roots):
+    d = roots / 'data_nvme' / 'ops'
+    pool(d / 'probe-v1.json', ['a'])
+    pool(d / 'probe-v2.json', ['b'])
+    pool(d / 'other' / 'x.jsonl', ['c'])
+    dr.record_dataset('p1', d / 'probe-v1.json', kind='probe', format='f')
+    dr.record_dataset('p2', d / 'probe-v2.json', kind='probe', format='f')
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert reg.find(d / 'probe-v1.json')['id'] == 'p1' and reg.find(d / 'probe-v2.json')['id'] == 'p2'
+    assert reg.find(d / 'other' / 'x.jsonl') is None
+
+
+def test_consumers_include_runs_and_derived_datasets(roots):
+    src = pool(roots / 'data_hdd' / 'src' / 'cases.jsonl', ['a'])
+    dr.record_dataset('src', src.parent, kind='rl-tasks', format='f')
+    out = pool(roots / 'data_hdd' / 'derived' / 'cases.jsonl', ['a'])
+    dr.record_dataset('derived', out.parent, kind='rl-tasks', format='f', inputs=[str(src)])
+    dr.consume([src], run='grpo:x', how='GRPO task pool')
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert [c['run'] for c in reg.consumers('src')] == ['grpo:x', 'dataset:derived']

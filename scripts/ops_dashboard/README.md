@@ -11,7 +11,7 @@ answers reads.
 | `data_service.py` (+ `data_catalog.py`, `data_items.py`, `data_edits.py`) | child of ops-peer (JSON lines) | answers every read: ops state and the training-data catalog, items, runs; applies edits to the edit layers |
 | `app/domain.mjs` | bound into the signed descriptor | the retained state: `proposeEdit`, `recordApplication`, `ask`, `answer`; queries `edits`, `inbox` |
 | `app/ui/` | the signed publication | dashboard (`app.mjs`, `charts.mjs`, `model.mjs`), training data (`data.mjs`), session connection (`connect.mjs`, `page.mjs`) |
-| `catalog_sources.json` | read by `data_catalog.py` | the hand layer for datasets no registry knows (to be replaced by a producer-written registry: `plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md`) |
+| data registry | read by `data_catalog.py` | every dataset, its producer, inputs, license and consumers: `natlang_neuralese.common.data_registry` (git layer `training/neuralese_corpora.json` + the producer journal; `scripts/data_registry.py`) |
 
 Private state (handle, signer, epoch key, descriptor, device store) lives in `~/.local/share/tendriller/natlang-ops-app/private/`
 (`NATLANG_OPS_PRIVATE`), never in the repository; the release kit and its verified packages are in `.../natlang-ops-app/kit/`;

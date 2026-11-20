@@ -39,6 +39,7 @@ REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO / 'scripts/rl_tasks')]
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
+from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 SUCCESS = 'task_success'
@@ -123,7 +124,39 @@ def rl_rollout_files(run_dir, archive_dir):
             yield directory.name, directory / 'rollouts.jsonl', directory
 
 
+# Every output is recorded in the data registry when it is written (natlang_neuralese.common.data_registry): a WORK after
+# each extract and replay (a refreshed WORK is a new snapshot), a built set with what it was built from.
+DERIVED_LICENSE = 'derived: each input keeps its registered license (teacher providers, own rollouts, task sources)'
+WORK_INCLUDE = ['*.jsonl.zst', '*.json', '*.jsonl', 'replay/*/rollouts.jsonl', 'replay/*/*.json']
+
+
+def record_work(work, inputs):
+    data_registry.record_dataset(data_registry.dataset_id(work, 'sft-work'), work, kind='trajectories', include=WORK_INCLUDE, inputs=inputs,
+                                 format='sft_sources WORK: episodes*.jsonl.zst (extracted episodes), replay.jsonl '
+                                        '(verdicts), replay/<episode>/rollouts.jsonl (verified replays)',
+                                 license=DERIVED_LICENSE, closed=False)
+
+
+def record_built(out, args, schema):
+    inputs = [args.work, getattr(args, 'held_manifest', None), getattr(args, 'base_rates', None),
+              getattr(args, 'october', None), getattr(args, 'live_holdout_registry', None),
+              *(getattr(args, 'teacher_pool', None) or []),
+              *[a.split('=', 1)[1].split(',')[0] for a in getattr(args, 'aux', None) or []]]
+    data_registry.record_dataset(data_registry.dataset_id(out, 'sft-rows'), out, kind='sft-rows', format=f'{schema}: chains.pkl (exp0_sft --chains), '
+                                 'rows.jsonl.zst, cases.jsonl, build.json', inputs=[i for i in inputs if i],
+                                 license=DERIVED_LICENSE)
+
+
+def build_inputs(args):
+    """A build's inputs, checked before it reads them: data no registry entry holds stops it here."""
+    return [p for p in [args.work, getattr(args, 'held_manifest', None), getattr(args, 'base_rates', None),
+                        getattr(args, 'october', None), *(getattr(args, 'teacher_pool', None) or []),
+                        *[a.split('=', 1)[1].split(',')[0] for a in getattr(args, 'aux', None) or []]] if p]
+
+
 def extract(args):
+    data_registry.require_registered([*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
+                                      *(getattr(args, 'live_run', None) or [])])
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
     episodes_out = work / f'{args.out_name}.jsonl.zst'
@@ -240,6 +273,8 @@ def extract(args):
     summary = {k: dict(v) for k, v in census.items()}
     (work / f'{args.out_name}-extract.json').write_text(json.dumps({'sources': summary, 'episodes': out.rows,
                                                     'rl': args.rl, 'teacher': args.teacher, 'live_runs': getattr(args, 'live_run', [])}, indent=1) + '\n')
+    record_work(work, [*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
+                       *(getattr(args, 'live_run', None) or [])])
     print(json.dumps(summary, indent=1))
 
 
@@ -708,6 +743,7 @@ def replay_episodes(args, episodes):
             future.add_done_callback(finished)
             pending.add(future)
         concurrent.futures.wait(pending)
+    record_work(work, [])
     print(json.dumps(dict(counts)), flush=True)
 
 
@@ -1288,6 +1324,7 @@ def mix_report(chains, episodes, aux_report):
 
 
 def build(args):
+    data_registry.require_registered(build_inputs(args))
     import random
     import numpy as np
     import pickle
@@ -1754,6 +1791,7 @@ def build(args):
     (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
     (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)
                                              if any(e['task_id'] == t for e in sft_episodes)))
+    record_built(out, args, 'natlang.sft-sources-build/1')
     print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'forward_tokens',
                                              'target_tokens')}, indent=1))
 
@@ -1781,6 +1819,7 @@ def neuralese_text(args):
     closure, and each call's system prompt and tool schemas equal to ones the current runtime rendered in an exact replay
     (calls with an unseen surface are dropped). Writes OUT/chains.pkl (`exp0_sft.py train --chains`, the build's format),
     OUT/rows.jsonl.zst and OUT/build.json."""
+    data_registry.require_registered(build_inputs(args))
     import random
     import numpy as np
     import pickle
@@ -1892,6 +1931,7 @@ def neuralese_text(args):
     }
     (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
     (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)))
+    record_built(out, args, 'natlang.sft-sources-neuralese-text/1')
     print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'calls',
                                              'forward_tokens', 'target_tokens')}, indent=1))
 
@@ -1907,6 +1947,7 @@ def neuralese_graph(args):
     closure, and each call's system prompt and tool schemas equal to ones the current runtime rendered in an exact
     replay (an episode with a call on an unseen surface is dropped whole: its graph would lose a dependency). Writes
     OUT/chains.pkl (`exp0_sft.py train --chains`), OUT/rows.jsonl.zst and OUT/build.json."""
+    data_registry.require_registered(build_inputs(args))
     import random
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
@@ -2032,6 +2073,7 @@ def neuralese_graph(args):
     }
     (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
     (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)))
+    record_built(out, args, 'natlang.sft-sources-neuralese-graph/1')
     print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'importing_chains',
                                              'calls', 'forward_tokens', 'target_tokens')}, indent=1))
 
@@ -2063,7 +2105,7 @@ def main():
     b.add_argument('--work', required=True)
     b.add_argument('--out', required=True)
     b.add_argument('--tokenizer', required=True)
-    b.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    b.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     b.add_argument('--live-holdout-registry', metavar='CATALOG.jsonl',
                    help='required for open-goal training; output of pnpm natlang:teacher --list')
     b.add_argument('--no-default-teacher-pool', action='store_true',
@@ -2127,16 +2169,18 @@ def main():
     n.add_argument('--work', required=True)
     n.add_argument('--out', required=True)
     n.add_argument('--tokenizer', required=True)
-    n.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    n.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     n.add_argument('--max-per-task', type=int, default=4)
     n.add_argument('--seed', type=int, default=20261117)
     g = sub.add_parser('neuralese-graph', help='whole Neuralese episodes (consumers included) as pass-through graph rows')
     g.add_argument('--work', required=True)
     g.add_argument('--out', required=True)
-    g.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
+    g.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     g.add_argument('--max-per-task', type=int, default=2)
     g.add_argument('--seed', type=int, default=20261117)
     args = p.parse_args()
+    if hasattr(args, 'held_manifest') and not args.held_manifest:
+        args.held_manifest = data_registry.role_path('held-eval')
     if args.command == 'build' and args.teacher_pool is None:
         args.teacher_pool = [] if args.no_default_teacher_pool else [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
     {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build,

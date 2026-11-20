@@ -30,6 +30,12 @@ os.environ["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([
 # its first BLAS call, so it is set before any test imports torch, and child
 # processes inherit it. It has no effect on non-MKL builds (aarch64/DGX).
 os.environ.setdefault("MKL_CBWR", "AUTO,STRICT")
+# Producers and consumers record into the training-data registry (natlang_neuralese.common.data_registry). Tests write
+# to a disposable journal, never the machine's, and their fixture data is not registered: consumers read it unregistered
+# (recorded). Tests of the registry itself remove the opt-out with monkeypatch.
+import tempfile  # noqa: E402
+os.environ["NATLANG_DATA_REGISTRY"] = tempfile.mkdtemp(prefix="natlang-data-registry-test-")
+os.environ["NATLANG_ALLOW_UNREGISTERED_DATA"] = "1"
 
 
 @pytest.fixture

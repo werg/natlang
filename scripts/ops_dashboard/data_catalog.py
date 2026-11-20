@@ -4,9 +4,9 @@ Datasets come from providers, each reading a source of truth rather than a hand 
   code       the constants the trainers actually use: grpo.py POOLS / MEMETIC_TASKS / HELD / ERRATA / SD_TEACHER_SOURCES
              (parsed with ast, never imported), so a new supply round appears as soon as it lands in POOLS
   runs       GRPO runs (ops/grpo-*/run*/train.jsonl), their held evals, SFT runs (ops/sft-v*/run*), teacher-gen campaigns
-  registry   training/neuralese_corpora.json (3k+ entries) as one browsable dataset, plus registry facts for every path
-  sources    catalog_sources.json: the explicit hand layer for what no registry knows (to be replaced by a producer-written
-             registry; see plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md)
+  registry   the training-data registry (natlang_neuralese.common.data_registry): the git layer
+             (training/neuralese_corpora.json, 3k+ entries, one browsable dataset) and the journal producers write; every
+             registered dataset with a kind is a card, and its producer, inputs, license and consumers come from it
 Each dataset: {id, title, group, kind, reader, path, parts, protected, size_bytes, rows, provenance, consumers, relations}.
 Expensive facts (line counts, sizes) are cached under the dashboard cache and refreshed when files change.
 """
@@ -241,8 +241,10 @@ _CONS = {}
 def consumers_index():
     """path -> [{run, how, amount}] from what runs recorded: GRPO pool.json pools, teacher-gen pool.json, sft-mix build.json
     inputs, SFT launch.json chains."""
+    from natlang_neuralese.common.data_registry import journal_path
     key = tuple(sig(p) for p in glob.glob(OPS + '/grpo-*/run*/pool.json') + glob.glob(OPS + '/teacher-gen-*/*/pool.json')
-                + glob.glob(REPO + '/runs/sft-*/build.json') + glob.glob(OPS + '/sft-v*/run*/launch.json'))
+                + glob.glob(REPO + '/runs/sft-*/build.json') + glob.glob(OPS + '/sft-v*/run*/launch.json')
+                + [p for p in (str(journal_path()), REGISTRY) if os.path.exists(p)])
     if _CONS.get('key') == key:
         return _CONS['v']
     idx = {}
@@ -283,6 +285,29 @@ def consumers_index():
         if isinstance(ch, str):
             add(ch, {'run': f"sft-run:{r['run']}", 'how': 'SFT training chains', 'amount': None})
             add(os.path.dirname(ch), {'run': f"sft-run:{r['run']}", 'how': 'SFT training chains', 'amount': None})
+    reg = dreg()
+    for r in reg.consumption:          # consumption records every consumer writes (grpo, teacher_gen, exp0_sft)
+        for item in r.get('items') or []:
+            ds = reg.datasets.get(item.get('id'))
+            where = ds and ds.get('path')
+            try:
+                from natlang_neuralese.common.data_registry import absolute
+                target = str(absolute(where)) if where else None
+            except ValueError:
+                target = None
+            if target:
+                add(os.path.realpath(target), {'run': r['run'], 'how': r['how'], 'amount': r.get('amount'),
+                                               'sha256': item.get('sha256') or item.get('manifest_sha256'), 'time': r.get('time')})
+    for ident, ds in reg.datasets.items():   # datasets built from it (producer records' inputs)
+        for item in ds.get('inputs') or []:
+            src = reg.datasets.get(item.get('id')) if isinstance(item, dict) else None
+            if src:
+                try:
+                    from natlang_neuralese.common.data_registry import absolute
+                    add(os.path.realpath(absolute(src['path'])), {'run': f'dataset:{ident}', 'how': f"input of {ds.get('kind') or 'dataset'} {ident}",
+                                                                   'amount': None, 'sha256': item.get('sha256') or item.get('manifest_sha256')})
+                except ValueError:
+                    pass
     _CONS.update(key=key, v=idx)
     return idx
 
@@ -290,8 +315,8 @@ def consumers_index():
 def consumers_of(*paths):
     idx = consumers_index()
     out, seen = [], set()
-    for p in paths:
-        for rec in idx.get(os.path.normpath(p), []) if p else []:
+    for p in [x for q in paths if q for x in {os.path.normpath(q), os.path.realpath(q)}]:
+        for rec in idx.get(p, []):
             k = (rec['run'], rec['how'])
             if k not in seen:
                 seen.add(k)
@@ -301,12 +326,30 @@ def consumers_of(*paths):
 
 # ---------- dataset assembly ----------
 
+
+
+def dreg():
+    """The merged data registry (git layer + journal), reloaded when either changes."""
+    from natlang_neuralese.common import data_registry
+    return data_registry.load()
+
+
 def _prov_registry(path):
-    e = registry_entry_for(path)
+    e = dreg().find(path) if path else None
+    if not e:
+        e = registry_entry_for(path)
     if not e:
         return None
-    return {k: e.get(k) for k in ('id', 'admission', 'training_admission', 'license_provenance', 'license', 'derived_from',
-                                  'supersedes', 'superseded_by', 'note', 'owner') if e.get(k) is not None}
+    out = {k: e.get(k) for k in ('id', 'kind', 'layer', 'admission', 'training_admission', 'license_provenance', 'license',
+                                 'derived_from', 'supersedes', 'superseded_by', 'note', 'owner', 'manifest_sha256', 'rows',
+                                 'files', 'bytes', 'time') if e.get(k) is not None}
+    if e.get('producer'):
+        p = e['producer']
+        out['producer'] = {'script': p.get('script'), 'git_commit': p.get('git_commit') or (p.get('code') or {}).get('git_commit'),
+                           'dirty': p.get('dirty') if 'dirty' in p else (p.get('code') or {}).get('dirty')}
+    if e.get('inputs'):
+        out['inputs'] = [{k: i.get(k) for k in ('id', 'path', 'sha256', 'manifest_sha256') if i.get(k)} for i in e['inputs']][:50]
+    return out
 
 
 def _task_pool_ds(p, title, group, *, code_ref=None, protected=False, extra=None):
@@ -390,8 +433,6 @@ def _build_catalog():
                     'rows': sum(file_facts(f)['lines'] or 0 for f in files), 'size_bytes': sum(file_facts(f)['bytes'] or 0 for f in files),
                     'provenance': {'code_ref': f"grpo.py:{c['ERRATA']['line']} ERRATA"}, 'consumers': consumers_of(*files),
                     'note': 'Every *.jsonl here is excluded from GRPO and teacher-gen task pools at start/resume. ops-dashboard.jsonl is written by page edits.'})
-    for sd in (c.get('SD_TEACHER_SOURCES') or {}).get('value') or []:
-        pass       # covered by the catalog_sources globs (sft-teacher-demos-*, sft-sources-*), tagged as consumed below
     sd_set = {os.path.normpath(p) for p in (c.get('SD_TEACHER_SOURCES') or {}).get('value') or []}
     # GRPO runs and their held evals
     for r in grpo_runs():
@@ -427,52 +468,121 @@ def _build_catalog():
                 'path': REGISTRY, 'parts': [{'id': 'entries', 'title': 'Entries'}], 'rows': len(reg.get('corpora', [])),
                 'size_bytes': os.path.getsize(REGISTRY), 'format': 'natlang.neuralese-corpus-registry/1 + corpus-manifests/<id>.json (natlang.corpus-snapshot/1)',
                 'provenance': {'writer': 'scripts/neuralese_data/register_corpora.py'}})
-    # hand layer
-    src = read_json(HERE + '/catalog_sources.json', {})
-    seen = {d.get('path') for d in out} | {d.get('dir') for d in out}
-    for s in src.get('sources', []):
-        pats = [s['glob']]
-        m = re.search(r'\{([^}]*)\}', s['glob'])
-        if m:
-            pats = [s['glob'].replace(m.group(0), x) for x in m.group(1).split(',')]
-        for d in sorted(x for pat in pats for x in glob.glob(pat)):
-            if d in seen or not os.path.isdir(d):
-                continue
-            name = os.path.basename(d.rstrip('/')) if not d.endswith('/rollouts') else os.path.relpath(d, HDD).replace('/rollouts', '')
-            ds = {'id': f"{s['id']}:{name}" if '*' in s['glob'] or '{' in s['glob'] else s['id'], 'title': f"{s['title']} · {name}" if '*' in s['glob'] or '{' in s['glob'] else s['title'],
-                  'group': s['group'], 'kind': s['kind'], 'reader': s['reader'], 'item_kind': s.get('item_kind'), 'path': d, 'dir': d,
-                  'protected': bool(s.get('protected')), 'provenance': {'producer': s.get('producer'), 'registry': _prov_registry(d),
-                  'records': [x for x in s.get('side', []) if os.path.exists(f'{d}/{x}')], 'source': 'catalog_sources.json'},
-                  'relations': {k: s[k] for k in ('superseded_by',) if s.get(k)}, 'consumers_note': s.get('consumers_note')}
-            if os.path.normpath(d) in sd_set:
-                ds['code_consumer'] = f"{_cref(c['SD_TEACHER_SOURCES'], 'SD_TEACHER_SOURCES')} (TeacherDemos, self-distillation)"
-            files = s.get('files') or ({'tasks': s['file']} if s.get('file') else {})
-            if s['reader'] == 'sft-mix':
-                files = {'rows': 'rows.jsonl.zst', 'cases': 'cases.jsonl'}
-                b = read_json(d + '/build.json', None) or read_json(d + '/merge.json', None)
-                if b:
-                    mix = b.get('mix') or {}
-                    ds['mix'] = {'parts': mix.get('parts'), 'aux': {k: {x: y for x, y in v.items() if x in ('path', 'share', 'chains', 'loss_share')} for k, v in (mix.get('aux') or {}).items()} if isinstance(mix.get('aux'), dict) else None,
-                                 'funnel': b.get('funnel'), 'stats': b.get('stats'), 'code': b.get('code'), 'policy': b.get('policy'),
-                                 'inputs': {k: (v if not isinstance(v, dict) else {x: y for x, y in v.items() if not isinstance(y, (list, dict))}) for k, v in (b.get('inputs') or {}).items()} if isinstance(b.get('inputs'), dict) else None}
-            pm = {k: f'{d}/{v}' for k, v in files.items() if os.path.exists(f'{d}/{v}')}
-            kinds = {'sft-mix': {'rows': 'sft_row', 'cases': 'task'}, 'teacher-demos': {k: 'demo' for k in pm}}.get(s['reader'], {k: s.get('item_kind') or 'raw' for k in pm})
-            ds.update(parts=[{'id': k, 'title': k} for k in pm], parts_map=pm, part_kind=kinds)
-            sizes = [file_facts(p) for p in pm.values()]
-            ds['size_bytes'] = sum(x['bytes'] or 0 for x in sizes) if sizes else None
-            ds['rows'] = sum(x['lines'] or 0 for x in sizes) if sizes and all(x['lines'] is not None for x in sizes) else None
-            ds['rows_estimated'] = any(x.get('estimated') for x in sizes)
-            ds['consumers'] = consumers_of(d, *pm.values())
-            if s['reader'] in ('jsonl', 'held-set') and 'tasks' in pm:
-                ds['path'] = pm['tasks']
-            out.append(ds)
+    # every other registered dataset (producer records, backfill, git entries with a kind)
+    out += _registry_datasets(out, sd_set, c)
     for ds in out:
         ds.setdefault('protected', False)
         ds.setdefault('relations', {})
         if ds.get('code_consumer'):
             ds['consumers'] = (ds.get('consumers') or []) + [{'run': 'grpo (default)', 'how': ds['code_consumer'], 'amount': None}]
     _relations(out)
+    _pending(out)
     return out
+
+
+# kind -> (group, reader, item kind, part files) of a registry dataset's card
+KIND_VIEW = {
+    'rl-tasks': ('RL task pools', 'jsonl', 'task', {'tasks': 'cases.jsonl'}),
+    'held': ('Held-out (protected)', 'held-set', 'task', {'tasks': 'cases.jsonl', 'dev': 'dev.jsonl', 'confirmation': 'confirmation.jsonl'}),
+    'held-eval': ('Held-out evaluations (protected)', 'held-eval', None, {}),
+    'teacher-demos': ('Teacher-generation campaigns', 'info', None, {}),
+    'trajectories': ('SFT sources and teacher demonstrations', 'teacher-demos', 'demo',
+                     {'teacher': 'episodes-teacher.jsonl.zst', 'own': 'episodes-own.jsonl.zst', 'v6': 'episodes-v6.jsonl.zst',
+                      'episodes': 'episodes.jsonl.zst'}),
+    'sft-rows': ('SFT mixes and built sets', 'sft-mix', 'sft_row', {'rows': 'rows.jsonl.zst', 'cases': 'cases.jsonl'}),
+    'chains': ('Neuralese and operators', 'info', None, {}),
+    'rollouts': ('GRPO rollout archives', 'info', None, {}),
+    'step-chains': ('GRPO rollout archives', 'info', None, {}),
+    'corpus': ('Upstream sources', 'info', None, {}),
+    'index': ('Indexes', 'jsonl', 'raw', {'index': 'index.jsonl'}),
+    'probe': ('Indexes', 'info', None, {}),
+    'edits': ('Edit layers', 'info', None, {}),
+    'archive': ('Archives (inventory only)', 'info', None, {}),
+}
+
+
+def _registry_datasets(out, sd_set, c):
+    """Cards for the registry's datasets the providers above did not produce: what replaced the hand list."""
+    from natlang_neuralese.common.data_registry import absolute
+    reg = dreg()
+    seen = {os.path.realpath(x) for d in out for x in (d.get('path'), d.get('dir')) if x}
+    cards = []
+    for ident, e in reg.datasets.items():
+        kind = e.get('kind')
+        if kind not in KIND_VIEW or e.get('retired'):
+            continue
+        try:
+            d = str(absolute(e['path']))
+        except (ValueError, KeyError):
+            continue
+        if os.path.realpath(d) in seen:
+            continue
+        group, reader, item_kind, files = KIND_VIEW[kind]
+        protected = bool(e.get('protected')) or kind in ('held', 'held-eval') or str(e.get('admission') or '').startswith('evaluation-only')
+        title = ident
+        ds = {'id': f'reg:{ident}', 'title': title, 'group': group, 'kind': 'held' if kind == 'held-eval' else kind, 'reader': reader,
+              'item_kind': item_kind, 'path': d, 'dir': d, 'protected': protected, 'format': e.get('format'),
+              'note': e.get('note'), 'hidden': kind == 'held-eval',
+              'provenance': {'registry': _prov_registry(d), 'producer': ((e.get('producer') or {}).get('script')),
+                             'source': 'registry'},
+              'relations': {k: e[k] for k in ('superseded_by', 'supersedes') if e.get(k)}}
+        if os.path.normpath(d) in sd_set:
+            ds['code_consumer'] = f"{_cref(c['SD_TEACHER_SOURCES'], 'SD_TEACHER_SOURCES')} (TeacherDemos, self-distillation)"
+        if os.path.isfile(d):
+            pm = {'tasks' if kind in ('rl-tasks', 'held') else 'file': d}
+        else:
+            pm = {k: f'{d}/{v}' for k, v in files.items() if os.path.exists(f'{d}/{v}')}
+        if reader == 'sft-mix':
+            if 'rows' not in pm:
+                ds['reader'] = 'info'
+            b = read_json(d + '/build.json', None) or read_json(d + '/merge.json', None)
+            if b:
+                mix = b.get('mix') or {}
+                ds['mix'] = {'parts': mix.get('parts'), 'aux': {k: {x: y for x, y in v.items() if x in ('path', 'share', 'chains', 'loss_share')} for k, v in (mix.get('aux') or {}).items()} if isinstance(mix.get('aux'), dict) else None,
+                             'funnel': b.get('funnel'), 'stats': b.get('stats'), 'code': b.get('code'), 'policy': b.get('policy'),
+                             'inputs': {k: (v if not isinstance(v, dict) else {x: y for x, y in v.items() if not isinstance(y, (list, dict))}) for k, v in (b.get('inputs') or {}).items()} if isinstance(b.get('inputs'), dict) else None}
+        kinds = {'sft-mix': {'rows': 'sft_row', 'cases': 'task'}, 'teacher-demos': {k: 'demo' for k in pm}}.get(ds['reader'], {k: item_kind or 'raw' for k in pm})
+        ds.update(parts=[{'id': k, 'title': k} for k in pm], parts_map=pm, part_kind=kinds)
+        if pm and kind not in ('archive',):
+            sizes = [file_facts(p) for p in pm.values()]
+            ds['size_bytes'] = sum(x['bytes'] or 0 for x in sizes)
+            ds['rows'] = sum(x['lines'] or 0 for x in sizes) if all(x['lines'] is not None for x in sizes) else e.get('rows')
+            ds['rows_estimated'] = any(x.get('estimated') for x in sizes)
+        else:
+            ds['size_bytes'], ds['rows'] = e.get('bytes'), e.get('rows')
+        if reader in ('jsonl', 'held-set') and 'tasks' in pm:
+            ds['path'] = pm['tasks']
+        ds['consumers'] = consumers_of(d, *pm.values())
+        cards.append(ds)
+    return cards
+
+
+def _pending(out):
+    """Trainer default pools (grpo.py POOLS / registry role grpo-pool) that an active GRPO run does not read yet: they enter
+    at that run's next start or resume on a newer pin. Active = train.jsonl written in the last two hours."""
+    now = time.time()
+    active = []
+    for ds in out:
+        if ds.get('reader') != 'grpo-run':
+            continue
+        try:
+            if now - os.path.getmtime(ds['path'] + '/train.jsonl') > 7200:
+                continue
+        except OSError:
+            continue
+        rec = None
+        for rec in jsonl(ds['path'] + '/runs.jsonl'):
+            pass
+        active.append({'run': ds['run'], 'id': ds['id'], 'pin': os.path.basename(str((rec or {}).get('pin') or '')) or None,
+                       'started': (rec or {}).get('started')})
+    for ds in out:
+        ref = (ds.get('provenance') or {}).get('code_ref') or ''
+        if not (ref.endswith(' POOLS') or ref.endswith('grpo-pool')):
+            continue
+        users = {c.get('run') for c in ds.get('consumers') or []}
+        pend = [a for a in active if a['id'] not in users]
+        if pend:
+            ds['pending'] = pend
 
 
 def _relations(out):
@@ -511,7 +621,12 @@ WHAT = {'rl-tasks': 'RL tasks with exact oracles (natlang programs, worlds, expe
         'sft-rows': 'SFT rows: one model call each, context (weight 0) and trained target',
         'chains': 'Learner-ready chains (token ids with trained segments)',
         'corpus': 'Upstream source data, before conversion into tasks or rows',
-        'index': 'Index or registry over other datasets'}
+        'index': 'Index or registry over other datasets',
+        'rollouts': 'Archived GRPO episodes (one compressed file per group)',
+        'step-chains': 'Exact learner batches of recent GRPO steps',
+        'probe': 'Fixed probe calls scored after every step',
+        'edits': 'Edit layer: exclusions, corrections and flags applied to other datasets',
+        'archive': 'Inventory of a stored tree (file counts and sizes; not admitted as training data)'}
 
 
 def describe(ds):
@@ -533,8 +648,8 @@ def describe(ds):
         found = 'run directory (runs.jsonl)'
     elif ds.get('reader') == 'teacher-gen':
         found = 'teacher-gen campaign directory'
-    elif prov.get('source') == 'catalog_sources.json':
-        found = 'hand list (catalog_sources.json)'
+    elif prov.get('source') == 'registry':
+        found = 'data registry (' + str(((prov.get('registry') or {}).get('layer')) or 'journal') + ')'
     elif ds.get('reader') == 'registry':
         found = 'the registry file itself'
     else:
@@ -544,7 +659,7 @@ def describe(ds):
 
 def _card(ds):
     keep = ('id', 'title', 'group', 'kind', 'reader', 'path', 'protected', 'size_bytes', 'rows', 'rows_estimated', 'mtime', 'missing', 'consumers',
-            'relations', 'consumers_note', 'note', 'run', 'hidden')
+            'relations', 'consumers_note', 'note', 'run', 'hidden', 'pending')
     out = {k: ds.get(k) for k in keep if ds.get(k) is not None}
     prov = ds.get('provenance') or {}
     out['what'], out['found_via'] = describe(ds)
@@ -558,7 +673,12 @@ def _card(ds):
 def data_catalog(_):
     cat = build_catalog()
     return {'datasets': [_card(d) for d in cat if not d.get('hidden')], 'generated': int(_CAT.get('ts', time.time()) * 1000),
-            'sources': {'code': GRPO, 'registry': REGISTRY, 'hand_layer': HERE + '/catalog_sources.json'}}
+            'sources': {'code': GRPO, 'registry': REGISTRY, 'journal': _journal_path()}}
+
+
+def _journal_path():
+    from natlang_neuralese.common.data_registry import journal_path
+    return str(journal_path())
 
 
 @handler('data.dataset')

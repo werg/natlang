@@ -112,8 +112,8 @@ def split(args):
     out = Path(args.out)
     if (out / 'split.json').exists():
         raise SystemExit(f'{out}/split.json exists: a program split is pinned once')
-    pools = args.pool or grpo.POOLS
-    held = args.held_manifest or grpo.HELD
+    pools = args.pool or grpo.default_pools()
+    held = args.held_manifest or grpo.default_held()
     rows, seen = [], set()
     for pool in pools:
         for index, row in enumerate(read_jsonl(pool)):
@@ -551,8 +551,8 @@ def main(argv=None):
     s = sub.add_parser('split')
     s.add_argument('--family', required=True)
     s.add_argument('--out', required=True)
-    s.add_argument('--pool', action='append', help='task pools (default grpo.POOLS)')
-    s.add_argument('--held-manifest', help='default grpo.HELD (held-v3; its exclusion covers held-v2)')
+    s.add_argument('--pool', action='append', help='task pools (default: the registry role grpo-pool)')
+    s.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3; its exclusion covers held-v2)')
     s.add_argument('--errata', action='append', help='errata JSONL (default every grpo.ERRATA/*.jsonl)')
     s.add_argument('--exposed', action='append',
                    help='JSON list of task ids the start policy trained on (a later parent than the base): kept out')

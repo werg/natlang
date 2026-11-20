@@ -287,7 +287,7 @@ reference server applies the stack through its exact native adapter path.
 | Backend | Weight residuals | Soft instruction/skill states | Mixed stacks in one batch |
 | --- | --- | --- | --- |
 | Managed llama.cpp (upstream runtime) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
-| llama.cpp fork (`--lora-per-sequence`, `--native-state`) | Same | Yes with `tune.softStates: true` (LFM2): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
+| llama.cpp fork (`--lora-per-sequence`, `--native-state`; the pinned managed runtime) | Same | Yes by default (`tune.softStates: false` opts out): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
 | wllama in the page (vendored build of the fork, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | Yes: the fork's native state spans (`nativeStates`) | No (serialized per stack) |
 | SGLang actor (`serve_native_checkpoint.py --engine sglang`; training and held evals) | A request's native stack summed into resident adapter slots (`--sglang-adapter-slots`, `--sglang-adapter-rank`); `--adapter-release DIR` serves a fit by default | Through the native engine | Yes |
@@ -298,7 +298,7 @@ are `scripts/neuralese_data/program_tune.py` (plans/neuralese/TUNING_RESTORE_202
 
 **Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
 attention keys (after the key norm, before RoPE) and values, and LFM2's short-convolution gated inputs. With
-`tune.softStates: true` on the `managed-local` backend, the build trains soft states and the release keeps each as its
+the `managed-local` backend (default since 2026-11-20; `tune.softStates: false` opts out), the build trains soft states and the release keeps each as its
 store file (`states/<state>.nzs`, the native-state format every engine reads). The managed session passes those files
 with `--native-state` (the fork verifies each file's content ID and refuses a state whose identity differs from a
 natlang GGUF's declared one), the page passes them as `native_states` blobs, and requests carry `{"type": "native_state", "id"}` content parts where the instruction or skill
@@ -307,6 +307,16 @@ LFM2.5-350M it matches the reference engine as closely as plain text does (max |
 `scripts/llama_state_span_parity.py`). A server without `--native-state` (the upstream runtime) refuses to start with
 soft states (`weights-unavailable`); in `run`/`call` such releases run their soft-state bindings degraded. Mellum
 soft states are not exportable yet.
+
+**Soft states compose and are trained prefix-robust (CSPD, 2026-11-20).** Each soft state stands where its text stood,
+so several states (a binding's instructions and each disclosed skill) compose by concatenation in one request on every
+engine, with no joint inference-time fitting; each is trained only on verified rows (`rows.evidence_weight`: an
+oracle-confirmed root or a successful enclosing program), with the per-row token-normalized NLL of the reply. On half
+the rows that import soft states (content hash; recipe `soft_prefix_share` 0.5, 0 opts out), 128-256 tokens of other
+rows' prompts of the same component (`soft_prefix_tokens`) sit right before the first state as weight-0 context, so a
+state works after whatever a program puts before it (Composable Soft-Prompt Distillation, Zhang et al. 2026: +2.1
+points on a four-expert composition). Serving never adds the prefix. A fit resuming its own state from before the
+setting keeps it off. With every `ranks` level at 0 the fit trains soft states alone on the frozen backbone.
 
 In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
 checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters, nativeStates })` and the

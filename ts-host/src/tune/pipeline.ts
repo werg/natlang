@@ -238,9 +238,11 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
 }
 
 /** Whether this backend serves soft instruction/skill states, so the build trains and exports them (plan §3.3): the
- * native reference server always; managed llama.cpp when `tune.softStates` declares the fork's `--native-state`. */
+ * native reference server always; managed llama.cpp unless `tune.softStates: false` (the pinned managed runtime is the
+ * fork, which imports native-state files with `--native-state`; a server without it refuses the release's states at
+ * load and their bindings run degraded, `tuned-serving.ts`). */
 export function softStatesServed(settings: TuneOptions['settings']): boolean {
-  return settings.backend === 'native' || (settings.backend === 'managed-local' && settings.softStates === true);
+  return settings.backend === 'native' || (settings.backend === 'managed-local' && settings.softStates !== false);
 }
 
 /** One training variant: a scaffold (scales, tree roots), a recipe and optionally a row subset. */

@@ -91,6 +91,13 @@ finite values, content ID in one pass) and decodes a state only where it compute
 | Python block store / learner `NativeStates` | | `read_native_state_file` + `load()` | adopt by rename, verify from a mapping |
 | ts-host stores (memory, file, OPFS) and the collector archive | | | `putNativeStateWire`/`getNativeStateWire` keep the wire as received; decoded tensors are views of it; files re-verified when read from disk; archive and restore move wires between stores |
 
+**Soft instruction and skill states (tuned releases' `softStates`) are native states, so every engine serves them.**
+A request carries each as a `{"type": "native_state", "id"}` part where its text stood, and several states in one request
+compose by concatenation (CSPD's composition; docs/TUNING.md). Per request in one batch: the managed fork (per-sequence,
+`--native-state` files), the Python native engine and the SGLang actor (`natlang_import` per request,
+`sglang_actor.py` `_sglang_import`); the page serializes requests. Since 2026-11-20 `natlang tune` trains them on the
+managed backend by default (`tune.softStates: false` opts out; `tune/pipeline.ts` `softStatesServed`). No gap.
+
 **The learned operators' in-context capture** (OPERATORS_RESTORE_20261117.md) has a managed HTTP implementation and an engine primitive shared by the fork and page; the page runtime binding remains blocked as recorded below. The Python engine and the SGLang actor serve `native.capture`: the actor goes through the fork's capture request, the request its forced-producing parity covers. The managed llama-server and the page serve no write endpoints and write states only from produce spans; the managed HTTP `grammarCapture` client sends the call's own messages again with a grammar of the exact ids `<reply prefix> produce_open <content> produce_close`.
 
 Live check, 2026-11-17: natlang-b12081 CPU with the natlang-lfm3-5ff07638 Q8_0 GGUF against the Python engine (BF16, CPU) on 5ff07638, two view sites, 400-token spans.

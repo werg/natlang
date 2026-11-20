@@ -619,7 +619,23 @@ def finalize(directory, spec, started, *, complete):
               **aggregate(samples, complete=complete, elapsed=elapsed),
               'score': {'groups_with_spread': report.get('groups_with_spread')}}
     write_json_durable(directory / 'result.json', result)
+    record_result(directory, spec)
     return result
+
+
+def record_result(directory, spec):
+    """The finished evaluation as a protected registry dataset (``held-eval-...``): its result and episodes, the held
+    manifest it measured as input. Bookkeeping never fails an evaluation: an error is printed as an event."""
+    try:
+        from ..common import data_registry
+        data_registry.record_dataset(
+            data_registry.dataset_id(directory, 'held-eval'), directory, kind='held-eval', protected=True,
+            include=['result.json', 'run.json', 'rewards.jsonl', 'packet.jsonl', 'journal.jsonl'],
+            format=f'{RESULT_SCHEMA} result.json + run.json, rewards.jsonl and journal.jsonl of the episodes',
+            inputs=[x for x in (spec.get('manifest'),) if x], license='project-generated (held-out evaluation; view only)',
+            note=f"policy {spec.get('policy_id')}, {spec.get('samples')} samples per task")
+    except Exception as error:
+        print(json.dumps({'event': 'data registry error', 'error': repr(error)[:300]}), flush=True)
 
 
 def aggregate(samples, *, complete, elapsed):

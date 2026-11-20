@@ -192,3 +192,67 @@ def test_real_lfm_build_initializes_trains_and_persists_soft_states(tmp_path):
     assert json.loads((out / 'soft-init.json').read_text())[key]['state'] == records[key]['state']
     assert main(['--plan', str(plan), '--out', str(out)]) == 0
     assert json.loads((out / 'result.json').read_text())['softStates'] == result['softStates']
+
+
+def test_prefix_robust_rows_put_other_rows_context_before_the_first_state(tmp_path):
+    """CSPD prefix-robust training: a selected soft row carries another row's prompt tokens before its first imported
+    state, at weight 0; serving never adds it; share 0 leaves every row as it was."""
+    from natlang_neuralese.tune.rows import lower_rows, prefix_for
+    engine = soft_engine(tmp_path)
+    # decision rows: the fixture's toy template renders those (a text reply needs ChatML)
+    turns = [turn(root=f'r{index}', messages=[{'role': 'system', 'content': f't1{index} t11'},
+                                              {'role': 'user', 'content': 't12 ' + INSTRUCTIONS + ' t13'}],
+                  reply={'text': 't7'}, decision={'options': ['t7', 't8 t9'], 'chosen': 0})
+             for index in range(4)]
+    records = initialize_soft_states(engine, turns, skills=False)
+    soft = {key: record['state'] for key, record in records.items()}
+    plain = lower_rows(engine, turns, soft=soft)
+    assert lower_rows(engine, turns, soft=soft, prefix_share=0.) == plain
+    robust = lower_rows(engine, turns, soft=soft, prefix_share=1., prefix_tokens=(2, 3))
+    markers = set(engine.role_tokens.ids)
+    for before, after in zip(plain, robust):
+        old, new = before['graph']['nodes'][0], after['graph']['nodes'][0]
+        record = after['graph']['source']['prefix_robust']
+        added = record['tokens']
+        assert 2 <= added <= 3 and len(new['token_ids']) == len(old['token_ids']) + added
+        cut = old['token_ids'].index(engine.role_tokens.consume_open)
+        assert new['token_ids'][:cut] == old['token_ids'][:cut], 'the row\'s own context is unchanged'
+        assert new['token_ids'][cut + added:] == old['token_ids'][cut:], 'the state and the reply follow the prefix'
+        prefix = new['token_ids'][cut:cut + added]
+        assert not markers & set(prefix) and new['target_weights'][cut:cut + added] == [0.] * added
+        assert new['imports'][0]['at'] == old['imports'][0]['at'] + added
+        assert sum(new['target_weights']) == sum(old['target_weights']), 'the loss tokens are the same'
+    # deterministic, never the row's own tokens, and None below the share or without enough other context
+    pool = [('r0:call-1:1', [1, 2, 3]), ('r1:call-1:1', [4, 5, 6])]
+    drawn = prefix_for(turns[0], pool, 1., (2, 3))
+    assert drawn == prefix_for(turns[0], pool, 1., (2, 3)) and set(drawn) <= {4, 5, 6}
+    assert prefix_for(turns[0], pool, 1e-9, (2, 3)) is None or prefix_for(turns[0], pool, 1e-9, (2, 3)) == drawn
+    assert prefix_for(turns[0], pool, 1., (4, 5)) is None
+    selected = sum(prefix_for(turn(root=f's{index}'), [('x', list(range(300)))], .5, (128, 256)) is not None
+                   for index in range(200))
+    assert 70 <= selected <= 130, 'about half of the rows'
+
+
+def test_soft_prefix_share_defaults_on_for_new_fits_and_stays_off_for_resumed_ones():
+    from natlang_neuralese.tune.trainer import resolve_soft_prefix_share
+    assert Recipe().soft_prefix_share == .5 and Recipe().soft_prefix_tokens == [128, 256]
+    assert resolve_soft_prefix_share({}) == .5
+    assert resolve_soft_prefix_share({}, {'schema': 'old'}) == 0.
+    assert resolve_soft_prefix_share({}, {'recipe_soft_prefix_share': .5}) == .5
+    assert resolve_soft_prefix_share({'soft_prefix_share': 0}) == 0.
+    for bad in ({'soft_prefix_share': 2}, {'soft_prefix_tokens': [0, 4]}, {'soft_prefix_tokens': [9, 4]}):
+        with pytest.raises(TuneMathError, match='soft_prefix'):
+            Recipe.from_json(bad)
+
+
+def test_soft_states_alone_on_the_frozen_backbone_with_every_rank_zero(tmp_path):
+    """CSPD's form: no adapter node at any level, only the soft state trains."""
+    engine = soft_engine(tmp_path)
+    records = initialize_soft_states(engine, [turn()], skills=False)
+    key = soft_key('bx', 'instructions', None)
+    trainer = JointTrainer(engine, manifest_for(engine), soft_rows(engine, records), Recipe(
+        steps=1, batch_rows=3, ranks={'tree': 0, 'folder': 0, 'lambda': 0},
+        state_optimizer={'name': 'adam', 'learning_rate': .05}))
+    assert trainer.state['node_artifacts'] == {}
+    record = trainer.step()
+    assert record['updated_soft_states'] == [key] and trainer.state['soft_states'][key] != records[key]['state']

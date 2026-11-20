@@ -6,7 +6,7 @@
 
 ``--grpo``: the GRPO collector's own selection (``grpo.Collector._pick``: ``--explore`` of groups from the unmeasured-task
 walk ``grpo.ExploreWalk``, the rest cycling tasks in the pass band, each task's latest group replacing its rate) over the
-GRPO pool minus the held closure (``grpo.load_tasks``; ``--cases`` replaces ``grpo.POOLS``), with the latent outcome model,
+GRPO pool minus the held closure (``grpo.load_tasks``; ``--cases`` replaces the registry role grpo-pool), with the latent outcome model,
 once with the construct weighting off (wrapper share 1, held weight 1) and once with grpo's defaults; it reports the
 held constructs' shares among explored and among all groups.
 
@@ -192,11 +192,11 @@ def grpo_report(args):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'neuralese_data'))
     import grpo
     tasks, excluded = grpo.load_tasks(SimpleNamespace(
-        pool=args.cases or grpo.POOLS, held_manifest=grpo.HELD, exclude_manifest=[], task_ids=None,
+        pool=args.cases or grpo.default_pools(), held_manifest=grpo.default_held(), exclude_manifest=[], task_ids=None,
         exclude_family_regex=args.exclude_family_regex, exclude_ids=[], no_default_errata=False, seed=args.seed,
         explore_order=args.explore_order))
     pool = grpo.ExploreWalk(tasks, args.wrapper_share, args.held_weight)
-    report = {'schema': 'natlang.grpo-selection-simulation/1', 'pools': args.cases or grpo.POOLS, 'eligible': len(tasks),
+    report = {'schema': 'natlang.grpo-selection-simulation/1', 'pools': args.cases or grpo.default_pools(), 'eligible': len(tasks),
               'held_excluded': excluded, 'explore_order': args.explore_order, 'explore': args.explore, 'groups': args.groups,
               'pool': pool.pool_report(), 'outcomes': 'latent (OutcomeModel)'}
     for name, share, weight in (('before', 1., 1.), ('after', args.wrapper_share, args.held_weight)):

@@ -4893,3 +4893,282 @@ beside grpo-v5-run1: 3.6-6.6 GB free); the first TM step's `cuda_peak_gb` and `p
 check. Per-source temperature (paper D.5) not built.
 
 **Enters:** the next exp0_sft run on a pin >= 98c6eecdd.
+
+## 2026-11-20 16:15, CSPD: composable per-skill soft prompts for program tuning and Neuralese operators (paper review, part c)
+
+**What the paper shows** (Zhang et al., "Composable Soft-Prompt Distillation of RL Experts", UCSB/Apple, alphaXiv
+2611; read in full). Each RL expert is distilled into its own 256-vector input-embedding prompt on the frozen pre-RL
+model, by length-normalized NLL on the expert's verifier-passing responses (sequence-level KD), prompts in FP32, Muon
+lr cosine 0.03 -> 0.003, 200 updates, batch 64, clip 1 (AdamW cosine 0.01 -> 0.001 a little worse), init from sampled
+vocabulary embeddings.
+- One prompt recovers >= 90% of the expert's gain in 22 of 23 math/code/agent settings, >= teacher in 15. 32 vectors
+  already reach 90.0% (256: 93.1%). Training on 69%-correct responses still recovers 90.5% (correct only: 96.1%).
+- Four independently trained prompts (math, code, science, IF on Qwen3-4B M2RL-SFT), concatenated in the system message
+  with no joint training: 50.41 -> 67.83, matching MOPD (67.79) and above the oracle-routed experts (66.61). The mean
+  rises with each added expert (61.0, 61.7, 63.7, 67.8). Out of domain: 56.6 vs MOPD 53.5 vs student 50.3.
+- Independent beats progressive training (each prompt trained behind the earlier ones): 67.83 vs 65.17.
+- Prefix-robust training (half the examples, chosen by content hash, get a 128-256-token prefix from other examples'
+  prompt tokens of the same domain before the prompt, no loss, absent at inference): +2.1 points on the composition with
+  AdamW (64.50 -> 66.60), mainly GPQA/AIME/LCB. Muon adds +1.1.
+- Serving: within 1.5% of the bare backbone's throughput in SGLang; 2.40x rank-4 LoRA at 32 requests with distinct
+  adapters. The prompt acts mostly through response tokens attending to it (80% of the gain kept when only they may).
+  A written "verify your work" instruction closes 2.1% of the KL gap, the soft prompt 86.8%.
+- Limits: one backbone, four domains, one seed; hyperparameters screened on an evaluation benchmark.
+
+**Inventory (what implements this here; `tune/` is the one mechanism).**
+- Soft instruction and skill states exist (`tune/soft.py`, plan section 3.3): per binding, its instruction text and
+  each disclosed skill document become native KV/hybrid state spans, text-initialized in a real training call
+  (`initialize_soft_states`, `engine.native_init_body`), trained by the shared state optimizer
+  (`native_state_derivation.optimize_state`, Adam 1e-3, warmup-cosine to 10%) jointly with the program's adapter nodes,
+  placed where the text stood (`place_states`).
+- Data: only verified rows (`tune/rows.py` `verify_action_evidence`, `evidence_weight`: oracle-confirmed root 1.0,
+  successful enclosing program 0.5; rejected/unverified actions refused) and the `rft` objective's quality-1 episodes.
+- Loss: per-row token-normalized NLL (`train/native_graph_loss.py:235`, denominator = the row's target weights), the
+  same form as CSPD's Eq. 1.
+- Composition: several states in one request, each at its own position (instructions + skills). That is
+  concatenation in our layout.
+- Serving: every engine imports native-state store files (ENGINE_PARITY "Native state"), per request in one batch on
+  the fork, the Python engine and SGLang (`natlang_import` per request). ts-host places release `softStates`
+  (`tuned-serving.ts:97`, `browser/tuned-release.ts:49`). Stale gate: `natlang tune` trained soft states on the managed
+  backend only with `tune.softStates: true` (`tune/pipeline.ts:243`), from when the fork build was a manual step.
+  The pinned managed runtime has been the fork with `--native-state` since natlang-b12081.
+- Learned Neuralese operators (OPERATORS_RESTORE_20261117.md) and the GRPO/SFT learners: not the soft-prompt
+  mechanism. Operators are learned producers of input-specific state, not fixed per-skill prompts; their composition
+  is the graph, so CSPD's recipe does not apply (`rl/native_replay` trains operators through the real graph).
+- LoRA mixtures / program tuning nodes: weight-space; CSPD's finding (input-space composition >= LoRA merging, 67.83 vs
+  65.50 TA / 66.19 TIES, on the same data) argues for putting composable per-skill behaviour in soft states rather
+  than more LoRA mixing. Nothing to change in the LoRA path itself.
+
+**What I built (7b9294acd; defaults with opt-outs, targeted tests).**
+- **Prefix-robust soft-state training, default on** (`tune/rows.py` `lower_rows`/`prefix_for`, `tune/soft.py`
+  `soft_items_to_node(prefix=)`; recipe `soft_prefix_share` 0.5, `soft_prefix_tokens` [128, 256]; 0 opts out). On a
+  content-hash-selected half of the rows that import soft states, 128-256 tokens drawn from other rows' prompt leads
+  of the same component (rendered text before any Neuralese marker, chat-template symbols included) sit right before
+  the first imported state at weight 0. The graph's source records the prefix's length and digest. A fit resuming its
+  own state from before the setting keeps it off (`resolve_soft_prefix_share`), and the recipe hash is unchanged at
+  share 0, so in-flight fits resume as bound.
+- **Soft states alone on the frozen backbone:** with every `ranks` level 0 a fit now creates no adapter node and
+  trains its soft states only (`trainer._initial_state` no longer takes max() over no nodes). This is CSPD's form.
+- **`natlang tune` trains and ships soft states on the managed llama.cpp backend by default** (`tune.softStates:
+  false` opts out); serving still checks the executable for `--native-state` and runs bindings degraded without it.
+- Docs: docs/TUNING.md (backend table, soft-state composition and prefix-robust note), docs/ENGINE_PARITY.md (soft
+  states: every engine serves them, no gap).
+- Tests: `test_prefix_robust_rows_put_other_rows_context_before_the_first_state`,
+  `test_soft_prefix_share_defaults_on_for_new_fits_and_stays_off_for_resumed_ones`,
+  `test_soft_states_alone_on_the_frozen_backbone_with_every_rank_zero`; ts-host tune-pipeline soft-state default.
+  `test_tune_soft_states`, `test_tune_rows`, `test_tune_trainer`, `test_tune_rl` (32 passed) and the ts-host tune and
+  serving tests (22 passed) ran through the ledger; check-main --quick exit 0.
+
+**Kept different from CSPD, and why.**
+- Initialization from text in the real rendered call, not sampled vocabulary embeddings. Our states replace a text
+  that exists, so text-init starts at exactly the current behaviour (the zero-residual identity). CSPD distils an
+  expert that has no text form, and its own analysis shows most vectors keep their init token as nearest word, so
+  init carries little.
+- Optimizer: Adam 1e-3 on activation-valued KV/hybrid state, not Muon 0.03 on input embeddings. The scales differ
+  (KV values vs embedding rows) and the state optimizer has no Muon; the warmup-cosine shape matches.
+- Joint training with the binding's adapter nodes stays the default. Our states are per binding, so the composition
+  a fit trains is the one its release serves, not a new combination; CSPD's independence result is about combinations
+  unseen in training. Soft-only fits (ranks 0) give the independent form where wanted.
+
+**Left.**
+- Skill states are keyed per binding (`soft_key(binding, 'skill', target)`), so a skill disclosed by several programs
+  is learned once per binding. A cross-program skill library (one state per skill document, trained independently on
+  every binding's verified rows, composed across programs) is CSPD's continual-learning shape. It needs a key and
+  release change in tune/soft.py and ts-host `tuned-serving.ts`. Not built: no program fit currently shares skill
+  documents across bindings (to be checked once the program-tuning revival has fits).
+- No held measurement of prefix-robust training (first principles: a cheap regularizer toward the condition serving
+  actually has; the next program fit's development outcomes show any regression).
+
+## 2026-11-20 18:30, training-data registry: producers record what they write, runs what they read; pools are registry roles (data-registry strand; default)
+
+Owner (2026-11-20): discoverability problems found by the ops catalog become "a system where we don't have to keep track
+of things by hand and it's centralized and we don't lose track of training data and tasks". The 23 findings are in
+`plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md` (130 datasets, 42 unregistered; pools only in `grpo.py POOLS`).
+
+**Design: the corpus registry, extended, in two layers with one id namespace** (`natlang_neuralese/common/data_registry.py`,
+CLI `scripts/data_registry.py`).
+- *Git layer* = `training/neuralese_corpora.json` + immutable `training/corpus-manifests/` (unchanged schema; new optional
+  fields `kind, format, rows, license, producer, inputs, protected, roles, snapshots`). It is pinned with the code, so
+  what a pinned run *selects* comes from here: `roles` replace the hand lists (`grpo-pool` with an order, `grpo-memetic-tasks`,
+  `grpo-sd-teacher`, `held-eval`). Paths may now be root-qualified (`data_hdd:...`, `data_nvme:...`, resolved by
+  `common.paths`), so no `runs/` symlink is needed; `sync_training_corpora.py` resolves them and skips `snapshots: journal`
+  entries (growing sources).
+- *Journal layer* = append-only `<data_nvme>/data-registry/journal.jsonl` (+ content-addressed manifests, a stat-keyed
+  digest cache), machine-wide and checkout-independent. Why not git for everything: pins may not commit, rollout
+  archives and step chains add a file per group/step (a hot path), teacher campaigns and SFT WORKs grow in place (an
+  immutable git manifest per id cannot follow them), and `register_corpora` runs check-main per commit. Producers append
+  `dataset` snapshots (manifest sha, files, rows, format, producer script/argv/commit/dirty, inputs with their shas,
+  license, protected, supersedes) and `files` records; consumers append `consume` records (run, dataset, sha of what was
+  read, how, amount). `promote ID [--role R]` folds a closed journal snapshot into the git layer through
+  `register_corpora` (unattended commit).
+- *The check*: `consume()` and `require_registered()` refuse a path no dataset holds, and a path only an archive
+  *inventory* holds, with `NATLANG_ALLOW_UNREGISTERED_DATA=1` as the opt-out (recorded in the consume record). Static
+  ratchet in check-main --quick (`tests/test_data_registry_ratchet.py`): registry well-formed, roles complete and
+  ordered (kind and license required), held role protected, every listed producer calls `record_*`, every consumer
+  calls `consume`, trainers name no dataset paths. `scripts/data_registry.py check` scans the data roots.
+
+**Migrated (default on).**
+- grpo.py: `POOLS/MEMETIC_TASKS/SD_TEACHER_SOURCES/HELD` removed; `default_pools()` etc. resolve the roles (verified
+  equal, element for element and in order, to the removed lists: 18 pools incl. git-history). At every start/resume it
+  consumes pools, held/exclude manifests, errata, pass rates, memetic tasks, variants, hindsight, SD sources, replay
+  corpora, probes; declares its rollout archive and step chains and records each archived group and saved step.
+- teacher_gen (consumes its pool.json pools and selection inputs; the campaign is a growing dataset, each scored task
+  adds its episode files), sft_sources (extract/replay snapshot the WORK, build/neuralese-text/-graph check inputs and
+  record the built set with inputs), exp0_sft train (consumes --chains/--val-chains), held_eval (each finished result is
+  a protected `held-eval` dataset), memetic_tasks build, hindsight index, operator_rows build/merge, admit_authored,
+  assemble.py (+ its held splits, protected), assemble_selection_pool, neuralese_variants build. Callers of the removed
+  constants (program_tune, simulate_selection, exp1_measure_cases, neuralese_variants, memetic_tasks, teacher_gen,
+  hindsight, sft_sources held default) use the roles.
+- Task supply: `natlang-rl-authoring/round10/build_supply.py` (the one pool producer outside git, finding 10) moved to
+  `scripts/rl_tasks/build_supply.py` and records its source; the old path is a shim; `round18/final_checks.sh` and two
+  round9 helpers use `grpo.default_pools()`. A round is admitted with `scripts/data_registry.py promote ID --role grpo-pool`.
+- Ops page catalog: reads the merged registry (cards for every registered dataset with a kind; provenance = producer,
+  commit, inputs, license, manifest sha; consumers = consume records plus derived datasets). `catalog_sources.json`
+  (the hand layer) deleted. The UI text change in `app/ui/data.mjs` needs the next page publish.
+- Fixed on the way: `neuralese_variants.py build` crashed (`grpo.errata_files` needs `exclude_ids`).
+
+**Backfill.** Git layer: roles on the 16 registered pools, new entries `memetic-program-source-20261105`,
+`natlang-rl-bgkit-kr-20261103` (the two largest pools, finding 1), `memetic-tasks-20261118`, the three SD sources,
+`held-v3`, `held-v2` (protected). Journal: every other dataset of the catalog with full digests (task sources, teacher
+campaigns, SFT WORKs and sets, operator rows/chains, live corpus, hindsight, errata, edits, pass rates, probes, rollout
+archives, step chains, held evals, external sources, compaction/broad-graph corpora, full67), and every other directory
+of /mnt/external, /home/werg/data and ops/ as an archive inventory (per-directory counts and bytes). Run by
+`journal_backfill.py` (ledger, low priority).
+
+**Enters grpo-v5-run1 at its next resume on a new pin** (same pools as main's POOLS had; the run reads them through
+the registry and records its reads). Its inputs are all registered (the readers-copy of
+`sft-neuralese-graph-20261117-v1` that its `--replay-corpus` names is its own entry).
+
+**Not built / left:** exclusions and corrections as one registry layer read by every builder (findings 21, 22: the ops
+page's `data-edits` layer is registered, `sft_sources build` still reads no row exclusions); per-step learner exposure
+(finding 16: step chains are recorded, but kept 4 deep); the round tooling besides build_supply still lives in
+natlang-rl-authoring (held_verify.sh, custody_check.py; finding 11's union_groups_fast.py import); sft_sources'
+default `--teacher-pool` and the exp1-rft pass-rates default are still paths (registered datasets, not roles); Pop
+writes its own journal (held evals there are recorded on Pop, not merged into the DGX view).
+
+## 2026-11-20 16:30, reasoning RL without the future agreement bias: token-level forward KL from the privileged twin (default; paper review, part a)
+
+**What the paper shows** (Strauss, Fowl & Razin, "Which Tokens, in What Order, and How Fast?", arXiv 2611.23397, read
+in full).
+- **Granularity.** Sequence-level OPD (REINFORCE on log pi/pi_T summed over the sequence) has a *future agreement
+  bias*. Lemma 1 / Prop. 1: its logit gradient equals token-level reverse KL toward a teacher tilted by
+  exp(-KL of the continuations after v). It therefore favours tokens after which student and teacher agree on the rest,
+  whatever the teacher thinks of the token itself, and it learns positions in reverse order.
+  - Theorem 1 (binary tree): one sequence-level step puts ~all mass on a teacher-improbable first token, and recovery
+    takes exp(Omega(L^2)) steps; token-level FKL/RKL/JS never lower the right token and solve it in O(L ln L).
+  - Qwen3-1.7B <- 8B on WildJailbreak: sequence-level OPD refuses nearly all benign requests (teacher 17.5%); token-level
+    objectives move both refusal rates toward the teacher. With thinking on, the student refuses after a think block
+    that concluded the request is safe, because the bias acts once the block closes.
+  - It explains "repetitive or overly short generations": ending early leaves nothing to disagree on.
+  - It can help (App. A): when a short, formulaic path is also correct (a calculator call: 7.2% for the teacher,
+    ~100% for the student, accuracy above the teacher). That gain is early-stopping-dependent, since the objective's
+    optimum is still the teacher.
+- **Divergence.** Prop. 2: token-level FKL's logit-gradient norm is 2 x TV (zero only at agreement). RKL and JS can have
+  vanishing gradients at TV close to 1, because each logit's gradient is weighted by the student's own probability.
+  - Theorem 2: FKL (and FKL + RKL mixed equally, unlike JS) raises a teacher-preferred, student-unlikely token in
+    O(ln 1/p0); RKL and JS need polynomially many steps.
+  - New APIs (Qwen2.5-1.5B <- 8B): RKL and JS fail to transfer what FKL and the mix transfer.
+  - MATH, already-competent student: RKL >= FKL, and the RKL advantage grows with the teacher-student capacity gap.
+  - Sequence-level OPD shares RKL's flatness (App. B).
+  - The paper used full-vocabulary divergences; a sampled-token RKL estimate gave similar results.
+
+**Our case.** Reasoning RL rewarded a sampled think block z by log pi(a_teacher | x, z) (plus later actions): a
+sequence-level reward on z. Hazard investigation 3 (12:00 above) found its push: "samples that go on past a decision
+point score lower on the teacher action's likelihood, so the term's own objective selects closing right after naming
+the action" (+4.7 +- 2.3 at weight 0.5; positive at every step measured). That is the future agreement bias exactly:
+once `</think>` follows the action's name, nothing is left to disagree on. Best-return selection (the carried `search`
+SD chains, `rewrite`'s accept-if-better) is the same selection, by rejection rather than by gradient.
+
+**Built (9744865da; default, `--reasoning-rl-objective sequence` opts out).**
+- **Objective `twin-fkl`.** At every position of each sampled think block, KL(twin(. | x', z<t) || policy(. | x, z<t)),
+  scaled by `--reasoning-rl-weight` (0.5 in grpo-v5-run1's flags).
+  - The twin is the policy itself with the teacher action in a training guidance turn. That turn is inserted after the
+    leading system turn, as `PrivilegedRendering` places one, with the header
+    "Verified reference for this call (training only):" (ts-host `GUIDANCE_TEXT_HEADER`). This is OPSD, the self-teacher
+    of the paper's code base. It is myopic: no term depends on what follows the token.
+  - FKL is the paper's well-behaved divergence, and the twin knows something the student does not (the action), the
+    "new knowledge" regime of Thm. 2. There is no capacity gap that would favour RKL.
+- **Actor side** (`ReasoningRL._twin`, `twin_distributions`).
+  - The twin prompt is prefilled once, then each sample is one SGLang input-logprob request: top-32 plus
+    `token_ids_logprob [</think>]`, so the close is always matched exactly.
+  - Requests run at temperature 0 with no nucleus: these are untruncated T=1 log-probabilities, as the r0 scores
+    already are.
+- **Learner side** (`twin_forward_kl`).
+  - The KL is exact on the partition {listed ids, rest}. The rest is one bucket: not renormalized (a renormalized
+    top-k teacher would sharpen the student) and not dropped.
+  - The student's log p(v) = z_v - z_y + log p(y) comes from the target's logit and the log-probability the loss
+    already computes (the `close_probability` trick). That is 33 dot products a row, chunk-checkpointed; no vocabulary
+    softmax and no n x V logits.
+  - The policy-gradient advantage on these rows is 0. The k2 KL to the reference and the teacher action's
+    cross-entropy (0.05) are unchanged.
+- **Walk.** One wave (`--reasoning-rl-wave` 2) per step, and every sample trains, including blocks cut by the cap (each
+  position is an on-policy prefix). The best return is still carried forward as history (context only).
+  - `--reasoning-rl-carry-sd` and `--reasoning-rl-rewrite-share` now default by objective: off and 0 under `twin-fkl`,
+    on and 0.3 under `sequence`. Both stay available explicitly.
+- **Telemetry.**
+  - `close_push.reasoning_rl_twin`: sum scale x (p_twin(close) - p_policy(close)) over the trained positions, the FKL's
+    exact first-order push on the close logit.
+  - `reasoning_rl.twin_fkl_mean`, `twin_tokens`, `twin_p_close_twin` / `twin_p_close_policy`, `twin_close_mean`,
+    `twin_missing`.
+  - The run's log line records `rewrite_share_effective` and `carry_sd_effective`.
+- **Live check** against grpo-v5-run1's actor (one 25-token block on a toy read-file prompt; scratchpad
+  `twin_smoke.py`).
+  - The parse is exact and the top-32 mass is >= 0.995 at every position.
+  - 8.6 s for one request under collection load, about 1.2 kB of JSON per token.
+  - Where the policy put p(`</think>`) 0.32 (after "...read the file first."), the twin put 0.08. The twin did not
+    want to close early there. This is one example, not a measurement.
+
+**JOLT+ twin (5bcd77466; jolt-plus/1 `student_kl`, default `forward`, `reverse` opts out).** The whole-graph learner's
+student OPSD term was the reverse KL KL(pi(.|s) || sg pi(.|s,c)). It is already token-level, but the divergence axis
+applies: the twin's value is what only the privileged context knows, which is exactly what RKL is slow to transfer.
+- Token terms (`jolt_terms`) and sampled-decision twins (`decision_policy_terms`) now use the forward KL for students.
+- Teacher attempts keep KL(pi(.|s,c) || sg pi(.|s)): it keeps guidance within the student's reach, mode-seeking by
+  design.
+- Test `test_student_twin_kl_is_forward_by_default_with_a_reverse_opt_out`; the reference gradient test follows the
+  declared direction. JOLT+ is off in grpo (`grpo.py` docstring line 9: "no privileged twin"), so this enters wherever
+  program tuning or native replay turns JOLT+ on.
+
+**Inventory (the mechanism: a reward or selection on a sampled block that depends on the block's future).**
+- `grpo.py` reasoning RL walk, rewrite and carried chains: changed (above).
+- GRPO's outcome term: sequence-level by nature, but it is the task objective itself, not a teacher-matching proxy.
+  There is no teacher whose per-token law it approximates, so the paper's comparison does not apply (`rollout_math`
+  group advantages).
+- JOLT+ whole-graph student twin (`rl/jolt.py`, `rl/decision_policy.py`, `rl/native_replay.py`): already token-level;
+  divergence changed (above).
+- `TeacherDemos` SD rows and replay corpora: cross-entropy on fixed teacher tokens (token-level, off-policy); no
+  sampled-block reward.
+- SD `own` successes: outcome-selected own episodes. That is reward-weighted regression on the true objective, as GRPO
+  is.
+- Program tuning (`tune/objective.py`): verified-success NLL plus native RL replay; its twin path is the JOLT+ change
+  above.
+- exp0_sft: no sampler (fixed chains). Held eval and probes do not train.
+
+**Tests** (ledger, CPU):
+- `test_grpo_reasoning_rl.py` (+7):
+  - the FKL equals the exact full-vocabulary KL with gradient p_S - p_T;
+  - the top-k form equals the coarse partition KL, vanishes at agreement and is never above the full KL;
+  - pads count for nothing;
+  - the close is always listed;
+  - twin turn placement;
+  - a twin-mode walk (one wave, every sample with twin arrays, unclosed samples trained, no carried chain, advantage 0,
+    weight carried);
+  - objective defaults and row alignment.
+- With `test_grpo_learner.py`: 69 passed. `test_rl_jolt.py` + `test_native_policy_prefix_sharing.py`: 35 passed.
+- `check-main --quick` passed for both commits.
+
+**Not checked.**
+- A learner step with twin rows on the GPU: the first resumed step's `reasoning_rl.twin_*` and `cuda_peak_by_phase_gb`
+  are that check. The extra memory is (n x 33) per chunk, negligible next to the policy pass.
+- The actor's added load: one extra prefill of the twin prompt per step (the history re-prefills after the inserted
+  turn) and one scored forward per sample. Watch `reasoning_rl.worker` `actor_s` and collection groups/h at the resume.
+
+**Expected, and the rule (declared before it runs).**
+- `close_push.reasoning_rl_twin` is around zero or negative where the hazard sat (the twin has no reason to stop after
+  naming the action). `close_push.reasoning_rl` drops to ~0 (no PG term on reasoning).
+- The probe hazard stops its reasoning-RL-driven rise.
+- If `close_push.reasoning_rl_twin` is positive for 3 consecutive steps while the probe hazard rises, the reasoning-RL
+  weight drops to 0.25 at the next resume. A held loss with the hazard sends the term to 0 (the sft-v5 rule, applied
+  to the new term).
+
+**Enters:** grpo-v5-run1's next resume on a pin >= 9744865da (with the resume list of the 17:00 review entry). The
+held scoring series is unchanged: this is training data and objective only.
