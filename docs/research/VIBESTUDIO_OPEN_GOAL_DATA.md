@@ -275,9 +275,11 @@ The deployment run used the installed regular server package at version
 and suite cases. All nine recovery references passed against the managed
 PubSub and scratch services, including a stale cursor, a concurrent message,
 and incomplete replay. All eight publishing cases passed against the managed
-website renderer, package builder, and local journal. The archive verifies
-86 of the initial 91 goals. The public-research checks require a working
-search provider. The managed test reached the default DuckDuckGo provider,
+website renderer, package builder, and local journal. The managed PDF
+checks verified the missing-page hold, and two compound references passed
+in the original Spectrolite renderer. The two-case Gmail recheck verified
+retained draft identity and ambiguity handling. The public-research checks
+require a working search provider. The managed test reached the default DuckDuckGo provider,
 which rejected its automated searches. Configure Tavily, Brave, or Exa in
 the managed workspace before running the public-research references.
 
