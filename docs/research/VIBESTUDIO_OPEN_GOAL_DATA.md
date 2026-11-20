@@ -72,6 +72,9 @@ The current importer accepted all five archived seed-v3 assignment captures,
 retaining 124 supervised calls under their original task identities. A build
 that uses all five episodes needs at least 20 distinct verified open goals
 and at least four times the selected non-open weighted target mass.
+The mixed smoke imported all six trajectories and rejected publication at
+16.7% distinct open goals and 10.4% weighted open targets. The five archived
+episodes remain registered as `vibestudio-live-workflow-seed-20261118-v3`.
 
 The minimum applies both to distinct admitted goals divided by all
 training trajectories and to the weighted target tokens from their
@@ -433,11 +436,13 @@ coedit. All five independent checks passed. The capture is registered as
 `vibestudio-open-goal-luna-smoke-reconcile-20261120-cqppvh`.
 The native trajectory IR yielded nine learner chains, 1,735 target tokens,
 and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
-open-goal shares were 100% for this one-goal smoke. Its Tick unit peaked at
+open-goal shares were 100% for this one-goal smoke. The learner's CPU input
+loader packed all nine chains and reproduced the weighted target count.
+The longest chain was 25,875 tokens under its 32,000-token limit. The Tick unit peaked at
 7.3 GiB over 3 minutes 10 seconds. No campaign or training was launched.
 
-The 462-goal staged catalog preserves all 343 released rows exactly. It
-includes 104 held-out goals. Its new lanes cover terminal discovery and
+The [462-goal release](vibestudio-open-goal-pop-pins-462.tsv) preserves all
+343 previous rows exactly. It includes 104 held-out goals. Its new lanes cover terminal discovery and
 recovery, reconciliation against local and incoming revisions, retained
 scratch evidence, Spectrolite knowledge and renderer recovery, native unit
 rollout, and Google onboarding. All 14 Google onboarding references passed
@@ -447,6 +452,21 @@ covers 334 distinct goals including 70 held-out goals, with further managed
 verification pending.
 Google's evidence is registered as
 `vibestudio-open-goal-google-setup-reference-14-20261120`.
+
+The staged catalog also covers capability and skill provenance, durable task
+recovery, client diagnostics, GitHub readiness, workspace assembly, and
+scheduled automation recovery. Its 594 goals include 136 held-out cases.
+Their texts are distinct after normalizing quoted literals and numbers. All
+842 legacy assignment entries remain byte-identical. The 551-goal checkpoint
+has zero training ID or source-group overlaps with the digest-checked held-v2
+and held-v3 cases.
+
+Thirteen selected model-free checks passed across Examples, Personal,
+Spectrolite, and System. Both previously failing visual recovery checks passed
+after the runtime delivered committed state updates to headless panels and
+the test granted reload authority for the authorized renderer. The combined
+audit covers 384 goals, including 85 held-out goals. The research and
+research-to-edit families still lack verified held cases.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
@@ -459,3 +479,6 @@ Pop also reproduced that catalog from the live smoke pins in
 `/home/werg/vibestudio-worktrees/open-goal-live-luna-343.WsHCyK`. The
 Natlang CLI reported Codex sign-in on Pop. Its host was occupied by a
 separate model-serving job at the time of staging.
+The 462-goal release also reproduced byte for byte on Pop under
+`/home/werg/vibestudio-worktrees/open-goal-release-462.9AiHlQ`. Its catalog
+SHA-256 is `5811f79d83aea9db793c1e6825735b98a9ef5447a60fe2434a7b2d8c2464470f`.
