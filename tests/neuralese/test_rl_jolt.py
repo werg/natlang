@@ -124,7 +124,8 @@ def test_packed_twin_rows_equal_shared_teacher_scores(family, mode):
 
 
 def literal_reference(model, hidden, row, declaration):
-    """Direct float64 transcription of loss_t = -A U_t + beta KL(p || sg p~) (no twin: KL 0)."""
+    """Direct float64 transcription of loss_t = -A U_t + beta KL (no twin: KL 0); a student's KL in the declared
+    ``student_kl`` direction (forward: KL(sg p~ || p), the default; reverse: KL(p || sg p~)), a teacher's reverse."""
     from natlang_neuralese.rl.native_replay import behavior_top_k_tensors
     from test_rl_score_centering import literal_surrogate
     actions = row['actions']
@@ -134,7 +135,10 @@ def literal_reference(model, hidden, row, declaration):
     twin_queries = torch.tensor([a.get('twin_query', a['query']) for a in actions])
     log_p = torch.log_softmax(model.logits(hidden[queries]).double() / TEMPERATURE, -1)
     log_q = torch.log_softmax(model.logits(hidden[twin_queries]).double() / TEMPERATURE, -1).detach()
-    kl = (log_p.exp() * (log_p - log_q)).sum(1)
+    if role == 'student' and declaration.get('student_kl', 'reverse') == 'forward':
+        kl = (log_q.exp() * (log_q - log_p)).sum(1)
+    else:
+        kl = (log_p.exp() * (log_p - log_q)).sum(1)
     labels = torch.tensor([a['token_id'] for a in actions])
     behavior = torch.tensor([a['behavior_logp'] for a in actions])
     ids, logq, tail = behavior_top_k_tensors(actions, K, 'cpu')
@@ -559,3 +563,29 @@ def test_zero_student_coefficient_builds_no_student_twin():
         assert row['jolt']['privileged'] is None and 'beta_s is 0' in row['jolt']['refusal']
         assert {n['name'] for n in graph['nodes']} == set(row['episode_turns'])
         assert all('twin_query' not in action for action in row['actions'])
+
+
+def test_student_twin_kl_is_forward_by_default_with_a_reverse_opt_out():
+    """jolt-plus/1 ``student_kl`` (2026-11-20, arXiv 2611.23397): the forward KL's logit gradient is p - p~, which
+    vanishes only where the student matches its twin; the reverse KL's is weighted by p and stays small on tokens the
+    student finds unlikely however far apart the two are."""
+    from natlang_neuralese.rl.jolt import DEFAULT_JOLT, forward_kl, jolt_declaration, reverse_kl
+    assert DEFAULT_JOLT['student_kl'] == 'forward'
+    assert jolt_declaration({'schema': 'jolt-plus/1'})['student_kl'] == 'forward'
+    assert jolt_declaration({'schema': 'jolt-plus/1', 'student_kl': 'reverse'})['student_kl'] == 'reverse'
+    with pytest.raises(ValueError):
+        jolt_declaration({'schema': 'jolt-plus/1', 'student_kl': 'jsd'})
+    logits = torch.tensor([[4.0, 0.0, -8.0, float('-inf')], [0.5, 0.2, 0.1, float('-inf')]], requires_grad=True)
+    twin = torch.tensor([[0.0, 0.0, 3.0, float('-inf')], [0.5, 0.2, 0.1, float('-inf')]])
+    kl = forward_kl(logits, twin)
+    p, q = torch.softmax(logits.detach().double(), -1), torch.softmax(twin.double(), -1)
+    ref = torch.where(q > 0, q * (q.log() - p.log()), torch.zeros_like(q)).sum(-1)
+    torch.testing.assert_close(kl.double(), ref, rtol=1e-5, atol=1e-6)
+    kl.sum().backward()
+    torch.testing.assert_close(logits.grad.double(), (p - q), rtol=1e-5, atol=1e-6)
+    assert logits.grad[1].abs().max() < 1e-6 and logits.grad[0, 3] == 0      # agreement and masked tokens
+    # the token the twin wants (id 2, student p ~ 5e-6): forward pushes it with ~ -p~ (about -0.9); reverse barely
+    forward_push = logits.grad[0, 2].item()
+    logits.grad = None
+    reverse_kl(logits, twin).sum().backward()
+    assert forward_push < -0.8 and abs(logits.grad[0, 2].item()) < 1e-3

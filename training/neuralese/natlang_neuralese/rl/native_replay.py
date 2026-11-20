@@ -1347,7 +1347,7 @@ class NativePolicyObjective:
                     mode=self.spec['mode'], policy_loss=self.policy_loss,
                     chunk_tokens=self.spec.get('chunk_tokens', 128),
                     twin=[remap(action['twin_options']) if action.get('twin_options') is not None else None
-                          for action in decisions], beta=beta)
+                          for action in decisions], beta=beta, student=info.get('role', 'student') == 'student')
                 terms = torch.cat([terms, decided]) if len(actions) else decided
                 decision_count += len(decisions)
                 if len(jolt_parts) > parts_before:
