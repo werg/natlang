@@ -4893,3 +4893,88 @@ beside grpo-v5-run1: 3.6-6.6 GB free); the first TM step's `cuda_peak_gb` and `p
 check. Per-source temperature (paper D.5) not built.
 
 **Enters:** the next exp0_sft run on a pin >= 98c6eecdd.
+
+## 2026-11-20 16:15, CSPD: composable per-skill soft prompts for program tuning and Neuralese operators (paper review, part c)
+
+**What the paper shows** (Zhang et al., "Composable Soft-Prompt Distillation of RL Experts", UCSB/Apple, alphaXiv
+2611; read in full). Each RL expert is distilled into its own 256-vector input-embedding prompt on the frozen pre-RL
+model, by length-normalized NLL on the expert's verifier-passing responses (sequence-level KD), prompts in FP32, Muon
+lr cosine 0.03 -> 0.003, 200 updates, batch 64, clip 1 (AdamW cosine 0.01 -> 0.001 a little worse), init from sampled
+vocabulary embeddings.
+- One prompt recovers >= 90% of the expert's gain in 22 of 23 math/code/agent settings, >= teacher in 15. 32 vectors
+  already reach 90.0% (256: 93.1%). Training on 69%-correct responses still recovers 90.5% (correct only: 96.1%).
+- Four independently trained prompts (math, code, science, IF on Qwen3-4B M2RL-SFT), concatenated in the system message
+  with no joint training: 50.41 -> 67.83, matching MOPD (67.79) and above the oracle-routed experts (66.61). The mean
+  rises with each added expert (61.0, 61.7, 63.7, 67.8). Out of domain: 56.6 vs MOPD 53.5 vs student 50.3.
+- Independent beats progressive training (each prompt trained behind the earlier ones): 67.83 vs 65.17.
+- Prefix-robust training (half the examples, chosen by content hash, get a 128-256-token prefix from other examples'
+  prompt tokens of the same domain before the prompt, no loss, absent at inference): +2.1 points on the composition with
+  AdamW (64.50 -> 66.60), mainly GPQA/AIME/LCB. Muon adds +1.1.
+- Serving: within 1.5% of the bare backbone's throughput in SGLang; 2.40x rank-4 LoRA at 32 requests with distinct
+  adapters. The prompt acts mostly through response tokens attending to it (80% of the gain kept when only they may).
+  A written "verify your work" instruction closes 2.1% of the KL gap, the soft prompt 86.8%.
+- Limits: one backbone, four domains, one seed; hyperparameters screened on an evaluation benchmark.
+
+**Inventory (what implements this here; `tune/` is the one mechanism).**
+- Soft instruction and skill states exist (`tune/soft.py`, plan section 3.3): per binding, its instruction text and
+  each disclosed skill document become native KV/hybrid state spans, text-initialized in a real training call
+  (`initialize_soft_states`, `engine.native_init_body`), trained by the shared state optimizer
+  (`native_state_derivation.optimize_state`, Adam 1e-3, warmup-cosine to 10%) jointly with the program's adapter nodes,
+  placed where the text stood (`place_states`).
+- Data: only verified rows (`tune/rows.py` `verify_action_evidence`, `evidence_weight`: oracle-confirmed root 1.0,
+  successful enclosing program 0.5; rejected/unverified actions refused) and the `rft` objective's quality-1 episodes.
+- Loss: per-row token-normalized NLL (`train/native_graph_loss.py:235`, denominator = the row's target weights), the
+  same form as CSPD's Eq. 1.
+- Composition: several states in one request, each at its own position (instructions + skills). That is
+  concatenation in our layout.
+- Serving: every engine imports native-state store files (ENGINE_PARITY "Native state"), per request in one batch on
+  the fork, the Python engine and SGLang (`natlang_import` per request). ts-host places release `softStates`
+  (`tuned-serving.ts:97`, `browser/tuned-release.ts:49`). Stale gate: `natlang tune` trained soft states on the managed
+  backend only with `tune.softStates: true` (`tune/pipeline.ts:243`), from when the fork build was a manual step.
+  The pinned managed runtime has been the fork with `--native-state` since natlang-b12081.
+- Learned Neuralese operators (OPERATORS_RESTORE_20261117.md) and the GRPO/SFT learners: not the soft-prompt
+  mechanism. Operators are learned producers of input-specific state, not fixed per-skill prompts; their composition
+  is the graph, so CSPD's recipe does not apply (`rl/native_replay` trains operators through the real graph).
+- LoRA mixtures / program tuning nodes: weight-space; CSPD's finding (input-space composition >= LoRA merging, 67.83 vs
+  65.50 TA / 66.19 TIES, on the same data) argues for putting composable per-skill behaviour in soft states rather
+  than more LoRA mixing. Nothing to change in the LoRA path itself.
+
+**What I built (7b9294acd; defaults with opt-outs, targeted tests).**
+- **Prefix-robust soft-state training, default on** (`tune/rows.py` `lower_rows`/`prefix_for`, `tune/soft.py`
+  `soft_items_to_node(prefix=)`; recipe `soft_prefix_share` 0.5, `soft_prefix_tokens` [128, 256]; 0 opts out). On a
+  content-hash-selected half of the rows that import soft states, 128-256 tokens drawn from other rows' prompt leads
+  of the same component (rendered text before any Neuralese marker, chat-template symbols included) sit right before
+  the first imported state at weight 0. The graph's source records the prefix's length and digest. A fit resuming its
+  own state from before the setting keeps it off (`resolve_soft_prefix_share`), and the recipe hash is unchanged at
+  share 0, so in-flight fits resume as bound.
+- **Soft states alone on the frozen backbone:** with every `ranks` level 0 a fit now creates no adapter node and
+  trains its soft states only (`trainer._initial_state` no longer takes max() over no nodes). This is CSPD's form.
+- **`natlang tune` trains and ships soft states on the managed llama.cpp backend by default** (`tune.softStates:
+  false` opts out); serving still checks the executable for `--native-state` and runs bindings degraded without it.
+- Docs: docs/TUNING.md (backend table, soft-state composition and prefix-robust note), docs/ENGINE_PARITY.md (soft
+  states: every engine serves them, no gap).
+- Tests: `test_prefix_robust_rows_put_other_rows_context_before_the_first_state`,
+  `test_soft_prefix_share_defaults_on_for_new_fits_and_stays_off_for_resumed_ones`,
+  `test_soft_states_alone_on_the_frozen_backbone_with_every_rank_zero`; ts-host tune-pipeline soft-state default.
+  `test_tune_soft_states`, `test_tune_rows`, `test_tune_trainer`, `test_tune_rl` (32 passed) and the ts-host tune and
+  serving tests (22 passed) ran through the ledger; check-main --quick exit 0.
+
+**Kept different from CSPD, and why.**
+- Initialization from text in the real rendered call, not sampled vocabulary embeddings. Our states replace a text
+  that exists, so text-init starts at exactly the current behaviour (the zero-residual identity). CSPD distils an
+  expert that has no text form, and its own analysis shows most vectors keep their init token as nearest word, so
+  init carries little.
+- Optimizer: Adam 1e-3 on activation-valued KV/hybrid state, not Muon 0.03 on input embeddings. The scales differ
+  (KV values vs embedding rows) and the state optimizer has no Muon; the warmup-cosine shape matches.
+- Joint training with the binding's adapter nodes stays the default. Our states are per binding, so the composition
+  a fit trains is the one its release serves, not a new combination; CSPD's independence result is about combinations
+  unseen in training. Soft-only fits (ranks 0) give the independent form where wanted.
+
+**Left.**
+- Skill states are keyed per binding (`soft_key(binding, 'skill', target)`), so a skill disclosed by several programs
+  is learned once per binding. A cross-program skill library (one state per skill document, trained independently on
+  every binding's verified rows, composed across programs) is CSPD's continual-learning shape. It needs a key and
+  release change in tune/soft.py and ts-host `tuned-serving.ts`. Not built: no program fit currently shares skill
+  documents across bindings (to be checked once the program-tuning revival has fits).
+- No held measurement of prefix-robust training (first principles: a cheap regularizer toward the condition serving
+  actually has; the next program fit's development outcomes show any regression).
