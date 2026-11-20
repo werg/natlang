@@ -28,8 +28,20 @@ def test_ties_keep_the_sealed_order_and_sealed_opts_out():
         held_eval.Dispatch([], order='random')
 
 
-def test_observed_episodes_override_the_prior_and_running_ones_count_their_time_so_far():
-    dispatch = held_eval.Dispatch(entries(['a', 'b', 'c'], 2), prior={'a': 1000., 'b': 10., 'c': 5.})
+def test_mean_of_every_known_time_orders_and_running_episodes_count_their_time_so_far():
+    # a: one long earlier episode and a short one here (heavy tail: still expected long); c: short before, longer here
+    dispatch = held_eval.Dispatch(entries(['a', 'b', 'c'], 2), prior={'a': [1000., 2000.], 'b': [10.], 'c': [5.]})
+    a, b, c = (dispatch.take(now=0.) for _ in range(3))
+    assert [a['key'], b['key'], c['key']] == ['a-0', 'b-0', 'c-0']
+    dispatch.done(a, 30.)          # a: mean(1000, 2000, 30) = 1010
+    dispatch.done(c, 400.)         # c: mean(5, 400) = 202.5
+    # b still runs at t=500: its 500 s so far beat its 10 s prior, not a's mean
+    assert [dispatch.take(now=500.)['key'] for _ in range(3)] == ['a-1', 'b-1', 'c-1']
+
+
+def test_longest_first_max_keeps_the_previous_estimate():
+    dispatch = held_eval.Dispatch(entries(['a', 'b', 'c'], 2), prior={'a': 1000., 'b': 10., 'c': 5.},
+                                  order='longest-first-max')
     a, b, c = (dispatch.take(now=0.) for _ in range(3))
     assert [a['key'], b['key'], c['key']] == ['a-0', 'b-0', 'c-0']
     dispatch.done(a, 30.)          # a was short in this run: its prior no longer counts
@@ -45,12 +57,12 @@ def test_resumed_finished_episodes_seed_the_estimates():
     assert dispatch.take(now=0.)['key'] == 'a-1'
 
 
-def test_duration_prior_averages_ran_episodes(tmp_path):
+def test_duration_prior_keeps_every_ran_episode(tmp_path):
     for name, seconds in (('one', 100.), ('two', 300.)):
         (tmp_path / f'{name}.json').write_text(json.dumps({'samples': [
             {'task_id': 't', 'ran': True, 'elapsed_seconds': seconds},
             {'task_id': 'u', 'ran': False, 'elapsed_seconds': None}]}))
-    assert held_eval.duration_prior([tmp_path / 'one.json', tmp_path / 'two.json']) == {'t': 200.}
+    assert held_eval.duration_prior([tmp_path / 'one.json', tmp_path / 'two.json']) == {'t': [100., 300.]}
 
 
 def test_collect_runs_every_entry_longest_first_and_skips_finished(tmp_path, monkeypatch):
@@ -105,7 +117,7 @@ def test_compare_pairs_other_series_and_fork_commits_with_warnings_but_not_other
                   'export_format': f'x-kv-{kv}', **({'max_running': cap} if cap else {})}
         return {'samples': [{'task_id': 't', 'sample': 0, 'ran': True, 'reward': 1.0, 'outcome': 'task_success'}],
                 'policy_id': 'p', 'ran': 1, 'scored': 1, 'successes': 1, 'loop_rate': 0, 'engine': engine,
-                'sampling': {'temperature': 1.0, 'top_p': top_p}, 'code': {'git_commit': commit},
+                'complete': True, 'sampling': {'temperature': 1.0, 'top_p': top_p}, 'code': {'git_commit': commit},
                 'series': {'key': tree, 'ts_host_tree': tree, 'model_facing': 'effect-receipt',
                            'scoring_sources': {'scripts/run_bonsai_queue.py': 'a'}}}
     base = result('tree-old', 'fork-old')                       # e.g. grpo-v3's Pop base: no attested running cap

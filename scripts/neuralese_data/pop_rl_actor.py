@@ -3,6 +3,8 @@
 
     pop_rl_actor.py start --checkpoint CK --policy-id SHA [--port 18531] [--bind-host IP]
     pop_rl_actor.py serve-checkpoint --checkpoint CK --policy-id SHA --commit C [--step N]
+    pop_rl_actor.py prefetch --checkpoint CK --policy-id SHA
+    pop_rl_actor.py held-eval --spec SPEC.json
     pop_rl_actor.py stop
     pop_rl_actor.py status
 
@@ -19,11 +21,20 @@ already model-only BF16, so no view or transport is prepared) with the same SGLa
 goes to Pop as is (rsync, sha256-checked by the driver), and the actor runs an exported copy of commit C on Pop
 (``git archive``, no worktree), so a pinned experiment's held evaluations on Pop serve its own code. Pop keeps the
 newest ``POP_KEEP`` such checkpoints, actor work dirs and code copies.
+
+prefetch copies such a checkpoint to Pop while another evaluation runs, so its serve-checkpoint skips the copy (265-520 s
+over Wi-Fi in grpo-v4-run2, 2-4% of an evaluation, and the step most often cut by a restart). held-eval runs one whole
+evaluation (serve unless Pop already serves the policy, ``held_eval measure``, ``held_eval compare``) from a spec file:
+grpo's ``--held-remote pop`` loop starts it as its own DGX ledger unit, so a restart of the training run neither kills its
+episodes nor its copy (grpo-v4-run2: 14 restarts in 40 steps cut 8 of 10 evaluations and 3 copies).
 """
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -164,6 +175,53 @@ def copy_resumable(source, dest, attempts=None, stall_seconds=120):
             if attempt == attempts - 1:
                 raise
             time.sleep(30)
+
+
+@contextlib.contextmanager
+def copy_lock(sha):
+    """One copy of a checkpoint to Pop at a time across DGX processes (a prefetch in the training run, a serve-checkpoint
+    in an evaluation unit): two rsyncs into one .partial file would interleave."""
+    path = ROOT / 'locks' / f'pop-copy-{sha[:16]}.lock'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('w') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def checkpoint_on_pop(checkpoint, sha):
+    """Pop's copy of a served checkpoint (``POP_CHECKPOINTS/<sha>.pt``), copied first unless present; the driver
+    checks its sha256 before serving."""
+    target = f'{POP_CHECKPOINTS}/{sha}.pt'
+    with copy_lock(sha):
+        if not ssh(shlex.join(['test', '-f', target]) + ' && echo ok', check=False).strip():
+            ssh(shlex.join(['mkdir', '-p', POP_CHECKPOINTS]))
+            copy_resumable(str(checkpoint), f'{POP}:{target}.partial')
+            ssh(shlex.join(['mv', f'{target}.partial', target]))
+            return True
+    return False
+
+
+def prefetch(args):
+    """Copy a checkpoint to Pop ahead of its serve-checkpoint, beside a running evaluation (only the file moves; the
+    engine and its GPU are untouched). Keeps the newest POP_KEEP + 1 checkpoints (this one and what Pop serves
+    protected) and refuses when Pop's disk would fall under the scratch floor."""
+    sha, target = args.policy_id, f'{POP_CHECKPOINTS}/{args.policy_id}.pt'
+    served = (read_json(STATE) or {}).get('policy_id')
+    protect = (target,) + ((f'{POP_CHECKPOINTS}/{served}.pt',) if served else ())
+    ssh(shlex.join(['mkdir', '-p', POP_CHECKPOINTS]))
+    prune_pop_newest(f'{POP_CHECKPOINTS}/*.pt', POP_KEEP + 1, protect=protect)
+    free = int(ssh(shlex.join(['df', '--output=avail', '-B1', POP_CHECKPOINTS]), timeout=60).split()[-1])
+    if free < Path(args.checkpoint).stat().st_size + POP_MIN_FREE:
+        raise RuntimeError(f'Pop has {free / 2**30:.1f} GiB free: no prefetch')
+    started = time.time()
+    copied = checkpoint_on_pop(args.checkpoint, sha)
+    result = {'event': 'Pop checkpoint prefetched' if copied else 'Pop checkpoint already present', 'policy_id': sha,
+              'step': args.step, 'copy_seconds': round(time.time() - started, 1)}
+    log(**result)
+    return result
 
 
 def ledger_unit(name, command, *, budget_gb, workdir, env=(), wait=86400):
@@ -531,9 +589,7 @@ def serve_checkpoint(args):
     ssh(shlex.join(['mkdir', '-p', POP_CHECKPOINTS, work]))
     prune_pop_newest(f'{POP_CHECKPOINTS}/*.pt', POP_KEEP, protect=(target,))
     prune_pop_newest(f'{POP_EVAL_ROOT}/held-actor-*', POP_KEEP, protect=(work,))
-    if not ssh(shlex.join(['test', '-f', target]) + ' && echo ok', check=False).strip():
-        copy_resumable(str(args.checkpoint), f'{POP}:{target}.partial')
-        ssh(shlex.join(['mv', f'{target}.partial', target]))
+    checkpoint_on_pop(args.checkpoint, sha)
     copied = time.time()
     runtime = pop_code(commit)
     prune_pop_newest(f'{POP_EVAL_ROOT}/code-*', POP_KEEP, protect=(runtime,))
@@ -572,6 +628,66 @@ def serve_checkpoint(args):
             return result
         time.sleep(5)
     raise RuntimeError(f'Pop actor did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
+
+
+def serving_endpoint(policy, export_format):
+    """Pop's actor endpoint when it serves checkpoint ``policy`` in ``export_format`` (the engine's attested precision
+    and KV law), else None."""
+    state = read_json(STATE) or {}
+    try:
+        with urllib.request.urlopen(state['endpoint'] + '/v1/neuralese/info', timeout=10) as response:
+            binding = json.loads(response.read()).get('rl_policy_binding') or {}
+    except (KeyError, OSError, ValueError):
+        return None
+    served, served_format = binding.get('checkpoint_sha256'), (binding.get('actor_export') or {}).get('format')
+    return state['endpoint'] if served == policy and served_format == export_format else None
+
+
+def complete(result_path):
+    try:
+        return bool(json.loads(Path(result_path).read_text()).get('complete'))
+    except (OSError, ValueError):
+        return False
+
+
+def held_eval_job(args):
+    """One held evaluation on Pop from ``--spec`` (written by grpo's --held-remote pop loop): serve the policy unless Pop
+    serves it (``serve``: this script's start/serve-checkpoint arguments), ``held_eval measure`` (``measure``: its
+    arguments without --endpoint) against it with ``slots`` episodes in flight, then ``compare`` when given and the
+    measurement succeeded. Children run this checkout (the run's pin). The outcome goes to ``done`` (returncode,
+    serve_seconds, seconds), so a training run that restarted meanwhile reports it."""
+    spec = json.loads(Path(args.spec).read_text())
+    started, code, serving = time.time(), 1, None
+    # A stop of the unit reaches the measurement too, which drains and writes its partial result: wait for it and
+    # record the outcome rather than die first (a handler, not SIG_IGN, so children keep the default disposition).
+    signal.signal(signal.SIGTERM, lambda *_: None)
+    env = {**os.environ, 'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
+    python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
+    with open(spec['log'], 'a') as handle:
+        try:
+            endpoint = serving_endpoint(spec['policy'], spec['format'])
+            if endpoint is None:
+                subprocess.run([sys.executable, str(Path(__file__).resolve()), *spec['serve']], cwd=REPO, env=env,
+                               stdout=handle, stderr=subprocess.STDOUT, timeout=4 * 3600)
+                endpoint = serving_endpoint(spec['policy'], spec['format'])
+            if endpoint is None:
+                raise RuntimeError(f'Pop does not serve {spec["policy"][:12]}')
+            serving = time.time() - started
+            code = subprocess.run([*python, 'measure', *spec['measure'], '--endpoint', f'{endpoint}={spec["slots"]}'],
+                                  cwd=REPO, env=env, stdout=handle, stderr=subprocess.STDOUT).returncode
+            compare = spec.get('compare')
+            if compare:   # complete measurements only (a cut one writes result.json with complete false)
+                Path(compare[compare.index('--out') + 1]).unlink(missing_ok=True)
+            if code == 0 and compare and all(complete(path) for path in compare[:2]):
+                subprocess.run([*python, 'compare', *compare], cwd=REPO, env=env, stdout=handle,
+                               stderr=subprocess.STDOUT)
+        except Exception as error:
+            print(json.dumps({'event': 'held eval job failed', 'error': repr(error)[:500]}), file=handle, flush=True)
+        finally:
+            write_json(spec['done'], {'unit': spec.get('unit'), 'policy': spec['policy'], 'returncode': code,
+                                      'serve_seconds': None if serving is None else round(serving),
+                                      'seconds': round(time.time() - started), 'served': serving is not None})
+    return code
 
 
 def stop(_args=None):
@@ -618,6 +734,12 @@ def main(argv=None):
     c.add_argument('--bind-host')
     c.add_argument('--ready-seconds', type=int, default=1800)
     c.add_argument('--adapter-release', help='a program fit (tune.build output on the DGX) the actor serves by default')
+    f = commands.add_parser('prefetch', help='copy a pruned native checkpoint to Pop ahead of its serve-checkpoint')
+    f.add_argument('--checkpoint', required=True)
+    f.add_argument('--policy-id', required=True, help="the checkpoint file's sha256")
+    f.add_argument('--step', type=int, default=0)
+    h = commands.add_parser('held-eval', help='one held evaluation on Pop from a spec file (serve, measure, compare)')
+    h.add_argument('--spec', required=True)
     commands.add_parser('stop')
     commands.add_parser('status')
     p = commands.add_parser('prepare-view', help=argparse.SUPPRESS)
@@ -634,6 +756,11 @@ def main(argv=None):
     if args.action == 'serve-checkpoint':   # fails loudly: its caller (grpo --held-remote) retries later
         print(json.dumps(serve_checkpoint(args)), flush=True)
         return 0
+    if args.action == 'prefetch':
+        prefetch(args)
+        return 0
+    if args.action == 'held-eval':
+        return held_eval_job(args)
     try:
         if args.action == 'start':
             print(json.dumps(start(args)), flush=True)

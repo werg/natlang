@@ -235,6 +235,34 @@ def held_complete(out):
         return False
 
 
+def held_priors(base_out, held_root, out):
+    """Every complete held result of a run but ``out``'s (the start policy's first): the dispatch order's evidence of
+    each task's episode wall time (held_eval.Dispatch)."""
+    done = [Path(d) / 'result.json' for d in [base_out, *sorted(Path(held_root).glob('step-*'))]
+            if Path(d).resolve() != Path(out).resolve() and held_complete(d)]
+    return list(dict.fromkeys(str(path) for path in done))
+
+
+def unit_active(unit):
+    """A user unit, or its ledger admission waiter (``memory_ledger run --detach``), is active."""
+    return any(subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{name}.service']).returncode == 0
+               for name in (unit, unit + '-waiter'))
+
+
+def pop_eval_inflight(directories, active=None):
+    """(directory, record) of a detached Pop evaluation (``pop-eval.json``, no ``pop-eval-done.json``) whose unit still
+    runs, else None."""
+    active = active or unit_active
+    for directory in directories:
+        try:
+            record = json.loads((Path(directory) / 'pop-eval.json').read_text())
+        except (OSError, ValueError):
+            continue
+        if not (Path(directory) / 'pop-eval-done.json').exists() and active(record['unit']):
+            return Path(directory), record
+    return None
+
+
 def pinned_env():
     """The environment every child of the run gets (collector episodes, the actor, held_eval measure/compare): this
     process's own checkout (``REPO``: the run's pinned copy, ``scripts/pin_checkout.py``) on PYTHONPATH and NATLANG_REPO,
@@ -3716,7 +3744,10 @@ def train(args):
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
         try:
             with (work / 'held.log').open('a') as handle:
-                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, '--endpoint',
+                # every complete earlier result of the run orders the episodes (held_eval.Dispatch)
+                prior = [item for path in held_priors(work / 'held' / 'step-00000', work / 'held', out)
+                         for item in ('--duration-prior', path)]
+                code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, *prior, '--endpoint',
                                        f'{args.actor}={args.held_workers}', '--policy-id', policy, '--top-p', str(args.top_p), '--samples', str(samples),
                                        '--out', str(out), '--label', f'grpo-{name or f"step-{step_number}"}',
                                        '--max-model-requests', str(args.max_model_requests)],
@@ -3795,8 +3826,16 @@ def train(args):
         once on Pop (``held/step-00000-pop``: compare pairs only results of one engine); then, every ``--held-every-hours``
         or as soon as the previous evaluation ends if it took longer, the newest native checkpoint is served on Pop
         (``pop_rl_actor.py serve-checkpoint``: rsync, the run's commit) and measured with this run's pinned harness (the
-        collector processes run here, against Pop's endpoint) into ``held/step-N`` with ``compare-vs-step0.json``."""
-        from pop_rl_actor import pop_sglang
+        collector processes run on the DGX, against Pop's endpoint) into ``held/step-N`` with ``compare-vs-step0.json``.
+
+        Each evaluation runs as its own DGX ledger unit (``pop_rl_actor.py held-eval``, ``--held-remote-gb``), so a
+        restart of this run neither kills its episodes nor its copy: the restarted loop adopts a unit still running
+        (``held/step-N/pop-eval.json``) and starts no other evaluation on Pop meanwhile (grpo-v4-run2: 14 restarts in 40
+        steps cut 8 of 10 evaluations and 3 copies). ``--held-remote-inline`` runs them inside this process as before.
+        While an evaluation runs, the newest checkpoint not yet measured is copied to Pop (``pop_rl_actor.py prefetch``;
+        ``--no-pop-prefetch`` opts out), so the next one starts without its 265-520 s copy. Every complete earlier result
+        of the run orders the next evaluation's episodes (``--duration-prior``, held_eval.Dispatch)."""
+        from pop_rl_actor import pop_sglang, serving_endpoint
         held_root, tool = work / 'held', [sys.executable, str(HERE / 'pop_rl_actor.py')]
         base_out = Path(args.held_base) if args.held_base else held_root / 'step-00000-pop'
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
@@ -3822,17 +3861,84 @@ def train(args):
             return True
 
         def pop_endpoint(policy):
-            state = json.loads(subprocess.run([*tool, 'status'], capture_output=True, text=True, cwd=REPO,
-                                              env=pinned_env()).stdout or '{}').get('state') or {}
-            try:
-                with urllib.request.urlopen(state['endpoint'] + '/v1/neuralese/info', timeout=10) as response:
-                    binding = json.loads(response.read()).get('rl_policy_binding') or {}
-            except (KeyError, OSError, ValueError):
-                return None
-            served, served_format = binding.get('checkpoint_sha256'), (binding.get('actor_export') or {}).get('format')
-            return state['endpoint'] if served == policy and served_format == pop_format else None
+            return serving_endpoint(policy, pop_format)
+
+        def priors(out):
+            return held_priors(base_out, held_root, out)
+
+        def inflight():
+            return pop_eval_inflight([base_out, *sorted(held_root.glob('step-*'))])
+
+        def other_pop_evaluation():
+            """An active held evaluation unit on this machine that is not this run's (Pop is one GPU: its serve would stop
+            that evaluation's actor)."""
+            out = subprocess.run(['systemctl', '--user', 'list-units', '*popheld*', '--state=active,activating', '--plain',
+                                  '--no-legend'], capture_output=True, text=True).stdout
+            mine = f'{args.unit_prefix}-popheld-'
+            return [line.split()[0] for line in out.splitlines() if line.strip() and not line.startswith(mine)]
+
+        def wait_detached(out, record):
+            """Wait for a detached evaluation unit; its outcome (``pop-eval-done.json``), or a failure if it ended
+            without one (two checks 60 s apart: a ledger waiter hands over to the unit in between)."""
+            done, gone = out / 'pop-eval-done.json', 0
+            while not stop.is_set():
+                if done.exists():
+                    return json.loads(done.read_text())
+                gone = 0 if unit_active(record['unit']) else gone + 1
+                if gone >= 3:
+                    return {'returncode': 1, 'serve_seconds': None, 'served': (out / 'run.json').exists(),
+                            'error': f'unit {record["unit"]} ended without an outcome (journalctl --user -u {record["unit"]})'}
+                stop.wait(30)
+            return None
+
+        def evaluate_detached(step_number, out, policy, serve):
+            out.mkdir(parents=True, exist_ok=True)
+            (out / 'pop-eval-done.json').unlink(missing_ok=True)
+            unit = f'{args.unit_prefix}-popheld-{step_number:05d}-{int(time.time())}'
+            measure = ['--manifest', str(args.held_manifest), '--policy-id', policy, '--top-p', str(args.top_p),
+                       '--samples', str(args.held_samples), '--out', str(out), '--label', f'grpo-pop-step-{step_number}',
+                       '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)]
+            for path in priors(out):
+                measure += ['--duration-prior', path]
+            compare = ([str(base_out / 'result.json'), str(out / 'result.json'), '--out',
+                        str(out / 'compare-vs-step0.json'), *strict_series]
+                       if step_number and held_complete(base_out) else None)
+            spec = {'unit': unit, 'policy': policy, 'format': pop_format, 'serve': [str(x) for x in serve], 'measure': measure,
+                    'slots': args.held_remote_slots, 'compare': compare, 'log': str(work / 'held-pop.log'),
+                    'done': str(out / 'pop-eval-done.json')}
+            (out / 'pop-eval-spec.json').write_text(json.dumps(spec, indent=1) + '\n')
+            subprocess.run(['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit,
+                            '--budget-gb', str(args.held_remote_gb), '--priority', 'medium', '--no-resumable',
+                            '--wait', '86400', '--detach', '--workdir', str(REPO), '--',
+                            '/usr/bin/env', f'NATLANG_REPO={REPO}', f'PYTHONPATH={REPO}/training/neuralese:{REPO}',
+                            'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', 'HF_HUB_OFFLINE=1',
+                            sys.executable, str(HERE / 'pop_rl_actor.py'), 'held-eval', '--spec', str(out / 'pop-eval-spec.json')],
+                           check=True, timeout=600)
+            record = {'unit': unit, 'policy': policy, 'step': step_number, 'started': time.time()}
+            (out / 'pop-eval.json').write_text(json.dumps(record) + '\n')
+            return record
+
+        def report(step_number, out, policy, outcome, started):
+            summary = {}
+            if (out / 'result.json').exists():
+                result = json.loads((out / 'result.json').read_text())
+                summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'ran_out_rate', 'complete')}
+            if (out / 'compare-vs-step0.json').exists():
+                summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
+            log_line(log, {'event': 'held eval', 'remote': 'pop', 'step': step_number, 'policy': policy,
+                           'returncode': outcome.get('returncode'), 'seconds': round(time.time() - started),
+                           'serve_seconds': outcome.get('serve_seconds'), 'detached': True, **summary})
+            if not outcome.get('served', True):
+                raise RuntimeError(f'Pop does not serve {policy[:12]} (see {work}/held-pop.log)'
+                                   + (f': {outcome["error"]}' if outcome.get('error') else ''))
 
         def evaluate(step_number, out, policy, serve):
+            if not args.held_remote_inline:
+                record = evaluate_detached(step_number, out, policy, serve)
+                outcome = wait_detached(out, record)
+                if outcome is not None:
+                    report(step_number, out, policy, outcome, record['started'])
+                return
             started = time.time()
             with (work / 'held-pop.log').open('a') as handle:
                 endpoint = pop_endpoint(policy)
@@ -3843,15 +3949,16 @@ def train(args):
                 if endpoint is None:
                     raise RuntimeError(f'Pop does not serve {policy[:12]} (see {work}/held-pop.log)')
                 serving = time.time() - started
-                # the start policy's per-task wall times order this measurement's first sample (held_eval.Dispatch)
-                prior = (['--duration-prior', str(base_out / 'result.json')] if step_number and held_complete(base_out)
-                         else [])
+                # every complete earlier result's per-task wall times order this measurement (held_eval.Dispatch)
+                prior = [item for path in priors(out) for item in ('--duration-prior', path)]
+                measuring.set()
                 code = subprocess.run([*python, 'measure', '--manifest', args.held_manifest, *prior, '--endpoint',
                                        f'{endpoint}={args.held_remote_slots}', '--policy-id', policy, '--top-p', str(args.top_p), '--samples',
                                        str(args.held_samples), '--out', str(out), '--label', f'grpo-pop-step-{step_number}',
                                        '--allow-other-engine', '--max-model-requests', str(args.max_model_requests)],
                                       cwd=REPO, env=pinned_env(), stdout=handle,
                                       stderr=subprocess.STDOUT).returncode
+                measuring.clear()
                 (out / 'compare-vs-step0.json').unlink(missing_ok=True)   # complete measurements only (as held())
                 if step_number and code == 0 and held_complete(base_out) and held_complete(out):
                     subprocess.run([*python, 'compare', str(base_out / 'result.json'), str(out / 'result.json'), '--out',
@@ -3872,8 +3979,45 @@ def train(args):
 
         last_start, last_step = 0., max(measured_steps() - {0}, default=0)
         partial_tried = set()
+        prefetched = set()
+
+        def prefetch_loop():
+            """While an evaluation runs, copy the newest checkpoint not yet measured to Pop (the next evaluation's)."""
+            while not stop.wait(300):
+                busy = inflight() is not None or measuring.is_set()
+                ready = sorted(d for d in checkpoint_root.glob('step-*') if (d / 'sha256.txt').exists()
+                               and (d / 'checkpoint.pt').exists() and int(d.name.split('-')[1]) > last_step)
+                if not busy or not ready:
+                    continue
+                sha = (ready[-1] / 'sha256.txt').read_text().strip()
+                if sha in prefetched:
+                    continue
+                with (work / 'held-pop.log').open('a') as handle:
+                    code = subprocess.run([*tool, 'prefetch', '--checkpoint', str(ready[-1] / 'checkpoint.pt'), '--policy-id',
+                                           sha, '--step', ready[-1].name.split('-')[1]], cwd=REPO, env=pinned_env(),
+                                          stdout=handle, stderr=subprocess.STDOUT, timeout=4 * 3600).returncode
+                if code == 0:
+                    prefetched.add(sha)
+        measuring = threading.Event()   # an inline evaluation is running (detached ones: inflight())
+        if args.pop_prefetch:
+            threading.Thread(target=prefetch_loop, daemon=True).start()
         while not stop.is_set():
             try:
+                running = inflight()
+                if running:   # a detached evaluation started before this run (re)started: adopt it, start none beside
+                    out, record = running
+                    if record.get('step'):
+                        held_steps.add(record['step'])
+                        last_start, last_step = record['started'], max(last_step, record['step'])
+                    log_line(log, {'event': 'held eval adopted', 'remote': 'pop', 'step': record.get('step'),
+                                   'unit': record['unit']})
+                    outcome = wait_detached(out, record)
+                    if outcome is not None:
+                        report(record.get('step') or 0, out, record['policy'], outcome, record['started'])
+                    continue
+                if not args.held_remote_inline and other_pop_evaluation():
+                    stop.wait(300)   # another run's evaluation holds Pop
+                    continue
                 if args.held_base and not held_complete(base_out):
                     # measured by its own job (e.g. the pin's base on Pop while this run starts): wait, never serve
                     # another policy on Pop meanwhile; checkpoints keep being kept for their evaluations
@@ -4990,6 +5134,14 @@ def main():
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
     t.add_argument('--held-remote', choices=('pop',), help="measure held on Pop's GPU in parallel with training instead of "
                    'pausing collection on the training actor (pop_held_loop)')
+    t.add_argument('--held-remote-gb', type=float, default=11.,
+                   help="with --held-remote: ledger budget of each evaluation's own DGX unit (its collector processes: "
+                        '0.26-0.4 GB per slot, as ops/grpo-v4/pop-held.sh claims)')
+    t.add_argument('--held-remote-inline', action='store_true',
+                   help='with --held-remote: run each evaluation inside this process (before 2026-11-20; a restart kills '
+                        'it) instead of its own ledger unit that survives restarts')
+    t.add_argument('--no-pop-prefetch', dest='pop_prefetch', action='store_false',
+                   help='with --held-remote pop: do not copy the next checkpoint to Pop while an evaluation runs')
     t.add_argument('--held-remote-slots', type=int, default=20,
                    help="episodes in flight against Pop's actor, = --pop-max-running: the FP8 hybrid-SWA pool (280k tokens "
                         'at mem-fraction 0.77) holds 20 running sequences (smoke 2026-11-17: full usage p99 0.90, no queue, '

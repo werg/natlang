@@ -125,3 +125,65 @@ A 2-sample read then lags training by ~3.5 h instead of 4.7 h.
   (~12.5k s before the order gain) is an extrapolation, and the pin's base re-measure will be its first measurement.
 - **Root cause of the measure hang** (see Smoke): bounded and instrumented, not explained.
 - **Ran-out episodes** (21-25% of slot time) are part of the measurement and were left alone.
+
+## grpo-v4-run2 review (2026-11-20): where a Pop held eval's wall time and lag went
+
+Sources: `ops/grpo-v4/run2/train.jsonl` "held eval" events, `held-pop.log`, `held/step-N/journal.jsonl`
+(`pop_held_profile.py episodes`), and step 36's SGLang log from Pop (`pop_held_profile.py sglang`). 20 slots,
+20 running, FP8 KV, longest-first dispatch with the sft-v4 base as prior, 512 episodes (2 samples).
+
+- **The "3x spread" (4,760-14,439 s) is mostly restarts, not engine speed.** run2 restarted 14 times in 40 steps; each
+  restart stopped grpo's in-process held loop, so 8 of 10 evaluations ran in 2-3 pieces and a "held eval" event's
+  `seconds` covers only its last piece (step 32: 7,308 + 4,760 s). Spans first episode to last: 10,993-15,580 s
+  (steps 10-36). The two uninterrupted ones took 14,428 (step 30) and 13,834 s (step 36). Each restart lost the
+  20 running episodes (an unfinished attempt restarts whole) plus 2-6% of the span with nothing running.
+- **The remaining spread is the policy's tokens:** 5.72M (step 16) to 8.39M (step 26) generated tokens per eval, at
+  479-583 tok/s over the span (smoke: 605 at a steady 19.2 running). Ran-out episodes are 8-26% of slot time.
+- **The tail:** 350-1,930 s after the last dispatch; step 36 decoded at one running sequence 14.4% of the time
+  (~2,000 s). The late long episodes were tasks whose first episode in the run was short: held-v3 episode times are
+  heavy-tailed per task (s7-task-195 over run2's evals: 24 to 3,601 s; its sample 0 at step 36 took 92 s, sample 1
+  1,961 s and set the end). Dispatch estimated a task by its longest episode in this run, else the prior's mean, so one
+  short sample-0 episode sent it last.
+- **Engine at 20 running** (step 36): full KV pool p50 0.61, p99 0.96, max 0.98, requests queued in 7.9% of decode
+  logs, prefix hit 89%: 20 is the cap the pool carries.
+- **Serve:** `copy_seconds` 61-523 s (Wi-Fi rsync of the 3.46 GB BF16 checkpoint, median ~280), engine start ~100 s.
+- **The five "Pop does not serve" failures:** step 22, the actor came up but `measure`'s single 10 s identity read
+  timed out over Wi-Fi (fixed 62189f2e8: 6 x 20 s retries); step 24 (1f39f) twice, a Pop ledger admission at 10.5 GB
+  + 0.5 reserve that never fit after a desktop logout (fixed 935d119e9: 10.0 GB), then the copy killed by a grpo stop;
+  step 26 (315cda) and step 30 (bf7ad), copies killed by grpo stops (rsync exit 20). Step 24 was never measured.
+  A stalled Wi-Fi copy (35 min) is fixed by 43c6b8ccd (rsync --timeout + resume).
+
+### Changes (2026-11-20; transport, lifecycle and dispatch only: neither the engine nor the scoring series changes)
+
+1. **Each Pop evaluation is its own DGX ledger unit** (`pop_rl_actor.py held-eval --spec`, `<unit-prefix>-popheld-N-*`,
+   `--held-remote-gb 11`): serve unless Pop serves the policy, `held_eval measure`, `compare` (complete results only).
+   A grpo restart neither kills its episodes nor its copy; the restarted loop adopts it (`held/step-N/pop-eval.json`,
+   outcome in `pop-eval-done.json`, train.jsonl `held eval adopted`) and starts nothing else on Pop meanwhile, nor
+   while another run's `*popheld*` unit is active. Opt-out `--held-remote-inline`. Expected: the ~5-10% a restart cost
+   each interrupted eval and the copies a stop killed. DGX ledger: +11 GB claimed by the eval unit while grpo's own
+   budget no longer holds its held collectors.
+2. **Checkpoint prefetch** (`pop_rl_actor.py prefetch`; grpo copies the newest unmeasured checkpoint to Pop every 5 min
+   while an evaluation runs; `--no-pop-prefetch` opts out). serve-checkpoint then skips the copy: -265-520 s per eval
+   (~2-4%). Copies of one checkpoint are serialized across processes (`copy_lock`); Pop keeps the newest 3 checkpoints
+   (served one protected) and a prefetch refuses below the 8.5 GiB scratch floor. A compressed or delta transfer is
+   not built: the copy is now hidden behind the previous eval (3+ h vs ~5 min), except a run's first.
+3. **Dispatch estimate = mean of every known wall time** of the task (all earlier complete results of the run, the
+   base first, and this run's finished episodes), at least a running episode's time so far (`held_eval.Dispatch`,
+   default `longest-first`; `--dispatch longest-first-max` restores the previous estimate). grpo passes every complete
+   earlier held result as `--duration-prior` (Pop loop and training-actor held evals). Replay of run2's eight complete
+   evals at 20 slots with their measured episode times (the replay reproduces step 36: 13,814 vs 13,834 s): mean span
+   12,148 s -> 11,597 s (-551 s, -4.5%; bound 11,248 s); global longest-first across samples gave 11,514 s but loses the
+   sample-major balance of a cut run, so not taken.
+
+Combined expectation per 2-sample eval on a run that restarts: ~13.9k s (incl. serve and restart losses) -> ~11.6k s
+plus engine start, and no measurement or copy lost to restarts.
+
+### Not checked or not done
+
+- No Pop test of the detached unit, prefetch or dispatch: Pop was measuring sft-v5's base. Unit tests only
+  (`tests/neuralese/test_pop_held_detached.py`, `test_held_dispatch.py`); the first grpo resume on a pin with these
+  commits is the live test (train.jsonl `held eval adopted`, `held-pop.log` `Pop checkpoint prefetched`).
+- In-place weight reload into Pop's running SGLang (would save the ~100 s engine start per eval): not built.
+- Wi-Fi latency per model call (collectors on the DGX, engine on Pop) was not measured; tok/s per running sequence at
+  20 running was 24-27 in full evals vs 31.5 in the smoke, which this may explain in part (or longer contexts).
+- Whether `measure`'s rare `held eval actor lost` stops come from Wi-Fi drops.

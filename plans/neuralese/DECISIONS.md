@@ -4731,3 +4731,22 @@ as well as the scenario and source groups. This changes data admission only.
   (no GPU room beside sft-v5: ledger headroom 7-20 GB); flashinfer FP8 paged decode efficiency (the per-sequence cost
   implies ~110 GB/s effective KV reads, page size 1); the extra_buffer 256-token grid's re-prefill share per call; the
   actor's per-step CPU time at 96 running (no profile of the live actor).
+
+## 2026-11-20 17:00, Pop held evals: restart-proof evaluation units, checkpoint prefetch, mean-time dispatch (Pop held-eval review strand; default)
+
+- **Observed (grpo-v4-run2):** "held eval" `seconds` 4,760-14,439 s were pieces: 14 grpo restarts in 40 steps cut 8
+  of 10 Pop evaluations (the loop and its collectors lived in the grpo unit), losing the 20 running episodes and 2-6%
+  idle span each time. Whole spans were 10,993-15,580 s, driven by the policy's generated tokens (5.7-8.4M at
+  479-583 tok/s) and a 350-1,930 s tail of late long episodes. The five "Pop does not serve" failures: one Wi-Fi
+  identity-read timeout (fixed 62189f2e8), one Pop ledger admission at 10.5 GB (fixed 935d119e9), three copies killed
+  by grpo stops; step 24 was never measured. Details: POP_HELD_THROUGHPUT_20261117.md "grpo-v4-run2 review".
+- **Shipped (defaults, opt-outs):** each Pop evaluation runs as its own ledger unit (`pop_rl_actor.py held-eval`,
+  `--held-remote-gb 11`) that a restarted run adopts (`--held-remote-inline` opts out); the newest unmeasured checkpoint
+  is prefetched to Pop during an evaluation (`--no-pop-prefetch`); dispatch estimates a task by the mean of all its
+  known wall times with every earlier complete result as prior (`--dispatch longest-first-max` restores the old one).
+  Replay of run2's evals: -551 s per eval (4.5%) from dispatch, -265-520 s from prefetch, plus what restarts cost.
+  Tests: `tests/neuralese/test_pop_held_detached.py`, `test_held_dispatch.py`.
+- **Series:** none of these change the engine or the scoring series (held_eval.py, grpo.py and pop_rl_actor.py are
+  outside `SCORING_SOURCES`); results pair with grpo-v5-run1's base as before (code commit warning only).
+- **Enters:** at grpo-v5-run1's first resume on a pin with this commit (the running drive uses pin f9664edfe). The
+  sft-v5 base measurement (pop-held.sh) is unaffected; pop-held.sh's serve-checkpoint copies take the new copy lock.

@@ -358,39 +358,56 @@ def _finish_seconds(journal):
 
 
 def duration_prior(paths):
-    """task_id -> mean episode wall seconds over earlier ``result.json`` files (any policy, same held tasks): the
-    dispatch order's estimate before this run has seen the task."""
+    """task_id -> every ran episode's wall seconds over earlier ``result.json`` files (any policy, same held tasks): the
+    dispatch order's evidence before (and beside) this run's own episodes of the task."""
     seconds = collections.defaultdict(list)
     for path in paths:
         for sample in json.loads(Path(path).read_text()).get('samples') or ():
             if sample.get('ran') and isinstance(sample.get('elapsed_seconds'), (int, float)):
                 seconds[sample['task_id']].append(float(sample['elapsed_seconds']))
-    return {task: sum(values) / len(values) for task, values in seconds.items()}
+    return dict(seconds)
+
+
+DISPATCH_ORDERS = ('longest-first', 'longest-first-max', 'sealed')
 
 
 class Dispatch:
     """Which entry a free slot runs next: sample-major (sample s+1 starts only when every sample-s entry has started, so a
     partly finished run stays balanced), and within a sample the task expected to run longest first, so the last
-    minutes are not spent waiting for one long episode that started late (longest-processing-time-first; run1's six
-    Pop evals replayed: 500-1150 s of 16-18.5k saved). The estimate of a task is the longest of its episodes in this run
-    (finished: their wall time; running: their time so far), else ``prior`` (``duration_prior``), else 0; ties keep the
-    sealed order. ``order='sealed'`` opts out (the sealed queue's order). Order changes only which episodes share a
-    batch, never an episode's task, seed or budget."""
+    minutes are not spent waiting for one long episode that started late (longest-processing-time-first).
+
+    ``longest-first`` (default): a task's estimate is the mean of every wall time known for it (``prior``: earlier
+    results, ``duration_prior``; and its finished episodes in this run), at least the time so far of its running
+    episodes. Episode times of one task are heavy-tailed (held-v3 s7-task-195 over grpo-v4-run2's evals: 24 to 3,601 s),
+    so a single short sample-0 episode is weak evidence: the previous estimate (``longest-first-max``: the longest
+    episode in this run, else the prior's mean) dispatched such tasks last in sample 1, and their long second episodes
+    set the end (run2 step 36: 14% of the decode time at one running sequence). Replayed on run2's eight complete Pop
+    evals at 20 slots with the run's earlier results as prior: mean span 12,148 s (longest-first-max, base prior) ->
+    11,597 s, within 3% of the bound (11,248 s; POP_HELD_THROUGHPUT_20261117.md). Ties keep the sealed order.
+    ``sealed`` keeps the sealed queue's order. Order changes only which episodes share a batch, never an episode's
+    task, seed or budget."""
 
     def __init__(self, entries, *, prior=None, order='longest-first', observed=None):
-        if order not in ('longest-first', 'sealed'):
+        if order not in DISPATCH_ORDERS:
             raise ValueError(f'unknown dispatch order {order!r}')
         self.pending = list(entries)
-        self.order, self.prior = order, dict(prior or {})
-        self.finished = collections.defaultdict(float)   # task_id -> longest finished episode (s)
+        self.order = order
+        # task -> wall seconds of earlier results (a float: one mean, as older callers pass)
+        self.prior = {task: [float(v)] if isinstance(v, (int, float)) else [float(x) for x in v]
+                      for task, v in (prior or {}).items()}
+        self.finished = collections.defaultdict(list)   # task_id -> finished episodes' seconds in this run
         for task, seconds in (observed or {}).items():
-            self.finished[task] = max(self.finished[task], float(seconds))
+            self.finished[task] += [float(seconds)] if isinstance(seconds, (int, float)) else [float(x) for x in seconds]
         self.running = {}   # key -> (task_id, start time)
 
     def estimate(self, task, now):
-        seen = [self.finished[task]] if task in self.finished else []
-        seen += [now - start for running_task, start in self.running.values() if running_task == task]
-        return max(seen) if seen else self.prior.get(task, 0.)
+        running = [now - start for running_task, start in self.running.values() if running_task == task]
+        if self.order == 'longest-first-max':
+            seen = ([max(self.finished[task])] if self.finished.get(task) else []) + running
+            prior = self.prior.get(task)
+            return max(seen) if seen else (sum(prior) / len(prior) if prior else 0.)
+        known = self.prior.get(task, []) + self.finished.get(task, [])
+        return max([sum(known) / len(known) if known else 0.] + running)
 
     def take(self, now=None):
         if not self.pending:
@@ -409,7 +426,7 @@ class Dispatch:
     def done(self, entry, seconds):
         self.running.pop(entry['key'], None)
         if isinstance(seconds, (int, float)):
-            self.finished[entry['task_id']] = max(self.finished.get(entry['task_id'], 0.), float(seconds))
+            self.finished[entry['task_id']].append(float(seconds))
 
 
 STOP_DRAIN_SECONDS = 120   # after a stop: terminated episodes get this long, then they are killed and collection returns
@@ -426,13 +443,13 @@ def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None
     directory, repo = Path(directory), Path(repo)
     work = directory / 'workers'
     work.mkdir(exist_ok=True)
-    todo, observed = [], {}
+    todo, observed = [], collections.defaultdict(list)
     for entry in entries:
         seconds = _finish_seconds(work / f"{entry['key']}.journal.jsonl")
         if seconds is None:
             todo.append(entry)
         elif isinstance(seconds, (int, float)):
-            observed[entry['task_id']] = max(observed.get(entry['task_id'], 0.), float(seconds))
+            observed[entry['task_id']].append(float(seconds))
     dispatch = Dispatch(todo, prior=prior, order=order, observed=observed)
     lock, children, done = threading.Lock(), set(), [0]
     started = time.time()
@@ -1183,12 +1200,14 @@ def main(argv=None):
     m.add_argument('--allow-other-engine', action='store_true', help='measure an actor that is not the pinned eval engine')
     m.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument (repeatable)')
     m.add_argument('--keep-actor', action='store_true')
-    m.add_argument('--dispatch', choices=('longest-first', 'sealed'), default='longest-first',
-                   help='episode order within a sample: the task expected to run longest first (its episodes in this run, '
-                        'else --duration-prior), or the sealed queue order; never changes what is measured')
+    m.add_argument('--dispatch', choices=DISPATCH_ORDERS, default='longest-first',
+                   help='episode order within a sample: the task expected to run longest first (the mean of its known '
+                        'wall times: --duration-prior results and its episodes in this run), longest-first-max (the '
+                        'previous estimate: its longest episode in this run, else the prior), or the sealed queue order; '
+                        'never changes what is measured')
     m.add_argument('--duration-prior', type=Path, action='append', default=[],
                    help='an earlier result.json of the same held tasks (any policy): per-task wall seconds that order the '
-                        'first sample (repeatable)')
+                        'episodes (repeatable: every earlier result adds evidence)')
     v = sub.add_parser('serve', help='serve a checkpoint as a ledger actor unit (or reuse it) and print its URL')
     v.add_argument('--checkpoint', type=Path, required=True)
     v.add_argument('--checkpoint-sha256')
