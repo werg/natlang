@@ -3234,8 +3234,10 @@ def student_sampled_targets(chain):
     of own and JOLT+ successes, reasoning-RL reasoning, own Neuralese graph rows) was sampled by the actor."""
     import exp0_sft
     role = chain.get('role')
-    if role == 'sd_teacher' or (role == 'replay' and not exp0_sft.student_sampled(chain)):
+    if role == 'sd_teacher':
         return np.zeros(sum(n for _, n, _ in chain['segs']), bool)
+    if role == 'replay':   # the corpus's own flags (per row or per target: filled-reasoning rows), else its source
+        return exp0_sft.sampled_targets(chain)
     return np.concatenate([np.full(n, row.get('rrl') != 'action' and not row.get('teacher')) for _, n, row in chain['segs']])
 
 

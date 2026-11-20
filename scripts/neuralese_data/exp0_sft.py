@@ -259,10 +259,24 @@ def targets_nll(model, h, positions, targets, sampled, top_p):
     return torch.where(sampled, nucleus, nll)
 
 
+def sampled_targets(chain):
+    """Per target of ``chain`` (bool array): a row's own ``sampled`` flags where it declares them (a bool, or one per
+    target: filled-reasoning rows mix the student's sampled think block with the teacher action after it,
+    ``filled_reasoning.py``), else the chain's ``student_sampled``."""
+    default = student_sampled(chain)
+    parts = []
+    for _, length, row in chain['segs']:
+        flags = row.get('sampled', default)
+        flags = np.asarray(flags, bool)
+        parts.append(np.broadcast_to(flags, (length,)) if flags.ndim == 0 else flags)
+        if len(parts[-1]) != length:
+            raise ValueError(f"row {row.get('id')}: {len(parts[-1])} sampled flags for {length} targets")
+    return np.concatenate(parts) if parts else np.zeros(0, bool)
+
+
 def sampled_mask(chains, device):
-    """Per-target ``student_sampled`` flags of chains packed back to back (``row_tensors`` order)."""
-    return torch.cat([torch.full((sum(length for _, length, _ in chain['segs']),), student_sampled(chain),
-                                 dtype=torch.bool, device=device) for chain in chains])
+    """Per-target ``sampled_targets`` flags of chains packed back to back (``row_tensors`` order)."""
+    return torch.cat([torch.from_numpy(np.ascontiguousarray(sampled_targets(chain))).to(device) for chain in chains])
 
 
 def chain_tensors(chain, device):
