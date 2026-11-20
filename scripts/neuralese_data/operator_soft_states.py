@@ -68,6 +68,10 @@ def operator_turn(site, seed_text, provenance, *, case, index):
             'evidence': evidence(provenance)}
 
 
+def turn_chars(messages, reply):
+    return sum(len(m['content']) for m in messages if isinstance(m.get('content'), str)) + len(reply)
+
+
 def turns(args):
     tokenizer, roles, _ = operator_rows.load_tokenizer(args.base)
     renderer = TokenRenderer(tokenizer, role_ids=roles)
@@ -112,6 +116,9 @@ def turns(args):
                             counts[f'unverified:{seed["provenance"]}'] += 1
                             continue
                         text = tokenizer.decode(seed_ids, skip_special_tokens=False)
+                        if args.max_chars and turn_chars(site['messages'], text) > args.max_chars:
+                            counts['over_max_chars'] += 1   # a row's activations scale with its length (fit memory)
+                            continue
                         stream.write(json.dumps(operator_turn(site, text, seed['provenance'], case=case, index=index)) + '\n')
                         counts[f'{site["operator"]}:{seed["provenance"]}'] += 1
                         wrote = True
@@ -225,6 +232,8 @@ def main(argv=None):
     t.add_argument('--admit-mechanical', action='store_true',
                    help='admit mechanical seeds as weak (enclosing-success) rows; off by default: they are not verified')
     t.add_argument('--split', choices=('train', 'test'), default='train')
+    t.add_argument('--max-chars', type=int, default=40000,
+                   help='longest row (site and reply characters; ~10k tokens): bounds the fit\'s activation memory (0: no cap)')
     e = sub.add_parser('evaluate')
     e.add_argument('--build', required=True)
     e.add_argument('--turns', required=True, help='test-split turns (turns --split test)')

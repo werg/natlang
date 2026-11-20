@@ -60,6 +60,8 @@ def _engine(spec):
     from ...serve.store import TensorStore
     engine = load_native_engine(spec['checkpoint'], base=spec.get('base'), device=spec.get('device', 'cpu'),
                                 dtype=engine_dtype(spec), training_state=False)
+    from ...common.cuda_context import drop_file_cache
+    drop_file_cache(spec['checkpoint'])   # the weights are on the device; its cached pages are not needed
     from .checkpointing import configure_adaptation_checkpointing
     configure_adaptation_checkpointing(engine, group)
     if spec.get('store'):

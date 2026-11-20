@@ -94,3 +94,19 @@ def prepare_gpu(device: str = 'cuda', *, want_gb: float = 4.0) -> None:
     free = high_order_free_mb()
     if free is not None and free < want_gb * 1024:
         print(json.dumps({'event': 'cuda_compact', 'high_order_free_mb': free, 'compact': compact(want_gb)}), flush=True)
+
+
+def drop_file_cache(path) -> None:
+    """Evict a read file's clean pages from the page cache (``posix_fadvise DONTNEED``): a checkpoint whose weights are
+    on the device keeps nothing in host memory (on the GB10 its cached pages count toward the job's memory and crowd
+    the large free blocks CUDA needs)."""
+    try:
+        fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+    except (OSError, AttributeError):
+        pass
+    finally:
+        os.close(fd)
