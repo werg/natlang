@@ -2717,3 +2717,12 @@ guidance (DECISIONS 2026-11-18).
 - **Another rendering stays text, not untuned.** A call whose instruction text differs from the one its binding's state
   was primed from (an inline lambda interpolating values; a drifted release) sends that text under the binding's
   adapter stack. Before, it ran fully untuned. Training kept such rows as text under the stack too (`place_states`).
+
+## 2026-11-20: program guidance states are primed in their real call (first principles, AGENTS.md "text-init in context")
+
+A program-guidance state (memetic guidance, and any guidance bound without a trained state) was written from its text
+alone, from position 0, so its rows never saw the call they stand in. Now the first call that reads a guidance writes
+that text as a placeholder, renders its opening with it, and primes the state at that position (`native.init-body`).
+That call and every later call with the same guidance and actor read the primed state. A trained (refined) state is
+read as it is. Opt-out: `NATLANG_GUIDANCE_PRIMING=text` (agent option `guidancePriming: 'text'`). The text the model sees
+is unchanged; only the state's values change.

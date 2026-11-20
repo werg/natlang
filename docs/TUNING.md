@@ -334,6 +334,11 @@ input-specific and written by a producer call, not a static learned state.
   seeds) into rows of `prompt:view@<operator>` and a rank-0 plan; the collector serves a build with
   `NATLANG_NEURALESE_PROMPT_STATES=BUILD_DIR` (`off` or unset: text). An operator call then imports its own state where
   view's body stood, and its in-context capture keeps that import on every engine (`docs/ENGINE_PARITY.md`).
+- Every static member is primed in its real call. Program guidance (memetic or authored) is primed in the opening of
+  the first call that reads it (`native.init-body` through `neuralese.prime`, agent.ts `runtimeProgramGuidance`) and
+  reused by later calls; `NATLANG_GUIDANCE_PRIMING=text` opts out. A state that was already trained is read as it is.
+  Produced spans (a value the model writes as Neuralese) are written by their producer and differ in data. Moving
+  them to an in-place capture of the producing reply is the open §3.6 decision in OPERATORS_RESTORE_20261117.md.
 - Memetic guidance: with `refine` in the episode spec, the committed guidance states are refined on the support worlds'
   verified calls and kept only when the query worlds confirm them (`rl/memetic_workspace.py` `refine_guidance`).
 
