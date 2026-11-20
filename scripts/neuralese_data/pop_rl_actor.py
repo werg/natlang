@@ -102,6 +102,15 @@ def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING):
 
 
 SGLANG_MEMORY_GB = 11   # 8 GiB was OOM-killed at CUDA-graph capture (2026-11-12): front + view on CPU + server
+
+
+def pop_sglang_budget_gb():
+    """Pop ledger budget of an SGLang actor unit (start and serve-checkpoint alike): Pop's 15 GB leave 10.9-11.5 GiB
+    admissible (10.9 with the gdm greeter after a desktop logout), and the engine's own limits bound its memory, so
+    the unit claims SGLANG_MEMORY_GB - 1. NATLANG_POP_HELD_BUDGET_GB overrides."""
+    return os.environ.get('NATLANG_POP_HELD_BUDGET_GB', str(SGLANG_MEMORY_GB - 1.))
+
+
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
 
@@ -501,12 +510,14 @@ def start(args):
     unit = f'{name}-{int(time.time())}'
     # The SGLang actor runs on Pop's host (the fork's venv); the native one in its container.
     container = [] if args.engine == 'sglang' else ['--container', name]
-    # The SGLang front holds the CPU-loaded view until the server is up, beside the server's own processes.
-    # SGLANG_MEMORY_GB - 0.5 as serve-checkpoint asks: Pop admits about 11.3 GiB, so 11 + 0.5 reserve was refused.
-    budget = SGLANG_MEMORY_GB - .5 if args.engine == 'sglang' else RL_MEMORY_GB
+    # The SGLang front holds the CPU-loaded view until the server is up, beside the server's own processes; the same
+    # admissible budget as serve-checkpoint (pop_sglang_budget_gb: 10.5 was refused beside the gdm greeter, 2026-11-20).
+    # On the host (no container) MemoryMax is the real cap: it stays at the 10.5 GB the actor has run with.
+    budget = pop_sglang_budget_gb() if args.engine == 'sglang' else str(RL_MEMORY_GB)
+    cap = ['--host-max-gb', str(SGLANG_MEMORY_GB - .5)] if args.engine == 'sglang' else []
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                        '--budget-gb', str(budget), '--reserve-gb', str(POP_RESERVE_GB),
-                        '--class', 'experiment', '--no-resumable', *container, '--workdir', work, '--',
+                        '--budget-gb', budget, *cap, '--reserve-gb', str(POP_RESERVE_GB),
+                        '--class', 'experiment', '--no-resumable', '--wait', '900', *container, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
               'engine': args.engine, **({'sglang': sglang} if args.engine == 'sglang' else {}),
@@ -610,7 +621,7 @@ def serve_checkpoint(args):
     # 2026-11-19: 10.5 + the 0.5 reserve waited out its admission). The engine runs in a docker container capped by
     # its own --memory, so this unit's budget is accounting for the driver, not the engine's limit.
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                    '--budget-gb', os.environ.get('NATLANG_POP_HELD_BUDGET_GB', str(SGLANG_MEMORY_GB - 1.)), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
+                    '--budget-gb', pop_sglang_budget_gb(), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
                     '--no-resumable', '--wait', '900', '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1),
