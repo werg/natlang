@@ -155,6 +155,24 @@ python scripts/vibestudio/open_goal_inventory.py \
   --out "$BASELINE_OUTPUT"
 ```
 
+From the clean Vibestudio checkout, use the installed-skill probe under the
+memory ledger to reconcile the six workspace skill catalogs with the pinned
+sources. It starts one managed workspace at a time and reads its actual
+skill list and documents through the agent CLI. The report records Base and
+System Testing as composition layers.
+
+```sh
+node --import tsx "$NATLANG_CHECKOUT/scripts/vibestudio/open_goal_installed_skills.mjs" \
+  --host "$VIBESTUDIO_CHECKOUT" --templates "$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
+  --baseline "$NATLANG_CHECKOUT/docs/research/vibestudio-open-goal-baseline.jsonl" \
+  --out "$SKILL_INVENTORY"
+```
+
+Use `--plan` to inspect the predicted catalog without starting a workspace.
+For a one-workspace smoke, pass `--workspace examples`. The report sets
+`complete` only when the live catalogs of all six templates match their
+expected source owners, document digests, and visible metadata.
+
 | Capability | Evidence in the first cases | Gap |
 | --- | --- | --- |
 | Discover relevant state | The agent chooses search queries and sources, discovers workspace files, and inspects the live DOM and visible controls in an owned panel | Provider accounts, remote devices, and discovery across panels and workspaces |
@@ -185,20 +203,20 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 91 open goals across six workspace templates, with 71
-training goals and 20 source-separated holdouts. The same Base entry point
+The catalog declares 114 open goals across six workspace templates, with 89
+training goals and 25 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 27 | Public evidence and document recovery, authorized CDP changes and readback, declared suite verification, and publishing readiness and receipt recovery |
+| Examples | 35 | Public evidence and document recovery, authorized CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, and native PDF text, layout and raster evidence |
 | Personal | 15 | `workspace-live-declared-test-suite`, `personal-live-mission-planning`, and `personal-live-mission-facility` with board discovery, revision-bound changes, competing edits, prerequisites, and durable handoffs |
 | System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 5 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes |
-| Google Workspace | 7 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition |
+| Google Workspace | 22 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition. `google-live-gmail-compose-history` with retained drafts and read-only provider evidence for interrupted saves and delivery |
 
 Google's qualification uses the real installed Drive client against a bounded
 test transport. News and Spectrolite use the live workspace services for
