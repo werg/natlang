@@ -151,6 +151,7 @@ def build_inputs(args):
     """A build's inputs, checked before it reads them: data no registry entry holds stops it here."""
     return [p for p in [args.work, getattr(args, 'held_manifest', None), getattr(args, 'base_rates', None),
                         getattr(args, 'october', None), *(getattr(args, 'teacher_pool', None) or []),
+                        *(getattr(args, 'prefer_unseen', None) or []),
                         *[a.split('=', 1)[1].split(',')[0] for a in getattr(args, 'aux', None) or []]] if p]
 
 
@@ -1089,6 +1090,18 @@ def october_candidates(args, funnel, held, weights):
     return list(trajectories.values())
 
 
+def trained_in(builds):
+    """(episode keys, task ids) an earlier build trained: its OUT/rows.jsonl.zst rows (``--prefer-unseen``)."""
+    keys, tasks = set(), set()
+    for build in builds:
+        for line in zstd_lines(Path(build) / 'rows.jsonl.zst'):
+            if line.strip():
+                row = json.loads(line)
+                keys.add(row['episode'])
+                tasks.add(row['task_id'])
+    return frozenset(keys), frozenset(tasks)
+
+
 def round_robin(members, rng, order):
     """A task's episodes taking turns by producer (source and teacher model), the producers in `order`: a cap keeps
     different producers' solutions before a second one of any producer (no single teacher fills a task)."""
@@ -1106,14 +1119,17 @@ def round_robin(members, rng, order):
     return out
 
 
-def capped(candidates, rng, funnel, cap_of, family_share, order):
-    """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest."""
+def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozenset()):
+    """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest.
+    Episodes whose key is in `trained` (an earlier build the start checkpoint learned, ``--prefer-unseen``) go after
+    every untrained one under each cap; with none the selection is unchanged."""
     by_task = collections.defaultdict(list)
     for c in candidates:
         by_task[c['task_id']].append(c)
     selected = []
     for task_id, members in sorted(by_task.items(), key=lambda item: str(item[0])):
         members = round_robin(members, rng, order)
+        members.sort(key=lambda c: c.get('key') in trained)       # stable: producers keep their turns within each part
         cap = cap_of(task_id)
         selected += members[:cap]
         for c in members[cap:]:
@@ -1125,6 +1141,7 @@ def capped(candidates, rng, funnel, cap_of, family_share, order):
     final = []
     for family, members in sorted(by_family.items(), key=lambda item: str(item[0])):
         rng.shuffle(members)
+        members.sort(key=lambda c: c.get('key') in trained)
         final += members[:limit]
         for c in members[limit:]:
             funnel[c['source']]['over_family_cap'] += 1
@@ -1174,12 +1191,13 @@ def replayed_turns(work, name):
     return [semantic_turn(t, False) for t in replayed['turns']]
 
 
-def wrapper_capped(selected, rng, funnel, is_wrapper, share):
-    """Keep dataset-wrapper episodes to at most `share` of the selection."""
+def wrapper_capped(selected, rng, funnel, is_wrapper, share, trained=frozenset()):
+    """Keep dataset-wrapper episodes to at most `share` of the selection (untrained ones first, as in `capped`)."""
     wrappers = [c for c in selected if is_wrapper(c)]
     rest = [c for c in selected if not is_wrapper(c)]
     limit = int(share / (1 - share) * len(rest)) if share < 1 else len(wrappers)
     rng.shuffle(wrappers)
+    wrappers.sort(key=lambda c: c.get('key') in trained)
     for c in wrappers[limit:]:
         funnel[c['source']]['over_wrapper_share'] += 1
     return rest + wrappers[:limit]
@@ -1401,10 +1419,13 @@ def build(args):
 
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
+    trained_keys, trained_before = trained_in(getattr(args, 'prefer_unseen', None) or [])
     teacher_pool = wrapper_capped(capped([c for c in unique if c['source'] not in OWN_SOURCES], rng, funnel, core_cap,
-                                         args.max_family_share, lambda c: 0), rng, funnel, is_wrapper, args.wrapper_share)
+                                         args.max_family_share, lambda c: 0, trained_keys), rng, funnel, is_wrapper,
+                                  args.wrapper_share, trained_keys)
     own_pool = wrapper_capped(capped([c for c in unique if c['source'] in OWN_SOURCES], rng, funnel, core_cap,
-                                     args.max_family_share, lambda c: 0), rng, funnel, is_wrapper, args.wrapper_share)
+                                     args.max_family_share, lambda c: 0, trained_keys), rng, funnel, is_wrapper,
+                              args.wrapper_share, trained_keys)
 
     renderer = TemplateRenderer(args.tokenizer)
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
@@ -1506,11 +1527,13 @@ def build(args):
     def breadth_first(pool, key):
         """A pool in selection order: every task's first episode before any task's second, and within a round the
         families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key``
-        orders within a family's turn: held constructs first, then low base pass rates."""
+        orders within a family's turn: held constructs first, then low base pass rates. With ``--prefer-unseen`` every
+        untrained episode comes before any episode an earlier build trained (each part breadth-first)."""
         rank, seen = {}, collections.Counter()
         for c in pool:
-            rank[c['key']] = seen[c['task_id']]
-            seen[c['task_id']] += 1
+            old = c['key'] in trained_keys
+            rank[c['key']] = (old, seen[(old, c['task_id'])])
+            seen[(old, c['task_id'])] += 1
         ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
         turn, taken = {}, collections.Counter()
         for c in ordered:
@@ -1544,6 +1567,8 @@ def build(args):
         if not admit(c, turns_of(c)):
             funnel[c['source']]['render_error'] += 1
             continue
+        if c['key'] in trained_keys:
+            funnel[c['source']]['admitted_trained_before'] += 1
         teacher_forward += sft_episodes[-1]['forward_tokens']
         task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
     episode_sizes.save()
@@ -1687,6 +1712,8 @@ def build(args):
         if not admit(c, turns_of(c)):
             funnel[c['source']]['render_error'] += 1
             continue
+        if c['key'] in trained_keys:
+            funnel[c['source']]['admitted_trained_before'] += 1
         own_tokens += sft_episodes[-1]['weighted_target_tokens']
         task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
     episode_sizes.save()
@@ -1713,7 +1740,7 @@ def build(args):
 
     # validation sets: up to --val-episodes left-over successes per kind on tasks the build does not train (own:
     # the student's reasoning, whose NLL rising shows drift; teacher: actions on unseen tasks)
-    trained_tasks = {e['task_id'] for e in sft_episodes}
+    trained_tasks = {e['task_id'] for e in sft_episodes} | trained_before   # the start checkpoint's tasks too
     validation = {}
     for kind, pool in sorted(left_over.items()):
         val_chains, val_tasks = [], set()
@@ -1760,6 +1787,8 @@ def build(args):
                    'october_family_share': args.october_family_share,
                    'teacher_think': args.teacher_think, 'teacher_lead_in': args.teacher_lead_in,
                    'exclude_run': args.exclude_run, 'guided': args.guided,
+                   'prefer_unseen': {'builds': list(getattr(args, 'prefer_unseen', None) or []),
+                                     'episodes': len(trained_keys), 'tasks': len(trained_before)},
                    'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
                    'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
@@ -2156,6 +2185,10 @@ def main():
                    help='share of the weighted target tokens taken by the student\'s own successes (0: every capped one)')
     b.add_argument('--max-task-target-tokens', type=int, default=0,
                    help='per task cap on weighted target tokens that own successes may fill up to (0: none)')
+    b.add_argument('--prefer-unseen', action='append', default=[], metavar='BUILD_OUT',
+                   help='an earlier build the start checkpoint already trained (its OUT dir): its episodes go after '
+                        'every untrained one at each cap and budget, and its tasks stay out of validation (for SFT from '
+                        'a checkpoint descended from that build; repeatable)')
     b.add_argument('--val-episodes', type=int, default=40,
                    help='left-over own and teacher successes on untrained tasks written as OUT/val-{own,teacher}.pkl')
     b.add_argument('--aux', action='append', default=[],
