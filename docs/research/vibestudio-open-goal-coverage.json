@@ -29,6 +29,10 @@
       "capabilities": ["system-live-remote-commission", "system-live-remote-deployment"],
       "skills": ["base:skills/terminal/SKILL.md", "system:skills/remote-access/SKILL.md"]
     },
+    "ownedPreview": {
+      "capabilities": ["workspace-live-publication-revision", "workspace-publication-preflight"],
+      "skills": ["base:skills/website-publishing/SKILL.md"]
+    },
     "pdf": {
       "capabilities": ["workspace-pdf-intake", "workspace-live-pdf-layout", "workspace-live-pdf-media-review"],
       "skills": ["base:extensions/pdf-ingest/SKILL.md"]
@@ -91,6 +95,16 @@
         "news:panels/news/SKILL.md": ["verifiedAuthorizedChanges", "verifiedCadence"]
       }
     },
+    "open-goal-archive-exhibit-checklist-and-link-review": {
+      "capabilities": {
+        "personal-live-browser-library": ["exactLibraryState", "protectedBrowserRecords"],
+        "personal-live-collection": ["exactCollectionState", "verifiedBookmarkHandoff"]
+      },
+      "skills": {
+        "personal:extensions/browser-data/SKILL.md": ["observedOwnedArtifacts", "protectedBrowserRecords"],
+        "personal:about/collection/SKILL.md": ["exactCollectionState", "verifiedBookmarkHandoff"]
+      }
+    },
     "open-goal-audit-onboarding-pack-direct-access": {
       "capabilities": {
         "google-live-drive-inventory-sharing": ["exactProviderReads", "groundedDriveFindings"]
@@ -145,6 +159,16 @@
         "personal:workers/mission-control-store/SKILL.md": ["exactMissionEffects", "observedMissionBoard"]
       }
     },
+    "open-goal-held-river-cleanup-zone": {
+      "capabilities": {
+        "workspace-verified-memory": ["joinedSourceEvidence", "readExactMilestones"],
+        "workspace-live-provenance-history": ["observedArchiveDiscovery", "protectedHistory", "readExactMilestones"]
+      },
+      "skills": {
+        "personal:skills/memory/SKILL.md": ["joinedSourceEvidence", "observedArchiveDiscovery"],
+        "base:skills/provenance-orientation/SKILL.md": ["protectedHistory", "readExactMilestones"]
+      }
+    },
     "open-goal-open-pdf-visual-only-campus-map": {
       "capabilities": {
         "workspace-live-pdf-media-review": ["renderedEvidence", "groundedRecommendation"]
@@ -192,6 +216,14 @@
       },
       "skills": {
         "base:skills/open-user-goal/SKILL.md": ["discoveredWorkspace", "recoveredConcurrentEdit"]
+      }
+    },
+    "open-goal-resume-restoration-owned-preview-after-upload": {
+      "capabilities": {
+        "workspace-live-publication-revision": ["exactApprovedArtifact", "exactHostJournal", "exactProviderEffects"]
+      },
+      "skills": {
+        "base:skills/website-publishing/SKILL.md": ["exactOwnedLaunch", "exactHostJournal", "exactProviderEffects"]
       }
     },
     "open-goal-sequence-studio-dispatch": {

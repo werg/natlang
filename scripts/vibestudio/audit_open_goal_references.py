@@ -4,6 +4,8 @@ import argparse
 import gzip
 import hashlib
 import json
+import shutil
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -109,6 +111,32 @@ def corpus_floor(baseline):
     return floor
 
 
+def write_evidence_bundle(destination, result, inputs):
+    """Copy the accepted evidence and the audit inputs into one portable directory."""
+    if destination.exists():
+        raise FileExistsError(destination)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as scratch:
+        staged = Path(scratch) / 'evidence'
+        archive = staged / 'references'
+        archive.mkdir(parents=True)
+        for name, source in inputs.items():
+            if source is not None:
+                shutil.copyfile(source, staged / name)
+        if hashlib.sha256((staged / 'catalog.jsonl').read_bytes()).hexdigest() != result['catalog_sha256']:
+            raise ValueError('Open-goal catalog changed after the audit')
+        portable = {}
+        for case, proof in result['proofs'].items():
+            source = Path(proof['path'])
+            target = archive / source.name
+            shutil.copyfile(source, target)
+            with target.open('rb') as stream:
+                if hashlib.file_digest(stream, 'sha256').hexdigest() != proof['archive_sha256']:
+                    raise ValueError(f'Reference archive changed after the audit: {case}')
+            portable[case] = {**proof, 'path': target.relative_to(staged).as_posix()}
+        (staged / 'audit.json').write_text(json.dumps({**result, 'proofs': portable}, indent=2) + '\n')
+        staged.rename(destination)
+
+
 def inventory_coverage(result, baseline, crosswalk, installed=None):
     rows = [json.loads(line) for line in baseline.read_text().splitlines()]
     inventory = {
@@ -204,6 +232,7 @@ if __name__ == '__main__':
     parser.add_argument('--baseline', type=Path, help='audit the full corpus against the pinned inventory floor')
     parser.add_argument('--coverage', type=Path, help='crosswalk from goal families to the pinned inventory')
     parser.add_argument('--installed-skills', type=Path, help='live skill inventory from the managed workspace probe')
+    parser.add_argument('--bundle-out', type=Path, help='new directory for accepted reference evidence and audit inputs')
     parser.add_argument('--require-complete', action='store_true')
     args = parser.parse_args()
     if args.baseline and args.family:
@@ -236,5 +265,13 @@ if __name__ == '__main__':
             missing_coverage |= bool(installed['missing_workspaces']) or any(
                 workspace['without_verified_reference_links'] for workspace in installed['workspaces'].values()
             )
+    incomplete = bool(result['missing'] or shortfall or missing_holdout or missing_coverage)
+    if args.bundle_out and (not args.require_complete or not incomplete):
+        write_evidence_bundle(args.bundle_out, result, {
+            'catalog.jsonl': args.catalog,
+            'baseline.jsonl': args.baseline,
+            'coverage.json': args.coverage,
+            'installed-skills.json': args.installed_skills,
+        })
     print(json.dumps(result, indent=2))
-    raise SystemExit(int(args.require_complete and bool(result['missing'] or shortfall or missing_holdout or missing_coverage)))
+    raise SystemExit(int(args.require_complete and incomplete))

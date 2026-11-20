@@ -214,15 +214,15 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 240 open goals across six workspace templates, with 187
-training goals and 53 source-separated holdouts. The same Base entry point
+The catalog declares 248 open goals across six workspace templates, with 193
+training goals and 55 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 47 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, and native PDF text, layout and raster evidence |
+| Examples | 55 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, owned preview publishing, and native PDF text, layout and raster evidence |
 | Personal | 74 | Declared tests, Mission Control, browser-library-to-collection work, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
 | System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
@@ -242,6 +242,11 @@ The publishing cases reuse `workspace-publication-preflight` and
 `workspace-live-publication-revision`. The harness binds an actual renderer
 and website package to an observed workspace revision. It checks readiness
 and the exact local publication journal without issuing an external publish.
+Eight owned preview goals add bounded provider uploads, interrupted
+submission, idempotent retry, hosted-file readback, and approval holds. They
+use the installed publisher and durable Host journal with a disposable
+provider. The direct provider and journal probe passed. Managed renderer
+and RPC verification is tracked in the case evidence audit.
 The public-research holdouts use source groups for W3C image accessibility
 and Unicode canonical comparison, separate from the training cases about
 reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/images/decorative/),
@@ -262,7 +267,11 @@ and the reported System Testing build version. With the baseline, it reports
 the remaining corpus shortfall and families without a verified holdout. Add
 `--require-complete` to make those gaps or any missing reference fail the
 check. For a single family, pass `--family` in place of `--baseline`.
-Reference executions do not produce teacher data.
+Use `--bundle-out NEW_DIRECTORY` to save the catalog, audit inputs,
+and accepted reference traces together. Each copied archive is checked
+against the audit's digest, and the saved report uses paths relative to the
+bundle. Keep these reference bundles with the corpus verification evidence.
+Teacher exports and learner assembly use their own capture directories.
 
 The crosswalk identifies likely skill sources and baseline capabilities by
 family. Coverage credit requires an explicit case link and every named check
@@ -307,6 +316,14 @@ native retained compose history and the owned provider transport. The public-res
 require a working search provider. The managed test reached the default DuckDuckGo provider,
 which rejected its automated searches. Configure Tavily, Brave, or Exa in
 the managed workspace before running the public-research references.
+
+All 39 Calendar and Gmail-to-Drive cases passed. All nine browser-library and
+collection cases passed, including concurrent changes. The first archive
+history run passed six cases and exposed a canonical VCS snapshot ordering
+failure in 18 fixtures. The fixture now orders paths with the same comparator
+as the VCS protocol, and all 18 passed on rerun. The preserved 166-case bundle,
+`vibestudio-open-goal-reference-166-20261120`, includes the 240-goal catalog
+used for those checks and re-audits from its copied evidence.
 
 The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised

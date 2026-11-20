@@ -3,7 +3,9 @@ import json
 
 import pytest
 
-from scripts.vibestudio.audit_open_goal_references import audit, corpus_floor, fingerprint, inventory_coverage
+from scripts.vibestudio.audit_open_goal_references import (
+    audit, corpus_floor, fingerprint, inventory_coverage, write_evidence_bundle,
+)
 
 
 def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
@@ -32,21 +34,35 @@ def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
         'result': {'passed': True, 'details': proof['checks']},
         'execution': {'provenance': {'contextId': 'ctx-original'}, 'diagnostics': diagnostics},
     }
-    output = tmp_path / 'trajectory-open-goal-oracle-review-shift-full.json.gz'
+    source = tmp_path / 'source'
+    source.mkdir()
+    output = source / 'trajectory-open-goal-oracle-review-shift-full.json.gz'
 
     def verified_count():
         with gzip.open(output, 'wt', encoding='utf-8') as stream:
             json.dump(trace, stream)
-        return audit(catalog, [tmp_path], {'mission'})['verified']
+        return audit(catalog, [source], {'mission'})['verified']
 
     assert verified_count() == 1
-    result = audit(catalog, [tmp_path], {'mission'})
+    result = audit(catalog, [source], {'mission'})
     assert result['families']['mission'] == {
         'train': 1, 'held': 0, 'verified_train': 1, 'verified_held': 0,
     }
     assert result['families_without_verified_holdout'] == ['mission']
+    destination = tmp_path / 'bundle'
+    write_evidence_bundle(destination, result, {'catalog.jsonl': catalog})
+    proof_path = json.loads((destination / 'audit.json').read_text())['proofs'][scenario]['path']
+    assert proof_path == f'references/{output.name}'
+    portable = audit(destination / 'catalog.jsonl', [destination / 'references'], {'mission'})
+    assert portable['proofs'][scenario]['archive_sha256'] == result['proofs'][scenario]['archive_sha256']
+    output.write_bytes(output.read_bytes() + b'late change')
+    invalid = tmp_path / 'changed-archive'
+    with pytest.raises(ValueError, match='Reference archive changed after the audit'):
+        write_evidence_bundle(invalid, result, {'catalog.jsonl': catalog})
+    assert not invalid.exists()
     catalog.write_text(catalog.read_text().replace('"split": "train"', '"split": "test"'))
-    assert audit(catalog, [tmp_path], {'mission'})['families_without_verified_holdout'] == []
+    output.write_bytes((destination / proof_path).read_bytes())
+    assert audit(catalog, [source], {'mission'})['families_without_verified_holdout'] == []
     proof['goal'] = 'Review a different shift.'
     assert verified_count() == 0
     proof['goal'], proof['contextId'] = goal, 'ctx-replacement'
