@@ -264,16 +264,18 @@ the remaining corpus shortfall and families without a verified holdout. Add
 check. For a single family, pass `--family` in place of `--baseline`.
 Reference executions do not produce teacher data.
 
-The crosswalk links each current family to pinned skill sources and baseline
-capabilities. The audit reports missing links and which mapped capabilities
-have at least one archived reference. A family-level link records where the
-coverage applies, while individual test coverage still depends on the cases
-and their outcomes.
+The crosswalk identifies likely skill sources and baseline capabilities by
+family. Coverage credit requires an explicit case link and every named check
+in that case's accepted reference archive. The report lists the exact cases
+that support each capability and skill. It also lists every inventory entry
+that still needs evidence.
 
 Pass `--installed-skills "$SKILL_INVENTORY"` to match these links against the
-skills observed in each managed workspace. In that mode `--require-complete`
-also requires live observations from all six workspaces and at least one
-verified reference link for each installed skill.
+skills observed in each managed workspace. For the full corpus,
+`--require-complete` requires both inventories, live observations from all
+six workspaces, and at least one verified reference link for each baseline
+capability and skill. Each installed skill also needs a reference from its
+own workspace.
 
 The first Personal and System live reference runs passed all five planning
 cases and exposed missing target dependencies in five native executions.

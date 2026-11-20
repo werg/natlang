@@ -14,6 +14,7 @@ def test_registrations_only_gain_credit_for_bound_model_free_results(tmp_path):
         'interaction': 'open-user-goal',
         'scenario': scenario,
         'family': 'mission',
+        'workspace': 'personal',
         'split': 'train',
         'sourceGroups': ['gallery'],
         'goalSha256': fingerprint(goal),
@@ -79,32 +80,47 @@ def test_inventory_links_count_only_after_a_reference_pass(tmp_path):
         {'kind': 'skill', 'id': 'source:session'},
     ])))
     path = tmp_path / 'crosswalk.json'
+    scenario = 'open-goal-review-shift'
+    family_name = 'workspace-open-user-goal-recovery'
     mapping = {
-        'schema': 'vibestudio.open-goal-coverage/1',
+        'schema': 'vibestudio.open-goal-coverage/2',
         'families': {'recovery': {'capabilities': ['retained-session'], 'skills': ['source:session']}},
+        'cases': {scenario: {
+            'capabilities': {'retained-session': ['retainedReadback']},
+            'skills': {'source:session': ['retainedReadback']},
+        }},
     }
     path.write_text(json.dumps(mapping))
-    family = {'verified_train': 0, 'verified_held': 0}
-    report = {'families': {'workspace-open-user-goal-recovery': family}}
+    report = {
+        'families': {family_name: {'verified_train': 0, 'verified_held': 1}},
+        'cases': {scenario: {'family': family_name, 'workspace': 'one', 'split': 'test'}},
+        'proofs': {scenario: {'checks': ['unrelated']}},
+    }
     features = inventory_coverage(report, baseline, path)['capabilities']
     assert features['unmapped'] == ['file-version']
-    assert features['verified_reference_links'] == []
-    family['verified_held'] = 1
-    assert inventory_coverage(report, baseline, path)['capabilities']['verified_reference_links'] == [
-        'retained-session',
-    ]
+    assert features['verified_reference_links'] == {}
+    assert features['without_verified_reference_links'] == ['file-version', 'retained-session']
+    report['proofs'][scenario]['checks'] = ['retainedReadback']
+    assert inventory_coverage(report, baseline, path)['capabilities']['verified_reference_links'] == {
+        'retained-session': [scenario],
+    }
     live = tmp_path / 'installed.json'
     live.write_text(json.dumps({
         'schema': 'vibestudio.installed-skill-inventory/1',
         'baselinePins': {'base': 'pinned'},
         'mechanism': 'workspace.listSkills+workspace.readSkill',
         'instantiableWorkspaces': ['one', 'two'],
-        'workspaces': [{'workspace': 'one', 'matchesPinnedSources': True,
-                       'observed': {'skills': [{'expectedSource': 'source:session'}, {'expectedSource': 'source:new'}]}}],
+        'workspaces': [
+            {'workspace': 'one', 'matchesPinnedSources': True,
+             'observed': {'skills': [{'expectedSource': 'source:session'}, {'expectedSource': 'source:new'}]}},
+            {'workspace': 'two', 'matchesPinnedSources': True,
+             'observed': {'skills': [{'expectedSource': 'source:session'}]}},
+        ],
     }))
     installed = inventory_coverage(report, baseline, path, live)['installed_skills']
-    assert installed['missing_workspaces'] == ['two']
+    assert installed['missing_workspaces'] == []
     assert installed['workspaces']['one'] == {'observed': 2, 'without_verified_reference_links': ['source:new']}
+    assert installed['workspaces']['two'] == {'observed': 1, 'without_verified_reference_links': ['source:session']}
     mapping['families']['recovery']['skills'] = ['unknown']
     path.write_text(json.dumps(mapping))
     with pytest.raises(ValueError, match='Unknown skills'):

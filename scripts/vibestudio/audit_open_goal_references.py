@@ -22,6 +22,7 @@ def audit(catalog_path, roots, families):
         scenario, goal_hash = row['scenario'], row['goalSha256']
         if (row['interaction'] != 'open-user-goal' or not scenario.startswith('open-goal-') or
                 row['split'] not in {'train', 'validation', 'test'} or
+                not isinstance(row.get('workspace'), str) or not row['workspace'] or
                 scenario in catalog or goal_hash in digests or not row['sourceGroups']):
             raise ValueError(f'Invalid or duplicate open goal: {scenario}')
         for group in row['sourceGroups']:
@@ -89,6 +90,10 @@ def audit(catalog_path, roots, families):
         'families_without_verified_holdout': sorted(
             family for family, counts in coverage.items() if not counts['verified_held']
         ),
+        'cases': {
+            scenario: {key: row[key] for key in ('family', 'workspace', 'split')}
+            for scenario, row in selected.items()
+        },
         'proofs': proofs,
     }
 
@@ -129,7 +134,7 @@ def inventory_coverage(result, baseline, crosswalk, installed=None):
             raise ValueError('Installed skills must bind to pinned source identities')
         inventory['skills'].update(set().union(*observed.values()))
     mapping = json.loads(crosswalk.read_text())
-    if mapping.get('schema') != 'vibestudio.open-goal-coverage/1':
+    if mapping.get('schema') != 'vibestudio.open-goal-coverage/2':
         raise ValueError('Expected an open-goal inventory crosswalk')
     families = result['families']
     matched = {kind: defaultdict(list) for kind in inventory}
@@ -145,6 +150,20 @@ def inventory_coverage(result, baseline, crosswalk, installed=None):
                 raise ValueError(f'Unknown {kind} for {family}: {sorted(unknown)}')
             for reference in references:
                 matched[kind][reference].append(family)
+    exercised = {kind: defaultdict(list) for kind in inventory}
+    for scenario, links in mapping['cases'].items():
+        case = result['cases'].get(scenario)
+        if case is None or not links or links.keys() - inventory.keys():
+            raise ValueError(f'Invalid coverage case: {scenario}')
+        for kind, references in links.items():
+            for reference, required in references.items():
+                if (case['family'] not in matched[kind].get(reference, ()) or
+                        not isinstance(required, list) or not required or
+                        any(not isinstance(check, str) or not check for check in required)):
+                    raise ValueError(f'Invalid {kind} evidence for {scenario}: {reference}')
+                proof = result['proofs'].get(scenario)
+                if proof and set(required) <= set(proof['checks']):
+                    exercised[kind][reference].append(scenario)
     report = {
         'unmapped_families': sorted(set(families) - {
             f'workspace-open-user-goal-{name}' for name in mapping['families']
@@ -153,23 +172,24 @@ def inventory_coverage(result, baseline, crosswalk, installed=None):
             kind: {
                 'mapped': dict(sorted(items.items())),
                 'unmapped': sorted(inventory[kind] - items.keys()),
-                'verified_reference_links': sorted(
-                    key for key, links in items.items() if any(
-                        families[family]['verified_train'] or families[family]['verified_held'] for family in links
-                    )
-                ),
+                'verified_reference_links': dict(sorted(exercised[kind].items())),
+                'without_verified_reference_links': sorted(inventory[kind] - exercised[kind].keys()),
             } for kind, items in matched.items()
         },
     }
     if installed:
-        exercised = set(report['skills']['verified_reference_links'])
         report['installed_skills'] = {
             'sha256': hashlib.sha256(inventory_bytes).hexdigest(),
             'missing_workspaces': sorted(expected_workspaces - observed.keys()),
             'workspaces': {
                 workspace: {
                     'observed': len(sources),
-                    'without_verified_reference_links': sorted(sources - exercised),
+                    'without_verified_reference_links': sorted(
+                        source for source in sources if not any(
+                            result['cases'][scenario]['workspace'] == workspace
+                            for scenario in exercised['skills'].get(source, ())
+                        )
+                    ),
                 } for workspace, sources in sorted(observed.items())
             },
         }
@@ -192,6 +212,8 @@ if __name__ == '__main__':
         parser.error('--coverage requires --baseline')
     if args.installed_skills and not args.coverage:
         parser.error('--installed-skills requires --coverage')
+    if args.require_complete and args.baseline and not args.installed_skills:
+        parser.error('a complete corpus audit requires --coverage and --installed-skills')
     result = audit(args.catalog, args.roots, set(args.family))
     shortfall = 0
     missing_holdout = False
@@ -204,7 +226,11 @@ if __name__ == '__main__':
     if args.coverage:
         coverage = inventory_coverage(result, args.baseline, args.coverage, args.installed_skills)
         result['inventory_coverage'] = coverage
-        missing_coverage = bool(coverage['unmapped_families'])
+        missing_coverage = bool(
+            coverage['unmapped_families'] or
+            coverage['capabilities']['without_verified_reference_links'] or
+            coverage['skills']['without_verified_reference_links']
+        )
         if args.installed_skills:
             installed = coverage['installed_skills']
             missing_coverage |= bool(installed['missing_workspaces']) or any(

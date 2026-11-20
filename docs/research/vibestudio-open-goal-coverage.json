@@ -1,5 +1,5 @@
 {
-  "schema": "vibestudio.open-goal-coverage/1",
+  "schema": "vibestudio.open-goal-coverage/2",
   "families": {
     "browser": {
       "capabilities": ["panels"],
@@ -80,6 +80,176 @@
     "workspace-edit": {
       "capabilities": ["filesystem"],
       "skills": ["base:skills/open-user-goal/SKILL.md"]
+    }
+  },
+  "cases": {
+    "open-goal-accelerate-source-checks-with-chicago-slot-protected": {
+      "capabilities": {
+        "news-live-ownership": ["verifiedAuthorizedChanges", "verifiedCadence", "verifiedReaderViews"]
+      },
+      "skills": {
+        "news:panels/news/SKILL.md": ["verifiedAuthorizedChanges", "verifiedCadence"]
+      }
+    },
+    "open-goal-audit-onboarding-pack-direct-access": {
+      "capabilities": {
+        "google-live-drive-inventory-sharing": ["exactProviderReads", "groundedDriveFindings"]
+      },
+      "skills": {
+        "google-workspace:skills/google-drive/SKILL.md": ["boundDriveOutcome", "exactProviderReads"]
+      }
+    },
+    "open-goal-calendar-audio-handoff": {
+      "skills": {
+        "google-workspace:skills/google-workspace/SKILL.md": ["exactCalendarWindows", "verifiedCalendarHandoff"]
+      }
+    },
+    "open-goal-continue-mailroom-sort-from-latest-accepted-window": {
+      "capabilities": {
+        "workspace-headless-session-replay": ["boundNativeReplay", "verifiedRecoveryHandoff"],
+        "workspace-live-transcript-cursor": ["boundNativeReplay", "exactReplayScope"]
+      },
+      "skills": {
+        "base:workers/pubsub-channel/SKILL.md": ["boundNativeReplay", "exactReplayScope"],
+        "system-testing:packages/agentic-session/SKILL.md": ["discoveredRetainedSources", "verifiedRecoveryHandoff"]
+      }
+    },
+    "open-goal-evaluate-council-production-transfer": {
+      "capabilities": {
+        "workspace-publication-preflight": ["boundWebsiteReadback", "exactPreflight"]
+      },
+      "skills": {
+        "base:skills/website-publishing/SKILL.md": ["exactPreflight", "protectedHeads"]
+      }
+    },
+    "open-goal-explain-museum-gallery-readiness": {
+      "capabilities": {
+        "personal-live-mission-planning": ["observedMissionBoard", "reportedMissionEvidence"]
+      }
+    },
+    "open-goal-google-handoff-lighting-packet": {
+      "capabilities": {
+        "google-live-compose-continuation": ["reconciledGoogleHandoffDecision", "verifiedGoogleHandoffProviderReads"],
+        "google-live-drive-checkpoint-handoff": ["boundGoogleHandoffAssets", "verifiedGoogleHandoffArtifact"]
+      },
+      "skills": {
+        "google-workspace:workers/gmail-agent/SKILL.md": ["reconciledGoogleHandoffDecision", "verifiedGoogleHandoffProviderReads"],
+        "google-workspace:skills/google-drive/SKILL.md": ["boundGoogleHandoffAssets", "verifiedGoogleHandoffFreshness"]
+      }
+    },
+    "open-goal-handoff-marina-repairs-and-report-unfinished-check": {
+      "capabilities": {
+        "personal-live-mission-facility": ["exactMissionEffects", "verifiedMissionHandoff"]
+      },
+      "skills": {
+        "personal:workers/mission-control-store/SKILL.md": ["exactMissionEffects", "observedMissionBoard"]
+      }
+    },
+    "open-goal-open-pdf-visual-only-campus-map": {
+      "capabilities": {
+        "workspace-live-pdf-media-review": ["renderedEvidence", "groundedRecommendation"]
+      }
+    },
+    "open-goal-open-pdf-workshop-mixed-structure": {
+      "capabilities": {
+        "workspace-pdf-intake": ["exactSelection", "textEvidence"],
+        "workspace-live-pdf-layout": ["layoutEvidence"]
+      },
+      "skills": {
+        "base:extensions/pdf-ingest/SKILL.md": ["exactSelection", "textEvidence", "layoutEvidence"]
+      }
+    },
+    "open-goal-pair-new-operator-to-running-workspace": {
+      "capabilities": {
+        "system-live-remote-commission": ["discoveredOwnedTarget", "respectedOperatorAuthority", "verifiedServiceOutcome"]
+      },
+      "skills": {
+        "base:skills/terminal/SKILL.md": ["respectedOperatorAuthority", "verifiedServiceOutcome"]
+      }
+    },
+    "open-goal-pdf-vault-loading-bay-correction": {
+      "capabilities": {
+        "workspace-pdf-handoff": ["exactOriginalPdf", "exactPdfReference", "verifiedHandoff"],
+        "spectrolite-live-revision-handoff": ["exactWorkingVault", "verifiedHandoff"]
+      },
+      "skills": {
+        "base:extensions/pdf-ingest/SKILL.md": ["exactOriginalPdf", "exactPdfReference"]
+      }
+    },
+    "open-goal-preserve-harbor-checkpoint-on-provider-interruption": {
+      "capabilities": {
+        "google-live-drive-checkpoint": ["boundDriveOutcome", "groundedDriveFindings", "preservedReadOnlyScope"]
+      }
+    },
+    "open-goal-reassess-trail-preview-after-correction": {
+      "capabilities": {
+        "workspace-live-publication-revision": ["exactRevision", "rereadCurrentAndRetainedPackage"]
+      }
+    },
+    "open-goal-reconcile-workshop-update": {
+      "capabilities": {
+        "filesystem": ["exactDocumentReadback", "recoveredConcurrentEdit"]
+      },
+      "skills": {
+        "base:skills/open-user-goal/SKILL.md": ["discoveredWorkspace", "recoveredConcurrentEdit"]
+      }
+    },
+    "open-goal-sequence-studio-dispatch": {
+      "capabilities": {
+        "panels": ["exactPanelOutcome", "readBackBrowser"]
+      },
+      "skills": {
+        "base:packages/testkit/SKILL.md": ["readBackBrowser", "reportedVisibleRows"]
+      }
+    },
+    "open-goal-trace-coastal-shift-notice": {
+      "capabilities": {
+        "spectrolite-live-vault": ["exactObservedNavigation", "originalSpectroliteEditor"]
+      }
+    },
+    "open-goal-verify-adventure-world-state": {
+      "capabilities": {
+        "workspace-live-declared-test-suite": ["checkedSuiteReceipt", "selectedAuthorizedSuite"]
+      },
+      "skills": {
+        "base:extensions/test-runner/SKILL.md": ["checkedSuiteReceipt", "selectedAuthorizedSuite"],
+        "system-testing:skills/system-testing/SKILL.md": ["discoveredSuites", "checkedSuiteReceipt"]
+      }
+    },
+    "open-goal-verify-continuity-after-museum-maintenance": {
+      "capabilities": {
+        "system-live-remote-deployment": ["observedCurrentHub", "verifiedServiceOutcome"]
+      },
+      "skills": {
+        "system:skills/remote-access/SKILL.md": ["discoveredOwnedTarget", "verifiedServiceOutcome"]
+      }
+    },
+    "open-goal-verify-human-edit-survives-stale-mission-save": {
+      "capabilities": {
+        "workspace-live-declared-test-suite": ["checkedSuiteReceipt", "selectedAuthorizedSuite"]
+      },
+      "skills": {
+        "base:extensions/test-runner/SKILL.md": ["checkedSuiteReceipt", "selectedAuthorizedSuite"],
+        "system-testing:skills/system-testing/SKILL.md": ["discoveredSuites", "checkedSuiteReceipt"]
+      }
+    },
+    "open-goal-verify-retained-venue-pickup-draft": {
+      "capabilities": {
+        "google-live-gmail-compose-history": ["discoveredOwnedComposes", "verifiedComposeLineage"],
+        "google-live-compose-continuation": ["verifiedComposeLineage", "reportedGmailContinuity"]
+      },
+      "skills": {
+        "google-workspace:workers/gmail-agent/SKILL.md": ["boundProviderReadback", "verifiedComposeLineage"]
+      }
+    },
+    "open-goal-verify-unavailable-model-fails-without-waiting": {
+      "capabilities": {
+        "workspace-live-declared-test-suite": ["checkedSuiteReceipt", "selectedAuthorizedSuite"]
+      },
+      "skills": {
+        "base:extensions/test-runner/SKILL.md": ["checkedSuiteReceipt", "selectedAuthorizedSuite"],
+        "system-testing:skills/system-testing/SKILL.md": ["discoveredSuites", "checkedSuiteReceipt"]
+      }
     }
   }
 }
