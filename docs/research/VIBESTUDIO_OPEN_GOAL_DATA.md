@@ -182,3 +182,33 @@ the owned context and checks the exact execution receipt. Reference selectors
 `open-goal-oracle-verify-adventure-world-state` and
 `open-goal-oracle-verify-adapter-selected-module` cover Workerd and native
 execution respectively.
+
+### Workspace template cases
+
+The catalog declares 51 open goals across six workspace templates, with 41
+training goals and 10 source-separated holdouts. The same Base entry point
+receives the goal across these workspaces. It links the template's installed
+Natlang subtree and scopes the template services to the functions that use
+them. The workspace and the reference checks are selected by the harness.
+
+| Workspace | Goals | Baseline capability and open-goal coverage |
+| --- | ---: | --- |
+| Examples | 17 | Public evidence and document recovery, authorized CDP changes and readback, and declared suite verification |
+| Personal | 6 | `workspace-live-declared-test-suite` applied to Mission Control persistence, stale edits, lost links, draft retries, and browser route inspection |
+| System | 4 | `workspace-live-declared-test-suite` applied to model gateway readiness, image attempt recovery, and Natlang capture lineage |
+| News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
+| Spectrolite | 5 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes |
+| Google Workspace | 7 | `google-live-drive-inventory-sharing` and `google-live-drive-checkpoint` with paginated provider observations, incomplete coverage, and change disposition |
+
+Google's qualification uses the real installed Drive client against a bounded
+test transport. News and Spectrolite use the live workspace services for
+schedule and editor observations. News, Spectrolite, Drive, and suite cases
+have `open-goal-oracle-CASE` managed selectors for model-free references.
+These selectors exercise the outcome checks and produce no teacher data.
+
+The first Personal and System live reference runs passed all five planning
+cases and exposed missing target dependencies in five native executions.
+Native tests now request the declared dependency closure from the host and
+record the prepared dependency key in the report. The adapter checks the
+requested state, target, suite, and filters, and the harness checks the
+workspace state again before issuing a receipt.
