@@ -4832,3 +4832,64 @@ and the resume list.
   `--explore-order family` walk.
 - **Opt-out:** `--pool` without this source.
 
+
+## 2026-11-20 16:10, Ambient SFT temperature matching in exp0_sft (default on, opt-out) (paper review, part b)
+
+**What the paper shows** (Daras et al., arXiv 2611.23229, read in full). Ambient SFT adds to SFT a Temperature Matching
+term: the student's temperature-T next-token distribution is pulled toward the frozen pre-fine-tuning model's
+temperature-T distribution at the same supervised positions (Eq. 4; T -> inf is SFT, T = 1 is KD). Implementation
+(Algorithm 1): one coin per step, plain SFT with probability p_c, else only the TM loss (full-vocabulary cross-entropy
+to the tempered teacher, no T^2 factor); lambda = (1 - p_c) / p_c. Theory: TM alone recovers the teacher (it is learning
+from high-temperature samples); the teacher's bias shrinks as O(1/T^2); under a log-linear model an interior (lambda,
+T != 1) beats SFT, the frozen teacher and KD. Results: instruction tuning on 1% of Dolci-Instruct (21k examples, p_c
+0.75, T 2.5) +20.3% average relative over vanilla SFT at Qwen3-1.7B, +8.0 to +10.2% at 4-14B; vanilla SFT lost
+knowledge/math/code (base beat it on 6-7 of 8 benchmarks), Ambient kept them (IFEval the one loss, fixed by per-source
+T). KD at T = 1 was second (+17.0%), L2-SP +15.3%, NEFTune and label smoothing ~0. Reasoning (OLMo-3-7B, 1% of
+Dolci-Think, same settings): +3.5% over SFT, the only regularizer that helped (KD -7.3%, L2-SP -37%). Domain
+adaptation: up to -26.7% perplexity; the T sweep has its optimum at 2.5; the gain grows as data shrinks. Cost ~1.1x
+at p_c 0.75.
+
+**Why for us.** Earlier SFT damaged behaviour (sft-v3 -16 pts; sft-v4 hazard), sft-v5 is ~7.7k teacher episodes on a
+1.7B model: the small-data, forgetting-prone regime where the paper's gains are largest. First principles settle the
+direction (an anchor to the base's coarse distribution on the very tokens trained); only the size is unknown, so it
+ships as the default.
+
+**Built (98c6eecdd).** `exp0_sft.py train`:
+- `--ambient-p-clean` 0.75 and `--ambient-temperature` 2.5 (the paper's instruction/reasoning settings; no tuning run);
+  `--ambient-p-clean 1` opts out (plain SFT, bit-identical path).
+- One coin per optimizer step (Algorithm 1), `ambient_clean(seed, step)`: deterministic, so reruns draw the same steps.
+- Teacher = the run's start checkpoint (`--checkpoint`; base 5ff07638 for sft-v5-style runs). Its BF16 parameters stay
+  resident (3.4 GB) and are loaded into the policy's own module for a no-grad forward through the step's own prefix tree
+  and packing (`ambient_teacher_rows`, as grpo's `ReferenceWeights` does for the KL reference: no second module or
+  compile), keeping only the teacher's final hidden rows at the targets (~0.13 GB a 32k-token step); the policy is then
+  restored from its FP32 masters (exact). The TM loss (`tm_ce`) computes both models' logits 512 rows at a time,
+  checkpointed, from those rows and the teacher's tied head: no n x 128k logits are stored.
+- Same positions and weights as the SFT loss (context masks, second-close mask and stratified batches unchanged). The
+  nucleus NLL on own rows does not apply on TM steps: the target is the teacher's full tempered distribution, not a
+  sampled token.
+- `train.jsonl`: `loss_kind` (sft / tm), `loss` (the step's trained objective), `tm_kl` (its KL part),
+  `phase_seconds.ambient_teacher`. Validation stays the plain NLL, so val curves compare with sft-v4/v5.
+- Cost estimate from sft-v5-run1 (peak 51.9 GB of 72; forward ~25% of a step): +3.4 GB resident, +~1.5 GB TM chunk
+  peak, about +25% on one step in four, ~+6% wall.
+
+**Inventory (fix the mechanism everywhere).**
+- `ops/grpo-v4/launch-sft.sh` (what sft-v5's drive used): passes no ambient flags, so the next SFT gets the default;
+  header documents `EXTRA='--ambient-p-clean 1'` as the opt-out. sft-v5-run1 already finished (no effect on it).
+- grpo.py SD / teacher-demo rows: not adopted. The RL learner already anchors every trained token to the start policy
+  (k2 KL, `--kl-beta`, the `loss_terms + args.kl_beta * kl_term` line in `train_leaves`); TM there would be a second
+  anchor on the same rows, and grpo.py is being changed by the reasoning-RL strand (part a) right now. Revisit if SD
+  rows show the forgetting pattern.
+- Program tuning (`tune/trainer.py` `_row_request` / `_backward`, l. 764-783): not now. Its losses run in the native
+  engine's graph objective (`tune/objective.py`), with the backbone frozen, so the anchor would be the unadapted backbone
+  at T; it needs a tempered-teacher term in the engine objective. The program-tuning strand being revived owns it;
+  the soft-prompt (CSPD) strand (part c) trains on a frozen backbone too, where the same term is natural.
+- `rl/native_replay.py`: an RL replay/scoring path (action logps, score-centred loss), not SFT on fixed data: n/a.
+
+**Tests** (ledger, CPU): `tests/neuralese/test_ambient_sft.py` (tm_ce = KL + H(teacher), chunking exact, zero gradient
+at the teacher, deterministic coin at ~0.75, plain SFT unchanged, stock-path TM step = hand-computed weighted loss and
+KL, policy restored exactly) and `test_lfm3_fast_train.py::test_exp0_ambient_tm_step_with_shared_prefixes_equals_whole_chains`
+(levels and tree-mask). 38 passed, 3 CUDA-only skipped. **Not checked:** a GPU step on the real model (no headroom
+beside grpo-v5-run1: 3.6-6.6 GB free); the first TM step's `cuda_peak_gb` and `phase_seconds.ambient_teacher` are that
+check. Per-source temperature (paper D.5) not built.
+
+**Enters:** the next exp0_sft run on a pin >= 98c6eecdd.
