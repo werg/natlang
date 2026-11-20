@@ -43,13 +43,15 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO / 'scripts/rl_tasks')]
 
+from natlang_neuralese.common.paths import root  # noqa: E402
+
 FRONTIER_SCHEMA = 'natlang.ei-frontier/1'
-DATA = Path('/home/werg/data/lfm3-rl-dgx-20261029')
+DATA = root('data_nvme') / 'lfm3-rl-dgx-20261029'
 OPS = DATA / 'ops'
-BASE_CKPT = '/mnt/external/natlang-development-data/archive/data/lfm3-rl-dgx-20261029/fresh-init/checkpoint.pt'
+BASE_CKPT = str(root('data_hdd') / 'natlang-development-data/archive/data/lfm3-rl-dgx-20261029/fresh-init/checkpoint.pt')
 BASE_SHA = '5ff07638bbedba7c8ec506f763ce5fb7511c7755ce8c045ef764bca00ddc1d6a'
-PY = '/home/werg/natlang/.venv-neuralese/bin/python'
-LEDGER = ['/usr/bin/python3', '/home/werg/natlang/scripts/memory_ledger.py']
+PY = str(REPO / '.venv-neuralese/bin/python')
+LEDGER = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py')]
 
 
 def log(record):
@@ -368,9 +370,9 @@ class Cycle:
     # stages
     def pin_stage(self):
         if not (self.pin / '.natlang-pin.json').exists():
-            self.ledger(f'{self.a.name}-pin', 4, 'high', ['/usr/bin/python3', '/home/werg/natlang/scripts/pin_checkout.py',
+            self.ledger(f'{self.a.name}-pin', 4, 'high', ['/usr/bin/python3', str(REPO / 'scripts/pin_checkout.py'),
                                                           'create', self.a.commit, str(self.pin)],
-                        self.dir / 'pin.log', workdir='/home/werg/natlang')
+                        self.dir / 'pin.log', workdir=str(REPO))
         if not (self.pin / '.natlang-pin.json').exists():
             raise SystemExit(f'pin failed: {self.dir}/pin.log')
         self.mark('pin', pin=str(self.pin))
@@ -415,7 +417,7 @@ class Cycle:
                     self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', self.a.start,
                             '--checkpoint-sha256', self.start_sha, '--tasks', self.dir / 'tasks.json',
                             '--k', self.a.k, '--hours', self.a.collect_hours, '--slots', self.a.slots,
-                            '--unit-prefix', unit, f'--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
+                            '--unit-prefix', unit, '--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
                             '--actor-arg=--sglang-max-running', f'--actor-arg={self.a.slots}'),
                     self.dir / 'collect.log', detach=True)
         if self.a.fill:
@@ -467,7 +469,7 @@ class Cycle:
         covered = [*TEACHER_POOLS, *sorted(OPS.glob('ei/*/teacher'))]
         rare = [t for t, v in json.loads((self.dir / 'frontier.json').read_text())['tasks'].items()
                 if v['tier'] in ('never',) or v['successes'] / max(1, v['scored']) <= 0.25]
-        command = ['/home/werg/natlang/.venv-neuralese/bin/python', str(self.pin / 'scripts/neuralese_data/teacher_gen.py'),
+        command = [PY, str(self.pin / 'scripts/neuralese_data/teacher_gen.py'),
                    '--work', str(work), '--pause-below-available-gb', '25', '--exclude-family-regex', '(?!)',
                    *[x for c in covered if Path(c) != work and (Path(c) / 'manifest.jsonl').exists()
                      for x in ('--covered-by', str(c))],
@@ -475,7 +477,7 @@ class Cycle:
                    '--limit', str(len(rare)), *[x for t in TEACHERS for x in ('--teacher', json.dumps(t))]]
         script = work / 'launch.sh'
         script.write_text('#!/bin/bash\n# expert-iteration teacher frontier (expert_iteration.py teacher_stage)\nset -u\n'
-                          'set -a; for f in nvidia gemini anthropic; do . /home/werg/.config/natlang/$f.env; done; set +a\n'
+                          f'set -a; for f in nvidia gemini anthropic; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
                           f'cd {self.pin}\nexec ' + ' '.join(map(_quote, command)) + '\n')
         script.chmod(0o755)
         self.ledger(f'{self.a.name}-teacher', 7, 'low', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
@@ -485,7 +487,7 @@ class Cycle:
         w = self.work
         w.mkdir(parents=True, exist_ok=True)
         if not (w / 'tokenizer').exists():
-            os.symlink('/home/werg/data/sft-sources-20261118/tokenizer', w / 'tokenizer')
+            os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', w / 'tokenizer')
         steps = []
         if self.a.seed_work:
             steps.append(['/usr/bin/python3', str(OPS / 'sft-v5' / 'seed_replays.py'), str(w), *self.a.seed_work])
@@ -674,7 +676,7 @@ def main():
     y.add_argument('--start-sha')
     y.add_argument('--commit', required=True)
     y.add_argument('--pin')
-    y.add_argument('--sft-work', default='/home/werg/data/ei-sources', help='sft_sources WORK shared by the cycles')
+    y.add_argument('--sft-work', default=str(root('data_nvme') / 'ei-sources'), help='sft_sources WORK shared by the cycles')
     y.add_argument('--seed-work', action='append', default=[], help='earlier sft_sources WORKs: verdicts and extractions')
     y.add_argument('--select-args', default='', help='more select flags (e.g. "--limit 3000")')
     y.add_argument('--k', type=int, default=4)
