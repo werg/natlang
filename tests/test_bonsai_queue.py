@@ -874,10 +874,16 @@ def test_shared_collector_stops_listening_past_its_resident_memory_limit(tmp_pat
     assert first.wait(60) == 0
     deadline = time.time() + 30
     while time.time() < deadline:                                       # the server's one-second tick releases it
+        # this test process spawned the server (SharedChild's Popen), so an exited server stays a zombie that
+        # kill(pid, 0) still finds until it is reaped here
         try:
-            os.kill(first.server_pid, 0)
-        except ProcessLookupError:
-            break
+            if os.waitpid(first.server_pid, os.WNOHANG)[0]:
+                break
+        except ChildProcessError:
+            try:
+                os.kill(first.server_pid, 0)
+            except ProcessLookupError:
+                break
         time.sleep(0.2)
     else:
         os.kill(first.server_pid, 15)

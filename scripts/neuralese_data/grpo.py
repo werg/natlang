@@ -791,7 +791,7 @@ def teacher_guidance_leak(collector, info, row):
     if decode is None and getattr(args, 'base', None):
         try:
             from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(args.base)
+            tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)
             decode = collector.guidance_decode = lambda ids: tokenizer.decode(ids)
         except Exception:   # no tokenizer: writer texts alone are checked
             decode = collector.guidance_decode = None
@@ -3465,7 +3465,7 @@ def train(args):
         from natlang_neuralese.rl.held_eval import exclusion_ids
         held = set(exclusion_ids(args.held_manifest))
         from transformers import AutoTokenizer
-        corpus_tokenizer = AutoTokenizer.from_pretrained(args.base)   # the served vocabulary (empty think block)
+        corpus_tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)   # the served vocabulary (empty think block)
         replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r), tokenizer=corpus_tokenizer)
                           for spec in args.replay_corpus]
     collector.version = step
