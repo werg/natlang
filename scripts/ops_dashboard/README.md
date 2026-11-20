@@ -61,20 +61,18 @@ Publish a UI change (one owner of the signer at a time: stop ops-peer first, res
 
     node build.mjs && npx tendril --session $PWD/session.mjs --mode own publish ~/.local/share/tendriller/natlang-ops-app/page --operation ops-release-N
 
-**First connection (owner).** Opening the page while signed out lands on Tendriller sign-in (page admission). Signed in, the page shows
-one step at a time with one primary action: *Request access for this browser* (creates the browser's device key and a pairing
-request bound to the signed-in account). The native participant prepares the exact control change and, when the request belongs
-to the application owner's account (`host.info().owner_account_id`), selects it directly: the documented owner-device enroll path
-(`pairing-native.mjs` owner enrollment; `NATLANG_OPS_OWNER_AUTO_ENROLL=0` opts out). The page retries the connection every few
-seconds and opens the dashboard by itself. If that fails, the page offers the tendriller.dev review link after 45 s.
-Tendriller's own pairing flow requires that review: approval is a POST from the service origin with a one-time CSRF token
-issued to the owner's service session (`server/src/device-pairing.ts` `reviewDevicePairing`). The review page is `frame-ancestors
-'none'` and has no return link to the app.
+**First connection (owner).** Opening the page connects; there are no buttons (Tendriller's connection component,
+`app/ui/connection.mjs` + `connect-view.mjs`). A browser that is already registered connects at once, in any tab. A new browser
+creates its own key and a pairing request; the ops participant prepares the exact control change within seconds (host notice),
+and the page opens tendriller.dev once, where the owner taps **Approve this device**. With a host that supports `return_to`
+(Tendriller PR #73) tendriller.dev returns to the page by itself; until that is deployed, come back to the page after approving.
+The participant then commits and the page connects. Enrollment stays open while ops-peer runs. The earlier native owner
+auto-enrollment (which trusted author-controlled page code) was removed. The app uses the PR #73 SDK build from
+`~/.local/share/tendriller/natlang-ops-app/kit-pr73/`.
 
 Changing `domain.mjs` semantics needs a new definition version and a new application setup (`npm run create/init`), not a publish.
 First setup (done 2026-11-20): `npm install` of the kit packages, `npm run create -- https://tendriller.dev OWNER "natlang ops"`,
-`npm run init`, build, publish. Browser enrollment: the owner signs in on the page, chooses Request browser access, approves the
-exact request on tendriller.dev while ops-peer runs, then Connect.
+`npm run init`, build, publish. Browser enrollment: see First connection above (open the page, approve once on tendriller.dev).
 
 ## Preview and tests
 

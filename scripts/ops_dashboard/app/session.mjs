@@ -37,6 +37,8 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
   const selected = paths(profile);
   let binding = await readPrivate(selected.credential, true);
   if (!binding) binding = await savePrivate(selected.credential, { id: 'local-terminal', token: createNativeAttachmentKey() });
+  // Content-free host wake-ups: a browser asked to pair, or the owner approved one.
+  const notices = new EventTarget();
   let session, control, pairing, processPairings;
   const supervisor = await createNativeSessionSupervisor({ directory: selected.directory, profileId: profile, signal,
     bindings: [binding], openOwner: async () => {
@@ -46,16 +48,14 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
       await verifyAuthorityBundle(authority, descriptor);
       const device = await openNativeDevice({ path: selected.device });
       try {
-        session = await openNativeApplication({ device, definition, authority });
+        session = await openNativeApplication({ device, definition, authority,
+          signals: { limits: { maxQueuedSignals: 2048, maxQueuedBytes: 16777216 } } });
         pairing = Object.freeze({ descriptor, applicationId: handle.application.id,
           serviceOrigin: new URL(handle.api).origin, pageOrigin: new URL(handle.page_url).origin,
           authority: options => host.peers.application(options),
           // The retained owner signs in place. No identity/private key is
           // exported to terminal attachments, browser pages or helper files.
           signTransition: payload => signTransitionRequest(payload, device.identity),
-          ownerAutoEnroll: process.env.NATLANG_OPS_OWNER_AUTO_ENROLL === '0' ? null : {
-            ownerAccountId: async () => { const info = await host.info(); return typeof info.owner_account_id === 'string' ? info.owner_account_id : null; },
-            select: (request, control) => host.peers.selectGeneration(request, { control }) },
           client: createDevicePairingClient({ url: handle.api + '/peers/pairing',
             headers: { Authorization: `Bearer ${handle.token}` },
             fetch: (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.any([
@@ -69,12 +69,13 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
           peers: host.peers, identity: session.deviceId,
           openDirectConnection: async () => { throw Error('TUTORIAL_NATIVE_RTC_NOT_CONFIGURED'); },
           openRelayConnection: ({ relay, signal }) => openWebSocketConnection(relay, { ready: relay.ready, signal }),
+          onNotice: () => notices.dispatchEvent(new Event('pairing')),
         }) });
         signal?.throwIfAborted();
         return createApplicationOwner(session, { host: control });
       } catch (error) { if (session) await session.close(); else await device.close(); throw error; }
     } });
-  return { session, control, supervisor, pairing, processPairings, close: () => supervisor.close() };
+  return { session, control, supervisor, pairing, processPairings, notices, close: () => supervisor.close() };
 }
 
 export async function runPeer({ signal, profile = 'main' } = {}) {
