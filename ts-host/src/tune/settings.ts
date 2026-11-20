@@ -61,8 +61,8 @@ export type TuneSettings = {
   readonly teachers?: readonly string[];
   readonly teacherRouting: TeacherRouting;
   readonly backend: 'managed-local' | 'native';
-  /** Train and serve soft instruction/skill states on the managed llama.cpp backend; its server must be the llama.cpp
-   * fork with `--native-state` (the native backend always serves them). */
+  /** Train and serve soft instruction/skill states on the managed llama.cpp backend (default on: the pinned managed
+   * runtime is the llama.cpp fork with `--native-state`; `false` opts out). The native backend always serves them. */
   readonly softStates?: boolean;
   /** Invocation budgets shared by all tune execution arms; recorded in evaluation and RL receipts. */
   readonly execution?: TuneExecution;

@@ -325,9 +325,10 @@ test('distillation exports deduplicated, oracle-verified training rows of the tu
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('managed llama.cpp releases train soft states only when declared and carry their native state span exports', async () => {
+test('managed llama.cpp releases train soft states by default (softStates: false opts out) and carry their native state span exports', async () => {
   const { prepareData, trainRelease, softStatesServed } = await import('../dist/tune/pipeline.js');
-  assert.equal(softStatesServed({ backend: 'managed-local' }), false, 'the upstream server has no native-state import');
+  assert.equal(softStatesServed({ backend: 'managed-local' }), true, 'the pinned managed runtime is the fork (--native-state)');
+  assert.equal(softStatesServed({ backend: 'managed-local', softStates: false }), false, 'the opt-out');
   assert.equal(softStatesServed({ backend: 'managed-local', softStates: true }), true);
   assert.equal(softStatesServed({ backend: 'native' }), true);
   const root = project();

@@ -174,9 +174,11 @@ def main(argv=None):
     # The effective prompt weight: explicit, else the current default, except that an in-flight fit resuming its
     # own state keeps the value it was bound with (trainer.resolve_prompt_weight).
     existing = Path(args.out) / 'state.json'
-    from .trainer import resolve_prompt_weight
-    recipe = Recipe.from_json({**plan.get('recipe', {}), 'prompt_weight': resolve_prompt_weight(
-        plan.get('recipe', {}), json.loads(existing.read_text()) if existing.exists() else None)})
+    from .trainer import resolve_prompt_weight, resolve_soft_prefix_share
+    existing_state = json.loads(existing.read_text()) if existing.exists() else None
+    recipe = Recipe.from_json({**plan.get('recipe', {}),
+                               'prompt_weight': resolve_prompt_weight(plan.get('recipe', {}), existing_state),
+                               'soft_prefix_share': resolve_soft_prefix_share(plan.get('recipe', {}), existing_state)})
     # A continued round names the previous round's build directory: its state, versions and soft initialization.
     parent_dir = Path(args.plan).parent / plan['parent'] if plan.get('parent') else None
     from ..serve import load_native_engine
@@ -214,7 +216,8 @@ def main(argv=None):
                 _write(init_path, soft)
         from .rows import lower_rows
         rows = lower_rows(engine, rows, prompt_weight=recipe.prompt_weight,
-                          soft={key: record['state'] for key, record in soft.items()}) if rows else []
+                          soft={key: record['state'] for key, record in soft.items()},
+                          prefix_share=recipe.soft_prefix_share, prefix_tokens=tuple(recipe.soft_prefix_tokens)) if rows else []
         parent = json.loads((parent_dir / 'state.json').read_text()) if parent_dir is not None and state is None else None
         # Plan §8 incremental builds: `pinned` nodes stay frozen at earlier artifacts, `warm` nodes start from them (both
         # imported from the plan's `artifacts` directories, e.g. the active release's).

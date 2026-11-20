@@ -97,6 +97,12 @@ class Recipe:
     # "rl"/"rft" episodes: a reply's second </think> and what follows it up to the action are never reinforced
     # ('context', default since 2026-11-19; tune.rl.RLEpisodes); 'train' opts out.
     rl_second_close: str = 'context'
+    # Prefix-robust soft-state training (CSPD; tune.rows.lower_rows, default since 2026-11-20): on this share of the
+    # rows that import soft states (content hash), a context prefix of soft_prefix_tokens [lo, hi] tokens from other
+    # rows of the same component sits before the first imported state, weight 0. 0 opts out; an in-flight fit resuming
+    # its own state keeps 0 (`resolve_soft_prefix_share`).
+    soft_prefix_share: float = .5
+    soft_prefix_tokens: list = field(default_factory=lambda: [128, 256])
 
     @classmethod
     def from_json(cls, value):
@@ -129,6 +135,11 @@ class Recipe:
             raise TuneMathError('objectives is a nonempty list of sft, rl and rft')
         if type(recipe.rft_min_quality) not in (int, float) or not 0 < recipe.rft_min_quality <= 1:
             raise TuneMathError('rft_min_quality is a quality in (0, 1]')
+        if (type(recipe.soft_prefix_share) not in (int, float) or not 0 <= recipe.soft_prefix_share <= 1
+                or not isinstance(recipe.soft_prefix_tokens, (list, tuple)) or len(recipe.soft_prefix_tokens) != 2
+                or any(type(value) is not int for value in recipe.soft_prefix_tokens)
+                or not 0 < recipe.soft_prefix_tokens[0] <= recipe.soft_prefix_tokens[1]):
+            raise TuneMathError('soft_prefix_share lies in [0, 1] and soft_prefix_tokens is [lo, hi] with 0 < lo <= hi')
         if recipe.rl_second_close not in ('context', 'train'):
             raise TuneMathError("rl_second_close is 'context' or 'train'")
         if recipe.rl_policy_loss is not None:
@@ -187,6 +198,17 @@ def resolve_prompt_weight(recipe_json, state=None):
     if state is not None:
         return bound_prompt_weight(state)
     return float(Recipe.__dataclass_fields__['prompt_weight'].default)
+
+
+def resolve_soft_prefix_share(recipe_json, state=None):
+    """The effective ``soft_prefix_share`` of a plan recipe: an explicit value wins; an omitted one is the current
+    default for a new or continued fit and 0 for an in-flight fit resuming its own ``state`` from before the setting
+    (its rows were lowered without prefixes; a unit already bound finishes as bound)."""
+    if 'soft_prefix_share' in (recipe_json or {}):
+        return float(recipe_json['soft_prefix_share'])
+    if state is not None:
+        return float(state.get('recipe_soft_prefix_share', 0.))
+    return float(Recipe.__dataclass_fields__['soft_prefix_share'].default)
 
 
 def lr_factor(schedule, step, total):
@@ -328,6 +350,7 @@ class JointTrainer:
         # The effective prompt weight is recorded (legacy states: the value they were bound with).
         self.state.setdefault('recipe_prompt_weight', float(recipe.prompt_weight) if state is None
                               else bound_prompt_weight(self.state))
+        self.state.setdefault('recipe_soft_prefix_share', float(recipe.soft_prefix_share) if state is None else 0.)
         # States written before lineage/RL cursors existed resume with their current versions as history.
         self.state.setdefault('node_history', {node: [artifact] for node, artifact in self.state['node_artifacts'].items()})
         self.state.setdefault('soft_history', {key: [ident] for key, ident in self.state.get('soft_states', {}).items()})
@@ -397,6 +420,8 @@ class JointTrainer:
         # `rl_second_close` masks is in the episodes' graphs (their target weights), so it binds through their digest.
         recipe = {key: value for key, value in self.recipe.as_json().items()
                   if key not in ('steps', 'epochs', 'rl_policy_loss', 'rl_second_close')}
+        if not recipe['soft_prefix_share']:   # off: the input of fits from before the setting is unchanged
+            recipe = {key: value for key, value in recipe.items() if key not in ('soft_prefix_share', 'soft_prefix_tokens')}
         # The effective RL loss binds the input; the historical clipped loss keeps pre-2026-10-28 inputs unchanged.
         loss = self.rl_policy_loss if 'rl' in self.episodes and self.rl_policy_loss != LEGACY_RL_POLICY_LOSS else None
         return canonical_json_sha256_hex({'manifest': self.manifest, 'recipe': recipe,
@@ -444,7 +469,8 @@ class JointTrainer:
         recipe, engine = self.recipe, self.engine
         nodes = self._trained_nodes()
         artifacts, basis_id = {}, None
-        if recipe.parameterization == 'native-subspace':
+        if recipe.parameterization == 'native-subspace' and self._stack_nodes():
+            # (Every rank 0: no adapter node, the fit trains its soft states alone on the frozen backbone, CSPD's form.)
             # The basis is a pure function of the base, maximum rank and targets: over every stack node, pinned ones
             # included, it is the same basis the earlier fit sliced, so pinned and warm artifacts compose exactly.
             max_rank = max(recipe.ranks[self.nodes[node]['level']] for node in self._stack_nodes())
@@ -550,6 +576,7 @@ class JointTrainer:
         elif parent_loss is not None:
             state['recipe_rl_policy_loss'] = parent_loss
         state['recipe_prompt_weight'] = float(self.recipe.prompt_weight)
+        state['recipe_soft_prefix_share'] = float(self.recipe.soft_prefix_share)
         state['input_sha256'] = self.input_sha256
         return state
 

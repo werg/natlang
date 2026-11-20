@@ -116,8 +116,11 @@ def initialize_soft_states(engine, turns, *, skills=True, owner=None):
     return records
 
 
-def soft_items_to_node(engine, prompt, target, *, prompt_weight, state_names):
-    """Lower rendered items to one consumer node: block items become consume-marked imports."""
+def soft_items_to_node(engine, prompt, target, *, prompt_weight, state_names, prefix=None):
+    """Lower rendered items to one consumer node: block items become consume-marked imports.
+
+    ``prefix`` (prefix-robust training, `rows.lower_rows`): token ids placed right before the first imported state as
+    context (weight 0), so the state learns to work whatever precedes it."""
     tokens, weights, imports, external = [], [], [], {}
     from ..model.native_graph_plan import ImportSpan
     for index, (kind, value) in enumerate([*prompt, *target]):
@@ -128,6 +131,9 @@ def soft_items_to_node(engine, prompt, target, *, prompt_weight, state_names):
             continue
         if kind != 'block' or primary:
             raise TuneMathError('a soft-state row may import state only in its prompt')
+        if prefix and not imports:
+            tokens.extend(int(token) for token in prefix)
+            weights.extend([0.] * len(prefix))
         state_id = value['id'] if isinstance(value, dict) else value
         name = state_names.get(state_id)
         if name is None:

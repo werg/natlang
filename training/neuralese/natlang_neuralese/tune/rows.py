@@ -67,12 +67,13 @@ def reply_message(reply):
 OWN_TEACHERS = ('rl',)
 
 
-def turn_graph(engine, turn, *, prompt_weight, soft=None):
+def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
     """One collected turn as a single-node native graph row bound to its program binding.
 
     ``soft`` maps soft keys (`tune.soft.soft_key`) to the initial state IDs: the binding's instruction text and
     disclosed skill documents are then imported as those states at their positions (plan §3.3), and the row records
-    which trained soft parameter each import name is.
+    which trained soft parameter each import name is. ``prefix``: context token ids placed before the first imported
+    state (prefix-robust training, ``lower_rows``); a row without soft states takes none.
     """
     if turn.get('schema') != TURN_SCHEMA:
         raise TuneMathError('expected a natlang.tune-turn/v1 row')
@@ -107,7 +108,8 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
             raise TuneMathError('a decision turn needs distinct options and its selected option')
         prompt, continuations = decision_items(engine, messages, turn['tools'], options)
         names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
-        ids, _, imports, external = soft_items_to_node(engine, prompt, [], prompt_weight=0., state_names=names)
+        ids, _, imports, external = soft_items_to_node(engine, prompt, [], prompt_weight=0., state_names=names,
+                                                       prefix=prefix)
         import dataclasses
         occurrence = f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}"
         nodes = [{'name':f'decision:option:{index}', 'token_ids':ids + continuation,
@@ -121,7 +123,7 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
                                'prompt_tokens':len(ids),'label':chosen,'label_source':'verified-trajectory',
                                'values':options}], **({'external_states':external} if external else {}),
                  'source':{'schema':TURN_SCHEMA,'sha256':canonical_json_sha256_hex(turn),'teacher':turn['teacher'],
-                           'source':turn['source'],'evidence':turn['evidence']}}
+                           'source':turn['source'],'evidence':turn['evidence'],**_prefix_record(prefix, external)}}
         row = {'binding':turn['binding'],'graph':graph,'occurrence':occurrence,'evidence_weight':weight}
         if external:
             keys = {import_name(*json.loads(key)[1:]):key for key in placed}
@@ -141,7 +143,8 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
     names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
     if not names and any(item[0] != 'tok' for item in [*prompt, *target]):
         raise TuneMathError('a teacher text turn rendered native-state items; it is not a text trajectory')
-    ids, weights, imports, external = soft_items_to_node(engine, prompt, target, prompt_weight=prompt_weight, state_names=names)
+    ids, weights, imports, external = soft_items_to_node(engine, prompt, target, prompt_weight=prompt_weight, state_names=names,
+                                                         prefix=prefix)
     if turn.get('teacher') not in OWN_TEACHERS:
         # a reply the student did not sample: its think block and the text before its first tool call are context
         from ..serve.targets import non_student_context
@@ -157,7 +160,7 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
                         'producing': [], 'target_weights': weights}],
              **({'external_states': external} if external else {}),
              'source': {'schema': TURN_SCHEMA, 'sha256': canonical_json_sha256_hex(turn), 'teacher': turn['teacher'],
-                        'source': turn['source'], 'evidence': turn['evidence']}}
+                        'source': turn['source'], 'evidence': turn['evidence'], **_prefix_record(prefix, external)}}
     row = {'binding': turn['binding'], 'graph': graph, 'occurrence': occurrence, 'evidence_weight': weight}
     if external:
         keys = {import_name(*json.loads(key)[1:]): key for key in placed}
@@ -178,6 +181,80 @@ def evidence_weight(turn):
     raise TuneMathError('a turn from an unsuccessful root is not a positive target')
 
 
-def lower_rows(engine, rows, *, prompt_weight=0., soft=None):
-    return [turn_graph(engine, row, prompt_weight=prompt_weight, soft=soft) if row.get('schema') == TURN_SCHEMA else row
-            for row in rows]
+def _prefix_record(prefix, external):
+    if not prefix or not external:
+        return {}
+    return {'prefix_robust': {'tokens': len(prefix), 'sha256': canonical_json_sha256_hex([int(t) for t in prefix])}}
+
+
+# Prefix-robust soft-state training (CSPD, Zhang et al. 2026, section 2.2 and appendix A): a soft state is trained
+# in its rows' contexts but at inference follows whatever the program put before it (other skills' states, other
+# callers' text). On a share of the rows that import soft states, chosen by a content hash, a context prefix of
+# PREFIX_TOKENS tokens drawn from other rows' prompt tokens of the same component (chat-template symbols included, it
+# may end inside a turn) sits right before the first imported state, as context at weight 0. Serving never adds it.
+PREFIX_SHARE = .5
+PREFIX_TOKENS = (128, 256)
+
+
+def _hash_unit(text, salt):
+    digest = canonical_json_sha256_hex([salt, text])
+    return int(digest[:12], 16) / float(16 ** 12), int(digest[12:24], 16), int(digest[24:36], 16)
+
+
+def _prompt_lead(row, markers):
+    """A lowered row's prompt tokens before its first Neuralese marker (pure rendered text, all weight 0)."""
+    node = row['graph']['nodes'][0]
+    decisions = row['graph'].get('decisions') or []
+    end = decisions[0]['prompt_tokens'] if decisions else len(node['token_ids'])   # an option's text is no prompt
+    out = []
+    for token, weight in zip(node['token_ids'][:end], (node.get('target_weights') or [0.] * end)[:end]):
+        if int(token) in markers or weight:
+            break
+        out.append(int(token))
+    return out
+
+
+def prefix_for(turn, pool, share, lengths):
+    """The context prefix of one soft-state row, or None: selected when its content hash falls below ``share``; drawn
+    deterministically from the concatenated prompt leads of the other rows of its component (``pool``: [(occurrence,
+    ids)]), ``lengths`` (lo, hi) tokens long. None when the other rows hold fewer than ``lo`` tokens."""
+    if not share:
+        return None
+    unit, pick, start = _hash_unit(canonical_json_sha256_hex(turn), 'prefix-robust')
+    if unit >= share:
+        return None
+    own = f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}"
+    others = [ids for occurrence, ids in sorted(pool, key=lambda item: item[0]) if occurrence != own and ids]
+    if not others:
+        return None
+    offset = pick % len(others)
+    stream = [token for ids in others[offset:] + others[:offset] for token in ids]
+    lo, hi = lengths
+    if len(stream) < lo:
+        return None
+    length = min(len(stream), lo + pick % (hi - lo + 1))
+    begin = start % (len(stream) - length + 1)
+    return stream[begin:begin + length]
+
+
+def lower_rows(engine, rows, *, prompt_weight=0., soft=None, prefix_share=0., prefix_tokens=PREFIX_TOKENS):
+    """Turn rows lowered to graph rows (other rows pass through). ``prefix_share`` > 0: prefix-robust training of the
+    soft states (``prefix_for``); the fit's recipe sets it (``Recipe.soft_prefix_share``)."""
+    lowered = [turn_graph(engine, row, prompt_weight=prompt_weight, soft=soft) if row.get('schema') == TURN_SCHEMA else row
+               for row in rows]
+    if not prefix_share or not soft:
+        return lowered
+    lo, hi = prefix_tokens
+    if not 0 < prefix_share <= 1 or type(lo) is not int or type(hi) is not int or not 0 < lo <= hi:
+        raise TuneMathError('prefix-robust training needs a share in (0, 1] and token bounds 0 < lo <= hi')
+    markers = set(engine.role_tokens.ids)
+    pools = {}
+    for turn, row in zip(rows, lowered):
+        if turn.get('schema') == TURN_SCHEMA:
+            pools.setdefault(turn['component'], []).append((row['occurrence'], _prompt_lead(row, markers)))
+    out = []
+    for turn, row in zip(rows, lowered):
+        prefix = (prefix_for(turn, pools[turn['component']], prefix_share, (lo, hi))
+                  if turn.get('schema') == TURN_SCHEMA and row.get('soft') else None)
+        out.append(turn_graph(engine, turn, prompt_weight=prompt_weight, soft=soft, prefix=prefix) if prefix else row)
+    return out
