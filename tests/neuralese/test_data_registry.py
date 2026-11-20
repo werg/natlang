@@ -221,3 +221,13 @@ def test_single_file_datasets_share_a_directory(roots):
     reg = dr.load(repo=roots / 'repo', fresh=True)
     assert reg.find(d / 'probe-v1.json')['id'] == 'p1' and reg.find(d / 'probe-v2.json')['id'] == 'p2'
     assert reg.find(d / 'other' / 'x.jsonl') is None
+
+
+def test_consumers_include_runs_and_derived_datasets(roots):
+    src = pool(roots / 'data_hdd' / 'src' / 'cases.jsonl', ['a'])
+    dr.record_dataset('src', src.parent, kind='rl-tasks', format='f')
+    out = pool(roots / 'data_hdd' / 'derived' / 'cases.jsonl', ['a'])
+    dr.record_dataset('derived', out.parent, kind='rl-tasks', format='f', inputs=[str(src)])
+    dr.consume([src], run='grpo:x', how='GRPO task pool')
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert [c['run'] for c in reg.consumers('src')] == ['grpo:x', 'dataset:derived']

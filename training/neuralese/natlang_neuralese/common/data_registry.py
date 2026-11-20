@@ -552,11 +552,21 @@ class Registry:
         return [(e, p) for _, _, e, p in out]
 
     def consumers(self, identity: str) -> list[dict]:
-        return [{'run': r['run'], 'how': r['how'], 'amount': r.get('amount'), 'time': r.get('time'),
+        """Who read IDENTITY: the runs that recorded a read, then the datasets recorded as built from it."""
+        runs = [{'run': r['run'], 'how': r['how'], 'amount': r.get('amount'), 'time': r.get('time'),
                  'code': ((r.get('producer') or {}).get('code') or {}).get('git_commit'),
                  'sha256': next((i.get('sha256') or i.get('manifest_sha256') for i in r.get('items') or []
                                  if i.get('id') == identity), None)}
                 for r in self.consumption if any(i.get('id') == identity for i in r.get('items') or [])]
+        derived = []
+        for ident, snaps in self.snapshots.items():
+            for snap in snaps:
+                if any(isinstance(i, dict) and i.get('id') == identity for i in snap.get('inputs') or []):
+                    derived.append({'run': f'dataset:{ident}', 'how': f"input of {snap.get('kind')} {ident}",
+                                    'time': snap.get('time'),
+                                    'code': ((snap.get('producer') or {}).get('code') or {}).get('git_commit')})
+                    break
+        return runs + derived
 
     def protected_ids(self) -> list[str]:
         return [i for i, d in self.datasets.items() if d.get('protected') or
