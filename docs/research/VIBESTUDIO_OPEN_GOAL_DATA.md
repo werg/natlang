@@ -40,6 +40,44 @@ auxiliary data are included in the denominator when selected.
 
 ## Capability coverage
 
+The [pinned baseline](vibestudio-open-goal-baseline.jsonl) contains 60 skill
+documents and 1,343 system-test scenarios from the host and all eight
+template repositories. Its 1,082 pre-existing agentic tests span 151
+capability labels and set a floor of **2,164 distinct open goals**. The five
+goals from the new lane do not enlarge the baseline. The 253
+`harness-review` cases remain inventory items until their model paths are
+confirmed. The three TestKit suites are recorded separately.
+
+A baseline case counts when it starts a direct agent, declares an agent
+orchestration, submits model turns in an orchestrator, or is registered as a
+managed teacher case. Candidate workspaces are derived from tracked source
+paths and template dependencies. The live catalog remains authoritative for
+installation. A nearby Natlang file similarly records a candidate source
+relationship. Coverage requires a goal that actually exercises the capability
+and independently verifies the outcome.
+
+To reproduce the snapshot, check out the host and templates at the commits
+recorded in the first row. In a disposable System Testing checkout, copy
+`scripts/vibestudio/open_goal_catalog_probe.ts` from Natlang to
+`skills/system-testing/catalog-baseline.test.ts`. Set
+`VIBESTUDIO_TEMPLATE_CHECKOUTS` to the pinned template root and
+`VIBESTUDIO_GOAL_CATALOG` to the desired output file. From Vibestudio run:
+
+```sh
+node scripts/run-userland-tests.mjs --template system-testing \
+  --filter skills/system-testing/catalog-baseline.test.ts
+pnpm natlang:teacher --list > "$TEACHER_REGISTRY"
+```
+
+From Natlang run:
+
+```sh
+python scripts/vibestudio/open_goal_inventory.py \
+  --host "$VIBESTUDIO_CHECKOUT" --templates "$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
+  --catalog "$VIBESTUDIO_GOAL_CATALOG" --teacher-registry "$TEACHER_REGISTRY" \
+  --out "$BASELINE_OUTPUT"
+```
+
 | Capability | Evidence in the first cases | Gap |
 | --- | --- | --- |
 | Discover relevant state | Agent chooses search queries and sources, or lists and reads workspace files | Browser and CDP, provider accounts, remote devices, and multi-workspace discovery |
