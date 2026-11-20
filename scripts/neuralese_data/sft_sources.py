@@ -1251,10 +1251,15 @@ def build(args):
     #    policy, near-duplicates out (teacher first), then each source capped on its own: task caps by base pass rate,
     #    family shares, the dataset-wrapper share
     core, tasks = core_candidates(args, work, funnel, held)
+    open_goals_only = getattr(args, 'open_goals_only', False)
+    if open_goals_only and (args.october or args.aux):
+        raise SystemExit('--open-goals-only cannot be combined with --october or --aux')
     excluded_runs = [re.compile(pattern) for pattern in args.exclude_run]
     kept = []
     for c in core:
-        if c['source'] in OWN_SOURCES and any(p.search(c.get('run') or '') for p in excluded_runs):
+        if open_goals_only and not c.get('open_goal'):
+            funnel[c['source']]['excluded_non_open_goal'] += 1
+        elif c['source'] in OWN_SOURCES and any(p.search(c.get('run') or '') for p in excluded_runs):
             funnel[c['source']]['excluded_run'] += 1
         elif c['source'] in OWN_SOURCES and c.get('guided') and args.guided == 'exclude':
             funnel[c['source']]['guided_excluded'] += 1
@@ -1264,14 +1269,19 @@ def build(args):
             kept.append(c)
     core = kept
     rng.shuffle(core)
-    core.sort(key=lambda c: 0 if c['source'] == 'teacher' else 1)   # stable: teacher first, else shuffled
+    core.sort(key=lambda c: (not bool(c.get('open_goal')), c['source'] != 'teacher'))
     dedup = NearDuplicates(args.dup_threshold)
     unique = []
+    seen_goals = set()
     for c in core:
-        if dedup.seen(c['signature']):
+        if c.get('open_goal') in seen_goals:
+            funnel[c['source']]['repeated_open_goal'] += 1
+        elif dedup.seen(c['signature']):
             funnel[c['source']]['near_duplicate'] += 1
         else:
             unique.append(c)
+            if c.get('open_goal'):
+                seen_goals.add(c['open_goal'])
 
     constructs = {task_id: task_constructs(task) for task_id, task in tasks.items()}
 
@@ -1573,9 +1583,9 @@ def build(args):
     chains = all_chains
     mix = mix_report(chains, sft_episodes, aux_report)
     minimum_open_goal_share = getattr(args, 'min_open_goal_share', None)
-    if minimum_open_goal_share is None and any(
+    if minimum_open_goal_share is None and (open_goals_only or any(
             task.get('source') == 'observed-live-workspace' and
-            task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values()):
+            task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values())):
         minimum_open_goal_share = 0.8
     if minimum_open_goal_share is not None:
         report = mix['open_user_goals']
@@ -1980,6 +1990,8 @@ def main():
                    help='live-only build: do not require coverage of the historical default teacher pool')
     b.add_argument('--min-open-goal-share', type=float, choices=[0.8],
                    help='require at least 80%% distinct open user goals and weighted targets, even with no such captures')
+    b.add_argument('--open-goals-only', action='store_true',
+                   help='assemble only independently verified open user goal trajectories')
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))
     b.add_argument('--max-per-task', type=int, default=4,
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')

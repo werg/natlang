@@ -28,6 +28,8 @@ mixture with `sft_sources.py build`, passing `--min-open-goal-share 0.8` to
 enforce the contract even when extraction admitted no live Vibestudio cases.
 The build automatically applies the minimum when verified Vibestudio live data
 is present, including when every verified capture came from a legacy assignment.
+Use `--open-goals-only --no-default-teacher-pool` to assemble a goal-only mixture
+without including the historical teacher pool.
 
 The minimum applies both to distinct admitted goals divided by all
 training trajectories and to the weighted target tokens from their
