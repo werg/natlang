@@ -82,6 +82,9 @@ admitted chains divided by all weighted target tokens. Multiple attempts
 of one goal count once in the first numerator. An open-goal episode whose
 targets cannot all be rendered is excluded. Historical assignments and
 auxiliary data are included in the denominator when selected.
+The chain bundle retains each admitted goal's fingerprint and the required
+share. The learner checks the planned optimizer schedule after applying its
+context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 

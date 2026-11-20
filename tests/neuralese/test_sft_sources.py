@@ -303,7 +303,7 @@ def test_mix_report_gives_part_shares_and_task_concentration():
     def chain(task, part, n):
         row = {'sample': np.zeros(n, np.int32)}
         return {'ids': np.zeros(n + 10, np.int32), 'segs': [(10, n, row)], 'task': task, 'part': part}
-    report = s.mix_report([chain('a', 'teacher', 30), chain('b', 'rl-own', 10), chain('a', 'ops', 60)], [], {})
+    report = s.mix_report([chain('a', 'teacher', 30), chain('b', 'rl-own', 10), chain('a', 'ops', 60)], {})
     assert report['parts']['teacher']['loss_share'] == 0.3
     assert report['parts']['ops']['forward_tokens'] == 70
     assert report['loss_concentration']['max_task_tokens'] == 90
@@ -319,12 +319,32 @@ def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
     first = chain('one', 'attempt1', 'teacher', 60)
     second = chain('one', 'attempt2', 'teacher', 20)
     auxiliary = chain('one', 'attempt1', 'aux', 20)
-    episodes = [
-        {'open_goal': 'Update the notice', 'open_goal_chains': [id(first)]},
-        {'open_goal': 'ＵＰＤＡＴＥ   the notice', 'open_goal_chains': [id(second)]},
-    ]
-    mix = s.mix_report([first, second, auxiliary], episodes, {})['open_user_goals']
+    first['open_goal_fingerprint'] = s.open_goal_key('Update the notice')
+    second['open_goal_fingerprint'] = s.open_goal_key('ＵＰＤＡＴＥ   the notice')
+    mix = s.mix_report([first, second, auxiliary], {})['open_user_goals']
     assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8}
+
+
+def test_optimizer_exposure_rejects_a_post_mask_or_partial_schedule_below_the_floor(tmp_path):
+    import pickle
+    from exp0_sft import check_open_goal_exposure, load_chain_bundle, open_goal_exposure
+
+    def chain(index):
+        row = {'sample': np.zeros(12, np.int32)}
+        return {'part': 'teacher', 'task': str(index), 'round': 'one', 'segs': [(8, 12, row)],
+                **({'open_goal_fingerprint': str(index)} if index < 4 else {})}
+
+    path = tmp_path / 'chains.pkl'
+    path.write_bytes(pickle.dumps({'schema': 'natlang.sft-chains/1', 'minimum_open_goal_share': 0.8,
+                                  'chains': [chain(index) for index in range(5)]}))
+    bundle = load_chain_bundle(path)
+    chains, minimum = bundle['chains'], bundle['minimum_open_goal_share']
+    assert check_open_goal_exposure(open_goal_exposure(chains), minimum)['weighted_target_share'] == 0.8
+    with pytest.raises(SystemExit, match='Open user goal minimum not met'):
+        check_open_goal_exposure(open_goal_exposure(chains[index] for index in [0, 1, 2, 4]), minimum)
+    chains[2]['segs'][0][-1]['weight'] = np.ones(12, np.float32) * 0.5
+    with pytest.raises(SystemExit, match='Open user goal minimum not met'):
+        check_open_goal_exposure(open_goal_exposure(chains), minimum)
 
 
 @pytest.mark.parametrize(('distinct', 'weighted'), [(3, 0.9), (4, 0.79), (4, 0.8)])
