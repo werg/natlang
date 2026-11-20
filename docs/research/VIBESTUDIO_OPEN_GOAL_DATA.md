@@ -142,9 +142,18 @@ python scripts/vibestudio/open_goal_inventory.py \
 
 | Capability | Evidence in the first cases | Gap |
 | --- | --- | --- |
-| Discover relevant state | Agent chooses search queries and sources, or lists and reads workspace files | Browser and CDP, provider accounts, remote devices, and multi-workspace discovery |
+| Discover relevant state | The agent chooses search queries and sources, discovers workspace files, and inspects the live DOM and visible controls in an owned panel | Provider accounts, remote devices, and discovery across panels and workspaces |
 | Choose and compose skills | Goal-only root chooses research, revision, or a revision that depends on the research result | Broad installed skill selection, branching and replanning across longer workflows |
-| Execute independently verifiable work | Public evidence is read from the live cache. A workspace revision is independently read back | Publishing, deployment, integration changes, UI state, and durable cross-service outcomes |
+| Execute independently verifiable work | Public evidence is read from the live cache. A workspace revision or ordered browser change is independently read back | Publishing, deployment, integration changes, and durable cross-service outcomes |
 | Recover safely | A concurrent file edit makes the agent reread, replan, and verify a revision that retains the competing edit | Service interruptions, partial commits, delegated work, and follow-up goals across sessions |
 | Generalize to fresh goals | A source group ties related public tasks together | Real user-goal intake and held source groups for every capability family |
 | Train from trajectories | The SFT importer and native materializer consume observed call trees in canonical trajectory IR | A live teacher smoke through the complete pipeline and measured results on held open goals |
+
+The browser lane has four training goals and one held-out goal on distinct
+source groups. It includes read-only inspection and a dispatch task where the
+order of two changes matters. Each activation uses the latest observed
+revision and retains the CDP renderer receipt. The verifier checks which rows
+changed, the sequence of actions, the final DOM, and the unchanged workspace
+source. The System Testing qualification selector
+`open-goal-oracle-sequence-studio-dispatch` exercises the actual panel and
+verifier with a reference sequence.
