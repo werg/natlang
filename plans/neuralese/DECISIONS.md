@@ -4799,3 +4799,21 @@ and the resume list.
   - The ledger budget can drop by the held collectors that now run in their own 11 GB unit.
   - When: at the first natural stop, or after the first held verdict. Learner-only and transport changes leave the
     scoring series unchanged; overlap changes the actor's sampling path. The held base is on Pop and stays valid.
+
+## 2026-11-20: ops page rebuilt as a session-connected Tendriller app with a training-data viewer and editor
+
+- The ops page is now the Tendriller rc.16 application "natlang ops" (`scripts/ops_dashboard/README.md`). It replaces the
+  stream page and its collector, which had been stopped since 11-18 and are not restarted. Reads are served on demand
+  by the native participant (`ops-peer-N` ledger unit, 1.5 GB) over session signals. The journal keeps only edits,
+  asks, answers and application records, so 30 s snapshots never enter signed history.
+- New "Training data" tab with a catalog of 131 datasets. It is built from grpo.py constants, run records, SFT
+  build/launch records, teacher-gen pools, the corpus registry and a hand layer (`catalog_sources.json`). Every
+  dataset has a view (task editor, trajectory/call/token viewer with masks, GRPO group/step/chain views, SFT row
+  view, held views that are view-only), and links into it come from runs, held results, teachers, sentinels and
+  investigations.
+- Edits (flag/exclude/annotate/correct) are signed `proposeEdit` operations. The participant applies them to
+  `ops/data-edits/` and, for RL task exclusions, to `ops/pool-errata/ops-dashboard.jsonl`, which the next grpo or
+  teacher-gen start reads. Held targets are refused. SFT row exclusions and corrections are recorded, but no builder
+  reads them yet.
+- Organizational findings and the producer-written registry proposal:
+  `plans/neuralese/TRAINING_DATA_DISCOVERABILITY_20261120.md`. The catalog reads such a registry first once it exists.

@@ -5,12 +5,13 @@ import { num, fmt, ema } from './model.mjs';
 export function h(tag, attrs, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
+    if (k.startsWith('aria-') && typeof v === 'boolean') { n.setAttribute(k, String(v)); continue; }   // aria states need "true"/"false"
     if (v == null || v === false) continue;
     if (k === 'class') n.className = v;
     else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
     else n.setAttribute(k, v === true ? '' : v);
   }
-  for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   return n;
 }
 export const svg = (tag, attrs = {}, ...kids) => {

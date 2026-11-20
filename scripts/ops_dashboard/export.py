@@ -445,7 +445,7 @@ def teacher_summary(pool, state, now):
     hour = [h for h in hist if h[0] >= ms(now) - 3600_000]
     per_hour = (hist[-1][2] - (hour[0][2] if len(hour) > 1 else hist[-1][2])) if hist else 0
     mt = max([os.path.getmtime(f) for f in (pool + '/manifest.jsonl', pool + '/deferred.jsonl') if os.path.exists(f)] or [0])
-    return {'pool': os.path.basename(pool), 'eligible': pool_info.get('eligible'), 'tasks_done': done, 'success': total_ok,
+    return {'pool': os.path.basename(pool), 'pool_rel': os.path.relpath(pool, OPS), 'eligible': pool_info.get('eligible'), 'tasks_done': done, 'success': total_ok,
             'deferred': len(deferred), 'success_last_hour': per_hour, 'last_activity_ts': ms(mt),
             'teachers': sorted(per.values(), key=lambda t: -t['success']),
             'families': sorted(fam.values(), key=lambda f: (-f['success'], -f['tasks']))[:12], 'families_total': len(fam),

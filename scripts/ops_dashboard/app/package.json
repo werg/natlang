@@ -1,0 +1,25 @@
+{
+  "name": "natlang-ops-app",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "create": "node setup.mjs create",
+    "host:adopt": "node host-adoption.mjs",
+    "init": "node setup.mjs init",
+    "enroll": "node setup.mjs enroll",
+    "pair": "node setup.mjs pair",
+    "build": "node build.mjs",
+    "peer": "node ops-peer.mjs"
+  },
+  "dependencies": {
+    "@chronolog/peer-session": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/chronolog-peer-session-15573014f4536369d7bd2f8a4b894a0d9fb69812.tgz",
+    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/tendriller-sdk-0.3.0-rc.16.tgz",
+    "@tendriller/tools": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/tendriller-tools-0.3.0-rc.16.tgz"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
