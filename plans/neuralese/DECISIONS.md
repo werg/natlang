@@ -4750,3 +4750,52 @@ as well as the scenario and source groups. This changes data admission only.
   outside `SCORING_SOURCES`); results pair with grpo-v5-run1's base as before (code commit warning only).
 - **Enters:** at grpo-v5-run1's first resume on a pin with this commit (the running drive uses pin f9664edfe). The
   sft-v5 base measurement (pop-held.sh) is unaffected; pop-held.sh's serve-checkpoint copies take the new copy lock.
+
+## 2026-11-20 17:00, project review: what was fixed, and what grpo-v5-run1's first resume takes (review supervisor)
+
+Owner request: a full review for optimization, fallow work, correctness and direction. The strands ran in parallel and
+have their own entries above (learner 8bd12ca15, collection f25852a76, Pop held 44f2ab325). This entry records the rest
+and the resume list.
+
+- **Correctness sweep (4d7360d57, d096d57e6, 4cec2e4ab, 20bd538e6).** No defect found that invalidates trained steps of
+  grpo-v4-run2.
+  - The 114 `reasoning rl request failed` events were shutdown noise: the 8 workers' requests were in flight when the
+    actor died with the unit. Now they count as `abandoned_at_stop`, and `train()` stops the workers first.
+  - Held compares are written only for complete results. run2's `held/step-00038` compare covered 13 of 512 episodes.
+  - Resumes no longer replay the same data. Each one used to reset the teacher-demo use counters and reseed demos and
+    reasoning RL identically (14 resumes in 40 steps), empty the SD buffer and drop finished reasoning-RL searches.
+    Now resumes get per-resume seeds and persist `teacher-demo-uses.json`, `sd-buffer.pkl` and
+    `reasoning-rl-ready.pkl` (opt-outs `NATLANG_SD_BUFFER_PERSIST=0`, `NATLANG_RRL_READY_PERSIST=0`).
+  - `teacher_guidance_leak` is a count of guided attempts dropped before training, not a leak.
+  - 76 dead modules and 33 tests were removed.
+- **Running drive guard.** On pin f9664edfe, `drive.sh` step 5 judges the first `compare-vs-step0.json` it sees and
+  does not check `complete`. A grpo-v5 restart mid-eval could therefore fire the failure rule on a partial result. A
+  bash script that is running cannot be edited safely. Unit `sft-v5-partial-compare-guard`
+  (`ops/sft-v5/partial-compare-guard.py`) instead renames any compare whose `result.json` is not complete to
+  `compare-vs-step0.partial.json`, polling every 2 s. It exits once drive.log records the first judged result.
+- **Fallow register** (5b08a4343): rows that are running left the register; excluded rows carry their reasons. Row 23
+  (overlap scheduler) is resolved by f25852a76. The program-tuning rows T1-T4 and K3 (git-oracle tasks) have strands
+  working on them.
+- **lfm-latest** (register row 20): `~/.config/natlang/config.json` `nativeSources.lfm-latest` now reads
+  `ops/current-policy.json`, which points at the base 5ff07638, the best policy on held-v3. Before, it read a pointer to
+  the deleted bf95 chain and served a w5 LFM2.5-era checkpoint. `natlang setup --native lfm-latest --gguf q8_0` was
+  rerun: pinned, actor view and Q8 GGUF. **An experiment that meets its success criteria rewrites
+  `ops/current-policy.json`.**
+- **Storage.** Cold, unreferenced data moved to `/mnt/external/natlang-development-data/archive/data/lfm3-rl-dgx-20261029/ops/`,
+  with symlinks left at the old paths: grpo-v2/hunt and exp1-rft collect, scored1, actor-base and collect-m1 (75 GB).
+  NVMe free went from 79 to 140 GB.
+- **GPU sharing costs the run one for one.** run2's slow learner steps (1.8k vs 3.8-4.4k tok/s) and a 25% collection
+  loss on 11-20 09:00-11:08 were diagnostics time-slicing the GB10. Diagnostics beside a run are paid in its wall time.
+  That is a priority choice, not free capacity.
+- **grpo-v5-run1's first resume (new pin from main, >= 20bd538e6) takes:**
+  - the per-step prefix bound;
+  - the overlap scheduler, on, guarded by `actor_mismatch` (opt-out `--actor-overlap off`);
+  - detached Pop held evals with prefetch;
+  - resume-safe SD, demo and reasoning-RL state;
+  - complete-only compares.
+  - Launch changes to make at that resume: RUNNING 96 -> 128 and SLOTS 128. The actor sat at its cap with 10-17
+    queued and KV about 45% used; estimate +4-8%. `--activation-gb 12 -> 20` for about -5% learner compute and
+    +8 GB peak; run2's unit peak was 58.5 GB.
+  - The ledger budget can drop by the held collectors that now run in their own 11 GB unit.
+  - When: at the first natural stop, or after the first held verdict. Learner-only and transport changes leave the
+    scoring series unchanged; overlap changes the actor's sampling path. The held base is on Pop and stays valid.
