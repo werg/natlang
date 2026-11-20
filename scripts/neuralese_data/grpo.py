@@ -2643,6 +2643,45 @@ def restore_telemetry(stats, args):
     return out
 
 
+ACTOR_MISMATCH_NATS = 5.        # |learner logp - actor's recorded logp| of a sampled token beyond this: an engine mismatch
+ACTOR_MISMATCH_FLAG_PER_M = 10.  # ordinary sampled tokens below -ACTOR_MISMATCH_NATS per million loss tokens that flag
+
+
+def actor_mismatch_counts(log_rho, consumer=None, nats=ACTOR_MISMATCH_NATS):
+    """Per chain: sampled tokens whose learner logp lies more than ``nats`` below (``below``) or above (``above``) the
+    actor's recorded logp, ``below`` again outside calls that read imported Neuralese state (``below_ordinary``), and the
+    smallest log rho. The 2026-11-03 overlapped-scheduler defect drew single tokens from a wrong distribution (actor
+    p 0.53, learner -24 nats) in 2-6% of turns, i.e. ~15-45 such tokens per million; the learner gives them weight ~0
+    (rho), so only this count shows them."""
+    low = log_rho < -nats
+    out = {'below': int(low.sum()), 'above': int((log_rho > nats).sum()),
+           'min': float(log_rho.min()) if log_rho.numel() else 0.}
+    out['below_ordinary'] = int((low & ~consumer).sum()) if consumer is not None else out['below']
+    return out
+
+
+def actor_mismatch_summary(sums, tokens):
+    """(train.jsonl ``actor_mismatch``, flag): the step's engine-mismatch tokens (``actor_mismatch_counts``) and the
+    rate of ordinary ones per million loss tokens; the flag (``actor_mismatch_shift``) is set at
+    ACTOR_MISMATCH_FLAG_PER_M with at least 3 tokens, the cue to rerun with ``--actor-overlap off`` and compare."""
+    per_m = 1e6 * sums['mismatch_below_ordinary'] / max(1, tokens)
+    summary = {'below': sums['mismatch_below'], 'above': sums['mismatch_above'],
+               'below_ordinary': sums['mismatch_below_ordinary'], 'below_ordinary_per_m': round(per_m, 2),
+               'min_log_rho': round(sums.get('mismatch_min', 0.), 3), 'nats': ACTOR_MISMATCH_NATS}
+    return summary, bool(sums['mismatch_below_ordinary'] >= 3 and per_m >= ACTOR_MISMATCH_FLAG_PER_M)
+
+
+def actor_overlap(args):
+    """Whether the run's own SGLang actor runs the overlapped scheduler (``--actor-overlap``). ``auto``: on unless held
+    evaluations measure on this actor (no ``--held-remote`` and either periodic evals or a start-policy measurement),
+    whose pinned eval engine (``engine.json`` expect) serves without it."""
+    if args.actor_overlap != 'auto':
+        return args.actor_overlap == 'on'
+    held_here = not args.held_remote and (args.held_every_hours > 0 or bool(getattr(args, 'held_extra', None))
+                                          or not (args.skip_base_held or args.held_baseline))
+    return not held_here
+
+
 def teacher_rho_summary(parts, cap):
     """Distribution of rho over the step's teacher tokens in student form (JOLT+): how much of the guided run the unguided
     policy finds plausible. None without teacher tokens."""
@@ -3284,7 +3323,8 @@ def train(args):
                        '--checkpoint', args.checkpoint, '--checkpoint-sha256', source_sha, '--base', args.base,
                        '--port', str(args.actor_port), '--prompt-rendering', 'full', *engine,
                        '--hf-export-dir', str(store / 'sglang-hf'),
-                       *(['--sglang-memory-saver'] if args.actor_release else []), *args.actor_arg]
+                       *(['--sglang-memory-saver'] if args.actor_release else []),
+                       *(['--sglang-overlap-schedule'] if actor_overlap(args) else []), *args.actor_arg]
             with (work / 'actor.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
@@ -4326,11 +4366,17 @@ def train(args):
                     teacher_log_rho.append(log_rho.float().cpu().numpy())
                 sums['rho_capped'] += (rho > args.rho_cap).sum().item()
                 sums['abs_log_rho'] += log_rho.abs().sum().item()
+                consumer = None
                 if chain.get('imports'):    # learner-actor agreement on calls that read imported Neuralese state
                     consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
                                                                 for _, n, row in chain['segs']])).cuda()
                     sums['consumer_tokens'] += int(consumer.sum())
                     sums['consumer_abs_log_rho'] += log_rho.abs()[consumer].sum().item()
+                if chain.get('role') not in RATIO_FREE_ROLES:   # engine-mismatch tokens (actor_mismatch_counts)
+                    mismatch = actor_mismatch_counts(log_rho, consumer)
+                    for key in ('below', 'above', 'below_ordinary'):
+                        sums['mismatch_' + key] += mismatch[key]
+                    sums['mismatch_min'] = min(sums.get('mismatch_min', 0.), mismatch['min'])
                 sums['logp'] += logp.detach().sum().item()
                 rho_pre_max = max(rho_pre_max, rho.max().item())
                 rho_post_max = max(rho_post_max, weight.max().item())
@@ -4548,6 +4594,8 @@ def train(args):
             abs_log_rho_mean=round(sums['abs_log_rho'] / max(1, loss_tokens), 5),
             consumer_tokens=sums['consumer_tokens'],
             consumer_abs_log_rho_mean=round(sums['consumer_abs_log_rho'] / max(1, sums['consumer_tokens']), 5),
+            **dict(zip(('actor_mismatch', 'actor_mismatch_shift'), actor_mismatch_summary(sums, loss_tokens))),
+            actor_overlap=actor_overlap(args) if not args.replay else None,
             learner_tokens_per_s=round(forward_tokens / max(1e-6, learner_seconds)),
             actor_generated_tokens=collector.generated, actor_episodes=collector.episodes,
             actor_generated_tokens_per_s=round(collector.generated / max(1., elapsed)),
@@ -4626,6 +4674,13 @@ def main():
                         'to the learner while it computes, to the actor while it collects. The run\'s own actor runs '
                         'with --sglang-memory-saver. Episodes in flight wait in the paused actor (--case-seconds counts '
                         'the wait). --no-actor-release keeps the actor resident')
+    t.add_argument('--actor-overlap', choices=('auto', 'on', 'off'), default='auto',
+                   help="SGLang's overlapped scheduler on the run's own actor: the next decode step's CPU scheduling "
+                        'runs while the GPU computes the current one (+8-11%% output tok/s measured at fork dbc51ddb72, '
+                        'GRPO_STEP_THROUGHPUT_20261117.md). auto (default): on unless held evals measure on this actor '
+                        '(their pinned engine serves without it). The 2026-11-03 one-step wrong-distribution defect did '
+                        'not reproduce at the fork pin (0/192 turns); train.jsonl actor_mismatch counts such tokens every '
+                        'step and actor_mismatch_shift flags them: off opts out')
     t.add_argument('--actor-release-tags', default='kv_cache,weights,cuda_graph',
                    help='SGLang memory types released (the weights are reloaded from the mapped file on resume)')
     t.add_argument('--no-learner-gc', action='store_true',

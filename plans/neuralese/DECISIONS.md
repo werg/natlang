@@ -4688,3 +4688,46 @@ as well as the scenario and source groups. This changes data admission only.
 - **For the supervisor (launch flag):** ACT 12 -> 20 buys ~5% more of the policy pass for ~+8 GB learner-phase peak.
   GPU diagnostics beside a run cost it their GPU time 1:1 whichever phase they overlap.
 
+
+## 2026-11-20 16:30, GRPO collection wall time: where it goes; overlapped scheduler on for the training actor (collection-throughput review strand; default)
+
+- **Measured (grpo-v4-run2, 2026-11-20 00:24-11:58, steps ~33-40; `actor.log` decode/prefill lines, `train.jsonl`,
+  1,043 episode traces):** the actor was released for learner phases (and two restarts) 39% of wall time (16.1k of
+  41.6k s). While collecting it ran at its cap the whole time: `#running-req` 96 in every decode line with 10-17
+  requests queued (the 96 slots plus the reasoning-RL worker's requests). Slots are not the limiter: episodes spent
+  98.9% of their wall time inside model requests (episode start to first request median 0.1 s, harness work between
+  calls median 0.01 s, 0.4% in sum; 11.6 calls and 14.8k completion tokens per episode, 1 of 1,043 hit the 40-call
+  budget). In clean collection windows decode is 83-88% of actor time and prefill 12-17% (~840 new prompt tokens per
+  call, 93.5% radix hit; the burst after each resume re-prefills the in-flight contexts, which the weight update's
+  cache flush requires anyway). Decode step time from the log fits ~16 ms + 0.375 ms per running sequence at ~7k
+  context: 96 running decode ~1.5-1.65k tok/s clean. GPU jobs beside collection cost it 1:1: 09:00-11:08 (`hz3-*`
+  diagnostics, `sft-v5-build`) decode fell to 0.6-0.9k tok/s, so the window's collection average was 1.2k tok/s
+  (~25% lost). The reasoning-RL worker took ~15% of actor tokens (1.53M of 10.3M, steps 37-40). Result: 690 episodes
+  in 19.8k s (126 an hour) over steps 37-40.
+- **Shipped (default):** the GRPO training actor runs SGLang's overlapped scheduler (`grpo.py --actor-overlap`, auto:
+  on unless held evals measure on the training actor, whose pinned eval engine `held-v3/engine.json` expects it off;
+  grpo-v5-run1 measures held on Pop, so it gets it). Expected +8-11% collection tok/s (measured at fork dbc51ddb72 on
+  short turns; the scheduler's CPU work is in series with every ~52 ms decode step without it). Opt-out
+  `--actor-overlap off`. Fallow register row 23 resolved this way rather than by the pre-launch sample it listed
+  (AGENTS.md: no pre-launch smoke gates a feature; the bar was open > 48 h): the 11-03 defect did not reproduce at the
+  fork pin in the production configuration (0/192 turns, where its 2.5% rate gives p ~0.8%), its tokens get weight ~0
+  in the learner (rho = e^-23), and a new per-step guard counts them.
+- **Guard (default):** `train.jsonl` `actor_mismatch` counts sampled tokens whose learner logp lies more than 5 nats
+  below/above the actor's recorded logp (ordinary calls apart from Neuralese consumer calls, per million loss tokens,
+  smallest log rho); `actor_mismatch_shift` flags >= 10 per million (the 11-03 defect gives ~15-45). On a flag: resume
+  with `--actor-overlap off` and compare the rate. Tests: `tests/neuralese/test_grpo_actor_overlap.py` (auto rule,
+  counts, flag); grpo learner/collector/task-supply tests pass.
+- **Inventory:** the overlapped scheduler exists only in SGLang (managed llama-server, wllama and the Python native
+  engine sample and then build the next step synchronously; GRPO_STEP_THROUGHPUT_20261117.md overlap section). SGLang
+  launchers: the GRPO training actor (now on), held engines on the DGX and Pop (`engine.json` serve args through
+  `serve_native_checkpoint.py`, default off, kept: held pairing pins `overlap_schedule: false`), parity/release checks
+  (`check_sglang_hybrid_swa.py`, `check_sglang_release.py`: off, deterministic comparisons), `sglang_bench.py` (upstream
+  default, on). Not a serving-protocol change: no ENGINE_PARITY row.
+- **For the supervisor (resume flags, grpo-v5-run1):** `RUNNING=128` (the actor default; run2 and grpo-v5 pass 96
+  with ~108 requests wanting a seat; the step-time fit gives ~+4% at 108 running, ~+8% with `SLOTS=128`, KV pool was
+  ~45% used and the run's peak 58.5 GB of 84-92). Keep GPU diagnostics off the DGX during collection phases or accept
+  their 1:1 cost. Enters at a resume on a pin of this commit.
+- **Not checked:** the defect in the 11-03 configuration (BF16 full KV, 32 running) at the fork pin, and its cause
+  (no GPU room beside sft-v5: ledger headroom 7-20 GB); flashinfer FP8 paged decode efficiency (the per-sequence cost
+  implies ~110 GB/s effective KV reads, page size 1); the extra_buffer 256-token grid's re-prefill share per call; the
+  actor's per-step CPU time at 96 running (no profile of the live actor).
