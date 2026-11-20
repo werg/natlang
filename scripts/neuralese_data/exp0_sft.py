@@ -194,6 +194,49 @@ def token_nll_nucleus(model, h, positions, targets, top_p):
     return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p)
 
 
+# Ambient SFT (Daras et al., arXiv 2611.23229, Algorithm 1; DECISIONS 2026-11-20): with probability ``--ambient-p-clean``
+# an optimizer step trains the plain SFT loss; otherwise it trains Temperature Matching, the cross-entropy from the frozen
+# start checkpoint's temperature-T next-token distribution to the student's temperature-T distribution over the full
+# vocabulary, at the same supervised positions and weights (KL(p_T,teacher || p_T,student) up to the teacher's entropy;
+# no T^2 factor). In expectation: SFT + lambda * TM with lambda = (1 - p_c) / p_c. T -> inf is SFT, T = 1 is KD.
+AMBIENT_TEMPERATURE = 2.5
+AMBIENT_P_CLEAN = 0.75
+
+
+def ambient_clean(seed, step, p_clean):
+    """The step's coin (one per optimizer step, Algorithm 1): True for a plain SFT step. Deterministic in (seed, step),
+    so a rerun or a resume draws the same sequence."""
+    if p_clean >= 1.:
+        return True
+    return random.Random(f'{seed}:ambient:{step}').random() < p_clean
+
+
+def _tm_ce(weight, h, teacher_h, teacher_weight, temperature):
+    s = F.linear(h, weight).float() / temperature
+    with torch.no_grad():
+        t = F.linear(teacher_h, teacher_weight).float() / temperature
+        q = torch.softmax(t, -1)
+        entropy = -(q * torch.log_softmax(t, -1)).sum(-1)
+    return -(q * torch.log_softmax(s, -1)).sum(-1), entropy
+
+
+def tm_ce(weight, h_rows, teacher_rows, teacher_weight, temperature, chunk=512):
+    """(per-row cross-entropy from softmax(teacher logits / T) to log_softmax(student logits / T), per-row teacher
+    entropy (no grad)) over the full vocabulary; ``h_rows`` / ``teacher_rows`` are the hidden rows that predict the
+    targets. Chunk-checkpointed: at most ``chunk`` rows of fp32 logits of each model exist at once, none is stored."""
+    ces, entropies = [], []
+    for start in range(0, len(h_rows), chunk):
+        args = (weight, h_rows[start:start + chunk], teacher_rows[start:start + chunk], teacher_weight, temperature)
+        ce, entropy = (torch_checkpoint(_tm_ce, *args, use_reentrant=False) if torch.is_grad_enabled()
+                       else _tm_ce(*args))
+        ces.append(ce)
+        entropies.append(entropy.detach())
+    if not ces:
+        empty = h_rows.new_zeros(0, dtype=torch.float32)
+        return empty, empty
+    return torch.cat(ces), torch.cat(entropies)
+
+
 STUDENT_SOURCES = ('rl', 'rl-neuralese-graph')
 
 
@@ -527,7 +570,8 @@ def prefix_tree_settings(args):
 
 
 def step_backward(model, forward, chains, denominator, pack_tokens, activation_gb, share_prefix_tokens, fast=True,
-                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None, student_top_p=1.):
+                  mark=None, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None, student_top_p=1.,
+                  ambient=None):
     """Forward and backward of one optimizer step's chains, the loss sum(weight * nll) / ``denominator``. Prefixes of at
     least ``share_prefix_tokens`` tokens that several chains share are computed once and every batch is packed into
     varlen rows of ``pack_tokens`` (`lfm3_fast_train.run_prefix_tree` in ``mode``, exact gradients); 0: every chain
@@ -535,19 +579,30 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
     Chains that import Neuralese state stay whole and carry their producer documents in the same forward (``row_inputs``:
     the consumer's loss reaches the producer's state; ``passthrough`` False: detached). ``student_top_p`` < 1: the
     student's own sampled chains take the nucleus NLL (``targets_nll``).
-    Returns (sum of weighted nll, tokens computed)."""
+    ``ambient`` (a Temperature Matching step, ``ambient_teacher_rows``): {'temperature', 'head' (the teacher's output
+    weight), 'rows' {chain index: teacher hidden rows of its targets}}; the loss is then sum(weight * ``tm_ce``) /
+    ``denominator`` instead, and ``ambient['kl']`` collects sum(weight * KL) (telemetry).
+    Returns (sum of the weighted loss, tokens computed)."""
     mark = mark or (lambda name, since: time.time())
     total_nll = 0.
     device = model.lm_head.weight.device
+
+    def loss_of(h, positions, targets, weights, indices, sampled):
+        if ambient is None:
+            return targets_nll(model, h, positions, targets, sampled, student_top_p) * weights
+        teacher = torch.cat([ambient['rows'][index] for index in indices])
+        ce, entropy = tm_ce(model.lm_head.weight, h[positions], teacher, ambient['head'], ambient['temperature'])
+        ambient['kl'] = ambient.get('kl', 0.) + ((ce.detach() - entropy) * weights).sum().item()
+        return ce * weights
     if not fast:                     # the stock HF path: one chain per forward, no imports
-        for chain in chains:
+        for index, chain in enumerate(chains):
             t = time.time()
             ids, positions, targets, weights, _, imports = row_inputs([chain], device, passthrough)
             if imports is not None:
                 raise ValueError('imported Neuralese state needs the fast path (lfm3_fast_train)')
             h = forward(model, ids)
             t = mark('forward', t)
-            nll = targets_nll(model, h, positions, targets, sampled_mask([chain], device), student_top_p) * weights
+            nll = loss_of(h, positions, targets, weights, [index], sampled_mask([chain], device))
             (nll.sum() / denominator).backward()
             mark('loss_backward', t)
             total_nll += nll.sum().item()
@@ -576,7 +631,7 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
         h = run(ids, lengths, imports)
         t = mark('forward', t)
         sampled = sampled_mask([chains[index] for index, _ in items], device)
-        nll = targets_nll(model, h, positions, targets, sampled, student_top_p) * weights
+        nll = loss_of(h, positions, targets, weights, [index for index, _ in items], sampled)
         (nll.sum() / denominator).backward()
         clock['end'] = mark('loss_backward', t)
         total_nll += nll.sum().item()
@@ -587,6 +642,54 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
     if clock['end'] is not None:
         mark('prefix_backward', clock['end'])
     return total_nll, lfm3_fast_train.tree_tokens(nodes, [tokens(i, 0) for i in range(len(chains))])
+
+
+def ambient_teacher_rows(model, forward, chains, live, teacher, restore, pack_tokens, activation_gb, share_prefix_tokens,
+                         fast=True, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None):
+    """The frozen teacher's hidden rows at every target of the step's ``chains`` ({chain index: (targets, D) BF16}), for
+    a Temperature Matching step. The teacher's BF16 parameters (``teacher`` {name: tensor}, the start checkpoint) are
+    loaded into the policy's own module (``live``) for this forward, as grpo's ``ReferenceWeights`` does for its KL
+    reference (no second module or compile), and ``restore()`` puts the policy back from its FP32 masters (exact: the BF16
+    parameters are always the masters rounded). The same prefix tree and packing as the step's own pass, no backward."""
+    device = model.lm_head.weight.device
+    rows = {}
+    with torch.no_grad():
+        torch._foreach_copy_([live[name] for name in teacher], list(teacher.values()))
+    try:
+        if not fast:
+            with torch.no_grad():
+                for index, chain in enumerate(chains):
+                    ids, positions, _, _, _, imports = row_inputs([chain], device, passthrough)
+                    rows[index] = forward(model, ids)[positions].detach()
+            return rows
+        nodes = step_tree(chains, share_prefix_tokens)
+        cuda_ids = {}
+
+        def ids_of(index, start, end):
+            if index not in cuda_ids:
+                cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).to(device)
+            return cuda_ids[index][start:end]
+
+        def tokens(index, start):
+            return len(chains[index]['ids']) - start + source_tokens(chains[index])
+
+        def leaf(items, run):
+            ids, positions, targets, _, lengths, imports = row_inputs(
+                [chains[index] for index, _ in items], device, passthrough, starts=[start for _, start in items])
+            h = run(ids, lengths, imports)[positions].detach()
+            counts = [chain_loss_tokens(chains[index]) for index, _ in items]
+            for (index, _), part in zip(items, h.split(counts)):
+                rows[index] = part
+        # grad mode on, no backward: the policy's own compiled training graph (as grpo's reference pass), graphs dropped
+        with torch.enable_grad():
+            lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
+                                            backward=False, mode=mode if share_prefix_tokens > 0 else 'levels',
+                                            batch_tokens=tree_batch_tokens, retained_gb=retained_gb)
+        return rows
+    finally:
+        restore()
+        for p in live.values():
+            p.grad = None
 
 
 def load_chains(path):
@@ -665,6 +768,8 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step, train
 
 def train(args):
     run_started = time.time()
+    if not 0. < args.ambient_p_clean <= 1. or args.ambient_temperature <= 0.:
+        raise SystemExit('--ambient-p-clean must be in (0, 1] and --ambient-temperature > 0')
     episodes = [] if args.chains else pickle.load(open(args.turns, 'rb'))['episodes']
     if args.max_per_task:
         # compute-bound (GB10: about 1k tokens/s of fwd+bwd at 10k context): the shortest verified episodes of each task
@@ -702,6 +807,14 @@ def train(args):
         resident_tokens(model, args.activation_gb)
     special_index = torch.tensor(special, device='cuda')
     live = {name: p for name, p in model.named_parameters()}
+    # Ambient SFT's frozen teacher: the start checkpoint's BF16 parameters, kept resident (3.4 GB for LFM3-1.7B) and
+    # loaded into the module only for a Temperature Matching step's teacher forward (``ambient_teacher_rows``)
+    ambient_teacher = ({name: p.detach().clone() for name, p in live.items()}
+                       if args.ambient_p_clean < 1 else None)
+
+    def restore_live():
+        with torch.no_grad():
+            torch._foreach_copy_(list(live.values()), [masters[name] for name in live])
     parameters = [masters[name] for name in live]
     for master in parameters:
         master.grad = torch.zeros_like(master)
@@ -738,7 +851,8 @@ def train(args):
     if args.max_steps:
         steps = steps[:args.max_steps]
     print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens,
-                      'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': order}),
+                      'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': order,
+                      'ambient': {'p_clean': args.ambient_p_clean, 'temperature': args.ambient_temperature}}),
           flush=True)
     log = open(Path(args.out_dir) / 'train.jsonl', 'a')
     if val_sets:
@@ -774,11 +888,22 @@ def train(args):
         denominator = sum(chain_mass(chains[i]) for i in group)
         step_started = time.time()
         torch.cuda.reset_peak_memory_stats()
-        total_nll, computed = step_backward(model, forward, [chains[i] for i in group], denominator, pack_tokens,
+        step_chains = [chains[i] for i in group]
+        ambient = None
+        if not ambient_clean(args.seed, step, args.ambient_p_clean):
+            t = time.time()
+            rows = ambient_teacher_rows(model, forward, step_chains, live, ambient_teacher, restore_live, pack_tokens,
+                                        args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
+                                        passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
+                                        tree_batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb)
+            mark('ambient_teacher', t)
+            ambient = {'temperature': args.ambient_temperature, 'head': ambient_teacher[embedding_name], 'rows': rows}
+        total_nll, computed = step_backward(model, forward, step_chains, denominator, pack_tokens,
                                             args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
                                             mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
                                             tree_batch_tokens=args.tree_batch_tokens,
-                                            retained_gb=args.prefix_retained_gb, student_top_p=student_top_p)
+                                            retained_gb=args.prefix_retained_gb, student_top_p=student_top_p,
+                                            ambient=ambient)
         forward_tokens += computed
         t = time.time()
         embedding_master.grad[special_index] = 0
@@ -789,7 +914,11 @@ def train(args):
             embedding_master[special_index] = saved_rows
             torch._foreach_copy_(list(live.values()), [masters[name] for name in live])
         mark('optimizer', t)
+        # 'loss' is the step's trained objective: the weighted NLL on a clean step, the weighted Temperature Matching
+        # cross-entropy on a TM step ('tm_kl': its KL part); validation stays the plain NLL
         record = {'step': step + 1, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale, 'grad_norm': norm,
+                  'loss_kind': 'sft' if ambient is None else 'tm',
+                  **({} if ambient is None else {'tm_kl': ambient.get('kl', 0.) / denominator}),
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
                   'chain_tokens': int(sum(len(chains[i]['ids']) for i in group)), 'computed_tokens': computed,
                   'forward_tokens_per_s': round(forward_tokens / (time.time() - started)),
@@ -969,6 +1098,13 @@ def main():
     p.add_argument('--save-best', action='store_true', help='with --keep-best-val: write checkpoint.pt at every new best validation step')
     p.add_argument('--stop-file', help='stop before the next optimizer step when this file exists (the best-validation checkpoint is written)')
     p.add_argument('--keep-best-val', help='name (file stem) of a --val-chains set: write the checkpoint of the step with its lowest NLL (step 0 counts)')
+    p.add_argument('--ambient-p-clean', type=float, default=AMBIENT_P_CLEAN,
+                   help='Ambient SFT (arXiv 2611.23229, exp0_sft.ambient_clean): each optimizer step trains the plain SFT '
+                        'loss with this probability (default 0.75, the paper\'s), else Temperature Matching to the frozen '
+                        'start checkpoint at --ambient-temperature (one extra no-grad forward of the step, 3.4 GB of '
+                        'resident teacher weights); 1 opts out (plain SFT)')
+    p.add_argument('--ambient-temperature', type=float, default=AMBIENT_TEMPERATURE,
+                   help='Temperature Matching temperature T (default 2.5, the paper\'s; large T approaches SFT, 1 is KD)')
     p.add_argument('--hours', type=float, default=0., help='wall-clock budget: at --replan-step the schedule (cosine '
                    'included) is cut to the steps that fit at the measured rate, keeping --reserve-minutes for eval and save')
     p.add_argument('--replan-step', type=int, default=20)
