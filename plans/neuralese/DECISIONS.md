@@ -5428,7 +5428,9 @@ seed 20261117), on every source verified since v5's extract (11-20 05:05):
   of 7,810 episodes shared, 2,251 new (pool-v1 801, gap-v1 781, pool-v2-rich 578, own 80, progtune 11), 2,176 new
   tasks: the extra candidates shift the seeded selection, not only add to it. val-own/val-teacher 40 + 40 episodes.
 - **`runs/sft-mix-20261120-v2u`** (for SFT from a grpo-v5-run1 checkpoint): the same with `--prefer-unseen` v1.
-  Building (ops/sft-v6/build.log); its counts follow in a later commit.
+  Queued as ledger unit `sft-v6-build-6` (medium, 5 GB) behind grpo-v5-run1's 101 GB claim. If it has not finished
+  when sft-v6 launches from a grpo-v5 checkpoint, drive.sh stops the queued unit and builds v2u itself at high
+  priority once grpo-v5-run1 is stopped (~1.5 h before the SFT starts); `START=base` (v2) never waits.
 
 **`--prefer-unseen BUILD_OUT` (73f39c1e7, sft_sources build).** A checkpoint of grpo-v5-run1 descends from sft-v5, which
 trained v1's 7,814 episodes. SFT from it on the same selection would be a second epoch on them. With the flag, every
