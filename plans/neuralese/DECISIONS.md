@@ -4655,3 +4655,11 @@ checkpoints 26-40 stay on /mnt/external as the fallback that sft-v5's drive resu
 - **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
   `natlang-rl-authored-{dev,confirmation}-20261120r22`.
 - **Opt-out:** `--pool` without this source.
+
+## 2026-11-20: task supply round 23, `natlang-rl-task-supply-20261120c` (130 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 130 train rows in 8 new families, with 127 distinct answers.
+- **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
+  `natlang-rl-authored-{dev,confirmation}-20261120r23` and `-20261120r23b`.
+- **Total supply so far:** rounds 17-23 add 699 train rows in 48 new families.
+- **Opt-out:** `--pool` without this source.

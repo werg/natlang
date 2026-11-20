@@ -343,3 +343,33 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Constructs:** folder reducers 81%, decide 65%, depth 3 49%, iterateOn 40%, typed Neuralese 42%.
 - **Repetition:** 20 programs, none shared with the 36,414-row pool.
 - **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
+
+## 18. Round 23: `natlang-rl-task-supply-20261120c` (130 rows)
+
+- **Batches.** Haiku authors w317-w324, briefed by `AUTHOR_BRIEF_ROUND22.md`. The brief adds the round-21 lessons:
+  state the fallback when a pick fails, define every argument, never put a slash inside destination names, apply
+  every stated capacity, and say whether a no-op update counts.
+  - Families: ice rink sessions, community fridge log, recording studio bookings, dog walking groups, print shop
+    queue, youth referee assignments, bookstore consignment, apartment maintenance tickets.
+- **Blind solve.** Sonnet agreed on every task, apart from one solver slip that it fixed itself. 34 flagged tasks
+  were held back. The causes were:
+  - two "otherwise" branches written in sequence;
+  - one name used both for a flag and for a counter;
+  - opening-hour boundaries;
+  - a "within" capacity boundary;
+  - a variable used after its loop ends;
+  - a file read order left unstated;
+  - a benign note that contains a spoil cue;
+  - a word-fragment cue ("injur");
+  - a conditional reply treated as an acceptance;
+  - a run name that is confused with an area.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261120r23` (19 + 16 rows) and
+  `-20261120r23b` (w323's 2 + 1 rows).
+- **Result: 130 rows in 8 families**, with 127 distinct answers.
+- **Constructs:**
+  - folder reducers 89%, decide 73%, depth 3 57%, iterateOn 69%, typed Neuralese 49%;
+  - 126 of 130 rows carry 2+ held constructs;
+  - levels 35 / 59 / 36.
+- **Repetition** against all 16 earlier POOLS (36,457 rows): 58 programs (53.9 effective), 28 structures. No program
+  text and no functional program is shared with the pool.
+- **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.
