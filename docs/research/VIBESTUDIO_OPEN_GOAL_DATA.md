@@ -56,8 +56,14 @@ Assemble the SFT mixture with `sft_sources.py build`, passing
 enforce the contract even when extraction admitted no live Vibestudio cases.
 The build automatically applies the minimum when verified Vibestudio live data
 is present, including when every verified capture came from a legacy assignment.
-Use `--open-goals-only --no-default-teacher-pool` to assemble a goal-only mixture
-without including the historical teacher pool.
+Use `--open-goals-only --no-default-teacher-pool` for the isolated smoke.
+For a mixed build, ingest new and existing verified manifests together and
+build with the selected sources. Each historical assignment retains its original
+capture and supervision. It can contribute to the mix when both open-goal
+shares pass. The build evaluates the shares before publishing its rows, so a
+rejected mix leaves the previous admitted rows available.
+The current importer accepted all five archived seed-v3 assignment captures,
+retaining 124 supervised calls under their original task identities.
 
 The minimum applies both to distinct admitted goals divided by all
 training trajectories and to the weighted target tokens from their
@@ -217,17 +223,17 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 279 open goals across six workspace templates, with 218
-training goals and 61 source-separated holdouts. The same Base entry point
+The catalog declares 317 open goals across six workspace templates, with 248
+training goals and 69 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
 
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
-| Examples | 70 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing, native PDF evidence, and Natlang program discovery, compilation and stale source recovery |
+| Examples | 94 | Public evidence and document recovery, ordered CDP changes and readback, visual recovery across renderer revisions, declared suite verification, publishing, native PDF evidence, and Natlang program discovery, execution and authorized signing |
 | Personal | 74 | Declared tests, Mission Control, browser-library-to-collection work, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
-| System | 41 | Declared tests, hub and terminal operations, retained conversations and cursor recovery, and Host diagnostic windows across boots, failures and owned incident handoffs |
+| System | 55 | Declared tests, hub and terminal operations, retained conversations and cursor recovery, Host diagnostics, and owned local delivery with interrupted acknowledgement recovery |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 21 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence across pages before continuing to an authorized vault edit or hold |
 | Google Workspace | 61 | Drive inventory and checkpoint review, retained Gmail compose recovery, Calendar resource windows, and compound Gmail-to-Drive goals that confirm approvals and linked assets before an authorized handoff. |
@@ -348,8 +354,11 @@ and native worker regression tests, and all four managed preview cases
 passed on rerun.
 All 15 authoring and 16 System diagnostics references passed in managed
 workspaces. The preserved evidence bundle
-`vibestudio-open-goal-reference-223-20261120` includes the 279-goal catalog,
-223 accepted references, and 47 verified holdouts.
+`vibestudio-open-goal-reference-224-20261120` includes the 310-goal catalog
+and 224 accepted references. The 17 execution and 14 delivery goals passed
+their bounded port checks and are scheduled for managed verification.
+Seven visual recovery cases passed controlled renderer checks and are
+registered in the newer catalog.
 
 The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised

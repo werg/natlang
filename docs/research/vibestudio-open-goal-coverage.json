@@ -1,6 +1,10 @@
 {
   "schema": "vibestudio.open-goal-coverage/2",
   "families": {
+    "program-run": {
+      "capabilities": ["runtime-live-program-receipts"],
+      "skills": ["base:skills/natlang-authoring/SKILL.md"]
+    },
     "authoring": {
       "capabilities": ["workspace-natlang-authoring", "runtime-live-program-receipts"],
       "skills": ["base:skills/natlang-authoring/SKILL.md"]
@@ -24,6 +28,10 @@
     "google-handoff": {
       "capabilities": ["google-live-compose-continuation", "google-live-drive-checkpoint-handoff"],
       "skills": ["google-workspace:workers/gmail-agent/SKILL.md", "google-workspace:skills/google-drive/SKILL.md"]
+    },
+    "local-delivery": {
+      "capabilities": ["local-messaging", "workspace-live-channel-roster", "workspace-live-delivery-history"],
+      "skills": ["base:skills/messaging/SKILL.md"]
     },
     "news": {
       "capabilities": ["news-live-ownership"],
@@ -89,12 +97,23 @@
       "capabilities": ["system-live-host-log-audit", "system-live-incident-continuation", "system-live-saved-log-cursor"],
       "skills": ["system:skills/server-logs/SKILL.md"]
     },
+    "visualRecovery": {
+      "capabilities": ["panels", "workspace-live-panel-health", "workspace-panel-repair"],
+      "skills": ["base:packages/testkit/SKILL.md"]
+    },
     "workspace-edit": {
       "capabilities": ["filesystem"],
       "skills": ["base:skills/open-user-goal/SKILL.md"]
     }
   },
   "cases": {
+    "open-goal-program-run-ferry-stale-then-current": {
+      "capabilities": { "runtime-live-program-receipts": ["ranAuthorizedSamples", "verifiedNativeOutputReceipts", "verifiedSignedOutput"] },
+      "skills": { "base:skills/natlang-authoring/SKILL.md": ["inspectedCurrentCallable", "verifiedNativeOutputReceipts"] }
+    },
+    "open-goal-program-run-delivery-followup-new-revision-rejects": {
+      "capabilities": { "runtime-live-program-receipts": ["inspectedCurrentCallable", "verifiedNativeOutputReceipts", "preservedRuntimeSource"] }
+    },
     "open-goal-authoring-cinema-absent-scope-limits": {
       "capabilities": {
         "workspace-natlang-authoring": ["observedCurrentCompiler", "verifiedAuthoringFindings"]
@@ -208,6 +227,24 @@
         "base:skills/provenance-orientation/SKILL.md": ["protectedHistory", "readExactMilestones"]
       }
     },
+    "open-goal-local-delivery-recipient-vs-body-reference": {
+      "capabilities": {
+        "local-messaging": ["exactLocalRecipientAndReadback", "independentlyJoinedLocalDelivery"]
+      },
+      "skills": {
+        "base:skills/messaging/SKILL.md": ["exactLocalRecipientAndReadback", "independentlyJoinedLocalDelivery"]
+      }
+    },
+    "open-goal-local-delivery-same-handle-in-other-room-is-out-of-scope": {
+      "capabilities": {
+        "workspace-live-channel-roster": ["exactObservedDeliveryScope", "preservedOwnedLocalRosters", "matchedLocalDeliveryDecision"]
+      }
+    },
+    "open-goal-local-delivery-recover-interrupted-current-receipt": {
+      "capabilities": {
+        "workspace-live-delivery-history": ["exactLocalRecipientAndReadback", "independentlyJoinedLocalDelivery"]
+      }
+    },
     "open-goal-open-pdf-visual-only-campus-map": {
       "capabilities": {
         "workspace-live-pdf-media-review": ["renderedEvidence", "groundedRecommendation"]
@@ -255,6 +292,20 @@
       },
       "skills": {
         "base:skills/open-user-goal/SKILL.md": ["discoveredWorkspace", "recoveredConcurrentEdit"]
+      }
+    },
+    "open-goal-reload-planetarium-public-renderer-on-the-current-build": {
+      "capabilities": {
+        "workspace-live-panel-health": ["boundRendererReadback", "exactHealthDisposition", "untouchedCompanions"],
+        "workspace-panel-repair": ["boundRendererReadback", "exactOrderedRecovery", "protectedHeads"]
+      },
+      "skills": {
+        "base:packages/testkit/SKILL.md": ["boundRendererReadback", "untouchedCompanions"]
+      }
+    },
+    "open-goal-replan-step-free-route-from-current-renderer": {
+      "capabilities": {
+        "panels": ["exactOwnedDiscovery", "exactOrderedRecovery", "boundRendererReadback"]
       }
     },
     "open-goal-resume-restoration-owned-preview-after-upload": {
