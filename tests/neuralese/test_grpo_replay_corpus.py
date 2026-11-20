@@ -150,7 +150,7 @@ def test_episodes_cut_by_a_token_cap_are_neither_ranked_nor_trained(tmp_path, mo
         assert stats['episodes_truncated'] == (1 if mode == 'drop' else 0)
 
 
-def test_episodes_ended_on_the_request_budget_are_neither_ranked_nor_trained(tmp_path, monkeypatch):
+def test_episodes_ended_on_the_request_budget_train_by_default_and_drop_on_request(tmp_path, monkeypatch):
     import json
     import types
     import lower_rollout_turns

@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-mix-20261120-v1",
+  "owner": "dgx",
+  "path": "runs/sft-mix-20261120-v1",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 149945,
+      "sha256": "b91315b659a03f1949f0074b1094d07acbbd3a1d42df8b8c78fd48674f094375"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 73836365,
+      "sha256": "28d24bebae099f958006ccb4263f1b451febdebdc7ba685a68de543f1633b8b7",
+      "lines": 7755
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 867416475,
+      "sha256": "cc5d937f89bc2f4a6eb2cde58655097996448c0a8296ed105d9d77b1c2e5d40c"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 31195906,
+      "sha256": "de9209f794df93dccc6e7426757ce8bfead018af8de331b8dbae9725c9a24a92"
+    },
+    {
+      "path": "val-own.pkl",
+      "bytes": 3598376,
+      "sha256": "0f1d6f34aad0439cb39170c7ee6e557f26d59be7859d4863f8073ddaddb34921"
+    },
+    {
+      "path": "val-teacher.pkl",
+      "bytes": 3395551,
+      "sha256": "04efa550eabb0803d3e46d5afffd3714c89a6687a283b507228ca79f12ed715d"
+    }
+  ],
+  "bytes": 979592618
+}

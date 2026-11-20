@@ -38,12 +38,10 @@ def truncated_rollout(rollout: dict) -> bool:
 
 def budget_stopped_rollout(rollout: dict) -> bool:
     """Whether a scored episode ended on the model-request budget (outcome ``budget_exhaustion``; a wall-clock stop is
-    unscored). Such an episode was cut by an episode-length cap, the call-count form of a token cap: it scores 0 and is
-    the longest kind (grpo-v4-run2, last 300 groups: 8% of episodes, 28k sampled tokens each against 11.5k for
-    successes), so under token normalization it carried twice the step's net push-down on sampled reasoning (A*T -4.2M
-    of a net -2.1M) spread over every token of an unfinished run. Learners leave it out of advantages and training by
-    default (overlong filtering, as ``truncated_rollout``; DECISIONS 2026-11-20 sft-v5). Held evaluation still counts
-    it as a failure."""
+    unscored). Learners keep it by default (a 0, like any failure: running out is the policy's own looping or
+    slowness); ``drop`` treats the budget as a length cap and leaves such episodes out of advantages and training, as
+    ``truncated_rollout`` does for a token cap (opt-in; DECISIONS 2026-11-20 sft-v5: the hazard premise for dropping
+    them was refuted by the 12:00 investigation)."""
     return rollout.get('outcome') == 'budget_exhaustion' and rollout.get('reward') is not None
 
 

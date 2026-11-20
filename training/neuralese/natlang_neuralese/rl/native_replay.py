@@ -1650,7 +1650,7 @@ def second_close_queries(replay, close_id, stop_ids):
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
                       min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None,
-                      truncated='drop', second_close=None, budget_stop='drop'):
+                      truncated='drop', second_close=None, budget_stop='train'):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
@@ -1699,7 +1699,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         if truncated == 'drop' and truncated_rollout(rollout):
             continue     # a reply cut by a token cap: neither ranked nor trained (``truncated`` 'train' opts out)
         if budget_stop == 'drop' and budget_stopped_rollout(rollout):
-            continue     # ended on the model-request budget: neither ranked nor trained (``budget_stop`` 'train' opts out)
+            continue     # ended on the model-request budget, with ``budget_stop`` 'drop' (opt-in): neither ranked nor trained
         _require_scored_training_episode(rollout,identity,actors=actors)
         key = (rollout['task_id'], rollout.get('group'))
         if jolt is not None:
