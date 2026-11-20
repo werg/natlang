@@ -24,6 +24,12 @@ From the Vibestudio checkout, list the cases with
 It uses the configured teacher and the chosen workspace's real runtime. Use
 `--assignments` to select the historical assigned workflows.
 
+For a Codex teacher, `--approve-codex-session` lets the managed capture
+answer the model gateway's provider approval in its disposable workspace.
+It covers the gateway's authenticated Codex credential for that session.
+Other approval requests stay queued for their owners. Give longer workflows
+an explicit wall-clock budget with `--test-timeout-ms`.
+
 In the Natlang checkout, record each immutable capture directory in the data
 registry, then ingest each captured training manifest with
 `scripts/neuralese_data/sft_sources.py extract --work WORK --live-run MANIFEST`
@@ -404,11 +410,18 @@ The synthetic assembly check ran with an isolated data registry and the
 configured learner tokenizer. It produced one trajectory and 24 supervised
 tokens, with both open-goal shares at 100%. A one-reply Luna probe on Tick
 passed after sign-in. The first managed attempt exposed invalid service-scope
-paths in mounted packages, which were corrected. The next attempt loaded
-the joint program and reached the model gateway. The gateway call remained
-pending until the six-minute test deadline. The collector retained the
-failure trace and retired the owned instance. Live teacher capture through
-learner assembly remains unverified.
+paths in mounted packages, which were corrected. The model gateway then
+waited for Codex credential consent. Resolving the approval in that session
+let three actual Luna calls return. The teacher chose the document revision
+lambda and hit an unresolved type alias before reading the workspace. The
+collector retained the full call tree and verification failure.
+
+The TypeScript project compiler already canonicalized relative source paths.
+The virtual loader used by Workerd and the browser now uses the same path
+resolution for shared `types.ts` re-exports. The Node filesystem loader
+resolves these paths through its filesystem adapter. Llama Server, wllama,
+Python native, and SGLang consume the rendered calls from the TypeScript host.
+They have no separate implementation of callable-folder source resolution.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
