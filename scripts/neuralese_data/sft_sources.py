@@ -804,7 +804,7 @@ def held_closure(manifest_path):
 
 def live_holdout_registry(path, held):
     """Add the predeclared Vibestudio holdouts to the learner's source-group closure."""
-    group_splits, training = {}, {}
+    group_splits, goal_splits, training = {}, {}, {}
     task_ids = set()
     test_cases = 0
     ids, groups, sources = held
@@ -813,16 +813,20 @@ def live_holdout_registry(path, held):
         if row.get('interaction') != 'open-user-goal':
             continue
         task_id, split, relatives = row.get('taskId'), row.get('split'), row.get('sourceGroups')
+        digest = row.get('goalSha256')
         if (not isinstance(task_id, str) or not task_id.startswith('vibestudio:') or task_id in task_ids or
                 split not in ('train', 'validation', 'test') or not isinstance(relatives, list) or not relatives or
-                not all(isinstance(group, str) and group.strip() for group in relatives)):
+                not all(isinstance(group, str) and group.strip() for group in relatives) or
+                not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)):
             raise ValueError('invalid or duplicate open-goal holdout registry row')
         task_ids.add(task_id)
+        if goal_splits.setdefault(digest, split) != split:
+            raise ValueError('open-goal prompt crosses splits')
         for group in relatives:
             if group_splits.setdefault(group, split) != split:
                 raise ValueError(f'open-goal source group crosses splits: {group}')
         if split == 'train':
-            training[task_id] = set(relatives)
+            training[task_id] = (frozenset(relatives), digest)
         else:
             test_cases += 1
             ids.add(task_id)
@@ -831,6 +835,14 @@ def live_holdout_registry(path, held):
     if not training or not test_cases:
         raise ValueError('open-goal registry needs both train and held cases')
     return training
+
+
+def require_registered_open_goal(candidate, training):
+    from live_teacher_sources import open_goal_fingerprint
+    task_id = candidate['task_id']
+    _, digest = open_goal_fingerprint(candidate['open_goal'])
+    if training.get(task_id) != (frozenset(candidate['source_groups']), digest):
+        raise ValueError(f'open goal {task_id} differs from the pinned training registry')
 
 
 CHARS_PER_TOKEN = 3.3   # estimate for selecting October rows before rendering (calibrated in build.json)
@@ -971,6 +983,7 @@ def core_candidates(args, work, funnel, held):
                               if record.get('verification_mode') == 'observed-live' else {}),
                            'open_goal': task['interaction']['goal']
                            if record.get('verification_mode') == 'observed-live' and task.get('interaction') else None,
+                           'source_groups': task.get('source_groups', ()),
                            'guided': episode.get('role') == 'teacher',
                            'backend_workaround': backend_workaround(episode['turns']),
                            'signature': minhash(shingles(action_text(episode['turns'])))})
@@ -1309,9 +1322,7 @@ def build(args):
     core, tasks = core_candidates(args, work, funnel, held)
     for candidate in core:
         if candidate.get('open_goal'):
-            task = tasks[candidate['task_id']]
-            if registered_training.get(task['id']) != set(task['source_groups']):
-                raise ValueError(f'open goal {task["id"]} is absent from the pinned training registry or has different source groups')
+            require_registered_open_goal(candidate, registered_training)
     open_goals_only = getattr(args, 'open_goals_only', False)
     if open_goals_only and (args.october or args.aux):
         raise SystemExit('--open-goals-only cannot be combined with --october or --aux')
@@ -2054,7 +2065,7 @@ def main():
     b.add_argument('--tokenizer', required=True)
     b.add_argument('--held-manifest', default=resolve_str(*OPS, 'held-v3', 'manifest.json'))
     b.add_argument('--live-holdout-registry', metavar='CATALOG.jsonl',
-                   help='required for open-goal training; output of pnpm natlang:teacher --list --open-goals')
+                   help='required for open-goal training; output of pnpm natlang:teacher --list')
     b.add_argument('--no-default-teacher-pool', action='store_true',
                    help='live-only build: do not require coverage of the historical default teacher pool')
     b.add_argument('--min-open-goal-share', type=float, choices=[0.8],

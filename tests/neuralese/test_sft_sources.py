@@ -324,21 +324,41 @@ def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
 
 
 def test_vibestudio_holdout_closes_over_source_group_siblings(tmp_path):
+    from live_teacher_sources import open_goal_fingerprint
+
     catalog = tmp_path / 'goals.jsonl'
+    goal = 'Send a café update.\n"Use the new time."'
+    _, digest = open_goal_fingerprint(goal)
     training = {'interaction': 'open-user-goal', 'taskId': 'vibestudio:train', 'split': 'train',
-                'sourceGroups': ['train-world']}
+                'sourceGroups': ['train-world'], 'goalSha256': digest}
     holdout = {'interaction': 'open-user-goal', 'taskId': 'vibestudio:held', 'split': 'test',
-               'sourceGroups': ['test-world', 'shared-source']}
-    catalog.write_text(json.dumps(training) + '\n' + json.dumps(holdout) + '\n')
+               'sourceGroups': ['test-world', 'shared-source'], 'goalSha256': '1' * 64}
+
+    def write_catalog():
+        catalog.write_text(json.dumps(training) + '\n' + json.dumps(holdout) + '\n')
+
+    write_catalog()
     held = set(), set(), set()
-    assert s.live_holdout_registry(catalog, held) == {'vibestudio:train': {'train-world'}}
+    registration = s.live_holdout_registry(catalog, held)
+    assert registration == {'vibestudio:train': (frozenset({'train-world'}), digest)}
     assert s.held_hit('renamed', [], ['shared-source'], held)
     assert s.held_hit('renamed', ['vibestudio:held'], [], held)
     assert not s.held_hit('vibestudio:train', [], ['train-world'], held)
 
+    candidate = {'task_id': training['taskId'], 'source_groups': ['train-world'], 'open_goal': goal}
+    s.require_registered_open_goal(candidate, registration)
+    with pytest.raises(ValueError, match='differs from the pinned training registry'):
+        s.require_registered_open_goal({**candidate, 'open_goal': 'A different goal'}, registration)
+
     training['sourceGroups'].append('shared-source')
-    catalog.write_text(json.dumps(training) + '\n' + json.dumps(holdout) + '\n')
-    with pytest.raises(ValueError, match='crosses splits'):
+    write_catalog()
+    with pytest.raises(ValueError, match='source group crosses splits'):
+        s.live_holdout_registry(catalog, (set(), set(), set()))
+
+    training['sourceGroups'].remove('shared-source')
+    holdout['goalSha256'] = digest
+    write_catalog()
+    with pytest.raises(ValueError, match='prompt crosses splits'):
         s.live_holdout_registry(catalog, (set(), set(), set()))
 
 

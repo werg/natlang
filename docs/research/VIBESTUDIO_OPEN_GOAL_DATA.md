@@ -15,10 +15,11 @@ contributes zero training examples until a qualifying trajectory is captured.
 ## Running the open-goal lane
 
 From the Vibestudio checkout, list the cases with
-`pnpm natlang:teacher --list --open-goals`. The managed installation check is
-`pnpm natlang:teacher --preflight --open-goals`. A capture uses
-`pnpm natlang:teacher --open-goals --case CASE --out NEW_DIRECTORY` with explicit
-case IDs. It uses the configured teacher and the chosen workspace's real runtime.
+`pnpm --silent natlang:teacher --list`. The managed installation check is
+`pnpm natlang:teacher --preflight`. A capture uses
+`pnpm natlang:teacher --case CASE --out NEW_DIRECTORY` with explicit case IDs.
+It uses the configured teacher and the chosen workspace's real runtime. Use
+`--assignments` to select the historical assigned workflows.
 
 In the Natlang checkout, ingest each captured training manifest with
 `scripts/neuralese_data/sft_sources.py extract --work WORK --live-run MANIFEST`
@@ -36,12 +37,14 @@ host's `scripts/materialize-native-teacher.mjs` with the original manifest and
 its bound artifacts in place. The materializer checks their digests and
 projects standard `natlang.teacher_training_turn.native/1` targets.
 
-Save `pnpm natlang:teacher --list --open-goals` from the pinned Vibestudio
+Save the output of `pnpm --silent natlang:teacher --list` from the pinned Vibestudio
 checkouts as a JSONL catalog. Each open goal declares its split and source
-groups before capture. Pass the catalog to SFT with
+groups before capture. The catalog includes the hash of the exact Natlang root
+input. Pass the catalog to SFT with
 `--live-holdout-registry CATALOG.jsonl`. The learner admits open-goal captures
-whose identity and groups match a training entry and excludes the held
-cases and their source-group siblings. Held variants stay out of training
+whose identity, groups, and goal hash match a training entry. The registry
+rejects source groups and exact prompts that cross splits. Held cases and their
+source-group siblings stay out of training
 extraction.
 
 Assemble the SFT mixture with `sft_sources.py build`, passing
@@ -74,25 +77,32 @@ evaluation before starting a smoke. Run `scripts/memory_ledger.py status`
 and choose the host budget and reserve using that measurement.
 
 ```sh
+export VIBESTUDIO_TEMPLATE_CHECKOUTS
+cd "$VIBESTUDIO_CHECKOUT"
+pnpm --silent natlang:teacher --list > "$GOAL_CATALOG"
 python "$NATLANG_CHECKOUT/scripts/memory_ledger.py" run \
   --unit vibe-open-goal-smoke --budget-gb "$SMOKE_BUDGET_GB" \
   --reserve-gb "$SMOKE_RESERVE_GB" --no-resumable --workdir "$VIBESTUDIO_CHECKOUT" \
   --env "VIBESTUDIO_TEMPLATE_CHECKOUTS=$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
   --env "VIBESTUDIO_MAX_CONCURRENT_BUILDS=1" \
-  -- pnpm natlang:teacher --open-goals --case open-goal-reconcile-workshop-update \
+  -- pnpm natlang:teacher --case open-goal-reconcile-workshop-update \
   --out "$CAPTURE_DIRECTORY"
 ```
 
 Wait for the unit to exit successfully and keep the entire capture directory.
 The learner needs the actual tokenizer, chat template, and model type of the
-starting checkpoint. Only tokenizer assets are loaded for data assembly.
+starting checkpoint. Only tokenizer assets are loaded for data assembly. Set
+`HELD_MANIFEST` to the machine's held-v3 manifest with its referenced exclusions
+available. Use a fresh work directory and a fresh learner output directory.
 
 ```sh
+cd "$NATLANG_CHECKOUT"
 python scripts/neuralese_data/sft_sources.py extract --work "$WORK" \
   --live-run "$CAPTURE_DIRECTORY/verified/manifest.json" \
   --live-trajectory-out "$WORK/smoke.native.jsonl.zst"
 python scripts/neuralese_data/sft_sources.py build --work "$WORK" \
   --out "$LEARNER_READY" --tokenizer "$TOKENIZER_DIR" --base-rates '' \
+  --held-manifest "$HELD_MANIFEST" \
   --open-goals-only --no-default-teacher-pool --min-open-goal-share 0.8 \
   --live-holdout-registry "$GOAL_CATALOG" --val-episodes 0
 ```
