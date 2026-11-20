@@ -5303,3 +5303,17 @@ weights.
 - The text-written memetic guidance state is still a bare write from position 0. The refined arm primes in context, but
   the default arm does not.
 - Pop held runs need the build directory on Pop.
+
+## 2026-11-20 20:00, corpus registry split into one file per entry (data-registry strand)
+
+`training/neuralese_corpora.json` (54 MB, 3193 entries) is now `training/corpus-registry.json` (schema, policy and
+backlog, 10 KB) plus `training/corpora/<id>.json`, with one entry per file. Each registration had been adding another
+54 MB copy to git history; now a promote changes its own entry file and manifest, a few KB. The split is lossless: every
+entry is identical except 22 whose exact `include` list (up to 3.9 MB) duplicated their manifest's file list. Those now
+carry `include_manifest: true` plus `include_prefixes`, and sync reads the file list from the manifest. All readers and
+writers go through `natlang_neuralese.common.corpus_registry` (`load`, `save`, `write_entries`, `load_ref`).
+register_corpora publishes only its entry files, so a foreign edit to another entry no longer blocks a registration.
+Migrated: sync_training_corpora, custody (protected packets), storage_retention (which also resolves root-qualified
+manifest paths now), the ops catalog, data_registry, the held and render registration scripts, and the inventories.
+The ratchet asserts three things: no single registry file, no entry over 1 MB, and no code naming the retired file.
+grpo-v5-run1 runs from its pin and is unaffected; grpo roles resolve to the same 18 pools and held-v3.
