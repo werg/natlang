@@ -5218,3 +5218,13 @@ held scoring series is unchanged: this is training data and objective only.
 - **Not done:** the adapter arm and compare (no Pop window while grpo-v5 evaluates every new checkpoint back to back;
   if none opens before grpo-v5 ends, both arms move to a DGX actor then); T3 parity on this release (needs a GPU);
   a refit of route on its now 3x larger support data (433 tasks with verified successes in sft-sources-20261120).
+- *Catalog coverage (coordinator, 17:00):* ccc0870d8 dropped the ops catalog from 167 datasets (134 shown) to 95 (62):
+  git entries without a `kind` got no card, the journal backfill had not reached SFT WORKs, rollout archives, held evals
+  and the big corpora, and two lookup bugs let legacy entries rooted at `runs/` (glob includes) claim all of `runs/`.
+  Fixed: kinds set on 67 git entries (authored/bgkit/git-history/memetic held sets, broad-external, runs/sft-*); held
+  evals recorded; rollout archives, SFT WORKs, full67 and broad graphs declared (digests follow from the backfill);
+  `find()` indexes each include by its fixed prefix (a leading-wildcard component is expanded) and is a dict walk
+  (155-path check 43 s -> 5 s); the digest cache is SQLite (the JSONL one was loaded whole into each process). The
+  catalog now lists 181 datasets (148 shown); every one of the old 155 non-run datasets is registered.
+  `training/data-registry-coverage-20261120.json` is that baseline; `tests/test_data_registry_ratchet.py` (check-main
+  --quick, on the DGX) and `scripts/data_registry.py check --baseline` require it covered.

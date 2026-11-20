@@ -95,3 +95,23 @@ def test_trainers_name_no_dataset_paths():
                 if any(m in literal for m in DATASET_MARKERS):
                     offenders.append(f'{path}:{node.lineno} {literal}')
     assert not offenders, 'training data named in code instead of a registry role: ' + '; '.join(offenders)
+
+
+def test_registry_covers_what_the_catalog_found_before_it(monkeypatch):
+    """Every dataset the ops catalog listed before the registry replaced its hand list is held by a registered dataset
+    (an archive inventory does not count). Checked where the data lives (the DGX); elsewhere the paths are absent."""
+    import os
+    import sys
+    sys.path[:0] = [str(REPO / 'scripts'), str(REPO / 'training/neuralese')]
+    import data_registry as cli
+    from natlang_neuralese.common import data_registry as dr
+    paths = [p for p in cli.coverage_paths() if os.path.exists(p)]
+    if not paths:
+        import pytest
+        pytest.skip('the baseline datasets are not on this machine')
+    from natlang_neuralese.common.paths import root
+    monkeypatch.delenv(dr.ALLOW_ENV, raising=False)
+    monkeypatch.setenv('NATLANG_DATA_REGISTRY', str(root('data_nvme') / 'data-registry'))   # the machine's journal
+    reg = dr.load(fresh=True)
+    missing = [p for p in paths if (reg.find(p) or {'admission': dr.INVENTORY}).get('admission') == dr.INVENTORY]
+    assert not missing, f'{len(missing)} datasets the catalog knew are not registered: {missing[:20]}'

@@ -1,0 +1,781 @@
+{
+ "schema": "natlang.data-registry-coverage/1",
+ "note": "Every dataset the ops catalog found before the registry replaced its hand list (pre-ccc0870d8 catalog, 2026-11-20; GRPO run directories and the registry file itself left out). scripts/data_registry.py check --baseline and tests/test_data_registry_ratchet.py require each to be held by a registered dataset (not only an archive inventory). A dataset deliberately deleted leaves this list in the same commit.",
+ "datasets": [
+  {
+   "catalog_id": "pool:memetic-program-source-20261105",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-composed-20261103/memetic-program-source-20261105/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-bgkit-kr-20261103",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-bgkit-kr-20261103/natlang-rl-bgkit-kr-20261103/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261117",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261117/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118b",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118b/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118c",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118c/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118d",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118d/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118e",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118e/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118f",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118f/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261118g",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261118g/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261119",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261119/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261119b",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261119b/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261119c",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261119c/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261119d",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261119d/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261120",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261120/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261120b",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261120b/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-task-supply-20261120c",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-task-supply-20261120c/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool:natlang-rl-git-history-20261120",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-git-history-20261120/cases.jsonl"
+  },
+  {
+   "catalog_id": "memetic-tasks-20261118",
+   "group": "RL task pools",
+   "path": "data_nvme:memetic-tasks-20261118/cases.jsonl"
+  },
+  {
+   "catalog_id": "held-v3",
+   "group": "Held-out (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v3/cases.jsonl"
+  },
+  {
+   "catalog_id": "pool-errata",
+   "group": "Edit layers",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/pool-errata"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v1/run1:step-00000",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v1/run1/held/step-00000"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v1/run2:step-00000-pop",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v1/run2/held/step-00000-pop"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v1/run2:step-00000-series-c33dee66a4b7",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v1/run2/held/step-00000-series-c33dee66a4b7"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v1/run2:step-00000",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v1/run2/held/step-00000"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v1/run2:step-00005",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v1/run2/held/step-00005"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run1:step-00000-pop",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run1/held/step-00000-pop"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run1:step-00002",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run1/held/step-00002"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run1:step-00008",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run1/held/step-00008"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run1:step-00012",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run1/held/step-00012"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run1:step-00014",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run1/held/step-00014"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run2:step-00000-pop",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run2/held/step-00000-pop"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run2:step-00002",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run2/held/step-00002"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v2/run2:step-00003",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v2/run2/held/step-00003"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00000-pop",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00000-pop"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00001",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00001"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00003",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00003"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00004",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00004"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00005",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00005"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00007",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00007"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00008",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00008"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v3/run1:step-00010",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v3/run1/held/step-00010"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run1:step-00001",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run1/held/step-00001"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00001",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00001"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00004",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00004"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00010",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00010"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00012",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00012"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00016",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00016"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00020",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00020"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00026",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00026"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00030",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00030"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00032",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00032"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00036",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00036"
+  },
+  {
+   "catalog_id": "held-eval:grpo-v4/run2:step-00038",
+   "group": "Held-out evaluations (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/grpo-v4/run2/held/step-00038"
+  },
+  {
+   "catalog_id": "teacher-gen:teacher-gen-20261115/haiku-smoke-1",
+   "group": "Teacher-generation campaigns",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/teacher-gen-20261115/haiku-smoke-1"
+  },
+  {
+   "catalog_id": "teacher-gen:teacher-gen-20261115/luna-smoke-1",
+   "group": "Teacher-generation campaigns",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/teacher-gen-20261115/luna-smoke-1"
+  },
+  {
+   "catalog_id": "teacher-gen:teacher-gen-20261115/pool-progtune-decisions",
+   "group": "Teacher-generation campaigns",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/teacher-gen-20261115/pool-progtune-decisions"
+  },
+  {
+   "catalog_id": "teacher-gen:teacher-gen-20261115/pool-v1",
+   "group": "Teacher-generation campaigns",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/teacher-gen-20261115/pool-v1"
+  },
+  {
+   "catalog_id": "teacher-gen:teacher-gen-20261115/pool-v2-rich",
+   "group": "Teacher-generation campaigns",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/teacher-gen-20261115/pool-v2-rich"
+  },
+  {
+   "catalog_id": "teacher-gen:teacher-gen-20261119/gap-v1",
+   "group": "Teacher-generation campaigns",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/teacher-gen-20261119/gap-v1"
+  },
+  {
+   "catalog_id": "rl-broad-external",
+   "group": "RL task pools",
+   "path": "runs/natlang-rl-broad-external-20261031-v2/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authoring-admitted",
+   "group": "RL task pools",
+   "path": "data_hdd:natlang-rl-authoring/admitted/cases.jsonl"
+  },
+  {
+   "catalog_id": "memetic-tasks-old",
+   "group": "RL task pools",
+   "path": "data_nvme:memetic-tasks-20261117/cases.jsonl"
+  },
+  {
+   "catalog_id": "hindsight-index:hindsight-index-20261117",
+   "group": "Indexes",
+   "path": "data_nvme:hindsight-index-20261117/index.jsonl"
+  },
+  {
+   "catalog_id": "sft-sources:sft-sources-20261117",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:sft-sources-20261117"
+  },
+  {
+   "catalog_id": "sft-sources:sft-sources-20261118",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:sft-sources-20261118"
+  },
+  {
+   "catalog_id": "sft-sources:sft-sources-20261120",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:sft-sources-20261120"
+  },
+  {
+   "catalog_id": "sft-sources:sft-sources-20261120b",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:sft-sources-20261120b"
+  },
+  {
+   "catalog_id": "sft-teacher-demos:sft-teacher-demos-20261118",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:sft-teacher-demos-20261118"
+  },
+  {
+   "catalog_id": "sft-teacher-demos:sft-teacher-demos-20261119",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:sft-teacher-demos-20261119"
+  },
+  {
+   "catalog_id": "sft-built:sft-merged-20261117-v3",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-merged-20261117-v3"
+  },
+  {
+   "catalog_id": "sft-built:sft-neuralese-graph-20261117-v1",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-neuralese-graph-20261117-v1"
+  },
+  {
+   "catalog_id": "sft-built:sft-neuralese-text-20261117-v1",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-neuralese-text-20261117-v1"
+  },
+  {
+   "catalog_id": "sft-built:sft-neuralese-text-20261117-v2",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-neuralese-text-20261117-v2"
+  },
+  {
+   "catalog_id": "sft-built:sft-supplement-20261117-v1",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-supplement-20261117-v1"
+  },
+  {
+   "catalog_id": "sft-built:sft-verified-20261117-v1",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-verified-20261117-v1"
+  },
+  {
+   "catalog_id": "sft-built:sft-verified-20261117-v2",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-verified-20261117-v2"
+  },
+  {
+   "catalog_id": "sft-built:sft-verified-20261117-v3",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-verified-20261117-v3"
+  },
+  {
+   "catalog_id": "sft-built:sft-verified-20261117-v4",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-verified-20261117-v4"
+  },
+  {
+   "catalog_id": "sft-built:sft-warmup-20261118-v1",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-warmup-20261118-v1"
+  },
+  {
+   "catalog_id": "sft-mix:sft-mix-20261120-v1",
+   "group": "SFT mixes and built sets",
+   "path": "runs/sft-mix-20261120-v1"
+  },
+  {
+   "catalog_id": "operator-rows:natlang-operator-rows-20261117-test-v1",
+   "group": "Neuralese and operators",
+   "path": "data_nvme:natlang-operator-rows-20261117-test-v1"
+  },
+  {
+   "catalog_id": "operator-rows:natlang-operator-rows-20261117-v1",
+   "group": "Neuralese and operators",
+   "path": "data_nvme:natlang-operator-rows-20261117-v1"
+  },
+  {
+   "catalog_id": "operator-rows:natlang-operator-rows-20261117-v2",
+   "group": "Neuralese and operators",
+   "path": "data_nvme:natlang-operator-rows-20261117-v2"
+  },
+  {
+   "catalog_id": "operators-v1",
+   "group": "Neuralese and operators",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/operators-v1/merged"
+  },
+  {
+   "catalog_id": "vibestudio-live:seed-v1",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:vibestudio-live-corpus/seed-v1"
+  },
+  {
+   "catalog_id": "vibestudio-live:seed-v2",
+   "group": "SFT sources and teacher demonstrations",
+   "path": "data_nvme:vibestudio-live-corpus/seed-v2"
+  },
+  {
+   "catalog_id": "grpo-rollout-archive:natlang-grpo-v2/run1",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-grpo-v2/run1/rollouts"
+  },
+  {
+   "catalog_id": "grpo-rollout-archive:natlang-grpo-v2/run2",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-grpo-v2/run2/rollouts"
+  },
+  {
+   "catalog_id": "grpo-rollout-archive:natlang-grpo-v3/run1",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-grpo-v3/run1/rollouts"
+  },
+  {
+   "catalog_id": "grpo-rollout-archive:natlang-grpo-v4/run1",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-grpo-v4/run1/rollouts"
+  },
+  {
+   "catalog_id": "grpo-rollout-archive:natlang-grpo-v4/run2",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-grpo-v4/run2/rollouts"
+  },
+  {
+   "catalog_id": "grpo-rollout-archive:natlang-grpo-v5/run1",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-grpo-v5/run1/rollouts"
+  },
+  {
+   "catalog_id": "onpolicy-full67",
+   "group": "GRPO rollout archives",
+   "path": "data_hdd:natlang-full67-onpolicy-rollouts-20261103"
+  },
+  {
+   "catalog_id": "external-rl-sources:_raw",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/_raw"
+  },
+  {
+   "catalog_id": "external-rl-sources:enigmata",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/enigmata"
+  },
+  {
+   "catalog_id": "external-rl-sources:numinamath_1.5",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/numinamath_1.5"
+  },
+  {
+   "catalog_id": "external-rl-sources:tau2_bench",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/tau2_bench"
+  },
+  {
+   "catalog_id": "external-rl-sources:triviaqa_rc_wikipedia",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/triviaqa_rc_wikipedia"
+  },
+  {
+   "catalog_id": "external-rl-sources:verifiable_coding_python",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/verifiable_coding_python"
+  },
+  {
+   "catalog_id": "external-rl-sources:webinstruct_verified",
+   "group": "Upstream sources",
+   "path": "data_hdd:external-rl-sources/webinstruct_verified"
+  },
+  {
+   "catalog_id": "operator-cases",
+   "group": "Upstream sources",
+   "path": "data_hdd:natlang-compaction-operators-20261103"
+  },
+  {
+   "catalog_id": "broad-graphs",
+   "group": "Upstream sources",
+   "path": "data_hdd:natlang-broad-graphs-20261031"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261103",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261103/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261103b",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261103b/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261103c",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261103c/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261103d",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261103d/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261103e",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261103e/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261104",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261104/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261104r6",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261104r6/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261104r7",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261104r7/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261117r9",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261117r9/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r10",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r10/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r10b",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r10b/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r11",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r11/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r12",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r12/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r13",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r13/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r14",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r14/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r15",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r15/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261118r16",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261118r16/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261119r17",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261119r17/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261119r18",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261119r18/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261119r19",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261119r19/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261119r20",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261119r20/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261120r21",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261120r21/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261120r22",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261120r22/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261120r23",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261120r23/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-confirmation-20261120r23b",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-confirmation-20261120r23b/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261103",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261103/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261103b",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261103b/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261103d",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261103d/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261103e",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261103e/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261104",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261104/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261104r6",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261104r6/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261104r7",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261104r7/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261117r9",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261117r9/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r10",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r10/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r10b",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r10b/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r11",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r11/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r12",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r12/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r13",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r13/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r14",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r14/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r15",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r15/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261118r16",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261118r16/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261119r17",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261119r17/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261119r18",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261119r18/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261119r19",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261119r19/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261119r20",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261119r20/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261120r21",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261120r21/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261120r22",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261120r22/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261120r23",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261120r23/cases.jsonl"
+  },
+  {
+   "catalog_id": "rl-authored-held:natlang-rl-authored-dev-20261120r23b",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-rl-authored-dev-20261120r23b/cases.jsonl"
+  },
+  {
+   "catalog_id": "bgkit-kr-held",
+   "group": "Held-out (protected)",
+   "path": "data_hdd:natlang-rl-bgkit-kr-20261103/natlang-rl-bgkit-kr-20261103/held"
+  },
+  {
+   "catalog_id": "memetic-held",
+   "group": "Held-out (protected)",
+   "path": "runs/natlang-memetic-held-20261104/cases.jsonl"
+  },
+  {
+   "catalog_id": "held-v2",
+   "group": "Held-out (protected)",
+   "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v2/cases.jsonl"
+  }
+ ]
+}

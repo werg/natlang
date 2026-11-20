@@ -143,28 +143,24 @@ def absolute(value: str, repo=None) -> Path:
 
 # ---------- file digests (cached by stat) ----------
 
-_DIGESTS: dict | None = None
+_DIGESTS = None    # sqlite connection of the stat-keyed digest cache (one lookup per file, nothing held in memory)
 
 
 def _digest_cache_path() -> Path:
-    return registry_dir() / 'file-digests.jsonl'
+    return registry_dir() / 'file-digests.sqlite'
 
 
-def _load_digests() -> dict:
+def _digest_db():
     global _DIGESTS
-    if _DIGESTS is None:
-        _DIGESTS = {}
-        try:
-            with open(_digest_cache_path()) as stream:
-                for line in stream:
-                    try:
-                        row = json.loads(line)
-                        _DIGESTS[row['k']] = row['v']
-                    except (ValueError, KeyError):
-                        continue
-        except OSError:
-            pass
-    return _DIGESTS
+    if _DIGESTS is None or _DIGESTS[0] != str(_digest_cache_path()):
+        import sqlite3
+        path = _digest_cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        db = sqlite3.connect(str(path), timeout=60, check_same_thread=False)
+        db.execute('PRAGMA journal_mode=WAL')
+        db.execute('CREATE TABLE IF NOT EXISTS digests (k TEXT PRIMARY KEY, v TEXT NOT NULL)')
+        _DIGESTS = (str(path), db)
+    return _DIGESTS[1]
 
 
 def _stat_key(path: Path) -> str:
@@ -177,9 +173,12 @@ def file_digest(path) -> dict:
     """``{bytes, sha256[, lines]}`` (lines for ``.jsonl``), the corpus-snapshot file fields; cached by stat."""
     path = Path(path)
     key = _stat_key(path)
-    cache = _load_digests()
-    if key in cache:
-        return dict(cache[key])
+    try:
+        hit = _digest_db().execute('SELECT v FROM digests WHERE k = ?', (key,)).fetchone()
+    except Exception:
+        hit = None
+    if hit:
+        return json.loads(hit[0])
     h, lines, last, size = hashlib.sha256(), 0, b'', 0
     with open(path, 'rb') as stream:
         before = os.fstat(stream.fileno())
@@ -194,11 +193,12 @@ def file_digest(path) -> dict:
     value = {'bytes': size, 'sha256': h.hexdigest()}
     if path.name.endswith('.jsonl'):
         value['lines'] = lines + int(bool(last) and last != b'\n')
-    cache[key] = value
     try:
-        _append_line(_digest_cache_path(), {'k': key, 'v': value})
-    except OSError:
-        pass
+        db = _digest_db()
+        with db:
+            db.execute('INSERT OR REPLACE INTO digests VALUES (?, ?)', (key, json.dumps(value)))
+    except Exception:
+        pass     # the cache only saves work
     return dict(value)
 
 
@@ -489,29 +489,52 @@ class Registry:
             elif op == 'consume':
                 self.consumption.append(r)
         self._index = None
+        self._keymap = None
 
     # paths
     def _paths(self):
         if self._index is None:
             index = []
             self._roots = {}
+            listings = {}
+
+            def listdir(d):
+                if d not in listings:
+                    try:
+                        listings[d] = os.listdir(d)
+                    except OSError:
+                        listings[d] = []
+                return listings[d]
             for ident, ds in self.datasets.items():
                 try:
                     p = absolute(ds['path'])
                 except (ValueError, KeyError):
                     continue
                 include = ds.get('include') or []
-                # a dataset of a few named files (a held set's files, a single-file dataset) holds those files only,
-                # not its directory: two such datasets may share a directory
-                exact = include and len(include) <= 32 and not any(c in i for i in include for c in '*?[')
-                targets = [p / name for name in include] if exact else [p]
+                # A dataset holds what its includes name, not its whole directory: an exact name is that file, a glob
+                # the directory before its first wildcard (two datasets may share a directory, such as runs/)
+                targets = []
+                for pattern in include or ['']:
+                    parts = Path(pattern).parts
+                    fixed = []
+                    for part in parts:
+                        if any(c in part for c in '*?['):
+                            break
+                        fixed.append(part)
+                    if len(fixed) < len(parts) and parts[len(fixed)] != '**':
+                        # the first wildcard component names entries of a shared directory (runs/x-v*/...): claim the
+                        # entries it matches, not the directory
+                        base = p.joinpath(*fixed)
+                        hits = [n for n in listdir(base) if fnmatch.fnmatch(n, parts[len(fixed)])]
+                        targets += [base / n for n in hits] if len(fixed) + 1 < len(parts) or hits else []
+                        continue
+                    targets.append(p.joinpath(*fixed) if fixed else p)
+                exact = bool(include) and p not in targets
                 keys = set()
+                real_root = os.path.realpath(p)     # once per dataset: resolving every named file is slow on the HDD
                 for t in targets:
                     keys.add(os.path.normpath(str(t)))
-                    try:
-                        keys.add(os.path.realpath(t))
-                    except OSError:
-                        pass
+                    keys.add(os.path.normpath(os.path.join(real_root, os.path.relpath(t, p))))
                 for k in keys:
                     index.append((k, ident))
                 if exact:     # the dataset's own directory names it too, but holds nothing else by prefix
@@ -529,19 +552,27 @@ class Registry:
             candidates.add(os.path.realpath(path))
         except OSError:
             pass
+        self._paths()
+        if self._keymap is None:
+            self._keymap = {}
+            for k, ident in self._index:
+                self._keymap.setdefault(k, ident)
         best = None
-        index = self._paths()
-        for c in candidates:
-            if c in self._roots and not any(k == c for k, _ in index):
+        for c in candidates:      # the deepest ancestor (or the path itself) that a dataset names
+            if c in self._roots and c not in self._keymap:
                 return self.datasets[self._roots[c]]
-        for k, ident in index:
-            for c in candidates:
-                if c == k or c.startswith(k.rstrip('/') + '/'):
-                    if best is None or len(k) > len(best[0]):
-                        best = (k, ident)
-        if best is None:
-            return None
-        return self.datasets[best[1]]
+            probe = c
+            while True:
+                ident = self._keymap.get(probe)
+                if ident is not None:
+                    if best is None or len(probe) > len(best[0]):
+                        best = (probe, ident)
+                    break
+                parent = os.path.dirname(probe)
+                if parent == probe:
+                    break
+                probe = parent
+        return self.datasets[best[1]] if best else None
 
     def role(self, name: str) -> list[tuple[dict, Path]]:
         """Datasets of the git layer (pinned) with role NAME, in role order: ``[(entry, path of its role file)]``."""
