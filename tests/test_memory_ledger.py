@@ -6,6 +6,7 @@ ledger = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ledger)
 GIB = 2**30
 REAL_BALLOON_RECLAIM = ledger.balloon_reclaim
+REAL_HAS_GB10 = ledger.has_gb10
 
 
 import pytest  # noqa: E402
@@ -21,6 +22,7 @@ def no_real_machine_effects(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise AssertionError('a ledger test reached the real machine (balloon_reclaim)')
     monkeypatch.setattr(ledger, 'balloon_reclaim', refuse)
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: False)
 
 
 def claim(cls, budget, used, admitted):
@@ -124,6 +126,7 @@ def test_one_cache_release_at_a_time(monkeypatch, tmp_path):
 
 
 def test_the_guard_runs_one_walk_at_a_time_backs_off_after_a_poor_one_and_skips_without_cache_to_drop(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: True)
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'cuda_free_bytes', lambda: None)
     monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
@@ -167,9 +170,13 @@ def test_the_guard_runs_one_walk_at_a_time_backs_off_after_a_poor_one_and_skips_
         pass
     # one walk while it ran; then a pause of 1800 s (15 ticks of 120 s); by then nothing was left worth dropping
     assert len(started) == 1 and started[0][-1] == 'release-cache'
+    assert started[0][:2] == ['systemd-run', '--user']
+    assert 'natlang-cache-reclaim' in started[0] and 'MemoryMax=26G' in started[0]
+    assert f'RuntimeMaxSec={2 * ledger.RELEASE_SECONDS}' in started[0]
 
 
 def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: True)
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'cuda_free_bytes', lambda: None)
     monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
@@ -210,6 +217,7 @@ def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(mon
 ])
 def test_guard_retries_cache_reclaim_for_cuda_without_overlapping_or_spinning(
         monkeypatch, tmp_path, physical_gb, available_gb, expected):
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: True)
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'no-writes'))
     monkeypatch.setattr(ledger, 'mem_free', lambda: physical_gb * GIB)
@@ -590,13 +598,15 @@ def test_a_learned_budget_never_exceeds_what_the_machine_can_ever_admit(monkeypa
     assert ledger.learned_budget(state, 'natlang-e2e-7777.service', 96 * GIB) == 105 * GIB
 
 
-def test_a_waiting_run_registers_in_the_queue_before_any_slow_cache_walk(monkeypatch, tmp_path):
+def test_a_waiting_run_does_not_start_cache_reclamation(monkeypatch, tmp_path):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
     monkeypatch.setattr(ledger, 'mem_free', lambda: 1 * GIB)
     monkeypatch.setattr(ledger, 'mem_available', lambda: 50 * GIB)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 40 * GIB)
-    monkeypatch.setattr(ledger, 'start_release', lambda: None)
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: True)
+    releases = []
+    monkeypatch.setattr(ledger, 'start_release', lambda: releases.append('started'))
     args = type('A', (), {'cuda_budget_gb': None, 'budget_gb': 96, 'reserve_gb': 8, 'unit': 'e2e', 'priority': 'high', 'cls': 'experiment', 'wait': 0,
                           'host_max_gb': None, 'workdir': '.', 'env': [], 'stop_seconds': None, 'command': ['x'],
                           'resumable': None, 'hold_budget': False, 'oom_policy': 'stop', 'cuda_budget_gb': None})()
@@ -610,6 +620,59 @@ def test_a_waiting_run_registers_in_the_queue_before_any_slow_cache_walk(monkeyp
     with pytest.raises(KeyboardInterrupt):
         ledger.run(args)
     assert seen == [['e2e.service']]
+    assert releases == []
+
+
+@pytest.mark.parametrize('arch,gpu,expected', [
+    ('x86_64', 'NVIDIA GeForce RTX 4060', False),
+    ('aarch64', 'NVIDIA GB10\n', True),
+    ('aarch64', 'NVIDIA A100\n', False),
+])
+def test_cache_reclamation_hardware_detection(monkeypatch, arch, gpu, expected):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger.os, 'uname', lambda: SimpleNamespace(machine=arch))
+    queried = []
+    monkeypatch.setattr(ledger.subprocess, 'run',
+                        lambda argv, **_: queried.append(argv) or SimpleNamespace(stdout=gpu))
+    assert REAL_HAS_GB10() is expected
+    assert bool(queried) is (arch == 'aarch64')
+
+
+@pytest.mark.parametrize('gb10,priority,override,expected', [
+    (False, 'high', None, False),
+    (True, 'medium', None, False),
+    (True, 'high', None, True),
+    (True, 'high', False, False),
+    (True, 'medium', True, True),
+])
+def test_admitted_run_reclaims_cache_only_for_gb10_cuda(
+        monkeypatch, tmp_path, gb10, priority, override, expected):
+    from types import SimpleNamespace
+    guard_env(monkeypatch, tmp_path, [30 * GIB], {})
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: gb10)
+    monkeypatch.setattr(ledger, 'mem_free', lambda: GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 25 * GIB)
+    calls = []
+    monkeypatch.setattr(ledger, 'start_release', lambda: calls.append('release'))
+    monkeypatch.setattr(ledger, 'launch', lambda spec: calls.append(spec['unit']) or 0)
+    ledger.run(SimpleNamespace(
+        unit='probe', budget_gb=3, reserve_gb=2, cuda_budget_gb=None, cuda_cache_reclaim=override,
+        priority=priority, cls='experiment', wait=0, resumable=False, host_max_gb=3,
+        oom_policy='stop', workdir='.', env=[], stop_seconds=None, command=['probe'], hold_budget=False,
+        container=[],
+    ))
+    assert calls == (['release', 'probe.service'] if expected else ['probe.service'])
+
+
+def test_discrete_guard_does_not_start_cache_reclamation(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    guard_env(monkeypatch, tmp_path, [12 * GIB], {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 10 * GIB)
+    releases = []
+    monkeypatch.setattr(ledger, 'start_release', lambda: releases.append('started'))
+    ledger.guard(SimpleNamespace(floor_gb=8, overshoot=1.15, interval=5, once=True))
+    assert releases == []
 
 
 def test_blockers_name_the_non_preemptible_units_in_status_and_refusals():
