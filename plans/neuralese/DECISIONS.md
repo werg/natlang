@@ -5327,3 +5327,18 @@ runtime's digest over that inventory and the recorded effects. Both entry
 points continue to bind the original call artifacts to the independent
 workspace outcome. These checks protect training evidence from an export
 that loses an invocation while retaining the final answer.
+
+### 2026-11-20 — Keep CUDA cache reclamation out of CPU probe admission
+
+A Tick ledger waiter peaked at 6 GiB without admitting its Adventure source
+check. The later admitted check peaked at 226 MiB. The old admission path
+started cache reclamation before a claim could fit, and the reclaim process
+charged its temporary anonymous allocation to the waiter's cgroup.
+
+The shared ledger now enables automatic reclamation on the NVIDIA GB10,
+where CUDA needs physical free memory. At launch, only an admitted
+high-priority unified-memory job uses it by default. The GB10 guard retains
+its periodic reclamation. Both paths submit the same named transient
+service with its own memory limit. Host and discrete-GPU jobs use the usual
+available-memory admission. The explicit `release-cache` command remains
+available, and `--no-cuda-cache-reclaim` opts out of automatic reclamation.

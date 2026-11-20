@@ -13,7 +13,8 @@ heavy job declare a budget and enforces it from outside the job:
   release-cache  drop clean page cache of large files under the data roots. On the GB10 a CUDA allocation can only
            use MemFree: page cache is counted as available but is not reclaimed for the GPU, so stale cache of
            read-once checkpoints and corpora makes model loads fail with "CUDA error: out of memory" while
-           MemAvailable looks ample. `run` and `guard` call it when MemFree is short.
+           MemAvailable looks ample. The GB10 guard and admitted high-priority GB10 runs call it when MemFree is
+           short. Linux reclaims cache on demand for host allocations and discrete CUDA devices use separate VRAM.
   status   claims with measured use (cgroup memory plus each process's CUDA memory from nvidia-smi).
   guard    loop: under memory pressure (available below twice the floor) stop the unit most over its budget,
            and below the floor the lowest-priority admitted unit; without pressure an over-budget unit keeps
@@ -143,12 +144,30 @@ def reclaimable():
     return mem_available() - mem_free()
 
 
+def has_gb10():
+    if os.uname().machine != 'aarch64':
+        return False
+    try:
+        names = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
+                               capture_output=True, text=True, timeout=5, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return any(name.strip() == 'NVIDIA GB10' for name in names.splitlines())
+
+
+def cuda_cache_reclaim_enabled(args, *, auto=True):
+    override = getattr(args, 'cuda_cache_reclaim', None)
+    return override if override is not None else auto and has_gb10()
+
+
 def start_release():
-    """Run a cache release as its own detached process (never in the caller): a walk stuck in uncommitted I/O on a slow
-    disk then blocks only itself. Returns the Popen."""
+    """Give reclamation its own memory limit, outside the waiter or guard's cgroup."""
     idle = ['ionice', '-c3'] if shutil.which('ionice') else []
-    return subprocess.Popen(idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
-                            stdout=subprocess.PIPE, text=True, start_new_session=True)
+    own_unit = ['systemd-run', '--user', '--quiet', '--pipe', '--wait', '--collect', '--unit', 'natlang-cache-reclaim',
+                '-p', 'MemoryMax=26G', '-p', 'MemorySwapMax=0']
+    with contextlib.suppress(OSError):
+        return subprocess.Popen(own_unit + idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
+                                stdout=subprocess.PIPE, text=True, start_new_session=True)
 
 
 def take_release_lock():
@@ -777,12 +796,6 @@ def run(args):
     reserve = int(args.reserve_gb * GIB) if explicit_reserve else default_reserve(budget)
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
     priority = args.priority or DEFAULT_PRIORITY[args.cls]
-    # Before admission: a claim whose unit has not started within 30 s is released by the next ledger call, and a
-    # cache walk takes minutes. Walk only when there is cache to drop; skip it when another walk is running.
-    # In a thread: the walk takes minutes and the waiter must stay in the queue (refreshed every loop) meanwhile, or the
-    # guard cannot see it and preempts nothing.
-    if mem_free() < budget + reserve and reclaimable() >= GIB:
-        start_release()
     deadline = time.time() + args.wait
     since = time.time()
     request_generation = None
@@ -846,6 +859,9 @@ def run(args):
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after reservations{blockers}, '
                              f'{args.budget_gb} GiB requested, {reserve / GIB:.1f} GiB reserve{cuda_detail}')
         time.sleep(30)
+    if (cuda_cache_reclaim_enabled(args, auto=priority == 'high' and cuda_budget is None)
+            and mem_free() < budget + reserve and reclaimable() >= GIB):
+        start_release()
     if launch(spec):
         with ledger() as state:
             state['claims'].pop(unit, None)
@@ -1215,6 +1231,7 @@ def guard(args):
     pending = {}  # unit -> {'deadline', 'container'}: graceful stops in progress
     warned = {}  # head -> time of its last 'cannot fit' event
     next_release, retry_release, release, release_started = 0, 0, None, 0
+    reclaim_cuda_cache = cuda_cache_reclaim_enabled(args)
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
         # short: release clean page cache well above the floor, one walk at a time, at idle I/O priority, and only
@@ -1238,18 +1255,15 @@ def guard(args):
             next_release = time.time() + (60 if gained >= GIB else 1800)
             retry_release = time.time() + 60
             release = None
-        physical_free = mem_free()
-        urgent_cache = physical_free < floor and mem_available() >= 2 * floor
-        release_due = time.time() >= next_release or (urgent_cache and time.time() >= retry_release)
-        if physical_free < 2 * floor and reclaimable() >= 2 * GIB and release is None and release_due:
-            idle = ['ionice', '-c3'] if shutil.which('ionice') else []
-            # Its own transient unit: the release balloons anonymous memory a GiB at a time, which inside the
-            # guard's 256 MB cgroup got the guard itself OOM-killed (2026-10-09 22:04).
-            own_unit = ['systemd-run', '--user', '--quiet', '--pipe', '--wait', '--collect',
-                        '-p', 'MemoryMax=26G', '-p', 'MemorySwapMax=0'] if shutil.which('systemd-run') else []
-            release = subprocess.Popen(own_unit + idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
-                                       stdout=subprocess.PIPE, text=True, start_new_session=True)
-            release_started = time.time()
+        if reclaim_cuda_cache and release is None:
+            physical_free = mem_free()
+            urgent_cache = physical_free < floor and mem_available() >= 2 * floor
+            release_due = time.time() >= next_release or (urgent_cache and time.time() >= retry_release)
+            if physical_free < 2 * floor and release_due and reclaimable() >= 2 * GIB:
+                release = start_release()
+                release_started = time.time()
+                if release is None:
+                    next_release = retry_release = release_started + 60
         with ledger() as state:
             gpu = gpu_usage()
             all_live = live_claims(state, gpu)
@@ -1376,6 +1390,8 @@ def main():
     r.add_argument('--host-max-gb', type=float, default=None, help='MemoryMax for host memory (default: the budget)')
     r.add_argument('--cuda-budget-gb', type=float, default=None,
                    help='discrete GPU VRAM envelope, separate from the host --budget-gb claim; omit on unified memory')
+    r.add_argument('--cuda-cache-reclaim', action=argparse.BooleanOptionalAction, default=None,
+                   help='release cache before launch when physical memory is low (default: high-priority GB10 jobs)')
     r.add_argument('--oom-policy', choices=['stop', 'continue', 'kill'], default='stop',
                    help='when the kernel kills a process of the unit for memory: stop the unit (default), or continue '
                         '(a runner of many child processes, such as a test runner, records the kill and goes on)')
@@ -1419,6 +1435,8 @@ def main():
     rp.add_argument('--to-gb', type=float, default=None)
     sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')
+    g.add_argument('--cuda-cache-reclaim', action=argparse.BooleanOptionalAction, default=None,
+                   help='release cache when physical memory is low (default: GB10 only)')
     g.add_argument('--floor-gb', type=float, default=8)
     g.add_argument('--overshoot', type=float, default=1.15)
     g.add_argument('--interval', type=float, default=5)
