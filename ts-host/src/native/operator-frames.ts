@@ -16,6 +16,9 @@ export type CompactSite = { operator: ValueOperator; instructions: string; value
 /** One reply of a model call to capture in its own context: its request and, when the server reported them, its exact
  * prompt and sampled token ids (else its text and reasoning). */
 export type CapturedCall = { messages: unknown[]; tools: unknown[]; prompt?: number[]; reply?: number[];
+  /** Instead of `prompt`: the exact prompt with the native states it imported where they stood (an operator call under
+   * its soft prompt state), as the call's RL capture recorded it. */
+  promptSegments?: ({ kind: 'tokens'; token_ids: number[] } | { kind: 'native_state'; id: string })[];
   text?: string; reasoning?: string;
   /** Capture the tokens of this text inside the reply (a `compact_history` note in its tool call) instead of the
    * reply's content. */

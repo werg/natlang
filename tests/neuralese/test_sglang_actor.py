@@ -1040,3 +1040,55 @@ def test_sglang_requests_run_on_threads_that_end_with_them():
     with pytest.raises(ValueError, match='bad option'):
         SglangEngine._map_threads(lambda x: (_ for _ in ()).throw(ValueError('bad option')) if x == 2 else x, [1, 2, 3])
     assert not [t for t in threading.enumerate() if t.name.startswith('sglang-actor')]
+
+
+def test_capture_after_an_imported_state_matches_the_native_engine(tmp_path):
+    """An operator call under its soft prompt state: the front sends the fork one capture request whose imported state
+    rows are placeholders replaced by the stored state (`natlang_import`), and the stored capture equals the native
+    engine's capture in the same context."""
+    import torch
+    from natlang_neuralese.model.shared_state import native_step, splice_block
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    soft = native.native_write_text('t20 t21 t22')['id']
+    block = native.store.get_native_state(soft).block
+    front.store.put_native_state(block)
+    requests = []
+
+    def capture(ids, start, end, metadata, adapter=None, imports=None):
+        # The fork's import: rows [start, start + count) of the sequence are the stored state, not their ids.
+        requests.append({'ids': list(ids), 'start': start, 'end': end, 'imports': imports})
+        (spliced,) = imports
+        cache = native_step(native.shared_model, torch.tensor([ids[:spliced['start']]]))['cache']
+        cache = splice_block(native.shared_model, cache, block, checkpoint_sha256=block.checkpoint_sha256,
+                             tokenizer_fingerprint=block.tokenizer_fingerprint,
+                             embedding_weight_sha256=block.embedding_weight_sha256)
+        after = spliced['start'] + spliced['count']
+        cache = native_step(native.shared_model, torch.tensor([ids[after:start]]), cache)['cache']
+        out = native_step(native.shared_model, torch.tensor([ids[start:end]]), cache, producing=True)
+        import os, uuid
+        from natlang_neuralese.serve.store import write_native_state_file
+        tensors = {'token_ids': out['token_ids'], 'embeddings': out['embeddings'], 'positions': out['positions'],
+                   **{f'layers.{index}.{key}': value for index, layer in enumerate(out['layers'])
+                      for key, value in layer.items() if key != 'kind'}}
+        path = os.path.join(front._sglang_scratch(), f'{uuid.uuid4().hex}.safetensors')
+        write_native_state_file(path, metadata, tensors)
+        return path
+    front._sglang_capture = capture
+    front.native_state_enabled = native.native_state_enabled = True
+    segments = [{'kind': 'tokens', 'token_ids': word('t4') + [roles.consume_open]}, {'kind': 'native_state', 'id': soft},
+                {'kind': 'tokens', 'token_ids': [roles.consume_close] + word('t5')}]
+    reply = word('t6 t7') + [sorted(front.stop_ids)[0]]
+    expected = native.native_capture(None, reply, prompt_segments=segments)
+    actual = front._sglang_native_capture(None, reply, None, None, segments)
+    (request,) = requests
+    count = len(block.token_ids)
+    assert request['imports'] == [{'path': request['imports'][0]['path'], 'start': len(word('t4')) + 1, 'count': count}]
+    assert request['start'] == len(word('t4')) + 1 + count + 1 + len(word('t5')) + 1
+    assert actual['source_capture']['segments'] == expected['source_capture']['segments']
+    assert (actual['source_capture']['payload_start'], actual['source_capture']['payload_stop']) == \
+        (expected['source_capture']['payload_start'], expected['source_capture']['payload_stop'])
+    mine, theirs = stored['front'][-1], stored['native'][-1]
+    for index, (a, b) in enumerate(zip(mine.layers, theirs.layers)):
+        for key in a:
+            if key != 'kind':
+                torch.testing.assert_close(a[key], b[key], rtol=1e-5, atol=1e-6, msg=f'layer {index} {key}')

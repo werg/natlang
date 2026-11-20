@@ -47,7 +47,11 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const { grammarCapture } = await import('./native-operator.js');
   const capture = serves(info, 'native.capture') ? serverCapture({ ...options, info }) :
     (native as { production?: boolean }).production ? grammarCapture({ ...options, info }) : undefined;
-  return { store: options.store, dialect, nativeStateConsumer,
+  // Trained soft forms of the runtime's prompt pieces (operators' own states among them): NATLANG_NEURALESE_PROMPT_STATES.
+  const { loadPromptStates, promptStatesDirectory } = await import('./prompt-states.js');
+  const promptStates = promptStatesDirectory();
+  const systemPrompts = promptStates ? await loadPromptStates(promptStates, options.store) : undefined;
+  return { store: options.store, dialect, nativeStateConsumer, ...(systemPrompts ? { systemPrompts } : {}),
     nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),
     ...(port ? { port } : {}), ...(capture ? { capture } : {}) };
 }
@@ -194,9 +198,10 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
 /** `native.capture` on a server that implements it: the exact prompt and sampled reply ids, captured server-side. */
 export function serverCapture(options: NativeClientOptions): NativeCapture {
   return async (call, extra = {}) => {
-    if (!call.prompt?.length || !call.reply?.length)
+    if (!(call.prompt?.length || call.promptSegments?.length) || !call.reply?.length)
       return failure('neuralese-native-capture', 'native.capture needs the call\'s exact prompt and sampled reply ids');
-    return (await nativeTextOperation(options, 'capture', { prompt_token_ids: call.prompt, reply_token_ids: call.reply,
+    return (await nativeTextOperation(options, 'capture', { ...(call.promptSegments?.length ?
+      { prompt_segments: call.promptSegments } : { prompt_token_ids: call.prompt }), reply_token_ids: call.reply,
       ...(call.select !== undefined ? { select: call.select } : {}), ...extra })).meta;
   };
 }

@@ -55,24 +55,39 @@ def write_sources(row, stats=None):
     """{block id: producer document} of an episode's Neuralese writes, from its ``execution_graph`` ``block_write`` events:
     ``source_capture`` is the exact input of the actor's capture (a text write: ``[produce_open] + text ids`` from
     position 0; ``sglang_actor._sglang_write_text``, ``engine._native_write_text_impl``), the state the rows
-    [payload_start, payload_stop). A document is {'ids': int32[: payload_stop], 'start', 'stop'}. A capture whose
-    segments are not all tokens (a producer that itself imported state) is not a source (counted)."""
+    [payload_start, payload_stop). A document is {'ids': int32[: payload_stop], 'start', 'stop'}. A producer whose
+    context itself imported a stored state (an operator call under its soft prompt state, ``engine.capture_prompt``)
+    records it as a ``native_state`` segment of ``token_count`` rows: the document holds placeholder ids there and
+    ``imports`` [(position, state id)], read as fixed stored context (``lfm3_fast_train.passthrough_plan``). A
+    ``native_state`` segment without its row count is not a source (counted)."""
     sources = {}
     for event in row.get('execution_graph') or ():
         capture = event.get('source_capture') if event.get('kind') == 'block_write' else None
         if not capture or not event.get('block'):
             continue
-        if any(segment.get('kind') != 'tokens' for segment in capture['segments']):
+        ids, imports, lowerable = [], [], True
+        for segment in capture['segments']:
+            if segment.get('kind') == 'tokens':
+                ids.extend(int(i) for i in segment['token_ids'])
+            elif segment.get('kind') == 'native_state' and type(segment.get('token_count')) is int and segment.get('id'):
+                imports.append((len(ids), segment['id']))
+                ids.extend([0] * segment['token_count'])   # placeholders: the import replaces what these rows feed
+            else:
+                lowerable = False
+                break
+        if not lowerable:
             if stats is not None:
                 stats['source_not_tokens'] += 1
             continue
-        ids = [int(i) for segment in capture['segments'] for i in segment['token_ids']]
         start, stop = int(capture['payload_start']), int(capture['payload_stop'])
-        if not 0 < start <= stop <= len(ids):
+        if not 0 < start <= stop <= len(ids) or any(at >= start for at, _ in imports):
             if stats is not None:
                 stats['source_bad_span'] += 1
             continue
-        sources[event['block']] = {'ids': np.array(ids[:stop], dtype=np.int32), 'start': start, 'stop': stop}
+        sources[event['block']] = {'ids': np.array(ids[:stop], dtype=np.int32), 'start': start, 'stop': stop,
+                                   **({'imports': imports} if imports else {})}
+        if imports and stats is not None:
+            stats['source_stored_imports'] += len(imports)
     return sources
 
 
