@@ -10,7 +10,8 @@
  * system-prompts.ts `scopedBank`). The build's `result.json` lists them as `softStates` and ships each as its store file
  * `states/<id>.nzs`, the native-state format every engine reads.
  *
- * Node only (reads the build directory).
+ * `loadPromptStates` is Node only (reads the build directory); the collector loads the build named by
+ * NATLANG_NEURALESE_PROMPT_STATES (teacher/collector.ts).
  */
 import type { NeuraleseStore } from '../native/neuralese-store.js';
 import { neuraleseRef } from '../native/neuralese.js';

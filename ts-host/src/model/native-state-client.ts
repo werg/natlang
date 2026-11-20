@@ -47,11 +47,7 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const { grammarCapture } = await import('./native-operator.js');
   const capture = serves(info, 'native.capture') ? serverCapture({ ...options, info }) :
     (native as { production?: boolean }).production ? grammarCapture({ ...options, info }) : undefined;
-  // Trained soft forms of the runtime's prompt pieces (operators' own states among them): NATLANG_NEURALESE_PROMPT_STATES.
-  const { loadPromptStates, promptStatesDirectory } = await import('./prompt-states.js');
-  const promptStates = promptStatesDirectory();
-  const systemPrompts = promptStates ? await loadPromptStates(promptStates, options.store) : undefined;
-  return { store: options.store, dialect, nativeStateConsumer, ...(systemPrompts ? { systemPrompts } : {}),
+  return { store: options.store, dialect, nativeStateConsumer,
     nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),
     ...(port ? { port } : {}), ...(capture ? { capture } : {}) };
 }
