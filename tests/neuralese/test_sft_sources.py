@@ -272,7 +272,8 @@ def test_call_row_weights_a_teacher_detour_after_the_refusal_as_context_for_trai
 def test_parse_aux_reads_share_task_cap_and_think_policy():
     part = s.parse_aux('operators=/x/chains.pkl,share=0.03,task_tokens=4000')
     assert part == {'name': 'operators', 'path': '/x/chains.pkl', 'share': 0.03, 'task_tokens': 4000,
-                    'think': 'context'}
+                    'think': 'context', 'replaces': None}
+    assert s.parse_aux('filled=/f.pkl,replaces=teacher')['replaces'] == 'teacher'
     assert s.parse_aux('live=/y.pkl')['share'] == 'all'
     assert s.parse_aux('g=/z.pkl,think=train')['think'] == 'train'
     with pytest.raises(ValueError):
