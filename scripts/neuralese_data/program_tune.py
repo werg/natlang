@@ -368,7 +368,9 @@ def program_fit(engine, directory):
     the bank is built from and its mixture labels are projections of."""
     from natlang_neuralese.tune.build import import_archive
     from natlang_neuralese.tune.trainer import adapter_factors
-    build = Path(directory) / 'fit' / 'build'
+    if not (Path(directory) / 'fit' / 'release' / 'result.json').exists():
+        release(argparse.Namespace(dir=directory))   # read one artifact, not every step's (12 GB on LFM3)
+    build = Path(directory) / 'fit' / 'release'
     result = json.loads((build / 'result.json').read_text())
     import_archive(engine, [build / 'artifacts'], [])
     factors = {}
@@ -376,6 +378,46 @@ def program_fit(engine, directory):
         for name, (factor_b, factor_a) in adapter_factors(engine, item['artifact']).items():
             factors[name] = (factor_b.detach().float().cpu(), factor_a.detach().float().cpu())
     return factors
+
+
+def artifact_closure(artifacts, ids):
+    """The `.nnt` files of ``ids`` and their dependency closure in an artifacts directory."""
+    from natlang_neuralese.model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
+    artifacts, seen, todo = Path(artifacts), {}, list(ids)
+    while todo:
+        ident = todo.pop()
+        if ident in seen:
+            continue
+        path = artifacts / f'{ident}.nnt'
+        if not path.is_file():
+            raise SystemExit(f'{path}: an artifact of the release closure is missing')
+        seen[ident] = path
+        artifact, _ = decode_native_tensor_artifact(path.read_bytes())
+        todo += [d for d in native_tensor_dependencies(artifact) if isinstance(d, str) and d.startswith('nnt1_')]
+    return sorted(seen.values())
+
+
+def release(args):
+    """DIR/fit/release: the fit's result.json (byte-identical, so the served policy id is unchanged) and only the
+    artifacts it names with their dependency closure. A tune.build output keeps every step's adapter and optimizer
+    state for resumption (12 GB for a 60-step all-target rank-16 fit); a served release needs one 66 MB artifact."""
+    directory = Path(args.dir)
+    build, out = directory / 'fit' / 'build', directory / 'fit' / 'release'
+    result = json.loads((build / 'result.json').read_text())
+    if (build / 'states').is_dir() and any((build / 'states').iterdir()):
+        raise SystemExit(f'{build}/states: soft-state releases are copied whole (not handled here)')
+    files = artifact_closure(build / 'artifacts', [item['artifact'] for item in result['artifacts']])
+    temp = out.with_name('release.tmp')
+    shutil.rmtree(temp, ignore_errors=True)
+    (temp / 'artifacts').mkdir(parents=True)
+    for path in files:
+        shutil.copyfile(path, temp / 'artifacts' / path.name)
+    shutil.copyfile(build / 'result.json', temp / 'result.json')
+    shutil.rmtree(out, ignore_errors=True)
+    temp.rename(out)
+    print(json.dumps({'release': str(out), 'artifacts': [p.name for p in files],
+                      'bytes': sum(p.stat().st_size for p in files)}))
+    return out
 
 
 def write_release(engine, record_id, directory, provenance):
@@ -539,6 +581,8 @@ def main(argv=None):
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--gguf-base-sha256', help='sha256 of the base GGUF the LoRA exports bind to')
     p.add_argument('--hf-config', help='HF config directory of the base for the GGUF LoRA converter')
+    v = sub.add_parser('release', help='DIR/fit/release: the fit\'s result and only its artifact closure (to serve)')
+    v.add_argument('--dir', required=True)
     t = sub.add_parser('teacher-tasks', help='a teacher_gen.py WORK over the support split only')
     t.add_argument('--dir', action='append', required=True, help='program directory (repeatable)')
     t.add_argument('--work', required=True)
@@ -560,7 +604,8 @@ def main(argv=None):
     b.add_argument('--recipe', help='JSON overrides of meta_bank.MetaRecipe')
     b.add_argument('--seed', type=int, default=0)
     args = parser.parse_args(argv)
-    {'split': split, 'rows': rows, 'plan': plan, 'teacher-tasks': teacher_tasks, 'bank': bank}[args.command](args)
+    {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
+     'bank': bank}[args.command](args)
 
 
 if __name__ == '__main__':

@@ -223,3 +223,19 @@ def test_pop_attestation_distinguishes_base_and_adapted_actors(monkeypatch):
     assert pop_rl_actor.attested('http://pop', 'c' * 64) and not pop_rl_actor.attested('http://pop', 'c' * 64, 'ab')
     monkeypatch.setattr(pop_rl_actor.urllib.request, 'urlopen', info('ab'))
     assert pop_rl_actor.attested('http://pop', 'c' * 64, 'ab') and not pop_rl_actor.attested('http://pop', 'c' * 64)
+
+
+def test_release_keeps_the_result_and_only_its_artifact_closure(tmp_path):
+    import argparse
+    from natlang_neuralese.serve import load_native_engine
+    from serve_native_checkpoint import bind_adapter_release
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    directory = toy_program(engine, tmp_path / 'programs', 'fam', 4, 1)
+    build = directory / 'fit' / 'build'
+    (build / 'artifacts' / 'nnt1_stale.nnt').write_bytes(b'an earlier step')   # history a release must not carry
+    out = P.release(argparse.Namespace(dir=str(directory)))
+    result = json.loads((build / 'result.json').read_text())
+    assert (out / 'result.json').read_bytes() == (build / 'result.json').read_bytes()   # same served policy id
+    assert sorted(p.stem for p in (out / 'artifacts').iterdir()) == sorted(i['artifact'] for i in result['artifacts'])
+    served = load_native_engine(str(tmp_path / 'native.pt'), device=engine.device)
+    assert [e['id'] for e in bind_adapter_release(served, out)] == [i['artifact'] for i in result['artifacts']]
