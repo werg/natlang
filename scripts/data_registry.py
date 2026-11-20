@@ -56,6 +56,15 @@ def default_check_paths(reg):
     return list(dict.fromkeys(paths))
 
 
+COVERAGE = REPO / 'training/data-registry-coverage-20261120.json'
+
+
+def coverage_paths(path=COVERAGE):
+    """The local paths of a coverage baseline (what the ops catalog found before the registry; datasets present here)."""
+    rows = json.loads(Path(path).read_text())['datasets']
+    return [str(dr.absolute(r['path'])) for r in rows]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -88,6 +97,8 @@ def main(argv=None) -> int:
     ls.add_argument('--layer', choices=['git', 'journal', 'git+journal'])
     ck = sub.add_parser('check')
     ck.add_argument('paths', nargs='*')
+    ck.add_argument('--baseline', action='append', default=[],
+                    help='coverage file (natlang.data-registry-coverage/1): every listed path must be held by a dataset')
     pr = sub.add_parser('promote')
     pr.add_argument('ids', nargs='*')
     pr.add_argument('--all-closed', action='store_true')
@@ -136,7 +147,10 @@ def main(argv=None) -> int:
         _print(rows)
         return 0
     if a.cmd == 'check':
-        paths = a.paths or default_check_paths(reg)
+        paths = list(a.paths)
+        for baseline in a.baseline:
+            paths += coverage_paths(baseline)
+        paths = paths or default_check_paths(reg)
         missing = [p for p in paths if (reg.find(Path(p)) or {'admission': dr.INVENTORY}).get('admission') == dr.INVENTORY]
         _print({'checked': len(paths), 'unregistered': missing})
         return 1 if missing else 0

@@ -405,8 +405,8 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
       const entry = resolved?.binding ? scaffold.bindings.find(item => item.id === resolved.binding) : undefined;
       if (!entry) summary.unboundTurns++;
       const component = entry ? components.get(entry.component) : undefined;
-      const instructions = component?.baseline.kind === 'lambda.instructions' && component.origin === 'named'
-        ? component.baseline.template.segments.join('') : undefined;
+      const instructions = component?.baseline.kind === 'lambda.instructions'
+        ? renderedInstructions(component.baseline.template.segments, messages) : undefined;
       const response = step.model_response ?? {};
       const action = actionEvidence[trajectoryIndex]!;
       turns.push({ schema: 'natlang.tune-turn/v1', root: example.id, component: example.component, partition: example.partition,
@@ -479,4 +479,25 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
   mkdirSync(join(tuneDirectory(root), 'data'), { recursive: true });
   writeFileSync(join(tuneDirectory(root), 'data', 'imports.json'), JSON.stringify({ teachers: summary.teachers }, null, 1) + '\n');
   return summary;
+}
+
+/**
+ * The instruction text one call rendered from its lambda's template (named: one segment; inline `nl`: segments around
+ * interpolated values), as the call's messages show it (trimmed of newlines, kernel.ts): the unique match of the
+ * template in the messages' text, or undefined when it does not occur exactly once.
+ */
+export function renderedInstructions(segments: readonly string[], messages: readonly { content?: unknown }[]): string | undefined {
+  const parts = segments.map((segment, index) => index === 0 ? segment.replace(/^\n+/, '') : segment);
+  parts[parts.length - 1] = parts.at(-1)!.replace(/\n+$/, '');
+  // A value at either end has no delimiter in the message: its rendering cannot be recovered.
+  if (!parts.join('') || (parts.length > 1 && (!parts[0] || !parts.at(-1)))) return undefined;
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(parts.map(escape).join('([\\s\\S]*?)'), 'g');
+  const found = new Set<string>();
+  let count = 0;
+  for (const message of messages) {
+    if (typeof message.content !== 'string') continue;
+    for (const match of message.content.matchAll(pattern)) { found.add(match[0]); count++; }
+  }
+  return count === 1 ? [...found][0] : undefined;
 }

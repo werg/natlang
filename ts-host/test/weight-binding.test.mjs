@@ -149,7 +149,7 @@ test('release store: immutable releases, compare-before-activate, rollback', () 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('soft instruction states replace exactly their trained text, need native-state import, and fall back when text changes', async () => {
+test('soft instruction states replace exactly their trained text, need native-state import, and leave another text as text', async () => {
   const { hexDigest } = await import('../dist/native/hash.js');
   const app = compile(files), program = app.manifest.adaptation;
   const plain = release(program);
@@ -157,7 +157,7 @@ test('soft instruction states replace exactly their trained text, need native-st
   const state = 'nzs1_' + 'a'.repeat(52);
   const withSoft = text => host.sealManifest({ ...Object.fromEntries(Object.entries(plain).filter(([key]) => key !== 'digest')),
     softStates: [{ binding: inner.id, kind: 'instructions', target: null, state, textSha256: hexDigest(text), tokens: 7 }] });
-  const manifest = withSoft('Return value in uppercase.\n'); // the exact body text, as collection records it
+  const manifest = withSoft('Return value in uppercase.'); // the body as the opening message shows it, as collection records it
   // Without native-state import the soft binding is not served as tuned.
   const noImport = new host.WeightBinding(manifest, { executor: base });
   assert.equal(noImport.resolve('', inner.component, null).status, 'degraded');
@@ -184,12 +184,12 @@ test('soft instruction states replace exactly their trained text, need native-st
   // the call stops rather than running on text it was not trained with).
   await assert.rejects(runWith(soft), new RegExp(`${state} is unavailable`));
   assert.ok(!prompts.some(prompt => prompt.includes('Return value in uppercase.')), 'the trained text was never sent');
-  // The trained text no longer matches (the release says another text): the call runs untuned, with its text.
-  const drifted = new host.WeightBinding(withSoft('Return value in lowercase.\n'), { executor: base, nativeState: true });
+  // Another text than the state was primed from (an interpolating lambda's other rendering, or a drifted release):
+  // that text is sent as text under the same stack, as training kept such rows.
+  const drifted = new host.WeightBinding(withSoft('Return value in lowercase.'), { executor: base, nativeState: true });
   prompts.length = 0;
   const traces = await runWith(drifted);
   assert.ok(prompts.some(prompt => prompt.includes('Return value in uppercase.')));
   const innerTrace = traces.find(trace => trace.adaptation?.weights?.binding === inner.id);
-  assert.equal(innerTrace.adaptation.weights.status, 'degraded');
-  assert.deepEqual(innerTrace.adaptation.weights.effective, []);
+  assert.notEqual(innerTrace.adaptation.weights.status, 'degraded');
 });

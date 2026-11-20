@@ -194,9 +194,10 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
 /** `native.capture` on a server that implements it: the exact prompt and sampled reply ids, captured server-side. */
 export function serverCapture(options: NativeClientOptions): NativeCapture {
   return async (call, extra = {}) => {
-    if (!call.prompt?.length || !call.reply?.length)
+    if (!(call.prompt?.length || call.promptSegments?.length) || !call.reply?.length)
       return failure('neuralese-native-capture', 'native.capture needs the call\'s exact prompt and sampled reply ids');
-    return (await nativeTextOperation(options, 'capture', { prompt_token_ids: call.prompt, reply_token_ids: call.reply,
+    return (await nativeTextOperation(options, 'capture', { ...(call.promptSegments?.length ?
+      { prompt_segments: call.promptSegments } : { prompt_token_ids: call.prompt }), reply_token_ids: call.reply,
       ...(call.select !== undefined ? { select: call.select } : {}), ...extra })).meta;
   };
 }

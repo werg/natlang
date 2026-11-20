@@ -842,6 +842,30 @@ def test_rollout_lowering_resolves_imports_to_their_write_sources():
     assert episode_turns({'turns': [turn(prompt)]}, stats) == [] and stats['skip_native_state_prompt'] == 1
 
 
+def test_a_source_whose_producer_imported_a_stored_state_keeps_it_as_fixed_context():
+    """An operator call under its soft prompt state: its capture records the imported state; the producer document
+    holds placeholder rows there, and the pass-through reads the stored state at those rows of the document."""
+    import collections
+    from lower_rollout_turns import write_sources
+    write = {'kind': 'block_write', 'block': 'nzs1_y', 'source_capture': {
+        'segments': [{'kind': 'tokens', 'token_ids': [1, 61], 'producing': [False, False]},
+                     {'kind': 'native_state', 'id': 'nzs1_soft', 'token_count': 3},
+                     {'kind': 'tokens', 'token_ids': [60, 9, 63], 'producing': [False] * 3},
+                     {'kind': 'tokens', 'token_ids': [41, 42], 'producing': [True, True]},
+                     {'kind': 'tokens', 'token_ids': [62], 'producing': [False]}], 'payload_start': 8, 'payload_stop': 10}}
+    stats = collections.Counter()
+    source = write_sources({'execution_graph': [write]}, stats)['nzs1_y']
+    assert source['ids'].tolist() == [1, 61, 0, 0, 0, 60, 9, 63, 41, 42] and source['imports'] == [(2, 'nzs1_soft')]
+    assert stats['source_stored_imports'] == 1
+    plan = lfm3_fast_train.passthrough_plan([(0, [(5, 'nzs1_y')], {'nzs1_y': source})], 12)
+    assert plan['source'] == [12 + 8, 12 + 9] and plan['fixed'] == [(12 + 2, 'nzs1_soft')]
+    # Without its row count the import cannot be placed: not a source.
+    bad = {**write, 'source_capture': {**write['source_capture'], 'segments': [
+        {**segment, 'token_count': None} if segment['kind'] == 'native_state' else segment
+        for segment in write['source_capture']['segments']]}}
+    assert write_sources({'execution_graph': [bad]}, stats) == {} and stats['source_not_tokens'] == 1
+
+
 def test_prefix_parts_bound_prefix_tokens_and_keep_every_leaf_once():
     leaf = lambda i: {'start': 4, 'index': i}
     nodes = [{'start': 0, 'end': 4, 'first': 0, 'children': [

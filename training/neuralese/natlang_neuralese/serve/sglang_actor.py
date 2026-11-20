@@ -334,24 +334,64 @@ class SglangEngine(Engine):
                     'payload_start': 1, 'payload_stop': len(ids) + 1, 'adapter_binding': block.adapter_binding},
                 'source_text_sha256': hashlib.sha256(text.encode('utf-8')).hexdigest()}
 
-    def native_capture(self, prompt_token_ids, reply_token_ids, *, select=None, value_type=None, adapters=None):
+    def native_capture(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None,
+                       adapters=None):
         if adapters or not self.sglang_url:
             return self._measure_native_endpoint('capture', lambda: super(SglangEngine, self).native_capture(
-                prompt_token_ids, reply_token_ids, select=select, value_type=value_type, adapters=adapters))
+                prompt_token_ids, reply_token_ids, prompt_segments=prompt_segments, select=select,
+                value_type=value_type, adapters=adapters))
         return self._measure_native_endpoint('capture_sglang', lambda: self._sglang_native_capture(
-            prompt_token_ids, reply_token_ids, select, value_type))
+            prompt_token_ids, reply_token_ids, select, value_type, prompt_segments))
 
-    def _sglang_native_capture(self, prompt_token_ids, reply_token_ids, select, value_type):
-        """`_native_capture_impl` on SGLang: one capture request of the reply's content span in its own context."""
+    def _capture_blocks(self, imports):
+        """`Engine._capture_blocks` from the store's files (header and token ids; the fork reads the payload)."""
+        blocks = []
+        for _, ident in imports:
+            block = self._sglang_store().native_state_file(ident)
+            if block is None:
+                raise RequestError('neuralese-unknown-native-state', f'{ident} is not in this server\'s store; PUT it first')
+            if block.derivation is not None:
+                from ..model.native_state_derivation import verify_state_derivation
+                verify_state_derivation(self.store, block.load())
+            if not self._sglang_exact(block):
+                raise RequestError('neuralese-native-capture', 'a captured prompt imports only this model\'s exact native state')
+            blocks.append(block)
+        return blocks
+
+    def _sglang_placeholders(self, block_id, count):
+        """The content-hashed placeholder ids of an imported state's positions (their KV and conv inputs the fork
+        replaces by the stored ones; `custom_params.natlang_import`)."""
+        import hashlib
+        base = 2 * int(self.sglang_export['producer_embedding']['input_id_offset'])
+        return [base + int.from_bytes(hashlib.sha256(f'{block_id}:{index}'.encode()).digest()[:4], 'little')
+                % (2 ** 31 - 1 - base) for index in range(count)]
+
+    def _sglang_native_capture(self, prompt_token_ids, reply_token_ids, select, value_type, prompt_segments=None):
+        """`_native_capture_impl` on SGLang: one capture request of the reply's content span in its own context, the
+        prompt's imported states (`prompt_segments`) as the fork's imports where they stood."""
         if not getattr(self, 'native_state_enabled', False):
             raise RequestError('neuralese-native-state-unavailable', 'native captures require shared-state serving')
-        prefix, span = self.capture_plan(prompt_token_ids, reply_token_ids, select)
-        ids = [*prefix, *span]
+        prompt, imports = self.capture_prompt(prompt_token_ids, prompt_segments)
+        blocks = self._capture_blocks(imports)
+        self._capture_import_tokens = sum(len(block.token_ids) for block in blocks)
+        prefix, span = self.capture_plan(prompt, reply_token_ids, select, imports)
+        ids, spliced, last = [], [], 0
+        for (at, ident), block in zip(imports, blocks):
+            ids.extend(prefix[last:at])
+            count = len(block.token_ids)
+            if count:
+                spliced.append({'path': str(block.path), 'start': len(ids), 'count': count})
+            ids.extend(self._sglang_placeholders(ident, count))
+            last = at
+        ids.extend(prefix[last:])
+        start = len(ids)
+        ids.extend(span)
         text = self.tokenizer.decode(span, skip_special_tokens=False)
-        block, record = self._native_store_capture(span, [{'ids': ids, 'start': len(prefix), 'end': len(ids)}], text=text)
+        block, record = self._native_store_capture(span, [{'ids': ids, 'start': start, 'end': len(ids),
+                                                           **({'imports': spliced} if spliced else {})}], text=text)
         with self._sglang_lock:
             self.sglang_state_writes += 1
-        return self._capture_result(block, record, prefix, span, value_type)
+        return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
 
     def native_init_body(self, messages, tools, placeholder, text, **kwargs):
         return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
@@ -1099,11 +1139,7 @@ class SglangEngine(Engine):
             count = len(block.token_ids)
             if count:   # an empty state imports nothing; a count-0 span made the scheduler raise and die (2026-11-10)
                 seq.sglang_imports.append({'path': str(block.path), 'start': len(ids), 'count': count})
-            base = 2 * int(self.sglang_export['producer_embedding']['input_id_offset'])
-            import hashlib
-            for index in range(count):
-                digest = hashlib.sha256(f'{block_id}:{index}'.encode()).digest()
-                ids.append(base + int.from_bytes(digest[:4], 'little') % (2 ** 31 - 1 - base))
+            ids.extend(self._sglang_placeholders(block_id, count))
             mode = 'exact-native-state' if receipt is None else 'same-base-adapter-state'
             consumption = {'adapter_state_consumption': receipt} if receipt is not None else {}
             if capture:

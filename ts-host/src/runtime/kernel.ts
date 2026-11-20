@@ -26,7 +26,7 @@ import { runTiered, type TierAttempt } from '../calls/tiers.js';
 import { specializerOutput } from '../calls/compilations.js';
 import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
-import { weightBindingFor, untunedStack, type ResolvedWeightStack } from '../adaptation/weights/binding.js';
+import { weightBindingFor, type ResolvedWeightStack } from '../adaptation/weights/binding.js';
 import { nativeStateSentinel } from '../native/neuralese.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
@@ -807,23 +807,23 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
     const node = await prepareDefinitionNode(definition, normalizedInputs,
       { ...options, dialects: dialectBinding(task.runtime.options.neuralese) });
-    Object.assign(childFrame.invocationTexts!, { instructions: node.body, ...(node.skills ? { skills: { ...node.skills.documents } } : {}) });
+    // The instruction text as the call's opening message shows it (agent.ts `callHeading` trims its newlines): the text a
+    // soft instruction state is primed from in training and stands for at serving.
+    const instructions = node.body.replace(/^\n+|\n+$/g, '');
+    Object.assign(childFrame.invocationTexts!, { instructions, ...(node.skills ? { skills: { ...node.skills.documents } } : {}) });
     if (weights?.soft) {
-      // Tuned instruction/skill states replace exactly the texts they were trained on; a changed text runs untuned.
-      const soft = weights.soft, changed: string[] = [];
-      if (soft.instructions && hexDigest(node.body) !== soft.instructions.textSha256) changed.push('instructions');
-      for (const [target, use] of Object.entries(soft.skills))
-        if (node.skills?.documents[target] === undefined || hexDigest(node.skills.documents[target]!) !== use.textSha256) changed.push(target);
-      if (changed.length) {
-        const fallback = untunedStack(weights, `soft state texts changed since tuning (${changed.join(', ')}); this call runs untuned`);
-        (childFrame as { weights?: ResolvedWeightStack }).weights = fallback;
-        if (adaptationProvenance) (adaptationProvenance as Record<string, unknown>).weights = { ...fallback };
-        runtime.trace.emit('weight_stack', { call_id: callId, release: fallback.release, binding: fallback.binding, identity: fallback.identity,
-          status: fallback.status, reason: fallback.reason, effective: [] });
-      } else {
-        if (soft.instructions) node.body = nativeStateSentinel(soft.instructions.state);
-        for (const [target, use] of Object.entries(soft.skills)) node.skills!.documents[target] = nativeStateSentinel(use.state);
+      // Each tuned instruction/skill state replaces exactly the text it was primed from; any other text stays text under
+      // the same stack, as training kept it (tune/soft.py `place_states`: an interpolating lambda's other renderings).
+      const soft = weights.soft, kept: string[] = [];
+      if (soft.instructions && hexDigest(instructions) === soft.instructions.textSha256) node.body = nativeStateSentinel(soft.instructions.state);
+      else if (soft.instructions) kept.push('instructions');
+      for (const [target, use] of Object.entries(soft.skills)) {
+        if (node.skills?.documents[target] !== undefined && hexDigest(node.skills.documents[target]!) === use.textSha256)
+          node.skills.documents[target] = nativeStateSentinel(use.state);
+        else kept.push(target);
       }
+      if (kept.length) runtime.trace.emit('soft_state_text', { call_id: callId, binding: weights.binding,
+        text: kept, reason: 'the text differs from the one its soft state was primed from; it stays text' });
     }
     if (handoff) node.handoff = handoff;
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }

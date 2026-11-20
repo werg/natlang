@@ -376,6 +376,33 @@ def test_wrapper_cap_keeps_dataset_wrappers_to_their_share_of_the_selection():
     assert funnel['teacher']['over_wrapper_share'] == 40
 
 
+def test_prefer_unseen_keeps_untrained_episodes_under_every_cap_and_changes_nothing_without_a_build(tmp_path):
+    import collections
+    import random
+    candidates = [{'task_id': f't{i // 4}', 'family': 'f' if i < 40 else f'g{i}', 'source': 'teacher',
+                   'key': f'k{i}', 'w': i % 8 == 0} for i in range(80)]
+    trained = frozenset(f'k{i}' for i in range(80) if i % 4 != 3)       # one untrained episode per task
+    funnel = collections.defaultdict(collections.Counter)
+    kept = s.capped(candidates, random.Random(0), funnel, lambda task: 1, 0.5, lambda c: 0, trained)
+    assert all(c['key'] not in trained for c in kept)
+    plain = s.capped(candidates, random.Random(0), collections.defaultdict(collections.Counter), lambda task: 1, 0.5,
+                     lambda c: 0)
+    assert plain == s.capped(candidates, random.Random(0), collections.defaultdict(collections.Counter),
+                             lambda task: 1, 0.5, lambda c: 0, frozenset())
+    wrappers = [c for c in candidates if c['w']]
+    kept = s.wrapper_capped(wrappers + [c for c in candidates if not c['w']][:20], random.Random(0), funnel,
+                            lambda c: c['w'], 0.2, frozenset(c['key'] for c in wrappers[1:]))
+    assert wrappers[0] in kept                                    # the one untrained wrapper survives the share
+    rows = tmp_path / 'build'
+    rows.mkdir()
+    out = s.ZstdWriter(rows / 'rows.jsonl.zst')
+    for key, task in (('k1', 't0'), ('k1', 't0'), ('k9', 't2')):
+        out.write({'episode': key, 'task_id': task})
+    out.close()
+    assert s.trained_in([rows]) == (frozenset({'k1', 'k9'}), frozenset({'t0', 't2'}))
+    assert s.trained_in([]) == (frozenset(), frozenset())
+
+
 def test_task_constructs_names_held_constructs_and_wrappers():
     neuralese = {'semantics': {'root': 'main.nl', 'files': {
         'main.nl': '---\nargs: text: string\nreturns: string\n---\nUse helper.',

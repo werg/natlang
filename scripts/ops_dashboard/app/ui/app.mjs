@@ -2,6 +2,7 @@ import { num, fmt, gb, pct, signed, dur, ago, clock, dayClock, shortUnit, health
 import { h, lineChart, valueTable, spark, segBar, slotVar } from './charts.mjs';
 import { dataView, link as dl } from './data.mjs';
 import { editRef } from '../ops-protocol.mjs';
+import { BUILD } from './connect.mjs';
 
 let src = null;      // the data source (session or preview), set by start()
 const $ = id => document.getElementById(id);
@@ -30,9 +31,11 @@ function schedule() {
 }
 function notice(key, text) { text ? S.notices.set(key, text) : S.notices.delete(key); $('notices').textContent = [...S.notices.values()].join(' · '); }
 
+const report = e => { try { src?.report?.(e); } catch {} };
 function takeSnapshot(rec) {
-  if (!rec?.data || rec.data.v !== 3) return;
+  if (!rec?.data || rec.data.v !== 3) { report({ ev: 'snapshot_rejected', why: !rec?.data ? 'empty' : `version ${rec.data.v}` }); return; }
   if (S.snap && rec.data.ts < S.snap.ts) return;
+  if (!S.snap) report({ ev: 'snapshot_first', age_s: Math.round((Date.now() - rec.data.ts) / 1000), runs: (rec.data.runs || []).length, machines: Object.keys(rec.data.machines || {}).length });
   S.snap = rec.data;
   if (!S.selTouched) defaultSelection();
   schedule();
@@ -72,7 +75,7 @@ async function pull(tick) {
       for (const rec of r.records) fn(rec);
       offsets[key] = r.offset; seen[key] = tick?.[key];
     }
-  } catch (e) { notice('snap', `Could not read the ops state: ${e.message}`); }
+  } catch (e) { notice('snap', `Could not read the ops state: ${e.message}`); report({ ev: 'pull_failed', error: String(e.message).slice(0, 200) }); }
   finally { pulling = false; }
 }
 
@@ -460,7 +463,12 @@ function chrome(hv) {
   pill.onclick = () => go('overview');
   freshness();
 }
+function releaseLine() {
+  const el = document.getElementById('release') || document.querySelector('.foot')?.appendChild(h('span', { id: 'release', class: 'release' }));
+  if (el) el.textContent = `release ${window.tendril?.identity?.version ?? '–'} · build ${BUILD.build.replace('T', ' ').replace('Z', ' UTC')}${BUILD.commit ? ' · ' + BUILD.commit : ''}`;
+}
 function freshness() {
+  releaseLine();
   const el = $('fresh'), age = S.snap ? now() - S.snap.ts : null;
   el.className = `live ${age == null ? 'dead' : age < 90e3 ? 'fresh' : age < SNAP_STALE_MS * 2 ? 'stale' : 'dead'}`;
   $('fresh-text').textContent = !src ? 'not connected' : age == null ? 'connected, waiting for data' : `data ${dur(age / 1000)} old`;
@@ -480,7 +488,7 @@ function render() {
   if (banner) next.append(banner);
   if (S.gate) { next.append(S.gate); view.replaceChildren(next); return; }
   if (!S.snap && S.tab !== 'data') next.append(h('div', { class: 'notice' }, 'Connected. The first snapshot comes from the DGX within about 30 seconds. If nothing arrives in a minute, the exporter or the native ops participant on the DGX is not running.'));
-  try { next.append((VIEWS[S.tab] || overview)(hv)); } catch (e) { next.append(h('div', { class: 'alert crit' }, `This section failed to draw: ${e.message}`)); console.error(e); }
+  try { next.append((VIEWS[S.tab] || overview)(hv)); } catch (e) { next.append(h('div', { class: 'alert crit' }, `This section failed to draw: ${e.message}`)); console.error(e); report({ ev: 'render_failed', tab: S.tab, error: String(e.message).slice(0, 200), stack: String(e.stack || '').slice(0, 300) }); }
   view.replaceChildren(next);
   if (restoreTo != null && document.documentElement.scrollHeight > restoreTo + innerHeight * 0.5) { window.scrollTo({ top: restoreTo }); restoreTo = null; }
   const k2 = detKey();
@@ -559,8 +567,21 @@ setInterval(() => { if (!S.hold && S.tab !== 'data') render(); }, 60000);
 /** Start the dashboard on a connected source (session or preview). Before this, `gate` (the connection panel) is shown. */
 export function start(source) {
   src = source; S.gate = null;
+  addEventListener('error', e => report({ ev: 'page_error', error: String(e.message).slice(0, 200), at: `${e.filename?.split('/').pop()}:${e.lineno}` }));
+  addEventListener('unhandledrejection', e => report({ ev: 'page_rejection', error: String(e.reason?.message || e.reason).slice(0, 200) }));
+  document.addEventListener('visibilitychange', () => report({ ev: 'visibility', state: document.visibilityState }));
+  // A tab stays pinned to the publication it opened (Tendriller keeps the pin on reload). When the participant announces
+  // a newer build, move to the selected release once (the page's base URL); a second announcement of the same build is ignored.
+  src.ticks.on(t => {
+    const b = t?.page_build;
+    if (!b || !BUILD.build || BUILD.build === 'dev' || b <= BUILD.build || sessionStorage.getItem('ops.moved-to') === b) return;
+    sessionStorage.setItem('ops.moved-to', b); report({ ev: 'moving_to_latest', from: BUILD.build, to: b });
+    setTimeout(() => { location.href = window.tendril?.identity?.base || location.href.split('?')[0]; }, 1500);
+  });
   if (src.kind === 'preview') document.querySelector('.top .brand')?.append(h('span', { class: 'chip warn previewchip', title: 'A local preview of the page over the DGX exporter files and data service. Edits made here stay in this preview server and are not applied.' }, 'local preview'));
   src.ticks.on(t => { if (t) void pull(t); });
+  // a phone resumes a backgrounded page: read the current state at once rather than at the next tick
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pull(src.ticks.get()); });
   for (const c of [src.edits, src.inbox, src.pending]) c.on(() => { if (S.tab === 'data' || S.tab === 'inbox') softRender(); else schedule(); });
   void pull(null);
   setInterval(() => void pull(src.ticks.get()), 60000);      // ticks drive refreshes; this is the fallback

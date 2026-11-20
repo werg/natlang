@@ -8,7 +8,29 @@ import { openBrowserOwner } from '@tendriller/core/collaboration/browser';
 import { createApplicationBackend } from '@chronolog/peer-session/tendriller';
 import { createLiveView } from '../helpers/live-view.mjs';
 import { createBrowserPairing } from '../pairing-browser.mjs';
-import { createQueryClient } from '../ops-protocol.mjs';
+import { createQueryClient, TOPICS } from '../ops-protocol.mjs';
+
+/* global __OPS_BUILD__ */
+export const BUILD = typeof __OPS_BUILD__ === 'object' ? __OPS_BUILD__ : { build: 'dev', commit: '' };
+
+/** Page telemetry for the operators, never shown to the person: what this page sent, received and drew goes to the native
+ * participant as `ops/t` signals every 10 s (counts per kind plus the latest events), logged on the DGX. */
+export function createTelemetry(signals) {
+  const counts = {}, events = [];
+  let seq = 0;
+  const COUNT_ONLY = new Set(['reply_unmatched', 'query_ok']);    // frequent and benign: counted, not listed
+  const event = e => { counts[e.ev] = (counts[e.ev] || 0) + 1; if (!COUNT_ONLY.has(e.ev) && events.length < 200) events.push({ ...e, at: Date.now() }); };
+  const flush = async () => {
+    if (!events.length && !Object.keys(counts).length) return;
+    const batch = events.splice(0, 40);
+    const payload = { seq: ++seq, build: BUILD, publication: window.tendril?.identity?.publication?.slice?.(0, 12) ?? null, version: window.tendril?.identity?.version ?? null,
+      visible: document.visibilityState, counts: { ...counts }, events: batch };
+    try { await signals.send(TOPICS.telemetry, payload, { ttlMs: 30000 }); }
+    catch { events.unshift(...batch.slice(0, 200 - events.length)); }
+  };
+  const timer = setInterval(() => void flush(), 10000);
+  return { event, count: k => { counts[k] = (counts[k] || 0) + 1; }, flush, close: () => clearInterval(timer) };
+}
 import { definition } from '../domain.mjs';
 
 const PENDING_KEY = 'ops.pending-operations';
@@ -96,11 +118,14 @@ export async function createConnection(ui) {
       const ev = mk('edits'), iv = mk('inbox');
       ev.subscribe(s => edits.set(s.value)); iv.subscribe(s => inbox.set(s.value));
       await ev.refresh(); await iv.refresh();
-      const client = createQueryClient(session.signals, { onTick: t => ticks.set(t) });
+      const tele = createTelemetry(session.signals);
+      tele.event({ ev: 'connected', ms_since_load: Math.round(performance.now()), shared_worker: typeof SharedWorker === 'function', ua: navigator.userAgent.slice(0, 120) });
+      const client = createQueryClient(session.signals, { onTick: t => { tele.count('tick'); ticks.set(t); }, onEvent: e => tele.event(e) });
       const tracker = commandTracker(session, list => pending.set([...list]));
       pending.set([...tracker.list()]);
-      window.addEventListener('pagehide', () => { client.close(); ev.close(); iv.close(); void attachment.detach().catch(() => {}); }, { once: true });
-      return { kind: 'session', deviceId: session.deviceId, nativeDeviceId: configuration.nativeDeviceId,
+      window.addEventListener('pagehide', () => { tele.close(); client.close(); ev.close(); iv.close(); void attachment.detach().catch(() => {}); }, { once: true });
+      setTimeout(() => void tele.flush(), 3000);
+      return { kind: 'session', report: e => tele.event(e), deviceId: session.deviceId, nativeDeviceId: configuration.nativeDeviceId,
         query: (q, input, opts) => client.query(q, input, opts), command: (n, i) => tracker.submit(n, i),
         retry: id => tracker.retry(id), dismiss: id => tracker.dismiss(id), edits, inbox, pending, ticks };
   }

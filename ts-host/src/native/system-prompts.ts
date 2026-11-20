@@ -66,12 +66,32 @@ export function promptPieces(): PromptPiece[] {
 /** Soft forms by piece ID, with the text each was registered for (the text that is replaced). */
 export type SystemPromptBank = ReadonlyMap<string, { readonly text: string; readonly value: NeuraleseRef }>;
 
-/** A bank from soft forms by piece ID; each piece's text comes from `pieces` (default: this runtime's pieces). */
+/**
+ * A scoped entry `<piece>@<scope>` is the piece's soft form for one site only: the learned operators each have their
+ * own state of the one site prompt they share (`view@compact-value`, `view@compact-params`; agent.ts `operatorWrite`).
+ * Scoped entries soften nothing outside their scope (`scopedBank`).
+ */
+export const PIECE_SCOPE = '@';
+
+/** The bank as one scope sees it: its `<piece>@<scope>` entries in place of the pieces', other scopes' entries dropped. */
+export function scopedBank(bank: SystemPromptBank | undefined, scope?: string): SystemPromptBank | undefined {
+  if (!bank?.size || ![...bank.keys()].some(id => id.includes(PIECE_SCOPE))) return bank;
+  const out = new Map([...bank].filter(([id]) => !id.includes(PIECE_SCOPE)));
+  if (scope !== undefined) for (const [id, entry] of bank) {
+    const at = id.lastIndexOf(PIECE_SCOPE);
+    if (at > 0 && id.slice(at + 1) === scope) out.set(id.slice(0, at), entry);
+  }
+  return out;
+}
+
+/** A bank from soft forms by piece ID (or `<piece>@<scope>`); each piece's text comes from `pieces` (default: this
+ * runtime's pieces). */
 export function systemPromptBank(values: Readonly<Record<string, unknown>>, pieces: readonly PromptPiece[] = promptPieces()): SystemPromptBank {
   const texts = new Map(pieces.map(piece => [piece.id, piece.text]));
   const bank = new Map<string, { text: string; value: NeuraleseRef }>();
   for (const [id, value] of Object.entries(values)) {
-    const text = texts.get(id);
+    const at = id.lastIndexOf(PIECE_SCOPE);
+    const text = texts.get(at > 0 ? id.slice(0, at) : id);
     if (text === undefined) throw new Error(`system-prompt-unknown-piece: ${id} is not a prompt piece of this runtime`);
     if (!isNeuraleseRef(value)) throw new TypeError(`system prompt piece ${id}: not a Neuralese value`);
     bank.set(id, { text, value });
@@ -93,6 +113,7 @@ export function findPieces<P extends Pick<PromptPiece, 'id' | 'text'>>(text: str
 
 /** A text with each banked piece replaced by its block's sentinel. */
 export function softenText(text: string, bank: SystemPromptBank): string {
+  bank = scopedBank(bank)!;
   if (!bank.size) return text;
   const pieces = [...bank].map(([id, entry]) => ({ id, text: entry.text }));
   let out = '', last = 0;

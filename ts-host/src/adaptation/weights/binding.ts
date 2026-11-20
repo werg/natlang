@@ -60,12 +60,6 @@ export function stackIdentity(base: NativeModelIdentity, stack: readonly StackEn
     'natlang.weights-stack/v1');
 }
 
-/** The same call run untuned (a soft text no longer matches its trained text): base executor, marked degraded. */
-export function untunedStack(stack: ResolvedWeightStack, reason: string): ResolvedWeightStack {
-  const { soft: _soft, ...rest } = stack;
-  return { ...rest, effective: [], status: 'degraded', reason, identity: stack.baseIdentity };
-}
-
 /** Exact float text, matching Python's float.hex() for the identity hash. */
 function scaleHex(value: number): string {
   if (value === 0) return Object.is(value, -0) ? '-0x0.0p+0' : '0x0.0p+0';

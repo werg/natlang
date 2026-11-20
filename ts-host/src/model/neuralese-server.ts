@@ -497,7 +497,10 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         { code: 'neuralese-native-state-prompt' });
     return [{ role: 'system', content: parts }, ...messages];
   };
-  const nativeStateModesFor = async (messages: readonly unknown[]) => {
+  // `scope`: the adapters and soft states of the call that asked (a batched decision readout is sent from another
+  // caller's flush context); absent: the live context.
+  const nativeStateModesFor = async (messages: readonly unknown[],
+      scope?: { adapters: readonly unknown[]; softStates: readonly string[] }) => {
     const ids = requestNativeStateIds(messages);
     const actualIds = new Set(ids);
     const modes: Record<string, 'same-base-adapter-state'> = Object.fromEntries(
@@ -507,7 +510,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if (artifact?.metadata.adapter_binding) modes[id] = 'same-base-adapter-state';
     }
     // A tuned call's own soft states were written by the exact base and are read by its adapted stack.
-    if (activeNativeAdapters().length) for (const id of activeSoftStates()) if (actualIds.has(id)) modes[id] = 'same-base-adapter-state';
+    if ((scope?.adapters ?? activeNativeAdapters()).length)
+      for (const id of scope?.softStates ?? activeSoftStates()) if (actualIds.has(id)) modes[id] = 'same-base-adapter-state';
     return coefficientStateModes(coefficientPolicy, ids, Object.keys(modes).length ? modes : undefined);
   };
   const requireExactNativeImports = (capture: unknown, ids: readonly string[],
@@ -676,9 +680,11 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // A coalesced decision is scored in the batch's flush, whose asynchronous context is another caller's (or none): the
   // recorder and the dynamically scoped adapters are taken where the decision was asked for (`scope`), so concurrent
   // objectives each record their own turn and adapters do not leak between batched callers.
-  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly NativeAdapterBinding[]; nativeStates: readonly { id: string }[] };
+  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly NativeAdapterBinding[]; nativeStates: readonly { id: string }[];
+    softStates: readonly string[] };
   const scopes = new WeakMap<object, Scope>();
-  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates() });
+  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates(),
+    softStates: [...activeSoftStates()] });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
       scope: Scope = here(), record = false):Promise<Item> => {
@@ -686,7 +692,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const info = await serverInfo(scope.nativeStates.length > 0);
     const native=info?.native_state as {enabled?:boolean}|undefined;
     const preparedMessages=materializeNativeStateSentinels(await bindNativeStateContext(messages,scope.nativeStates,info)) as unknown[];
-    const modes=await nativeStateModesFor(preparedMessages);
+    const modes=await nativeStateModesFor(preparedMessages,{adapters:scope.adapters,softStates:scope.softStates});
     if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
       decision:{options:[...replies]},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),

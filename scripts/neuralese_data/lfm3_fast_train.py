@@ -387,7 +387,9 @@ def passthrough_plan(parts, total, frozen_all=False):
     ``parts``: [(offset, imports, sources)] of the sequences packed in it (``imports`` [(start, key)] relative to the
     sequence; ``sources`` {key: {'ids': int[], 'start', 'stop', 'frozen'?}}, the producer documents, ``exp0_sft.chains_of``).
     An import whose key has no source is returned in ``fixed`` [(absolute row, key)] (stored state:
-    ``import_tensors``). Each source is one document appended after the sequence (a source used by several imports once).
+    ``import_tensors``), and so is each stored state a source document itself imported (its ``imports`` [(position,
+    state id)], e.g. an operator call's soft prompt state). Each source is one document appended after the sequence
+    (a source used by several imports once).
     Returns {'documents': [int arrays], 'rows': [...], 'source': [...], 'frozen': [bool], 'fixed': [...]}."""
     documents, placed, rows, source, frozen, fixed = [], {}, [], [], [], []
     end = total
@@ -403,6 +405,7 @@ def passthrough_plan(parts, total, frozen_all=False):
                     raise ValueError(f'source of {key}: span [{spec["start"]}, {spec["stop"]}) outside its document')
                 placed[key] = end + int(spec['start'])
                 documents.append(spec['ids'])
+                fixed.extend((end + int(at), state) for at, state in spec.get('imports') or ())
                 end += len(spec['ids'])
             rows.extend(range(offset + start, offset + start + count))
             source.extend(range(placed[key], placed[key] + count))

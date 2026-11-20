@@ -26,5 +26,9 @@ test('only the profile GGUF every adapter was exported for serves the release on
     // Soft states need the fork's native-state import.
     const states = { ...manifest, softStates: [exported(sha)] };
     assert.equal(await llamaServesRelease(states, choice, { ...environment, NATLANG_LLAMA_SERVER: join(directory, 'missing-server') }), false);
+    // A soft-state-only fit (every rank 0) has no adapter export; it still needs the fork, and nothing else.
+    const softOnly = { artifacts: [], families: [], softStates: [{ state: 'nzs1_x' }] };
+    assert.equal(await llamaServesRelease(softOnly, choice, { ...environment, NATLANG_LLAMA_SERVER: join(directory, 'missing-server') }), false);
+    assert.equal(await llamaServesRelease({ ...softOnly, softStates: [] }, choice, environment), false, 'an empty release is not tuned');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

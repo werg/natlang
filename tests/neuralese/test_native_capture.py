@@ -67,3 +67,38 @@ def test_capture_refuses_a_reply_that_ended_inside_its_reasoning(tmp_path):
     with pytest.raises(RequestError, match='inside its reasoning'):
         engine.native_capture([4, 9, 6], [12, 13, 14])
     assert engine.native_capture([4, 9, 6], [12, 7, 13, stop])['source_capture']['payload_stop'] > 0
+
+
+def test_capture_in_a_context_that_imported_a_state(tmp_path):
+    """An operator call whose prompt imported a soft prompt state: the capture runs in that same context, and its
+    source records the state where it stood (payload positions count its rows)."""
+    engine = actor(tmp_path, 'lfm', lexical=True, words=THINK)
+    stop = sorted(engine.stop_ids)[0]
+    roles = engine.role_tokens
+    soft = engine.native_write_text(engine.tokenizer.decode([20, 21, 22], skip_special_tokens=False))['id']
+    other = engine.native_write_text(engine.tokenizer.decode([23, 24], skip_special_tokens=False))['id']
+    count = len(engine.store.get_native_state(soft).block.token_ids)
+    segments = lambda state: [{'kind': 'tokens', 'token_ids': [4, roles.consume_open]},
+                              {'kind': 'native_state', 'id': state},
+                              {'kind': 'tokens', 'token_ids': [roles.consume_close, 9]}]
+    result = engine.native_capture(None, [7, 12, 13, stop], prompt_segments=segments(soft))
+    capture = result['source_capture']
+    kinds = [segment['kind'] for segment in capture['segments']]
+    assert kinds == ['tokens', 'native_state', 'tokens', 'tokens', 'tokens']
+    assert capture['segments'][1]['id'] == soft and capture['segments'][1]['token_count'] == count
+    assert capture['segments'][0]['token_ids'] == [4, roles.consume_open]
+    assert capture['segments'][2]['token_ids'] == [roles.consume_close, 9, 7, roles.produce_open]
+    assert capture['payload_start'] == 4 + count + 2 and capture['payload_stop'] == capture['payload_start'] + 2
+    # The imported state is context of the capture: another state there gives another captured state.
+    assert engine.native_capture(None, [7, 12, 13, stop], prompt_segments=segments(other))['id'] != result['id']
+    with pytest.raises(RequestError, match='consume_open'):
+        engine.native_capture(None, [7, 12, stop], prompt_segments=[{'kind': 'native_state', 'id': soft},
+                                                                     {'kind': 'tokens', 'token_ids': [roles.consume_close]}])
+    with pytest.raises(RequestError, match='not both'):
+        engine.native_capture([4], [7, 12, stop], prompt_segments=segments(soft))
+    with pytest.raises(RequestError):
+        engine.native_capture(None, [7, 12, stop], prompt_segments=segments('nzs1_' + 'a' * 52))
+    # Role markers outside an import's own consume markers are still refused.
+    with pytest.raises(RequestError, match='role markers'):
+        engine.native_capture(None, [7, 12, stop], prompt_segments=[*segments(soft),
+                                                                     {'kind': 'tokens', 'token_ids': [roles.consume_open]}])

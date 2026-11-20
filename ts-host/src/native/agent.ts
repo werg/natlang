@@ -52,7 +52,7 @@ import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, s
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-recording.js';
 import { hexDigest } from './hash.js';
-import { activeSystemPrompts, softenMessages, renderPromptMessages, renderSystemPrompt, type PromptRendering } from './system-prompts.js';
+import { activeSystemPrompts, scopedBank, softenMessages, renderPromptMessages, renderSystemPrompt, type PromptRendering } from './system-prompts.js';
 import type { ModelBudget } from './model-budget.js';
 /** The answer to a call of a reply that did not run because an earlier call of the same reply failed. */
 const UNRUN_CALL = 'Not run: an earlier call in this reply failed; call it again if you still need it.';
@@ -644,12 +644,17 @@ export class NativeToolAgent {
       capture: NonNullable<NeuraleseRuntimeOptions['capture']>, request: ModelTurnRequest, response: ModelTurn,
       select?: string): Promise<NeuraleseRef> {
     const callId = session.runtime.currentCallId ?? session.runtime.options.runId;
-    const sampled = response.raw_response?.x_natlang_rl_capture as { prompt?: { kind?: string; token_ids?: number[] }[];
+    const sampled = response.raw_response?.x_natlang_rl_capture as { prompt?: { kind?: string; token_ids?: number[]; id?: string }[];
       generated_inputs?: { token_id?: number }[] } | undefined;
+    const tokens = (segment: { kind?: string; token_ids?: number[] }) => segment.kind === 'tokens' && Array.isArray(segment.token_ids);
     const exact = !!sampled?.prompt?.length && !!sampled.generated_inputs?.length &&
-      sampled.prompt.every(segment => segment.kind === 'tokens' && Array.isArray(segment.token_ids));
+      sampled.prompt.every(segment => tokens(segment) || (segment.kind === 'native_state' && typeof segment.id === 'string'));
+    // A prompt that imported state (the operator's soft prompt state) is captured with those imports in place.
+    const plain = exact && sampled!.prompt!.every(tokens);
     const meta = await capture({ messages: request.messages, tools: request.tools,
-      ...(exact ? { prompt: sampled!.prompt!.flatMap(segment => segment.token_ids!),
+      ...(exact ? { ...(plain ? { prompt: sampled!.prompt!.flatMap(segment => segment.token_ids!) } :
+        { promptSegments: sampled!.prompt!.map(segment => tokens(segment) ? { kind: 'tokens' as const, token_ids: segment.token_ids! } :
+          { kind: 'native_state' as const, id: segment.id! }) }),
         reply: sampled!.generated_inputs!.map(input => input.token_id!) } : {}),
       text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}),
       ...(select !== undefined ? { select } : {}) }, { type: 'Neuralese<string>' });
@@ -679,8 +684,9 @@ export class NativeToolAgent {
     const callId = session.runtime.currentCallId ?? session.runtime.options.runId;
     const index = (this.operatorCalls.get(callId) ?? 0) + 1;
     this.operatorCalls.set(callId, index);
+    // The operator's prompt: its own soft state (`view@<operator>`) or view's where the bank has one, else the text.
     const request: ModelTurnRequest = { invocation_id: `${callId}#operator-${index}`,
-      messages: viewSiteMessages(site.value, site.instructions), tools: [],
+      messages: this.softened(viewSiteMessages(site.value, site.instructions), site.operator), tools: [],
       seed: session.runtime.seedPolicy.mode === 'backend' ? null :
         deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
       // Reasoning and reply share the actual request allowance; the shared graph reservation below may lower it.
@@ -773,8 +779,8 @@ export class NativeToolAgent {
   }
 
   /** Messages with the runtime's prompt pieces in their soft forms, when a bank is configured and the driver is Neuralese. */
-  private softened<M extends Record<string, unknown>>(messages: readonly M[]): M[] {
-    const bank = activeSystemPrompts(this.options.neuralese?.systemPrompts);
+  private softened<M extends Record<string, unknown>>(messages: readonly M[], scope?: string): M[] {
+    const bank = scopedBank(activeSystemPrompts(this.options.neuralese?.systemPrompts), scope);
     return bank?.size && supportsNeuralese(this.driver) ? softenMessages(messages, bank) : [...messages];
   }
 

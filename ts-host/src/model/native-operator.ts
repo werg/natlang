@@ -91,21 +91,42 @@ export function grammarCapture(options: { endpoint: string; headers?: Record<str
       throw new Error('neuralese-native-capture: the forced reply did not produce exactly one state');
     // The prompt ids: the call's own when it reported them, else the server's rendering of the same messages (a
     // captured rollout's sampling law refuses a grammar, so the forced request reports none itself).
-    const prompt = call.prompt?.length ? call.prompt : await tokenize(await applyTemplate(call), true);
-    const artifact = await archiveNativeState({ endpoint: options.endpoint, headers: options.headers, store: options.store }, id);
+    const client = { endpoint: options.endpoint, headers: options.headers, store: options.store };
+    // A prompt that imported states (an operator call under its soft prompt state): its segments as recorded, each
+    // state with its row count and identity, as the native.capture servers return them.
+    const imported: Record<string, unknown>[] = [];
+    let prompt: number[] = [];
+    if (call.promptSegments?.length) {
+      for (const segment of call.promptSegments) {
+        if (segment.kind === 'tokens') { prompt.push(...segment.token_ids); continue; }
+        const state = await archiveNativeState(client, segment.id);
+        imported.push({ at: prompt.length, segment: { kind: 'native_state', id: segment.id, token_count: state.tensors.token_ids!.shape[0]!,
+          native_identity: { checkpoint_sha256: state.metadata.checkpoint_sha256, tokenizer_fingerprint: state.metadata.tokenizer_fingerprint,
+            embedding_weight_sha256: state.metadata.embedding_weight_sha256, architecture: state.metadata.architecture } } });
+      }
+    } else prompt = call.prompt?.length ? call.prompt : await tokenize(await applyTemplate(call), true);
+    const artifact = await archiveNativeState(client, id);
     const ids = artifact.tensors.token_ids!, view = new DataView(ids.data.buffer, ids.data.byteOffset, ids.data.byteLength);
     if (ids.shape[0] !== span.length || span.some((token, index) => BigInt(token) !== view.getBigInt64(index * 8, true)))
       throw new Error('neuralese-native-capture: the produced state does not hold the forced span');
-    const prefix = [...prompt, ...reply.slice(0, start)];
+    const prefix = [...prompt, ...reply.slice(0, start), open];
     const text = typeof artifact.metadata.text === 'string' ? artifact.metadata.text : '';
     const meta = nativeStateBlockMeta(artifact);
+    const segments: Record<string, unknown>[] = [];
+    let last = 0, rows = 0;
+    for (const { at, segment } of imported as { at: number; segment: { token_count: number } }[]) {
+      if (at > last) segments.push({ kind: 'tokens', token_ids: prefix.slice(last, at), producing: prefix.slice(last, at).map(() => false) });
+      segments.push(segment);
+      rows += segment.token_count;
+      last = at;
+    }
+    segments.push({ kind: 'tokens', token_ids: prefix.slice(last), producing: prefix.slice(last).map(() => false) });
     return { ...meta, ...(extra.type ? { type: extra.type } : {}), producer: {
       source_text_sha256: hexDigest(text), native_source_capture: {
         policy: { checkpoint_sha256: artifact.metadata.checkpoint_sha256, tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
           embedding_weight_sha256: artifact.metadata.embedding_weight_sha256, architecture: artifact.metadata.architecture },
-        segments: [{ kind: 'tokens', token_ids: [...prefix, open], producing: [...prefix.map(() => false), false] },
-          { kind: 'tokens', token_ids: span, producing: span.map(() => true) },
+        segments: [...segments, { kind: 'tokens', token_ids: span, producing: span.map(() => true) },
           { kind: 'tokens', token_ids: [close], producing: [false] }],
-        payload_start: prefix.length + 1, payload_stop: prefix.length + 1 + span.length } } };
+        payload_start: prefix.length + rows, payload_stop: prefix.length + rows + span.length } } };
   };
 }

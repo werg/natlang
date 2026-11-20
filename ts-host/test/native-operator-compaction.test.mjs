@@ -154,3 +154,52 @@ test('learned compaction cuts and compacts values over its threshold whatever th
   const small = operatorSite({ operator: 'compact-value', value: 'line\n'.repeat(1000), purpose: 'p', context_tokens: 131072 });
   assert.equal(small.compacted, false);
 });
+
+test('an operator call imports its own soft prompt state where view\'s body stood, and its capture keeps the import', async () => {
+  const { systemPromptBank, SYSTEM_PROMPT_TYPE } = await import('../dist/native/system-prompts.js');
+  const { neuraleseRef } = await import('../dist/native/neuralese.js');
+  const SOFT = 'nzs1_' + 'b'.repeat(52), VIEW = 'nzs1_' + 'c'.repeat(52);
+  const captures = [], operatorCalls = [];
+  const capture = async call => {
+    captures.push({ prompt: call.prompt, promptSegments: call.promptSegments, reply: call.reply });
+    return { id: ID, dialect: 'native-state/test', type: 'Neuralese<string>', length: 3, width: 8,
+      producer: { native_source_capture: { segments: [], payload_start: 5, payload_stop: 8 } } };
+  };
+  const driver = Object.assign(async request => {
+    if (request.invocation_id?.includes('#operator-')) {
+      operatorCalls.push(request);
+      return { text: 'summary', completion_tokens: 2, raw_response: { x_natlang_rl_capture: { prompt: [
+        { kind: 'tokens', token_ids: [1, 61] }, { kind: 'native_state', id: SOFT }, { kind: 'tokens', token_ids: [60, 4] }],
+        generated_inputs: [{ token_id: 9, input_role: 'ordinary' }] } } };
+    }
+    return { calls: [['return_result', { status: 'success', value: 7 }]], completion_tokens: 1 };
+  }, { neuralese: true });
+  const bank = systemPromptBank({ 'view@compact-params': neuraleseRef(SYSTEM_PROMPT_TYPE, SOFT),
+    'view@compact-value': neuraleseRef(SYSTEM_PROMPT_TYPE, VIEW) });
+  const runtime = createNatlangRuntime({ calls: false, model: driver, neuralese: { store: new MemoryNeuraleseStore(),
+    dialect: 'native-state/test', capture, compaction: 'nl', systemPrompts: bank } });
+  const fn = loadVirtualNatlang({ 'run.nl': '---\nargs: {value: string}\nreturns: number\n---\nCount the lines of value.\n' }, 'run.nl');
+  await runtime.run(() => fn('line of data\n'.repeat(20000))).catch(() => undefined);
+  assert.equal(operatorCalls.length, 1);
+  const system = JSON.stringify(operatorCalls[0].messages[0]);
+  assert.ok(system.includes(SOFT) && !system.includes(VIEW) && !system.includes(VIEW_PROMPT.slice(0, 40)),
+    'compact-params imports its own state, not compact-value\'s, in place of the text');
+  assert.deepEqual(captures, [{ prompt: undefined, reply: [9], promptSegments: [{ kind: 'tokens', token_ids: [1, 61] },
+    { kind: 'native_state', id: SOFT }, { kind: 'tokens', token_ids: [60, 4] }] }]);
+});
+
+test('scoped prompt-bank entries soften only their own scope; prompt states from a build are checked against the piece text', async () => {
+  const { scopedBank, softenText, systemPromptBank, SYSTEM_PROMPT_TYPE } = await import('../dist/native/system-prompts.js');
+  const { promptStateIds } = await import('../dist/model/prompt-states.js');
+  const { neuraleseRef } = await import('../dist/native/neuralese.js');
+  const { hexDigest } = await import('../dist/native/hash.js');
+  const A = 'nzs1_' + 'd'.repeat(52);
+  const bank = systemPromptBank({ 'view@compact-value': neuraleseRef(SYSTEM_PROMPT_TYPE, A) });
+  assert.equal(softenText(VIEW_PROMPT, bank), VIEW_PROMPT, 'outside its scope the text stays');
+  assert.notEqual(softenText(VIEW_PROMPT, scopedBank(bank, 'compact-value')), VIEW_PROMPT);
+  assert.equal(softenText(VIEW_PROMPT, scopedBank(bank, 'compact-params')), VIEW_PROMPT);
+  const item = { binding: 'prompt:view@compact-value', kind: 'instructions', target: null, state: A, textSha256: hexDigest(VIEW_PROMPT) };
+  assert.deepEqual(promptStateIds([item, { ...item, binding: 'lambda:x' }]), { 'view@compact-value': A });
+  assert.throws(() => promptStateIds([{ ...item, textSha256: hexDigest('old text') }]), /system-prompt-stale/);
+  assert.throws(() => promptStateIds([{ ...item, binding: 'prompt:nope' }]), /system-prompt-unknown-piece/);
+});

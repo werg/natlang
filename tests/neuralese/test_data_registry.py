@@ -241,3 +241,28 @@ def test_named_file_dataset_directory_names_it(roots):
     reg = dr.load(repo=roots / 'repo', fresh=True)
     assert reg.find(d)['id'] == 'held'
     assert reg.find(d / 'runs' / 'r.jsonl') is None
+
+
+def test_glob_includes_claim_only_their_fixed_prefix(roots):
+    repo = roots / 'repo'
+    pool(repo / 'runs' / 'a-1' / 'cases.jsonl', ['a'])
+    pool(repo / 'runs' / 'b-1' / 'cases.jsonl', ['b'])
+    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': [
+        {'id': 'legacy', 'owner': 'dgx', 'path': 'runs', 'include': ['a-1/*']},
+        {'id': 'b', 'owner': 'dgx', 'path': 'runs/b-1', 'include': ['cases.jsonl']}]}))
+    reg = dr.load(repo=repo, fresh=True)
+    assert reg.find(repo / 'runs' / 'a-1' / 'cases.jsonl')['id'] == 'legacy'
+    assert reg.find(repo / 'runs' / 'b-1' / 'cases.jsonl')['id'] == 'b'
+    pool(repo / 'runs' / 'c-1' / 'x.jsonl', ['c'])
+    assert reg.find(repo / 'runs' / 'c-1' / 'x.jsonl') is None
+
+
+def test_leading_wildcard_include_claims_only_matching_entries(roots):
+    repo = roots / 'repo'
+    pool(repo / 'runs' / 'succ-v1' / 'x.jsonl', ['a'])
+    pool(repo / 'runs' / 'other' / 'cases.jsonl', ['b'])
+    (repo / dr.GIT_REGISTRY).write_text(json.dumps({'corpora': [
+        {'id': 'legacy', 'owner': 'dgx', 'path': 'runs', 'include': ['succ-v*/**']}]}))
+    reg = dr.load(repo=repo, fresh=True)
+    assert reg.find(repo / 'runs' / 'succ-v1' / 'x.jsonl')['id'] == 'legacy'
+    assert reg.find(repo / 'runs' / 'other' / 'cases.jsonl') is None

@@ -145,3 +145,14 @@ def test_held_priors_are_every_complete_result_but_the_measured_one(tmp_path):
         (directory / 'result.json').write_text(json.dumps({'complete': complete}))
     assert grpo.held_priors(base, held, held / 'step-00006') == [str(base / 'result.json'),
                                                                   str(held / 'step-00002/result.json')]
+
+
+def test_start_and_serve_checkpoint_claim_one_admissible_pop_budget(monkeypatch):
+    # 10.5 GB was refused beside Pop's gdm greeter (10.8 GiB free, 2026-11-20); both actor paths claim the same budget
+    import inspect
+    monkeypatch.delenv('NATLANG_POP_HELD_BUDGET_GB', raising=False)
+    assert float(pop_rl_actor.pop_sglang_budget_gb()) + pop_rl_actor.POP_RESERVE_GB <= 10.8
+    monkeypatch.setenv('NATLANG_POP_HELD_BUDGET_GB', '9.5')
+    assert pop_rl_actor.pop_sglang_budget_gb() == '9.5'
+    for path in (pop_rl_actor.start, pop_rl_actor.serve_checkpoint):
+        assert 'pop_sglang_budget_gb()' in inspect.getsource(path)

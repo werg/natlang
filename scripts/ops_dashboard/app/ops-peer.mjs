@@ -11,6 +11,8 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openSession } from './session.mjs';
+import { readFile, appendFile } from 'node:fs/promises';
+import { privateDirectory } from './local.mjs';
 import { startPairingWindow } from './pairing-native.mjs';
 import { TOPICS, encodeReply, validId, editRef, MAX_REPLY_CHUNKS, REPLY_TTL_MS } from './ops-protocol.mjs';
 
@@ -48,26 +50,50 @@ function dataService({ signal }) {
   });
 }
 
+/** Send one signal, waiting out transport backpressure: a relay route stays busy while its previous frame is in flight,
+ * and Chronolog refuses (SIGNAL_BACKPRESSURE) rather than queueing, so consecutive reply chunks are paced here. */
+async function sendPaced(session, topic, payload, opts) {
+  for (let k = 0, wait = 25; ; k++, wait = Math.min(wait * 2, 1000)) {
+    try { return await session.signals.send(topic, payload, opts); }
+    catch (e) { if (e.code !== 'SIGNAL_BACKPRESSURE' && !/BACKPRESSURE/.test(e.message) || k >= 40) throw e; await new Promise(r => setTimeout(r, wait)); }
+  }
+}
+
 async function serveQueries(session, rpc, signal) {
   const inflight = { n: 0 };
   for await (const sig of session.signals.subscribe({ topics: [TOPICS.query], mode: 'all', signal })) {
     const { id, q, input } = sig.payload || {};
     if (!validId(id) || typeof q !== 'string' || q.length > 64) continue;
     if (q.startsWith('edits.') || q.startsWith('inbox.')) continue;          // native-only operations
-    if (inflight.n >= 6) { void session.signals.send(TOPICS.reply, { id, error: 'The data service is busy; retry in a moment.', code: 'busy' }, { ttlMs: REPLY_TTL_MS }); continue; }
+    if (inflight.n >= 6) { void sendPaced(session, TOPICS.reply, { id, error: 'The data service is busy; retry in a moment.', code: 'busy' }, { ttlMs: REPLY_TTL_MS }).catch(() => {}); continue; }
     inflight.n++;
     (async () => {
       const t0 = Date.now();
       try {
         const parts = await encodeReply(await rpc(q, input ?? null));
         if (parts.length > MAX_REPLY_CHUNKS) throw Object.assign(Error(`Answer too large (${parts.length} chunks); ask for a smaller page.`), { code: 'too_large' });
-        for (let i = 0; i < parts.length; i++) await session.signals.send(TOPICS.reply, { id, i, n: parts.length, z: parts[i] }, { ttlMs: REPLY_TTL_MS });
+        for (let i = 0; i < parts.length; i++) await sendPaced(session, TOPICS.reply, { id, i, n: parts.length, z: parts[i] }, { ttlMs: REPLY_TTL_MS });
         log({ query: q, ms: Date.now() - t0, chunks: parts.length, from: sig.authorId?.slice(0, 12) });
       } catch (e) {
         log({ query: q, error: e.message });
-        await session.signals.send(TOPICS.reply, { id, error: e.message.slice(0, 2000), code: e.code || 'error' }, { ttlMs: REPLY_TTL_MS }).catch(() => {});
+        await sendPaced(session, TOPICS.reply, { id, error: e.message.slice(0, 2000), code: e.code || 'error' }, { ttlMs: REPLY_TTL_MS }).catch(() => {});
       } finally { inflight.n--; }
     })();
+  }
+}
+
+// The build of the page as last built for publication: ticks announce it so pinned tabs move to the selected release.
+const PAGE_DIR = process.env.NATLANG_OPS_BUILD ? pathToFileURL(process.env.NATLANG_OPS_BUILD.replace(/\/?$/, '/')) : new URL('../page/', privateDirectory);
+async function pageBuild() { try { return JSON.parse(await readFile(new URL('build.json', PAGE_DIR), 'utf8')).build; } catch { return null; } }
+
+/** Page telemetry: each connected page reports what it sent, received and drew (`ops/t`); logged here and kept in
+ * <dashboard>/page-telemetry.jsonl for the operators. */
+async function serveTelemetry(session, rpc, signal) {
+  const file = (await rpc('ops.paths', null).catch(() => null))?.telemetry;
+  for await (const sig of session.signals.subscribe({ topics: [TOPICS.telemetry], mode: 'all', signal })) {
+    const rec = { t: new Date().toISOString(), from: sig.authorId?.slice(0, 12), ...(sig.payload || {}) };
+    log({ page: { from: rec.from, seq: rec.seq, version: rec.version, build: rec.build?.build, visible: rec.visible, counts: rec.counts, events: (rec.events || []).slice(0, 12) } });
+    if (file) await appendFile(file, JSON.stringify(rec) + '\n').catch(() => {});
   }
 }
 
@@ -75,7 +101,7 @@ async function ticks(session, rpc, signal) {
   let last = null;          // log a tick failure when it changes (no reader connected is the normal idle state)
   while (!signal.aborted) {
     let err = null;
-    try { await session.signals.send(TOPICS.tick, await rpc('ops.tick', null, 15000), { ttlMs: REPLY_TTL_MS }); }
+    try { await sendPaced(session, TOPICS.tick, { ...await rpc('ops.tick', null, 15000), page_build: await pageBuild() }, { ttlMs: REPLY_TTL_MS }); }
     catch (e) { err = e.code || e.message; }
     if (err !== last) { log({ tick: err || 'delivered' }); last = err; }
     await new Promise(r => setTimeout(r, 10000));
@@ -123,7 +149,7 @@ export async function runOpsPeer({ signal }) {
       await new Promise(r => setTimeout(r, 1000));
     }
   })();
-  const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
+  const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal), serveTelemetry(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
   let busy = false, again = false;
   const kick = async () => {
     if (busy) { again = true; return; }

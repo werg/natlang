@@ -43,7 +43,8 @@ type Exported = { exports?: { gguf?: { baseGgufSha256?: string } } };
 export async function llamaServesRelease(manifest: { artifacts: readonly Exported[]; families?: readonly Exported[];
   softStates: readonly unknown[] }, choice: ResolvedModelChoice,
   environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  if (choice.kind !== 'managed-local' || !manifest.artifacts.length) return false;
+  // A fit of soft states alone (every rank 0, CSPD's frozen backbone) has no adapter to export: its states are the release.
+  if (choice.kind !== 'managed-local' || (!manifest.artifacts.length && !manifest.softStates.length)) return false;
   environment = profileEnvironment(choice, environment);
   let base: string;
   try { base = await managedModelSha256(environment, choice.release); } catch { return false; }
@@ -79,7 +80,8 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
     base = await managedModelSha256(environment, choice.release);
     const exported = manifest.artifacts.filter(item => item.exports?.gguf);
     const families = manifest.families.map(family => manifest.artifacts.find(item => item.artifact === family.artifact)).filter(Boolean);
-    if (!exported.length && !families.length) incompatible = 'this release has no llama.cpp export; rerun natlang tune for the managed backend';
+    if (!exported.length && !families.length && (manifest.artifacts.length || !manifest.softStates.length))
+      incompatible = 'this release has no llama.cpp export; rerun natlang tune for the managed backend';
     else if (exported.some(item => item.exports!.gguf!.baseGgufSha256 !== base))
       incompatible = 'the tuned adapters were exported for another base model file; rerun natlang tune';
     else for (const item of exported) {

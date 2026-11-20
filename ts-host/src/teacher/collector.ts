@@ -11,6 +11,7 @@ import { checkHintedTechnique, hintedTechnique, techniqueAccepted } from './requ
 import { observeGreenhouseControl } from './greenhouse-control.js';
 export { trajectoryTurn } from '../runtime/trajectory.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
+import { loadPromptStates, promptStatesDirectory } from '../model/prompt-states.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { acquireJournalSpool, type JournalSpool } from './journal-spool.js';
@@ -997,6 +998,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       await nativeStateRuntimeOptions({ endpoint: config.endpoint!, store: nativeStore,
         headers: config.apiKeyEnv ? { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } : undefined,
         info: nativeInfo! as import('../model/neuralese-info.js').NeuraleseServerInfo }, { write: 'available' }) : undefined;
+    // Trained soft forms of the runtime's prompt pieces, the learned operators' own states among them
+    // (NATLANG_NEURALESE_PROMPT_STATES: a tune build directory; model/prompt-states.ts).
+    const promptStates = nativeValueRuntime ? promptStatesDirectory() : undefined;
+    if (promptStates) Object.assign(nativeValueRuntime!, { systemPrompts: await loadPromptStates(promptStates, nativeStore!) });
     const teacherTextTransport = config.textNeuraleseEmulation ? createTeacherTextNeuralese() : undefined;
     const valueRuntime = teacherTextTransport?.runtime ?? (nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : undefined);
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,

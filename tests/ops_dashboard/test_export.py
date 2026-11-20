@@ -234,3 +234,24 @@ def test_queue_from_annotations_and_bench_queue(tmp_path):
     q = export.build_queue(ann, {'dgx': {'waiting': [{'unit': 'hunt-z.service', 'budget_gb': 30}], 'headroom_gb': 5}}, str(tmp_path), set())
     assert [(i['title'], i['source']) for i in q] == [('hunt-z.service', 'ledger-waiting'), ('B', 'annotations')]
     assert os.path.isdir(tmp_path)
+
+
+def test_run_without_finished_step_is_listed_while_fresh(tmp_path):
+    path = tmp_path / 'train.jsonl'
+    write_lines(path, [{'event': 'start'}, {'event': 'learner progress', 'step': 1}])
+    st = {}
+    steps, mtime = export.tail_run(st, str(path))
+    assert steps == [] and st['phase'] == {'event': 'learner progress', 'step': 1}
+    state = {'runs': {'grpo-v9.run1': {**st, 'mtime': mtime}, 'grpo-v1.old': {'mtime': mtime - 7 * 3600}}}
+    rows = export.runs_summary(state, set(), mtime + 60)
+    assert [r['id'] for r in rows] == ['grpo-v9.run1'] and rows[0]['steps'] == 0 and rows[0]['kind'] == 'grpo'
+
+
+def test_active_teacher_pool_is_the_newest_campaign(tmp_path, monkeypatch):
+    for name, t in (('teacher-gen-1/a', 100), ('teacher-gen-2/b', 200)):
+        p = tmp_path / 'ops' / name / 'manifest.jsonl'
+        p.parent.mkdir(parents=True)
+        p.write_text('{}\n')
+        os.utime(p, (t, t))
+    monkeypatch.setattr(export, 'DATA', str(tmp_path))
+    assert export.active_teacher_pool().endswith('teacher-gen-2/b')

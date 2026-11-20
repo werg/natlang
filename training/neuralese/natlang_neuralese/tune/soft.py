@@ -14,6 +14,7 @@ serving engine's `_native_consume` does.
 """
 from __future__ import annotations
 
+import collections
 import copy
 import hashlib
 import json
@@ -41,30 +42,31 @@ def _parts(text, needle, state_id):
             *([{'type': 'text', 'text': after}] if after else [])]
 
 
-def place_states(turn, states):
+def place_states(turn, states, state_texts=None):
     """Messages with soft-state parts in place of their exact texts, and the placed keys in order.
 
-    ``states`` maps soft keys of this turn's binding to state IDs. The instruction text must occur exactly once in the
-    string contents; a skill state replaces every tool result whose whole content is that document (each disclosure is
-    one consumption). A row whose instruction text is missing or ambiguous is rejected.
+    ``states`` maps soft keys of this turn's binding to state IDs. The instruction state stands where the instruction
+    text occurs exactly once in the string contents; a skill state replaces every tool result whose whole content is
+    that document (each disclosure is one consumption). ``state_texts`` (soft key -> the text a state was primed from):
+    a turn whose text differs keeps its text, as the runtime does (kernel.ts serves a binding's state only for the
+    exact text it was primed from, so an instruction that interpolates other values runs as text). A row without its
+    instruction text (a judge readout or operator call of the binding), or with it more than once, keeps its text too.
     """
     messages = copy.deepcopy(turn['messages'])
     texts = turn.get('texts') or {}
     placed = []
     instruction_key = soft_key(turn['binding'], 'instructions', None)
-    if instruction_key in states:
-        text = texts.get('instructions')
-        if not isinstance(text, str) or not text:
-            raise TuneMathError('a soft-instruction binding row carries no instruction text')
+    text = texts.get('instructions')
+    if (instruction_key in states and isinstance(text, str) and text
+            and (state_texts is None or state_texts.get(instruction_key) == text)):
         hits = [index for index, message in enumerate(messages)
                 if isinstance(message.get('content'), str) for _ in range(message['content'].count(text))]
-        if len(hits) != 1:
-            raise TuneMathError(f'instruction text occurs {len(hits)} times in the request; its soft state needs exactly one position')
-        messages[hits[0]]['content'] = _parts(messages[hits[0]]['content'], text, states[instruction_key])
-        placed.append(instruction_key)
+        if len(hits) == 1:
+            messages[hits[0]]['content'] = _parts(messages[hits[0]]['content'], text, states[instruction_key])
+            placed.append(instruction_key)
     for target, document in sorted((texts.get('skills') or {}).items()):
         key = soft_key(turn['binding'], 'skill', target)
-        if key not in states:
+        if key not in states or (state_texts is not None and state_texts.get(key) != document):
             continue
         for message in messages:
             if message.get('role') == 'tool' and message.get('content') == document:
@@ -73,42 +75,54 @@ def place_states(turn, states):
     return messages, placed
 
 
+def _wanted(turn, skills):
+    texts = turn.get('texts') or {}
+    wanted = []
+    if isinstance(texts.get('instructions'), str) and texts['instructions']:
+        wanted.append(('instructions', None, texts['instructions']))
+    if skills:
+        wanted.extend(('skill', target, text) for target, text in sorted((texts.get('skills') or {}).items())
+                      if isinstance(text, str) and text)
+    return wanted
+
+
 def initialize_soft_states(engine, turns, *, skills=True, owner=None):
     """One in-context-written state per (binding, instructions) and per disclosed (binding, skill target).
 
-    Deterministic: the initializing call is the first training turn (by occurrence) of that binding where the text has
-    its single position. Returns ``{key: record}`` with the state ID, text digest, token count and init receipt.
+    A binding whose rendered instruction text differs between calls (an inline lambda interpolating values) gets its
+    state for its most frequent exact text (ties: the smallest digest); its other calls keep their text, in training
+    (``place_states``) and serving alike. Deterministic: the initializing call is the first training turn (by
+    occurrence) of that binding where the chosen text has its single position. Returns ``{key: record}`` with the
+    state ID, text digest, token count, init receipt and how many training calls carry the chosen text.
     """
-    records = {}
     ordered = sorted(turns, key=lambda turn: (turn['binding'] or '', turn['root'], turn.get('call') or '', turn['turn']))
+    ordered = [turn for turn in ordered if turn.get('partition') == 'train' and turn.get('binding')]
+    frequency = collections.Counter()
     for turn in ordered:
-        if turn.get('partition') != 'train' or not turn.get('binding'):
-            continue
-        texts = turn.get('texts') or {}
-        wanted = []
-        if isinstance(texts.get('instructions'), str) and texts['instructions']:
-            wanted.append(('instructions', None, texts['instructions']))
-        if skills:
-            wanted.extend(('skill', target, text) for target, text in sorted((texts.get('skills') or {}).items())
-                          if isinstance(text, str) and text)
-        for kind, target, text in wanted:
+        for kind, target, text in _wanted(turn, skills):
+            frequency[(soft_key(turn['binding'], kind, target), text)] += 1
+    chosen = {}
+    for (key, text), count in frequency.items():
+        best = chosen.get(key)
+        if best is None or (count, -int(text_sha256(text), 16)) > (best[1], -int(text_sha256(best[0]), 16)):
+            chosen[key] = (text, count)
+    records = {}
+    for turn in ordered:
+        for kind, target, text in _wanted(turn, skills):
             key = soft_key(turn['binding'], kind, target)
-            if key in records:
-                if records[key]['textSha256'] != text_sha256(text):
-                    raise TuneMathError(f'binding {turn["binding"]} carries two different {kind} texts; one state needs one text')
+            if key in records or chosen[key][0] != text:
                 continue
             placeholder = engine.native_write_text(text)['id']
-            try:
-                messages, placed = place_states(turn, {key: placeholder})
-            except TuneMathError:
-                continue
+            messages, placed = place_states(turn, {key: placeholder})
             if key not in placed:
-                continue  # a skill not disclosed in this turn initializes from a later one
+                continue  # not at a single position in this turn (or a skill not disclosed here): a later turn
             written = engine.native_init_body(messages, turn['tools'], placeholder, text,
                                               placeholder_occurrence=0 if placed.count(key) > 1 else None)
             block = engine.store.get_native_state(written['id']).block
             records[key] = {'binding': turn['binding'], 'kind': kind, 'target': target, 'state': written['id'],
                             'textSha256': text_sha256(text), 'tokens': len(block.token_ids),
+                            'calls': chosen[key][1],
+                            'variants': sum(1 for (other, _) in frequency if other == key),
                             'init': {'schema': SOFT_SCHEMA, 'writer': 'native_init_body', 'actor': dict(engine.native_identity),
                                      'tokenizer_fingerprint': engine.model_config['tokenizer_fingerprint'],
                                      'context_occurrence': f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}",

@@ -307,6 +307,7 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/native-states/capture":
                     body = self._object()
                     return self._json(201, engine.native_capture(body.get("prompt_token_ids"), body.get("reply_token_ids"),
+                                                                 prompt_segments=body.get("prompt_segments"),
                                                                  select=body.get("select"), value_type=body.get("type"), adapters=body.get('adapters')))
                 if self.path == "/v1/neuralese/native-states/init-body":
                     body = self._object()

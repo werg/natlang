@@ -944,15 +944,60 @@ class Engine:
         block.validate()
         return block, self.store.put_native_state(block, owner=owner)
 
-    def native_capture(self, prompt_token_ids, reply_token_ids, *, select=None, value_type=None, adapters=None):
+    def native_capture(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None,
+                       adapters=None):
         """The in-context capture of a sampled reply (an operator write, OPERATORS_RESTORE_20261117.md §3.1): the reply's
         content (after its reasoning, before its end of turn), or with ``select`` the tokens of that text inside the
-        reply (a ``compact_history`` note in its tool call), as a producer span in its own context."""
-        return self._native_run(lambda: self._native_capture_impl(prompt_token_ids, reply_token_ids, select=select,
+        reply (a ``compact_history`` note in its tool call), as a producer span in its own context.
+
+        ``prompt_segments`` (instead of ``prompt_token_ids``): the call's prompt as its RL capture recorded it, token
+        segments and the exact native states it imported between consume markers (a soft prompt state standing where
+        the operator's prompt text stood). The reply is captured in that same context."""
+        return self._native_run(lambda: self._native_capture_impl(prompt_token_ids, reply_token_ids,
+                                                                  prompt_segments=prompt_segments, select=select,
                                                                   value_type=value_type), adapters)
 
-    def capture_plan(self, prompt_token_ids, reply_token_ids, select=None):
-        """(prefix ids through produce_open, span ids) of a reply captured in place; RequestError when it has no content."""
+    def capture_prompt(self, prompt_token_ids, prompt_segments):
+        """(token ids, imports [(position, state id)]) of a capture's prompt: imported states occupy no token ids here;
+        each sits right after a consume_open and before a consume_close token."""
+        if prompt_segments is None:
+            return prompt_token_ids, []
+        if prompt_token_ids is not None or not isinstance(prompt_segments, list):
+            raise RequestError("neuralese-native-capture", "give the prompt as token ids or as segments, not both")
+        ids, imports = [], []
+        for segment in prompt_segments:
+            kind = segment.get("kind") if isinstance(segment, dict) else None
+            if kind == "tokens":
+                tokens = segment.get("token_ids")
+                if not isinstance(tokens, list) or not all(type(t) is int and t >= 0 for t in tokens):
+                    raise RequestError("neuralese-native-capture", "a token segment needs token ids")
+                ids.extend(tokens)
+            elif kind == "native_state" and isinstance(segment.get("id"), str):
+                if not ids or ids[-1] != self.role_tokens.consume_open:
+                    raise RequestError("neuralese-native-capture", "an imported state follows a consume_open token")
+                imports.append((len(ids), segment["id"]))
+            else:
+                raise RequestError("neuralese-native-capture", "prompt segments are tokens or native_state imports")
+        if any(at >= len(ids) or ids[at] != self.role_tokens.consume_close for at, _ in imports):
+            raise RequestError("neuralese-native-capture", "an imported state is followed by a consume_close token")
+        return ids, imports
+
+    def _capture_segments(self, prefix, imports, blocks):
+        """The capture prefix as source segments, the imported states interleaved where they stood."""
+        segments, last = [], 0
+        for (at, ident), block in zip(imports, blocks):
+            if at > last:
+                segments.append({"kind": "tokens", "token_ids": list(prefix[last:at]), "producing": [False] * (at - last)})
+            segments.append({"kind": "native_state", "id": ident, "token_count": len(block.token_ids),
+                             "native_identity": self._native_block_identity(block),
+                             **({"state_derivation": block.derivation} if block.derivation is not None else {})})
+            last = at
+        segments.append({"kind": "tokens", "token_ids": list(prefix[last:]), "producing": [False] * (len(prefix) - last)})
+        return segments
+
+    def capture_plan(self, prompt_token_ids, reply_token_ids, select=None, imports=()):
+        """(prefix ids through produce_open, span ids) of a reply captured in place; RequestError when it has no content.
+        ``imports`` (``capture_prompt``): the consume markers around those positions are the only markers allowed."""
         ids = [prompt_token_ids, reply_token_ids]
         if not all(isinstance(part, list) and all(type(t) is int and t >= 0 for t in part) for part in ids):
             raise RequestError("neuralese-native-capture", "capture needs the prompt and reply token ids")
@@ -969,39 +1014,70 @@ class Engine:
                 raise RequestError("neuralese-native-capture", "the reply ended inside its reasoning: no content to capture")
         span = reply[start:end]
         markers = set(self.role_tokens.ids)
-        if not span or markers.intersection(span) or markers.intersection(prompt_token_ids):
+        bounds = {position for at, _ in imports for position in (at - 1, at)}
+        if (not span or markers.intersection(span)
+                or any(token in markers for index, token in enumerate(prompt_token_ids) if index not in bounds)):
             raise RequestError("neuralese-native-capture", "the reply has no content to capture, or carries role markers")
         prefix = [*prompt_token_ids, *reply[:start], self.role_tokens.produce_open]
-        if len(prefix) + len(span) + 1 >= self.context:
+        if len(prefix) + len(span) + 1 + getattr(self, '_capture_import_tokens', 0) >= self.context:
             raise RequestError("context-length", "captured reply and its context exceed this model context")
         return prefix, span
 
-    def _capture_result(self, block, record, prefix, span, value_type):
+    def _capture_result(self, block, record, prefix, span, value_type, imports=(), blocks=()):
         text = self.tokenizer.decode(span, skip_special_tokens=False)
         meta = record.meta()
         if value_type is not None:
             meta["type"] = value_type
+        imported = sum(len(item.token_ids) for item in blocks)
         return {"id": record.id, "native_state": meta, "source_text": text,
                 "source_capture": {"policy": self._native_block_identity(block), "segments": [
-                    {"kind": "tokens", "token_ids": list(prefix), "producing": [False] * len(prefix)},
+                    *self._capture_segments(prefix, imports, blocks),
                     {"kind": "tokens", "token_ids": list(span), "producing": [True] * len(span)},
                     {"kind": "tokens", "token_ids": [self.role_tokens.produce_close], "producing": [False]}],
-                    "payload_start": len(prefix), "payload_stop": len(prefix) + len(span),
+                    "payload_start": len(prefix) + imported, "payload_stop": len(prefix) + imported + len(span),
                     "adapter_binding": block.adapter_binding},
                 "source_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()}
 
-    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, select=None, value_type=None):
+    def _capture_blocks(self, imports):
+        """The exact native states a capture's prompt imports (RequestError for unknown or foreign state)."""
+        blocks = []
+        for _, ident in imports:
+            record = self.store.get_native_state(ident)
+            if record is None:
+                raise RequestError("neuralese-unknown-native-state", f"{ident} is not in this server's store; PUT it first")
+            block = record.block
+            if block.derivation is not None:
+                from ..model.native_state_derivation import verify_state_derivation
+                verify_state_derivation(self.store, block)
+            if not self._native_exact(block):
+                raise RequestError("neuralese-native-capture", "a captured prompt imports only this model's exact native state")
+            blocks.append(block)
+        return blocks
+
+    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None):
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native captures require shared-state serving")
-        prefix, span = self.capture_plan(prompt_token_ids, reply_token_ids, select)
-        from ..model.shared_state import native_step
+        prompt, imports = self.capture_prompt(prompt_token_ids, prompt_segments)
+        blocks = self._capture_blocks(imports)
+        self._capture_import_tokens = sum(len(block.token_ids) for block in blocks)
+        prefix, span = self.capture_plan(prompt, reply_token_ids, select, imports)
+        from ..model.shared_state import native_step, splice_block
+        tensor = lambda ids: torch.tensor([ids], dtype=torch.long, device=self.device)
         with torch.inference_mode():
-            opened = native_step(self.shared_model, torch.tensor([prefix], dtype=torch.long, device=self.device))
-            capture = native_step(self.shared_model, torch.tensor([span], dtype=torch.long, device=self.device),
-                                  opened["cache"], producing=True)
+            cache, last = None, 0
+            for (at, _), block in zip(imports, blocks):
+                if at > last:
+                    cache = native_step(self.shared_model, tensor(prefix[last:at]), cache)["cache"]
+                cache = splice_block(self.shared_model, cache, block,
+                                     checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
+                                     tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
+                                     embedding_weight_sha256=self.embedding_weight_sha256)
+                last = at
+            opened = native_step(self.shared_model, tensor(prefix[last:]), cache)
+            capture = native_step(self.shared_model, tensor(span), opened["cache"], producing=True)
         text = self.tokenizer.decode(span, skip_special_tokens=False)
         block, record = self._native_store_capture(span, [capture], text=text)
-        return self._capture_result(block, record, prefix, span, value_type)
+        return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
