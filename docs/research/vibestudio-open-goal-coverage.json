@@ -45,6 +45,10 @@
       "capabilities": ["personal-live-browser-library", "personal-live-collection"],
       "skills": ["personal:about/collection/SKILL.md", "personal:extensions/browser-data/SKILL.md"]
     },
+    "personal-automation": {
+      "capabilities": ["workspace-automation-lifecycle", "workspace-live-automation-planning"],
+      "skills": ["base:skills/automations/SKILL.md"]
+    },
     "personal-history": {
       "capabilities": ["workspace-verified-memory", "workspace-live-provenance-history"],
       "skills": ["personal:skills/memory/SKILL.md", "base:skills/provenance-orientation/SKILL.md"]

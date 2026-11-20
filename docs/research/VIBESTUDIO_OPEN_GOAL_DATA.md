@@ -214,8 +214,8 @@ execution respectively.
 
 ### Workspace template cases
 
-The catalog declares 214 open goals across six workspace templates, with 165
-training goals and 49 source-separated holdouts. The same Base entry point
+The catalog declares 240 open goals across six workspace templates, with 187
+training goals and 53 source-separated holdouts. The same Base entry point
 receives the goal across these workspaces. It links the template's installed
 Natlang subtree and scopes the template services to the functions that use
 them. The workspace and the reference checks are selected by the harness.
@@ -223,7 +223,7 @@ them. The workspace and the reference checks are selected by the harness.
 | Workspace | Goals | Baseline capability and open-goal coverage |
 | --- | ---: | --- |
 | Examples | 47 | Public evidence and document recovery, ordered CDP changes and readback, declared suite verification, publishing readiness and receipt recovery, and native PDF text, layout and raster evidence |
-| Personal | 48 | Declared tests, Mission Control, browser-library-to-collection goals, and archived decisions. The shared program checks historical authority across immutable milestones, and verifies recovered browser references and linked panel state. |
+| Personal | 74 | Declared tests, Mission Control, browser-library-to-collection work, archived decisions, and coordination across authorized monitors. Exact readback checks recovered references, historical authority, and interrupted scheduling changes. |
 | System | 25 | `workspace-live-declared-test-suite`, `system-live-remote-deployment`, and `system-live-remote-commission` with hub discovery, readiness, authorization holds, boot continuity, and private terminal profiles. `workspace-headless-session-replay` and `workspace-live-transcript-cursor` with retained conversation discovery, cursor recovery, and durable scratch handoffs |
 | News | 12 | `news-live-ownership` with live cadence, reader decisions, paused schedules, and replanning after a concurrent poll change |
 | Spectrolite | 21 | `spectrolite-live-vault` and `spectrolite-live-revision-handoff` with multi-hop wiki links, actual renderer preview, and canonical document changes. Compound goals verify PDF evidence across pages before continuing to an authorized vault edit or hold |
