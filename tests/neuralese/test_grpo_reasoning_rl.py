@@ -412,3 +412,17 @@ def test_reasoning_rl_seed_differs_per_resume():
     c = grpo.ReasoningRL(args, 'http://sglang', CLOSE, [END], [], [100], a.collector, None, log=lambda r: None,
                          first_group=57)
     assert c.rng.random() != sampler().rng.random()
+
+
+def test_ready_searches_survive_a_stop_without_unserved_policies(tmp_path):
+    rrl = sampler()
+    rrl.ready = [{'version': v, 'samples': [np.array([v], np.int32)]} for v in (3, 4, 5)]
+    rrl.sd_ready = [{'task_id': 't', 'rows': []}]
+    path = tmp_path / 'reasoning-rl-ready.pkl'
+    rrl.save(path)
+    resumed = sampler()
+    assert resumed.restore(path, 4) == 3                      # versions 3 and 4 were served by the resumed state
+    assert [g['version'] for g in resumed.ready] == [3, 4] and resumed.sd_ready == [{'task_id': 't', 'rows': []}]
+    assert resumed.ready[0]['samples'][0].tolist() == [3]
+    rrl.save(None)                                            # persistence off: nothing written
+    assert sampler().restore(tmp_path / 'missing.pkl', 4) == 0

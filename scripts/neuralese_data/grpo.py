@@ -2523,6 +2523,25 @@ class ReasoningRL:
         return {'task_id': segment['task_id'], 'round': name, 'rows': rows, 'decisions': [], 'reward': 1.,
                 'quality': 1., 'role': 'sd', 'sd_source': 'rewrite'}
 
+    def save(self, path):
+        """The ready groups and carried chains to ``path`` (``sd_buffer_save``), so a stop does not discard up to
+        2 x --reasoning-rl-groups finished searches (grpo-v4-run2 stopped 14 times in 40 steps)."""
+        if path is None:
+            return
+        with self.lock:
+            ready, carried = list(self.ready), list(self.sd_ready)
+        sd_buffer_save(path, [{'version': g['version'], 'group': g} for g in ready]
+                       + [{'version': c.get('version', -1), 'carried': c} for c in carried])
+
+    def restore(self, path, step):
+        """The saved groups and chains sampled before ``step`` policy versions were reached (a policy the resumed
+        state never served is gone: its samples are not this run's); returns how many."""
+        items = sd_buffer_load(path, step + 1)   # actor versions 0..step are the resumed run's policies
+        with self.lock:
+            self.ready += [item['group'] for item in items if 'group' in item]
+            self.sd_ready += [item['carried'] for item in items if 'carried' in item]
+        return len(items)
+
     def take(self, step, count, max_staleness):
         """The step's groups: the oldest ready ones within ``max_staleness`` policy versions, at most ``count``; staler
         ones are dropped. Also the carried chains finished since (for the SD buffer). Returns (groups, dropped, chains)."""
@@ -3600,6 +3619,8 @@ def train(args):
     # the two run2 restarts of 2026-11-13); the learner finishes the step it is in.
     signal.signal(signal.SIGTERM, lambda *_: (stop.set(), collector.stop.set()))
     reasoning_rl = None
+    # finished reasoning-RL searches persist across a stop (ReasoningRL.save); NATLANG_RRL_READY_PERSIST=0 opts out
+    rrl_ready_path = work / 'reasoning-rl-ready.pkl' if os.environ.get('NATLANG_RRL_READY_PERSIST', '1') != '0' else None
     if reasoning_rl_on:
         if think_close is None:
             raise SystemExit('--reasoning-rl-weight needs the </think> id (see the log); --reasoning-rl-weight 0 opts out')
@@ -3613,6 +3634,10 @@ def train(args):
         markers = [i for i in (served.token_to_id(m) for m in ROLE_MARKERS) if i is not None]   # Neuralese role markers
         reasoning_rl = ReasoningRL(args, sglang_url, think_close, stop_ids, banned, markers, collector, teacher_demos,
                                    log=lambda r: log_line(log, r), first_group=first_group)
+        if args.resume and rrl_ready_path is not None:
+            restored = reasoning_rl.restore(rrl_ready_path, step)
+            if restored:
+                log_line(log, {'event': 'reasoning rl ready restored', 'items': restored})
         reasoning_rl.start(stop)
         log_line(log, {'event': 'reasoning rl', 'sources': reasoning_rl.sources, 'demo_tasks': len(reasoning_rl.demo_tasks),
                        'stop_ids': reasoning_rl.stops, 'banned': banned, 'markers': markers,
@@ -4550,6 +4575,8 @@ def train(args):
             teacher_demos.save()
         if args.sd_weight > 0:
             sd_buffer_save(sd_buffer_path, sd_buffer)
+        if reasoning_rl is not None:
+            reasoning_rl.save(rrl_ready_path)
         if save_native and held_due:
             sync.wait()                   # the actor now serves (and attests) this step's checkpoint
             held(step, args.held_samples)
