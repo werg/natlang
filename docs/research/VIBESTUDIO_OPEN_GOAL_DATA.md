@@ -117,9 +117,10 @@ done < docs/research/vibestudio-open-goal-pop-pins-luna.tsv
 Install the host dependencies with `pnpm install --frozen-lockfile` from
 `$RELEASE/host`. The detached checkout needs its own workspace dependency
 links. Set `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
-`VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_CHECKOUT` to
-`$RELEASE/natlang`. Set `LEDGER_CHECKOUT` to the checkout with the current
-memory ledger and choose a fresh `SMOKE_UNIT` for each attempt.
+`VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_RUNTIME_CHECKOUT`
+to `$RELEASE/natlang`. The last checkout supplies the release's vendored
+runtime. Set `LEDGER_CHECKOUT` to the checkout with the current memory
+ledger and choose a fresh `SMOKE_UNIT` for each attempt.
 
 Run one case at a time with the Natlang memory ledger. The collector starts
 and stops a managed workspace for the selected case and uses the configured
@@ -128,14 +129,14 @@ evaluation before starting a smoke. Run `scripts/memory_ledger.py status`
 and choose the host budget and reserve using that measurement.
 
 ```sh
-export VIBESTUDIO_TEMPLATE_CHECKOUTS NATLANG_REPO="$NATLANG_CHECKOUT"
+export VIBESTUDIO_TEMPLATE_CHECKOUTS NATLANG_REPO="$NATLANG_RUNTIME_CHECKOUT"
 cd "$VIBESTUDIO_CHECKOUT"
 pnpm --silent natlang:teacher --list > "$GOAL_CATALOG"
 python "$LEDGER_CHECKOUT/scripts/memory_ledger.py" run \
   --unit "$SMOKE_UNIT" --budget-gb "$SMOKE_BUDGET_GB" --host-max-gb "$SMOKE_BUDGET_GB" \
   --reserve-gb "$SMOKE_RESERVE_GB" --hold-budget --no-resumable --workdir "$VIBESTUDIO_CHECKOUT" \
   --env "VIBESTUDIO_TEMPLATE_CHECKOUTS=$VIBESTUDIO_TEMPLATE_CHECKOUTS" \
-  --env "NATLANG_REPO=$NATLANG_CHECKOUT" \
+  --env "NATLANG_REPO=$NATLANG_RUNTIME_CHECKOUT" \
   --env "VIBESTUDIO_MAX_CONCURRENT_BUILDS=1" \
   -- pnpm natlang:teacher --case open-goal-reconcile-workshop-update \
   --approve-codex-session --test-timeout-ms 600000 --out "$CAPTURE_DIRECTORY"
@@ -147,6 +148,9 @@ catalog from Pop. The manifest's bound validation, call, and readback artifacts
 use paths relative to the manifest. Use a machine with the Neuralese Python
 environment and point `CAPTURE_DIRECTORY` and `GOAL_CATALOG` at the transferred
 copies. Activate that Python environment before running the commands below.
+Set `NATLANG_CHECKOUT` on the assembly machine to a separate Natlang data
+checkout at `b41e062e9` or a descendant. This version provides capture directory
+import and checks the open-goal share in the learner's actual step schedule.
 The learner needs the tokenizer and chat template from the starting model.
 Only tokenizer assets are loaded for assembly. Use that machine's held-v3
 manifest for `HELD_MANIFEST`, with the referenced held-v2 exclusion available.
@@ -156,6 +160,7 @@ for this capture.
 
 ```sh
 cd "$NATLANG_CHECKOUT"
+export NATLANG_REPO="$NATLANG_CHECKOUT"
 python scripts/data_registry.py record --id "$SMOKE_DATASET_ID" \
   --path "$CAPTURE_DIRECTORY" --kind teacher-demos \
   --format 'natlang.live-teacher-task/1 with bound Vibestudio evidence'
@@ -513,6 +518,11 @@ The new News fixtures model article and schedule records. Binary asset
 recovery and worker package repair use the production semantic VCS engine in
 source replay. Their managed outcomes are tracked independently of source
 replay results.
+The 998-goal stage adds 28 mobile continuity goals, including six held
+goals. It exercises the production startup cache, retained build record
+parser, reconnect and trust handling, and mobile lease reconciliation
+through local fixture ports. Android hardware and real-server transport
+remain separate verification work.
 The 777-goal checkpoint had distinct texts after normalizing quoted literals
 and numbers. All 842 legacy assignment entries remained byte-identical.
 The 777-goal checkpoint had zero training ID or source-group overlaps with
@@ -565,3 +575,11 @@ The training selector SHA-256 is
 `a3ad8b55ed300d53345cfd76fdd42b678234a5ad88d7d35b5c9bdbd471afcfdc`.
 Seven selectors require an installed deployment package. The combined
 proof archive is registered as `vibestudio-open-goal-verified-release-777-20261121`.
+The follow-up verified all 31 previously failing references, including 16
+Adventure goals. The total is now 603 verified goals, including 153 held-out
+goals. The 450 training selectors are in `train-cases-450.txt` in the same
+Pop release directory. That file has SHA-256
+`b6b232cd3b31a35a63b8f8a7b7b85c3f7b1f77bc761ee61d6efdf96a0bf35b85`.
+The expanded proof archive is registered as
+`vibestudio-open-goal-verified-release-777-extended-20261121`.
+The managed follow-up peaked at 8.8 GiB on Tick.
