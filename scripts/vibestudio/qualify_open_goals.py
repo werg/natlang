@@ -12,8 +12,10 @@ from pathlib import Path
 from audit_open_goal_references import read_catalog
 
 
-def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms):
+def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None):
     group = f'{workspace}@{baseline}' if baseline else workspace
+    if batch is not None:
+        group = f'{group}-{batch:03d}'
     output = destination / group
     output.mkdir()
     results = output / 'results'
@@ -62,10 +64,14 @@ def main():
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--case', action='append', default=[])
     parser.add_argument('--model', default='openai-codex:gpt-6-luna')
+    parser.add_argument('--cases-per-instance', type=int, default=12,
+                        help='Recycle the managed workspace after this many cases (0 keeps one per workspace)')
     parser.add_argument('--test-timeout-ms', type=int)
     args = parser.parse_args()
     if args.test_timeout_ms is not None and args.test_timeout_ms <= 0:
         parser.error('--test-timeout-ms must be positive')
+    if args.cases_per_instance < 0:
+        parser.error('--cases-per-instance cannot be negative')
 
     source, catalog = read_catalog(args.catalog)
     chosen = {case: row for case, row in catalog.items()
@@ -85,10 +91,14 @@ def main():
     destination.mkdir(parents=True)
     (destination / 'catalog.jsonl').write_bytes(source)
     all_passed = True
+    host = args.host.resolve()
     for (workspace, baseline), cases in groups.items():
-        passed = qualify_group(args.host.resolve(), workspace, baseline, cases, args.model, destination,
-                               args.test_timeout_ms)
-        all_passed &= passed
+        size = args.cases_per_instance or len(cases)
+        for index, offset in enumerate(range(0, len(cases), size), start=1):
+            passed = qualify_group(host, workspace, baseline, cases[offset:offset + size],
+                                   args.model, destination, args.test_timeout_ms,
+                                   batch=index if len(cases) > size else None)
+            all_passed &= passed
     return 0 if all_passed else 1
 
 

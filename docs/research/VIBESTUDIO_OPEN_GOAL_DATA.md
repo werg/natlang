@@ -303,8 +303,11 @@ reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/image
 To verify a goal against the managed workspace, run its model-free oracle.
 Pass `--case` to select goals or `--family` to verify a family from the pinned
 catalog. The command groups cases by workspace and baseline, runs one owned
-instance at a time, saves each full reference trajectory, and stops the
-instance before moving to the next group.
+instance at a time, and saves each full reference trajectory. It stops and
+recreates the instance every 12 cases by default to bound the lifetime of
+renderers, compiler caches, and test state. Completed batches retain their
+evidence if a later batch fails. Set `--cases-per-instance` to change the
+limit. A value of zero uses one instance per workspace and baseline.
 
 ```sh
 python3 scripts/memory_ledger.py run \
