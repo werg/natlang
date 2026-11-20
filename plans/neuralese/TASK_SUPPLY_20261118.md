@@ -300,3 +300,29 @@ pins (c57e7be28 on). Round-9 tasks that had passed on the grpo-v3 pin failed the
 - **Repetition** (against all 13 earlier POOLS, 36,226 rows): 52 distinct programs (48.9 effective), 24 structures
   (17.1 effective), top structure 14%, top-10 instructions 26%; 0 program texts and 0 functional programs shared.
 - **Checks.** held-v3 verify 0/0, also with exposure; custody 0 related; closure passed.
+
+## 16. Round 21: `natlang-rl-task-supply-20261120` (74 rows)
+
+- **Brief** (`AUTHOR_BRIEF_ROUND21.md`): answer variety, after the coordinator noted that bAbI count tasks mostly
+  answered "one". The root return value must not be the answer of more than 25% of a batch's tasks, and sibling worlds
+  must not share it. Counts must span 0-5, and every label must be some world's answer. The generator asserts this and
+  the supervisor rechecks it before admission (`round21/answer_variety.py`). Rounds 18-20 already had varied answers
+  (22-24 distinct answers per 24-task batch), so the rule mostly guards future dataset seeds.
+- **Batches admitted:** w310 talk scheduling, w312 school bus roster, w313 housekeeping board, w314 board-game cafe,
+  w315 license seat audit.
+  - w309 (orchard spray schedule) was refused by the author model's content filter and replaced by w316.
+  - w308, w311 and w316 were still in progress at the build. They go into round 22 so this round lands before
+    grpo-v5-run1 pins.
+  - The authoring gate allows 5 concurrent units now (was 3), since sft-v5 leaves ~30 GB of ledger headroom.
+- **Blind solve.** Sonnet agreed on every task. 18 flagged tasks were held back:
+  - w310 7: whether the next slot is tried when the first has no room;
+  - w313 3: a destination value with a trailing slash;
+  - w314 3: an undefined argument;
+  - w312 2: an unchecked capacity, and a change to the current value.
+- **Held worlds** are registered as `natlang-rl-authored-{dev,confirmation}-20261120r21` (15 + 17 rows).
+- **Result: 74 rows in 5 families**, with 68 distinct answers (the top answer appears 4 times).
+- **Constructs:** folder reducers 84%, decide 46%, depth 3 43%, iterateOn 55%, typed Neuralese 39%, skills 15%.
+  64 of the 74 rows carry 2+ held constructs.
+- **Repetition** (against all 14 earlier POOLS, 36,340 rows): 37 programs (34.5 effective). No program text and no
+  functional program is shared with the pool.
+- **Checks.** held-v3 verify 0/0, also with exposure. Custody 0 related. Closure passed.

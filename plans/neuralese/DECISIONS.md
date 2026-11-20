@@ -4639,3 +4639,12 @@ independent investigations as reasoning RL's objective (no learner bug in scope;
 (plan and criteria in its DECISIONS entry) launched on pin f9664edfe (includes close_push 9072c42cc): SFT/RFT on 7,688
 verified teacher episodes + own successes from the base, then grpo-v5-run1. run2's last states (39, 40) and held
 checkpoints 26-40 stay on /mnt/external as the fallback that sft-v5's drive resumes on a failure verdict.
+
+## 2026-11-20: task supply round 21, `natlang-rl-task-supply-20261120` (74 rows) joins POOLS (task-supply agent)
+
+- **What it holds:** 74 train rows in 5 new families. Authoring now asserts answer variety: no return value answers
+  more than 25% of a batch, and sibling worlds have distinct answers. 68 of the 74 answers are distinct.
+- **Checks:** held-v3 verify 0/0, custody 0 related, closure passed. Held worlds are
+  `natlang-rl-authored-{dev,confirmation}-20261120r21`.
+- **Timing:** this round lands before grpo-v5-run1 pins. Three more batches go into round 22.
+- **Opt-out:** `--pool` without this source.

@@ -734441,6 +734441,26 @@
       "note": "Held confirmation packet of the bgkit knowledge-reasoning RL reader source natlang-rl-bgkit-kr-20261103 (165 verified cases across searchqa, haystack, narrative, memory and pubmed families; split confirmation). Upstream validation/eval splits or a unit carve-out; related units (clue, story, summary, chat episode, abstract) share a split. For development and confirmation of RL reader outcomes; never a training source."
     },
     {
+      "id": "natlang-rl-authored-dev-20261120r21",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-dev-20261120r21",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 15 verified cases in 15 worlds (split dev), registered 20261120r21. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
+      "id": "natlang-rl-authored-confirmation-20261120r21",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-authored-confirmation-20261120r21",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "cases.jsonl"
+      ],
+      "note": "Held confirmation rows of the authored (Haiku-written, qualified) RL task pool: 17 verified cases in 17 worlds (split confirmation), registered 20261120r21. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+    },
+    {
       "id": "natlang-rl-authored-dev-20261119r20",
       "owner": "dgx",
       "path": "runs/natlang-rl-authored-dev-20261119r20",
@@ -734823,6 +734843,23 @@
       "source_class": "immutable-RL-task-source",
       "split": "Train-only 121-row RL task source for grpo.py POOLS: authored round-15 rows (w259-w266, 8 new families incl. WikiSQL train-split table desk with SQL-executed answers); folder reducers 84%, decide 69%, call depth >= 3 62%, iterateOn 62%, typed Neuralese results 49%.",
       "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 10. Qualified on the grpo-v4 pin runtime a0981794b, novelty-gated, Sonnet blind-solved (196/196 admitted, none held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r15. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (16 w260/w265 rows whose root inputs equal a held sibling's, and 40 earlier custody rows, left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 259 --max-worker 266 --drop-related round15/custody-drop.json. Data on /mnt/external (runs/ entry is a symlink)."
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120",
+      "owner": "dgx",
+      "path": "runs/natlang-rl-task-supply-20261120",
+      "include": [
+        "cases.jsonl",
+        "selection.json",
+        "repetition.json",
+        "constructs.json",
+        "custody.json",
+        "protection-union.json",
+        "held-verify/*.json"
+      ],
+      "source_class": "immutable-RL-task-source",
+      "split": "Train-only 74-row RL task source for grpo.py POOLS: authored round-21 rows (w310, w312-w315), 5 new families with answer variety asserted per batch (68 distinct answers in 74 rows); folder reducers 84%, decide 46%, call depth >= 3 43%, iterateOn 55%, typed Neuralese results 39%.",
+      "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 16. Qualified on grpo-v4 pin runtime 43c6b8ccd, novelty-gated, Sonnet blind-solved (every flagged task held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261120r21. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related; LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 308 --max-worker 316 (via round18/final.sh). Data on /mnt/external (runs/ entry is a symlink)."
     },
     {
       "id": "natlang-rl-task-supply-20261119d",
