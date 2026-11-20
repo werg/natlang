@@ -451,14 +451,20 @@ verification pending.
 Google's evidence is registered as
 `vibestudio-open-goal-google-setup-reference-14-20261120`.
 
-The 551-goal staged catalog adds broader capability and skill provenance,
-durable task recovery, client diagnostics, and GitHub readiness. Thirteen
-selected model-free checks passed across Examples, Personal, Spectrolite,
-and System. The combined reference audit covers 377 goals, including 83
-held-out goals. All 842 legacy assignment entries remain byte-identical.
-The staged goals have 551 distinct texts after normalizing quoted literals
-and numbers. Their declared training IDs and source groups have zero overlap
-with the digest-checked held-v2 and held-v3 cases.
+The staged catalog also covers capability and skill provenance, durable task
+recovery, client diagnostics, GitHub readiness, workspace assembly, and
+scheduled automation recovery. Its 594 goals include 136 held-out cases.
+Their texts are distinct after normalizing quoted literals and numbers. All
+842 legacy assignment entries remain byte-identical. The 551-goal checkpoint
+has zero training ID or source-group overlaps with the digest-checked held-v2
+and held-v3 cases.
+
+Thirteen selected model-free checks passed across Examples, Personal,
+Spectrolite, and System. Both previously failing visual recovery checks passed
+after the runtime delivered committed state updates to headless panels and
+the test granted reload authority for the authorized renderer. The combined
+audit covers 384 goals, including 85 held-out goals. The research and
+research-to-edit families still lack verified held cases.
 Pop reproduced the pinned 317-goal catalog byte for byte from clean detached
 checkouts of the host and all eight templates. The source pins and catalog are
 under `/home/werg/vibestudio-worktrees/open-goal-release-317.rt37IS` on Pop.
@@ -471,3 +477,6 @@ Pop also reproduced that catalog from the live smoke pins in
 `/home/werg/vibestudio-worktrees/open-goal-live-luna-343.WsHCyK`. The
 Natlang CLI reported Codex sign-in on Pop. Its host was occupied by a
 separate model-serving job at the time of staging.
+The 462-goal release also reproduced byte for byte on Pop under
+`/home/werg/vibestudio-worktrees/open-goal-release-462.9AiHlQ`. Its catalog
+SHA-256 is `5811f79d83aea9db793c1e6825735b98a9ef5447a60fe2434a7b2d8c2464470f`.
