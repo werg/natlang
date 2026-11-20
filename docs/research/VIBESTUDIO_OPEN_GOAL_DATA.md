@@ -338,6 +338,10 @@ recreates the instance every 12 cases by default to bound the lifetime of
 renderers, compiler caches, and test state. Completed batches retain their
 evidence if a later batch fails. Set `--cases-per-instance` to change the
 limit. A value of zero uses one instance per workspace and baseline.
+On a continuation, pass `--reuse-references RESULT_DIR` for each previous
+result or evidence bundle to skip cases whose existing managed outcome
+matches the exact current goal. Omit the option when retesting a changed
+fixture or verifier.
 
 ```sh
 python3 scripts/memory_ledger.py run \
@@ -493,6 +497,11 @@ owned HTTP research, compound native eval handoffs, linked vault work,
 retained provider approvals, local incident drafts, build provenance,
 template migration, local execution width, retained dictation, Adventure
 journeys, and specialist handoffs.
+The subsequent 898-goal stage adds local visual presentation, deployed actor
+and extension interfaces, Personal onboarding and tour handoffs, extension
+planning dossiers, and private Tendril route review. The Tendril checks
+exercise the real matcher and SQLite-backed Tendril state through a modeled
+channel transport. The managed transport still needs verification.
 The 777-goal checkpoint had distinct texts after normalizing quoted literals
 and numbers. All 842 legacy assignment entries remained byte-identical.
 The 777-goal checkpoint had zero training ID or source-group overlaps with

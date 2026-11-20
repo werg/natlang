@@ -10,7 +10,7 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
-from audit_open_goal_references import read_catalog
+from audit_open_goal_references import audit, read_catalog
 
 
 def terminal_startup_failure(log):
@@ -59,9 +59,12 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
             raise ValueError(f'Expected one managed run in {results}, found {len(runs)}')
         run_id = runs[0].name
         for case in cases:
+            artifact_name = f'trajectory-{case}-full.json.gz'
+            archive = results / run_id / artifact_name
+            if archive.is_file() or (archive.parent / 'failure-evidence' / artifact_name).is_file():
+                continue
             status = invoke(['trajectory', run_id, case, '--full', '--json', '--out-dir', str(results)],
                             f'{case}.log')
-            archive = results / run_id / f'trajectory-{case}-full.json.gz'
             failures += bool(status) or not archive.is_file()
     except (subprocess.CalledProcessError, ValueError) as error:
         print(f'{group} {error}. Evidence is in {output}', file=sys.stderr, flush=True)
@@ -80,6 +83,9 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--case', action='append', default=[])
+    parser.add_argument('--reuse-references', action='append', type=Path, default=[],
+                        metavar='RESULT_DIR',
+                        help='Skip goals already backed by an accepted managed reference in this directory')
     parser.add_argument('--model', default='openai-codex:gpt-6-luna')
     parser.add_argument('--cases-per-instance', type=int, default=12,
                         help='Recycle the managed workspace after this many cases (0 keeps one per workspace)')
@@ -95,6 +101,12 @@ def main():
               if (not args.case or case in args.case) and (not args.family or row['family'] in args.family)}
     if not chosen or set(args.case) - chosen.keys() or set(args.family) - {row['family'] for row in chosen.values()}:
         parser.error('Every requested case and family must match the pinned catalog')
+    if args.reuse_references:
+        previous = audit(args.catalog, args.reuse_references, set(args.family))['proofs']
+        pending = {case: row for case, row in chosen.items() if case not in previous}
+        print(f'Reusing {len(chosen) - len(pending)} verified references, {len(pending)} goals pending', flush=True)
+        chosen = pending
+
     groups = defaultdict(list)
     for case, row in chosen.items():
         workspace, baseline = row['workspace'], row.get('workspaceBaseline', '')
