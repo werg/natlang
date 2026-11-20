@@ -4978,3 +4978,130 @@ vocabulary embeddings.
   documents across bindings (to be checked once the program-tuning revival has fits).
 - No held measurement of prefix-robust training (first principles: a cheap regularizer toward the condition serving
   actually has; the next program fit's development outcomes show any regression).
+
+## 2026-11-20 16:30, reasoning RL without the future agreement bias: token-level forward KL from the privileged twin (default; paper review, part a)
+
+**What the paper shows** (Strauss, Fowl & Razin, "Which Tokens, in What Order, and How Fast?", arXiv 2611.23397, read
+in full).
+- **Granularity.** Sequence-level OPD (REINFORCE on log pi/pi_T summed over the sequence) has a *future agreement
+  bias*. Lemma 1 / Prop. 1: its logit gradient equals token-level reverse KL toward a teacher tilted by
+  exp(-KL of the continuations after v). It therefore favours tokens after which student and teacher agree on the rest,
+  whatever the teacher thinks of the token itself, and it learns positions in reverse order.
+  - Theorem 1 (binary tree): one sequence-level step puts ~all mass on a teacher-improbable first token, and recovery
+    takes exp(Omega(L^2)) steps; token-level FKL/RKL/JS never lower the right token and solve it in O(L ln L).
+  - Qwen3-1.7B <- 8B on WildJailbreak: sequence-level OPD refuses nearly all benign requests (teacher 17.5%); token-level
+    objectives move both refusal rates toward the teacher. With thinking on, the student refuses after a think block
+    that concluded the request is safe, because the bias acts once the block closes.
+  - It explains "repetitive or overly short generations": ending early leaves nothing to disagree on.
+  - It can help (App. A): when a short, formulaic path is also correct (a calculator call: 7.2% for the teacher,
+    ~100% for the student, accuracy above the teacher). That gain is early-stopping-dependent, since the objective's
+    optimum is still the teacher.
+- **Divergence.** Prop. 2: token-level FKL's logit-gradient norm is 2 x TV (zero only at agreement). RKL and JS can have
+  vanishing gradients at TV close to 1, because each logit's gradient is weighted by the student's own probability.
+  - Theorem 2: FKL (and FKL + RKL mixed equally, unlike JS) raises a teacher-preferred, student-unlikely token in
+    O(ln 1/p0); RKL and JS need polynomially many steps.
+  - New APIs (Qwen2.5-1.5B <- 8B): RKL and JS fail to transfer what FKL and the mix transfer.
+  - MATH, already-competent student: RKL >= FKL, and the RKL advantage grows with the teacher-student capacity gap.
+  - Sequence-level OPD shares RKL's flatness (App. B).
+  - The paper used full-vocabulary divergences; a sampled-token RKL estimate gave similar results.
+
+**Our case.** Reasoning RL rewarded a sampled think block z by log pi(a_teacher | x, z) (plus later actions): a
+sequence-level reward on z. Hazard investigation 3 (12:00 above) found its push: "samples that go on past a decision
+point score lower on the teacher action's likelihood, so the term's own objective selects closing right after naming
+the action" (+4.7 +- 2.3 at weight 0.5; positive at every step measured). That is the future agreement bias exactly:
+once `</think>` follows the action's name, nothing is left to disagree on. Best-return selection (the carried `search`
+SD chains, `rewrite`'s accept-if-better) is the same selection, by rejection rather than by gradient.
+
+**Built (9744865da; default, `--reasoning-rl-objective sequence` opts out).**
+- **Objective `twin-fkl`.** At every position of each sampled think block, KL(twin(. | x', z<t) || policy(. | x, z<t)),
+  scaled by `--reasoning-rl-weight` (0.5 in grpo-v5-run1's flags).
+  - The twin is the policy itself with the teacher action in a training guidance turn. That turn is inserted after the
+    leading system turn, as `PrivilegedRendering` places one, with the header
+    "Verified reference for this call (training only):" (ts-host `GUIDANCE_TEXT_HEADER`). This is OPSD, the self-teacher
+    of the paper's code base. It is myopic: no term depends on what follows the token.
+  - FKL is the paper's well-behaved divergence, and the twin knows something the student does not (the action), the
+    "new knowledge" regime of Thm. 2. There is no capacity gap that would favour RKL.
+- **Actor side** (`ReasoningRL._twin`, `twin_distributions`).
+  - The twin prompt is prefilled once, then each sample is one SGLang input-logprob request: top-32 plus
+    `token_ids_logprob [</think>]`, so the close is always matched exactly.
+  - Requests run at temperature 0 with no nucleus: these are untruncated T=1 log-probabilities, as the r0 scores
+    already are.
+- **Learner side** (`twin_forward_kl`).
+  - The KL is exact on the partition {listed ids, rest}. The rest is one bucket: not renormalized (a renormalized
+    top-k teacher would sharpen the student) and not dropped.
+  - The student's log p(v) = z_v - z_y + log p(y) comes from the target's logit and the log-probability the loss
+    already computes (the `close_probability` trick). That is 33 dot products a row, chunk-checkpointed; no vocabulary
+    softmax and no n x V logits.
+  - The policy-gradient advantage on these rows is 0. The k2 KL to the reference and the teacher action's
+    cross-entropy (0.05) are unchanged.
+- **Walk.** One wave (`--reasoning-rl-wave` 2) per step, and every sample trains, including blocks cut by the cap (each
+  position is an on-policy prefix). The best return is still carried forward as history (context only).
+  - `--reasoning-rl-carry-sd` and `--reasoning-rl-rewrite-share` now default by objective: off and 0 under `twin-fkl`,
+    on and 0.3 under `sequence`. Both stay available explicitly.
+- **Telemetry.**
+  - `close_push.reasoning_rl_twin`: sum scale x (p_twin(close) - p_policy(close)) over the trained positions, the FKL's
+    exact first-order push on the close logit.
+  - `reasoning_rl.twin_fkl_mean`, `twin_tokens`, `twin_p_close_twin` / `twin_p_close_policy`, `twin_close_mean`,
+    `twin_missing`.
+  - The run's log line records `rewrite_share_effective` and `carry_sd_effective`.
+- **Live check** against grpo-v5-run1's actor (one 25-token block on a toy read-file prompt; scratchpad
+  `twin_smoke.py`).
+  - The parse is exact and the top-32 mass is >= 0.995 at every position.
+  - 8.6 s for one request under collection load, about 1.2 kB of JSON per token.
+  - Where the policy put p(`</think>`) 0.32 (after "...read the file first."), the twin put 0.08. The twin did not
+    want to close early there. This is one example, not a measurement.
+
+**JOLT+ twin (5bcd77466; jolt-plus/1 `student_kl`, default `forward`, `reverse` opts out).** The whole-graph learner's
+student OPSD term was the reverse KL KL(pi(.|s) || sg pi(.|s,c)). It is already token-level, but the divergence axis
+applies: the twin's value is what only the privileged context knows, which is exactly what RKL is slow to transfer.
+- Token terms (`jolt_terms`) and sampled-decision twins (`decision_policy_terms`) now use the forward KL for students.
+- Teacher attempts keep KL(pi(.|s,c) || sg pi(.|s)): it keeps guidance within the student's reach, mode-seeking by
+  design.
+- Test `test_student_twin_kl_is_forward_by_default_with_a_reverse_opt_out`; the reference gradient test follows the
+  declared direction. JOLT+ is off in grpo (`grpo.py` docstring line 9: "no privileged twin"), so this enters wherever
+  program tuning or native replay turns JOLT+ on.
+
+**Inventory (the mechanism: a reward or selection on a sampled block that depends on the block's future).**
+- `grpo.py` reasoning RL walk, rewrite and carried chains: changed (above).
+- GRPO's outcome term: sequence-level by nature, but it is the task objective itself, not a teacher-matching proxy.
+  There is no teacher whose per-token law it approximates, so the paper's comparison does not apply (`rollout_math`
+  group advantages).
+- JOLT+ whole-graph student twin (`rl/jolt.py`, `rl/decision_policy.py`, `rl/native_replay.py`): already token-level;
+  divergence changed (above).
+- `TeacherDemos` SD rows and replay corpora: cross-entropy on fixed teacher tokens (token-level, off-policy); no
+  sampled-block reward.
+- SD `own` successes: outcome-selected own episodes. That is reward-weighted regression on the true objective, as GRPO
+  is.
+- Program tuning (`tune/objective.py`): verified-success NLL plus native RL replay; its twin path is the JOLT+ change
+  above.
+- exp0_sft: no sampler (fixed chains). Held eval and probes do not train.
+
+**Tests** (ledger, CPU):
+- `test_grpo_reasoning_rl.py` (+7):
+  - the FKL equals the exact full-vocabulary KL with gradient p_S - p_T;
+  - the top-k form equals the coarse partition KL, vanishes at agreement and is never above the full KL;
+  - pads count for nothing;
+  - the close is always listed;
+  - twin turn placement;
+  - a twin-mode walk (one wave, every sample with twin arrays, unclosed samples trained, no carried chain, advantage 0,
+    weight carried);
+  - objective defaults and row alignment.
+- With `test_grpo_learner.py`: 69 passed. `test_rl_jolt.py` + `test_native_policy_prefix_sharing.py`: 35 passed.
+- `check-main --quick` passed for both commits.
+
+**Not checked.**
+- A learner step with twin rows on the GPU: the first resumed step's `reasoning_rl.twin_*` and `cuda_peak_by_phase_gb`
+  are that check. The extra memory is (n x 33) per chunk, negligible next to the policy pass.
+- The actor's added load: one extra prefill of the twin prompt per step (the history re-prefills after the inserted
+  turn) and one scored forward per sample. Watch `reasoning_rl.worker` `actor_s` and collection groups/h at the resume.
+
+**Expected, and the rule (declared before it runs).**
+- `close_push.reasoning_rl_twin` is around zero or negative where the hazard sat (the twin has no reason to stop after
+  naming the action). `close_push.reasoning_rl` drops to ~0 (no PG term on reasoning).
+- The probe hazard stops its reasoning-RL-driven rise.
+- If `close_push.reasoning_rl_twin` is positive for 3 consecutive steps while the probe hazard rises, the reasoning-RL
+  weight drops to 0.25 at the next resume. A held loss with the hazard sends the term to 0 (the sft-v5 rule, applied
+  to the new term).
+
+**Enters:** grpo-v5-run1's next resume on a pin >= 9744865da (with the resume list of the 17:00 review entry). The
+held scoring series is unchanged: this is training data and objective only.
