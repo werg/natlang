@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-inactive-weight-offload-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-inactive-weight-offload-20261007-v1",
+  "include": [
+    "*.json"
+  ],
+  "admission": "operational availability and restoration evidence only; no training or model qualification",
+  "notes": "Twelve inactive V16/V17/V18 weights freshly verified against immutable corpus manifest and canonical DGX bytes before unlinking only Pop aliases; about10.4GiB recovered. All diagnostic evidence/manifests retained. Active V19/V20/V21 unchanged."
+}

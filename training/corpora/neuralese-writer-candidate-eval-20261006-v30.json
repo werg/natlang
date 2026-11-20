@@ -1,0 +1,12 @@
+{
+  "id": "neuralese-writer-candidate-eval-20261006-v30",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-eval-20261006-v30",
+  "admission": "protected-conditional-heldout-diagnostic-not-training",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.pt",
+    "**/*.safetensors"
+  ]
+}

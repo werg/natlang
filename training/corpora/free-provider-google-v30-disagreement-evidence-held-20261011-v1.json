@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v30-disagreement-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-disagreement-candidates-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "112fullsource semanticdisagreements, responsebudget evidence andhoneststaticbytearchive supplement:7directV30filehashmatches4reference-onlyruntimefiles; notcompleteexecutionfreeze. No automatictruth/holds."
+}

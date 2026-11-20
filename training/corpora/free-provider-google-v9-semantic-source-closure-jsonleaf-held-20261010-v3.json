@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-google-v9-semantic-source-closure-jsonleaf-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v30-v9-semantic-source-closure",
+  "include": [
+    "closure-input-v3/*",
+    "closure-harness-only-v3-final/*"
+  ],
+  "source_class": "source-semantic-closure-quality-evidence",
+  "split": "evidence-only-inherited-train",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-closure-pending",
+  "notes": "64actualvisibleitem/state leaves;10sources exactroot/candidatesrawlineage. Taskcontractmetadata emptyselectedoutputexcluded.10/10harness-onlyclosed noerrors; fullS1pending noadmission."
+}

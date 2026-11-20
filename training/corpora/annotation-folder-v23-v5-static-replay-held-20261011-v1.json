@@ -1,0 +1,20 @@
+{
+  "id": "annotation-folder-v23-v5-static-replay-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v23-v5",
+  "include": [
+    "source-selection/**/*",
+    "static/**/*",
+    "postrun-review-v1/**/*",
+    "source-policy-pin-correction-v1.json",
+    "source-policy-pin-correction-v1.md",
+    "review.json",
+    "review.md"
+  ],
+  "split": "inherited-train-static-reference-evidence",
+  "source_class": "held-source-annotation-derived-static-reference",
+  "training_admission": false,
+  "admission": "held-static-reference-only-source-quality-clearance-pending",
+  "independent_new_worlds": 0,
+  "notes": "V23-v5 source selection and authored static replay snapshot: 640 inherited-train rows across 8 families, 80 static programs, 80/80 reference output matches, 640/640 exact child eval/return joins, 80/80 full-context visibility; execution component archive and postrun review included. The preparation command exited 1 on final source-component verification drift although archived expected selector bytes were verified; summary.json was absent and not reconstructed. Materializer accepted 0 rows because annotation source-quality clearance remains held. No provider calls, no teacher trajectory, no admission. Exact source quality/current hold policy correction and attribution-only selector diff are retained."
+}

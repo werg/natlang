@@ -1,0 +1,16 @@
+{
+  "id": "google-choice-confidence-v35-semantic-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-semantic-review-v1",
+  "include": [
+    "review.json",
+    "review.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-source-quality-review-only",
+  "source_class": "provider-label-semantic-review",
+  "training_admission": false,
+  "admission": "held-disagreement-review-no-automatic-source-holds-or-relabels-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Exact V35 source/case/label/master line binding for 117 paired disagreements. Two answerability candidates are identified for root review; disagreement is not source defect or training admission. All original outputs remain unchanged."
+}

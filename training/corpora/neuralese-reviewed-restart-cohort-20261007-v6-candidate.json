@@ -1,0 +1,18 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v6-candidate",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v6-candidate",
+  "admission": "held-decision-semantic-review;structural-candidate-not-training-admission",
+  "include": [
+    "*.json",
+    "*.jsonl",
+    "*.md",
+    "*.py",
+    "assembled/*.json",
+    "assembled/*.jsonl"
+  ],
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-20261007-v5"
+  ],
+  "notes": "V5preserved plus257native/crisppositive decisioncandidates;246addedbysharedproducerclosure,3248records. Equipmentserviceworld3held,106priorV27holds/2failedrecoveryactionsretained. ConversionblockersseparatefromnativeSFTsuitability;193/257haveedgegaps. Noqualification/traininglaunch/admission; broadactualdecisionreviewpending."
+}

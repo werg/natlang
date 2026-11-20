@@ -1,0 +1,22 @@
+{
+  "id": "luna-v43-static-reference-controller-20261011-v2",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/luna-v43-static-reference-controller-20261011-v2",
+  "include": [
+    "teacher-turns.jsonl",
+    "salvage-receipt.json"
+  ],
+  "split": "train",
+  "source_class": "authored-static-reference-controller-trajectories",
+  "training_admission": true,
+  "trace_admission": false,
+  "admission": "69 source-bound authored static controller trajectories; 1,224 exact-replay-approved training turns with complete visible inputs; reference actions only, no model-generated reasoning",
+  "derived_from": [
+    "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1"
+  ],
+  "training_admission_reason": "All 69 reference replays are admitted with zero failures; every one of the 1,224 turns preserves source-visible fields; shared source annotations with native child data remain on train, with no held/test group conflicts or JeFF/protected benchmark hits. 94 of 543 source annotations are new relative to the admitted 401 and 926 V43 child-target sets. The authored static controller is a distinct batched task and keeps complete trajectory context. teacher_reasoning_trained remains false.",
+  "review_status": "exact reference replay passed; renderer selection passed; source-group split closure passed against the active union, native 401 and exact-map 926",
+  "required_conversion": "render full, program-header, and whole-trajectory twins for both tokenizers",
+  "consumable_by_direct_stage": false,
+  "notes": "Receipt records immutable source hashes, 543 annotations total, 449 shared annotations with native 401 and 94 new annotations, 612 teacher-turn source groups (506 shared with native 401, none with exact-map 926 or the 4962 union), no duplicate row IDs, and exact context/source-lineage handling for generic repeated tool targets. This admits static reference SFT only, not provider trajectories, teacher reasoning, recurrence, or runtime qualification."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-inline-capture-diagnostics-v33-v34-20261007",
+  "owner": "pop",
+  "path": "runs/luna-inline-capture-diagnostics-v33-v34-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "unreviewed converter diagnostic only; excluded from training",
+  "notes": "Exactstudy-pinnedephemeral/tmpmaterialized/converted/pieces preservedcanonically forreproducibility. Defaultaccepted-parentfilter not per-actionqualityapproval; no native admission."
+}

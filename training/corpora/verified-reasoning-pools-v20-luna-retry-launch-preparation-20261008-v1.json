@@ -1,0 +1,17 @@
+{
+  "id": "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2/retry-review-v1",
+  "admission": "approved-retry-plan-source-frozen-runtime-and-static-reference-evidence-only; no teacher-quality-or-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1"
+  ],
+  "notes": "Immutable retry launch-preparation packet pins approved plan SHA 5af544e528260984fb51546cf9ddd476518e437383ab09e6270f2cddb5b5c223, V20 source SHA e7ce3fd2873182c587ab1d03077a6b0b62b1410b9837d94ebf708fa6ed1e3ca4, selected subset SHA 80458f68354026dceb97de7d5f7fd9ff82db8bda39888b8bff355a19f80af091 (physical JSONL indices [3, 4, 8, 10, 19, 20, 22] copied byte-for-byte), frozen runtime receipt SHA c51601fe870713f7fe13501fd6e22be1485309a5dad44c0de4f9f05a2ab1875d, and latest 23-case CPU reference proof SHA cf4be58de76a3cf121bf567ac1c14011f3a3954341948f7241154c557c3c0c2d (23 cases, 197 deterministic decisions, 0 provider calls). Frozen runtime files verified 1099/1099. Included root-artifact-review.json is the earlier review state in which launch was not yet authorized; later approved plan and active launch SHA are separately pinned. Preparation/provenance only: no provider-result, semantic/teacher-quality review, qualification, DPO, independent-world credit, or training admission.",
+  "include_manifest": true,
+  "include_prefixes": [
+    ".",
+    "runtime-build/dist",
+    "runtime-build/runtime",
+    "runtime-reference-proof-latest"
+  ]
+}

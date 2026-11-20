@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-dataset-coverage/1",
   "as_of": "2026-10-08",
-  "registry": "training/neuralese_corpora.json",
+  "registry": "training/corpora",
   "source_ledger": "training/neuralese_data_ledger.json",
   "source_dispositions": {
     "excluded": 241,

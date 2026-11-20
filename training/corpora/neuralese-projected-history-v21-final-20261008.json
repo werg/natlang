@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-projected-history-v21-final-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-projected-history-v21-final-20261008-plan-v1",
+  "admission": "held-diagnostic-evidence-only;not-training-data-or-qualification",
+  "include": [
+    "prepared-launch.json",
+    "launch.json",
+    "diagnostic/report.json",
+    "runtime/**/*"
+  ],
+  "notes": "Exact final paired weights registered separately in closedV21. Production read-interface controls compare gold-conditioned parallel crisp predictions to full/sketch projection; not autonomous generation. Frozen evaluator predates direct crisp parity reporting. Existing gates remain failed."
+}

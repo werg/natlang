@@ -1,0 +1,10 @@
+{
+  "id": "luna-v18-worker3-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v18-worker3-quality-review-20261006-v1",
+  "admission": "independent-audit-26-supported-finals-seven-missing-inline-not-semantic-negatives",
+  "include": [
+    "review.md",
+    "case-findings.json"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-luna-v32-runtimev8-queued-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev32-twentythree-runtimev8-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-dispatch-receipt-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "authored-semantic-iterate-generation-evidence",
+  "training_admission": false,
+  "admission": "held-root-review-or-explicit-exclusion",
+  "independent_new_worlds": 0,
+  "notes": "Immutable plan/queues for23disjointcaseentries, fiveworkers5/5/5/4/4, runtimev8 and source/proof/rootapprovalpinned. Mutablejournals/results excluded untilcloseout."
+}

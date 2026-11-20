@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v31-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v31-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "closed raw teacher observations; actual decision review pending",
+  "notes": "24 independently authored V10r2worlds12file12iterate12train12held.22exactgraderaccepted/two rejected7and15. Typed result-vs-capture confusion and capture/currentDraftnamecollision explain failures; fixed nextfrozenV32runtime. Final acceptance not blanket intermediate admission. Failed actions and scope/quiescence evidence retained, no cross-prompt DPO."
+}

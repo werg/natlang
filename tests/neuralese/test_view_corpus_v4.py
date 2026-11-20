@@ -78,7 +78,8 @@ def test_v4_preset_keeps_v3_caps():
 
 
 def test_registered_view_v4_supersedes_v3_and_pins_its_view_stage_records():
-    entries = {e["id"]: e for e in json.loads((ROOT / "training/neuralese_corpora.json").read_text())["corpora"]}
+    from natlang_neuralese.common import corpus_registry
+    entries = {e["id"]: e for e in corpus_registry.load(ROOT)["corpora"]}
     v4, v3 = entries["view-ask-20261010-v4"], entries["view-ask-20261010-v3"]
     # Native record recovery (2b9bba0e) does not qualify the recurrence
     # recipe, whose independent admission assertion remains below.

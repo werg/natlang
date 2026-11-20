@@ -1,0 +1,22 @@
+{
+  "id": "groq-short-decision-held-labels-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-groq-short-decisions-v1",
+  "include": [
+    "cases.jsonl",
+    "labels.jsonl",
+    "labels.jsonl.manifest.json",
+    "baseline-v1.json",
+    "launch-receipt-v1.json",
+    "closeout-v1.json"
+  ],
+  "split": null,
+  "source_class": "sampled-typed-decision-labels",
+  "admission": "held-pending-source-quality-review-and-current-IR-conversion",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [],
+  "license": "Inherited source licenses in cases.jsonl; generated teacher probability annotations",
+  "independent_new_worlds": 0,
+  "notes": "16 existing train noul cases (15 BoolQ,1 Civil Comments toxicity), chosen for short complete inputs under Groq free TPM. Gold excluded from teacher requests. Source groups and original per-row source/license retained. GPT-OSS120B label envelope matches shared decision scorer; baseline on this tiny selected cohort is not a representative evaluation. No full interpreter trajectory or recurrence qualification. Required conversion: current Natlang typed decision/inline-lambda IR adapter and explicit source/quality admission; do not silently admit numeric labels."
+}

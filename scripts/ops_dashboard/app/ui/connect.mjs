@@ -9,6 +9,7 @@ import { createApplicationBackend } from '@chronolog/peer-session/tendriller';
 import { createLiveView } from '../helpers/live-view.mjs';
 import { createBrowserPairing } from '../pairing-browser.mjs';
 import { createQueryClient, TOPICS } from '../ops-protocol.mjs';
+import { reloadOnOwnerReplaced } from './connection.mjs';
 
 /* global __OPS_BUILD__ */
 export const BUILD = typeof __OPS_BUILD__ === 'object' ? __OPS_BUILD__ : { build: 'dev', commit: '' };
@@ -91,7 +92,7 @@ export async function createConnection(ui) {
   const pairing = createBrowserPairing({ configuration, profileId, workerUrl: new URL('./pairing-worker.mjs', document.baseURI) });
   const show = status => ui.pairing(status);
   return {
-    configuration, onPublishedOrigin, retained: () => pairing.read(),
+    configuration, onPublishedOrigin, pairing, retained: () => pairing.read(),
     async request(newReview = false) { show(await pairing.request({ newReview, signal: AbortSignal.timeout(35000) })); },
     async refresh() { show(await pairing.refresh({ signal: AbortSignal.timeout(15000) })); },
     async connect() {
@@ -101,7 +102,7 @@ export async function createConnection(ui) {
         context: { viewId: sessionStorage.getItem('ops.view') || (() => { const v = crypto.randomUUID(); sessionStorage.setItem('ops.view', v); return v; })(),
           ...(identity?.documentPath ? { documentPath: identity.documentPath } : {}), ...(identity?.publication ? { publicationId: identity.publication } : {}) },
         // The browser's device owner moved (another tab took it over, or it restarted): reconnect by reloading, at most once a minute.
-        onOwnerReplaced() { const last = Number(sessionStorage.getItem('ops.reloaded') || 0); if (Date.now() - last > 60000) { sessionStorage.setItem('ops.reloaded', String(Date.now())); location.reload(); } else ui.status('The connection moved to another tab of this page. Reload to reconnect here.', 'warn'); },
+        onOwnerReplaced: reloadOnOwnerReplaced({ key: 'ops.reloaded', onSkipped() { ui.status('The connection moved to another tab of this page. Reload to reconnect here.', 'warn'); } }),
       });
       try { return await mount(attachment); } catch (e) { await attachment.detach().catch(() => {}); throw e; }
     },
@@ -109,8 +110,6 @@ export async function createConnection(ui) {
   async function mount(attachment) {
       const session = attachment.session;
       if (!window.tendril) throw Error('Open the published Tendriller page to install its runtime binding.');
-      window.tendril.application.install(createApplicationBackend({ id: session.applicationId, session }));
-      window.tendril.signals.install(session.signals);
       session.participation.onStatus(s => ui.status(`Session ${s.phase}${s.error ? ` (${s.error})` : ''}`, s.phase === 'connected' || s.phase === 'ready' ? 'ok' : 'warn'));
       const edits = cell(null), inbox = cell(null), pending = cell([]), ticks = cell(null);
       const mk = (query, target) => createLiveView(session, { query, input: null, onError: e => ui.status(`${query}: ${e.message}`, 'warn'),
@@ -118,6 +117,9 @@ export async function createConnection(ui) {
       const ev = mk('edits'), iv = mk('inbox');
       ev.subscribe(s => edits.set(s.value)); iv.subscribe(s => inbox.set(s.value));
       await ev.refresh(); await iv.refresh();
+      // The runtime binding installs once per page: only after the session is usable, so a failed attempt can retry.
+      window.tendril.application.install(createApplicationBackend({ id: session.applicationId, session }));
+      window.tendril.signals.install(session.signals);
       const tele = createTelemetry(session.signals);
       tele.event({ ev: 'connected', ms_since_load: Math.round(performance.now()), shared_worker: typeof SharedWorker === 'function', ua: navigator.userAgent.slice(0, 120) });
       const client = createQueryClient(session.signals, { onTick: t => { tele.count('tick'); ticks.set(t); }, onEvent: e => tele.event(e) });

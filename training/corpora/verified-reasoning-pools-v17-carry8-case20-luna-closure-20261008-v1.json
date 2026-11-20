@@ -1,0 +1,15 @@
+{
+  "id": "verified-reasoning-pools-v17-carry8-case20-luna-closure-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/**",
+    "verified-reasoning-pools-20261008-v17/generation-review-v1/luna/campaign-v1/slot-02/jobs/000020*",
+    "verified-reasoning-v17-carry8-case20-bbaa0847-source/frozen-runtime/frozen-runtime.json"
+  ],
+  "admission": "held-closed-teacher-generation-review-no-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-20261008-v17"
+  ],
+  "notes": "Closed nine-row V17 carry/case20 recovery campaign: six parent accepted and three rejected, no infrastructure failures in the recovery attempt. Includes original V17 case20 connection-refusal evidence. All outcomes remain held; no training, trace, DPO, or independent-world admission."
+}

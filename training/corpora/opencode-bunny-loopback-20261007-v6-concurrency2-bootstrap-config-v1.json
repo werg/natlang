@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-loopback-20261007-v6-concurrency2-bootstrap-config-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-loopback-20261007-v6-concurrency2",
+  "include": [
+    "bootstrap-config.json"
+  ],
+  "admission": "provider-adapter-configuration-evidence-not-training-examples",
+  "notes": "Immutable official SDK cap2/bootstrap IO-policy configuration only. Mutable live logs/lifecycle state intentionally excluded; no native provider JSON-schema claim or learned transport qualification."
+}

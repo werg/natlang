@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-semantic-iterate-v15-lineage-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v15-lineage-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
+  "notes": "Immutable V1–V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
+}

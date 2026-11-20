@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v17-root-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v17-root-review-20261008-v1",
+  "admission": "root-admission-and-independent-integrity-evidence-only",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Independent source quality and exact integrity decision for V17 native/R v5 and ordinary textv6. Authoritative override of preserved proposal holds only for bound SHA files."
+}

@@ -36,7 +36,7 @@ return { profileId,
       const authority = await peers.application();
       const verified = await verifyAuthorityBundle(authority, configuration.descriptor);
       if (!verified.grant(device.identity.publicKey)?.reader)
-        throw Object.assign(Error('This retained browser is not enrolled. Request browser access, review its exact proposal on the service origin, and keep the native peer running to commit it.'), { code: 'DEVICE_NOT_ENROLLED' });
+        throw Object.assign(Error('This browser is not enrolled yet. The page requests access and opens the one-tap approval on tendriller.dev; the ops participant commits it.'), { code: 'DEVICE_NOT_ENROLLED' });
       signal.throwIfAborted();
       session = await openBrowserApplication({ device, definition, authority,
         signals: { localEcho: true, delivery: 'neighbors', limits: { maxSubscriptions: 256, maxQueuedSignals: 2048, maxQueuedBytes: 16777216 } } });

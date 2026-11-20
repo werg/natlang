@@ -1,0 +1,21 @@
+{
+  "id": "google-choice-confidence-v33-closed-labels-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v33-source",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl",
+    "launch-plan-v1.json",
+    "root-source-launch-review-v1.json",
+    "root-launch-process-v1.json",
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-provider-label-generation-output",
+  "training_admission": false,
+  "admission": "held-provider-label-output-no-static-or-training-admission",
+  "notes": "Closed V33 exact labels and attempts, 512 prepared train cases/512 completed labels; source inputs are separately registered as google-v33-inputs-held. This output entry preserves label outputs only and does not claim oracle pass or training admission."
+}

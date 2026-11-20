@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v29-closed-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v29-source",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Closed512rows507typedvalid396annotationmatches111disagreements5malformed. ProviderTRECprompts predates sharedcriteria. Held, noadmission."
+}

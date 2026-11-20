@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v18-static-reference-v2-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v18-adapter-v2",
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "53 unchanged authored source programs and 399 original train items. Fresh replay accepts all 53 with complete capture visibility; 904 native turns held. No semantic truth or training admission inferred.",
+  "exclude_dirs": [
+    "__pycache__"
+  ]
+}

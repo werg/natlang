@@ -1,0 +1,14 @@
+{
+  "id": "semantic-lambda-refinement-tasks-20261006-v2",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-next-20261006-v2",
+  "include": [
+    "cases.jsonl",
+    "cases.jsonl.report.json"
+  ],
+  "admission": "prepared-verified-train-task-sources-not-generated-training-examples",
+  "derived_from": [
+    "semantic-lambda-refinement-tasks-20261006-v1"
+  ],
+  "notes": "Seed6161, ten cross-source family v3 shapes; seven source tasks verified and retained, three held/quarantined in cases.jsonl.report.json. Selection task contract explicitly requires top-level JSON array and read-back. Source-only preparation; no generated teacher outputs or training admission. Supersedes v1 for future collection; do not schedule both."
+}

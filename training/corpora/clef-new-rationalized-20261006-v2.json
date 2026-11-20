@@ -1,0 +1,20 @@
+{
+  "id": "clef-new-rationalized-20261006-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/clef-new-rationalized-20261006-v2",
+  "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1, root turns only); not teacher-sampled",
+  "include": [
+    "*.jsonl",
+    "*.log"
+  ],
+  "derived_from": [
+    "clef-new-rationalized-20261006-v1"
+  ],
+  "supersedes": "clef-new-rationalized-20261006-v1",
+  "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. 403/403 admitted, 2,619 decisions, 806 root rationales, 1,813 child turns without reasoning.",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "verified replay 403/403 cases",
+  "required_conversion": "render; exclude or move to test the programs containing JeFF reserved test texts (plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json, defect D3)",
+  "consumable_by_direct_stage": false
+}

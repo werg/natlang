@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-sched540-v42-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sched540-recovery-v42-runtimev13-v1",
+  "include": [
+    "root-repair-review-v1.json",
+    "reviewed-plan-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "SingleoriginaltrainSCHED540recoveryruntimeV13/medium/512requests. Priorpartialheld. Mayoverlap4freshworkers,max5total; noindependentworldcredit."
+}

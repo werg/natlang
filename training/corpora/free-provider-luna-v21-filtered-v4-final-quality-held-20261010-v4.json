@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v21-filtered-v4-final-quality-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-luna-pubmedqa-full-abstract-final-v4",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Corrected shared per-invocation visibility proof:35 source states in child requests,two exact same-invocation captures,37 covered;124 saved request turns. Preserve distinction between requests/captures/wire bytes."
+}

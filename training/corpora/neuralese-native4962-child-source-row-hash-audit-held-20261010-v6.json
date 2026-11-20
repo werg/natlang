@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-native4962-child-source-row-hash-audit-held-20261010-v6",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v6-child-row-hash-audit",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only",
+  "source_class": "native-source-hash-convention-correction",
+  "training_admission": false,
+  "admission": "held-runtime-invocation-trace-and-quality-review-required",
+  "notes": "V5childintegrityflagwaswronghashencodingcomparison.7/7childdeclaredsource_case_row_sha256 equalexactrawJSONLrowbytesexcludingLF(documentedproducercontract). Exactparentfile/ID/context/resultpinsverified17refs; no runtimeparent-childinvocationproof/admission."
+}

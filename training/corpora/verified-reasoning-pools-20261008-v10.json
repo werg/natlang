@@ -1,0 +1,21 @@
+{
+  "id": "verified-reasoning-pools-20261008-v10",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "verified-reasoning-pools-20261008-v10/root-generation-review.json",
+    "verified-reasoning-pools-20261008-v10/selection-review.json",
+    "verified-reasoning-pools-20261008-v10/selection.input.json",
+    "verified-reasoning-pools-20261008-v10/source-build/selection.json",
+    "verified-reasoning-pools-20261008-v10/source-build/source-manifest.json",
+    "verified-reasoning-pools-20261008-v10/source-build/source-proof.json",
+    "verified-reasoning-pools-20261008-v10/source-build/source.cases.jsonl",
+    "verified-reasoning-pools-20261008-v10/source-verification.json"
+  ],
+  "admission": "source-generation-reviewed; static-reference-only-no-teacher-or-training-admission",
+  "derived_from": [
+    "s1-full-final-20261003",
+    "verified-reasoning-pools-20261008-v9"
+  ],
+  "notes": "V10 source and frozen CPU reference packet: two token-rewrite task variants over eight existing S1 train records. Reference proof used zero model/provider calls and has no training admission."
+}

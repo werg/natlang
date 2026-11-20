@@ -1,0 +1,227 @@
+{
+  "id": "natlang-native-turns-campaign-uncovered-render-20261011-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/natlang-native-turns-campaign-uncovered-render-20261011-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered corpus natlang-native-turns-campaign-uncovered-render-20261011-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "natlang-native-turns-campaign-uncovered-render-20261011-v1",
+    "teacher-campaign-evidence-20261005"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 1445,
+            "supervised_tokens": 280581,
+            "tokens": 10498667,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 96217574,
+        "decoded_text_data_sha256": "379642670a4e1cd6e6166332d482e13f53f5b19ffad2c46d2ada1c351fdc285f",
+        "documents": 1445,
+        "max_document_tokens": 13619,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "36136114c02d1d1a673db2d4bcd857ced65a28cc4ec94b77dffc7685f2a877fd",
+        "exact_subset": {
+          "file": "exact-subset/full/lfm3/text-data.jsonl.zst",
+          "sha256": "36136114c02d1d1a673db2d4bcd857ced65a28cc4ec94b77dffc7685f2a877fd",
+          "documents": 1445,
+          "counts": {
+            "train": 1445
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 28359,
+            "supervised_tokens": 5646203,
+            "tokens": 93911410,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 837904564,
+        "decoded_text_data_sha256": "c0a2fe4d66a681b6c21de055f77afdf596892372c55158cd871402dcd87b3a39",
+        "documents": 28359,
+        "max_document_tokens": 11626,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "23c9175a227d7a550d85917da676f781575d30bbdd332891c772c1feda9d37e9",
+        "exact_subset": {
+          "file": "exact-subset/program-header/lfm3/text-data.jsonl.zst",
+          "sha256": "50e8410dc18757a428ecec13ae3c89fd9e6d2258ca25223f5c97998f53e73c66",
+          "documents": 28353,
+          "counts": {
+            "excluded_nonidentical": 6,
+            "train": 28353
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 18046794,
+            "documents": 21959,
+            "opening_tokens": 8778503,
+            "supervised_tokens": 9268283,
+            "tokens": 57747113,
+            "tool_tokens": 24846996
+          }
+        },
+        "decoded_text_data_bytes": 522845952,
+        "decoded_text_data_sha256": "fca1a9e38f55ec9dcd6cf6d1b250c601eb3b1f0828ce4d128b5293d401de1678",
+        "documents": 21959,
+        "max_document_tokens": 11324,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "8787f968afeaaf6039b76462fe30f64759f74a3ee634fd96449da6ede20f7e8e",
+        "exact_subset": {
+          "file": "exact-subset/whole-trajectory/lfm3/text-data.jsonl.zst",
+          "sha256": "d19b2f4b3c89a507081b0d5e864cadf32a7cec7956473f8df6e3278e431451bd",
+          "documents": 1255,
+          "counts": {
+            "excluded_nonidentical": 20704,
+            "train": 1255
+          }
+        }
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "natlang-native-turns-campaign-uncovered-render-20261011-v1",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 1445,
+        "reference_documents": 1445,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 28359,
+        "reference_documents": 28396,
+        "same_order": 0,
+        "only_reference": 43,
+        "only_student": 6
+      },
+      "whole-trajectory": {
+        "documents": 21959,
+        "reference_documents": 9259,
+        "same_order": 0,
+        "only_reference": 8004,
+        "only_student": 20704
+      }
+    },
+    "target_parse": {
+      "full:exact": 1445,
+      "program-header:exact": 28358
+    },
+    "exact_subset": {
+      "policy": "keep documents identical to the reference (id, split, source groups, source record ids); drop train documents sharing a source group with any held document of either render",
+      "resolved_problems": [
+        "whole-trajectory: split_or_group_changed 8004"
+      ],
+      "excluded": {
+        "full": 0,
+        "program-header": 6,
+        "whole-trajectory": 20704
+      }
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 28353,
+        "whole-trajectory": 1255
+      },
+      "detail": {
+        "program-header": {
+          "train": 28353,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-campaign-uncovered-render-20261011-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 28353,
+              "bytes": 17471947,
+              "sha256": "44cfb0a623bf718922e58a37b03c1724c03680ad8dcf765b8dba9e3604b21edd"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-campaign-uncovered-render-20261011-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 1255,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-campaign-uncovered-render-20261011-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 1255,
+              "bytes": 632562,
+              "sha256": "7ba8f822ed8d53e58b04b1e6a513ab1b7950886c9bb3a09810985a3e6244d876"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-campaign-uncovered-render-20261011-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

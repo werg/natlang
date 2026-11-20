@@ -1,0 +1,13 @@
+{
+  "id": "semantic-iterate-v35-v5-direct-return-derivation-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-direct-return-derivation-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Ten exact same-invocation model-authored plain return_result writers in8results bind to typed graph writer/ref/reader and provider expansion. Approval gates still false; computed host outputs and different invocation equal text excluded."
+}

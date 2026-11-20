@@ -1,0 +1,26 @@
+{
+  "id": "restored-searchowl-original-native-views-20261025-v1",
+  "include": [
+    "evidence/mellum-original-earned-owl-rows.json",
+    "evidence/original-source-private-receipt.json",
+    "lfm25/earned-binding-comparison.json",
+    "lfm25/recovery.json",
+    "lfm25/train/native-graphs.jsonl.zst",
+    "mellum21/earned-binding-comparison.json",
+    "mellum21/recovery.json",
+    "mellum21/train/native-graphs.jsonl.zst"
+  ],
+  "source_class": "semantic-equivalent-original-native-graph-recovery-views",
+  "training_admission": true,
+  "split": "Train-only;7027 original graphs in each tokenizer view, same protected source groups and exact saved semantic row bindings.",
+  "training_admission_reason": "All7027 original LFM and Mellum graph bindings match their verified full-state parents. Mellum full active/held row sets and row order also match. Both original compressed container hashes remain recorded alongside the distinct reconstructed hashes.",
+  "derived_from": [
+    "external-expansion-search-owl-overcap-static-sft-20261016"
+  ],
+  "notes": "Recovery representations of already admitted examples, not additional independent rows. Source targets are reviewed third-party static SFT, not oracle/native execution. No new learner visits or capability lift claimed.",
+  "owner": "dgx",
+  "path": "runs/restored-searchowl-original-native-views-20261025-v1",
+  "snapshot_manifest": "training/corpus-manifests/restored-searchowl-original-native-views-20261025-v1.json",
+  "admission": "Source recovery/eligibility only; no new training exposure. Every original graph quota remains authoritative.",
+  "license_provenance": "Inherited exact original reviewed source licenses and provenance; no license exclusions or new teacher generations."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-static-google-poolv3-quality-review-v17-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v17",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "not-training-data",
+  "source_class": "read-only-quality-review",
+  "training_admission": false,
+  "admission": "held; publication and successful reference execution do not grant admission",
+  "independent_new_worlds": 0,
+  "notes": "Full replay and source-group review; original immutable V17 license count is per reducer case, not source-label row; correction in separate source receipt."
+}

@@ -1,0 +1,50 @@
+{
+  "id": "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3",
+  "owner": "dgx",
+  "path": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3",
+  "include": [
+    "text-data.jsonl",
+    "row-stats.jsonl",
+    "omissions.jsonl",
+    "receipt.json"
+  ],
+  "split": "inherited unchanged from neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1 (3258 train / 1704 test; same ids, source_groups, order)",
+  "source_class": "derived-program-header-twin-of-admitted-native-text",
+  "admission": "admitted-post-warm-up-phase-of-the-direct-stage (owner decision 2026-10-11: drop the generic system prompt after a warm-up; program-specific content stays; plans/neuralese/NO_SYSTEM_PROMPT_RENDERING_DECOMPOSITION.md). Same documents as the admitted union; not additional independent examples.",
+  "training_admission": true,
+  "training_admission_reason": "derived twin of an admitted text set; consumption needs the no-system-prompt rendering mode declared for the serving model (plan in NO_SYSTEM_PROMPT_RENDERING_DECOMPOSITION.md) and a recipe phase after the full-prompt warm-up; model-facing rendering change unmeasured: debt in plans/MODEL_FACING_CHANGES.md",
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1"
+  ],
+  "build": {
+    "script": "scripts/neuralese_data/strip_generic_system_prompt.py",
+    "code_commit": "413ebbc9",
+    "tokenizer": "models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "container": "natlang-neuralese:26.09",
+    "receipt": "runs/neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v3/receipt.json",
+    "prompt_pieces": "training/prompt-pieces/pieces.json (current + historical bank, abcf8b66)"
+  },
+  "tokens": {
+    "source_tokens": 26471435,
+    "output_tokens": 5637751,
+    "source_system_tokens": 21454333,
+    "header_tokens": 620649,
+    "rows_with_program_header": 3233,
+    "rows_checked_by_retokenization": 4289,
+    "by_split": {
+      "train": {
+        "rows": 3258,
+        "source_tokens": 17414500,
+        "output_tokens": 3866435
+      },
+      "test": {
+        "rows": 1704,
+        "source_tokens": 9056935,
+        "output_tokens": 1771316
+      }
+    }
+  },
+  "notes": "Program header by the shared D9 boundary: ts-host renderSystemPrompt (Python port) over training/prompt-pieces/pieces.json = current promptPieces() plus the historical texts of every piece (Pop's bank, abcf8b66): generic pieces removed, nested program declarations and unmatched program addenda kept verbatim. Replaces the interim program-head paragraph filter of v1/v2. 4962 rows, 0 omitted.",
+  "supersedes": "neuralese-foundation-text-input-4962-program-header-lfm25-20261011-v2"
+}

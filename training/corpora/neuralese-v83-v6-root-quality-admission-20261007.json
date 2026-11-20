@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v83-v6-root-quality-admission-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-v83-v6-root-quality-admission-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-approved-exact-selection",
+  "notes": "Eleven exact successful source-reviewed native action IDs; dataset approval only, not model qualification or active V21 handoff."
+}

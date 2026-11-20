@@ -1,0 +1,15 @@
+{
+  "id": "neuralese-v26-lang850-failure-source-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v26-lang850-failure-source-review-20261008-v1",
+  "include": [
+    "README.md",
+    "review.json",
+    "manifest.json"
+  ],
+  "admission": "held-source-action-diagnostic-no-training-admission",
+  "notes": "Bounded LANG-850 failure diagnosis: pass-03 source-grounded notes remain correct; pass-04 typed note child returns decision JSON instead of its declared accumulated Neuralese<string>, dropping the evidence before final interpretation. Diagnostic only; no answer normalization/admission.",
+  "derived_from": [
+    "neuralese-semantic-iterate-reducers-v26-20261008-v1"
+  ]
+}

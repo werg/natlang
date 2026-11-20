@@ -1,0 +1,13 @@
+{
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v9",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v9",
+  "admission": "collection-provenance-not-training-examples",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-refill-task-source-20261006-v9"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v23-quality-closure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-gemini-choice-confidence-and-static-replay-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Provider quality audit and full-S1 source closure packet, pin clarification separate; no admission."
+}

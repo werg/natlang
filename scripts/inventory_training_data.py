@@ -95,8 +95,9 @@ def catalog(repo, config=None):
     # Registered neuralese snapshots are catalogued by their pinned manifests;
     # do not rehash/traverse tens of GB through an unrelated native-SFT builder.
     # Their admission and pending transformations remain explicit below.
-    corpus_registry_path = repo / 'training/neuralese_corpora.json'
-    corpus_registry = json.loads(corpus_registry_path.read_text()) if corpus_registry_path.exists() else {'corpora': []}
+    from natlang_neuralese.common import corpus_registry as _cr
+    corpus_registry_path = repo / _cr.ENTRIES
+    corpus_registry = _cr.load(repo)
     registered_corpora = []
     registered_roots = {repo / entry['path'] for entry in corpus_registry['corpora']}
     for entry in corpus_registry['corpora']:

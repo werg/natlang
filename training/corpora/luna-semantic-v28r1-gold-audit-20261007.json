@@ -1,0 +1,12 @@
+{
+  "id": "luna-semantic-v28r1-gold-audit-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v28-semantic-gold-audit-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "audit-only; 8 Findings source-confounded, affected worlds held; no training targets",
+  "derived_from": [
+    "luna-semantic-aggregate-source-v28r1-20261007"
+  ]
+}

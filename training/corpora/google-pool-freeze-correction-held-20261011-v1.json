@@ -1,0 +1,10 @@
+{
+  "id": "google-pool-freeze-correction-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-google-pool-freeze-correction-v1",
+  "split": "provenance-evidence-only",
+  "source_class": "held-runtime-provenance-correction",
+  "training_admission": false,
+  "admission": "evidence-not-training-examples",
+  "notes": "V31/V32 declared old runner hash differs from actual bundled2048runner. Label manifests correctly pin actual schedulerce64c6 and2048. Exact22historical bundle files preserved; oldsealed/active folders untouched. V2supersedes onlyV1 strictpycache rejection: caches are documented runtimeauxiliary excludedfromdeclaredsourceidentity. No originalwire/transitiveenvironmentclosure claim."
+}

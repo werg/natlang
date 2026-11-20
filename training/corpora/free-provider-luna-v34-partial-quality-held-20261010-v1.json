@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v34-partial-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-luna-v34-partial",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "quality-provenance-and-publication-audit",
+  "training_admission": false,
+  "admission": "held-review-evidence-only",
+  "notes": "28stablecompletedresults27exact/1measureformatdeviation;23actualiterateOn/5manualtraversal. All29selectedsourceIDs/8inheritedgroups/zeroindependentworlds. Currentpartialonly/norecurrenceorblanketadmission."
+}

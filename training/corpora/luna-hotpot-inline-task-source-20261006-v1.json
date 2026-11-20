@@ -1,0 +1,15 @@
+{
+  "id": "luna-hotpot-inline-task-source-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-knowledge-source-20261006-v1",
+  "include": [
+    "cases.jsonl",
+    "cases.jsonl.report.json",
+    "reviewed.cases.jsonl",
+    "audit/source-quality-review-v1.json"
+  ],
+  "admission": "prepared-verified-train-tasks-source-group-split-review-pending-not-generated-examples",
+  "notes": "13 source-backed HotpotQA cases retained unchanged; reviewed subset8 cases: evidence indices1,2,3,4,5,7 and genuine two-hop research8,9. Indices0 and6 held from exact-move supervision due additional support documents outside non-exhaustive supporting_facts annotations. Research10-12 retained as single-hop repurpose candidates, not iterateOn. No teacher collection outputs or training admission; full source-group/split closure pending.",
+  "source": "HotpotQA distractor training split at pinned revision; CC-BY-SA-4.0",
+  "exclusions": "Review audit records all five omissions and reasons; original13-case cases.jsonl and source report preserved."
+}

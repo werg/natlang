@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v19-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v19-gemini-choice-confidence-and-static-replay-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Sealed teacher and static replay audit plus Pop source closure packet. Full S1 closure and semantic ambiguity/quality review pending. Annotation agreement is descriptive, not independent truth."
+}

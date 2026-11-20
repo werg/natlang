@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v15-iterate-richness-proof-v4-passed-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-20261007-v4-runtime-proof",
+  "include": [
+    "**/*"
+  ],
+  "admission": "passed-canonical-scripted-reference-only-not-semantic-or-teacher-admission",
+  "notes": "Full successful canonical scripted proof and per-case evidence for the typed-alias source. Twelve authored references, 72 reads, 168 native decisions; no model/provider calls. Runtime proof is not semantic teacher validation or admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+  "derived_from": [
+    "neuralese-v15-iterate-richness-proposal-20261007-v4"
+  ]
+}

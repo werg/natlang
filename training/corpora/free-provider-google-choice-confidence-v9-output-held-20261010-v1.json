@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-google-choice-confidence-v9-output-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9",
+  "include": [
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json",
+    "worker.log"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-case-review-only",
+  "source_class": "provider-decision-label-confidence-generation-raw-outputs",
+  "training_admission": false,
+  "admission": "held-raw-output-evidence-only",
+  "notes": "Closed Gemini choice-confidence V9 raw output snapshot. 92 labeled cases; includes complete labels, attempts ledger, run manifest, and terminal worker log. Existing V1/V2 input registrations retain cases, source manifest, launch receipt, and frozen adapter. Preserve all output/attempt outcomes; no semantic or confidence admission."
+}

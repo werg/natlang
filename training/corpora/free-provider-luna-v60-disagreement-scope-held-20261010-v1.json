@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v60-disagreement-scope-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v60-disagreement-scope-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Exact23 differing source records and21 scope failures with original source/result pins. Provisional helpercategories notadmission; rootreviews sourceholdsseparately."
+}

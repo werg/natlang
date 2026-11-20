@@ -1,0 +1,16 @@
+{
+  "id": "sft-verified-20261117-v3",
+  "owner": "dgx",
+  "path": "runs/sft-verified-20261117-v3",
+  "include": [
+    "build.json",
+    "cases.jsonl",
+    "chains.pkl",
+    "rows.jsonl.zst",
+    "repetition.json"
+  ],
+  "admission": "sft-experiment-input",
+  "license_provenance": "Own LFM3 GRPO rollouts (project-generated); teacher episodes of nvidia/nemotron-3-ultra-550b-a55b (free and paid NVIDIA API), gpt-6-luna (openai-codex), gemini-3.5/3.7-flash, glm-4.7-flash, claude-haiku-5-5 (Anthropic API) on the project's GRPO pool; October corpora rows keep their registered sources' license provenance (Luna/Qwen/Bonsai teacher curricula; SWE-rebench OpenHands Qwen3-Coder trajectories, OpenResearcher web sessions, CooperBench) as recorded per row in rows.jsonl.zst provenance.",
+  "note": "As v2 (same work dir, teacher extract 11:32), built with construct-aware caps (39b5f9cfe): tasks declaring a held construct up to 8 episodes, dataset wrappers at most 15%. 4,513 trajectories, 4,084 tasks, 16,789 chains, 120.2M forward / 9.44M target tokens; weighted target 57% own, 21% teacher, 22% October. Pool tasks (2,326): Neuralese result 16%, folder reducer 15%, iterateOn 11%, depth>=3 15%, dataset wrapper 18% (v2: 9/9/6.5/8.5/53%; held-v3: 30/30/18/18/9%).",
+  "kind": "sft-rows"
+}

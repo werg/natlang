@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v58-closed-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-choice-folder-final-v2",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "All53 outputs closed;33 accepted exact-map/files,20 rejected.30/394 source decisions differ. Scope failures under investigation. Input records match pinned source; nested request wire visibility not established. No admission."
+}

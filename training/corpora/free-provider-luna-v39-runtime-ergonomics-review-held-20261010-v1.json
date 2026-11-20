@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v39-runtime-ergonomics-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v39-runtime-ergonomics-diagnostic-v1",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only",
+  "source_class": "runtime-quality-diagnosis",
+  "training_admission": false,
+  "admission": "diagnosis-only-not-training-admission",
+  "notes": "Mosterrorsactualinvalidscope/result/API; actionableguidancecallableannotation/fixedcaptures/templateinterpolation. No evidence supportsweakerchecks."
+}

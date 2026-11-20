@@ -1,0 +1,13 @@
+{
+  "id": "pop-stopped-container-preservation-20261010-v1",
+  "owner": "pop",
+  "path": "runs/storage-cleanup-pop-20261010-v1",
+  "include": [
+    "*"
+  ],
+  "source_class": "storage-maintenance-evidence",
+  "split": "evidence-only",
+  "training_admission": false,
+  "admission": "maintenance-evidence-only",
+  "notes": "176stoppedNatlang/Lunacontainers sanitizedmetadata+compressedlogs preserved beforedisposablewritablelayerdeletion; noimages/volumes/activejobs selected. Envenamesonlysecretvaluesexcluded."
+}

@@ -1,0 +1,32 @@
+{
+  "id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+  "include": [
+    "index.json",
+    "groups.json",
+    "digests.npz",
+    "sketches.npz"
+  ],
+  "kind": "cross-corpus-index",
+  "purpose": "exact digest/group/sketch matching for split closure and contamination checks against the published corpus (scripts/neuralese_data/cross_corpus.py Index); not training data",
+  "split": "none (index of harness-bench-swe-rebench-openhands-pi-records-20261010-v4's splits)",
+  "source_class": "derived-index-of-published-corpus",
+  "admission": "not-training-data",
+  "training_admission": false,
+  "training_admission_reason": "an index (hashes, MinHash sketches and group splits), never training examples",
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+  ],
+  "license": "derived from harness-bench-swe-rebench-openhands-pi-records-20261010-v4; contains digests and sketches only",
+  "build": {
+    "script": "scripts/neuralese_data/cross_corpus.py index_corpus",
+    "schema": "natlang.cross-corpus-index/1",
+    "format": "turn",
+    "records": 3843,
+    "groups": 769
+  },
+  "notes": "index.json 'files' lists the DGX path the index was built from (provenance only). Built 2026-10-10 with python -m neuralese_data.cross_corpus --format turn (PYTHONHASHSEED=0); also at data_nvme natlang-corpora/cross-corpus-index/harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py.",
+  "supersedes": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1"
+}

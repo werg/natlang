@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v33-targeted-audit-overlay-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v33-targeted-audit-overlay-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "rootinterpretation qualityreview only; no trainingadmission",
+  "notes": "ST91ordinaryrecordscope/yearwindow preserved, no redundant-ID/yeardemand. CG62lackbenchmark/UTCreferents stayssourceconflicthold. Exact source/target/result hashes bound."
+}

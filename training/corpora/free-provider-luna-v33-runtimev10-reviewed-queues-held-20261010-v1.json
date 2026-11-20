@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-luna-v33-runtimev10-reviewed-queues-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev33-five-runtimev10-v2",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-infrastructure-retry-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "reviewed-infrastructure-retry-queues",
+  "training_admission": false,
+  "admission": "immutable-dispatch-evidence-live-output-excluded",
+  "notes": "Fivefreshsinglecasequeues, sameV33v4source/gold/sampling aszero-callfailedV9attempt; runtimeV10importpreflight passed, corrected supervisor. Liveoutputs intentionallynotinimmutablemanifest."
+}

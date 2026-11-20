@@ -1,0 +1,17 @@
+{
+  "id": "luna-v74-exact-source-closure-request-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-source-closure-packet-v5",
+  "include": [
+    "README.md",
+    "FILES.sha256",
+    "closure-packet-v1.json",
+    "closure-input-v1/**/*"
+  ],
+  "split": "inherited-train-source-closure-input",
+  "source_class": "held-source-closure-evidence-request",
+  "training_admission": false,
+  "admission": "full-s1-dgx-key-closure-pending",
+  "independent_new_worlds": 0,
+  "notes": "V74 exact source closure request binds 640 original train rows to archived master line numbers and raw row hashes, and maps them to 80 static programs. Sent to DGX owner for full S1/harness-v4/protected exact-key checks; request only, no closure result, source-quality clearance, or admission."
+}

@@ -1,0 +1,17 @@
+{
+  "id": "annotation-decision-folders-v22-source-and-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v22",
+  "include": [
+    "preparation-review-v1.json",
+    "source-selection/cases.jsonl",
+    "source-selection/source-manifest.json",
+    "source-selection/omissions.jsonl",
+    "static/**/*"
+  ],
+  "split": "inherited-train-annotation-reference",
+  "source_class": "held-static-source-annotation-reference",
+  "training_admission": false,
+  "admission": "held-annotation-derived-static-reference",
+  "notes": "640 exact train source rows, disjoint from registered prior provider reservations, prior 640 annotation groups, and current V15 holds; adapted into88 authored folder programs across11 available families.88/88 reference replays accepted and capture checks passed. Dataset annotations appear only in hidden reference outcomes; model-visible input files contain no answer/gold fields. This is not independent semantic adjudication and does not grant admission."
+}

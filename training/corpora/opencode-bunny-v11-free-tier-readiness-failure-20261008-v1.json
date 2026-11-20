@@ -1,0 +1,12 @@
+{
+  "id": "opencode-bunny-v11-free-tier-readiness-failure-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-loopback-20261008-v11-retry-schedule-probe",
+  "include": [
+    "readiness-probe-receipt.json",
+    "post-probe-review.json",
+    "server/scratch/.natlang-transport-failures/failure-ses_ee5d89e63ffeuEmqXVGBZ4MdQ9-45e5cbfc-3e4c-461d-911e-230a73eb392e.json"
+  ],
+  "admission": "held-provider-readiness-infrastructure-evidence-no-generation-or-training-admission",
+  "notes": "One bounded official OpenCode Space Bunny READY probe through the isolated denied-tools bridge failed with a matching-session free-tier retry schedule (attempt 1, next_at_ms 1791504000768; ~17.7 hours from observation). Preserves the bounded bridge receipt, supplemental correction noting cancellation was not verified by the older bridge, and sanitized matching-session failure diagnostic. No READY completion, no collector retry, no training admission, no semantic/model negative, and no paid fallback."
+}

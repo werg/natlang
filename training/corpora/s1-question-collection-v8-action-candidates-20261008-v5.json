@@ -1,0 +1,26 @@
+{
+  "id": "s1-question-collection-v8-action-candidates-20261008-v5",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-v8-action-candidates-20261008-v5",
+  "include": [
+    "README.md",
+    "build-identity.json",
+    "converter-omissions.jsonl",
+    "empty-pieces.jsonl",
+    "native-actions.jsonl",
+    "packet-summary.json",
+    "raw-action-receipts-convertible.jsonl",
+    "raw-action-receipts.jsonl",
+    "receipt-correction.json",
+    "selected-actions-convertible.jsonl",
+    "selected-actions.jsonl",
+    "text-preview/**",
+    "manifest.json"
+  ],
+  "admission": "held-final-corrected-action-preview-no-training-admission",
+  "derived_from": [
+    "s1-question-collection-v8-action-candidates-20261008-v1",
+    "s1-question-collection-v8-quality-review-20261008-v3"
+  ],
+  "notes": "Final digest-corrected V8 action candidate packet. Explicit source review document/case/item/selection hashes and raw result hashes are separately bound; mechanical verification checks exact target turns, context, host results and terminal tool links. Original raw trace provenance is retained separately from the derivative trace admission. 54 source-reviewed candidates, 49 exact native/text rows, five source-correct actions still omitted due parent quality_pending. No action, whole-trace, training, or DPO admission. V3/V4 manifests preserve unsynced historical correction/build-identity stages."
+}

@@ -1,0 +1,17 @@
+{
+  "id": "neuralese-v25-pure-literal-derived-text-preview-20261008-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-pure-literal-derived-text-preview-20261008-v5",
+  "include": [
+    "README.md",
+    "derived-rows.jsonl",
+    "converted-preview-rows.jsonl",
+    "selection-receipts.jsonl",
+    "manifest.json"
+  ],
+  "admission": "held-derived-target-preview-no-training-admission",
+  "notes": "Six train-split pure terminal eval-finish literals have converted shared-IR targets with an explicitly derived semantic-text writer role. Every original target/context and terminal typed-result receipt is checked against code-pinned converter/materializer/renderer sources. The derived writer is an SFT target transformation, not original eval hidden-state equivalence, an observed runtime writer, a recurrence edge, or runtime-gradient qualification. Two effectful literal returns and one nonterminal eval-return stage remain held.",
+  "derived_from": [
+    "neuralese-v25-pure-literal-derived-text-preview-20261008-v2"
+  ]
+}

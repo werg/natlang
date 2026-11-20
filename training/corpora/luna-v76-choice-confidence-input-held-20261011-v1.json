@@ -1,0 +1,17 @@
+{
+  "id": "luna-v76-choice-confidence-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v76-v37-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-generation-input",
+  "source_class": "held-luna-provider-generation-input",
+  "training_admission": false,
+  "admission": "generation-input-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V76 input queues derive from 54 reviewed V37 static references over 414 original train rows; plan and source review are preserved. Mutable launch state, worker journals/logs/results are excluded. All outputs remain held."
+}

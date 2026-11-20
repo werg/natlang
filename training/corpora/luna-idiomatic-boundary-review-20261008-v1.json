@@ -1,0 +1,10 @@
+{
+  "id": "luna-idiomatic-boundary-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-idiomatic-boundary-review-20261008-v1",
+  "admission": "held-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Immutable Luna audit snapshot with root receipt; observed and proactive ergonomic fixes distinguished. Audit evidence only, no sample admission."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "luna-choice-confidence-v86-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v86-choice-confidence-final-v1",
+  "include": [
+    "audit.json",
+    "audit.md",
+    "FILES.sha256.json"
+  ],
+  "split": "held-quality-review",
+  "source_class": "bounded-independent-closed-output-audit",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "quality review only; inherited source-label agreement is not independent truth or admission",
+  "notes": "20 programs / 147 source items, 142 exact inherited-label agreements; five full item disagreements bound by exact source lines. Saved rendered request/capture evidence is not claimed as original wire bytes. Failed intermediate actions and compiler scope failures are counted but are not converted into standalone negatives. Audit JSON, Markdown and file manifest hashes are recorded inside audit packet."
+}

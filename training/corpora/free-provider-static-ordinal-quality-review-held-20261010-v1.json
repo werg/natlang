@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-static-ordinal-quality-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v12",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "inherited-train-source-groups",
+  "source_class": "quality-review-evidence",
+  "admission": "evidence-only-no-training-admission",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "free-provider-static-decision-inline-lambdas-held-20261010-v3",
+    "free-provider-static-decision-inline-lambdas-held-20261010-v4"
+  ],
+  "independent_new_worlds": 0,
+  "notes": "Independent Luna audit: 761/761 six-field capture bindings, zero accepted ordinal disagreements (154 accepted ordinal rows), no false accepted ordinal labels found in previous snapshots. Three fractional tie disagreements correctly remain rejected under shared earlier-level tie policy. Source rows role=train, no explicit split field. Outputs remain held; no learned-channel qualification or automatic semantic admission."
+}

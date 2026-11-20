@@ -1,0 +1,16 @@
+{
+  "id": "decision-visible-answerability-root-review-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Root excludes13 new source items prospectively,20 total canonical holds. No relabel or mutation of sealed artifacts. Preserve prior seven-item policy and full decision evidence."
+}

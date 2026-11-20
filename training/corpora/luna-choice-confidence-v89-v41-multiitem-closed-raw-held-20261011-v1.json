@@ -1,0 +1,28 @@
+{
+  "id": "luna-choice-confidence-v89-v41-multiitem-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v89-v41-multiitem-runtimev17-prepared-v1",
+  "include": [
+    "campaign-launch.json",
+    "reviewed-plan-root-approved-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-owner-approval-v1.json",
+    "root-supervisor-launch-v1.json",
+    "worker-*/**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-closed-generation-evidence",
+  "source_class": "held-provider-generated-static-program-evaluation",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "closed raw generation evidence only; no training or trajectory admission",
+  "parent_registry_ids": [
+    "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1",
+    "luna-choice-confidence-v89-approved-launch-held-20261011-v1"
+  ],
+  "notes": "Closed five-worker V89 output. Ten programs completed (80 items); worker 03 index 7 ended in model_request_budget after partial exploration and remains unscored. Includes terminal worker evidence and partial/error records; source and prepared inputs are separately registered."
+}

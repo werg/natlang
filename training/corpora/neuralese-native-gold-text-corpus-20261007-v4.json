@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-native-gold-text-corpus-20261007-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v4",
+  "include": [
+    "**"
+  ],
+  "admission": "ordinary native gold-text foundation only; no runtime qualification",
+  "notes": "2512 exact LFM-native documents/1800train712held from3257 admitted records. 745 exactsame-split documents deduplicated with allIDs/groups retained, zero omitted. Actual assistant suffix boundary metadata; source splits immutable. Maple must independently render its own tokenizer/template using shared builder."
+}

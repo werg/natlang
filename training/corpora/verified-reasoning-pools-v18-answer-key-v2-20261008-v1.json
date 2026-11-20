@@ -1,0 +1,14 @@
+{
+  "id": "verified-reasoning-pools-v18-answer-key-v2-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v18-answer-key-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-approved-source-generation; teacher-and-training-held",
+  "derived_from": [
+    "s1-full-final-20261003",
+    "verified-reasoning-pools-20261008-v17"
+  ],
+  "notes": "32 derived task variants over 128 existing S1 Reasoning Gym train records in eight solver families. Original source groups/splits retained, zero new independent-world credit. Independent S1 verifier and frozen CPU runtime reference proof included. Includes failed pre-fix bd433 proof as historical runtime evidence. No teacher observations or training admission."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "luna-rwa-v7-nine-admitted-native-text-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "Root-adopted nine ordinary native eval-code action targets plus nine faithful ordinary-text train records; derived observed typed-text body candidates remain separately unadmitted; not active training input.",
+  "derived_from": [
+    "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
+  ],
+  "notes": "Root composition adoption runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/root-native-text-composition-adoption-v1.json (SHA 663902f8a2445cb3dfa2bd7db4ea9db99811de33614d0855ad329b698e324b15) approves exactly nine native and nine ordinary-text train additions. Virtual union over the named 5467/4699/4961 base is 5497 native (3462 train/2035 test), 4729 text (3025 train/1704 test), recurrence 4961 unchanged; compact additions only, no full-base copy. Nine sampled targets are ordinary eval-code actions; no learned body target, recurrence, whole-trajectory, runtime qualification, model-performance claim, new-world credit, or active-input mutation. Exact action admission, sampled contexts/raw traces/results, source rows and group/split bindings, native materializer, composition review/adoption, full/suffix tokenizer review, text provenance/coverage, renderer snapshot and builder sources are included. Streamed SDK deltas and final parsed calls are distinct evidence; see committed future stream comparison metadata.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1",
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence",
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1",
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/source",
+    "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1",
+    "luna-staged-eval-return-writer-fix-20261009-v1/evidence",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3"
+  ]
+}

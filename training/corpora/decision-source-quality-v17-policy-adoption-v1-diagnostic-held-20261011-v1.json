@@ -1,0 +1,15 @@
+{
+  "id": "decision-source-quality-v17-policy-adoption-v1-diagnostic-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17-policy-adoption-v1",
+  "include": [
+    "adoption.json",
+    "decision_source_quality_holds.json"
+  ],
+  "split": "inherited-train-policy-provenance",
+  "source_class": "held-source-quality-policy-adoption-diagnostic",
+  "training_admission": false,
+  "admission": "diagnostic-policy-provenance-superseded-no-admission",
+  "independent_new_worlds": 0,
+  "notes": "Preserves the initial V17 policy adoption artifact. Its parent-policy metadata is incorrect, so this snapshot is diagnostic and superseded by the distinct V2 adoption receipt. Do not treat it as the authoritative policy chain."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-v64-terminal-conversion-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-recovery-terminal-text-conversion-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-quality-and-generation-evidence",
+  "training_admission": false,
+  "admission": "held-pending-explicit-review",
+  "notes": "Actual shared materializer rejected both source-held rows, produced zero turns. Exact 11 model-call bindings and conversion gate evidence retained; no manual target construction."
+}

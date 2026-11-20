@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-v29-root-ordinary-text-admission-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v29-root-ordinary-text-admission-v1",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-only-no-new-evaluation-credit",
+  "source_class": "root-ordinary-text-only-receipt-evidence",
+  "training_admission": false,
+  "admission": "review-and-receipt-evidence-only",
+  "native_admission": false,
+  "trace_admission": false,
+  "independent_new_worlds": 0,
+  "notes": "Rootreceiptde2a6ae293c3f7a24d94f92169be4686752b3f68a26a97a42830c8b381d13052 binds20exacttrain-onlyactions; source321andpiecesunchanged, false native/trace flags retained. Receipt isapprovalscopeevidence, not extra training rows."
+}

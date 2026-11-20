@@ -1,0 +1,13 @@
+{
+  "id": "v20-bunny-campaign-v1-raw-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8",
+  "include": [
+    "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/**/*"
+  ],
+  "admission": "held-closed-raw-attempt-action-review-pending-no-training-admission",
+  "derived_from": [
+    "v20-counterfactual-source-v8-20261008"
+  ],
+  "notes": "Immutable raw Bunny V20 actual attempt 02, source indices 12-23. Includes raw actions, events, results, logs and transport errors. Exact source and closed review packet are separately pinned. All model actions remain held; no training, trace, or DPO admission."
+}

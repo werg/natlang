@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v21-full-abstract-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-pubmedqa-full-abstract-and-static-replay-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-full-evidence-regeneration",
+  "training_admission": false,
+  "admission": "held-source-semantic-full-visibility-runtime-review",
+  "notes": "Sealed raw teacher audit and static replay, original metadata-allowlist failure preserved. Validated narrow pinned provenance excluded from model-facing state but retained in attribution. Source closure retains six programs, not replay admission. One full2290-character state visibility failure remains held. Full S1 and near-duplicate closure pending."
+}

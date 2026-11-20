@@ -1,0 +1,18 @@
+{
+  "id": "luna-v43-runtimev18-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v43-runtimev18-closeout-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-quality-review-no-admission",
+  "source_class": "provider-output-quality-review",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "read-only output quality and request-visibility accounting; no training, native trajectory, or recurrence admission",
+  "derived_from": [
+    "luna-v43-runtimev18-closed-raw-held-20261011-v1",
+    "luna-v43-prefix-646-runtimev18-static-held-20261011-v1"
+  ],
+  "notes": "Exact per-case/source/result provenance and source-label agreement review. SDK turn starts are distinct from physical network requests and billable usage; physical request and total billing counts are unavailable."
+}

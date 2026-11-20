@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v95-typed-result-runtime-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v95-typed-result-runtime-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "runtime-reproduction-evidence-not-training-examples",
+  "notes": "Immutable isolated Node runtime snapshot and build/identity receipts for closed native generation. Frozen execution code is evidence; shared development code moves through Git. Does not grant training admission."
+}

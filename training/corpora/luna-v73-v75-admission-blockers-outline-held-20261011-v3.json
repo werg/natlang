@@ -1,0 +1,16 @@
+{
+  "id": "luna-v73-v75-admission-blockers-outline-held-20261011-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-v75-admission-blockers-v3",
+  "include": [
+    "outline.json",
+    "outline.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-native-generation-admission-blocker-outline",
+  "training_admission": false,
+  "admission": "audit-only-no-source-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Corrected additive outline supersedes v2 diagnostic. Pins local V36 exact S1/harness/protected receipt files, scoped to 390 source keys actually used by the static adapter; distinguishes folder-level single_call from a single NL invocation."
+}

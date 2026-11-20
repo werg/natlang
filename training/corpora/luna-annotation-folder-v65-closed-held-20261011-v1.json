@@ -1,0 +1,10 @@
+{
+  "id": "luna-annotation-folder-v65-closed-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v65-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Closed160planned159terminal1providerterminatedpartialindex135. Preserveoriginal57-holdtiming/predecessordisposition, noadmission. Separateactual qualityreviewpending."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-semantic-iterate-v15-guided-v83-frozen-proof-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-soft-v14-v83-root-frozen-proof-20261007",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+  "notes": "Actual frozen V83 CPU scripted proof:12 cases48reads144actions; zero teacher calls, not semantic admission."
+}

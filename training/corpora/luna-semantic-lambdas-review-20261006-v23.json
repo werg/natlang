@@ -1,0 +1,13 @@
+{
+  "id": "luna-semantic-lambdas-review-20261006-v23",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23",
+  "admission": "quality-evidence-only-not-training-examples",
+  "include": [
+    "audit.md",
+    "audit.json"
+  ],
+  "derived_from": [
+    "luna-semantic-lambdas-source-v23-20261006"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "verified-reasoning-pools-v10-luna-closure-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-5e27c7e38f661557.result.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-5e27c7e38f661557.trace.jsonl",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-f72ed9b96997380f.result.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-f72ed9b96997380f.trace.jsonl",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/closure-v1/closure.json"
+  ],
+  "admission": "held-terminal-generation-results-no-teacher-quality-or-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-20261008-v10",
+    "verified-reasoning-pools-v10-luna-launch-20261008-v1"
+  ],
+  "notes": "Immutable terminal V10 Luna evidence. Two parent results: one accepted and one rejected on answer/file checking. Raw jobs/traces/logs preserved; no training or DPO admission."
+}

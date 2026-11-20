@@ -1,0 +1,187 @@
+{
+  "id": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+  "license": "facts from the source rows",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+  "admission": "lfm3 render of the registered render external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+    "external-expansion-agentic-coding-repeated-id-repair-20261014-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 10,
+            "supervised_tokens": 1245,
+            "tokens": 103414,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 941853,
+        "decoded_text_data_sha256": "58692dca1d51974e728ab433782b0f535f9a635123af96eb818c552c0da21e86",
+        "documents": 10,
+        "max_document_tokens": 14519,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "01e01b32a00ed046ddb3bcd5a1aeafd61c6cdbf44b8312c8f39dae9a5505b6c5"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 10,
+            "supervised_tokens": 1245,
+            "tokens": 60256,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 528124,
+        "decoded_text_data_sha256": "29e32d1d4f1064a9ec6228c05f722cbd4498736dab3c4d6defc4fc2bce28560f",
+        "documents": 10,
+        "max_document_tokens": 10649,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "37c5532d58cb2e3a85f8528c02ca22ffb63b3b71e90c0ec492890fe50b4c8d83"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 2080,
+            "documents": 5,
+            "opening_tokens": 734,
+            "supervised_tokens": 1302,
+            "tokens": 38638,
+            "tool_tokens": 35259
+          }
+        },
+        "decoded_text_data_bytes": 346290,
+        "decoded_text_data_sha256": "3453cf78eca8e63d11ce9bed5cfa66d545768bb8e9545e773eb462afe05e8071",
+        "documents": 5,
+        "max_document_tokens": 10649,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "a9d5b3e4f0ee1c04ba547dc1916fbdf481cd72d5206829e2b920922765f14a4a"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+    "student": "lfm3",
+    "identical_documents": true,
+    "views": {
+      "full": {
+        "documents": 10,
+        "reference_documents": 10,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 10,
+        "reference_documents": 10,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 5,
+        "reference_documents": 5,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": "not checked (parts render: sources are streamed part inputs)"
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 10,
+        "whole-trajectory": 5
+      },
+      "detail": {
+        "program-header": {
+          "train": 10,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 10,
+              "bytes": 12554,
+              "sha256": "7c2edc58b470f38206d41e5f9940c07fa6591493ae6064414e71cdb197cb87b7"
+            },
+            {
+              "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 5,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 5,
+              "bytes": 14220,
+              "sha256": "88ee0a6bd883d29f802bc6e1d957bec89e9633581ec7c22857d479cb04868a48"
+            },
+            {
+              "path": "runs/lfm3-renders/external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  },
+  "render_policy_binding_sha256": "eb051d6c8f2efe9d5c4ba6f30c0cf2ea7a59096aafa211c595ca24991df63601"
+}

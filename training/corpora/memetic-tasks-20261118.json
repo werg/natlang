@@ -1,0 +1,26 @@
+{
+  "id": "memetic-tasks-20261118",
+  "owner": "dgx",
+  "path": "data_nvme:memetic-tasks-20261118",
+  "include": [
+    "cases.jsonl",
+    "build.json",
+    "specs/*.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "memetic \"improve program P\" rows (natlang.memetic-tasks/1): cases.jsonl + build.json + specs/",
+  "training_admission": "grpo-memetic-tasks",
+  "roles": {
+    "grpo-memetic-tasks": {
+      "order": 0,
+      "file": "cases.jsonl"
+    }
+  },
+  "supersedes": "memetic-tasks-20261117",
+  "license": "derived from the grpo task pools (each keeps its license provenance)",
+  "producer": {
+    "script": "python -m natlang_neuralese.rl.memetic_tasks build",
+    "git_commit": null
+  },
+  "note": "grpo --memetic-tasks default (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3)."
+}

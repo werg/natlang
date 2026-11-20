@@ -1,0 +1,10 @@
+{
+  "id": "google-v31-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v31-adapter-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-quality-and-generation-evidence",
+  "training_admission": false,
+  "admission": "held-pending-explicit-review",
+  "notes": "57 related reference programs over 407 original agreed items, 57 actual accepted replays / 0 failures; actual shared execution byte archive. No new independent worlds or training admission."
+}

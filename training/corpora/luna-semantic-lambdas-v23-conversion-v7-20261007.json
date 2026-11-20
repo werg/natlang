@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambdas-v23-conversion-v7-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v23-causality-fix-v7-20261007",
+  "admission": "candidate-causal-conversion-held-quality-and-finish-representation-review",
+  "include": [
+    "native-teacher.jsonl",
+    "neuralese.jsonl",
+    "pieces.jsonl",
+    "conversion-summary.json",
+    "recurrence-audit.json",
+    "diagnosis.md"
+  ],
+  "representation_of": [
+    "luna-semantic-lambdas-generated-v23-20261006"
+  ],
+  "supersedes": "luna-semantic-lambdas-v23-conversion-20261007",
+  "notes": "Conversion/7 fixes future producer linkage and whole-object/field orphan edges. 316decisions retain per-row admission flags; emitted graph13writers/15readers/15edges/0missing-producer audit failures. Structural closure of emitted edges is not source quality or training admission. 88finish-based child captures remain crisp observations, not fabricated model writer actions; producer-missing/unprinted/ambiguous/crisp omissions explicit. Prior conversion retained as diagnostic; duplicate representations not additional examples."
+}

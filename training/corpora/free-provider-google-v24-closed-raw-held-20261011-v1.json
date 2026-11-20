@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v24-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v24",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "512 typed-valid decisions,406 annotation agreements and106 differences,556 attempts. Original source and actual frozen runner preserved. No semantic admission."
+}

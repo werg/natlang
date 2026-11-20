@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v38-v39-combined-static-reference-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v38-v39-combined-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-derived-static-reference",
+  "source_class": "held-combined-static-reference-inputs",
+  "training_admission": false,
+  "admission": "reference-replay-only-no-native-training-or-teacher-admission",
+  "independent_new_worlds": 0,
+  "notes": "Fresh combined V77 source input: unchanged V38/V39 static cases and replay rows, 107 programs/833 source items, 107/107 authored reference replays pass, exact source IDs/groups disjoint between parents. All data held."
+}

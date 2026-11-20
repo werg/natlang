@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v14",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v14",
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "admission": "closed-reviewed-evidence-pending-current-policy-target-and-producer-admission",
+  "notes": "40 attempts;38 source-supported final candidates; held extractionfixture11 and wrong loaded-skill selection. Failed actions/dependent targets not admitted by final acceptance."
+}

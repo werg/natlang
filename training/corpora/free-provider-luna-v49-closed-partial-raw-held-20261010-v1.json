@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v49-closed-partial-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Three exact completed V4 train repairs and one 384-request resource partial. Preserve original incomplete campaign status; partial is not a semantic negative or DPO preference pair.",
+  "exclude_dirs": [
+    "__pycache__"
+  ]
+}

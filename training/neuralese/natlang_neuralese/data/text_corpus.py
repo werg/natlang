@@ -451,7 +451,7 @@ def _authenticated_root_derived_text_writer(record, derived):
             or admission.get("source_group") not in record.get("source_groups", [])):
         return None
     root = next((parent.parent for parent in Path(admission_path).resolve().parents
-                 if parent.name == "runs" and (parent.parent / "training/neuralese_corpora.json").is_file()), None)
+                 if parent.name == "runs" and (parent.parent / "training/corpora").is_dir()), None)
     if root is None:
         return None
     for rel, pin in (admission.get("input_pins") or {}).items():

@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-luna-v39-reviewed-resume-inputs-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v39-fortyeight-runtimev12-v1",
+  "include": [
+    "reviewed-plan-v2.json",
+    "root-operational-predecessor-review-v2.json",
+    "root-launch-receipt-v2.json",
+    "launcher.log",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "evidence-only",
+  "source_class": "storage-or-generation-review-evidence",
+  "training_admission": false,
+  "admission": "evidence-only-no-training-admission",
+  "notes": "OriginalV39launch blockedbyV38index12budgetincomplete beforeworkers. Freshreview-v2rootapproved unrelated48foldercases4mediumworkers; priorpartialheldnotadmitted."
+}

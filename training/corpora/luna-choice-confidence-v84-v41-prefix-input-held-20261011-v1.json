@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v84-v41-prefix-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v84-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-reviewed-generation-inputs",
+  "source_class": "held-prepared-luna-generation-queues",
+  "training_admission": false,
+  "admission": "root-reviewed-queue-inputs-only-no-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Seven program/37 item V84 queues from the immutable V41 prefix-v8 static source; authored references and item bindings passed at preparation. Runtime v17; five lanes bind the actual V83 predecessor queues. Mutable journals, results, campaign status, and quota state are excluded."
+}

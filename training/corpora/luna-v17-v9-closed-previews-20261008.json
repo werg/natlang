@@ -1,0 +1,13 @@
+{
+  "id": "luna-v17-v9-closed-previews-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal",
+  "include": [
+    "assembled/native-records.jsonl",
+    "assembled/recurrence-records.jsonl",
+    "text-proposal-26/text.jsonl",
+    "text-proposal-26-pre-renderer-fix/text.jsonl"
+  ],
+  "admission": "held-superseded-conversion-previews-no-training-admission",
+  "notes": "Recoverable mirror of four closed superseded V9 preview JSONL files, used only for Pop storage recovery. Excludes the authoritative assembled-v3 and text-proposal-26-v3 outputs, delta/review artifacts, and hardlinked assembled-v2 duplicate. No training admission, publication of a current cohort, or training handoff."
+}

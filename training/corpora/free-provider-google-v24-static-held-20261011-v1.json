@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v24-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v24-adapter-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "54 shared inline directory reducer programs with406 decision items. All actual reference/full-input visibility gates accepted.30 currentholds have no intersection; actualgeneration policy pin preserved. No source/world admission."
+}

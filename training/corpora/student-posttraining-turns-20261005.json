@@ -1,0 +1,24 @@
+{
+  "id": "student-posttraining-turns-20261005",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/student-posttraining-turns-20261005",
+  "admission": "candidate-native-turns-unadmitted-review-before-use",
+  "include": [
+    "**/*.jsonl",
+    "**/*.json",
+    "**/*.md",
+    "**/*.nl",
+    "**/*.ts",
+    "**/*.mjs",
+    "**/*.txt"
+  ],
+  "note": "New native turns from the Oct 4-5 student post-training phases (online repair, search SFT, skill-use demonstrations, inventory controls, projection v5-v7, broad-reference review, chunk rewrite). The *-phase rendered.jsonl/ready.jsonl files are replay mixes over native-sft-v13-r2; the new examples are the turns/reference files. Data and evidence files only; trainer outputs, wandb, caches and code snapshots stay in the run archives.",
+  "derived_from": [
+    "native-sft-v13-r2"
+  ],
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "new turns files only; rendered/ready replay mixes are copies of native-sft-v13-r2",
+  "required_conversion": "render",
+  "consumable_by_direct_stage": false
+}

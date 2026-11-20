@@ -1,0 +1,16 @@
+{
+  "id": "luna-semantic-v28r1-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v28-campaign-20261007",
+  "include": [
+    "worker-*/**",
+    "approved-plan-v8.json",
+    "launch-approved-v8.json",
+    "closed-outcome-decision-quality-audit-20261007-v1/**"
+  ],
+  "admission": "raw-observations-and-diagnostic-audit-only; 7 terminal exports and 1 request-budget partial; source/decision holds; no training or DPO admission",
+  "derived_from": [
+    "luna-semantic-aggregate-source-v28r1-20261007"
+  ],
+  "notes": "6 grader rejections,1 grader acceptance. Acceptance case6 does not clear marked-transect evidence gap. Further audit adds load-release and marked-transect qualifier holds; preserve original snapshots."
+}

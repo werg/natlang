@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-luna-v48-final-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v48-choice-folder-final-v1",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-infrastructure-recovery-review",
+  "training_admission": false,
+  "admission": "held-semantic-trace-source-review",
+  "notes": "23/46 exact maps23wrong, all source inputs unchanged;1transport failed partial unscored, never model-negative or automatic DPO."
+}

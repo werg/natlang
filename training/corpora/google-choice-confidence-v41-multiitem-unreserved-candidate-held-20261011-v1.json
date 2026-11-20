@@ -1,0 +1,21 @@
+{
+  "id": "google-choice-confidence-v41-multiitem-unreserved-candidate-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-multiitem-unreserved-v2",
+  "include": [
+    "cases.jsonl",
+    "reference-replay.jsonl",
+    "selection-manifest.json"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-held-candidate",
+  "source_class": "static-source-and-reference-selection-proposal",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "candidate selection evidence only; not generation approval or data admission",
+  "notes": "11 multi-item programs/88 source items from exact existing V41 batch-size-8 static cases/reference, remaining disjoint from observed prior Luna source IDs/groups and current 79 source-quality holds. Families: 8 CLINC, 3 Yahoo. No labels/reference regenerated."
+}

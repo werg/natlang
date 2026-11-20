@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261006-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261006-v4",
+  "admission": "source-reviewed-constructed-world-positive-targets-closed-producer-split-graph; not-serving-or-semantic-model-qualification",
+  "derived_from": [
+    "neuralese-reviewed-luna-v14-v15-20261006-v1"
+  ],
+  "notes": "1946train/747held;846addedclean current-policyturns; held unchanged.651writerrows529readerrows639edges; depthmax5/branch3. No missing/ambiguous/crosssplit/cyclic edges. Optional unresolved outputflow retainedcrisp; provenancecoverageaudit pending before claiming complete neuralese conversion. Not adopted into frozen ongoingv6inputs."
+}

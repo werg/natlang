@@ -1,0 +1,10 @@
+{
+  "id": "bunny-v9-v11-luna-v92-actual-quality-review-20261007-v5",
+  "owner": "pop",
+  "path": "runs/bunny-v9-v11-luna-v92-actual-quality-review-20261007-v5",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-independent-root-action-and-cumulative-admission-review",
+  "notes": "Immutable actual-source review and conversion proposal, not training admission. V1 preserves original holds; V5 has32 proposed action rows and20 technically validated soft edges, with exact eval body sidecars and separately labeled authenticated capture context augmentation. No learned-vector/runtime qualification or new independent worlds."
+}

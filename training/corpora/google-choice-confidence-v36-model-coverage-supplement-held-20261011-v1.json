@@ -1,0 +1,16 @@
+{
+  "id": "google-choice-confidence-v36-model-coverage-supplement-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-model-coverage-supplement-v1",
+  "include": [
+    "coverage-supplement.json",
+    "coverage-supplement.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-quality-review",
+  "source_class": "held-provider-model-coverage-accounting",
+  "training_admission": false,
+  "admission": "held-coverage-accounting-no-comparative-ranking-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V36 coverage supplement: ten models configured, two actually received requests, eight had zero attempts. 512 HTTP 200 label rows and 33 failed attempts are pinned. Request allocation is not a comparative quality ranking; no admission change."
+}

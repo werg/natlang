@@ -1,0 +1,38 @@
+{
+  "id": "view-sources-20261010-v3",
+  "owner": "dgx",
+  "path": "data/neuralese/raw/view-sources-20261010-v3",
+  "include": [
+    "sources.json",
+    "qmsum/**",
+    "fetaqa/**",
+    "wtq/repo.tar.gz",
+    "codesearchnet/*.parquet",
+    "codesearchnet/*-licenses.json",
+    "codesearchnet/*_licenses.pkl",
+    "websrc/**",
+    "tabfact/**",
+    "booksum/**",
+    "xsum/**",
+    "govreport/**",
+    "mind2web/**",
+    "loghub/**",
+    "common_crawl/**"
+  ],
+  "split": "source",
+  "source_class": "public-dataset-slices-with-dataset-questions-summaries-and-artifacts",
+  "admission": "held-source-view-corpus-evidence-only",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "view-sources-20261010-v2"
+  ],
+  "license": "per dataset (provenance facts; every licence acceptable, owner rule 2026-10-10): as view-sources-20261010-v2, plus BookSum BSD-3-Clause card (summaries scraped from study-guide websites), XSum card 'unknown' (BBC articles), GovReport not stated (US federal works), Mind2Web CC-BY-4.0 (third-party pages), LogHub no licence file ('for research'), Common Crawl Terms of Use",
+  "source_url": "https://huggingface.co/datasets/kmfoda/booksum (c6232103); https://huggingface.co/datasets/EdinburghNLP/xsum (7d4d486c); https://huggingface.co/datasets/ccdv/govreport-summarization (4e21184e); https://huggingface.co/datasets/osunlp/Mind2Web (17ece8eb); https://github.com/logpai/loghub (dd61d095); https://data.commoncrawl.org/crawl-data/CC-MAIN-2025-38/segments/1757047532641.17/warc/CC-MAIN-20250905112101-20250905142101-00000.warc.gz (first 256 MiB); as v2 otherwise",
+  "build": {
+    "script": "scripts/neuralese_view_corpus.py fetch --v3",
+    "fetcher": "scripts/neuralese_data/view_sources.py",
+    "code_commit": "8a6ec82a"
+  },
+  "notes": "v2's raw directory hard-linked (sources.json rewritten atomically), then fetch --v3: BookSum chapter-level train/dev/test CSV, XSum and GovReport parquets, Mind2Web train_0/2/6/8/10.json (the test set not fetched), LogHub's 16 systems (2k-line log, structured CSV, templates), and bytes 0-268435455 of one CC-MAIN-2025-38 WARC file. sources.json lists URL, revision, SHA-256 and licence per file. Multi-News, arXiv (S2ORC) and PubMed Central (Markdown) are read from local bgkit-data copies and hashed in the corpus manifest's inputs (large parquets by size and mtime)."
+}

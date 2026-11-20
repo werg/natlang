@@ -1,0 +1,20 @@
+{
+  "id": "luna-neuralese-direct-lfm-base-v8-full-checkpoint-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-lfm-base-20261011-v8-full-checkpoint-held-20261011-v1",
+  "include": [
+    "direct-stage-run.container-launch.json",
+    "direct-stage-run.container-launch.log",
+    "direct-stage-run.recipe-launch.json",
+    "direct-stage-run/direct-stage-plan.json",
+    "direct-stage-run/direct-stage-result.json",
+    "direct-stage-run/direct_sft/**/*",
+    "launcher-runtime/natlang_neuralese/**/*"
+  ],
+  "split": "held-neuralese-direct-training-state-and-evaluation",
+  "source_class": "held-complete-direct-sft-checkpoint-report-runtime-and-launch-evidence",
+  "training_admission": false,
+  "admission": "completed training-stage checkpoint and report evidence only; semantic runtime, task behavior and downstream lineage remain unqualified; no new training admission",
+  "independent_new_worlds": 0,
+  "notes": "V8 run completed step 1000 with report status complete, training-stage qualified=true/value_qualified=true and behavior-drift guard ok. This is not semantic runtime or task-quality qualification. Includes exact checkpoint/best checkpoint, train/eval/report/identity/checkpoint policy, full stage plan/result, launch receipts/log and the 151-module frozen launcher runtime. Excludes kernel-cache artifacts and duplicate direct-stage-run/runtime copy. Checkpoint.pt and best-checkpoint.pt are byte-identical (SHA 1768c700444da52ac9d031288174a1c600adfad8f213f63bca302622e7ee935b). Final report SHA d75849eb72e01c05957a395612243aeb70fd7744d1e37a3c2fb7a9fd423903d7; direct-stage result SHA 7a8a178fccb7c63e96cddfaf81bc8e510ee372ecdd35db1c4bccef69c29eedd5. Prior V4/V6/V7 diagnostic entries remain separately preserved."
+}

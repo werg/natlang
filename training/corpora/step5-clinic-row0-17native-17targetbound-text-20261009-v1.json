@@ -1,0 +1,22 @@
+{
+  "id": "step5-clinic-row0-17native-17targetbound-text-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "derived_from": [
+    "luna-v17-step5-selected112-native-87-targetbound-text-20261009-v3",
+    "luna-v17-text-serving-boundary-refresh-20261009-v2",
+    "luna-v17-foundation-text-input-4880-20261009-v1"
+  ],
+  "admission": "Root adopted 17 reviewed ordinary native actions and 17 exact serving-boundary text documents. The native delta contains 1 explicitly reviewed authored-static action and 16 provider-sampled actions. One malformed return_result action remains explicitly omitted. No new recurrence, whole-trajectory, runtime, hidden-state, learned-writer, or world-credit admission; active training inputs unchanged.",
+  "notes": "Compact selected-file evidence and delta only; no cumulative base copy. Text rows are an exact serving-boundary rendering with tokenizer e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008. Renderer/tokenizer code closure is referenced by the previously published text-serving-boundary-refresh corpus. Runtime snapshot-v3 is included for native materializer replay. Root composition adoption binds totals 5701 native (3666 train/2035 test), 4897 text (3193 train/1704 test), and 5004 recurrence records (3115 train/1889 test); this addition contributes 0 recurrence records. Includes locator map v2 for exact current-stream paths and registered parent stream reuse; live process/workdir locators are explicitly excluded.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-authored-root-microgrid-multilambda-20261009-v1/runtime",
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1",
+    "step5-preview-free-clinic-row0-corrected-20261009-v1",
+    "step5-preview-free-clinic-row0-corrected-20261009-v1/bridge-code-source-snapshot-v1",
+    "step5-preview-free-clinic-row0-corrected-20261009-v1/campaign-v1",
+    "step5-preview-free-clinic-row0-corrected-20261009-v1/capture-seal-v1",
+    "step5-preview-free-clinic-row0-corrected-20261009-v1/evidence"
+  ]
+}

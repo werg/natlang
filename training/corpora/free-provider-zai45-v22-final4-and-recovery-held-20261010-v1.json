@@ -1,0 +1,36 @@
+{
+  "id": "free-provider-zai45-v22-final4-and-recovery-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "include": [
+    "provider-zai45-current-pass-boundary-recovery-v1/case-003/collector.log",
+    "provider-zai45-current-pass-boundary-recovery-v1/case-003/jobs/000003-fd4c46c6be24a0b0.result.json",
+    "provider-zai45-current-pass-boundary-recovery-v1/case-003/jobs/000003-fd4c46c6be24a0b0.trace.jsonl",
+    "provider-zai45-current-pass-boundary-recovery-v1/case-003/results.jsonl",
+    "provider-zai45-current-pass-boundary-recovery-v1/case-003/results.jsonl.manifest.json",
+    "provider-zai45-current-pass-boundary-recovery-v1/journal.jsonl",
+    "provider-zai45-current-pass-boundary-recovery-v1/launch-receipt-v1.json",
+    "provider-zai45-current-pass-boundary-recovery-v1/queue.jsonl",
+    "provider-zai45-current-pass-boundary-recovery-v1/worker.log",
+    "provider-zai45-flash-source-indices-1-4-v1/case-004/collector.log",
+    "provider-zai45-flash-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.result.json",
+    "provider-zai45-flash-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+    "provider-zai45-flash-source-indices-1-4-v1/case-004/results.jsonl",
+    "provider-zai45-flash-source-indices-1-4-v1/case-004/results.jsonl.manifest.json",
+    "provider-zai45-flash-source-indices-1-4-v1/journal.jsonl",
+    "quality-review-v9/review.json",
+    "quality-review-v9/review.md"
+  ],
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "independent_new_worlds": 0,
+  "split": "inherited-train",
+  "source_class": "actual-provider-native-results-and-prompt-only-recovery",
+  "admission": "held-pending-V22-source-quality-and-native-review",
+  "derived_from": [
+    "free-provider-zai45-first3-native-and-partial-held-20261010-v1",
+    "luna-v22-current-pass-pending-facts-source-held-20261010-v1"
+  ],
+  "license": "Inherited authored V22 same-world source provenance",
+  "notes": "Closed REC-976 and source-v5 DOC-954 have exact accepted final decisions and all scoped file checks. Same-seed/runtime DOC-954 prompt-only recovery took716.7s versus old1800.7s incomplete. One paired case only. Real child-call/argument topology uses text-marker stand-ins and does not qualify learned soft-state transport. Old resource cutoff is not a semantic negative or DPO rejection. Remaining case5 active and excluded."
+}

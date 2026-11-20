@@ -1,0 +1,18 @@
+{
+  "id": "luna-choice-confidence-v87-root-approval-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v87-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-root-approved-v1.json",
+    "root-owner-approval-v1.json",
+    "root-disjointness-verified-v1.json"
+  ],
+  "split": "held-provider-generation-approval-evidence",
+  "source_class": "held-root-approved-generation-plan-and-source-disjointness",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "approval provenance only; not a result, quality, or training admission",
+  "notes": "Separate immutable V87 root approval snapshot. Approved plan SHA 2804cc7ee26040dafb08074717d29cc86831016f2dc4488c1afb09860a211040; owner approval and disjointness review bind 404 exact source rows and all 51 authored replays. The campaign is running from five worker lanes. A separate immutable root supervisor launch receipt file was not present at snapshot time, so active campaign-launch/journal files are not represented here."
+}

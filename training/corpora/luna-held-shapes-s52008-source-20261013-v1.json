@@ -1,0 +1,13 @@
+{
+  "id": "luna-held-shapes-s52008-source-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-s52008-source-20261013-v1",
+  "admission": "source-only-nontraining; held input worlds excluded from selected teacher queue",
+  "include": [
+    "source.ir.jsonl",
+    "build-report.json",
+    "campaign-manifest.json",
+    "provenance.json"
+  ],
+  "selection_correction": "2026-10-13: source itself is valid; original teacher selection falsely treated distinct folder_files worlds as collisions. Folder cases to be generated in a recovery campaign; complete visible-world comparison finds zero exact held overlaps."
+}

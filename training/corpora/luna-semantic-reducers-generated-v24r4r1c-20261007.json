@@ -1,0 +1,15 @@
+{
+  "id": "luna-semantic-reducers-generated-v24r4r1c-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
+  "admission": "raw-teacher-candidate;13exact,3rejected;2output-pathsourceconfounds-notDPO;retainoriginal9train7test",
+  "include": [
+    "worker-*/*.results.jsonl",
+    "worker-*/*.results.jsonl.manifest.json",
+    "audit-r4r1c.json",
+    "audit-r4r1c.md"
+  ],
+  "derived_from": [
+    "luna-semantic-reducers-source-v24r4r1c-20261007"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v15",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v15",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "admission": "verified-reference-task-source-only; teacher-results-require-independent-source-split-quality-review",
+  "notes": "80 train/nohint source variants of the same40 authored fixture facts as V14, balanced40 skill-catalog and40 evidence-chain. Source policy includes none record and requested fact-kind fixes. Variants do not count as independent semantic facts."
+}

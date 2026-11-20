@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-guided-soft-v8-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v8",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Accepted course parent outcome; provenance-marked official SDK text action bridge, pending actual soft-edge/source/action quality review. No automatic admission."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "luna-semantic-aggregate-source-v28r4-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v8-r4-final-reviewed-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "reviewed-source-scripted-proof-only; no model observations or training admission",
+  "derived_from": [
+    "luna-semantic-aggregate-source-v28r3-20261007"
+  ],
+  "notes": "Corrects dispatch load-release strengthening and explicit marked-transect positive scope. Original4train/4test source groups retained; only affected indices5/6 scheduled for new actual attempts in V29 remaining queues. Not independent additional worlds or changed-input DPO pairs."
+}

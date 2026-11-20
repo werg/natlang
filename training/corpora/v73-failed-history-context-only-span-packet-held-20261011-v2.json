@@ -1,0 +1,18 @@
+{
+  "id": "v73-failed-history-context-only-span-packet-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-failed-history-spans-v2",
+  "include": [
+    "FILES.sha256.json",
+    "corrected-failed-history-row-bindings.json",
+    "failed-history-context-only-candidate.jsonl",
+    "review.json",
+    "review.md"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-native-failed-action-history-context-span-diagnostic",
+  "training_admission": false,
+  "admission": "context-only-supervision-proposal-no-native-or-trace-admission; exact parser acceptance does not resolve prior row-hash discrepancies or approve masking",
+  "independent_new_worlds": 0,
+  "notes": "82 rows with 145 exact failed-action/message/result bindings and context token spans are preserved as a held proposal. Candidate SHA 99704d015170934acbcffa7936d0b3aedc6eccd2fb4be7626095434e1d37b91d; corrected binding SHA b4cf661af1eb47ca098f0d555b6c9524d13f7852e8dbf996f9edd6763892b221; review SHA e532551038d6673a0c66f1d53ea248190d522f9978e665d1cf06050ef979492d. The prior 82-line hash mismatch remains unresolved; raw line hashes are added without replacing prior receipt values. Context masking/admission awaits independent review."
+}

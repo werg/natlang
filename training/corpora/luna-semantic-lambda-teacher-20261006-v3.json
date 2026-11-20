@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v3",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v3",
+  "admission": "closed-native-trajectories; current-policy positives separated; semantic/source review, split closure and neuralese conversion pending",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "include_root_prefixes": [
+    "worker-",
+    "closed-audit"
+  ],
+  "notes": "21attempts/18completed/10current-policypositive/8rejected; three no-result failures preserved: provider-overload7, case-wall16, request-budget18. Two quality-pending Hotpot holds remain. 163inline calls/two iterateOn in positives. Admission subsets/audits are derivatives, not new independent examples."
+}

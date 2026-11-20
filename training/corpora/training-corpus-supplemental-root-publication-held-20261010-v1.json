@@ -1,0 +1,13 @@
+{
+  "id": "training-corpus-supplemental-root-publication-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/training-corpus-supplemental-root-publication-20261010-v1",
+  "include": [
+    "root-receipt.json"
+  ],
+  "split": "evidence-only",
+  "source_class": "root-current-artifact-publication-decision",
+  "training_admission": false,
+  "admission": "publication-only-no-training-native-trace-admission",
+  "notes": "Root exact382734277durablebytes11supplementals; originalmanifestsunchanged/currentpresenceonlynotpublish-timeexistence. Dynamic17excluded/4alreadycoveredskip."
+}

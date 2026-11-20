@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-local-stage-resource-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-resource-audit-20261006-v1",
+  "admission": "audit-only-resource-measurements-not-model-qualification",
+  "include": [
+    "report.md",
+    "findings.json"
+  ]
+}

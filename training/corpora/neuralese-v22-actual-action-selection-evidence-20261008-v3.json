@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-v22-actual-action-selection-evidence-20261008-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-v22-actual-action-candidate-proposal-20261008-v3",
+  "include": [
+    "README.md",
+    "manifest.json",
+    "quality-holds.json",
+    "raw-receipts.jsonl",
+    "selected-actions.jsonl"
+  ],
+  "admission": "held-actual-action-selection-evidence-no-training-admission",
+  "notes": "Immutable V22 source-reviewed action selection and raw provenance inputs for a 39-action candidate preview. Accepted parent outcomes and reviewer selection do not grant training or recurrence admission."
+}

@@ -1,0 +1,50 @@
+{
+  "id": "view-ask-slice-20261010-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/view-ask-slice-20261010-v1",
+  "include": [
+    "*.port-records.jsonl",
+    "manifest.json"
+  ],
+  "split": "closed by source group: upstream splits kept; train-only sources carved 5% test / 5% validation by group; tool outputs by repository (harness-bench split); protected bgkit benchmark hits forced to test",
+  "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
+  "admission": "superseded-by-view-ask-20261010-v2;held",
+  "training_admission": false,
+  "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by view-ask-20261010-v4 (same inputs, closure against S1 and harness v4); rows dropped by the later closure were split leaks. No unique rows.",
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "view-sources-20261009-v1",
+    "nebius-swe-rebench-openhands-trajectories-20261009-v1"
+  ],
+  "license": "per record (license field): Apache-2.0 (CNN/DM card), CC-BY-SA-4.0 (SQuAD, WTQ, FeTaQA), MIT (QMSum), CC-BY-4.0 (WebSRC, xLAM, SWE-rebench trajectories), LicenseRef-QuALITY (unverified), repository licences (CodeSearchNet; configs from MIT/Apache-2.0/BSD/ISC/Unlicense repositories only)",
+  "build": {
+    "script": "scripts/neuralese_view_corpus.py build",
+    "code_commit": "2a407dbb430502a391c3a29975271a5a1605bf7b",
+    "builder": "scripts/neuralese_data/view_corpus.py@1",
+    "record_version": "natlang.port-record/1",
+    "options": {
+      "caps": {
+        "cnn_dailymail": 500,
+        "squad": 220,
+        "quality": 40,
+        "qmsum": 160,
+        "codesearchnet": 900,
+        "websrc": 700,
+        "xlam": 700,
+        "repo_configs": 700,
+        "wtq": 450,
+        "fetaqa": 700,
+        "swe_tool_outputs": 1100
+      },
+      "max_source_chars": 32000,
+      "min_source_chars": 200,
+      "seed": 0,
+      "questions_per_source": 4,
+      "extracts_per_source": 3,
+      "protected_index": "/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json",
+      "protected_index_sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+    }
+  },
+  "notes": "Port records (natlang.port-record/1) for the view/ask summarizer family (DECISIONS 2026-10-09; plans/neuralese/VIEW_CORPUS.md), built 2026-10-10: 25067 records over 7300 sources; by artifact {\"code\": 3534, \"data\": 5536, \"html\": 4468, \"log\": 3938, \"prose\": 3209, \"table\": 4382}; by task {\"compare\": 19150, \"consume\": 663, \"reconstruct\": 5254}; by family {\"view_code_extract\": 1734, \"view_code_reconstruct\": 900, \"view_code_summary\": 900, \"view_data_extract\": 3475, \"view_data_qa\": 700, \"view_data_reconstruct\": 1361, \"view_html_extract\": 968, \"view_html_qa\": 2800, \"view_html_reconstruct\": 700, \"view_log_extract\": 2850, \"view_log_reconstruct\": 1088, \"view_prose_qa\": 968, \"view_prose_reconstruct\": 755, \"view_prose_summary\": 1486, \"view_table_extract\": 1525, \"view_table_qa\": 2407, \"view_table_reconstruct\": 450}; by split {\"test\": 1411, \"train\": 22353, \"validation\": 1303}. Targets are reconstruction (identity), code-computed extraction (JSONPath, CSS selectors, table cells/counts/arg-max, Python AST, tool-output facts) and questions/summaries taken from public datasets; no teacher-generated targets. Writer instructions are the dataset's query or instruction; compare records pair purposes over one source. Sources: CNN/DM 3.0.0 and SQuAD (train only; validation is protected) and QuALITY from the local HF cache, xLAM 60k (sdkb raw), bgkit bare repositories (permissive licences detected at HEAD), SWE-rebench OpenHands bash outputs (registered corpus), and view-sources-20261009-v1. Rejections by reason and input file hashes are in manifest.json. Omissions (preprocessing, generated targets, eval contamination; the v1 licence omissions were lifted by the owner rule of 2026-10-10) are recorded in VIEW_CORPUS.md section 2. Open before admission: cross-corpus split closure and near-duplicate dedup against s1-full-final-20261003 (shared wiki:/repo: groups).",
+  "superseded_by": "view-ask-20261010-v2"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "external-expansion-d16-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D16",
+  "include": [
+    "acquisition.json",
+    "MAD_full_dataset.json",
+    "MAD_human_labelled_dataset.json",
+    "README.md"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "mcemri/MAST-Data",
+    "revision": "95118ac951421753cf1deb87ddea3b01e693c41b",
+    "license": "cc-by-4.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

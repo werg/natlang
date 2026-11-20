@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v13-prepared-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v13-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed source for generation only; teacherdecisionquality required",
+  "notes": "24independentdiverseworlds12file12iterate12train12held. Root7factfixes +positivepositionbalancewithineachsplits; sourceSHA00065ebc... CPUreference24completed84exacthandle reads0modelcalls. No automatictrajectoryadmission."
+}

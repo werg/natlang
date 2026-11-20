@@ -1,0 +1,31 @@
+{
+  "id": "cross-corpus-index-s1-full-final-20261003-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/cross-corpus-index-s1-full-final-20261003-v1",
+  "include": [
+    "index.json",
+    "groups.json",
+    "digests.npz",
+    "sketches.npz"
+  ],
+  "kind": "cross-corpus-index",
+  "purpose": "exact digest/group/sketch matching for split closure and contamination checks against the published corpus (scripts/neuralese_data/cross_corpus.py Index); not training data",
+  "split": "none (index of s1-full-final-20261003's splits)",
+  "source_class": "derived-index-of-published-corpus",
+  "admission": "not-training-data",
+  "training_admission": false,
+  "training_admission_reason": "an index (hashes, MinHash sketches and group splits), never training examples",
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "s1-full-final-20261003"
+  ],
+  "license": "derived from s1-full-final-20261003; contains digests and sketches only",
+  "build": {
+    "script": "scripts/neuralese_data/cross_corpus.py index_corpus",
+    "schema": "natlang.cross-corpus-index/1",
+    "format": "port",
+    "records": 1870591,
+    "groups": 985434
+  },
+  "notes": "index.json 'files' lists the DGX paths the index was built from (provenance only). Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py."
+}

@@ -1,0 +1,22 @@
+{
+  "id": "luna-folder-recovery-native-turns-20261013-v1",
+  "owner": "pop",
+  "path": "runs/luna-folder-recovery-native-turns-20261013-v1",
+  "include": [
+    "approved-turns.jsonl",
+    "accepted-parents.native.jsonl",
+    "admission-review.json"
+  ],
+  "admission": "corrected visible-world held clearance and exact native parent/turn approval; train-only",
+  "training_admission": true,
+  "training_admission_reason": "50 folder parents falsely excluded by an earlier fingerprint omitting semantics.folder_files; complete visible-world comparison finds zero held collisions; all parent checks true; 237 approved decision turns; disjoint from earlier held-shape v1 corpus",
+  "review_status": "exact oracle and all checks true; 24 nonapproved context decisions omitted; LFM/Mellum renderer pending",
+  "required_conversion": "render native-turn corpus for both LFM and Mellum; include with earlier held-shape corpus in next declared union",
+  "split": "train only; source group IDs distinct from held seed61012; complete visible-world decontamination",
+  "source_class": "project-generated folder criteria reducer",
+  "license": "project-generated",
+  "source_corpora": [
+    "luna-held-shapes-s52005-source-20261013-v1",
+    "luna-held-shapes-s52006-source-20261013-v1"
+  ]
+}

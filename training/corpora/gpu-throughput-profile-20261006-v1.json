@@ -1,0 +1,11 @@
+{
+  "id": "gpu-throughput-profile-20261006-v1",
+  "owner": "pop",
+  "path": "runs/gpu-throughput-profile-20261006-v1",
+  "admission": "resource-diagnostic-only; not training examples or channel qualification",
+  "include": [
+    "*.json",
+    "*.md"
+  ],
+  "notes": "Live Python/native stack samples and isolated exact allocator-counter parity/microbenchmark. Raw samples retain limitations. Installed profiler binary excluded. Guard checks/budgets unchanged; do not mistake helper microbenchmark for end-to-end speedup."
+}

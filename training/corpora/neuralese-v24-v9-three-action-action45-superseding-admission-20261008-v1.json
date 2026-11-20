@@ -1,0 +1,18 @@
+{
+  "id": "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-action45-root-integration-review-20261008-v1",
+  "include": [
+    "admission.json",
+    "selected-action-admission.json",
+    "mechanical-review.json"
+  ],
+  "admission": "root-issued-exact45-native-action-and-ordinary-gold-text-facets-only; supersedes-47-action-selection-due-to-two-model-visible-context-holds",
+  "derived_from": [
+    "s1-question-collection-v8-action-supported-proposal-20261008-v1",
+    "s1-question-collection-v8-action-source-audit-20261008-v1",
+    "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1",
+    "neuralese-v24-v9-integration-root-admission-20261008-v1"
+  ],
+  "notes": "Root-issued selected45 certificate plus V24 integration certificate and mechanical review. Selected action targets are exactly the 45 independently source-reviewed actions with sufficient model-visible grounding; qa_quality_mcq:24 and :26 are excluded from native and ordinary-text facets due to missing decisive facts in visible excerpts. The older root-issued47 action certificate remains immutable historical evidence, superseded in active scope by these two holds. No recurrence additions, trajectory admission, writer/runtime/foundation qualification, or active training-input change."
+}

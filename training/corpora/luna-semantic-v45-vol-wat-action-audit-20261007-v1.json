@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v45-vol-wat-action-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v45-vol-wat-action-audit-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "V45/V46 raw action review evidence; VOLcooperativeauthority sourcehold, explicit WATtyped-objecttruthiness modelerror; no admission",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

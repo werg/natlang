@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v17-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "provider-source-generation-diagnosis-review",
+  "training_admission": false,
+  "admission": "held-source-semantic-split-trace-quality-review",
+  "notes": "Pinned actual output/static quality review and exact source leaf closure packet; held no admission."
+}

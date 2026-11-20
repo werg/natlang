@@ -1,0 +1,25 @@
+{
+  "id": "luna-v17-step5-selected112-native-87-targetbound-text-20261009-v3",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "Root adopted 112 ordinary sampled native actions (62 Luna source-grounded actions, 49 Luna source-grounded actions, and 1 sampled Step5 action) and 87 exact target-bound text documents; 25 source-backed text omissions remain explicit. The Step5 action is bound to the approved case-01 Microgrid run and source physical row 1, with matching result/trace/plan/argv/preflight and root action receipt. It is not from the separate Clinic case-00 source-selection mismatch. No whole-trajectory, R, runtime, or new-world admission. Active training inputs unchanged.",
+  "derived_from": [
+    "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1",
+    "v18-v19-step5-case01-scorefact-selected3-native-text-delta-20261009-v1",
+    "luna-river-derived-writer-native-text-delta-20261009-v1",
+    "v18-v19-opencode-step5-selected-seven-native-text-delta-20261009-v1",
+    "v18-v19-opencode-step5-selected-eight-native-text-delta-20261009-v1",
+    "luna-microgrid-three-derived-native-23-counterfactual-r-20261009-v1"
+  ],
+  "notes": "Compact allowlisted delta only; no cumulative corpus copy. Adopted virtual union before this addition was 5572 native / 4793 text / 5004 recurrence; proposed union is 5684 / 4880 / 5004. V3 include list is the exact root-approved 220-file allowlist plus its review and approval receipts; it excludes OpenCode process databases/logs, credentials/config, caches, dependency trees and raw CLI output. Unsafe v1/v2 candidate IDs are retired and held locally: luna-v17-step5-selected112-native-87-targetbound-text-20261009-v1 (manifest SHA-256 5560ea6ac4a76cff72c5411481a0384b4c8a5850800b79fc43e95802ae929e11) and luna-v17-step5-selected112-native-87-targetbound-text-20261009-v2 (manifest SHA-256 464cd30137d8d524bed36f9f700380dd08dc88144aa07085eb49fb281d46916b). They included copied private OpenCode process state and dependencies; exact verified DGX copies were removed. Cleanup receipt SHA-256 009e85ec833c05119232c4a2907df9ec4e10970f4a2ef39c092c9862e37ce10f is retained locally, not transferred. Neither candidate is active, admitted, transferred, or part of this v3 derivation.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-authored-root-microgrid-multilambda-20261009-v1/evidence",
+    "luna-authored-root-microgrid-multilambda-20261009-v1/runtime",
+    "luna-authored-root-remaining-four-multilambda-20261009-v1/campaign-v1",
+    "luna-authored-root-remaining-four-multilambda-20261009-v1/evidence",
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1",
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3"
+  ]
+}

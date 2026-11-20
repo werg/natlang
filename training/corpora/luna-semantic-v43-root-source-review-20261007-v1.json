@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v43-root-source-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v43-root-source-review-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Root24 exactnativeaction approvals pending cumulative materialization; LIB236 heldincorrectrationale, no blanketproducer/recurrence approval",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

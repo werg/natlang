@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-static-depth2-v15-20261007-v13-audit-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v2",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.md",
+    "**/*.mjs"
+  ],
+  "admission": "Superseded proposal118; root rejected NEI conditional applicability inference, preserve history not admission",
+  "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+}

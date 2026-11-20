@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-successor-v14-v10r3-westmere-r1-generation-only-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v14-prepared-20261007-v10r3-westmere-r1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
+  "derived_from": [
+    "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
+    "luna-semantic-v65-v67-closed-audit-20261007-v1"
+  ],
+  "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
+}

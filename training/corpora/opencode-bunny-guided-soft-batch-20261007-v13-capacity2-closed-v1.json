@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-guided-soft-batch-20261007-v13-capacity2-closed-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-guided-soft-batch-20261007-v13-capacity2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+  "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+}

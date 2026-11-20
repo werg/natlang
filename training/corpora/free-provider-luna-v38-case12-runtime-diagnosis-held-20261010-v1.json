@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v38-case12-runtime-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v38-case12-runtime-diagnosis-v1",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only",
+  "source_class": "runtime-quality-diagnosis",
+  "training_admission": false,
+  "admission": "diagnosis-only-not-training-admission",
+  "notes": "384requestbudget191turns nofinal. Childmissingtypedresult, free decisionContextname,inputpropertyrequired, explicittimeout_ms1. Noestablishedbroadruntimebug; notsemanticnegative."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "luna-held-shapes-s52079-curated-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-s52079-parent-review-20261015-v1",
+  "include": [
+    "accepted-parents.jsonl",
+    "accepted-parents.review.json",
+    "semantic-holds.json",
+    "approved-turns.jsonl",
+    "curation-review.json"
+  ],
+  "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+  "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+  "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+  "admission": "89 exact accepted candidate roots; 88 admitted after one no-iterate research parent hold; 640 approved native decisions, all failed or unapproved decisions excluded",
+  "training_admission": true,
+  "training_admission_reason": "Exact accepted roots, source-review and protected checks, source-bound independent dataset-workbench audit, one research no-iterate parent hold, native per-decision approval; only approved-turns.jsonl is training input",
+  "review_status": "Six of six dataset-workbench roots semantically approved; one HotpotQA research root held for omitting required iterateOn and inline NL. Remaining seven accepted HotpotQA research roots used required iteration and inline NL.",
+  "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+  "notes": "Exact accepted 89 roots/672 materialized decisions; 640 approved after 29 unapproved decisions and 3 from held parent. Global union makes final cross-corpus decision."
+}

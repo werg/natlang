@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v15-iterate-richness-proposal-20261007-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v4",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-generation-only-typed-alias-source-candidate-no-teacher-output",
+  "notes": "Same V3 facts/tasks/gold/groups/splits and pass references; root code restores ergonomic eval-local Draft/Progress aliases. Root generation review, revision audit and source are included. Source candidate only. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+  "derived_from": [
+    "neuralese-v15-iterate-richness-proposal-20261007-v3"
+  ]
+}

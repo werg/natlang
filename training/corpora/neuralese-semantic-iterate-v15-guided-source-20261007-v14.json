@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-semantic-iterate-v15-guided-source-20261007-v14",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v15-soft-state-20261007-v14-guided",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+  "notes": "Guided source scaffold variant of same12V15 worlds; preserves split/groups/gold, no new independent worlds. Includes scripted V79 proof only."
+}

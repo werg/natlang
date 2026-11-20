@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-luna-v52-guidance-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "One SCHED-543 train V5 guidance recovery with V4-identical facts and gold. V49 partial preserved unscored. One worker beside four V53 workers. Active outputs excluded.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

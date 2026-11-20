@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-google-mass-repair-startup-failure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+  "include": [
+    "worker.log",
+    "startup-failure-closeout-v1.json"
+  ],
+  "split": "not-applicable",
+  "source_class": "closed-provider-launch-failure-evidence",
+  "training_admission": false,
+  "admission": "startup failure, no API request or training sample",
+  "independent_new_worlds": 0,
+  "notes": "Shared persistence import missing from flatfrozenlayout. Originalreceipt/snapshot untouched; correctedV7 preserves package layout through sharedfreezehelper."
+}

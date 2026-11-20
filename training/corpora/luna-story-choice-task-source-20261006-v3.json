@@ -1,0 +1,18 @@
+{
+  "id": "luna-story-choice-task-source-20261006-v3",
+  "owner": "pop",
+  "path": "runs/luna-story-choice-source-20261006-v3",
+  "include": [
+    "cases.jsonl",
+    "cases.jsonl.report.json",
+    "reviewed.cases.jsonl",
+    "audit/source-quality-review-v3.json"
+  ],
+  "admission": "prepared-source-reviewed-train-tasks-not-generated-training-examples",
+  "derived_from": [
+    "luna-story-choice-task-source-20261006-v1",
+    "bgkit-exports-20261006-v1"
+  ],
+  "source": "QuALITY via BGKit qa_quality_mcq, CC-BY-4.0 as declared in scripts/neuralese_data/bgkit.py and dataset inventory.",
+  "notes": "Root corrected factual source-ordering error and overly literal inference hold. Six candidates supported by non-blind source review; no independent blinded agreement claim. Group/split closure and actual teacher/runtime admission pending. Collection usesv3 only; retainv1/v2 as superseded audit-process diagnostics."
+}

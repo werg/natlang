@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-v27-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-review-20261007",
+  "admission": "closed-raw-observations-only;19graderaccepted13rejected;all8aggregatesheld;decisionreviewpending;noDPOadmission",
+  "include": [
+    "worker-*/**",
+    "launch-approved-v7.json",
+    "closed-attempt-review.json"
+  ],
+  "derived_from": [
+    "luna-semantic-reducers-source-v27r1-20261007"
+  ]
+}

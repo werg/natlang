@@ -1,0 +1,18 @@
+{
+  "id": "pop-action45-inactive-original-checkpoint-exports-held-20261010-v1",
+  "owner": "pop",
+  "path": ".local/retained-checkpoints/action45-original-exports-20261009-v1",
+  "include": [
+    "best-heads.pt",
+    "best-checkpoint.pt",
+    "heads.pt",
+    "relocation-receipt.json"
+  ],
+  "split": "not-training-data",
+  "source_class": "inactive-full-checkpoint-and-projection-export-preservation",
+  "admission": "retained-checkpoint-evidence-only",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "independent_new_worlds": 0,
+  "notes": "Inactive original Action45 exports, including full optimizer checkpoint. Preserved for reproducibility and recovery, not admitted samples or neuralese qualification. Current active training has its own full checkpoint on /srv/storage. SHA-verified offload may remove these local inactive bytes; restore via sync_training_corpora.py before using the original /srv symlink paths. Relocation receipt preserves original paths and exact hashes."
+}

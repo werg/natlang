@@ -1,0 +1,19 @@
+{
+  "id": "s1-question-collection-v7-generation-source-20261008",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-candidates-20261008-v7",
+  "include": [
+    "source.cases.jsonl",
+    "source-manifest.json",
+    "source-proof.json",
+    "source-validation.json",
+    "review-facts.json",
+    "root-review-v1/review.json",
+    "generation-review-v1/luna/plan.approved.json",
+    "generation-review-v1/luna/root-authorization.json",
+    "generation-review-v1/luna/source-index-catalog.json",
+    "generation-review-v1/luna/launch-binding.json"
+  ],
+  "admission": "held-generation-only-no-training-trace-or-dpo-admission",
+  "notes": "Reviewed source-derived question collection variants; 16 tasks inherit existing source groups/splits and receive zero independent-world credit. Includes immutable root review, frozen-runtime reference proof linkage, approved execution plan and launch binding. The active campaign output directory and mutable logs are intentionally excluded. Copies/proofs do not grant training admission."
+}

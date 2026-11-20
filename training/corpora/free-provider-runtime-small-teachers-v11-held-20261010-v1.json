@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-runtime-small-teachers-v11-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v11",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "node_modules",
+    "__pycache__"
+  ],
+  "split": "not-applicable-generation-inputs",
+  "source_class": "frozen-provider-generation-runtime",
+  "training_admission": false,
+  "admission": "generation-input-or-quality-review-only-not-training-data",
+  "notes": "1333payloadfiles +manifest; cleancommittedd7ba3c07 sourceisolatedcompile; positive nl.with<ResultType>/freshfinishing sharedguidance99d0f6ab unmeasuredpaired48variantdebt. Sourcevendor canonicaldependencyoverlay; remoteartifactalone doesnotinstalllocalnode dependencies."
+}

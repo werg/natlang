@@ -1,0 +1,20 @@
+{
+  "id": "verified-reasoning-pools-v19-closed-raw-v2-v5-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+  "exclude_dirs": [
+    "node_modules",
+    "__pycache__",
+    ".git"
+  ],
+  "admission": "held generation/source evidence only; no training admission",
+  "notes": "Complete closed raw original/recovery/retry evidence. Final25 original results19accepted6rejected; six later retries accepted. Includes failed/abandoned resource attempts and both frozen runtime pins; no automatic trajectory/action/DPO admission. Source and initial frozen runtime are separate registry dependencies.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "generation-review-v2/luna",
+    "generation-review-v3/luna",
+    "generation-review-v4/luna",
+    "generation-review-v5/luna",
+    "generation-review-v5/runtime-build"
+  ]
+}

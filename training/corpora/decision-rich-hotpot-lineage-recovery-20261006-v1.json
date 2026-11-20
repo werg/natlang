@@ -1,0 +1,12 @@
+{
+  "id": "decision-rich-hotpot-lineage-recovery-20261006-v1",
+  "owner": "pop",
+  "path": "runs/decision-rich-hotpot-lineage-recovery-20261006-v1",
+  "admission": "source-lineage-audit-only-eight-reviewed-facts-pinned-raw-source-and-exact-protected-overlap-clear-semantic-source-group-and-trajectory-admission-still-required",
+  "include": [
+    "lineage.json",
+    "summary.json",
+    "assessment.md",
+    "protected-overlap-check.json"
+  ]
+}

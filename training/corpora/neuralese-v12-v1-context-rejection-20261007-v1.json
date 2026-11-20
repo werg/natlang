@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-v12-v1-context-rejection-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v12-v1-context-rejection-publication-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-context-identity-failure-no-training-admission",
+  "notes": "Root rejection overlay for V12 candidate V1. Seven CRA targets resolved changed generation guidance; V1 is rejected and incomplete. This overlay does not repair or qualify V1.",
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-v11-20261007-v1",
+    "luna-semantic-v48-closed-action-audit-20261007-v1"
+  ]
+}

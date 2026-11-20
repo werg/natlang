@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v58-source-differences-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-scope-and-label-differences-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Scope failures explained by submitted code; original full30 differing source decision evidence. Provisional helper categories do not confer exclusion or admission."
+}

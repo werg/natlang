@@ -1,0 +1,7 @@
+{
+  "id": "luna-v14-skill-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v14-skill-quality-review-20261006-v1",
+  "admission": "independent-review-evidence-only-not-training-examples",
+  "notes": "Closed V14 worker1 reviewed20/20:19 exact accepts, one loaded-skill redundancy error.13 inline-lambda traces;11 recovered after rejected/error actions. Final exact acceptance does not admit failed actions. Worker2 excluded."
+}

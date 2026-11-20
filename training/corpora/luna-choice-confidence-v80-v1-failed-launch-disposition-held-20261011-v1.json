@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-confidence-v80-v1-failed-launch-disposition-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v1",
+  "include": [
+    "root-launch-failure-v1/launch-failure.json",
+    "root-supervisor-v1.log"
+  ],
+  "split": "inherited-train-launch-failure-evidence",
+  "source_class": "held-preflight-failure-disposition",
+  "training_admission": false,
+  "admission": "zero-worker-preflight-failure-only-no-data-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Immutable additive disposition for V80 v1. The predecessor lane cardinality check failed before any worker or provider call. Preserves the exact failure receipt and supervisor log; prior V1 input/plan snapshots remain unchanged. V2 is the corrected fresh plan."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-v20-source-contract-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v20-source-contract-review-20261006-v1",
+  "admission": "audit-only-city-state-source-conflict-not-model-negative-or-training-admission",
+  "include": [
+    "findings.json",
+    "report.md"
+  ]
+}

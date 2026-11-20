@@ -1,0 +1,15 @@
+{
+  "id": "neuralese-v25-actual-action-review-20261008-v8",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-source-action-review-20261008-v8",
+  "include": [
+    "README.md",
+    "review.json",
+    "manifest.json"
+  ],
+  "admission": "held-actual-source-action-review-no-training-admission",
+  "notes": "Held V25 source/action audit: all 16 actual Luna cases, exact typed-text writer event/body/request provenance, per-case source pass binding and selected output graph path; 30 train action recommendations, test rows diagnostic only. Not training admission, gradient replay qualification, or learned-runtime qualification.",
+  "derived_from": [
+    "neuralese-semantic-iterate-reducers-v25-20261008-v1"
+  ]
+}

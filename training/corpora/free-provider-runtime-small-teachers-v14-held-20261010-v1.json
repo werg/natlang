@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-runtime-small-teachers-v14-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v14",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "provider-source-runtime-generation-review",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-trace-review-required",
+  "notes": "Frozen built runtime b8251f576f clarifies passing full child records or named captures. Active V45 retains V13."
+}

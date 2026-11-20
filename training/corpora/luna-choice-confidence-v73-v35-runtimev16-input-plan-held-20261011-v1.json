@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v73-v35-runtimev16-input-plan-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v2",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v2.json",
+    "predecessor-bindings-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-input",
+  "source_class": "held-luna-native-generation-inputs",
+  "training_admission": false,
+  "admission": "prepared-only-root-review-required",
+  "independent_new_worlds": 0,
+  "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1–5; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "luna-native-current-admission-20261006-v2",
+  "owner": "pop",
+  "path": "runs/luna-native-current-admission-20261006-v2",
+  "admission": "derived-current-policy-still-needs-semantic-source-split-closure",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.log"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-teacher-20261006-v2",
+    "luna-semantic-lambda-teacher-20261006-v3",
+    "luna-semantic-lambda-teacher-20261006-v4",
+    "luna-semantic-lambda-teacher-20261006-v5",
+    "luna-semantic-lambda-teacher-20261006-v6"
+  ]
+}

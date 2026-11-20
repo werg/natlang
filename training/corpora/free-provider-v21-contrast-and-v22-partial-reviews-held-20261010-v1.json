@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-v21-contrast-and-v22-partial-reviews-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "include": [
+    "quality-review-v21-luna-v28-five-supplement-v1/supplement.json",
+    "quality-review-v21-luna-v28-five-supplement-v1/supplement.md",
+    "quality-review-v22-zai45-v28case001-partial/review.json",
+    "quality-review-v22-zai45-v28case001-partial/review.md"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "independent-contrast-and-incomplete-trajectory-review",
+  "training_admission": false,
+  "admission": "diagnosticreview only; incompleteZAIcase notnegative, finalLuna/ZAIprefixnotprovenidentical",
+  "independent_new_worlds": 0,
+  "notes": "V21contrastsource/task/systempromptmatchbutfinalcaptureddecisionprefixunknown; noautomaticDPOpair. ZAIpartial40searchcallswithoutdirectFileHandle read, zero completediterateOnsteps; collectionlimitnotlanguagefailure."
+}

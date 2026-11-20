@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-runtime-small-teachers-v15-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v15",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-runtime-visibility-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-live-model-quality-review",
+  "notes": "Fresh isolated compiled shared runtime includes4096-character scope/input display, separate2000 tool/page limit, upstream runtime feedback updates. Immutable; old activeV55 frozenV14 unchanged. Live model qualification pending."
+}

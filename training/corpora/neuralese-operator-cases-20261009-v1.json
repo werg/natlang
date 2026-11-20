@@ -1,0 +1,22 @@
+{
+  "id": "neuralese-operator-cases-20261009-v1",
+  "owner": "dgx",
+  "path": "runs/neuralese-operator-cases-20261009-v1",
+  "include": [
+    "cases.jsonl"
+  ],
+  "split": "per-row (source record split)",
+  "source_class": "derived-operator-cases-with-code-computed-targets",
+  "admission": "s5-operator-training-source;exact-code-targets;not-task-admission",
+  "training_admission": true,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "neuralese-maple-native-gold-text-corpus-20261008-v7"
+  ],
+  "license": "internal: derived from the registered v7 gold text corpus",
+  "notes": "natlang_neuralese.data.operator_cases (b94a2d49): 2000 spans (1166 train / 834 test by source record) from chat turns of the v7 corpus, system prompt and spans repeated in >2 records excluded; each with a partner span and a map transform (upper, first_word, last_word, word_count, reverse_words, initials) whose result is computed in code.",
+  "review_status": "2026-10-11 dgx-held-recovery: label said not-task-admission; the cases are code-computed exact targets. Admitted: 1166 train spans (834 test spans stay out). ~74k tokens. JeFF scan 0 hits.",
+  "consumable_by_direct_stage": false,
+  "required_conversion": "operator-objective cases (S5), not text SFT; replay records are backbone-specific smoke and stay excluded",
+  "train_rows": 1166
+}

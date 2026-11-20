@@ -1,0 +1,17 @@
+{
+  "id": "google-choice-confidence-v41-prefix-remainder-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-remainder-static-v1",
+  "include": [
+    "prefix-snapshot-receipt.json",
+    "prefix-input/**/*",
+    "static/**/*",
+    "visible-subset-v1/**/*"
+  ],
+  "split": "inherited-train-static-reference-only",
+  "source_class": "held-label-derived-static-reference-and-replay",
+  "training_admission": false,
+  "admission": "authored-reference-generation-only-no-provider-turns-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Byte-prefix remainder derivative of V41 JSON-object output after the already-snapshotted V78 prefix. At cutoff it contains 59 new typed labels; static adapter produced 8 programs/47 accepted labels, with 2 capture failures. Visible subset has 6 programs/37 items passing authored admission and full capture visibility. The exact full adapter evidence, failures/rejections, source manifest, 58 component archive, and subset selection are retained. No labels from the prior 187-row V78 prefix are selected."
+}

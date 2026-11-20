@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v45-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "closed-iterative-case-trace-review",
+  "training_admission": false,
+  "admission": "held-source-trace-and-curriculum-fidelity-review",
+  "notes": "Closed four original train iterative cases. All four result/file/source derived checks pass; prior failures remain separate. No admission."
+}

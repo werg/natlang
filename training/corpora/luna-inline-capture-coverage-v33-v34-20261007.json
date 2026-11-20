@@ -1,0 +1,10 @@
+{
+  "id": "luna-inline-capture-coverage-v33-v34-20261007",
+  "owner": "pop",
+  "path": "runs/luna-inline-capture-coverage-v33-v34-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "read-only conversion coverage diagnostic; no quality admission",
+  "notes": "29rawresultbindings;118writers163reads418holds.73JSONcaptureoccurrences butonly3successfulattestationholds; implicit captures,failedactions,alias syntax,interpolation dominate. Exactnative data preserved; noinventedhostproof."
+}

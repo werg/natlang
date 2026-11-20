@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v17-guided-runtime-20261008-8bf",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v17-guided-runtime-20261008-8bf",
+  "admission": "held-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Frozen Node runtime and source evidence for stopped V17 campaign. Provenance only, no qualification/admission."
+}

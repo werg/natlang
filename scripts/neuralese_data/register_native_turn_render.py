@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Register a finished render of render_native_turn_corpus.py (or the union) in training/neuralese_corpora.json.
+"""Register a finished render of render_native_turn_corpus.py (or the union) in training/corpora/.
 
 Adds or replaces the registry entry ``--id`` for ``--render-dir`` (its receipt.json gives counts, tokens and hashes),
 then publishes its immutable manifest (scripts/sync_training_corpora.py publish). The text files are bound per
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY = ROOT / 'training' / 'neuralese_corpora.json'
+REGISTRY = ROOT / 'training' / 'corpora'
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 
@@ -148,7 +148,8 @@ def make_entry(a) -> dict:
     body = member_entry(a, receipt) if a.kind == 'member' else union_entry(a, receipt)
     if protection is not None:
         body['build']['admission_protection'] = protection
-    sources = {corpus['id']: corpus for corpus in json.loads(REGISTRY.read_text())['corpora']}
+    from natlang_neuralese.common import corpus_registry
+    sources = {corpus['id']: corpus for corpus in corpus_registry.load(ROOT)['corpora']}
     unadmitted = [source for source in a.source_corpus
                   if source not in sources or sources[source].get('training_admission') is not True]
     if unadmitted:
@@ -187,12 +188,9 @@ def main(argv=None):
         from register_corpora import register
         register([entry], f'Register {a.id}', replace=True)
         return
-    registry = json.loads(REGISTRY.read_text())
-    corpora = [c for c in registry['corpora'] if c['id'] != a.id]
-    replaced = len(corpora) != len(registry['corpora'])
-    corpora.append(entry)
-    registry['corpora'] = corpora
-    REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False) + '\n')
+    from natlang_neuralese.common import corpus_registry
+    replaced = corpus_registry.entry_path(ROOT, a.id).exists()
+    corpus_registry.write_entries(ROOT, [entry], replace=True)
     print(json.dumps({'registered': a.id, 'replaced': replaced}))
     if not a.no_publish:
         subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', a.machine,

@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v21-filtered-v4-closure-packet-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-static-filtered-v4-v1/source-closure-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Changed batch composition requires full-S1 closure.37 retained train source decisions, five programs; root/source/quality and semantic source projection pins. Held until explicit quality and split decisions."
+}

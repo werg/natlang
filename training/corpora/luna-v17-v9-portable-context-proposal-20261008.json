@@ -1,0 +1,18 @@
+{
+  "id": "luna-v17-v9-portable-context-proposal-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal",
+  "include": [
+    "README.md",
+    "context-bound-delta/*",
+    "inputs/*",
+    "review/*",
+    "assembled-v3/*",
+    "text-proposal-26-v3/*"
+  ],
+  "admission": "root-admitted-exact-source-grounded-native-sft-closed-recurrence-and-derived-gold-text;not-runtime-qualified",
+  "notes": "Root admission through runs/neuralese-v9-root-review-20261008-v1/root-admission.json only. Authoritative assembled-v3 and text-proposal-26-v3 retain exact V17 prefixes; 26 protected actions (21 train/5 test), 5242 native/4961 recurrence/1020 closed links, 4496 gold docs (2792 train/1704 test), zero text omissions. Authenticated context-only inputs do not add writer targets or learned edges. Null-provider-type row held. Historical proposal flags unchanged. No new worlds/DPO/runtime/foundation qualification and no active V22 input change.",
+  "derived_from": [
+    "neuralese-native-r-v17-bunny-v5-20261008"
+  ]
+}

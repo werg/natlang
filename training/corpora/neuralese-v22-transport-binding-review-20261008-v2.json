@@ -1,0 +1,17 @@
+{
+  "id": "neuralese-v22-transport-binding-review-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v22-transport-binding-review-20261008-v2",
+  "include": [
+    "README.md",
+    "manifest.json",
+    "summary.json",
+    "source-output-classification.jsonl",
+    "transport-bindings.json"
+  ],
+  "admission": "held-graph-transport-diagnostic-no-training-admission",
+  "notes": "Graph-qualified transport facts: 22 selected source-action/execution-output/consumer bindings plus 2 selected typed-result targets with actual readers and same-body earlier events. Explicitly no learned-gradient edge or training admission. Includes AST-based exact source-output construction classes.",
+  "derived_from": [
+    "neuralese-v22-actual-action-preview-20261008-v1"
+  ]
+}

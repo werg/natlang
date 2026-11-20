@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v14r2-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v14r2-clarification-20261007-candidate-v4",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed source for generation only; static scripted actions separately audited",
+  "notes": "Four source clarifications preserve original V14 groups/splits/gold. Explicit rule subtypes and exact action/handling contracts. Zero new worlds."
+}

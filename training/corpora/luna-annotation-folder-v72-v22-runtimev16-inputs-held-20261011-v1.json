@@ -1,0 +1,19 @@
+{
+  "id": "luna-annotation-folder-v72-v22-runtimev16-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v72-runtimev16-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ],
+  "split": "inherited-train-input-only",
+  "source_class": "held-native-generation-inputs",
+  "training_admission": false,
+  "admission": "input-only-owner-review-pending",
+  "notes": "Preparation-only V72 plan based on V22 held static annotation reference and runtime-v16. root_approved=false. Five queues of18,18,18,17,17 cases. No campaign was launched by this preparation; no result, training admission, native trace admission, or independent-world credit."
+}

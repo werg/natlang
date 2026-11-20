@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v59-closed-iterative-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-independent-quality-review",
+  "notes": "Three original train cases accepted, all6files exact each; four typed iterateOn state transitions and final Draft each, no scope failures. Original accepted manual variants retained. No new-world or admission credit."
+}

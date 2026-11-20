@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-v36-v37-label-adjudication-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-v37-source-label-adjudication-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "source_class": "closed-provider-static-quality-evidence",
+  "split": "evidence-only-inherited-groups",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "19mismatchitemsproposal9supportedsourceanchors10ambiguous/suspect/insufficientvisibleevidence pendingreview; no goldrewrite/admission."
+}

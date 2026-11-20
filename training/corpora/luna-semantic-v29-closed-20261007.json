@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-v29-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v29-campaign-20261007",
+  "include": [
+    "worker-*/**",
+    "*.json"
+  ],
+  "admission": "raw-candidate-only;32finalaccepted-basecases;ordered-child-reviewrequired;oneaggregate-ledgerconfound-onebudgetpartial",
+  "notes": "16file/16iterate baseworlds16train16test. Partial/failedactionsandbadchilddecisionsnotautomaticadmission. Sameaggregateworldsr4notnewindependentsamples. Peractualdraft inputstateauditneeded; nofinal-onlyadmission."
+}

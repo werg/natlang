@@ -1,0 +1,15 @@
+{
+  "id": "sft-neuralese-text-20261117-v2",
+  "owner": "dgx",
+  "path": "runs/sft-neuralese-text-20261117-v2",
+  "include": [
+    "build.json",
+    "cases.jsonl",
+    "chains.pkl",
+    "rows.jsonl.zst"
+  ],
+  "admission": "sft-experiment-input",
+  "license_provenance": "Own LFM3 GRPO rollouts (project-generated, grpo-v2 run1/run2 and grpo-v3 run1); task sources keep their pool rows' license provenance (bgkit KR readers: SearchQA, PubMedQA, NarrativeQA, babi haystack, memory sessions; composed Neuralese tasks), recorded per task in cases.jsonl.",
+  "note": "Text rows of the 449 verified own GRPO successes that sft_sources build skips for imported Neuralese state (has_native_state): every call whose messages hold no native_state part, i.e. the Neuralese producer invocations (the prompted extraction/summary calls whose returned value span is what the actor captures as the state) and the consumer's calls before its first import; calls after an import are counted, not written. 263 episodes over 94 tasks (115 episodes on bgkit KR reader tasks), 3,806 calls, 1,115 exp0_sft --chains sequences, 11.7M forward / 4.82M target tokens; held-v3/v2 closure 0 hits; every call's system prompt and tool schemas equal ones the current runtime rendered in an exact replay (pin aa1bd846); per-task cap 4. Not replayed (states lived only in the actor store). Merge with sft-verified-20261117-v2/v3 chains (same row format). Built by scripts/neuralese_data/sft_sources.py neuralese-text; plans/neuralese/SFT_SOURCES_20261117.md. v2: --max-per-task 2 (165 episodes, 2,477 calls, 711 chains, 7.4M forward / 3.0M target tokens).",
+  "kind": "sft-rows"
+}

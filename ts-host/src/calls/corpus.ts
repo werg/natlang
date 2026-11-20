@@ -3,7 +3,7 @@
  * evidence that it does what the agent did (the calls it was checked on, with the judge's verdicts), each decline with
  * its reason and sample calls (where natural language was judged essential), and the findings. The corpus is evidence
  * about which parts of natural-language functions are crisp; whether it is used for training is decided separately,
- * in the corpus registry (training/neuralese_corpora.json).
+ * in the corpus registry (training/corpora).
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,0 +1,15 @@
+{
+  "id": "s3-subset-20261005",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/s3-subset-20261005",
+  "admission": "derived-held-inherits-s1-admission",
+  "include": [
+    "*.port-records.jsonl",
+    "manifest.json"
+  ],
+  "derived_from": [
+    "s1-full-final-20261003"
+  ],
+  "training_admission": false,
+  "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): subset of s1-full-final-20261003, not additional examples"
+}

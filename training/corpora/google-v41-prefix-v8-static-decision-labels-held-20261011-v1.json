@@ -1,0 +1,18 @@
+{
+  "id": "google-v41-prefix-v8-static-decision-labels-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v41-prefix-static-v8-current-criteria",
+  "include": [
+    "prefix-input/**/*",
+    "prefix-snapshot-receipt.json",
+    "prepare-prefix.py",
+    "selection/**/*",
+    "static/**/*"
+  ],
+  "split": "inherited-train-held-static-label-adapter",
+  "source_class": "held-static-decision-label-adapter-from-immutable-provider-prefix",
+  "training_admission": false,
+  "admission": "static-reference-and-source-binding-only-quality-review-pending",
+  "independent_new_worlds": 0,
+  "notes": "Immutable V41 complete-line prefix snapshot: 792 rows, 3,110,226 bytes, prefix SHA 417e49880b205f3003d6ae73cc39ef14efe22648badcaa554bf9e55d99b45b1f. Seven authored cases from 37 accepted typed labels; seven of seven scripted reference replays passed. Cases SHA 659779a3371e2c759c78d56a9ac55d6c16eacdc507d3d970116b866f850fbdc6 and replay SHA 137aec1e88edc670501b5add721bcbf74e45c7391d4449a3c76e9d3de3ec1591. Provider-label disagreements and source-quality review remain held; static references are not teacher trajectories."
+}

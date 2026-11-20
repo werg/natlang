@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-v28r3-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v28r3-campaign-20261007",
+  "include": [
+    "worker-*/**",
+    "*.json"
+  ],
+  "admission": "raw-diagnostics-only;six-accepted-one-rejected-one-budget-partial;actualdecisionreview/sourceconfounds-held",
+  "derived_from": [
+    "luna-semantic-aggregate-source-v28r3-20261007"
+  ],
+  "notes": "Finalgradercountsareprovisionalquality. Missinghubassignmentcontext/releasequalifierconfounds notcleanDPOnegative."
+}

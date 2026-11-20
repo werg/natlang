@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v31-closed-decision-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v31-decision-quality-audit-20261007-closed-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "diagnostic outcome and invocation evidence; no blanket teacher admission",
+  "notes": "24 terminal exports,22 exact parent finals,353 actual invocation entries. Source/split/group and raw hashes bound. Child semantic and shape failures retained independently; exact native decision review follows in a separate immutable revision."
+}

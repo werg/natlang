@@ -1,0 +1,18 @@
+{
+  "id": "luna-dataset-workbench-held-audit-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-dataset-workbench-held-audit-20261015-v1",
+  "include": [
+    "review.json",
+    "REPORT.md"
+  ],
+  "source_class": "Independent source-bound semantic audit of forty held Luna dataset-workbench exact roots",
+  "license": "Project-generated curriculum with individual source facts in seed parent corpora",
+  "split": "train-only source parents but this audit itself is review evidence, not training rows",
+  "admission": "Forty parents item-by-item reviewed; 30 semantics approved for separate curation and ten held; no direct training admission",
+  "training_admission": false,
+  "training_admission_reason": "Review and hold evidence, not training data; approved data, if any, is in a separate curated corpus",
+  "review_status": "Complete independent semantic audit with source hashes and per-item rationales",
+  "required_conversion": "None for review evidence; selected exact parents were separately curated and registered",
+  "notes": "The audit holds two concrete label conflicts and eight other ambiguous/boundary cases; review.json pins original accepted-parents and semantic-hold hashes."
+}

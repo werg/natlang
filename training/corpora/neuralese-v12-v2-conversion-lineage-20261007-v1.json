@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v12-v2-conversion-lineage-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v12-v2-lineage-receipt-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "conversion-provenance-and-sidecar-attestation-only",
+  "notes": "Detached receipt binds the V2 candidate/root admission to full converter dependency inventory (all 494 ts-host/dist and 228 ts-host/src files, entrypoints, package lock and Node/npm versions) and 4 native IR sidecars. Does not add training examples or recurrence admission.",
+  "derived_from": [
+    "neuralese-v12-native-cohort-v2-20261007-v1"
+  ]
+}

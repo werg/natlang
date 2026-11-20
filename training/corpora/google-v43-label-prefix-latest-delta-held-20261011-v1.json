@@ -1,0 +1,16 @@
+{
+  "id": "google-v43-label-prefix-latest-delta-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-prefix-latest-delta-snapshot-v1",
+  "include": [
+    "prefix-snapshot.json",
+    "labels.jsonl",
+    "labels.jsonl.manifest.json"
+  ],
+  "split": "held-provider-label-prefix",
+  "source_class": "provider-label-evidence",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "immutable complete-line label prefix and provenance; labels require exact static source-label screening before downstream use",
+  "notes": "Cutoff snapshot of V43 complete-line labels; source rows at indices 658-1374 are the suffix candidate window. No active source output or campaign state included."
+}

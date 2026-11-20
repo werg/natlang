@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261006-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261006-v3",
+  "admission": "reviewed-source-and-exact-target-admitted; original-commitment-fixture-held; train-test-producer-closed",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ]
+}

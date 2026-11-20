@@ -1,0 +1,10 @@
+{
+  "id": "google-v31-closed-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v31-source",
+  "split": "inherited-train-evidence",
+  "source_class": "held-quality-and-generation-evidence",
+  "training_admission": false,
+  "admission": "held-pending-explicit-review",
+  "notes": "Closed 512 exact source rows / 512 strictly valid provider outputs, 407 annotation agreements and 105 semantic differences pending review. Frozen 2048-output budget, actual request receipts. No training admission."
+}

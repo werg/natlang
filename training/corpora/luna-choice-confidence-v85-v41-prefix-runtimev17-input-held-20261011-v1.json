@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v85-v41-prefix-runtimev17-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v85-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-reviewed-generation-inputs",
+  "source_class": "held-luna-provider-generation-inputs",
+  "training_admission": false,
+  "admission": "root-reviewed-inputs-only-no-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root-approved V85 successor prepared from the immutable disjoint V41 prefix remainder static source: 11 programs/82 items, runtime V17; five per-lane predecessor bindings. Root approval and launch records are registered separately. This entry contains the reviewed plan, snapshotted source policy/preparer and exact five queues; mutable status, logs, journals, results and worker outputs are excluded."
+}

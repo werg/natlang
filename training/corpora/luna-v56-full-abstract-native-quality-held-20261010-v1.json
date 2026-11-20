@@ -1,0 +1,13 @@
+{
+  "id": "luna-v56-full-abstract-native-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v56-pubmedqa-full-abstract-audit-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Six closed full-abstract programs; two exact maps,33/42 item annotation matches. Complete42 child context strings visible; output maps equal saved decisions. No causal comparison, source truth unadjudicated, no training admission."
+}

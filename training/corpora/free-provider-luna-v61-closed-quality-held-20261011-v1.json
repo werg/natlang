@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-luna-v61-closed-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v61-choice-folder-final-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Final outcome audit:370/402 target matches, all saved source inputs exact. Initial strict visibility audit covers152 items and leaves250 without invocation-bound evidence; investigation pending. Program-scope state presence must not be promoted to child visibility. All held."
+}

@@ -1,0 +1,39 @@
+{
+  "admission": "lfm3 student twin of qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0002-quality-exact-child-v1 (scripts/neuralese_data/teacher_graph_student_twin.py): the reference lfm25 view's admitted teacher actions re-rendered from the exact source trajectories; inherits its admission, splits, deduplication and decision omissions; 0 explicit render omissions",
+  "derived_from": [
+    "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0002-quality-exact-child-v1"
+  ],
+  "id": "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0002-quality-exact-child-v1-lfm3",
+  "include": [
+    "lfm3/receipt.json",
+    "lfm3/train/native-graphs.jsonl.zst",
+    "lfm3/test/native-graphs.jsonl.zst"
+  ],
+  "license_provenance": "Project-collected exact trajectories from the pinned self-hosted Qwen3.8-Flash-Next-NVFP4 base teacher; primary source provenance retained. Licenses recorded as facts.",
+  "note": "Registration establishes availability only; learner exposure is recorded by each continuation.",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0002-quality-exact-child-v1",
+  "source_binding": {
+    "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+    "model_key": "lfm3",
+    "omitted_rows": 0,
+    "reference_receipt_sha256": "f1411cf0fc9e381072bbd6aa7ad3916ce44e8c2bff371c45b45e553f1e59452e",
+    "rows": 4,
+    "source_trajectories_sha256": "25a4a48f122a5be4dd0be801b897b8229c61bfed9c24a42eed2fe82f3a314992",
+    "tokenizer": {
+      "expanded_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+      "role_token_ids": [
+        125033,
+        125034,
+        125035,
+        125036
+      ],
+      "source_fingerprint": "8818b793a02e560d72d2bafee3a1ca9cfedd9b84518bce89800fc4db80ca967a"
+    },
+    "verification_passed": true
+  },
+  "source_class": "verified-strong-teacher-exact-child-decision-native-full-context-masked-history-SFT-graphs",
+  "split": "Train-only; empty test views. Current global held/quality/pending and decision protection enforced.",
+  "training_admission": true,
+  "training_admission_reason": "Exact independently reviewed child sentiment targets passed current original source/oracle/global protection, typed captured child/host proof, original full-context rerender, assistant-history loss mask, source-bound decision identity and complete BOTH action accounting. Original partial parents and all unapproved siblings remain unqualified."
+}

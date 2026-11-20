@@ -1,0 +1,13 @@
+{
+  "id": "luna-choice-confidence-v68-v31-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v68-v31-runtimev15-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "closed-provider-generation-raw-audit",
+  "training_admission": false,
+  "admission": "held-raw-only-no-training-admission-no-DPO",
+  "notes": "Immutable raw V68 campaign artifact snapshot, including plans, queues, journals, per-case results and traces. See linked held V68/V69 audit snapshots for independent terminal quality and scope-failure reviews. Repeated existing Google choice-confidence source records; no new independent-world credit and no training/action/DPO admission."
+}

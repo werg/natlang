@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@chronolog/peer-session": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/chronolog-peer-session-15573014f4536369d7bd2f8a4b894a0d9fb69812.tgz",
-    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/tendriller-sdk-0.3.0-rc.16.tgz",
+    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-pr73/tendriller-sdk-0.3.0-rc.16-pr73-752b069.tgz",
     "@tendriller/tools": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/tendriller-tools-0.3.0-rc.16.tgz"
   },
   "devDependencies": {

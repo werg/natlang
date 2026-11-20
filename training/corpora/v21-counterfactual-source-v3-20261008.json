@@ -1,0 +1,14 @@
+{
+  "id": "v21-counterfactual-source-v3-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v21-20261008-v3",
+  "include": [
+    "README.md",
+    "source.cases.jsonl",
+    "source-proof.json",
+    "source-manifest.json",
+    "root-review-v1/root-review.json"
+  ],
+  "admission": "generation-source-or-scripted-reference-no-training-admission",
+  "notes": "V21 counterfactual source pool and authored reference proof. The source inherits eight parent groups/splits and provides counterfactual task variants; no independent-world or training admission is inferred from source generation or scripted proof."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "v35-sixteen-semantic-admission-proposal-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v35-v5-sixteen-admission-proposal-semantic-supplement-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-trace-structural-and-semantic-quality",
+  "training_admission": false,
+  "admission": "held-pending-action-level-review",
+  "notes": "64iterative updates reviewed/60exact bodies/3narrow semantic-action candidates,8placeholderseed exclusions,3no-decision instruction conflicts,4missing exactbodies. Wholetrajectory/finalmap notapproved solely fromgoldmatch; no independentworlds."
+}

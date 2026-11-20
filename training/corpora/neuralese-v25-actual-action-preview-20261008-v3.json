@@ -1,0 +1,18 @@
+{
+  "id": "neuralese-v25-actual-action-preview-20261008-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-actual-action-preview-20261008-v3",
+  "include": [
+    "README.md",
+    "selected-actions.jsonl",
+    "raw-receipts.jsonl",
+    "native-preview.jsonl",
+    "candidate-crosswalk.jsonl",
+    "manifest.json"
+  ],
+  "admission": "held-action-preview-no-training-admission",
+  "notes": "V25 exact selected eval-code action preview: 30 train candidates and 26 test diagnostics across 16 source groups. All model targets are exact selected eval code; typed eval-finish bodies are separate authenticated outputs and are not substituted into assistant targets. Source quality and typed output roles have separate receipts. No runtime-gradient qualification or training admission.",
+  "derived_from": [
+    "neuralese-v25-actual-action-review-20261008-v8"
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "id": "natlang-native-turns-bgkit-knowledge-render-20261011-v2-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/natlang-native-turns-bgkit-knowledge-render-20261011-v2",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered corpus natlang-native-turns-bgkit-knowledge-render-20261011-v2 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "natlang-native-turns-bgkit-knowledge-render-20261011-v2",
+    "bgkit-knowledge-rationalized-20261007-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 3223,
+            "supervised_tokens": 184885,
+            "tokens": 12787354,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 122309385,
+        "decoded_text_data_sha256": "1b80819a1a8a4fd47861f1f845df5a422d4c085dd08371c4d395e3ddc95a44f9",
+        "documents": 3223,
+        "max_document_tokens": 5394,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "3a2eb7a9301767bc165547f8a7d60d7b53dc0b898794e4e57b976a5bf8364c3b",
+        "exact_subset": {
+          "file": "exact-subset/full/lfm3/text-data.jsonl.zst",
+          "sha256": "91bbeed817c80020e731aea7e7502179a0fe244941071094658c85f4cc0b7b8c",
+          "documents": 3212,
+          "counts": {
+            "excluded_nonidentical": 11,
+            "train": 3212
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 69760,
+            "supervised_tokens": 3889255,
+            "tokens": 70686723,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 687739032,
+        "decoded_text_data_sha256": "94d178facad72f0c5313901cb35a235a20fece4c445fb4880486a51fd325e144",
+        "documents": 69760,
+        "max_document_tokens": 3268,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "faa0a9f60ed1b1783e27d26d4f7382b0014e705e3cd38b72206d75246df6dd6f",
+        "exact_subset": {
+          "file": "exact-subset/program-header/lfm3/text-data.jsonl.zst",
+          "sha256": "53185f8699ea560d5688317e72f8dde9ea12253fd561c96cd46761f87d3bd809",
+          "documents": 67325,
+          "counts": {
+            "excluded_nonidentical": 2435,
+            "train": 67325
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 22293672,
+            "documents": 38326,
+            "opening_tokens": 17387886,
+            "supervised_tokens": 4905786,
+            "tokens": 41354874,
+            "tool_tokens": 13690669
+          }
+        },
+        "decoded_text_data_bytes": 428292004,
+        "decoded_text_data_sha256": "774712c3a068d3f7087dfeb02bf8579eb1c57687514ee512bd585c4f2fc55fd1",
+        "documents": 38326,
+        "max_document_tokens": 3268,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "30b7dacb59bf293b3b8a9571166c6ac06828efdc4967357d0fe408d518dbb661",
+        "exact_subset": {
+          "file": "exact-subset/whole-trajectory/lfm3/text-data.jsonl.zst",
+          "sha256": "d8f5cd355c200a7c10bf68a28983b8323577389c9babc6fb45147fc9a14164dd",
+          "documents": 36913,
+          "counts": {
+            "excluded_nonidentical": 1413,
+            "train": 36913
+          }
+        }
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "natlang-native-turns-bgkit-knowledge-render-20261011-v2",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 3223,
+        "reference_documents": 3226,
+        "same_order": 0,
+        "only_reference": 14,
+        "only_student": 11
+      },
+      "program-header": {
+        "documents": 69760,
+        "reference_documents": 67644,
+        "same_order": 0,
+        "only_reference": 319,
+        "only_student": 2435
+      },
+      "whole-trajectory": {
+        "documents": 38326,
+        "reference_documents": 36913,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 1413
+      }
+    },
+    "target_parse": {
+      "full:exact": 3223,
+      "program-header:exact": 69760
+    },
+    "exact_subset": {
+      "policy": "keep documents identical to the reference (id, split, source groups, source record ids); drop train documents sharing a source group with any held document of either render",
+      "resolved_problems": [
+        "full: split_or_group_changed 1",
+        "program-header: split_or_group_changed 39"
+      ],
+      "excluded": {
+        "full": 11,
+        "program-header": 2435,
+        "whole-trajectory": 1413
+      }
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 67325,
+        "whole-trajectory": 36913
+      },
+      "detail": {
+        "program-header": {
+          "train": 67325,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-bgkit-knowledge-render-20261011-v2/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 67325,
+              "bytes": 18316531,
+              "sha256": "8336c0b1febdb3da97cc064783ede5077d780926cb717018f423242b37534634"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-bgkit-knowledge-render-20261011-v2/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 36913,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-bgkit-knowledge-render-20261011-v2/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 36913,
+              "bytes": 21115979,
+              "sha256": "ffdddb177985887eb0dc837ca3f24c43935dac0e4bd13f7b0219f60d88b91d8d"
+            },
+            {
+              "path": "runs/lfm3-renders/natlang-native-turns-bgkit-knowledge-render-20261011-v2/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

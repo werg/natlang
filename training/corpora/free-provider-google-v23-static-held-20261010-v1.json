@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v23-static-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v23-adapter-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "397 retained items in53 static programs;53 full reference/visibility checks passed and900 native turns. Explicit canonical quality holds applied; full-S1 closure pending."
+}

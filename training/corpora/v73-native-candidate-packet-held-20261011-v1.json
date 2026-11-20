@@ -1,0 +1,26 @@
+{
+  "id": "v73-native-candidate-packet-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-native-candidate-v1",
+  "include": [
+    "FILES.sha256",
+    "candidate-manifest-v2.json",
+    "quality-review-v2.json",
+    "quality-review-v2.md",
+    "selected-results.jsonl",
+    "result-trace-pins.json",
+    "visibility-and-source-bindings.json",
+    "child-return-bindings-v1.json",
+    "native-turns-candidate-only-v2.jsonl",
+    "native-turns-held.jsonl",
+    "decision-holds.json",
+    "candidate-gate-projection-v2.json",
+    "candidate-gate-projection-v2-turn-bindings.json"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-native-candidate-materialization",
+  "training_admission": false,
+  "admission": "candidate-only-pending-full-source-closure-and-root-review-no-native-or-trace-admission",
+  "independent_new_worlds": 0,
+  "notes": "V73 quality v2 selects 43 parent-accepted programs (302 source items) and 909 candidate turns with source/request/return bindings. All target decision holds remain; candidate projection forces training and trace admission false. Not semantic truth certification or recurrence qualification."
+}

@@ -47,6 +47,14 @@ def data_root(repo, value):
     return repo / relative(value)
 
 
+def corpus_registry():
+    """The registry's git layer (one file per entry): natlang_neuralese.common.corpus_registry."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training/neuralese'))
+    from natlang_neuralese.common import corpus_registry as module
+    return module
+
+
 def save(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
@@ -100,7 +108,7 @@ def status_admission(entry):
 
 def require_committed_offload_snapshot(repo, identity):
     """Require the selected registry entry and immutable manifest at HEAD."""
-    registry_path = repo / 'training/neuralese_corpora.json'
+    registry_path = corpus_registry().entry_path(repo, identity)
     selected_manifest_path = manifest_path(repo, identity)
     committed = {}
     for path in [registry_path, selected_manifest_path]:
@@ -111,14 +119,11 @@ def require_committed_offload_snapshot(repo, identity):
             raise ValueError(f'offload requires a committed registry entry and manifest: {relative_path}')
         committed[relative_path] = result.stdout
     try:
-        current_registry = json.loads(registry_path.read_text())
-        committed_registry = json.loads(committed[registry_path.relative_to(repo).as_posix()])
+        current_entry = json.loads(registry_path.read_text())
+        committed_entry = json.loads(committed[registry_path.relative_to(repo).as_posix()])
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f'offload requires a readable registry: {registry_path}') from error
-    def find_entry(registry):
-        matches = [entry for entry in registry.get('corpora', []) if entry.get('id') == identity]
-        return matches[0] if len(matches) == 1 else None
-    if find_entry(current_registry) is None or find_entry(current_registry) != find_entry(committed_registry):
+        raise ValueError(f'offload requires a readable registry entry: {registry_path}') from error
+    if current_entry != committed_entry:
         raise ValueError(f'offload requires the selected registry entry unchanged at HEAD: {identity}')
     manifest_rel = selected_manifest_path.relative_to(repo).as_posix()
     if selected_manifest_path.read_bytes() != committed[manifest_rel]:
@@ -172,6 +177,8 @@ def publish(repo, entry, reuse_cache=None, *, manifest_output=None):
     root = data_root(repo, entry['path'])
     files = []
     patterns = entry.get('include', ['**/*'])
+    if entry.get('include_manifest'):    # its exact file list is its manifest's (too long to keep in the entry)
+        patterns = corpus_registry().manifest_files(repo, entry)
     # Closed snapshots often list thousands of exact paths. Testing every path
     # against every entry churns fnmatch's pattern cache and recompiles them.
     exact_paths = {pattern for pattern in patterns if not any(c in pattern for c in '*?[')}
@@ -744,7 +751,7 @@ def main():
         parser.error('offload requires exactly one --id and one or more --file paths')
     if args.execute and args.action != 'offload':
         parser.error('--execute is only valid with offload')
-    registry = json.loads((args.repo / 'training/neuralese_corpora.json').read_text())
+    registry = corpus_registry().load(args.repo)
     known = {entry['id'] for entry in registry['corpora']}
     if args.ids and not set(args.ids).issubset(known):
         raise ValueError('unknown corpus ids: ' + str(set(args.ids) - known))

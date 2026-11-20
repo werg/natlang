@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v39-launch-review-v2-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v2",
+  "include": [
+    "launch-receipt.json"
+  ],
+  "split": "inherited-train-generation-control-evidence",
+  "source_class": "held-provider-launch-authorization-evidence",
+  "training_admission": false,
+  "admission": "launch-evidence-only-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Retry waiter PID1064015 uses the existing reviewed V39 input approval, same frozen runtime and shared quota state. Status started-waiting-for-project-owner; this separate receipt references the prior zero-call launcher failure. No secrets, labels, attempts, or logs included."
+}

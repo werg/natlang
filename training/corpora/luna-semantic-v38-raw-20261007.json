@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v38-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v38-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw generation evidence only; no training admission",
+  "notes": "V38 six planned V14 source tasks: two parent outcomes accepted for raw review (indices 2,3), source-confounded holds (0,4,5), and index 1 budget-partial (128 provider responses / 256 physical requests) with empty result export and incomplete host ledger. Preserve original splits/groups; zero newly introduced independent worlds. Child decisions are not admitted; no cross-prompt DPO."
+}

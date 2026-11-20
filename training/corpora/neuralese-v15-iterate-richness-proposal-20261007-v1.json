@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v15-iterate-richness-proposal-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-source-generation-only-early-iterate-proposal-not-teacher-output",
+  "notes": "Early same-world iterate proposal and its actual build/audit artifacts. Twelve source groups only; not teacher outputs, not a new independent world cohort, and not admitted. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs."
+}

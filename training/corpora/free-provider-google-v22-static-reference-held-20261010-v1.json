@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v22-static-reference-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v22-adapter-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "53 replayed static programs394items; all reference and visibility checks pass. Synthetic source-label filtered execution, not independent semantic truth."
+}

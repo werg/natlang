@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-confidence-v73-root-launch-supplement-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v3",
+  "include": [
+    "root-approved-plan-v1.json",
+    "root-supervisor-launch-v1.json"
+  ],
+  "split": "inherited-train-launch-approval-evidence",
+  "source_class": "held-luna-generation-root-approval-and-launch-receipt",
+  "training_admission": false,
+  "admission": "root-approved-launch-evidence-no-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Separate immutable two-file supplement records root approval and supervisor launch PID 1036055 for the V73 input plan. The earlier prepared input snapshot remains unchanged; active campaign-launch/journals/logs are excluded. This records launch only, not result quality or training admission."
+}

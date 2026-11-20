@@ -1,0 +1,74 @@
+{
+  "id": "harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1",
+  "include": [
+    "text.jsonl.zst",
+    "receipt.json",
+    "shards/*/receipt.json",
+    "shards/*/omissions.jsonl",
+    "shards/*/render-omissions.jsonl"
+  ],
+  "split": "inherited from the source records (by repository; source groups repository and instance)",
+  "source_class": "rendered-whole-trajectory-text-of-harness-bench-records",
+  "admission": "admitted-harness_bench-cohort-text-stages (Mellum line); whole-trajectory documents, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1"
+  ],
+  "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+  "build": {
+    "script": "scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings program-header whole-trajectory --program-header-as-full per shard, concatenated)",
+    "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+    "renderer": "scripts/neuralese_data/render_native_turn_corpus.py whole-trajectory",
+    "renderer_code": {
+      "scripts/neuralese_data/render_native_turn_corpus.py": "7dc949b327fe11ff8660482e4dc580857aac68b925330477e1e5d65a3ddf3324",
+      "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+      "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "1f46d0c2d6e876ed7d2a5c00e384283bb805b8e283da617907cab45999bcd59d",
+      "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+      "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+      "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+    },
+    "tokenizer": {
+      "files": {
+        "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+        "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+        "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+      },
+      "history_reasoning": {
+        "backbone": "mellum",
+        "policy": "keep",
+        "probe": "keep",
+        "template_kwargs": {}
+      },
+      "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+    },
+    "rendering": "whole-trajectory",
+    "history_reasoning_policy": "keep",
+    "text_file": "text.jsonl.zst",
+    "text_jsonl_sha256": "e5fa3425958a22e9e2a1905a01c12ec82f4942a33e45098aa1195c6999bd872d",
+    "text_zst_sha256": "fdeb7ca448a2f7f449b32984d8150c1f648d2a1e9f7237c219fa6b4762273684"
+  },
+  "tokens": {
+    "max_document_tokens": 175489,
+    "test": {
+      "assistant_tokens": 84298075,
+      "documents": 7120,
+      "opening_tokens": 0,
+      "supervised_tokens": 84298075,
+      "tokens": 349250990,
+      "tool_tokens": 249614637
+    },
+    "train": {
+      "assistant_tokens": 262030232,
+      "documents": 24400,
+      "opening_tokens": 0,
+      "supervised_tokens": 262030232,
+      "tokens": 1199375013,
+      "tool_tokens": 887624492
+    }
+  },
+  "notes": "whole-trajectory text of harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1 (the system prompt is the pi harness's own, kept whole with its tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context per target: on 120 v4 trajectories (940 decisions) all 940 decisions are covered, and Mellum train text is 4.06M tokens with 817k supervised assistant tokens against 17.1M / 145k per decision. Per-shard receipts under shards/."
+}

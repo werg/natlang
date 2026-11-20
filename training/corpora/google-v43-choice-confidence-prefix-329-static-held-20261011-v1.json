@@ -1,0 +1,16 @@
+{
+  "id": "google-v43-choice-confidence-prefix-329-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v43-prefix-329-adapter-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-static-reference-no-independent-world-credit",
+  "source_class": "authored-static-decision-reference",
+  "training_admission": false,
+  "admission": "static reference only; provider labels are strict-scored and source matched; no training admission",
+  "derived_from": [
+    "google-v43-choice-confidence-prefix-329-held-20261011-v1"
+  ],
+  "notes": "Shared decision-label adapter accepted 231 of 329 saved label rows into 31 static native cases; it recorded 98 rejections. All 31 scripted reference replays completed. The static scaffold is authored and does not claim teacher-generated reasoning."
+}

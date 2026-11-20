@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find registered training-side sources that contain rows of given task families (oracle correction passes).
 
-The file list is bounded by the registry: the manifest files of every training/neuralese_corpora.json entry that is not
+The file list is bounded by the registry: the manifest files of every training/corpora entry that is not
 explicitly held, evaluation-only or evidence-only. Each file is streamed in 32 MiB blocks (``.zst`` decompressed in a
 stream) and the clean page cache of what was read is dropped, so the job's charged memory stays well under 1 GiB.
 Progress is appended per chunk of files to ``OUT/progress.txt``; rerunning resumes. ``OUT/matches.txt`` lists
@@ -15,6 +15,7 @@ admission text. A mention is a candidate, not a classified row: inspect matching
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 import os
 import re
@@ -29,7 +30,9 @@ CHUNK = 50
 
 
 def candidate_corpora(root: Path, data_root: Path) -> list[dict]:
-    registry = json.loads((root / 'training/neuralese_corpora.json').read_text(encoding='utf-8'))
+    sys.path.insert(0, str(root / 'training/neuralese'))
+    from natlang_neuralese.common import corpus_registry
+    registry = corpus_registry.load(root)
     out = []
     for corpus in registry['corpora']:
         admission = corpus.get('admission')

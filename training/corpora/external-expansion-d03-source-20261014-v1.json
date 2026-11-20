@@ -1,0 +1,27 @@
+{
+  "id": "external-expansion-d03-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D03",
+  "include": [
+    "acquisition.json",
+    "AGENTS.md",
+    "LICENSE",
+    "README.md",
+    "sample/CHECKSUMS.json",
+    "sample/labels/labels.jsonl.zst",
+    "sample/messages/messages.jsonl.zst",
+    "sample/trajectories/trajectories.jsonl.zst",
+    "sample/views/error_recovery.jsonl.zst",
+    "sample/views/sft_steps.jsonl.zst",
+    "sample/views/tool_grammar.jsonl.zst"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "GOAT-AI/gatcv6",
+    "revision": "5d3ff3bd39afeaf99f07590b1cdfb853a86ac5e1",
+    "license": "apache-2.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

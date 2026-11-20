@@ -1,0 +1,23 @@
+{
+  "id": "luna-choice-confidence-v70-v34-input-plan-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v70-v34-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-generation-input-plan",
+  "training_admission": false,
+  "admission": "input-plan-only-active-results-excluded",
+  "notes": "Root-approved V70 source/plan and immutable five worker queues; campaign active. Includes input-only plan provenance and queues; intentionally excludes mutable campaign-launch, journals, logs, cases/results, and all active outputs. The V34 static source/replay and label inputs are separately registered. No completion, quality outcome, or training admission is represented.",
+  "include": [
+    "current-source-policy-check-v1.json",
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-supervisor-launch-v1.json",
+    "v34-label-screen-diagnostic-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ]
+}

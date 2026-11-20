@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v58-request-visibility-shared-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-request-visibility-shared-v2",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Shared request audit preserves1059 request turns and explicit per-item invocationIDs;394/394 states exact in saved requests. Supersedes narrower prior visibility counts, not outcome/admission decisions."
+}

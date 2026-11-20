@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-semantic-iterate-v15-enum-contract-source-20261007-v13",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v15-source-candidate-20261007-v13-enum",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-authored-enum-source-and-frozen-scripted-proof-only-no-teacher-or-training-admission",
+  "derived_from": [
+    "neuralese-semantic-iterate-v15-lineage-20261007-v1",
+    "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1"
+  ],
+  "notes": "Fresh V13 authored explicit-enum contract variant, source.cases.jsonl SHA-256 d8f80d31b8019561fbc1394c00c994cf53e593b8da2085d94d4630413616fa70; preserves the 12 V8 worlds/groups/splits/gold, with V10 course AC-73 plus AC-73A and vaccine decision.json boundary clarifications. Includes explicit authored categorical contracts, source review/lineage and frozen CPU scripted proof (proof SHA-256 5ebc3ef28c71daa59ca26830ce31287775c772533e83e964d3a80c490b81de3e), 12/12 cases, 48 clean reads, 120 successful outcomes. Proof is runtime mechanics only, with zero provider/model calls; no teacher output or training admission."
+}

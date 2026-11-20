@@ -1,0 +1,18 @@
+{
+  "id": "luna-choice-confidence-v88-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v88-choice-confidence-final-v1",
+  "include": [
+    "audit.json",
+    "audit.md",
+    "FILES.sha256.json"
+  ],
+  "split": "held-quality-review",
+  "source_class": "independent-closed-output-quality-audit",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "quality evidence only; source-annotation comparison is not admission",
+  "notes": "V88 closeout binds 50 actual saved results, 46 exact inherited annotation agreements, 4 disagreements, 0 returned-map/file drift, 50/50 same-invocation rendered request state matches (8 also have capture snapshots). No original-byte-wire or broad accuracy claim."
+}

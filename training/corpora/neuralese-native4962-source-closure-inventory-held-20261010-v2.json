@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v2",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "source-provenance-quality-recovery-evidence",
+  "training_admission": false,
+  "admission": "held-source-quality-closure-pending",
+  "notes": "Supersededdiagnostic exactrefmap omitted multisourcerows; V3 corrects1126missingmatches/perstreamcounters. Preserveevidence noadmission."
+}

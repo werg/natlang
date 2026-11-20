@@ -8,7 +8,7 @@ The page replaces the hand-written handover logs: plans/neuralese/HANDOVER.md (D
 2. running units on this machine (the memory ledger's claims plus `natlang-*` systemd user units), with the
    recipe each one runs;
 3. the recipes on disk;
-4. the corpus registry training/neuralese_corpora.json (counts only);
+4. the corpus registry training/corpora (counts only);
 5. open coordination requests to the machine and the latest decisions.
 
 Usage:
@@ -96,7 +96,9 @@ def units():
 
 
 def registry():
-    corpora = json.loads((REPO / 'training/neuralese_corpora.json').read_text())['corpora']
+    sys.path.insert(0, str(REPO / 'training/neuralese'))
+    from natlang_neuralese.common import corpus_registry
+    corpora = corpus_registry.load(REPO)['corpora']
     live = [c for c in corpora if not c.get('retired')]
     owners = collections.Counter(c.get('owner') for c in live)
     admitted = sum(1 for c in live if c.get('training_admission') is True)
@@ -149,7 +151,7 @@ def render(machine, now):
     out += ['', f'Recipes on disk ({len(recipes)}): ' + ', '.join(f'`{r}`' for r in recipes), '']
     total, admitted, owners = registry()
     out += ['## Corpus registry', '',
-            f'{total} live entries in `training/neuralese_corpora.json` ('
+            f'{total} live entries in `training/corpora/` ('
             + ', '.join(f'{n} {o}' for o, n in sorted(owners.items())) + f'); {admitted} carry training admission.', '']
     requests = open_requests(machine)
     out += [f'## Open coordination requests to {machine}', '']

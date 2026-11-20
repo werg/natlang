@@ -1,0 +1,189 @@
+{
+  "id": "luna-repair-s52082-s52089-reviewed-render-20261015-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/luna-repair-s52082-s52089-reviewed-render-20261015-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered render luna-repair-s52082-s52089-reviewed-render-20261015-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "luna-repair-s52082-s52089-reviewed-render-20261015-v1",
+    "luna-repair-s52082-s52089-reviewed-20261015-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 9,
+            "supervised_tokens": 1018,
+            "tokens": 53521,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 517285,
+        "decoded_text_data_sha256": "8940478d9dc5676f298708534f7ae788c8e6a5c05e43675907203c897dad2264",
+        "documents": 9,
+        "max_document_tokens": 6878,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "99e989440476e3a618525e4ac3b07d4b404691d5d5aba1e7dbbf84251cf14be0"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 9,
+            "supervised_tokens": 1018,
+            "tokens": 16604,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 162867,
+        "decoded_text_data_sha256": "b4101cbcc65acc92a8d6e61927be17e82f6440a923d9d97219fbe5bb5f2e3374",
+        "documents": 9,
+        "max_document_tokens": 2409,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "473800acec7883ea3220b85e4edb1735db07d25436287340edff9f59bcee1445"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 4531,
+            "documents": 9,
+            "opening_tokens": 3267,
+            "supervised_tokens": 1264,
+            "tokens": 16604,
+            "tool_tokens": 1111
+          }
+        },
+        "decoded_text_data_bytes": 166710,
+        "decoded_text_data_sha256": "de0c4c7573a104870414d4ed458b19caa2bca715658e1c1a3fdbb7bf96c3b15e",
+        "documents": 9,
+        "max_document_tokens": 2409,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "b74b5993e69b35714041044eec1f82b65562a2bb402c80ad7210ea2b8ef3fda8"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "luna-repair-s52082-s52089-reviewed-render-20261015-v1",
+    "student": "lfm3",
+    "identical_documents": true,
+    "views": {
+      "full": {
+        "documents": 9,
+        "reference_documents": 9,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 9,
+        "reference_documents": 9,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 9,
+        "reference_documents": 9,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": {
+      "full:exact": 9,
+      "program-header:exact": 9
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 9,
+        "whole-trajectory": 9
+      },
+      "detail": {
+        "program-header": {
+          "train": 9,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/luna-repair-s52082-s52089-reviewed-render-20261015-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 9,
+              "bytes": 7128,
+              "sha256": "cc818a4a0d8adb58bec4483588f46cd31dc5ad4632678c0d62ab34a3538852ef"
+            },
+            {
+              "path": "runs/lfm3-renders/luna-repair-s52082-s52089-reviewed-render-20261015-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 9,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/luna-repair-s52082-s52089-reviewed-render-20261015-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 9,
+              "bytes": 8697,
+              "sha256": "f77da736bbe4dfec3d67ec0eccff8d59e61103882ba9073bccd9e0dfbeba6a3c"
+            },
+            {
+              "path": "runs/lfm3-renders/luna-repair-s52082-s52089-reviewed-render-20261015-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

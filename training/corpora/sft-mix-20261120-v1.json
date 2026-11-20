@@ -1,0 +1,17 @@
+{
+  "id": "sft-mix-20261120-v1",
+  "owner": "dgx",
+  "path": "runs/sft-mix-20261120-v1",
+  "include": [
+    "build.json",
+    "cases.jsonl",
+    "chains.pkl",
+    "rows.jsonl.zst",
+    "val-own.pkl",
+    "val-teacher.pkl"
+  ],
+  "admission": "sft-experiment-input",
+  "license_provenance": "Teacher-generation episodes of claude-haiku-5-5 (Anthropic API), gpt-6-luna (openai-codex), nvidia/nemotron-3-ultra-550b-a55b (NVIDIA API, paid and OpenRouter free), gemini-3.5-flash-lite / gemini-3.7-flash (Google API), glm-4.7-flash on the project's GRPO task pools (teacher-gen-20261115 pool-v1, pool-v2-rich, pool-progtune-decisions; teacher-gen-20261119 gap-v1); own LFM3 GRPO rollouts (grpo-v3 run1, grpo-v4 run2; project-generated); prebuilt parts keep their registered provenance (sft-neuralese-graph-20261117-v1, operators-v1 merged rows of bgkit/dataset sources, vibestudio live seed v2 with gpt-6-luna). Task sources keep their pool rows' license provenance, recorded per task in cases.jsonl.",
+  "note": "sft-v5 SFT/RFT stage from base 5ff07638 (DECISIONS 2026-11-20 sft-v5; ops/sft-v5/build.sh): 7,688 teacher + 126 own (grpo-v3-run1 31, grpo-v4-run2 95) verified episodes over 8,318 tasks plus prebuilt parts; 34,682 exp0_sft --chains sequences, 191.9M forward / 6.23M weighted target tokens. Loss shares: teacher actions 67.8%, own successes (reasoning included, nucleus NLL in exp0_sft) 24.0%, Neuralese graph rows 5.1%, operator rows 3.0%, live 0.1%. All four teacher pools incl. gap-v1; every episode exact-replayed under a runtime with the return_result answer protocol (pins 43989d8ba/ae1f7dacb/72e4874d0 reused, new ones at 43c6b8ccd); 11-18 masks (teacher think, lead-in, backend detours as context); guided JOLT+ attempts, grpo-v2 and grpo-v4-run1 own successes out; breadth-first under a 180M teacher forward budget; held-v3/v2 closure (preflight overlap 0). val-own.pkl / val-teacher.pkl: 40 left-over successes each on untrained tasks. Built by sft_sources.py build (3124af06c checkout).",
+  "kind": "sft-rows"
+}

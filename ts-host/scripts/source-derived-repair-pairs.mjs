@@ -374,7 +374,7 @@ async function findRepositoryRoot(start) {
   while (true) {
     try {
       await Promise.all([access(path.join(current, 'scripts/coord.py')),
-        access(path.join(current, 'training/neuralese_corpora.json'))]);
+        access(path.join(current, 'training/corpus-registry.json'))]);
       return current;
     } catch { /* keep walking toward filesystem root */ }
     const parent = path.dirname(current);

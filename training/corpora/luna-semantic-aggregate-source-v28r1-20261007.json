@@ -1,0 +1,17 @@
+{
+  "id": "luna-semantic-aggregate-source-v28r1-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v8-aggregate-contract-20261007",
+  "admission": "root-reviewed-source-only;scripted-proof-not-training-observations",
+  "include": [
+    "source.cases.jsonl",
+    "*.json",
+    "*.py",
+    "REVIEW.md",
+    "native-reference-compiler7/**"
+  ],
+  "derived_from": [
+    "luna-semantic-reducers-source-v27r1-20261007"
+  ],
+  "notes": "8contract revisions of original4train4test worlds; task-visible5fieldledger, verbatimquotes; facts/checkdefinitions reconciled. No new independent worlds, changedcontract not DPO pair; no model outputs yet."
+}

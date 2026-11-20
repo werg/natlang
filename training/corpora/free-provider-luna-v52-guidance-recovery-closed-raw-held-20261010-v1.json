@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v52-guidance-recovery-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "iterative-guidance-recovery-evidence",
+  "training_admission": false,
+  "admission": "held-source-native-runtime-quality-review",
+  "notes": "SCHED-543 V5 guidance retry completed with exact gold and all six files. Original V49 partial remains unscored; changed guidance and seed are descriptive, not a controlled causal comparison."
+}

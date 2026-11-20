@@ -1,0 +1,17 @@
+{
+  "admission": "supplemental-immutable-evidence-only",
+  "id": "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008-glob-supplement-20261010-v1",
+  "include": [
+    "neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/closed-raw-review-v1/review.json"
+  ],
+  "native_admission": false,
+  "notes": "Root approved current exact durable bytes for supplemental publication only; no claim these existed at original publication. Original source manifests unchanged, no independent examples or training/native/trace admission. Source neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008; exact audited files, dynamic/ambiguous artifacts excluded.",
+  "owner": "pop",
+  "path": "runs",
+  "trace_admission": false,
+  "training_admission": false,
+  "split": "evidence-only-inherited-source",
+  "source_class": "supplemental-immutable-runtime-source-and-quality-evidence",
+  "source_snapshot": "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008",
+  "supplemental_worklist_sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
+}

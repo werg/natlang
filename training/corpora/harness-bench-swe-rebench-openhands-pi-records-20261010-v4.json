@@ -1,0 +1,63 @@
+{
+  "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+  "include": [
+    "records.jsonl",
+    "pieces.jsonl",
+    "summary.json",
+    "surface.json",
+    "prepared.jsonl",
+    "replayed.jsonl",
+    "replay.log"
+  ],
+  "split": "by repository, following the published cross-corpus closure: a repository S1 already places keeps S1's split (cross_corpus.place over the repository's component through cross-corpus-index-s1-full-final-20261003-v1), others by split_of(repo, 5); source groups repository and instance",
+  "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
+  "admission": "admitted-by-owner-pending-recurrence-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): read directly only by the recurrence stage, which stays held until each student's runtime qualification and the view gate, and until written views run on these records (raw-recurrence-v3 cohorts.harness_bench.recurrence.status); its LFM text twin is admitted",
+  "training_admission": true,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+  ],
+  "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+  "build": {
+    "script": "training/neuralese/scripts/harness_bench_build.sh (records stage)",
+    "code_commit": "621de060a13f3f3bbab6042605a9febb74986184",
+    "builder": "natlang.harness_bench.records/1",
+    "record_format": "natlang.harness-bench-conversion/2",
+    "command": "python -m natlang_neuralese.harness_bench.records --replayed <v4>/replayed.jsonl --surface <v4>/surface.json --corpus nebius-swe-rebench-openhands-trajectories-20261009-v1 --out <v4> (default --placed-by cross-corpus-index-s1-full-final-20261003-v1)",
+    "dialect": "openhands-v0.54",
+    "mapping": "pi",
+    "surface_sha256": "c8e3d62f0460046edc09a3be683445387f5a22a388b4836005bc8d9938b533cf",
+    "surface_file_sha256": "bf007f819f00fb9107b687c38dcd82be391ab2a6261b4e0a06814ff2d22fa050",
+    "criteria": "harness-bench-criteria/2",
+    "replay_outputs": "surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte from harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (no replay rerun)",
+    "placement": {
+      "indexes": [
+        {
+          "corpus_id": "s1-full-final-20261003",
+          "registry_id": "cross-corpus-index-s1-full-final-20261003-v1",
+          "records": 1870591
+        }
+      ],
+      "repositories": 321,
+      "published": 321,
+      "split_of": 0,
+      "unplaceable": [],
+      "moved_from_split_of": {
+        "test->train": 8,
+        "train->test": 45
+      },
+      "by_split": {
+        "train": 275,
+        "validation": 0,
+        "test": 46
+      }
+    }
+  },
+  "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md §4.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
+  "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+  "review_status": "2026-10-11 dgx-held-recovery: owner-admitted 2026-10-10 harness bench records (v4 = S1-consistent splits, 2969 train / 874 test records); label said pending recurrence support, which is not a reason to exclude. JeFF scan done.",
+  "consumable_by_direct_stage": false,
+  "required_conversion": "whole-trajectory or decision-text render (text twins v2 already admitted for LFM and Mellum)"
+}

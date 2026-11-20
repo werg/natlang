@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v73-v35-runtimev16-input-plan-held-20261011-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v3",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v2.json",
+    "predecessor-bindings-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-input",
+  "source_class": "held-luna-native-generation-inputs",
+  "training_admission": false,
+  "admission": "prepared-only-root-review-required",
+  "independent_new_worlds": 0,
+  "notes": "Current five-lane V73 input plan from V35 static cases and frozen runtime V16. Pins current shared reviewed-lane starter and exact predecessor mapping: V72 lanes 01/03/04/05 from original launch plus lane 02 supplement process over the original lane-02 queue. Each source PID/queue hash/runtime pin is bound; journal SHAs in preparation evidence are explicitly time-of-observation because active predecessor journals can append. Current 74 held-source item/group inventory has zero overlap with the selected 55 programs. Existing V72 incomplete model_request_budget is preserved as an incomplete predecessor, no quality-success inference. Plan root_approved=false; root must review starter/scheduler behavior before launch. No training admission."
+}

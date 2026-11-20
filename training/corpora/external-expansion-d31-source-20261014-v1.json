@@ -1,0 +1,23 @@
+{
+  "id": "external-expansion-d31-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D31",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "assets/combine_head_figure.svg",
+    "assets/kg_data_pipeline.svg",
+    "data/qa_rl-00000-of-00001.parquet",
+    "data/qa_sft-00000-of-00001.parquet",
+    "data/trajectories_sft-00000-of-00001.parquet"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "zai-org/DeepDive",
+    "revision": "36b28945eaf271e64003e7fcd4ddb81af0828eb5",
+    "license": "apache-2.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

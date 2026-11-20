@@ -1,0 +1,13 @@
+{
+  "id": "v18-v19-native-soft-edge-independent-source-action-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/v18-v19-native-soft-edge-review-20261008-v2",
+  "include": [
+    "independent-source-action-review-v1.json"
+  ],
+  "admission": "independent-source-and-action-facet-review-evidence-only; executable action semantic review pending; no training admission",
+  "derived_from": [
+    "v18-v19-native-soft-edge-materialization-review-20261008-v2"
+  ],
+  "notes": "Independent source/action audit SHA is pinned by the immutable snapshot. It checked 48 exact source-item gold bindings and 96 payload edges; preserves ten empty {} outputs and two edges lacking reader-context receipts as held. This does not approve action bodies or admit source, teacher, DPO, recurrence, transport, or training data."
+}

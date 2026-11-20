@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v18-quality-v1-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-gemini-choice-confidence-and-static-replay-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-original-quality-evidence",
+  "training_admission": false,
+  "admission": "superseded-audit-held",
+  "notes": "Original V18 source and visibility review preserved. Six checker false negatives are diagnosed and superseded by v2; raw source, labels, and cases unchanged. No automatic admission."
+}

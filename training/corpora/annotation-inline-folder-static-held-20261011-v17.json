@@ -1,0 +1,10 @@
+{
+  "id": "annotation-inline-folder-static-held-20261011-v17",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v17",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "104 annotation-grounded inline directory reducer programs,416 full train items,52 per eight families. Exact V16 ID/group exclusions and complete source lineage receipts.104 reference/visibility gates accepted,0 provider label calls. Execution-source snapshots preserve exact12 generation component hashes before later group-exclusion strengthening. Held, no new-world or training admission."
+}

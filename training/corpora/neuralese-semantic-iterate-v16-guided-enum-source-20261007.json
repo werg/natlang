@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-semantic-iterate-v16-guided-enum-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v15-soft-state-20261007-v16-guided-enum-types-v3",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Held literal-union final Draft and exact field-format revision from shared authored enums. Separate intermediate placeholder type. Same 12 source worlds; scripted proof does not grant admission."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "luna-v13-reviewed-recurrence-inputs-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v13-reviewed-recurrence-inputs-20261006-v1",
+  "admission": "source-reviewed-exact-constructed-train; individual-target-and-closure-gates-remain",
+  "include": [
+    "*.json",
+    "*.jsonl",
+    "*.log"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ]
+}

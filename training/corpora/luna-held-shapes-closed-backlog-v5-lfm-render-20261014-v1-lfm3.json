@@ -1,0 +1,226 @@
+{
+  "id": "luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered corpus luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1",
+    "luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 1188,
+            "supervised_tokens": 133711,
+            "tokens": 9890368,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 95011924,
+        "decoded_text_data_sha256": "84a67a160a430cb1033831bb3fcb3e873538f12a782b9d793a55ee3beff472a5",
+        "documents": 1188,
+        "max_document_tokens": 36323,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "1f929bb660095da5f83d3b27d47cb9057fa1f3d3b1fa467a6f1a05b87070dcaf",
+        "exact_subset": {
+          "file": "exact-subset/full/lfm3/text-data.jsonl.zst",
+          "sha256": "1f929bb660095da5f83d3b27d47cb9057fa1f3d3b1fa467a6f1a05b87070dcaf",
+          "documents": 1188,
+          "counts": {
+            "train": 1188
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 23616,
+            "supervised_tokens": 2561049,
+            "tokens": 57491302,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 556748677,
+        "decoded_text_data_sha256": "cdbc84ce519b29cb2bcf9aafa5245068e6747c464dcc71f2fa52995262322350",
+        "documents": 23616,
+        "max_document_tokens": 32213,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "d25c46e0b5ea6ebe6bbf125cc43edef7c9a4bc8fda1647b5fef1ab32be1798b1",
+        "exact_subset": {
+          "file": "exact-subset/program-header/lfm3/text-data.jsonl.zst",
+          "sha256": "d25c46e0b5ea6ebe6bbf125cc43edef7c9a4bc8fda1647b5fef1ab32be1798b1",
+          "documents": 23616,
+          "counts": {
+            "train": 23616
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 8972605,
+            "documents": 12777,
+            "opening_tokens": 6146585,
+            "supervised_tokens": 2826020,
+            "tokens": 27687194,
+            "tool_tokens": 3403015
+          }
+        },
+        "decoded_text_data_bytes": 279139232,
+        "decoded_text_data_sha256": "72af671e675c698c592a3dd79a7be6f400a7de2decb70495511d7812ea4d9210",
+        "documents": 12777,
+        "max_document_tokens": 32213,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "0f8bd17503c9579f5b25ff09911c9605a3d513ae609109d0de949e83f7e13852",
+        "exact_subset": {
+          "file": "exact-subset/whole-trajectory/lfm3/text-data.jsonl.zst",
+          "sha256": "ccec18573f7975c8e7a196d29f22823ff1fe78c06c32ad24256743d5be66317b",
+          "documents": 12776,
+          "counts": {
+            "excluded_nonidentical": 1,
+            "train": 12776
+          }
+        }
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 1188,
+        "reference_documents": 1188,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 23616,
+        "reference_documents": 23644,
+        "same_order": 0,
+        "only_reference": 28,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 12777,
+        "reference_documents": 12777,
+        "same_order": 0,
+        "only_reference": 1,
+        "only_student": 1
+      }
+    },
+    "target_parse": {
+      "full:exact": 1188,
+      "program-header:exact": 23616
+    },
+    "exact_subset": {
+      "policy": "keep documents identical to the reference (id, split, source groups, source record ids); drop train documents sharing a source group with any held document of either render",
+      "resolved_problems": [
+        "whole-trajectory: split_or_group_changed 1"
+      ],
+      "excluded": {
+        "full": 0,
+        "program-header": 0,
+        "whole-trajectory": 1
+      }
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 23616,
+        "whole-trajectory": 12776
+      },
+      "detail": {
+        "program-header": {
+          "train": 23616,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 23616,
+              "bytes": 8328414,
+              "sha256": "c56132a461ae14f1bf92a8fda9a9abaeeb9e5ea28d44367169b40e35ad415d17"
+            },
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 12776,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 12776,
+              "bytes": 8639641,
+              "sha256": "5106361000b4681af48c175464d3099a2fe62fab60e9927a495f627b6776dd85"
+            },
+            {
+              "path": "runs/lfm3-renders/luna-held-shapes-closed-backlog-v5-lfm-render-20261014-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

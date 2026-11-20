@@ -1,0 +1,15 @@
+{
+  "id": "curriculum-visible-scope-source-fix-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/curriculum-visible-scope-source-fix-v1",
+  "include": [
+    "cases.jsonl",
+    "case-reviews.json"
+  ],
+  "split": "inherited-original-source-groups-held",
+  "source_class": "curriculum-source-visibility-correction-reference-held",
+  "training_admission": false,
+  "admission": "reference-and-source-fix-evidence-held-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Seven source-derived authored cases correct two visibility assumptions in inline_cohort_policy and paged_late_row by using named visits()/checks() callables to retrieve complete arrays. The source facts and expected numerical policies are preserved; seven case reviews report successful shared verification/reference grading. These are source-contract/reference artifacts, not teacher observations, semantic admission, or new independent-world credit."
+}

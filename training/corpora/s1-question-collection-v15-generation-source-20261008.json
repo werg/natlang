@@ -1,0 +1,21 @@
+{
+  "id": "s1-question-collection-v15-generation-source-20261008",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-candidates-20261008-v15-numeric-answer-contract",
+  "include": [
+    "source.cases.jsonl",
+    "source-manifest.json",
+    "source-proof.json",
+    "independent-verification.json",
+    "selection.json",
+    "review-facts.json",
+    "root-generation-review-v1.json",
+    "reference-proof-v12/**",
+    "generation-review-v1/luna/plan.approved.json",
+    "generation-review-v1/luna/root-authorization.json",
+    "generation-review-v1/luna/source-index-catalog.json",
+    "generation-review-v1/luna/plan.draft.json"
+  ],
+  "admission": "held-generation-only-source-and-scripted-reference; no teacher, trace, training, or DPO admission",
+  "notes": "Root-approved generation source for 32 S1 question-collection task variants over existing source records. Preserves original groups/splits and zero independent-world credit. Includes source proof, independent verification, frozen-runtime CPU scripted reference proof, exact approved plan and execution authorization. The active mutable campaign directory is excluded; teacher outcomes are not included here and require separate closed review. Copies/proofs do not grant training admission."
+}

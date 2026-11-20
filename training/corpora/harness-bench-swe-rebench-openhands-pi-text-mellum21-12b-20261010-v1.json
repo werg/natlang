@@ -1,0 +1,65 @@
+{
+  "id": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1",
+  "include": [
+    "text.jsonl",
+    "receipt.json",
+    "provenance.jsonl",
+    "omissions.jsonl"
+  ],
+  "split": "inherited from the source records (by repository; source groups repository and instance)",
+  "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
+  "admission": "admitted-by-owner-pending-trainer-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): the Mellum template renders tool results as user turns, so text_warmup's tool-feedback weight (0.25) does not apply yet; training_admission flips when it does (raw-recurrence-v3 cohorts.harness_bench.twins)",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+  ],
+  "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+  "build": {
+    "script": "scripts/build_neuralese_text_packet.py",
+    "code_commit": "974b0492",
+    "command": "scripts/build_neuralese_text_packet.py --records data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v3/records.jsonl --pieces data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v3/pieces.jsonl --tokenizer /home/werg/data/models/mellum21-12b-a2.5b-thinking --out data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1",
+    "renderer": "natlang_neuralese.data.text_corpus.gold_text_rows",
+    "rendering": "natlang.native_gold_chat/3",
+    "renderer_code": {
+      "scripts/build_neuralese_text_packet.py": "a5f10a90d28a45bd5e7ac8613d87c8ef2993920632012d2646ca2995333ca06c",
+      "training/neuralese/natlang_neuralese/data/text_corpus.py": "249835c69a4f9028862e682ed95f47c2af7e6aa1bd08a00144c506b2dcb67cb6",
+      "training/neuralese/natlang_neuralese/serve/chat.py": "d3b5911d81c136b0c12351f5fa7546136e7e6fc73c47027808c9197ceae0332e"
+    },
+    "tokenizer_sha256": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+    "tokenizer": {
+      "class": "TokenizersBackend",
+      "files": {
+        "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+        "special_tokens_map.json": "20e1ead0b0986b55989aa8116bafe63efcbae0daf8ed047970cd28b36aada4d9",
+        "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+        "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+      },
+      "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+    },
+    "source_files": {
+      "pieces.jsonl": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9",
+      "records.jsonl": "be22d6f7074d87ddfd5303453671defa429164da8f57373d0d1d155e3b0fe5e5"
+    },
+    "text_jsonl_sha256": "fce4d6fb6167be213079008012d46063688ee7137cd5681b45448dd4163a2f44"
+  },
+  "tokens": {
+    "test": {
+      "documents": 112,
+      "max_document_tokens": 79814,
+      "suffix_tokens": 21161,
+      "tokens": 2789628
+    },
+    "train": {
+      "documents": 3731,
+      "max_document_tokens": 105093,
+      "suffix_tokens": 800422,
+      "tokens": 92621371
+    }
+  },
+  "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+  "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+  "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by text v2 (renders records v4); v1 renders v3 splits."
+}

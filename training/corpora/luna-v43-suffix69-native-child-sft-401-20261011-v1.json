@@ -1,0 +1,29 @@
+{
+  "id": "luna-v43-suffix69-native-child-sft-401-20261011-v1",
+  "owner": "pop",
+  "path": "runs/v43-suffix69-native-child-sft-admitted-20261011-v1",
+  "include": [
+    "FILES.sha256.json",
+    "README.md",
+    "decision-source-quality-holds.json",
+    "native-adoption-binding-v1.json",
+    "native-decisions.jsonl",
+    "raw-campaign-binding.json",
+    "review.json",
+    "root-adoption-v1.json",
+    "selection.json",
+    "selection.md",
+    "source-item-bindings.jsonl",
+    "source-native-candidate.jsonl"
+  ],
+  "derived_from": [
+    "luna-v43-suffix658-1374-runtimev19-closed-raw-held-20261011-v1",
+    "luna-v43-suffix658-1374-runtimev19-static-held-20261011-v1"
+  ],
+  "admission": "Root-approved exact 401 successful source-annotation- and invocation-bound child results for native decision SFT only. Excludes 24 annotation disagreements and 118 other unselected items. Parent outcomes are preserved unchanged; no failed action is a target. This does not admit whole parent traces, recurrence, independent worlds, or model/runtime qualification.",
+  "training_admission": true,
+  "training_admission_reason": "Root explicitly approved exact 401 rows; inherited source-annotation agreement and item input visibility are bound by selection evidence. This is child-result SFT only and is not an independent semantic relabel.",
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "review_status": "root-approved native SFT only; native parent/trace/recurrence admission false"
+}

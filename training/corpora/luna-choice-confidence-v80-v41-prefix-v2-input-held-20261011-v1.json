@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v80-v41-prefix-v2-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v2",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-provider-generation-input",
+  "source_class": "held-luna-generation-inputs-and-plan-v2",
+  "training_admission": false,
+  "admission": "generation-only-no-data-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Corrected fresh V80 v2 input snapshot: same reviewed 21 static-reference programs/139 inherited-train items and V79 predecessor evidence, with all five explicit predecessor lanes. Includes immutable source review/policy, plan and queues; excludes mutable journals, logs, campaign status and generated outputs."
+}

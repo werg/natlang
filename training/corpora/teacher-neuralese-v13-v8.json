@@ -1,0 +1,16 @@
+{
+  "id": "teacher-neuralese-v13-v8",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/teacher-neuralese-v13-v8",
+  "admission": "candidate-conversion-needs-current-native-admission",
+  "include": [
+    "teacher.neuralese.jsonl",
+    "pieces.jsonl",
+    "summary.json"
+  ],
+  "derived_from": [
+    "native-sft-v13-r2"
+  ],
+  "training_admission": false,
+  "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): superseded soft-Neuralese conversion/3 format; the direct line reads tokens; the source native-sft-v13-r2 is admitted instead"
+}

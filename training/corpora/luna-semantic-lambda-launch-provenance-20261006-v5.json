@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v5",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v5",
+  "admission": "collection-provenance-only; not training examples",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-refill-task-source-20261006-v5"
+  ],
+  "notes": "Nine SMS folder targets split across disjoint five/four-case queues. Runtime and sources pinned; active outputs require separately closed snapshots and quality/split review."
+}

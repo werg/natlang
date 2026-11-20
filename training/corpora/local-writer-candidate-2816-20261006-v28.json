@@ -1,0 +1,11 @@
+{
+  "id": "local-writer-candidate-2816-20261006-v28",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-2816-20261006-v28",
+  "admission": "checkpoint-candidate-only; semantic/channel qualification pending",
+  "include": [
+    "*.pt",
+    "*.json"
+  ],
+  "notes": "Best complete paired CE at2816: written0.0004896805664 vs shuffled0.5754838859,12/12pairs,noerrors. Preserves prior2432 candidate; not full autonomous semantic certification."
+}

@@ -1,0 +1,189 @@
+{
+  "id": "qad-student-root-recovery-s52052-render-20261014-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered render qad-student-root-recovery-s52052-render-20261014-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "qad-student-root-recovery-s52052-render-20261014-v1",
+    "qad-student-root-recovery-s52052-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 17,
+            "supervised_tokens": 1414,
+            "tokens": 112659,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 1084319,
+        "decoded_text_data_sha256": "93e529310ac4f40db52ade634e813edd29c6a5b7db4d4e56d12fea4d884767dd",
+        "documents": 17,
+        "max_document_tokens": 8021,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "72890970686b7ed656d64fc59bd3793e5324f674a71c3df9cf047e9dd9358a75"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 57,
+            "supervised_tokens": 6418,
+            "tokens": 127966,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 1243818,
+        "decoded_text_data_sha256": "b2d43103e18975a25eb97df7186e618fbd391664cbc98534fd3cb9b30bde71a8",
+        "documents": 57,
+        "max_document_tokens": 4486,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "de095ec9a56abbd11ff1ad7bb897a934d4ef5d698f56112b01bba26c7c63280b"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 24955,
+            "documents": 39,
+            "opening_tokens": 17041,
+            "supervised_tokens": 7914,
+            "tokens": 82234,
+            "tool_tokens": 10171
+          }
+        },
+        "decoded_text_data_bytes": 830454,
+        "decoded_text_data_sha256": "beeb748fd53b110d3e9c774875d9337934570b014c1a1d119b47b70e8c96cb2c",
+        "documents": 39,
+        "max_document_tokens": 4486,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "10676d1496610486cb1cb0e0462fa227c791db838e3632300597aa4dd54ef7d7"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "qad-student-root-recovery-s52052-render-20261014-v1",
+    "student": "lfm3",
+    "identical_documents": true,
+    "views": {
+      "full": {
+        "documents": 17,
+        "reference_documents": 17,
+        "same_order": 1,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "program-header": {
+        "documents": 57,
+        "reference_documents": 57,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 39,
+        "reference_documents": 39,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": {
+      "full:exact": 17,
+      "program-header:exact": 57
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 57,
+        "whole-trajectory": 39
+      },
+      "detail": {
+        "program-header": {
+          "train": 57,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 57,
+              "bytes": 31448,
+              "sha256": "e6f91447592a503f8354867180cbf90715bc6e67f3f66e975aca525b274fca83"
+            },
+            {
+              "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 39,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 39,
+              "bytes": 37807,
+              "sha256": "c0b5693984a848a4ca7396b1fbaac059294d5dce609162e2a19f82888bc4b2c9"
+            },
+            {
+              "path": "runs/lfm3-renders/qad-student-root-recovery-s52052-render-20261014-v1/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

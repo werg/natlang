@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-luna-v54-current-status-train-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "iterative-guidance-trajectories-inputs",
+  "training_admission": false,
+  "admission": "held-source-native-quality-review",
+  "notes": "Fifteen V35 V5 train worlds indices 0–14, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
+}

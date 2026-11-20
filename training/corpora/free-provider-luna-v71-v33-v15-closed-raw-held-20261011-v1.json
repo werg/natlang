@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v71-v33-v15-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v71-v33-runtimev15-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-actual-provider-observations",
+  "source_class": "closed-provider-generation-raw-held",
+  "training_admission": false,
+  "admission": "closed-raw-held-quality-review-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Closed V71 actual provider output and all original partials/errors/journals/logs preserved exactly. Root audit v4 reports 58 parent result rows (40 accepted, 18 rejected) plus one infrastructure-incomplete index16; no claim that parent acceptance alone establishes semantic/source quality or admission. V71 index16 transport attempt is preserved here; its separate fresh recovery is published independently. No new independent-world credit."
+}

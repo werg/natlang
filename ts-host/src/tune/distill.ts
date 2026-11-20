@@ -3,7 +3,7 @@
  * together with the teacher's training rows, as one deduplicated corpus for the student's shared production SFT
  * recipe. Only training roots with a root oracle are re-run, only oracle-correct runs of the tuned stack are kept, and
  * development, confirmation and protected roots never enter. The export is conversion, not admission: registering and
- * admitting it (`training/neuralese_corpora.json`) is an explicit operations decision. After the base is retrained,
+ * admitting it (`training/corpora`) is an explicit operations decision. After the base is retrained,
  * rerunning `natlang tune` against the new exact base rebuilds every adapter; no tensor coordinates carry over.
  *
  *   <program>/.natlang/tune/distill/<release>/turns.jsonl      natlang.tune-turn/v1, partition "train" only

@@ -1,0 +1,15 @@
+{
+  "id": "decision-source-quality-v17-policy-adoption-v2-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v17-policy-adoption-v2",
+  "include": [
+    "adoption.json",
+    "decision_source_quality_holds.json"
+  ],
+  "split": "inherited-train-policy-provenance",
+  "source_class": "held-source-quality-policy-adoption-receipt",
+  "training_admission": false,
+  "admission": "held-policy-provenance-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Corrected V17 policy adoption receipt: pins the exact parent V16 policy snapshot, the root-reviewed V17 hold decisions, and exact 79-hold policy bytes (SHA c8eab8b4...). It records unchanged source labels and does not itself grant training admission."
+}

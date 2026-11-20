@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-choice-confidence-v12-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v12-gemini-choice-confidence-and-static-replay-v1",
+  "include": [
+    "*"
+  ],
+  "split": "train-inherited-evidence-only",
+  "source_class": "provider-static-derivative-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "512valid389match123disagree confidencesoverconfident. Recovered66HTTP500/15HTTP503. Allheld no calibratedtargets/DPO."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-luna-v21-filtered-v4-launch-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v21-v4-runtimev15-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "reviewed-plan-v2-root-approved.json",
+    "root-generation-source-review-v1.json",
+    "quality-hold-exclusion-check.json",
+    "worker-*/queue.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Five Luna workers, five filtered full-abstract programs and37 retained source items. All seven canonical holds excluded. Source/reference proof and approved plan pinned; active outputs excluded. Generation approval does not grant training admission."
+}

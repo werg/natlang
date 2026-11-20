@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-semantic-iterate-v17-guided-source-v7-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v17-guided-20261008-v7",
+  "admission": "approved-generation-source;scripted-runtime-reference-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "24 authored configurations/8domains;12train12test, unchanged source facts/golds/groups. Revision6 retains all observed evidence in reference notes and removes rank-leaking eligibleIds enum. Scripted stand-in reference proof is not actual teacher observations or semantic admission. Earlier V17 artifacts superseded for generation, retained locally for bug history."
+}

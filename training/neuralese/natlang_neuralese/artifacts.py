@@ -2,7 +2,7 @@
 
 An artifact is a `.nz` file (or a small set of files) a run produces or consumes as a value rather than as model
 weights: system-prompt banks, the standard library of combinator soft bodies, operators, soft skills, data blocks,
-adapters. Like corpora (training/neuralese_corpora.json), artifacts are registered in
+adapters. Like corpora (training/corpora/), artifacts are registered in
 `training/neuralese_artifacts.json` and pinned by an immutable SHA-256 manifest in `training/artifact-manifests/`.
 An entry also pins what an artifact means: its dialect (each `.nz` file's header dialect must equal it), the backbone and
 revision its space belongs to, how it was initialised (text, a parent artifact, conversion), what trained it
@@ -158,10 +158,8 @@ def validate_entry(item: dict, registry: dict, corpora_ids: set[str] | None = No
 
 
 def registered_corpora(repo: Path = REPO) -> set[str]:
-    path = repo / "training/neuralese_corpora.json"
-    if not path.exists():
-        return set()
-    return {c["id"] for c in json.loads(path.read_text()).get("corpora", [])}
+    from .common import corpus_registry
+    return {c["id"] for c in corpus_registry.load(repo).get("corpora", [])}
 
 
 def manifest_path(repo: Path, identity: str) -> Path:

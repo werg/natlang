@@ -1,0 +1,26 @@
+{
+  "id": "neuralese-v22-actual-action-preview-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v22-actual-action-preview-20261008-v1",
+  "include": [
+    "README.md",
+    "manifest.json",
+    "conversion-summary.json",
+    "native.jsonl",
+    "pieces.jsonl",
+    "recurrence-pieces.jsonl",
+    "recurrence-review/audit.json",
+    "recurrence-review/hold.json",
+    "recurrence.jsonl",
+    "review-report.json",
+    "text-final-v2/omissions.jsonl",
+    "text-final-v2/provenance.jsonl",
+    "text-final-v2/receipt.json",
+    "text-final-v2/text.jsonl"
+  ],
+  "admission": "held-preview-no-training-admission",
+  "notes": "Held candidate-only native/R/text rendering of 39 exact source-reviewed V22 actions (18 train/21 test), not training admission. Recurrence audit remains 0 learned edges and missing producers; context outputs are not synthetic writers. Text preview has 3 omissions; superseded previews are excluded.",
+  "derived_from": [
+    "neuralese-v22-actual-action-selection-evidence-20261008-v3"
+  ]
+}

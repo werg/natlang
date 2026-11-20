@@ -1,0 +1,15 @@
+{
+  "id": "google-choice-confidence-v39-launch-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v1",
+  "include": [
+    "launch-review.json",
+    "launch-receipt.json"
+  ],
+  "split": "inherited-train-generation-control-evidence",
+  "source_class": "held-provider-launch-authorization-evidence",
+  "training_admission": false,
+  "admission": "launch-evidence-only-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Separate root approval and waiter launch receipts for V39. Status is started-waiting-for-project-owner; logs, labels, attempts, and other live artifacts are excluded."
+}

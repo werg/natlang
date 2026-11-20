@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v39-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v39-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "raw generation evidence only; no training admission",
+  "notes": "Two parent outcomes accepted for raw review: same-world recovery/format variants from existing V14 wetland and V13 sewing source groups, both test split. Preserve source groups/splits; zero new independent worlds. Parent outcome does not admit child decisions; no cross-prompt DPO."
+}

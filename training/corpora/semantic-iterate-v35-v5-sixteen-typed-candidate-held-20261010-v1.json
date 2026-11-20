@@ -1,0 +1,13 @@
+{
+  "id": "semantic-iterate-v35-v5-sixteen-typed-candidate-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-candidate-conversion-closure-and-quality-review",
+  "notes": "All16original train V35V5cases, selected V54eleven/V57one/V59three/V52one traces accepted exact6files and genuine four typediterateOn transitions/finalDraft. Four originaltrainfamilygroups, no new-worldcredit. Candidate manifest binds exactsource/result/IR lineage; conversion pending."
+}

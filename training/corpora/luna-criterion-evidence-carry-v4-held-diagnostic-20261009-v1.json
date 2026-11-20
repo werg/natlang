@@ -1,0 +1,26 @@
+{
+  "id": "luna-criterion-evidence-carry-v4-held-diagnostic-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "held-diagnostic-and-proposal-not-training-admission",
+  "derived_from": [
+    "luna-river-return-result-guidance-v10-20261009-v3",
+    "v17-river_water_allocation-scenario-1"
+  ],
+  "notes": "Immutable held package for the River retry evidence, exact selected CallStore descendants/blobs, semantic review, proposed generic student-skill refinement, shared-evaluator versioned source, and local fake-provider compatibility/matrix proofs. Source group is train split; diagnostic fixtures are diagnostic split. The provider result remains semantically rejected because eligible RWA-1C was omitted. Fake provider outputs prove runner integration only. No training rows, activation, model-quality claim, or training admission.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-criterion-evidence-carry-v4-20261009-v1",
+    "luna-criterion-evidence-carry-v4-20261009-v1/candidate",
+    "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2",
+    "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3",
+    "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2",
+    "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3",
+    "luna-criterion-evidence-carry-v4-20261009-v1/fixtures",
+    "luna-criterion-evidence-carry-v4-20261009-v1/runner",
+    "luna-river-return-result-guidance-v10-20261009-v1/evidence",
+    "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1",
+    "luna-river-return-result-guidance-v10-20261009-v3/evidence",
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1"
+  ]
+}

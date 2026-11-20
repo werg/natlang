@@ -1,0 +1,15 @@
+{
+  "id": "luna-semantic-v57-v64-closed-action-audit-20261007-v2",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v57-v64-closed-action-audit-20261007-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
+  "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan’s missing runtime frozen-manifest SHA is recorded as a gap.",
+  "derived_from": [
+    "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+    "neuralese-v16-caption-role-clarification-publication-20261007-v1",
+    "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
+  ]
+}

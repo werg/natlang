@@ -1,0 +1,19 @@
+{
+  "id": "luna-semantic-lambda-teacher-20261006-v4",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v4",
+  "admission": "closed-native-trajectories; explicit current-policy positives/holds; independent semantic review, source/split closure and neuralese conversion pending",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "exclude_dirs": [
+    "runtime",
+    "vendor"
+  ],
+  "include_root_prefixes": [
+    "worker-",
+    "closed-audit"
+  ],
+  "notes": "18attempts/17completed/6current-policypositives/11wrong-return rejections/one no-result failure. 235inlinecalls/two iterateOn in positives. Interim worker3 live-partial audit retained as non-final derivative. All source/split/intermediate quality decisions and neuralese conversion pending."
+}

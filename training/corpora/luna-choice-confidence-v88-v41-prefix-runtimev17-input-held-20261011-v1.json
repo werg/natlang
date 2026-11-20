@@ -1,0 +1,20 @@
+{
+  "id": "luna-choice-confidence-v88-v41-prefix-runtimev17-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v88-v41-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-hold-check-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-reviewed-generation-inputs",
+  "source_class": "held-luna-provider-generation-inputs",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "root-approved generation inputs only; excludes active campaign state, journals, logs, and results",
+  "notes": "V88 approved plan SHA 8f5ce633c13c57a03fbf27a3bae5f8cf304e7cc5e66ea94b422b13f6cb8646cb. Fifty source-visible programs / 400 train items, 0 current hold overlap, V17 runtime; active workers must not be treated as closed."
+}

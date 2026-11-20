@@ -1,0 +1,16 @@
+{
+  "id": "v18-v19-opencode-step5-selected-eight-native-text-delta-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "root-adopted eight ordinary native action SFT records plus eight faithful ordinary-text records; not active training input",
+  "derived_from": [
+    "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
+  ],
+  "notes": "Root composition adoption runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/root-native-text-composition-adoption-v1.json approves exactly eight native and eight ordinary-text additions, all train, zero recurrence. Virtual union of full 5467/4699/4961 base plus previously adopted River 1, Step5 7, and this Step5 8 is 5483 native / 4715 text / 4961 recurrence (3448/2035 native train/test; 3011/1704 text train/test); the streamed audit found no duplicate IDs or source groups crossing splits. The official route was OpenCode Zen Step 5 Preview Free, exact free alias main/small, low. Physical/upstream/title request counts are unknown. Provider source row, action results, exact context/target receipts, full traces, immutable capture snapshots, compact text outputs and frozen renderer closure are included. CPU full/suffix decode was independently verified against the pinned tokenizer by root; local Pop Transformers fallback re-encode segmentation differs and is documented in the audit. No new-world credit, whole trajectories, recurrence, runtime qualification, automatic active-training selection, or active input mutation.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1",
+    "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3"
+  ]
+}

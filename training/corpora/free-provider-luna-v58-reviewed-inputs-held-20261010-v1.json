@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-luna-v58-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v58-runtimev15-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "53 source-label filtered V22 programs394items, four workers V15 runtime, fifth slot reserved forV57. Source truth remains held.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "candidate-unapproved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

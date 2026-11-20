@@ -1,0 +1,15 @@
+{
+  "id": "local-recurrence-quality-v1-20261005",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/local-recurrence-quality-v1-20261005",
+  "include": [
+    "checkpoint.pt",
+    "heads.pt",
+    "soft-params.pt",
+    "summary.json",
+    "train.jsonl",
+    "eval.jsonl",
+    "memory-routing.jsonl"
+  ],
+  "admission": "completed-diagnostic-not-best-student"
+}

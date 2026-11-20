@@ -1,0 +1,19 @@
+{
+  "id": "external-expansion-d07-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D07",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "example_deepnlp_multi_agents_202601.json"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "DeepNLP/Multi-Agents-Parallel-Orchestration-Dataset",
+    "revision": "d543ecdb679db2aed76b0a4eb8efa178a5daa8a2",
+    "license": null
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

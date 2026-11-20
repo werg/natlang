@@ -1,0 +1,19 @@
+{
+  "id": "luna-choice-confidence-v90-joint-closeout-superseded-v2-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v2",
+  "include": [
+    "joint-completion-v2.json"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-superseded-diagnostic",
+  "source_class": "incomplete-joint-closeout-diagnostic",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "incomplete superseded diagnostic retained; no quality receipt",
+  "notes": "Intermediate corrected PID receipt only. Superseded by v3; do not use as the quality result."
+}

@@ -6,7 +6,7 @@
 //   3. edits: applies each retained `edit` to the errata / exclusion / annotation layers (data_service `edits.apply`) and
 //      records the outcome with `recordApplication` (operation id `apply-<edit operation id>`, so a restart never duplicates);
 //   4. inbox: copies questions asked from the page into <data>/ops/dashboard/inbox.jsonl for the supervising agent.
-// Browser pairing: reviewed pairing windows (ten minutes each) reopen continuously while no ordering pause is held.
+// Browser pairing: enrollment stays open while this runs; every browser is approved once by the owner on tendriller.dev.
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -135,20 +135,13 @@ export async function runOpsPeer({ signal }) {
   const rpc = dataService({ signal });
   log({ running: true, deviceId: nativeId, ownerInstanceId: owned.supervisor.ownerInstanceId });
   session.participation.onStatus(s => log({ connection: s.phase, error: s.error }));
-  const pairingLoop = (async () => {
-    // Enrollment stays available for the participant's whole life: each finite window (Tendriller bounds one at ten
-    // minutes) is followed by the next. A window that ends with a transition in flight leaves its durable ordering pause;
-    // the next window's first pass inspects that exact request and reconciles it (adopt + resume) before taking new ones.
-    let lastPairing = '';
-    while (!signal.aborted) {
-      const w = startPairingWindow({ owned, signal, onStatus: status => {
-        if (!status?.state || status.state === 'idle' || status.state === 'window_closed') return;
-        const k = JSON.stringify(status); if (k !== lastPairing) { lastPairing = k; log({ pairing: status }); } } });
-      await w.done.catch(e => log({ pairing_error: e.message }));
-      if (await session.orderingPause().catch(() => null)) log({ pairing: 'a transition is still in flight; the next window reconciles it' });
-      await new Promise(r => setTimeout(r, 1000));
-    }
-  })();
+  // Browser enrollment stays open for the participant's lifetime; host notices wake it when a browser asks or the owner
+  // approves on tendriller.dev. A transition in flight keeps its durable pause and is reconciled by the next pass.
+  let lastPairing = '';
+  const pairingWindow = startPairingWindow({ owned, signal, onStatus: status => {
+    if (!status?.state || status.state === 'idle') return;
+    const k = JSON.stringify(status); if (k !== lastPairing) { lastPairing = k; log({ pairing: status }); } } });
+  const pairingLoop = pairingWindow.done.catch(e => log({ pairing_error: e.message }));
   const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal), serveTelemetry(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
   let busy = false, again = false;
   const kick = async () => {

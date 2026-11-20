@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-v35-source-proposal-v2-excluded-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v2",
+  "include": [
+    "**/*"
+  ],
+  "source_class": "superseded-authored-source-proposal-evidence",
+  "split": "proposal-only",
+  "training_admission": false,
+  "admission": "Supersededproposal: correctedfacts/splits butduplicateversionedsharedimplementation; consolidatedV3 authoritative",
+  "notes": "No generation launchedfromproposal; preserveimmutable source/golds/implementation snapshots, notmodelnegative ortraininginput."
+}

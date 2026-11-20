@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v18-static-reference-v1-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v18-adapter-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Original 53 authored references with six visibility flags retained as original audit evidence. Corrected v2 replays unchanged source cases with complete native scope rendering.",
+  "exclude_dirs": [
+    "__pycache__"
+  ]
+}

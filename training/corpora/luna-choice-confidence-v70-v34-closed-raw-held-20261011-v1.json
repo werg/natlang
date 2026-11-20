@@ -1,0 +1,13 @@
+{
+  "id": "luna-choice-confidence-v70-v34-closed-raw-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v70-v34-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-provider-generation-raw-and-terminal-evidence",
+  "training_admission": false,
+  "admission": "held-raw-only-no-training-admission-no-DPO",
+  "notes": "Closed V70 campaign: 55/55 programs completed across five queues (11 each), 419 source items, current 74-hold source policy at launch, with the historical V68 plan lineage preserved in pinned campaign review. Includes all actual raw results, traces, files, worker journals/queues/logs, and launch artifacts. Parent acceptance and original source labels are not training admission or semantic adjudication; no new-world credit.",
+  "include": [
+    "**/*"
+  ]
+}

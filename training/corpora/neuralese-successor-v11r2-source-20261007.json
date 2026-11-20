@@ -1,0 +1,17 @@
+{
+  "id": "neuralese-successor-v11r2-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v11r2-prepared-20261007",
+  "include": [
+    "source.cases.jsonl",
+    "README.md",
+    "*audit*",
+    "source-manifest.json",
+    "source-quality-audit.md",
+    "reference-proof.json",
+    "build_source.mjs",
+    "prove_source.mjs"
+  ],
+  "admission": "source/reference scaffolding only; no teacher training admission",
+  "notes": "Superseded unlaunched draft, same world identities/groups/splits as r6; digest/date/signature/output-format corrections preserved through fresh revisions. Source, oracle, generator and quality evidence mirrored; large reproducible scripted materializations omitted from this selected snapshot and remain locally available. No distinct training-example or independent-case count."
+}

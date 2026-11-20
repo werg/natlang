@@ -1,0 +1,19 @@
+{
+  "id": "external-expansion-d02-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D02",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "train.parquet"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "SearchSwarm/SearchSwarm-SFT",
+    "revision": "4bad3397be6144a0fbbaac3121929e082f32865e",
+    "license": "mit"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

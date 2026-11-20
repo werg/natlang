@@ -1,0 +1,10 @@
+{
+  "id": "luna-bunny-v17-guided-20261008-v2",
+  "owner": "pop",
+  "path": "runs/luna-bunny-v17-guided-20261008-v2",
+  "admission": "held-actual-generation-evidence-only;not-training-admitted",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Closed corrected-source campaign: Luna accepted indices0–5,7–11;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
+}

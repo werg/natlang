@@ -1,0 +1,14 @@
+{
+  "id": "luna-v52-v53-v6r3-closed-audit-publication-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v52-v53-v6r3-closed-audit-publication-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "closed-audit-only-explicitly-held-not-for-training-no-DPO",
+  "derived_from": [
+    "luna-v52-v53-closed-action-audit-20261007-v1",
+    "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
+  ],
+  "notes": "Immutable aggregate preserving the complete closed V52/V53 raw/action audit and V51 capture review history, with fresh corrected V51 exact-action proof and V6r3 static-reference/source/action review including superseding WAT-215 source overlay. V6r3 contains 12 authored worlds/72 scoped reference passes/168 native decisions; executable scripted proof only, no teacher/provider observations. No training admission, no DPO, no independent-world inflation."
+}

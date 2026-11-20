@@ -1,0 +1,21 @@
+{
+  "id": "luna-choice-confidence-v90-lane03-runtime-bound-recovery-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v90-v40-runtimev17-prepared-v1",
+  "include": [
+    "reviewed-plan-root-lane03-runtime-bound-recovery-v1.json",
+    "root-lane03-runtime-repair-v1.json",
+    "root-lane03-supervisor-launch-v1.json"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-single-lane-recovery-evidence",
+  "source_class": "root-approved-runtime-bound-lane-recovery-launch",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "recovery launch evidence only; no data admission",
+  "notes": "One-lane recovery of V90 lane 3 on the exact original queue after terminal V89 model_request_budget incomplete. The repair evidence verifies predecessor completion using the V89 approved plan runtime; original blocked launch and original lane queue/source remain unchanged."
+}

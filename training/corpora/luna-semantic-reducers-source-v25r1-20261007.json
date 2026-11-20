@@ -1,0 +1,22 @@
+{
+  "id": "luna-semantic-reducers-source-v25r1-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v5",
+  "admission": "reviewed16authoredworlds8train8test;explicitoutputpathrevision2;native-reference-is-not-modeldata-or-admission",
+  "include": [
+    "source.cases.jsonl",
+    "rows.json",
+    "build_v5.py",
+    "*.md",
+    "source-*.json",
+    "native-report*.json",
+    "native-results*.jsonl",
+    "native-visible*.json",
+    "visible-*.jsonl",
+    "capture-*.json",
+    "prepared-plan-v5.json",
+    "approved-plan-v5.json",
+    "worker-*/queue-v5.jsonl"
+  ],
+  "derived_from": []
+}

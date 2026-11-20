@@ -1,0 +1,41 @@
+{
+  "id": "free-provider-zai45-first3-native-and-partial-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/collector.log",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.result.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.trace.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/results.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/results.jsonl.manifest.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/collector.log",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.result.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.trace.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/results.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/results.jsonl.manifest.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/collector.log",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.partial.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.partial.json.evidence-263c3df4-a1da-43d1-aac5-2c5a3a1946aa.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/results.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/results.jsonl.manifest.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/launch-receipt-v1.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/model-choice-review-pause-v1.json",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/queue.jsonl",
+    "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/throughput-policy-resume-v1.json",
+    "free-provider-generation-20261009-v1/zai45-flash-v22-first3-journal-prefix-v1.jsonl",
+    "free-provider-generation-20261009-v1/zai45-flash-v22-first3-quality-review-v1.json",
+    "free-provider-generation-20261009-v1/zai45-flash-v22-first3-quality-review-v1.md"
+  ],
+  "split": "inherited-train",
+  "source_class": "actual-provider-native-results-and-scoped-file-partial-evidence",
+  "admission": "held-pending-V22-source-quality-and-native-review",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "free-provider-v22-followups-and-kilo-held-20261009-v1",
+    "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1"
+  ],
+  "independent_new_worlds": 0,
+  "license": "Inherited authored V22 same-world counterfactual source provenance",
+  "notes": "Closed ZAI4.5Flash cases1-3 only; case4live excluded. Two exact runtime accepted final decisions, third1800.7s resource-budget incomplete/61savedreplies48kcompletiontokens, not semanticnegative. Twenty-four repeatedempty authoritysearches occur in correctlyscoped pass3conditions child; authorityfactintentionallylaterpass4. Root shared prompt fixes pendingfactreturn boundary, no widenedscope/sourcefactmutation. Provider transport causes/physicalrequesttotals unknown. Frozenruntime/source receipts preserved throughparent/sourcehash. No admission/newworldcredit."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-native-gold-text-corpus-20261007-v8-r2",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v8-r2",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-20261007-v10"
+  ],
+  "admission": "Root-reviewed derived LFM actual-tokenizer gold-text packet; all4919 admittednative IDs accounted once, original splits/groups preserved, no model/runtime qualification",
+  "notes": "4173documents2636train1537test; sameV7tokenizer/template/exactbyteprefix. 96 hash-bound attested inlinebody expansions; first96omission draft retained separately, no admission."
+}

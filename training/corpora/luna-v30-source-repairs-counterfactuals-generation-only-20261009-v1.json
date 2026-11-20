@@ -1,0 +1,23 @@
+{
+  "id": "luna-v30-source-repairs-counterfactuals-generation-only-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "root-approved-generation-source-only; no sampled-output or training admission",
+  "notes": "Five root-reviewed V30 source rows (all inherited train groups; zero new-world credit), source derivation and parent inputs, source/reference proof, exact frozen current-main runtime closure, immutable approved plan and launch/source approvals. Provider outputs are intentionally excluded; this package is not training data and conveys no sample/action admission. Mutable authority, claim ledger, worker output, OpenCode home/database/log/cache are excluded. External builder modules used by build-source.mjs are hash-bound in source manifests and the approved plan.",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "source_class": "authored-generation-source-and-frozen-runtime-evidence",
+  "split": "source",
+  "license": "project-generated",
+  "independent_new_worlds": 0,
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-mixed-iterate-callable-20261009-v1/source-v2",
+    "luna-v29-source-repairs-and-counterfactuals-20261009-v1",
+    "luna-v29-source-repairs-and-counterfactuals-20261009-v1/dispatch-proposal-v1",
+    "luna-v29-source-repairs-and-counterfactuals-20261009-v1/runtime-current-main-v1",
+    "luna-v29-source-repairs-and-counterfactuals-20261009-v1/source-v2",
+    "neuralese-semantic-iterate-reducers-v22-20261008-v5",
+    "neuralese-successor-v14-prepared-20261007-v1"
+  ]
+}

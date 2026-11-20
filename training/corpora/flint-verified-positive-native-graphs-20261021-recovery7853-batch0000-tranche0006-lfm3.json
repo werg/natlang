@@ -1,0 +1,39 @@
+{
+  "admission": "lfm3 student twin of flint-verified-positive-native-graphs-20261021-recovery7853-batch0000-tranche0006 (scripts/neuralese_data/teacher_graph_student_twin.py): the reference lfm25 view's admitted teacher actions re-rendered from the exact source trajectories; inherits its admission, splits, deduplication and decision omissions; 0 explicit render omissions",
+  "derived_from": [
+    "flint-verified-positive-native-graphs-20261021-recovery7853-batch0000-tranche0006"
+  ],
+  "id": "flint-verified-positive-native-graphs-20261021-recovery7853-batch0000-tranche0006-lfm3",
+  "include": [
+    "lfm3/receipt.json",
+    "lfm3/train/native-graphs.jsonl.zst",
+    "lfm3/test/native-graphs.jsonl.zst"
+  ],
+  "license_provenance": "Project-collected full trajectories from self-hosted teacher; exact model, revision, quantization and serving provenance: {\"artifact\": {\"at\": 1792601676.5418024, \"bytes\": 22863084160, \"passed\": true, \"path\": \"/work/generation/flint-evaluation-20261021/model/flint-nvfp4.gguf\", \"repo\": \"RecursiveSI/flint-nvfp4-gguf\", \"revision\": \"6ec43e19b565fc8d560e2d04985d7724f20673bf\", \"sha256\": \"97cc8009ff9b132d5cf3c488e6767962bb5a5dc158a90ed661bbbddf876b8bde\"}, \"base_model\": \"RecursiveSI/flint\", \"base_revision\": \"2a247be0c0aec895ccb0ac7ca92229ec6df37288\", \"model\": \"RecursiveSI/flint-nvfp4-gguf\", \"quantization\": \"NVFP4\", \"revision\": \"6ec43e19b565fc8d560e2d04985d7724f20673bf\", \"serving_runtime\": {\"actual_revision\": \"fe3e6ba71c885af4b58b4f1a53610d0f03acc716\", \"at\": 1792603251.7921152, \"binary\": \"/work/generation/flint-evaluation-20261021/llama.cpp/build/bin/llama-server\", \"flint_pr\": 30928, \"flint_revision\": \"1b44e30775dcb2f93952116b05f89e5bd797fb00\", \"passed\": true, \"upstream_revision\": \"9febe63d5a379f8568bae7116a5b2ba844a4a4a6\"}, \"teacher_role\": \"independent stronger open teacher; not either student/onpolicy\"}",
+  "note": "Registration establishes availability only; learner exposure is recorded by each continuation.",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/flint-verified-positive-native-graphs-20261021-recovery7853-batch0000-tranche0006",
+  "source_binding": {
+    "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+    "model_key": "lfm3",
+    "omitted_rows": 0,
+    "reference_receipt_sha256": "a03a858e22bd580b85ecf637f417e9ae2cc517052ca27ed227ae31fae7a04277",
+    "rows": 57,
+    "source_trajectories_sha256": "207f99800530dbde4cc0d545cb9e56915a3a7608ab7c6a0a5064d2154115d1cb",
+    "tokenizer": {
+      "expanded_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+      "role_token_ids": [
+        125033,
+        125034,
+        125035,
+        125036
+      ],
+      "source_fingerprint": "8818b793a02e560d72d2bafee3a1ca9cfedd9b84518bce89800fc4db80ca967a"
+    },
+    "verification_passed": true
+  },
+  "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+  "split": "Train-only; empty test views. Current connected held/quality/pending source and decision protections remain excluded.",
+  "training_admission": true,
+  "training_admission_reason": "Both complete model views passed exact private-export recovery, original full-trajectory source/oracle/current protection, decision-hold, source-bound graph identity, and complete action accounting. Registration establishes no student exposure."
+}

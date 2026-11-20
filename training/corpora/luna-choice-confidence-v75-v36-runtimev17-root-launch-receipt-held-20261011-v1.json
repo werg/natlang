@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-confidence-v75-v36-runtimev17-root-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v75-v36-runtimev17-v3",
+  "include": [
+    "root-approved-plan-v1.json",
+    "root-launch-receipt-v1.json"
+  ],
+  "split": "inherited-train-launch-evidence",
+  "source_class": "held-luna-generation-approval-launch-receipt",
+  "training_admission": false,
+  "admission": "held-generation-launch-evidence-only-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Separate immutable root approval and launch receipt for V75 v3, supervisor PID 1048971. Receipt pins approved plan SHA 2cdd29b7b8a50690d7f057be47c6c8f0f16db7358f7b80785590c8fdbdf1f4f3. Does not imply outcome quality or admission."
+}

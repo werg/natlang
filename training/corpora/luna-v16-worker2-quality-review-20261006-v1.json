@@ -1,0 +1,10 @@
+{
+  "id": "luna-v16-worker2-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v16-worker2-quality-review-20261006-v1",
+  "admission": "audit-only-final-target33-held-missing-inline-seven-held-for-recurrence-not-negative",
+  "include": [
+    "review.md",
+    "case-findings.json"
+  ]
+}

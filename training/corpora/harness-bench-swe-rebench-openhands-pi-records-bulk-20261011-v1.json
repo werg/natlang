@@ -1,0 +1,66 @@
+{
+  "id": "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1",
+  "include": [
+    "surface.json",
+    "prepared/*.summary.json",
+    "shards/*/records.jsonl",
+    "shards/*/pieces.jsonl",
+    "shards/*/summary.json",
+    "shards/*/prepared.jsonl",
+    "shards/*/replayed.jsonl",
+    "shards/*/replay.log"
+  ],
+  "split": "by repository, as harness-bench-swe-rebench-openhands-pi-records-20261010-v4: a repository S1 places keeps S1's split (cross-corpus-index-s1-full-final-20261003-v1), others split_of(repo, 5); source groups repository and instance; shards are disjoint sets of whole repositories, so per-shard placement equals whole-corpus placement, and repositories shared with v4 get v4's split",
+  "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
+  "admission": "admitted (maximize-data rule); records are read directly only by the recurrence stage, which stays held as for v4; the text twins are the training input",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "replay: 18168 fully verified, 9641 diverged (records up to the divergence), 140 failed (no records)",
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "nebius-swe-rebench-openhands-trajectories-20261009-v1"
+  ],
+  "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+  "build": {
+    "script": "training/neuralese/scripts/harness_bench_bulk.sh OUT 24 6 1000",
+    "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+    "builder": "natlang.harness_bench.records/1",
+    "dialect": "openhands-v0.54",
+    "mapping": "pi",
+    "surface_file_sha256": "bf007f819f00fb9107b687c38dcd82be391ab2a6261b4e0a06814ff2d22fa050 (identical to v4)",
+    "prepare": {
+      "seen": 66074,
+      "written": 31669,
+      "no_task": 0,
+      "unresolved_skipped": 34405
+    },
+    "replay": {
+      "fullyVerified": 18168,
+      "diverged": 9641,
+      "failed": 140,
+      "trajectories": 31669
+    },
+    "shards": 24,
+    "offset": 1000
+  },
+  "counts": {
+    "trajectories": 31529,
+    "records": 249094,
+    "by_split": {
+      "train": 192568,
+      "validation": 0,
+      "test": 56526
+    },
+    "view_parts": 1519630,
+    "repositories": 1437,
+    "repositories_by_split": {
+      "train": 1354,
+      "validation": 0,
+      "test": 83
+    },
+    "unplaceable_trajectories": 0
+  },
+  "notes": "D13 (plans/neuralese/DATA_INVENTORY_20261011.md): every resolved SWE-rebench OpenHands trajectory after parquet row 1000 (v4 is rows 0-999), normalized to pi transcripts, replayed in pi's tools and turned into native records (8 sampled targets per trajectory, the v4 default). Additive to v4: no trajectory in common. Built and stored on NVMe."
+}

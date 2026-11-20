@@ -522,7 +522,7 @@ def render_loop(args) -> None:
             print(json.dumps({'register_error': str(error)}), flush=True)
 
 
-REGISTRY = REPO / 'training/neuralese_corpora.json'
+REGISTRY = REPO / 'training/corpora'
 LINK = 'data/neuralese/corpora'  # ROOT is symlinked here under its own name
 
 

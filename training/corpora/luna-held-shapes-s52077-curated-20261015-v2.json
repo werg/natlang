@@ -1,0 +1,22 @@
+{
+  "id": "luna-held-shapes-s52077-curated-20261015-v2",
+  "owner": "pop",
+  "path": "runs/luna-s52077-parent-review-20261015-v1",
+  "include": [
+    "accepted-parents.jsonl",
+    "accepted-parents.review.json",
+    "semantic-holds-v2.json",
+    "approved-turns-v2.jsonl",
+    "curation-review-v2.json"
+  ],
+  "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+  "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+  "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+  "admission": "88 exact accepted candidate roots; 85 admitted after three parent holds; 744 approved native decisions, all failed or unapproved decisions excluded",
+  "training_admission": true,
+  "training_admission_reason": "Corrected independent audit confirms dataset19 positive-film route equals expected and observed trust; five dataset-workbench parents admitted. Two contradictory-source HotpotQA roots and one no-iterateOn research root held. Native per-decision approval; only approved-turns-v2.jsonl is training input.",
+  "review_status": "Corrected source-hash-bound dataset audit v2 approves all five roots; supersedes false-hold v1 source corpus. HotpotQA and required-process holds remain.",
+  "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+  "notes": "Supersedes luna-held-shapes-s52077-curated-20261015-v1, whose audit falsely held valid dataset19. Source and curation reviews bind immutable bytes; global union makes final cross-corpus decision.",
+  "supersedes": "luna-held-shapes-s52077-curated-20261015-v1"
+}

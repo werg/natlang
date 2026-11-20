@@ -1,0 +1,19 @@
+{
+  "id": "luna-dataset-workbench-s77-audit-20261015-v2",
+  "owner": "pop",
+  "path": "runs/luna-dataset-workbench-s77-audit-20261015-v2",
+  "include": [
+    "review.json",
+    "REPORT.md"
+  ],
+  "source_class": "Independent source-bound item-level semantic audit of five Luna dataset-workbench exact roots",
+  "license": "Project-generated curriculum with specific source license facts in parent campaign",
+  "split": "train-only source parents; audit itself is review evidence only",
+  "admission": "Five roots reviewed with exact source day/text/expected/observed bindings; all five semantically approved; no direct training admission",
+  "training_admission": false,
+  "training_admission_reason": "Review and hold evidence, not training rows",
+  "review_status": "Corrected v2 audit supersedes v1 false hold; dataset19 expected and observed M3 trust, matching the visible positive-film criterion",
+  "required_conversion": "None for audit; approved rows curated separately",
+  "notes": "V1 incorrectly asserted dataset19 M3 was routed cards; the exact source records say trust. V2 is the valid independent audit.",
+  "supersedes": "luna-dataset-workbench-s77-audit-20261015-v1"
+}

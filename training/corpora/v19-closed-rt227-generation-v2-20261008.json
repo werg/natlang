@@ -1,0 +1,20 @@
+{
+  "id": "v19-closed-rt227-generation-v2-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/generation-review-v2",
+  "include": [
+    "bunny-rt227/approval.receipt.json",
+    "bunny-rt227/bunny-campaign-v1/case-000008/events/case.jsonl",
+    "bunny-rt227/bunny-campaign-v1/case-000008/jobs/000008-6d2f44e98e8decda.result.json",
+    "bunny-rt227/bunny-campaign-v1/case-000008/jobs/000008-6d2f44e98e8decda.trace.jsonl",
+    "bunny-rt227/bunny-campaign-v1/case-000008/logs/case.log",
+    "bunny-rt227/bunny-campaign-v1/case-000008/results/case.results.jsonl",
+    "bunny-rt227/bunny-campaign-v1/case-000008/results/case.results.jsonl.manifest.json",
+    "bunny-rt227/bunny-campaign-v1/launch.json",
+    "bunny-rt227/plan.draft.json",
+    "bunny-rt227/plan.root-approved.json",
+    "bunny-rt227/queue.jsonl"
+  ],
+  "admission": "held-raw-or-review-evidence-no-new-training-admission",
+  "notes": "Closed corrected complete-map RT227 generation, exact none/0/no_action accepted; raw failures/recovery retained, no automatic action admission."
+}

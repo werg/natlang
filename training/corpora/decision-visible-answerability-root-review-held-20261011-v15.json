@@ -1,0 +1,13 @@
+{
+  "id": "decision-visible-answerability-root-review-held-20261011-v15",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v15",
+  "include": [
+    "review.json",
+    "canonical-policy-v15.json"
+  ],
+  "source_class": "root-reviewed-prospective-source-quality-filter",
+  "training_admission": false,
+  "admission": "held-root-source-review-no-automatic-admission-or-relabel",
+  "notes": "Six additive prospectiveholds, prior68retained. Rootindependentlycheckedoriginalrowhash/index/gold/group;fourunprovidedforumcontexts/twoVitaminCunsupportedREFUTES;fivehelpercandidatesdeclinedwithcorrectcockroachRule2/4proof. AllcurrentV33/V35inputsandV70selecteditemsdisjoint;sealedoldplans/policiesunchanged. No automaticDPOnegatives."
+}

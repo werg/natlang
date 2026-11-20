@@ -1,0 +1,18 @@
+{
+  "id": "luna-annotation-folder-v74-v23v5-runtimev16-approval-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v74-approval-launch-receipt-held-v1",
+  "include": [
+    "root-approved-plan.json",
+    "root-launch-receipt.json",
+    "receipt.json",
+    "README.md",
+    "FILES.sha256"
+  ],
+  "split": "inherited-train-launch-evidence",
+  "source_class": "held-luna-generation-approval-launch-receipt",
+  "training_admission": false,
+  "admission": "held-generation-evidence-only-no-admission",
+  "independent_new_worlds": 0,
+  "notes": "Append-only copy of root approval and launch receipt for V74's four-lane, 80-program successor campaign on frozen runtime V16. V74 lanes 1,3,4,5 were launched under supervisor PID 1044457; lane 2 was deliberately omitted because its V73 predecessor lane was still pending, avoiding duplicate workers. This receipt does not imply output quality or admission; live queues, journals, logs and results are excluded."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-google-choice-confidence-v14-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v14",
+  "include": [
+    "*",
+    "frozen-adapter-v1/**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-static-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "512closedtypedchoices368annotationmatches144disagreements;648attemptsallfinal. Notsemantictruth."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v21-full-abstract-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-pubmedqa-full-abstract-v21",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-full-evidence-regeneration",
+  "training_admission": false,
+  "admission": "held-source-semantic-full-visibility-runtime-review",
+  "notes": "43 typed-valid final teacher labels, 42 saved-answer matches and one disagreement. Complete pinned source question/abstract, original source IDs/groups, no new worlds. All raw outcomes preserved."
+}

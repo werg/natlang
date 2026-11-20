@@ -1,0 +1,32 @@
+{
+  "id": "clef-rich-teacher-evidence-20261005-v1",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "teacher-and-runtime-evidence; requests/rejections-are-not-training-targets",
+  "include": [
+    "clef-rich-pilot-20261005-v1/teacher.requests.jsonl",
+    "clef-rich-pilot-20261005-v1/summary.json",
+    "clef-rich-pilot-20261005-v2/reference.results.jsonl",
+    "clef-rich-pilot-20261005-v2/native.jsonl",
+    "clef-rich-pilot-20261005-v2/teacher.requests.jsonl",
+    "clef-rich-pilot-20261005-v2/summary.json",
+    "clef-rich-expanded-train-20261005-v1/*",
+    "clef-rich-expanded-heldout-20261005-v2/*",
+    "clef-rich-expanded-heldout-20261005-v1.building-3642058/teacher.requests.jsonl",
+    "clef-rich-expanded-heldout-20261005-v1.building-3642058/failure.json",
+    "decision-skills-heldout-20261005-v1/reference.results.jsonl",
+    "decision-skills-heldout-20261005-v1/native.jsonl"
+  ],
+  "include_root_prefixes": [
+    "clef-rich-pilot-20261005-v1",
+    "clef-rich-pilot-20261005-v2",
+    "clef-rich-expanded-train-20261005-v1",
+    "clef-rich-expanded-heldout-20261005-v2",
+    "clef-rich-expanded-heldout-20261005-v1.building-3642058",
+    "decision-skills-heldout-20261005-v1"
+  ],
+  "derived_from": [
+    "clef-rich-source-20261005-v1"
+  ],
+  "notes": "Keep live receipts and cached replay provenance. Only final cohort supplies optimization inputs."
+}

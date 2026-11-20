@@ -443,18 +443,18 @@ class OffloadTests(unittest.TestCase):
                 module.verify_remote(self.manifest, SimpleNamespace(host='dgx', remote_repo='/remote/repo'))
 
     def test_execution_requires_registry_and_manifest_bytes_committed_at_head(self):
-        registry = self.repo / 'training' / 'neuralese_corpora.json'
+        registry = self.repo / 'training' / 'corpora' / 'closed-checkpoint.json'
         manifest_path = self.repo / 'training' / 'corpus-manifests' / 'closed-checkpoint.json'
         registry.parent.mkdir(parents=True)
         manifest_path.parent.mkdir(parents=True)
-        registry.write_text(json.dumps({'corpora': [self.entry]}) + '\n')
+        registry.write_text(json.dumps(self.entry) + '\n')
         manifest_path.write_text(json.dumps(self.manifest) + '\n')
-        committed_registry = json.dumps({'corpora': [self.entry]}, indent=2).encode() + b'\n'
+        committed_registry = json.dumps(self.entry, indent=2).encode() + b'\n'
         snapshots = [committed_registry, manifest_path.read_bytes()]
         results = [SimpleNamespace(returncode=0, stdout=data, stderr=b'') for data in snapshots]
         with patch.object(module.subprocess, 'run', side_effect=results):
             module.require_committed_offload_snapshot(self.repo, 'closed-checkpoint')
-        registry.write_text(json.dumps({'corpora': [self.entry, {'id': 'unrelated', 'owner': 'dgx'}]}) + '\n')
+        (registry.parent / 'unrelated.json').write_text(json.dumps({'id': 'unrelated', 'owner': 'dgx'}) + '\n')
         results = [SimpleNamespace(returncode=0, stdout=snapshots[0], stderr=b''),
                    SimpleNamespace(returncode=0, stdout=snapshots[1], stderr=b'')]
         with patch.object(module.subprocess, 'run', side_effect=results):

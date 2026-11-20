@@ -1,0 +1,39 @@
+{
+  "admission": "lfm3 student twin of qwen-verified-positive-native-graphs-20261015-v4 (scripts/neuralese_data/teacher_graph_student_twin.py): the reference lfm25 view's admitted teacher actions re-rendered from the exact source trajectories; inherits its admission, splits, deduplication and decision omissions; 0 explicit render omissions",
+  "derived_from": [
+    "qwen-verified-positive-native-graphs-20261015-v4"
+  ],
+  "id": "qwen-verified-positive-native-graphs-20261015-v4-lfm3",
+  "include": [
+    "lfm3/receipt.json",
+    "lfm3/train/native-graphs.jsonl.zst",
+    "lfm3/test/native-graphs.jsonl.zst"
+  ],
+  "license_provenance": "Project-generated trajectories; pinned stronger teacher model/runtime licenses recorded in immutable per-batch teacher-source.json receipts. No license exclusion.",
+  "note": "Registration establishes availability only; learner exposure is recorded by each continuation.",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/qwen-verified-positive-native-graphs-20261015-v4",
+  "source_binding": {
+    "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+    "model_key": "lfm3",
+    "omitted_rows": 0,
+    "reference_receipt_sha256": "c2d7e366fafbde4028080a8af14985f535b071463522cae278a52553ead5ac72",
+    "rows": 3404,
+    "source_trajectories_sha256": "afa8bfdd258ec5002a19a5f1fa580e874ce0d62275e951e3dc0b5aca02f53bcd",
+    "tokenizer": {
+      "expanded_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+      "role_token_ids": [
+        125033,
+        125034,
+        125035,
+        125036
+      ],
+      "source_fingerprint": "8818b793a02e560d72d2bafee3a1ca9cfedd9b84518bce89800fc4db80ca967a"
+    },
+    "verification_passed": true
+  },
+  "source_class": "verified-static-transformations-of-own-model-strong-teacher-positive-full-trajectories",
+  "split": "Train only; exact current held, quality and pending source-review intersections excluded. Empty test files are structural, not held evaluation evidence.",
+  "training_admission": true,
+  "training_admission_reason": "1280 exact-success code/recovery executions bound to original response rows and immutable batch case/selection/runtime receipts; current16,133 held and65,161 quality groups plus pending reviews checked.4,691 full action turns/model minus1,287 exact token+weight duplicates =3,404 new graphs/model. All graphs parsed with actual expanded tokenizer and source groups. Ordinary supervision only; no communication edge claim."
+}

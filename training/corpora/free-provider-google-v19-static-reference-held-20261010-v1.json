@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v19-static-reference-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v19-adapter-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "free-provider-source-bound-held-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "51 authored programs over 390 unchanged source train items; actual replay 51/51 with zero visibility failures. Source disagreements excluded, retained in raw. Native reference turns held for quality admission."
+}

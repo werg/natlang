@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v29-v23-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-luna-sourcev29-native",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "native-quality-review",
+  "training_admission": false,
+  "admission": "held-source-and-turn-review-required",
+  "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
+}

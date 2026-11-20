@@ -1,0 +1,13 @@
+{
+  "id": "natlang-dev-task-packet-v2-20261028",
+  "owner": "dgx",
+  "path": "runs/natlang-dev-task-packet-v2-20261028",
+  "admission": "evaluation-only-never-training",
+  "training_admission": false,
+  "split": "test (generated); role development",
+  "include": [
+    "cases.jsonl",
+    "provenance.json"
+  ],
+  "note": "Protected DEVELOPMENT task packet v2 for LFM3 checkpoint selection (2026-10-28, plans/neuralese/LFM3_RECIPE_20261028.md): natlang-dev-task-packet-v1-20261028 with only the oracle side of its 8 edit_stream and 8 contract_diagnosis rows regenerated from the same draws (seed 71028; every non-oracle field identical, the other 112 rows byte-identical). edit_stream: edit_fidelity constraint (the reference-edited document: paragraphs in order near-exact, renames counted exactly, deleted text absent); contract_diagnosis: function-effect oracle (line_total as the run left it repaired or untouched as required, correct on hidden lines, the returned total its sum). All 128 cases reference-verified through the collector (registry without the edit_stream hold); adversarial probe: 210/210 negatives rejected, 68/68 positives accepted (v1 oracles accepted 72 of the same negatives). Same worlds and separation as v1 (provenance.json). The 8 edit_stream cases stay refused by the runtime family hold until it is lifted through a reviewed registry change; the 120 other cases are executable. Never a training source."
+}

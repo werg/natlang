@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v21-static-reference-v3-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-pubmedqa-full-abstract-v21-adapter-v3",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-runtime-visibility-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-live-model-quality-review",
+  "notes": "Six unchanged full-abstract programs /42 items now replay with zero full-state visibility failures under shared scope display fix. OriginalV2 failure retained; authored rendering evidence, not model performance or admission."
+}

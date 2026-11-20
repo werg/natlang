@@ -1,0 +1,14 @@
+{
+  "id": "s1-question-collection-runtime-b9d884fd-v7-proof-20261008",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-runtime-b9d884fd",
+  "include": [
+    "runtime/**",
+    "reference-proof-v7/**"
+  ],
+  "admission": "held-runtime-and-cpu-reference-proof-no-teacher-or-training-admission",
+  "notes": "Frozen runtime snapshot and source-bound CPU scripted reference proof for S1 V7. Proof demonstrates runtime mechanics only: zero model/provider calls, not teacher observations or training admission. Runtime snapshot is immutable and its full file manifest is included.",
+  "derived_from": [
+    "s1-question-collection-v7-generation-source-20261008"
+  ]
+}

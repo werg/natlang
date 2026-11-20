@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v23-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v23",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-unqualified-alignment-or-source-quality-evidence",
+  "notes": "Closed512 labels with originals, attempts, frozen runner and exact launch inputs.397 annotation agreements,115 differences; no source-truth admission."
+}

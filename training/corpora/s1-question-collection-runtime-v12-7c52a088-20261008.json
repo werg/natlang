@@ -1,0 +1,13 @@
+{
+  "id": "s1-question-collection-runtime-v12-7c52a088-20261008",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-runtime-v12-7c52a088",
+  "include": [
+    "runtime/**"
+  ],
+  "admission": "held-frozen-runtime-no-teacher-or-training-admission",
+  "derived_from": [
+    "s1-question-collection-v15-generation-source-20261008"
+  ],
+  "notes": "Frozen shared runtime V12 with its exact runtime receipt and file manifest. The V15 scripted source-reference proof is separately in the V15 source snapshot. Runtime and CPU reference proof demonstrate mechanics only; no model observations, learned-vector qualification, training admission, or DPO admission."
+}

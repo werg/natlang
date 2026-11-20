@@ -1,0 +1,22 @@
+{
+  "id": "luna-choice-confidence-v90-joint-closeout-superseded-v1-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v1",
+  "include": [
+    "joint-completion-v1.json",
+    "quality-review.json",
+    "quality-review.md",
+    "FILES.sha256"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-superseded-diagnostic",
+  "source_class": "superseded-joint-closeout-diagnostic",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "superseded diagnostic retained; not a valid lane-specific PID receipt",
+  "notes": "Superseded by V90 joint closeout v3 because v1 incorrectly repeated lane 1 PID on lanes 2/4/5. Kept as history; use v3."
+}

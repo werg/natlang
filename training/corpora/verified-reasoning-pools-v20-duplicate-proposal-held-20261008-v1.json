@@ -1,0 +1,21 @@
+{
+  "id": "verified-reasoning-pools-v20-duplicate-proposal-held-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v1",
+  "include": [
+    "independent-verification.json",
+    "root-global-dedup-review.json",
+    "selection-input.json",
+    "source-build/selection.json",
+    "source-build/source-manifest.json",
+    "source-build/source-proof.json",
+    "source-build/source.cases.jsonl"
+  ],
+  "exclude_dirs": [
+    "node_modules",
+    "__pycache__",
+    ".git"
+  ],
+  "admission": "held generation/source evidence only; no training admission",
+  "notes": "Held duplicate source proposal: all96 records overlapped previous V11–V17 source cases. No generation, fresh-world credit, or training admission."
+}

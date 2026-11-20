@@ -1,0 +1,14 @@
+{
+  "id": "luna-choice-confidence-v81-supervisor-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v81-v41-prefix-runtimev17-v1",
+  "include": [
+    "root-supervisor-launch-v1.json"
+  ],
+  "split": "held-generation-launch-evidence",
+  "source_class": "held-provider-campaign-supervisor-launch-receipt",
+  "training_admission": false,
+  "admission": "launch-lineage-only-no-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Owner-sealed receipt records the V81 supervisor and five worker PID launch snapshot, bound to the approved plan and independent review. It is separate from the immutable source/queue input snapshot and excludes mutable output journals."
+}

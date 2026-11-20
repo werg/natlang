@@ -1,0 +1,18 @@
+{
+  "id": "annotation-inline-folder-refill-explorations-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/annotation-refill-explorations-20261011-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "PreserveV18/V19rejectedclippedpreparation andV20correctedfilterbefore shareddeclaredruleV21. Inputcatalogandcomponent/policyfreezes retained. Neverlaunched; noadmission.",
+  "include": [
+    "provider-static-annotation-decision-folders-v18/**/*",
+    "provider-static-annotation-decision-folders-v19/**/*",
+    "provider-static-annotation-decision-folders-v20/**/*",
+    "provider-static-annotation-decision-folders-v18-input/**/*",
+    "provider-static-annotation-decision-folders-v19-input/**/*",
+    "provider-static-annotation-decision-folders-v20-input/**/*"
+  ]
+}

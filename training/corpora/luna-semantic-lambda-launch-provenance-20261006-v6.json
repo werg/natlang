@@ -1,0 +1,15 @@
+{
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v6",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v6",
+  "admission": "retry-provenance-only; not training examples",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-refill-task-source-20261006-v3",
+    "luna-semantic-lambda-teacher-20261006-v3"
+  ],
+  "notes": "Fresh fifth-slot retry of v3 index7 after explicit provider-overload failure and long delay. Same task identity/seed; preserves original failed evidence. No retry yet for request-budget18 or wall-budget16 pending diagnosis."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "luna-held-shapes-s52076-curated-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-s52076-parent-review-20261015-v1",
+  "include": [
+    "accepted-parents.jsonl",
+    "accepted-parents.review.json",
+    "semantic-holds.json",
+    "approved-turns.jsonl",
+    "curation-review.json"
+  ],
+  "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+  "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+  "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+  "admission": "88 exact accepted candidate roots; 85 admitted after three parent holds; 806 approved native decisions, all failed or unapproved decisions excluded",
+  "training_admission": true,
+  "training_admission_reason": "Exact accepted roots, source-review and protected checks, independent dataset-workbench semantic audit, two required-process research holds, native per-decision approval; only approved-turns.jsonl is training input",
+  "review_status": "Six of seven dataset-workbench roots semantically approved; one unclear technology-news label parent held; two no-iterateOn research roots held",
+  "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+  "notes": "Source and curation reviews bind immutable bytes; global union makes final cross-corpus decision."
+}

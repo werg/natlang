@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v7",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v7",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed native SFT and separately closed recurrence channel",
+  "notes": "All3257 nativeV6 +449 exactreviewapprovedoriginalV31actions=3706; all3235 recurrenceV6 +449=3684.247 newqualityholds incl6badcreators/1duplicate remainexplicit. Parentoutcomes preserved; native targets notrewrittenbyconversion. Continuoussame-world derivatives notindependentdata."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "neuralese-writer-autonomous-20261006-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-autonomous-20261006-v2",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.log"
+  ],
+  "admission": "protected-autonomous-task-shape-diagnostic-not-training"
+}

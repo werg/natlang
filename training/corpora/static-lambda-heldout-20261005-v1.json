@@ -1,0 +1,11 @@
+{
+  "id": "static-lambda-heldout-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/static-lambda-heldout-20261005-v1",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "**/*.jsonl",
+    "**/*.json"
+  ],
+  "note": "108 held-out constructed-world workbench cases,1036 decisions. Preserve evaluation split and source closure; approval is decision correctness, not permission to train."
+}

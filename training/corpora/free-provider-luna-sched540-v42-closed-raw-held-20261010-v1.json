@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-sched540-v42-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sched540-recovery-v42-runtimev13-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-quality-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "OriginaltrainSCHED540complete44topturns88telemetryrequests; exactsource-deriveddecisionandfiles; fouriterateOnupdates7writes7readouts21invocations. Native/sourceclosureadmissionseparate."
+}

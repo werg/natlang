@@ -1,0 +1,20 @@
+{
+  "id": "external-expansion-d29-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D29",
+  "include": [
+    "acquisition.json",
+    "README.md",
+    "data/train-00000-of-00001.parquet",
+    "ota-logo.png"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "open-thoughts/OpenThoughts-Agent-v1-SFT",
+    "revision": "c5dc896981f4e3b7c5382669b1d1be0bc4b6a1a6",
+    "license": "apache-2.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

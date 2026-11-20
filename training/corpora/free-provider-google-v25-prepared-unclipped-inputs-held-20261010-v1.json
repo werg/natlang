@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-google-v25-prepared-unclipped-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v25",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-native-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-quality-review",
+  "notes": "Prepared only512new complete train inputs; canonical7quality holds always applied,669legacy clipped evidence omissions; no provider launch yet.",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl"
+  ]
+}

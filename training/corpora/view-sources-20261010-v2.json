@@ -1,0 +1,32 @@
+{
+  "id": "view-sources-20261010-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/raw/view-sources-20261010-v2",
+  "include": [
+    "sources.json",
+    "qmsum/**",
+    "fetaqa/**",
+    "wtq/repo.tar.gz",
+    "codesearchnet/*.parquet",
+    "codesearchnet/*-licenses.json",
+    "codesearchnet/*_licenses.pkl",
+    "websrc/**",
+    "tabfact/**"
+  ],
+  "split": "source",
+  "source_class": "public-dataset-slices-with-dataset-questions-summaries-and-artifacts",
+  "admission": "held-source-view-corpus-evidence-only",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "view-sources-20261009-v1"
+  ],
+  "license": "per dataset: as view-sources-20261009-v1, plus CodeSearchNet Go/Java/JavaScript/PHP/Ruby (per repository) and the release's per-repository licence files; TabFact CC-BY-4.0 (card; code MIT; Wikipedia tables)",
+  "source_url": "https://huggingface.co/datasets/code-search-net/code_search_net (rev bd0cf261; licence pickles at fdc6a9e3); https://github.com/wenhuchen/Table-Fact-Checking (2ab782ba); as v1 otherwise",
+  "build": {
+    "script": "scripts/neuralese_view_corpus.py fetch --v2",
+    "fetcher": "scripts/neuralese_data/view_sources.py",
+    "code_commit": "c370732b"
+  },
+  "notes": "v1's raw directory copied, then fetch --v2: 80k leading Python train rows, 15k per other CodeSearchNet language with full valid/test, <language>_licenses.pkl from the pre-Parquet zips read member by member and converted to <language>-licenses.json by a restricted unpickler (no classes) with licences detected by view_extract.detect_license (GNU licences by title), 40 WebSRC pages per site, TabFact statements/split ids/page titles and 2,920 seeded tables. sources.json lists URL, revision, SHA-256 and licence per file (5,390 files)."
+}

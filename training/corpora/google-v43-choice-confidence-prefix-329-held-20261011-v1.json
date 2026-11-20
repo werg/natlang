@@ -1,0 +1,25 @@
+{
+  "id": "google-v43-choice-confidence-prefix-329-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v43-prefix-329-20261011-v1",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json",
+    "resume-plan.json",
+    "root-independent-approval-v1.json",
+    "launch-receipt-v1.json",
+    "locked-prior-successes.json",
+    "prefix-snapshot.json"
+  ],
+  "split": "held-prefix-snapshot-no-admission",
+  "source_class": "provider-generated-label-prefix",
+  "training_admission": false,
+  "admission": "immutable active-prefix evidence only; static source and Luna queues remain held",
+  "derived_from": [
+    "free-provider-google-choice-confidence-v43-launch-inputs-held-20261011-v1"
+  ],
+  "notes": "Byte-stable complete-line snapshot of 329 rows from still-active V43 enum-omission resume. Includes strict-invalid response and full source/provenance bindings; no active worker log or changing labels are included."
+}

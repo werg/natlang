@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v34-runtimev10-reviewed-queues-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev34-twentynine-runtimev10-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "reviewed-five-worker-semantic-iterate-queues",
+  "training_admission": false,
+  "admission": "dispatch-evidence-live-output-excluded",
+  "notes": "5workers6/6/6/6/5singlecases from29reviewedsourceindices; frozenV10 dependencyoverlay/providerimportpreflight, max5nativeLuna total. Targetoutputsnotadmitted."
+}

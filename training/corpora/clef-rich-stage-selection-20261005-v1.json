@@ -1,0 +1,13 @@
+{
+  "id": "clef-rich-stage-selection-20261005-v1",
+  "owner": "pop",
+  "path": "runs/clef-rich-stage-selection-20261005-v1",
+  "admission": "derived-all-training-and-producers-retained;28heldout-readers-prioritized-for-probes",
+  "include": [
+    "records.jsonl",
+    "selection.json"
+  ],
+  "derived_from": [
+    "clef-rich-reviewed-cohort-20261005-v1"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v80-v41-prefix-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v80-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-provider-generation-input",
+  "source_class": "held-luna-generation-inputs-and-plan",
+  "training_admission": false,
+  "admission": "root-approved-launch-receipt-recorded-separately; generation-only-no-data-admission",
+  "independent_new_worlds": 0,
+  "notes": "21 authored static-reference programs/139 original train items/groups: five repaired CLINC plus 16 new V41 remainder programs. Prepared using frozen V17 and actual V79 lane predecessors, with exact original annotation, group, current-hold and no-reuse checks. Source/plan review, copied policy/preparer and five queues pinned; mutable campaign state/journals/logs and generated outputs excluded."
+}

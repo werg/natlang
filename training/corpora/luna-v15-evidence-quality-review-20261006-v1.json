@@ -1,0 +1,7 @@
+{
+  "id": "luna-v15-evidence-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v15-evidence-quality-review-20261006-v1",
+  "admission": "independent-review-evidence-only-no-training-admission",
+  "notes": "Worker2 mixed40 assignments:39completed/1empty; fixture11 held, fixture27 undercoverage, wrong skillchoice and missing inline traces explicitly recorded."
+}

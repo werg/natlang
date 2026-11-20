@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v39-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v39-fortyeight-runtimev12-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "train-inherited-evidence-only",
+  "source_class": "provider-generation-reviewed-inputs",
+  "training_admission": false,
+  "admission": "generation-input-only-no-training-admission",
+  "notes": "Fourmediumworkers48V11sourcefolderprograms357itemsactualauthoredreferenceaccepted/capturevisible. Originalgroups/splits/golds unchangedsourcequalitypending. <=5workersincludingoneV38qualityrepair; activeoutputs excluded."
+}

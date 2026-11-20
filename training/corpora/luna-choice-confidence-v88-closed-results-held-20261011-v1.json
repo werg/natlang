@@ -1,0 +1,28 @@
+{
+  "id": "luna-choice-confidence-v88-closed-results-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v88-v41-runtimev17-v1",
+  "include": [
+    "campaign-launch.json",
+    "root-supervisor-launch-v1.json",
+    "worker-*/queue.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/worker.log",
+    "worker-*/case-*/collector.log",
+    "worker-*/case-*/results.jsonl",
+    "worker-*/case-*/results.jsonl.manifest.json",
+    "worker-*/case-*/jobs/*.trace.jsonl",
+    "worker-*/case-*/jobs/*.result.json"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "held-closed-provider-generation-results",
+  "source_class": "closed-native-teacher-trajectory-and-trace-evidence",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "closed output evidence only; no training, trace, recurrence, or independent-world admission",
+  "notes": "V88 closed 50/50 single-item CLINC programs on five lanes. Exact source annotation matches 46/50; all 50 choices were in declared options; saved decisions.json equals returned map in all 50. Nine reported scope failures remain part of raw traces. See separate quality review for same-invocation request visibility and item-level comparisons."
+}

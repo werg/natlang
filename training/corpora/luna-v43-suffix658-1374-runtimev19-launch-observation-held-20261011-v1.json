@@ -1,0 +1,21 @@
+{
+  "id": "luna-v43-suffix658-1374-runtimev19-launch-observation-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-suffix658-1374-runtimev19-launch-evidence-v1",
+  "include": [
+    "FILES.sha256.json",
+    "approved-plan-v1.json",
+    "campaign-launch-at-capture.json",
+    "root-independent-approval-v1.json",
+    "snapshot.json"
+  ],
+  "split": "held-launch-observation-no-admission",
+  "source_class": "provider-generation-launch-evidence",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "immutable launch-time snapshot; no active journals, logs, results, or completion/quality claims",
+  "derived_from": [
+    "luna-v43-suffix658-1374-runtimev19-approved-inputs-held-20261011-v1"
+  ],
+  "notes": "Cutoff snapshot captured status running with five actual worker PIDs. Treat as a launch observation only; later raw outputs require a separate closed snapshot."
+}

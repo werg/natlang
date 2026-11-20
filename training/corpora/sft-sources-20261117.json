@@ -1,0 +1,16 @@
+{
+  "id": "sft-sources-20261117",
+  "owner": "dgx",
+  "path": "data_nvme:sft-sources-20261117",
+  "kind": "trajectories",
+  "snapshots": "journal",
+  "format": "sft_sources WORK: episodes*.jsonl.zst, replay.jsonl, replay/<episode>/rollouts.jsonl",
+  "training_admission": "grpo-sd-teacher",
+  "roles": {
+    "grpo-sd-teacher": {
+      "order": 1
+    }
+  },
+  "license": "teacher-generation episodes (claude-haiku-5-5, gpt-6-luna, nemotron-3-ultra, gemini, glm-4.7-flash; see the teacher-gen campaigns) replayed under the project runtime",
+  "note": "Self-distillation teacher demonstrations (grpo TeacherDemos). A refreshed WORK grows in place: its snapshots are journal records (sft_sources extract/replay record one per refresh), and each run records the sha of what it read."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v20-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v20-gemini-choice-confidence-and-static-replay-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-generation-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "Sealed provider/static/Pop source closure review; full S1 and semantic quality remain required. Record source evidence clipping obligations separately."
+}

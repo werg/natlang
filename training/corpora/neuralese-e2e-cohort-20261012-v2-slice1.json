@@ -1,0 +1,61 @@
+{
+  "owner": "dgx",
+  "source_class": "native-e2e-producer-consumer-records",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-12 (e2e data: include everything; hold nothing for review, pending status or license): every authenticated producer->consumer edge of every converted native-turn source, for the e2e stage of both lines (tokenizer-agnostic records)",
+  "id": "neuralese-e2e-cohort-20261012-v2-slice1",
+  "path": "runs/neuralese-e2e-cohort-20261012-v2-slice1",
+  "include": [
+    "records.jsonl",
+    "pieces.jsonl",
+    "edges.jsonl",
+    "chains.jsonl",
+    "receipt.json"
+  ],
+  "split": "from neuralese-e2e-cohort-20261012-v2 (per record)",
+  "admission": "trainer-sized slice of neuralese-e2e-cohort-20261012-v2: the edge endpoints of whole chains (the v1 rule), round-robin over families, densest chains first, writer names unique across the file (e2e_mine.py slice); re-authenticated as a whole: 7521 edges, 0 missing",
+  "derived_from": [
+    "neuralese-e2e-cohort-20261012-v2"
+  ],
+  "counts": {
+    "chains": 712,
+    "records": 7007,
+    "edges": 7521,
+    "by_split": {
+      "test": {
+        "chains": 170,
+        "edges": 1306,
+        "records": 1004
+      },
+      "train": {
+        "chains": 542,
+        "edges": 6215,
+        "records": 6003
+      }
+    },
+    "families": 80
+  },
+  "build": {
+    "script": "scripts/neuralese_data/e2e_mine.py",
+    "receipt": "runs/neuralese-e2e-cohort-20261012-v2-slice1/receipt.json",
+    "files": {
+      "chains.jsonl": {
+        "bytes": 503340,
+        "sha256": "6c2f7f08d74762687f6533c405a0a3d1eb8153d527852519d1950666317654fa"
+      },
+      "edges.jsonl": {
+        "bytes": 3579716,
+        "sha256": "577af36dd77e1fe98510ccf84feeafd51db1dab3ec38ee4a3718db7ac6e71218"
+      },
+      "pieces.jsonl": {
+        "bytes": 1929022,
+        "sha256": "8f420dcd79ee6044012d2323ef06557706989d02dbdc07aa6108d7c9949a7a9a"
+      },
+      "records.jsonl": {
+        "bytes": 972385014,
+        "sha256": "68b3e77951687aee85d0caf39df91561d1a7027b6aaa7487a16119c549a5e469"
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v13r2-prepared-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v13r2-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "root-reviewed source revision for generation only",
+  "notes": "OnlyCIRindex9assessmentwindowclarified; allgroups/splits/gold unchanged,0newindependentworlds. OldCIRV35/V36sourceworldheld fordateambiguity. No oldsource/attempt rewrites/crosspromptDPO;24/24CPUproof0modelcalls."
+}

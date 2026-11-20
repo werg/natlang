@@ -1,0 +1,15 @@
+{
+  "id": "luna-v64-seven-source-recovery-v65-disposition-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v64-seven-source-recovery-v65-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "V65closed159complete1providerterminatedpartial. Ownercheckedall160finish/all5PIDsdead. Independent reviewed2recovery workerlaunch authorizedwithoutmarkingfailedcasecomplete. Oldfailedsupervisorlogpreserved.",
+  "include": [
+    "root-v65-predecessor-disposition-v1.json",
+    "root-approved-plan-v2.json",
+    "supervisor.log"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "natlang-rl-task-supply-20261117",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-task-supply-20261117",
+  "include": [
+    "cases.jsonl",
+    "selection.json",
+    "repetition.json",
+    "exposure.json",
+    "custody.json",
+    "protection-union.json",
+    "custody-agentic.json",
+    "protection-union-agentic.json",
+    "verification-agentic-s0.json",
+    "verification-agentic-s1.json",
+    "verification-agentic-s2.json",
+    "held-verify/*.json"
+  ],
+  "source_class": "immutable-RL-task-source",
+  "split": "Train-only 1,355-row RL task source for grpo.py POOLS: 447 authored rows (382 round-9 rows in 16 new writing/chat/reasoning families, 65 round-8 rows admitted after the last pool build) and 908 tau-bench retail train tasks / APIGen-MT-5k retail and airline trajectories (store service, final-state digest oracle, at most one per customer).",
+  "note": "plans/neuralese/TASK_SUPPLY_20261117.md. Authored rows: qualified (reference/negative/alias replay, smoke, custody, lint) on the grpo-v3 pin runtime 7e929f2ea, novelty-gated, blind-solved by an independent Sonnet solver and admitted to natlang-rl-authoring/admitted (held dev/confirmation worlds registered as natlang-rl-authored-{dev,confirmation}-20261117r9). Store rows: build-v3 verified rows re-verified on the same runtime (908/908 kept, 2,694 wrong controls rejected). held_eval verify vs held-v3: 0 shared ids or split/source groups (also with the recorded exposure); ProtectedWorlds: 0 related (114 authored rows related through shared invented-domain groups were left out); LFM3 held-set group closure: passed. Builder: /mnt/external/natlang-rl-authoring/round9/build_supply.py --drop-related. Data on /mnt/external (runs/ entry is a symlink).",
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
+  "roles": {
+    "grpo-pool": {
+      "order": 2,
+      "file": "cases.jsonl"
+    }
+  },
+  "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay; plus tau-bench / APIGen-MT store-service tasks (upstream dataset licenses)",
+  "training_admission": "grpo-task-pool"
+}

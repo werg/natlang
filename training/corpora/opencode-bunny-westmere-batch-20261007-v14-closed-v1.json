@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-westmere-batch-20261007-v14-closed-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-westmere-batch-20261007-v14",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+  "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+}

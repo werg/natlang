@@ -1,0 +1,14 @@
+{
+  "id": "google-reservation-preparations-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/google-reservation-preparations-20261011-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "V28preparedonly antecedent preservedwith exactcode/policyfreeze, neverlaunched. V29actualsourceprep addsnestedpriorlineagefilter andconsistentemptyreservationreturn.",
+  "include": [
+    "provider-google-choice-confidence-v28-source/**/*",
+    "provider-google-choice-confidence-v28-input/**/*"
+  ]
+}

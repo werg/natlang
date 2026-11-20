@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-v8-registry-revalidation-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v8-registry-revalidation-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "audit provenance only",
+  "notes": "Exacthistoricalregistrybytes reconstructed byremovingonlytwoaddedV13entries; pinnedcandidateSHAvalidated, currentregistryunmodified and noentriesomitted."
+}

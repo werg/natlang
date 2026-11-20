@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v11",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v11",
+  "include": [
+    "**/*"
+  ],
+  "derived_from": [
+    "neuralese-reviewed-restart-cohort-20261007-v10",
+    "luna-semantic-v43-action-disposition-proposal-20261007-v7"
+  ],
+  "admission": "Root-approved exact24native actions with source/scope/hosttarget binding andcorrectrationale; recurrenceV43heldpendingtypedproducerclosure, V10Rprefixunchanged",
+  "notes": "4943native4892R, 24native additions11train13test;776explicitnewholds retained; allpriorholds in derivedV10evidence. No newworld/DPO/model/runtimequalification."
+}

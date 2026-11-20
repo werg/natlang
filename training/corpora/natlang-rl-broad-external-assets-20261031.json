@@ -1,0 +1,13 @@
+{
+  "id": "natlang-rl-broad-external-assets-20261031",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-20261031",
+  "include": [
+    "assets/*/*"
+  ],
+  "source_class": "RL-task-service-assets",
+  "admission": "Support data of natlang-rl-broad-external-20261031-v2 and its held packets: SQLite databases (Spider, BIRD) and DataBench tables that the cases' db/table services open read-only and check by SHA-256. Not a task source by itself.",
+  "license": "CC-BY-SA-4.0 (Spider, BIRD databases); MIT (DataBench tables)",
+  "snapshot_manifest": "training/corpus-manifests/natlang-rl-broad-external-assets-20261031.json",
+  "note": "Path is the default compiled into the case services (NATLANG_RL_TASK_ASSETS overrides it); keep it while any of the three broad-external packets is in use."
+}

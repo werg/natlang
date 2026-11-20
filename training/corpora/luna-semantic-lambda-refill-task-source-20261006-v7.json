@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v7",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v7",
+  "admission": "source-candidates; native reference checks passed for selected SMS tasks; output quality and split closure pending",
+  "include": [
+    "*.jsonl",
+    "*.json"
+  ],
+  "notes": "Seed6174 32shapes/26verified/six existing source-policy holds retained. Eight SMS tasks selected across two four-case queues; other SST candidates retained/deferred. No hints. Subset not independent additional cases."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-v26-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v26-closed-20261007",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.log"
+  ],
+  "admission": "raw-actual-observation-only;29terminal25accepted4rejected3incomplete;source-confounds-and-intermediate-semantic-holds;no-reference-or-invented-outputs;corpus-admission-pending",
+  "derived_from": [
+    "luna-semantic-reducers-source-v26r1-20261007"
+  ]
+}

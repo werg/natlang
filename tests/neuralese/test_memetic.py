@@ -244,3 +244,68 @@ def test_memetic_groups_log_the_guided_against_unguided_gap(tmp_path):
     history = list(grpo.memetic_gap_history(tmp_path / 'train.jsonl'))
     step = grpo.memetic_step_record([group], history)
     assert step['gap_mean'] == .375 and step['gap_running_mean'] == .25 and step['gap_running_groups'] == 2
+
+
+class StateEvaluator(Evaluator):
+    """As Evaluator, writing the guidance binding file a real evaluation writes; refined states succeed at ``refined``."""
+
+    def __init__(self, root, refined):
+        super().__init__()
+        self.root, self.refined = root, refined
+
+    def __call__(self, cases, guidance, *, name, samples=None, states=None):
+        report = super().__call__(cases, guidance, name=name, samples=samples)
+        out = self.root / name
+        out.mkdir(parents=True, exist_ok=True)
+        if guidance:
+            (out / 'program-guidance.json').write_text(json.dumps(
+                [{'native_state_id': 'nzs1_' + 't' * 52, 'function': entry['function']} for entry in guidance]))
+        self.calls[-1] = (*self.calls[-1], states)
+        return {**report, 'dir': str(out), **({'success': self.refined} if states else {})}
+
+
+@pytest.mark.parametrize('refined, kept', [(1.0, True), (0.5, False)])
+def test_refined_guidance_states_are_kept_only_when_the_query_worlds_confirm_them(tmp_path, monkeypatch, refined, kept):
+    value = spec(tmp_path, 1)
+    value['refine'] = {'checkpoint': '/x.pt', 'steps': 1}
+    evaluator = StateEvaluator(tmp_path / 'evals', refined)
+    w = mw.Workspace(value, evaluator, check=lambda case: [], run='r0')
+    refined_state = {None: {'id': 'nzs1_' + 'r' * 52, 'build': str(tmp_path / 'build')}}
+    seen = {}
+
+    def refine(spec_, reports, guidance, bindings, out):
+        seen.update(guidance=guidance, bindings=bindings)
+        return refined_state, {'rows': 3}
+    monkeypatch.setattr(mw, 'refine_guidance', refine)
+    change = w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Read the question carefully and '
+                        'answer with the exact name it asks for.'})['id']
+    w.evaluate([change])
+    w.commit([change], 'careful reading')
+    outcome = w.score()['memetic']
+    assert seen['bindings'][0]['native_state_id'] == 'nzs1_' + 't' * 52, 'refined from the committed text-written state'
+    runs = {call[0]: call for call in evaluator.calls}
+    refined_run = next(call for name, call in runs.items() if name.startswith('query-refined-'))
+    assert refined_run[1] == [f'w{i}' for i in range(4, 10)] and refined_run[-1] == refined_state, 'judged on the query worlds'
+    assert outcome['refine']['kept'] is kept and outcome['refine']['text_success'] == 0.75
+    assert outcome['query_success'] == (refined if kept else 0.75)
+
+
+def test_guidance_rows_are_the_verified_calls_that_imported_the_state_with_its_text_in_place():
+    if not (mw.REPO / 'ts-host/dist/tune/pool.js').exists():
+        pytest.skip('needs the built ts-host dist')
+    state = 'nzs1_' + 'g' * 52
+    step = lambda: {'phase': 'action', 'invocation_id': 'i1', 'tools_offered': [], 'assistant': {},
+                    'model_response': {'text': 'Sunday'},
+                    'context': [{'role': 'system', 'content': 'S'}, {'role': 'user', 'content': [
+                        {'type': 'text', 'text': 'Instructions: x\n\n<natlang_program_guidance>\n'},
+                        {'type': 'native_state', 'id': state}, {'type': 'text', 'text': '\n</natlang_program_guidance>\n'}]}]}
+    passed = {'id': 'row1', 'trajectory': [step()], 'outcome': {'status': 'done', 'oracle': {'accepted': True}}}
+    report = {'results': [('w1', passed), ('w2', {**passed, 'id': 'row2'})], 'rewards': [1.0, 0.0]}
+    guidance = [{'function': None, 'text': 'Check the weekday twice.'}]
+    rows = mw.guidance_rows([report], guidance, [{'native_state_id': state}])
+    assert len(rows) == 1, 'only the verified success'
+    [row] = rows
+    assert row['binding'] == 'guidance:*' and row['texts'] == {'instructions': 'Check the weekday twice.'}
+    assert row['messages'][1]['content'] == ('Instructions: x\n\n<natlang_program_guidance>\nCheck the weekday twice.\n'
+                                             '</natlang_program_guidance>\n')
+    assert row['teacher'] == 'rl' and row['evidence']['rootOracle'] is True and row['reply'] == {'text': 'Sunday'}

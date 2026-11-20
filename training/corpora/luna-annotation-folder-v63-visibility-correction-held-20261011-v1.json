@@ -1,0 +1,10 @@
+{
+  "id": "luna-annotation-folder-v63-visibility-correction-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v63-visibility-invocation-closure-v3",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Exact originating eval/toolcall/codeSHA and unique full state joins bind the28 previously unresolved items to saved childrequests;416/416 total request-backed. Preserve prior v1/v2; no original wire or admission claim."
+}

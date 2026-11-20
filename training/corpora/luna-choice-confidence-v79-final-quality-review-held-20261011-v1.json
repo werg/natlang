@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-confidence-v79-final-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v79-choice-confidence-final-v1",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-provider-generation-quality-audit",
+  "training_admission": false,
+  "admission": "audit-evidence-only-no-source-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Read-only source-bound review of closed V79. Six of six output rows have terminal accounting; 35/37 item decisions match exact inherited annotations, with two completed decision disagreements in one Newsgroups and one Yahoo Topic program. Per-item saved rendered child requests show state, question and option-domain visibility; no original wire bytes are claimed. Existing source quality/license conditions are preserved."
+}

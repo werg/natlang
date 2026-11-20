@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v4-final",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only",
+  "source_class": "storage-or-source-review-evidence",
+  "training_admission": false,
+  "admission": "evidence-only-no-training-admission",
+  "notes": "Finalcorrectedbindinginventory5590exactrefs215canonicalID/hash sourcepairs2694refs; trace696verified193callonly149pointer4552unmatched. Noautomaticadmission,143unresolvedunchanged. Narrowfilenamecoverage supersededbyV5broaderexactlookup."
+}

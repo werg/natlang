@@ -1,0 +1,18 @@
+{
+  "id": "luna-dataset-workbench-s73-s74-audit-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-dataset-workbench-s73-s74-audit-20261015-v1",
+  "include": [
+    "review.json",
+    "REPORT.md"
+  ],
+  "source_class": "Independent source-bound semantic audit of twelve Luna dataset-workbench exact roots",
+  "license": "Project-generated curriculum with source license facts in seed parent corpora",
+  "split": "train-only source parents but audit is review evidence, not training rows",
+  "admission": "Twelve exact roots item-by-item reviewed; 11 semantically approved for separate curation and one held",
+  "training_admission": false,
+  "training_admission_reason": "Review and hold evidence only",
+  "review_status": "Complete independent audit with source hashes and item rationales",
+  "required_conversion": "None for review evidence; approved data curated in seed source corpora",
+  "notes": "No label rewriting; mixed praise/criticism sentiment case held."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "s2-sample-20261003",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/s2-sample-20261003",
+  "admission": "sample-not-independent-source",
+  "include": [
+    "*.jsonl",
+    "*.json"
+  ]
+}

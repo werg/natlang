@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-luna-v37-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v37-nineteen-runtimev12-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-source-generation-quality-evidence",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "Fourdisjointworkers19V10folderprograms133items inheritedtrain actualreferenceaccepted. FrozenV12activeoutputs/logs/journalsexcluded."
+}

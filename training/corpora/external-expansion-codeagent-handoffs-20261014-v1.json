@@ -1,0 +1,18 @@
+{
+  "id": "external-expansion-codeagent-handoffs-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-codeagent-handoffs-20261014-v1",
+  "include": [
+    "*.port-records.jsonl",
+    "manifest.json",
+    "admission-review.json"
+  ],
+  "source_class": "external-static-typed-handoff",
+  "training_admission": true,
+  "training_admission_reason": "Owner2026-10-14 explicitly admits static natlang-like transformation and general coding/Neuralese teacher data.",
+  "derived_from": [
+    "external-expansion-d05-source-20261014-v1"
+  ],
+  "license": "pinned source card facts in source manifests and record lineage",
+  "notes": "External teacher correctness unknown; exact static source/target separation and protected closure, not live native task certification."
+}

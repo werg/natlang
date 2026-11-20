@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-luna-done-producer-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-luna-done-producer-audit-20261006-v1",
+  "admission": "audit-only-conversion-gap-host-results-need-typed-provenance-and-host-result-IR",
+  "include": [
+    "report.md",
+    "findings.json"
+  ]
+}

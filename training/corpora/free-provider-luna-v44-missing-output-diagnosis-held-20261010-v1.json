@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v44-missing-output-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v44-missing-child-outputs-diagnosis-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "actual-child-trace-contract-diagnosis",
+  "training_admission": false,
+  "admission": "held diagnostic evidence; no admission or DPO decision",
+  "notes": "15 missing child captures inspected; zero successful typed returns dropped. One caller supplied only caseId and decision while child needed source fields. Other children unfinished or errored; eval success is not a declared child return."
+}

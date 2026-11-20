@@ -1,0 +1,15 @@
+{
+  "id": "neuralese-semantic-iterate-reducers-v19-source-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1",
+  "include": [
+    "source.cases.jsonl",
+    "source-proof.json",
+    "source-manifest.json",
+    "source-quality-review.json",
+    "README.md",
+    "authored-reference-cb892/**/*"
+  ],
+  "admission": "generation-approved-source-no-action-or-training-admission",
+  "notes": "Nine task variants over eight inherited V18 factual groups/splits: eight counterfactuals plus same-facts RT-227 complete decision-map revision. Zero independent new-world credit. Root independently reviewed facts/ranking/eligibility/authorization and exact planned outcomes. Authored reference proof is structural scripted evidence, not model qualification or teacher trajectory admission. Eight variants dispatched across five Luna slots and Bunny cap two; active generation outputs excluded from immutable source publication."
+}

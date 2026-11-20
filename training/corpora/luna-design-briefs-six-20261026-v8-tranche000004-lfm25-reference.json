@@ -1,0 +1,23 @@
+{
+  "id": "luna-design-briefs-six-20261026-v8-tranche000004-lfm25-reference",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/luna-design-briefs-six-20261026-v8-tranche000004",
+  "include": [
+    "lfm25/receipt.json",
+    "lfm25/train/native-graphs.jsonl.zst",
+    "lfm25/test/native-graphs.jsonl.zst"
+  ],
+  "source_class": "verified-provider-teacher-positive-native-full-trajectory",
+  "split": "Train only; 114 source trajectories are train-only; current held/quality/pending groups checked; this LFM2.5-tokenized bridge is used only to create and verify the LFM3 twin.",
+  "license_provenance": "Owner-authorized project-collected openai-codex/gpt-6-luna trajectories; original teacher actor/runtime/source record hashes retained; provider weight revision unavailable.",
+  "admission": "Historical tokenizer reference for the qualified LFM3 student twin. Current native teacher materializer admitted 288 sampled actions from 114 accepted Luna trajectories; 11 failed/unexecuted proposals omitted. Not a claim of LFM3 learner exposure.",
+  "training_admission": false,
+  "source_binding": {
+    "model_key": "lfm25",
+    "model_id": "lfm2:becd44942637909e2239d0701ee5c6350050c7cbb19f924dd970594e4720724f",
+    "source_trajectories_sha256": "6a772a83000b675066806b9e03f9b7c62a4a4e79c3e5f08e82001e462b7ed2cc",
+    "receipt_sha256": "30878634afccf6f69ad8d01670d6abd351f4e62aff9572f54225f586723a11e2",
+    "rows": 288,
+    "omitted_rows": 11
+  }
+}

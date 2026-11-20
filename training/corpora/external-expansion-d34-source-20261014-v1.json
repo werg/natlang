@@ -1,0 +1,23 @@
+{
+  "id": "external-expansion-d34-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D34",
+  "include": [
+    "acquisition.json",
+    "LICENSE",
+    "README.md",
+    "ck-pro-web.sft.jsonl",
+    "docbench.sft.jsonl",
+    "tablebench.sft.jsonl",
+    "webwalker_subset.sft.jsonl"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "CognitiveKernel/CognitiveKernel-Pro-SFT",
+    "revision": "6443666c406f863898b0924cf1a3e1a2512180e8",
+    "license": "other"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

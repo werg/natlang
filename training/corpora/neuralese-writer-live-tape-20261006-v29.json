@@ -1,0 +1,12 @@
+{
+  "id": "neuralese-writer-live-tape-20261006-v29",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-live-tape-20261006-v29",
+  "admission": "learned-checkpoint-diagnostic-not-new-training-examples",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.pt",
+    "**/*.safetensors"
+  ]
+}

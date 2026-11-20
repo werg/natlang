@@ -1,0 +1,13 @@
+{
+  "id": "v20-counterfactual-source-v8-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8",
+  "include": [
+    "README.md",
+    "source.cases.jsonl",
+    "source-proof.json",
+    "source-manifest.json"
+  ],
+  "admission": "generation-source-or-scripted-reference-no-training-admission",
+  "notes": "Constructed 24 source variants inheriting eight V18 groups and splits,12train12test; zero independent-world credit. V8 corrects matching saved template capture set. Source approved for generation only; authored scripted references are separate, not observed teacher examples."
+}

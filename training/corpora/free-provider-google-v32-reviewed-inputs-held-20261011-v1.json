@@ -1,0 +1,18 @@
+{
+  "id": "free-provider-google-v32-reviewed-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v32-source",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "512fresh9-familytraininputs62holds2048budget; sharedquotawaiter991941behindV31. Activeoutputs excluded.",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl",
+    "root-source-launch-review-v1.json",
+    "frozen-adapter-v1/**",
+    "source-preparation-code/**"
+  ]
+}

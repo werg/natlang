@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v29-candidate-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-candidate-evidence-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Five incompleteJSON lengthstops and11full disagreement candidates preserved. No automatic truth/holds."
+}

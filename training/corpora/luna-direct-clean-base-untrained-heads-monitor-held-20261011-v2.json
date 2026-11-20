@@ -1,0 +1,14 @@
+{
+  "id": "luna-direct-clean-base-untrained-heads-monitor-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-clean-base-monitor-20261011-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-initialization-and-clean-base-monitor-diagnostic",
+  "source_class": "untrained-clean-base-heads-and-behavior-probe-diagnostic",
+  "training_admission": false,
+  "admission": "initialization-and-behavior-diagnostic-only-no-training-or-foundation-qualification",
+  "independent_new_worlds": 0,
+  "notes": "Preserves the CPU/offline initialized untrained heads artifact, exact probe inputs/results, manifest, preparation/launch receipts, and failed first preparation attempt. No training or generation was launched. These artifacts do not establish task quality or foundation qualification."
+}

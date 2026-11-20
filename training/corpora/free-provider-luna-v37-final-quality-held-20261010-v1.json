@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v37-final-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v37-choice-folder-v12-final-20261010-v1",
+  "include": [
+    "*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "source_class": "closed-provider-static-quality-evidence",
+  "split": "evidence-only-inherited-groups",
+  "training_admission": false,
+  "admission": "held-source-split-semantic-review-required",
+  "notes": "FinalactualLuna19casequalityaudit sourcebindings/choiceerrors/keysets/capture/actions allheld separatefromreference810turns."
+}

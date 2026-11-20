@@ -1,0 +1,19 @@
+{
+  "id": "static-lambda-neuralese-20261005-v2",
+  "owner": "pop",
+  "path": "runs/static-lambda-neuralese-v5-20261005-final",
+  "admission": "structurally-closed-candidate; retains-original-source-and-target-quality-decisions",
+  "include": [
+    "records.jsonl",
+    "pieces.jsonl",
+    "conversion.json",
+    "recurrence-audit.json"
+  ],
+  "derived_from": [
+    "static-lambda-expansion-20261005-v1"
+  ],
+  "supersedes": [
+    "static-lambda-neuralese-20261005-v1"
+  ],
+  "notes": "Conversion5recovers319writers/319edges. Ambiguous equal values remain exact; no invented edges. Historical v1 stays held."
+}

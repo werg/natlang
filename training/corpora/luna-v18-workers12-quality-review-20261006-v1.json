@@ -1,0 +1,10 @@
+{
+  "id": "luna-v18-workers12-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v18-workers12-quality-review-20261006-v1",
+  "admission": "independent-audit-54-supported-finals-clean-target-and-recurrence-admission-still-required",
+  "include": [
+    "review.md",
+    "case-findings.json"
+  ]
+}

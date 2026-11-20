@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v58-current-shared-request-audit-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-request-visibility-shared-v3",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Shared exact byte hashing helper rerun:394 item-bound full states,1059 saved turns,151 same-invocation captures. Equivalent evidence to previous sharedv2; held."
+}

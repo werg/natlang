@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v9-root-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v9-root-review-20261008-v1",
+  "include": [
+    "*.json"
+  ],
+  "admission": "root-admission-review-receipts-not-training-examples",
+  "derived_from": [
+    "luna-v17-v9-portable-context-proposal-20261008"
+  ],
+  "notes": "Immutable independent root prefix/target/alignment checks and exact final admission decision; source/body proof and validator parity explicit."
+}

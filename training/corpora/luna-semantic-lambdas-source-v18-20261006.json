@@ -1,0 +1,11 @@
+{
+  "id": "luna-semantic-lambdas-source-v18-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v18",
+  "admission": "source-only-root-reviewed-40-new-facts-train-only-no-trajectory-admission",
+  "include": [
+    "all.cases.jsonl",
+    "all.cases.jsonl.report.json",
+    "source-review.json"
+  ]
+}

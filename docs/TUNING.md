@@ -318,6 +318,25 @@ state works after whatever a program puts before it (Composable Soft-Prompt Dist
 points on a four-expert composition). Serving never adds the prefix. A fit resuming its own state from before the
 setting keeps it off. With every `ranks` level at 0 the fit trains soft states alone on the frozen backbone.
 
+**One primed-state family (2026-11-20).** A soft instruction or skill state, a runtime prompt piece's state, a learned
+operator's prompt state and a memetic guidance state are the same thing: a native state primed from its text at its
+position in a real rendered call (`tune/soft.py` `initialize_soft_states`, `native_init_body`) and then trained on
+verified rows by the same fit (`tune.build`, CSPD prefix robustness, frozen backbone at rank 0). They differ only in
+data, the binding they belong to: a program's lambda (`lambda:...`), a runtime prompt piece (`prompt:<piece>`, or
+`prompt:<piece>@<scope>` for one site: `prompt:view@compact-value` is the compact-value operator's own state of view's
+body), or memetic guidance (`guidance:<function or *>`). A produced Neuralese span differs in data too: it is
+input-specific and written by a producer call, not a static learned state.
+- A state stands for the exact text it was primed from. A binding whose instructions interpolate values gets its state
+  for its most frequent rendering; its other renderings, and calls of the binding that do not show the text (judge
+  readouts, operator calls), stay text under the same stack, in training (`place_states`) and serving
+  (`kernel.ts`) alike. The instruction text is the body as the call's opening message shows it (newlines trimmed).
+- Learned operators: `scripts/neuralese_data/operator_soft_states.py` turns verified operator cases (gold or checked
+  seeds) into rows of `prompt:view@<operator>` and a rank-0 plan; the collector serves a build with
+  `NATLANG_NEURALESE_PROMPT_STATES=BUILD_DIR` (`off` or unset: text). An operator call then imports its own state where
+  view's body stood, and its in-context capture keeps that import on every engine (`docs/ENGINE_PARITY.md`).
+- Memetic guidance: with `refine` in the episode spec, the committed guidance states are refined on the support worlds'
+  verified calls and kept only when the query worlds confirm them (`rl/memetic_workspace.py` `refine_guidance`).
+
 In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
 checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters, nativeStates })` and the
 binding for `createNatlangRuntime({ weights })`. Adapters load at scale 0; each request lists every adapter with its

@@ -1,0 +1,24 @@
+{
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v1",
+  "include": [
+    "inventory.json",
+    "inventory.md",
+    "row-bindings.jsonl"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "quality-review-evidence",
+  "training_admission": false,
+  "admission": "held-source-closure-evidence-only",
+  "notes": "Seven-stream exact input/native-text inventory,4962 bindings. Groups-only S1 check:52 matched train groups/317 row-group pairs with no observed split conflict; harness exact group overlap0. No full source-text/question closure or actual original source-case revision disambiguation yet. Evidence-only, not a qualification/admission.",
+  "snapshot_pin": {
+    "files": 3,
+    "bytes": 5229991,
+    "file_sha256": {
+      "inventory.json": "c0cc0d9526a7480f5f8637d1c8ce67c5e3d70f4894405a592cf60fb052c58751",
+      "inventory.md": "59d63b05491f6a5e1ec39fb826db692afa0e080c990f6b28c5f69a4597b43909",
+      "row-bindings.jsonl": "148768b2096eb051bd3c0199b8518890faa6a443425cb6e91f7bd044cf679e6d"
+    }
+  }
+}

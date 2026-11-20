@@ -1,0 +1,18 @@
+{
+  "id": "luna-dataset-workbench-s82-audit-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-dataset-workbench-s82-audit-20261015-v1",
+  "include": [
+    "review.json",
+    "REPORT.md"
+  ],
+  "source_class": "Independent source-bound item-level semantic audit of four Luna dataset-workbench roots",
+  "license": "Project-generated curriculum with specific source license facts in parent campaign",
+  "split": "train-only source parents; audit itself is review evidence only",
+  "admission": "Four accepted roots reviewed and semantically approved; no direct training admission",
+  "training_admission": false,
+  "training_admission_reason": "Review and hold evidence, not training rows",
+  "review_status": "Visible items and criterion independently checked, exact expected/observed values verified",
+  "required_conversion": "None for audit; approved rows curated separately",
+  "notes": "All four accepted dataset-workbench parents cleared; eight separate rejected-case source-contract conflicts entered source-review v7."
+}

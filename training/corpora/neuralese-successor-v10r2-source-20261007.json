@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v10r2-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v10r2-prepared-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "source-and-scripted-proof-only; no actual teacher admission",
+  "notes": "24 independently authored worlds, 12 file reducers and 12 ordered carried-state repairs, 12 train/12 test. Root clarified scoped qualifiers and exact object/string formats. CPU reference proof24/24 is scaffolding only. Actual V31 decisions require per-call input/semantic review before admission; same groups as V10 predecessor."
+}

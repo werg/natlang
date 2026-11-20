@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-luna-v47-reviewed-train-iterative-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "reviewed-original-semantic-iterate-inputs",
+  "training_admission": false,
+  "admission": "held-source-trace-curriculum-quality-review",
+  "independent_new_worlds": 0,
+  "notes": "New actual trajectories for four other existing train worlds with unchanged source/instructions/gold. Retain original prior results; no claim of failed predecessors or forced iterateOn fidelity."
+}

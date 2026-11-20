@@ -1,0 +1,20 @@
+{
+  "id": "static-lambda-rationalized-20261006-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/static-lambda-rationalized-20261006-v2",
+  "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1, root turns only); not teacher-sampled",
+  "include": [
+    "*.jsonl",
+    "*.log"
+  ],
+  "derived_from": [
+    "static-lambda-rationalized-20261006-v1"
+  ],
+  "supersedes": "static-lambda-rationalized-20261006-v1",
+  "note": "Rationale policy (owner 2026-10-06, DECISIONS.md): only root turns (planning, delegation, answer synthesis) carry teacher rationales; turns inside nl children act without reasoning (empty, trained as acting directly). Child rationales of v1 were written without the runtime's opening eval (captured variables) and are dropped. Same cases re-replayed: lambda-v3-s61 4,176/4,178 admitted (2 held source_review_pending by the current source-conflict rule), 44,443 decisions, 8,272 root rationales; extras-s61 1,659/1,659, 10,310 decisions, 3,318 root rationales.",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "verified replay; 2 cases held source_review_pending stay held",
+  "required_conversion": "render; cross-corpus closure; exclude or move to test the programs containing JeFF reserved test texts (plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json, defect D3)",
+  "consumable_by_direct_stage": false
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-v17-dynamic-recovery-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-v17-dynamic-recovery-20261008-v1",
+  "admission": "held-actual-generation-evidence;no-automatic-action-admission-or-DPO",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Closed nine reviewed Luna claims on corrected V17 source. Seven accepted parents12,14,17,18,19,21,22;6 and13 actual semantic errors preserved. Finite immutable master queue/five rolling slots; source worlds/splits unchanged."
+}

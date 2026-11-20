@@ -1,0 +1,16 @@
+{
+  "id": "luna-semantic-r4r1c-conversion-v7-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-r4r1c-conversion-v7-20261007",
+  "admission": "candidate-current-conversion;156approved-turns10held;originalsplits-preserved;nl-literal-writerconversion-deferred;finishoutputs-hostmetadata-only",
+  "include": [
+    "*.json",
+    "*.jsonl",
+    "*.md",
+    "*.txt",
+    "*.log"
+  ],
+  "derived_from": [
+    "luna-semantic-reducers-generated-v24r4r1c-20261007"
+  ]
+}

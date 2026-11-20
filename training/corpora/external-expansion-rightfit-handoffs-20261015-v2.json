@@ -1,0 +1,26 @@
+{
+  "id": "external-expansion-rightfit-handoffs-20261015-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-rightfit-handoffs-20261015-v2",
+  "include": [
+    "*.port-records.jsonl",
+    "manifest.json",
+    "admission-review.json"
+  ],
+  "source_class": "external-static-typed-handoff",
+  "training_admission": true,
+  "training_admission_reason": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+  "derived_from": [
+    "external-expansion-d06-source-20261014-v1"
+  ],
+  "admission": {
+    "schema": "natlang.external-static-admission/1",
+    "approved": true,
+    "policy": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+    "source_reports": "6204 scored primary runs,3534 positive rewards,6067 available histories,284 child traces. Parent score is upstream-reported, never independent child correctness.137 missing histories explicit. Viewer parquet duplicate not converted.",
+    "conversion": "14564 typed accepted records,one exact duplicate collapsed;2669 failed/unresolved exclusions and5 oversized consumers assigned failure/paged conversion; original raw histories retained",
+    "semantic_correctness": "Native replay verifies static plumbing and exact recorded targets, not independent external teacher correctness",
+    "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction"
+  },
+  "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction"
+}

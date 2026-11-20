@@ -1,0 +1,15 @@
+{
+  "id": "luna-direct-untrained-base-behavior-gate-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-base-behavior-20261011-v2",
+  "include": [
+    "capture_base_gate.py",
+    "report.json"
+  ],
+  "split": "held-untrained-base-behavior-diagnostic",
+  "source_class": "untrained-base-behavior-gate-report",
+  "training_admission": false,
+  "admission": "48-probe-behavior-diagnostic-only-no-model-or-training-qualification",
+  "independent_new_worlds": 0,
+  "notes": "Exact clean-base behavior gate capture and 48-probe report. Gate pass is 26/48; metrics are descriptive diagnostics for an untrained base, not a qualification certificate or training admission."
+}

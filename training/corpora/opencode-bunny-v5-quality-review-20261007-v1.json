@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-v5-quality-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v5-root-quality-review-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-generation-or-review-evidence-no-training-admission",
+  "notes": "Held review plus immutable clarification: parsedcanonicaltrace matchesprovenance; physicalJSONLbytehash differs representation. Answercorrect, NL-child/capture coverage unobserved. Originalreview preserved."
+}

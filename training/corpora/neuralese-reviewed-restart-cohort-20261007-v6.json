@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-reviewed-restart-cohort-20261007-v6",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v6",
+  "include": [
+    "**"
+  ],
+  "admission": "explicit native-decision admission; recurrence source reviewed but channel/causal qualification pending",
+  "notes": "V5 base3002 plus255 correct actual native decisions =3257. Two native failures held; 13 evacuation branch decisions blocked only in recurrence. Shared assembler3235 records/656edges with closed source/split graph. Original native targets preserved even when conversion differs or loses edges; never invent child/host targets."
+}

@@ -1,20 +1,13 @@
-// A bounded enrollment window on the existing native owner. It never opens a
-// second signing store or replaces a retained transition after an uncertain send.
+// Browser enrollment on the existing native owner, open while it runs. It never
+// opens a second signing store or replaces a retained transition after an uncertain send.
 import { peerDigest, verifyAuthorityBundle, signTransitionRequest } from '@chronolog/peer-session';
 import { createDevicePairingClient } from '@tendriller/core/pairing';
 import { readPrivate, savePrivate } from './local.mjs';
 
 const PREFIX = 'pairing:';
-const MAX_WINDOW_MS = 600_000;
 const pauseId = id => PREFIX + id;
 const saved = (id, kind) => `pairing-${id}-${kind}.json`;
 const fail = (code, message) => Object.assign(new Error(message), { code });
-const delay = (ms, signal) => new Promise((resolve, reject) => {
-  if (signal.aborted) { reject(signal.reason); return; }
-  const abort = () => { clearTimeout(timer); reject(signal.reason); };
-  const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, ms);
-  signal.addEventListener('abort', abort, { once: true });
-});
 
 /** Pure identity checks used before a host result can influence retained state. */
 export function assertPairingContext(status, { applicationId, serviceOrigin, pageOrigin }, pairingId) {
@@ -62,14 +55,12 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
   const transition = verified.bundle.generations.find(generation => generation.payload.transition.payload.transitionId === `pair-${id}`);
   // Resolve the original receipt before judging the newer selected generation.
   // Later revocation never triggers another admission of this key.
-  const auto = await restore(saved(id, 'commit'), true);
-  const autoCommitted = Boolean(auto?.ownerAuto);
   if (transition) {
-    if (!autoCommitted && !['committed', 'revoked'].includes(result.state))
+    if (!['committed', 'revoked'].includes(result.state))
       throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The host has not verified this exact reviewed control/account outcome. Preserve the pause and original transition.');
     const prepared = original ?? result.prepared;
     if (!prepared || await peerDigest(transition.payload.transition) !== await peerDigest(prepared.request) ||
-        !autoCommitted && (!result.generation || await peerDigest(result.generation) !== await peerDigest(transition)))
+        !result.generation || await peerDigest(result.generation) !== await peerDigest(transition))
       throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The original pairing receipt does not match the retained signed attempt. Keep ordering paused for reconciliation.');
     const control = verified.bundle.controls[transition.payload.controlRevision]?.payload;
     const expected = prepared.control;
@@ -81,10 +72,9 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
     await session.adopt(authority);
     await persist(saved(id, 'outcome'), { pairingId: id, generation: transition });
     if (pause) await session.resumeOrdering(pause.operationId);
-    onStatus({ pairingId: id, state: autoCommitted ? 'owner-enrolled' : result.state, nextAction: result.nextAction });
-    return autoCommitted ? { ...result, state: 'committed' } : result;
+    onStatus({ pairingId: id, state: result.state, nextAction: result.nextAction });
+    return result;
   }
-  if (autoCommitted) throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The owner enrollment was sent but is not yet in verified authority. Keep the pause; the next pass re-reads authority.');
   if (result.generation || ['committed', 'reconciliation_required'].includes(result.state))
     throw fail('PAIRING_OUTCOME_UNCERTAIN', 'The host outcome is not present in verified authority. Preserve the pause and original request.');
   if (['denied', 'expired', 'stale'].includes(result.state)) {
@@ -135,16 +125,6 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
     result = assertPairingContext(await pairing.client.prepare(id, prepared, { signal }), pairing, id);
     if (result.preparedDigest !== digest) throw fail('PAIRING_PROPOSAL_CHANGED', 'The host did not retain this exact prepared proposal.');
   }
-  // Owner enrollment (natlang ops, NATLANG_OPS_OWNER_AUTO_ENROLL=0 opts out): a request the host created for the
-  // application owner's own signed-in page session is the owner's explicit "add this browser" action. Select the exact
-  // prepared control change directly (the documented owner-device enroll path: grant + binding to the owner account)
-  // instead of waiting for a second confirmation on the service origin. Other accounts still need the service review.
-  if (result.state === 'pending' && pairing.ownerAutoEnroll && c.accountId && c.accountId === await pairing.ownerAutoEnroll.ownerAccountId()) {
-    await persist(saved(id, 'commit'), { pairingId: id, preparedDigest: digest, transitionId: prepared.request.payload.transitionId, ownerAuto: true });
-    await pairing.ownerAutoEnroll.select(prepared.request, prepared.control, { signal });
-    onStatus({ pairingId: id, state: 'owner-enrolling', nextAction: 'Selected the owner device enrollment; the next pass verifies authority and resumes ordering.', orderingPaused: true });
-    return { ...result, state: 'approved' };
-  }
   if (['approved', 'committing'].includes(result.state)) {
     // This local marker precedes any possibly lost HTTP send. The durable
     // Chronolog pause survives both process close and private-helper failure.
@@ -178,16 +158,34 @@ export function createReviewedPairingProcessor({ handle, host, descriptor, sessi
   };
 }
 
+const validDuration = value => value === Infinity || Number.isSafeInteger(value) && value >= 1;
+function wakeableDelay(ms, signal, wakeups) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason); return; }
+    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); wakeups.removeEventListener('pairing', done); resolve(); };
+    const abort = () => { clearTimeout(timer); wakeups.removeEventListener('pairing', done); reject(signal.reason); };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', abort, { once: true }); wakeups.addEventListener('pairing', done, { once: true });
+  });
+}
+
+/** Checks pending pairings for as long as the participant runs (or a finite
+ * `durationMs`). Idle checks back off; a host notice (`wakeups` dispatching
+ * 'pairing', or `wake()`) checks immediately. Ending never releases a pause. */
 export function startReviewedPairingLoop(process, { signal, report = () => {}, intervalMs = 2000,
-  maxIdleMs = 30000, durationMs = MAX_WINDOW_MS } = {}) {
-  if (!Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > MAX_WINDOW_MS ||
-      !Number.isSafeInteger(intervalMs) || intervalMs < 250 || intervalMs > 10000 ||
-      !Number.isSafeInteger(maxIdleMs) || maxIdleMs < intervalMs || maxIdleMs > 30000)
-    throw fail('PAIRING_WINDOW_INVALID', 'Use a finite pairing window of at most ten minutes with bounded idle backoff.');
-  const stopped = new AbortController(), lifetime = AbortSignal.any([stopped.signal, AbortSignal.timeout(durationMs), ...[signal].filter(Boolean)]);
+  maxIdleMs = 30000, durationMs = Infinity, wakeups = new EventTarget() } = {}) {
+  if (!validDuration(durationMs) || !Number.isSafeInteger(intervalMs) || intervalMs < 250 || intervalMs > 10000 ||
+      !Number.isSafeInteger(maxIdleMs) || maxIdleMs < intervalMs || maxIdleMs > 30000 || typeof wakeups?.addEventListener !== 'function')
+    throw fail('PAIRING_WINDOW_INVALID', 'Use a positive (or unbounded) pairing duration with bounded idle backoff.');
+  const stopped = new AbortController(), lifetime = AbortSignal.any([stopped.signal,
+    ...(durationMs === Infinity ? [] : [AbortSignal.timeout(durationMs)]), ...[signal].filter(Boolean)]);
+  let woken = false;
+  const wake = () => { woken = true; };
+  wakeups.addEventListener('pairing', wake);
   const completion = (async () => {
     let delayMs = intervalMs;
-    for (let checks = 0; checks < Math.ceil(durationMs / intervalMs) + 1 && !lifetime.aborted; checks++) {
+    while (!lifetime.aborted) {
+      woken = false;
       try {
         const results = await process({ signal: lifetime });
         for (const result of results) report({ pairing: result });
@@ -198,28 +196,33 @@ export function startReviewedPairingLoop(process, { signal, report = () => {}, i
         report({ pairing: { state: 'inspection_unavailable', code: error.code || error.name, nextAction: error.message } });
         delayMs = Math.min(maxIdleMs, delayMs * 2);
       }
-      try { await delay(delayMs, lifetime); } catch { break; }
+      // A notice that arrived during the pass is not lost: check again at once.
+      if (woken) { delayMs = intervalMs; continue; }
+      try { await wakeableDelay(delayMs, lifetime, wakeups); } catch { break; }
     }
+    wakeups.removeEventListener('pairing', wake);
   })();
-  return Object.freeze({ done: completion, async close() { stopped.abort(); await completion; } });
+  return Object.freeze({ done: completion, wake() { wakeups.dispatchEvent(new Event('pairing')); },
+    async close() { stopped.abort(); await completion; } });
 }
 
-/** Starts at most ten minutes of polling. A timeout or close never releases an
- * uncertain ordering pause; reopening the same owner resumes its exact journal. */
-export function startPairingWindow({ owned, durationMs = MAX_WINDOW_MS, intervalMs = 2000, maxIdleMs = 30000, signal, onStatus = () => {} }) {
-  if (!Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > MAX_WINDOW_MS ||
-      !Number.isSafeInteger(intervalMs) || intervalMs < 250 || intervalMs > 10000)
-    throw fail('PAIRING_WINDOW_INVALID', 'Use a finite pairing window of at most ten minutes.');
+/** Keeps enrollment open for the native participant's lifetime by default.
+ * `owned.notices` (from openSession) wakes it as soon as a browser asks or the
+ * owner approves. Closing never releases an uncertain ordering pause; the next
+ * pass of the same owner reconciles the exact retained request. */
+export function startPairingWindow({ owned, durationMs = Infinity, intervalMs = 2000, maxIdleMs = 30000, signal, onStatus = () => {} }) {
+  if (!validDuration(durationMs) || !Number.isSafeInteger(intervalMs) || intervalMs < 250 || intervalMs > 10000)
+    throw fail('PAIRING_WINDOW_INVALID', 'Use a positive (or unbounded) pairing duration.');
   if (!owned?.session || !owned.pairing) throw fail('PAIRING_OWNER_REQUIRED', 'Use the existing retained native owner returned by openSession.');
   const process = owned.processPairings ?? createReviewedPairingProcessor({ session: owned.session, pairing: owned.pairing });
-  const loop = startReviewedPairingLoop(process, { durationMs, intervalMs, maxIdleMs,
+  const loop = startReviewedPairingLoop(process, { durationMs, intervalMs, maxIdleMs, ...(owned.notices ? { wakeups: owned.notices } : {}),
     signal: AbortSignal.any([owned.session.signal, ...[signal].filter(Boolean)]), report: ({ pairing }) => onStatus(pairing) });
   const done = (async () => {
     await loop.done;
     const pause = await owned.session.orderingPause().catch(() => undefined);
     onStatus({ state: 'window_closed', orderingPaused: Boolean(pause),
-      nextAction: pause ? 'A reviewed or uncertain transition still holds ordering. Restart this same native peer to inspect its original request.'
-        : 'This finite pairing window ended. Restart the same native peer to open another window.' });
+      nextAction: pause ? 'A reviewed or uncertain transition still holds ordering. Start this same native peer again; its first pass reconciles the original request.'
+        : 'Enrollment stopped with this native peer. Start it again to accept browser requests.' });
   })();
-  return Object.freeze({ done, async close() { await loop.close(); await done; } });
+  return Object.freeze({ done, wake: loop.wake, async close() { await loop.close(); await done; } });
 }

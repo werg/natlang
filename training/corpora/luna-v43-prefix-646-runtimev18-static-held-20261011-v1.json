@@ -1,0 +1,14 @@
+{
+  "id": "luna-v43-prefix-646-runtimev18-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v43-prefix-646-delta-adapter-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-static-reference-no-independent-world-credit",
+  "source_class": "authored-static-decision-reference",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "static reference replay and source-bound provider-label scaffold only; no native model trajectory or training admission",
+  "notes": "34 authored programs, 256 exact source-matched accepted label items; 34 static reference replays. Frozen V18 runtime identity is recorded in the derived launch input snapshot. All outputs remain held."
+}

@@ -1,0 +1,24 @@
+{
+  "id": "external-expansion-d18-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D18",
+  "include": [
+    "acquisition.json",
+    "CITATION.bib",
+    "Inject-Mix.jsonl",
+    "LG-Ctrl.jsonl",
+    "LICENSE",
+    "MAST-clean.jsonl",
+    "README.md",
+    "lofo_splits.json"
+  ],
+  "kind": "pinned-external-source",
+  "training_admission": false,
+  "admission": "source snapshot; training views registered separately",
+  "upstream": {
+    "repo": "mascope/mascope-bench",
+    "revision": "07fcb9f0d65f6f0423d2d77a4a8f51742acf7b27",
+    "license": "cc-by-4.0"
+  },
+  "notes": "Owner accepts all licenses. Exact acquired release files and original communication graphs; no claim of native execution qualification. Dataset train/eval views require explicit conversion, protected split closure and separate admission."
+}

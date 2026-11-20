@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-choice-confidence-v13-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v13-gemini-choice-confidence-and-static-replay-v1",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "provider-or-static-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Independentclosed512review; frozeninputpins/IDs/groups/sourcechoices checked. Nottrainingadmission."
+}

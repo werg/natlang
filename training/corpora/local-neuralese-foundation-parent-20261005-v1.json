@@ -1,0 +1,10 @@
+{
+  "id": "local-neuralese-foundation-parent-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-foundation-parent-evidence-20261005-v1",
+  "admission": "heldout-foundation-diagnostic-not-training-examples",
+  "include": [
+    "gate.json"
+  ],
+  "derived_from": []
+}

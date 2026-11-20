@@ -79,12 +79,12 @@ def test_protected_worlds_cache_tracks_nested_packet_registry_and_cases(tmp_path
     packet_b.mkdir()
     (packet_a / 'cases.jsonl').write_text('{"id":"held-a","family":"fixture","semantics":{}}\n')
     (packet_b / 'cases.jsonl').write_text('{"id":"held-b","family":"fixture","semantics":{}}\n')
-    packet_registry = tmp_path / 'neuralese_corpora.json'
+    packet_registry = tmp_path / 'packets.json'
     top_registry = tmp_path / 'registry.json'
     top_registry.write_text(json.dumps({
         'schema': custody.REGISTRY_SCHEMA,
         'sources': [{'id': 'packets', 'kind': 'evaluation-packets',
-                     'registry': 'neuralese_corpora.json'}],
+                     'registry': 'packets.json'}],
     }))
 
     def select_packet(path):

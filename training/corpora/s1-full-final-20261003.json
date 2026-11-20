@@ -1,0 +1,15 @@
+{
+  "id": "s1-full-final-20261003",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/s1-full-final-20261003",
+  "admission": "held-source-policy-and-split-review",
+  "include": [
+    "*.port-records.jsonl",
+    "manifest.json"
+  ],
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "schema audit passed; licensing hold void (owner 2026-10-10); provenance-alias backlog note (no alias list recorded; DGX to derive); the 799 JeFF reservations do not concern S1 (corrected 2026-10-11)",
+  "required_conversion": "render port records as natlang call documents (or E2E writer/consumer pairs); per-family weights",
+  "consumable_by_direct_stage": false
+}

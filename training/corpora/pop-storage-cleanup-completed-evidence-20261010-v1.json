@@ -1,0 +1,13 @@
+{
+  "id": "pop-storage-cleanup-completed-evidence-20261010-v1",
+  "owner": "pop",
+  "path": "runs/pop-storage-cleanup-completed-20261010-v1",
+  "include": [
+    "*"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "cleanup-or-provider-evidence",
+  "training_admission": false,
+  "admission": "held-review-no-training-admission",
+  "notes": "Nineexactverifiedoffloadreceipts/restorecommands plus cleanupsummary. Copiesremovedlocally, originalsretainedDGX; exactdedup/rendercachedeletion preserves sources/rejections."
+}

@@ -1,0 +1,17 @@
+{
+  "id": "pop-inactive-model-ling3-tiny-hf-preservation-20261010-v1",
+  "owner": "pop",
+  "path": ".local/retained-model-candidates-20261010-v1/ling3-tiny-hf",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    ".cache",
+    "__pycache__"
+  ],
+  "kind": "model-artifact",
+  "source_class": "inactive-model-candidate-preservation",
+  "training_admission": false,
+  "admission": "model-artifact-only-not-training-data",
+  "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+}

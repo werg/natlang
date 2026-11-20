@@ -1,0 +1,20 @@
+{
+  "id": "google-choice-confidence-v39-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "omissions.jsonl",
+    "frozen-adapter-v1/**/*",
+    "source-review-v1/**/*",
+    "root-source-preparation-review-v1.json",
+    "prepared-launch-command-v1.json"
+  ],
+  "split": "inherited-train-provider-input",
+  "source_class": "held-provider-label-generation-input",
+  "training_admission": false,
+  "admission": "generation-input-only-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V39 exact 512-row inherited-train input, 128 each DBpedia, LanguageID, Newsgroups, Yahoo Topic. Exact master row IDs/groups/line hashes and all source fields verified; no intersections with current 79 source-quality holds or prior provider reservations. Frozen runner is shared commit 5022f073a3 with ten-model pool. Labels/generation results are not included in this immutable input snapshot."
+}

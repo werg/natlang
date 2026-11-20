@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-zai45-sourcev5-research-index2-runtimev6-closeout-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev5-research-index2-runtimev6-v1",
+  "include": [
+    "*.json",
+    "*.jsonl",
+    "case-002/**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "provider-native-trajectory",
+  "training_admission": false,
+  "admission": "held; publication and successful reference execution do not grant admission",
+  "independent_new_worlds": 0,
+  "notes": "Runtimev6 retry after original storage pause;28turns21975tokens completed exact result export. Gold and trace review pending; inherited authored train world, zero independent-world credit."
+}

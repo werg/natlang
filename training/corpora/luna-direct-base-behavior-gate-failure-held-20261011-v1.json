@@ -1,0 +1,15 @@
+{
+  "id": "luna-direct-base-behavior-gate-failure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-base-behavior-20261011-v1",
+  "include": [
+    "capture_base_gate.py",
+    "failure.json"
+  ],
+  "split": "held-failed-base-behavior-capture",
+  "source_class": "failed-untrained-base-behavior-gate-capture",
+  "training_admission": false,
+  "admission": "capture-failure-diagnostic-only-no-model-or-training-qualification",
+  "independent_new_worlds": 0,
+  "notes": "Preserves the failed initial base behavior-gate capture attempt. It contains only the capture script and failure receipt; no task result or training admission is inferred."
+}

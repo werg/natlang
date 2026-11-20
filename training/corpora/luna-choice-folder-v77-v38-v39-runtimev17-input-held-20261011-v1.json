@@ -1,0 +1,23 @@
+{
+  "id": "luna-choice-folder-v77-v38-v39-runtimev17-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v77-v38-v39-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "root-approved-plan-v1.json",
+    "root-launch-receipt-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ],
+  "split": "inherited-train-generation-input",
+  "source_class": "held-luna-generation-inputs",
+  "training_admission": false,
+  "admission": "root-approved-generation-input-only-no-quality-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V77 on runtime V17, 107 static programs/833 source items, five reviewed worker queues; root-approved SHA 3925092770395e6feea636aee873b57ee25accb7485e619df1fd0cff3ffb8b37 and supervisor 1085068. Per-lane V76 predecessors pinned; active campaign status, logs, journals and results excluded."
+}

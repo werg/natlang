@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-google-v4-mass-repair-v7-closed-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v7",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-case-review-only",
+  "source_class": "provider-typed-decision-generation-closed-held",
+  "training_admission": false,
+  "admission": "held-semantic-quality-and-explicit-root-review-required",
+  "notes": "178sameIDrepairfinals/204attempts;88typedvalid40goldargmax43wrong5tie;90invalid89mass1JSON. 9.53attemptrecords/min8.32finalrows/min; noautomaticsemanticadmission."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-successor-v14-v9-v65-confound-diagnostic-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v14-v9-v65-source-confound-diagnostics-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "derived_from": [
+    "neuralese-successor-v14-v9-source-diagnostic-20261007-v1"
+  ],
+  "admission": "frozen-scripted-proof-and-source-confound-diagnostic-only;earlier-generation-approval-superseded;no-teacher-or-training-admission",
+  "notes": "Contains the exact V65 frozen root reference proof, original root-generation-review.json, later source-confound-review.json, and V6-to-V8/V8-to-V9 lineage deltas. Current disposition is diagnostic-only: the later source-confound review supersedes V9 file-task generation approval; index20 was held for consent linkage. Proof is deterministic source execution with 0 model/provider calls and false admission flags. No live worker outputs/campaign journals included; 0 new facts or independent worlds."
+}

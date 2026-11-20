@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v32-complete-quality-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/luna-sourcev32-runtimev8-complete-quality-review-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "read-only-source-bound-native-quality-review",
+  "training_admission": false,
+  "admission": "review-evidence-only",
+  "independent_new_worlds": 0,
+  "notes": "IndependentLunareviewer all23outcomes/notes/gold; sourcea947...activeV32exactpins. 21exact/2reject/3sourcequarantined/1formatambiguity. 19exactcandidates only; scopeerrorclusters stillunderreview. Receipt2a675b1470a8019f7bd07f898570de5ecf939ac1b48b539c0d7a5ded8ede2894."
+}

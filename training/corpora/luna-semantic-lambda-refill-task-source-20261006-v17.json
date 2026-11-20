@@ -1,0 +1,7 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v17",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
+  "admission": "current-native-reference-verified-source-only; no-teacher-admission",
+  "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
+}

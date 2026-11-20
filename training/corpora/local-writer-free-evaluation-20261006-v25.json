@@ -1,0 +1,16 @@
+{
+  "id": "local-writer-free-evaluation-20261006-v25",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-eval-20261006-v25",
+  "admission": "protected-conditional-evaluation-only; excluded from training",
+  "include": [
+    "*.json",
+    "*.jsonl",
+    "audit/*",
+    "failed-startup/*"
+  ],
+  "derived_from": [
+    "local-writer-candidate-2432-20261006-v24"
+  ],
+  "notes": "Four protected conditional cases; free21writerblocks; crisp4 encoded4 written3 shuffled1 transparent4 of4. Initial immutable-output startup guard failure preserved. Cardinality omission, not established runtime bug."
+}

@@ -1,0 +1,12 @@
+{
+  "id": "neuralese-text-runtime-qualification-20261007-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-text-runtime-qualification-20261007-v2",
+  "admission": "exact-v8-weight-runtime-parity-evidence-only;not-foundation-or-task-qualification",
+  "include": [
+    "*.json"
+  ],
+  "derived_from": [
+    "neuralese-gold-text-foundation-v8-closed-20261007"
+  ]
+}

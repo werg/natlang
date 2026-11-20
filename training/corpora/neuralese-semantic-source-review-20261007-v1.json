@@ -1,0 +1,11 @@
+{
+  "id": "neuralese-semantic-source-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-source-review-audit-20261007-v1",
+  "admission": "semantic-review-evidence-only;26accepted-real-teacher-roots;309candidate-positive17held-decisions;no-reference-observations;not-admission-by-itself",
+  "include": [
+    "*.json",
+    "*.md",
+    "*.sha256"
+  ]
+}

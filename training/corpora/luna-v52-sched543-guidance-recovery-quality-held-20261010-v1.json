@@ -1,0 +1,13 @@
+{
+  "id": "luna-v52-sched543-guidance-recovery-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v52-sched543-guidance-recovery-audit-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "iterative-guidance-recovery-evidence",
+  "training_admission": false,
+  "admission": "held-source-native-runtime-quality-review",
+  "notes": "Sealed actual four-pass trace audit, exact source-bound result and file checks. Updated notes retain prior uncertainty as history and append current authority. No semantic truth beyond authored facts or independent world credit. No automatic admission."
+}

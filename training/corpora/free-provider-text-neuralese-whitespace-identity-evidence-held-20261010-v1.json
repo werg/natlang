@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-text-neuralese-whitespace-identity-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/text-neuralese-whitespace-identity-diagnostic-v1",
+  "include": [
+    "diagnostic.json"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "infrastructure-diagnostic-evidence",
+  "training_admission": false,
+  "admission": "generation-input-or-quality-review-only-not-training-data",
+  "notes": "Actual failed V35index20 observedbody digests7e181/e6bef differbytrailing space, oldIDcollision documentedrawpartial. Builtfixedport producesdistinct IDs and exactauthenticated producerdigests. Evidenceonly, no teacher calls ordataadmission."
+}

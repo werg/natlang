@@ -1,0 +1,23 @@
+{
+  "id": "free-provider-google-v4-mass-repair-v7-queued-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v7",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/frozen-runtime.json",
+    "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+    "frozen-adapter-v1/scripts/label_decision_cases.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+    "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+    "frozen-adapter-v1/models.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "quota-locked-invalid-typed-output-regeneration-queue",
+  "training_admission": false,
+  "admission": "generation inputs only; regeneratedlabels pending schema/sourcequalityreview",
+  "independent_new_worlds": 0,
+  "notes": "Exact178invalidV4inputs; sharedprompt/strictmassvalidation. Sharedfreezehelper preserves scheduler/sharedJSONwriter relativepackage layout; no sourcepathhardcoding. Confirmedsoleprojectlockwait, V5untouched; no paidfallback."
+}

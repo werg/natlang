@@ -1,0 +1,19 @@
+{
+  "id": "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+  "include": [
+    "README.md",
+    "conversion-summary.json",
+    "candidate-crosswalk.jsonl",
+    "selected-actions.jsonl",
+    "raw-receipts.jsonl",
+    "native.jsonl"
+  ],
+  "admission": "held-native-preview-no-training-admission",
+  "derived_from": [
+    "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+    "neuralese-v24-actual-action-review-20261008-v1"
+  ],
+  "notes": "Materialized all 63 selected source-grounded V24 actions via the existing shared native held-preview builder: 55 prose notes and 8 typed final results, 30 train/33 test over 15 source groups. All target values and exact raw generation events matched crosswalk references; no omissions/missing contexts. All rows remain training_approved=false; 56 came from overall accepted source results and 7 from overall rejected source results. Six TRN-520 wrapper-bearing notes remain a separate adapter-review backlog. Native rows contain normal builder-produced context; selection/receipt/crosswalk carry references and hashes, not copied target/prefix bodies."
+}

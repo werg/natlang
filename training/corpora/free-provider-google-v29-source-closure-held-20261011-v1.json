@@ -1,0 +1,10 @@
+{
+  "id": "free-provider-google-v29-source-closure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-source-closure-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Actual54program396originalitem/sourcegroup linkage plus792visibletextleaves andportableharnessclosure; fullS1pending. Exactexecutioncomponents archived."
+}

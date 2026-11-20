@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v39-launch-failure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v39-source/root-launch-review-v1",
+  "include": [
+    "launch-failure.json"
+  ],
+  "split": "inherited-train-generation-control-evidence",
+  "source_class": "held-provider-launch-failure-evidence",
+  "training_admission": false,
+  "admission": "launch-failure-only-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "First approved waiter PID1063823 exited because its launcher lacked the configured Gemini key environment; receipt records zero provider calls. The separately pinned v2 receipt retries the same approved queue without exposing key contents."
+}

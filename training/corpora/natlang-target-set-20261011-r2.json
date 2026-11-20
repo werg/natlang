@@ -1,0 +1,157 @@
+{
+  "id": "natlang-target-set-20261011-r2",
+  "owner": "dgx",
+  "path": "runs/natlang-target-set-20261011",
+  "include": [
+    "r2.json"
+  ],
+  "source_class": "shared-natlang-target-training-set-manifest",
+  "admission": "manifest of training-admitted member renders (owner 2026-10-11: expand the target set by everything found that can be integrated); exclusions only protected eval sets, held splits and defect rows under repair",
+  "training_admission": true,
+  "training_admission_reason": "lists training-admitted members; the training input is natlang-target-union-20261011-r2",
+  "members": [
+    "natlang-native-turns-clef-new-render-20261011-v2",
+    "natlang-native-turns-static-lambda-expansion-render-20261011-v1",
+    "natlang-native-turns-clef-pools-20261011-v2-render",
+    "natlang-native-turns-refine-render-20261011-v1",
+    "natlang-native-turns-static-lambda-v2-render-20261011-v1",
+    "natlang-native-turns-misc-admitted-render-20261011-v1",
+    "natlang-native-turns-luna-v17-v9-render-20261011-v2",
+    "natlang-free-provider-v28-render-20261011-v2",
+    "natlang-free-provider-v29-render-20261011-v2",
+    "natlang-free-provider-v73-render-20261011-v2",
+    "natlang-native-turns-pop-v43-static-render-20261011-v1",
+    "natlang-native-turns-s72-render-20261011-v1",
+    "neuralese-foundation-text-input-4962",
+    "harness-bench-swe-rebench-openhands-pi-text-v2"
+  ],
+  "skipped": [
+    {
+      "id": "natlang-native-turns-clef-new-render-20261011-v1",
+      "reason": "not training-admitted"
+    },
+    {
+      "id": "natlang-free-provider-v28-render-20261011-v1",
+      "reason": "not training-admitted"
+    },
+    {
+      "id": "natlang-free-provider-v29-render-20261011-v1",
+      "reason": "not training-admitted"
+    },
+    {
+      "id": "natlang-free-provider-v73-render-20261011-v1",
+      "reason": "not training-admitted"
+    },
+    {
+      "id": "natlang-native-turns-luna-v17-v9-render-20261011-v1",
+      "reason": "not training-admitted"
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-wholetraj-bulk-20261011-v1",
+      "reason": "not registered yet: ['harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1', 'harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1']"
+    }
+  ],
+  "union": "natlang-target-union-20261011-r2",
+  "totals_after_union": {
+    "full": {
+      "lfm25": {
+        "documents": 68851,
+        "by_split": {
+          "test": {
+            "documents": 2704,
+            "supervised_tokens": 312684,
+            "tokens": 27731822
+          },
+          "train": {
+            "documents": 66147,
+            "supervised_tokens": 5682148,
+            "tokens": 287985075
+          }
+        }
+      },
+      "mellum21": {
+        "documents": 68851,
+        "by_split": {
+          "test": {
+            "documents": 2704,
+            "supervised_tokens": 334282,
+            "tokens": 32042322
+          },
+          "train": {
+            "documents": 66147,
+            "supervised_tokens": 6429749,
+            "tokens": 306527708
+          }
+        }
+      }
+    },
+    "program-header": {
+      "lfm25": {
+        "documents": 136191,
+        "by_split": {
+          "test": {
+            "documents": 2729,
+            "supervised_tokens": 318078,
+            "tokens": 20175324
+          },
+          "train": {
+            "documents": 133462,
+            "supervised_tokens": 16032340,
+            "tokens": 189831481
+          }
+        }
+      },
+      "mellum21": {
+        "documents": 136191,
+        "by_split": {
+          "test": {
+            "documents": 2729,
+            "supervised_tokens": 339938,
+            "tokens": 24462226
+          },
+          "train": {
+            "documents": 133462,
+            "supervised_tokens": 17556722,
+            "tokens": 211967254
+          }
+        }
+      }
+    },
+    "whole-trajectory": {
+      "lfm25": {
+        "documents": 76106,
+        "by_split": {
+          "test": {
+            "documents": 123,
+            "supervised_tokens": 10333,
+            "tokens": 50536
+          },
+          "train": {
+            "documents": 75983,
+            "supervised_tokens": 11717655,
+            "tokens": 64603011
+          }
+        }
+      },
+      "mellum21": {
+        "documents": 76106,
+        "by_split": {
+          "test": {
+            "documents": 123,
+            "supervised_tokens": 14477,
+            "tokens": 58150
+          },
+          "train": {
+            "documents": 75983,
+            "supervised_tokens": 15902786,
+            "tokens": 70111508
+          }
+        }
+      }
+    }
+  },
+  "notes": "Written by scripts/neuralese_data/target_set_watcher.py from the living spec runs/natlang-target-set-20261011/spec.json and the registry on origin/main.",
+  "supersedes": [
+    "natlang-target-set-20261011-r1"
+  ]
+}

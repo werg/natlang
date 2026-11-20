@@ -1,0 +1,10 @@
+{
+  "id": "opencode-bunny-v17-recovery-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v17-recovery-20261008-v1",
+  "admission": "held-actual-generation-evidence;no-automatic-action-admission-or-DPO",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Closed two cross-teacher attempts6/13 after actual provider READY recovery; both correct values/files, prior Luna failures retained separately. Same source/world/split, no new worlds, official bridge cap2 and unchanged request ceilings."
+}

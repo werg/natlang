@@ -1,0 +1,20 @@
+{
+  "id": "free-provider-luna-v31-twelve-runtimev8-queued-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev31-twelve-runtimev8-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-dispatch-receipt-v1.json",
+    "worker-01/queue.jsonl",
+    "worker-02/queue.jsonl",
+    "worker-03/queue.jsonl",
+    "worker-04/queue.jsonl",
+    "worker-05/queue.jsonl"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "reviewed-native-teacher-generation-queue",
+  "training_admission": false,
+  "admission": "queue/launch evidence only; evolvingoutputs excluded until closed review",
+  "independent_new_worlds": 0,
+  "notes": "12singlecase queueentries allocated2/3/3/2/2 acrossfiveworkers; source/proof/rootapproval/runtime/supervisor pins. gpt-6-luna, one requestperworker,32Kcontext,60turn384request resourcebudgets unchanged."
+}

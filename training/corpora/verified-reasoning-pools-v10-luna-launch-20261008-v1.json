@@ -1,0 +1,16 @@
+{
+  "id": "verified-reasoning-pools-v10-luna-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/plan.approved.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/root-execution-authorization.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/launch-started.json",
+    "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/source-index-catalog.json"
+  ],
+  "admission": "generation-launch-provenance-only-no-teacher-quality-or-training-admission",
+  "derived_from": [
+    "verified-reasoning-pools-20261008-v10"
+  ],
+  "notes": "Immutable V10 Luna plan, root authorization, launch binding, and source-index catalog. Two reviewed rows were attempted; see separate V10 closure packet for exact outcomes."
+}

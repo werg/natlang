@@ -1,0 +1,14 @@
+{
+  "id": "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v14-v10r3-generation-only-publication-20261007-v2",
+  "include": [
+    "**/*"
+  ],
+  "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
+  "derived_from": [
+    "neuralese-successor-v14-v9-source-diagnostic-20261007-v1",
+    "neuralese-successor-v14-v9-v65-confound-diagnostic-20261007-v1"
+  ],
+  "notes": "Immutable V10r3 sourceV14 generation-only handoff, source SHA ceec8b488e2567e7b65dd79b7e6ee489add2e0a769c6aa04ee443d8dbb368514. Root approved all 24 indices in runs/luna-semantic-v67-campaign-20261007/root-generation-review.json; bundle includes source candidate and authored CPU reference proof, independent source review, frozen V65 root proof, and root receipt. Earlier V9 source-confound diagnostic is separately registered and retained. Scripted proofs are not teacher observations or runtime/trace/training approval. No V67 worker outputs are included; V67 campaign remains active. Generation approval only; 0 teacher observations and no training admission."
+}

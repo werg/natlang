@@ -1,0 +1,10 @@
+{
+  "id": "inline-primitive-capture-conversion-study-20261007",
+  "owner": "pop",
+  "path": "runs/converter-primitive-capture-study-20261007",
+  "include": [
+    "design.md"
+  ],
+  "admission": "converter provenance study only; not training data",
+  "notes": "Frozen pre-implementation study of capture/interpolation coverage and missing host snapshot provenance. Occurrence counts overlap and are not conversion yield. Shared runtime/compiler changes implement explicit primitive proof separately; old local records cannot be retroactively attested."
+}

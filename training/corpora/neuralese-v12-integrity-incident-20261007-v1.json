@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v12-integrity-incident-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-candidate-integrity-incident-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "integrity-incident-held-incomplete-not-training-data",
+  "notes": "V1 incident snapshot. Three payloads restored exactly, but v48-full-conversion-audit-summary.json remains a SHA mismatch (expected 9927c6880f37cff59fcc623c3975d70cb31402bda0090c8b9913c043d8803675, actual 860fd58e4f6eedf4b8f2952ab2780069a0c4ee9ba221589f3968aa7a975685ce). Original V1 manifest is unchanged; no claim of V1 completeness.",
+  "derived_from": [
+    "neuralese-v12-v1-context-rejection-20261007-v1"
+  ]
+}

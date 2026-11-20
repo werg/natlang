@@ -1,0 +1,14 @@
+{
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v3",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v3",
+  "admission": "collection-provenance-only; not training examples",
+  "include": [
+    "*.json",
+    "worker-*/queue.jsonl"
+  ],
+  "derived_from": [
+    "luna-semantic-lambda-refill-task-source-20261006-v3"
+  ],
+  "notes": "Immutable reviewed plan and three disjoint7case queues; runtimehashes only. Active outputs require separately closed snapshots and current admission."
+}

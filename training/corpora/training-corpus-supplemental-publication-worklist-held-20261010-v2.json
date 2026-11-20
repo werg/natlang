@@ -1,0 +1,16 @@
+{
+  "id": "training-corpus-supplemental-publication-worklist-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/training-corpus-supplemental-publication-worklist-20261010-v2",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "generation-and-publication-review-inputs",
+  "training_admission": false,
+  "admission": "held-evidence-only",
+  "notes": "Exactfileworklist11unresolved/4covered/17dynamicexcluded; root approved current immutable supplemental evidence only, not historicalexistence/admission."
+}

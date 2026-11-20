@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v73-v35-runtimev16-input-plan-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v73-v35-runtimev16-v3",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v2.json",
+    "predecessor-bindings-v1.json",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-input",
+  "source_class": "held-luna-native-generation-inputs",
+  "training_admission": false,
+  "admission": "prepared-only-root-review-required",
+  "independent_new_worlds": 0,
+  "notes": "Fresh V73 plan after V72 lane-02 supplement launch. Five successors pair by exact worker lane to V72 original workers 01,03,04,05 plus the separate lane-02 supplement over the original worker-02 queue. Root source review pins exact queue hashes, PIDs, current policy V15 with zero source-ID/group overlaps, and V16 per-lane runtime. Lane-05 model_request_budget is preserved as an incomplete terminal predecessor; the newly pinned starter applies reviewed terminal-accounting semantics. Root approval remains false; no worker launch, quality success claim, or admission."
+}

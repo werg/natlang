@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v33-source-v4-generation-reviewed-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-v33-source-proposal-20261010-v4",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "explicit-fact-and-numeric-list-successor-source",
+  "training_admission": false,
+  "admission": "generation-source-reviewed-training-held",
+  "independent_new_worlds": 0,
+  "notes": "Five V32 successors,4inheritedgroups. Root verified candidate-local NEWFACT station evidence and unchanged exactgold; numericlistmeasure optin/order exact; sourcefactv3scope rejected. No generated-output admission."
+}

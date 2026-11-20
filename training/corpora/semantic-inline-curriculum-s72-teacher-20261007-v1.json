@@ -1,0 +1,17 @@
+{
+  "id": "semantic-inline-curriculum-s72-teacher-20261007-v1",
+  "owner": "dgx",
+  "path": "runs/semantic-teacher-20261005",
+  "admission": "raw-teacher-observations-only;54-split-holds-in-s72-holds.jsonl;native-admission-and-materialization-pending",
+  "include": [
+    "results.jsonl",
+    "s72-holds.jsonl"
+  ],
+  "derived_from": [],
+  "notes": "Qwen3.6-35B-A3B-NVFP4 teacher on data/teacher/inline-curriculum/semantic-s72.ir.jsonl (seed 972): 2772 terminal rows (2759 train/13 test cases): 2184 grader-accepted, 588 rejected. Holds: 38 train cases on reserved-test sources (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2) excluded from train; 16 anli_batch train cases on hash-test sources pending source review. Per-job traces stay in the run directory (jobs/).",
+  "training_admission": true,
+  "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+  "review_status": "2,184 grader-accepted rows minus 38 train cases on reserved-test sources (leak defect, s72-holds.jsonl); 16 anli cases held",
+  "required_conversion": "native materialization of accepted traces; render; exclude or move to test the programs containing JeFF reserved test texts (plans/neuralese/JEFF_RESERVATION_OVERLAP_20261011.json, defect D3)",
+  "consumable_by_direct_stage": false
+}

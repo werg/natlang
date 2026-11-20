@@ -1,0 +1,27 @@
+{
+  "id": "luna-river-retry-whole-trajectory-recurrence-review-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "include": [
+    "luna-exact-source-clinic-river-retry-proposal-20261008-v1/two-case-dispatch-root-approved-v1.json",
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+    "luna-exact-clinic-river-retry-20261008-v1/launch.json",
+    "luna-exact-clinic-river-retry-20261008-v1/retry-closeout-v2.json",
+    "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.result.json",
+    "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.trace.jsonl",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/code-input-provenance-v1.json",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/**/*",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/review_river_recurrence_v1.py",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/whole-trajectory-review-v3.json",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/selected-invocation-ids-v3.json",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-snapshot-spec-v3.json",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/audit-code-inputs/**/*",
+    "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/**/*"
+  ],
+  "admission": "held-diagnostic-whole-trajectory-recurrence-review-not-training-admission",
+  "derived_from": [
+    "luna-clinic-river-retry-readerstate-audit-20261008-v1"
+  ],
+  "notes": "Exact successful River retry whole-trajectory writer/reader graph audit. Preserves source train split/group, pinned source row/result/trace, exact 37 child CallStore records and 127 verified referenced blobs, runtime code-input snapshots, and analysis-tool source copies. Five typed Neuralese<string> eval-finish writes map to six iteration-state nodes with verified same-run direct read/model-turn edges and hash-matching actual downstream evaluator returns; raw provider request/response, context, and assistant argument hashes retained. Runtime explicitly uses text-marker-standin/2 with deterministic hash stand-in, non-learned vector semantics, and no qualification certificate. Recurrence structure and answer correctness do not grant recurrence or training admission."
+}

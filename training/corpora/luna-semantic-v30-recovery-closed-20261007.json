@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v30-recovery-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v30-recovery-campaign-20261007",
+  "include": [
+    "**"
+  ],
+  "admission": "closed raw teacher observations; held pending actual decision review",
+  "notes": "Seven unchanged source-world recoveries of V29 ordered repair failures, newer frozen interpreter prompt. Preserve successful/failed actions and quiescence evidence. Final grader outcomes do not imply intermediate admission; no cross-prompt DPO pairs. V31 exact-shape successors address broad Record wrapper mistakes."
+}

@@ -1,0 +1,22 @@
+{
+  "id": "luna-choice-confidence-v90-joint-closeout-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v90-joint-closeout-v3",
+  "include": [
+    "joint-completion-v3.json",
+    "quality-review-v3.json",
+    "quality-review-v3.md",
+    "FILES.sha256"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-train-generation-quality-evidence",
+  "source_class": "joint-luna-lane-completion-and-quality-review",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "held provider quality review only; no training, native, or recurrence admission",
+  "notes": "V90 five-lane joint closeout. Original campaign launch remains finished_with_blocked_predecessor_lanes; lane 3 is separately bound through runtime-bound recovery evidence. 52 programs/402 decisions; source-label agreement is descriptive only."
+}

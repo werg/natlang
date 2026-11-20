@@ -1,0 +1,10 @@
+{
+  "id": "decision-visible-answerability-root-review-held-20261011-v13",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v13",
+  "split": "inherited-train-evidence",
+  "source_class": "held-source-and-trajectory-quality-evidence",
+  "training_admission": false,
+  "admission": "quality-evidence-only",
+  "notes": "Root exactoriginalsource reviewholds2missing-thread Newsgroups fragments forward,64total. Originalsource/gold/attempts unchanged, noautomaticsemanticnegative. DeclinedTREC SinnFeinhold: definition answer DESC supported. Frozenactive/queuedpreparedsources disjoint newholds."
+}

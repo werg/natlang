@@ -1,0 +1,22 @@
+{
+  "id": "free-provider-google-pool-v4-closed-typed-labels-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v4",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "labels.jsonl",
+    "labels.jsonl.attempts.jsonl",
+    "labels.jsonl.manifest.json",
+    "worker.log",
+    "frozen-adapter-v1/*.py",
+    "frozen-adapter-v1/models.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "closed-typed-decision-label-collection",
+  "training_admission": false,
+  "admission": "1024 typed labels pending source-bound truth/schema/quality review; standalone labels are not native teacher trajectories",
+  "independent_new_worlds": 0,
+  "notes": "Four quota-group workers with soleprojectlock; batch closed and v5 automatically continued. No raw probability annotation conversion or trace/reasoning credit. Independent LunaV22 review pending."
+}

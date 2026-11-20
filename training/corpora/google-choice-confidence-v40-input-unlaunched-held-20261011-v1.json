@@ -1,0 +1,16 @@
+{
+  "id": "google-choice-confidence-v40-input-unlaunched-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v40-source",
+  "include": [
+    "cases.jsonl",
+    "omissions.jsonl",
+    "source-manifest.json"
+  ],
+  "split": "inherited-train-provider-input",
+  "source_class": "held-provider-generation-input",
+  "training_admission": false,
+  "admission": "prepared-input-only-unlaunched-no-provider-label-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V40 prepared 512-case input buffer, never launched. Preserved after root moved to larger V41 refill; no labels or provider attempts included."
+}

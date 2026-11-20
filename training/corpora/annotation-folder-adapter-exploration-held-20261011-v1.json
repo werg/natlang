@@ -1,0 +1,19 @@
+{
+  "id": "annotation-folder-adapter-exploration-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/annotation-adapter-history-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Preserved V9 through V15 exploratory reference artifacts. V9 fixed child does not satisfy intended inline topology; V10/V15 visibility checker failures and intermediate metadata/identity corrections are diagnostics, not training admission. Final V16 separately registered.",
+  "include": [
+    "provider-static-annotation-decision-folders-v9/**/*",
+    "provider-static-annotation-decision-folders-v10/**/*",
+    "provider-static-annotation-decision-folders-v11/**/*",
+    "provider-static-annotation-decision-folders-v12/**/*",
+    "provider-static-annotation-decision-folders-v13/**/*",
+    "provider-static-annotation-decision-folders-v14/**/*",
+    "provider-static-annotation-decision-folders-v15/**/*"
+  ]
+}

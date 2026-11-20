@@ -1,0 +1,10 @@
+{
+  "id": "decision-visible-answerability-root-review-held-20261011-v7",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Root reviewed four exact V62 source candidates. Three forward strict-label holds: two body-only destination labels without context and lower-bound numeric evidence cannot entail upper bound. Season-versus-season-end timing case retained, no forced relabel."
+}

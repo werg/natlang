@@ -1,0 +1,30 @@
+{
+  "id": "luna-v22-current-pass-pending-facts-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-v22-targeted-counterfactual-five-20261009-v1/source-v5-current-pass-boundary",
+  "include": [
+    "frozen-prompt-builder-v1/semantic-iterate-worlds-v15-soft-guided-builder.mjs",
+    "reference-case-index-003-current-runtime.json",
+    "reference-case-index-003-text-emulation.json",
+    "reference-case-index-003-wrapped-text-emulation.json",
+    "reference-case-index-003.json",
+    "reference-replay-review-current-runtime.json",
+    "reference-replay-review-text-emulation.json",
+    "reference-replay-review-wrapped-text-emulation.json",
+    "reference-replay-review.json",
+    "source-derivation-proof.json",
+    "source-manifest.json",
+    "source.cases.jsonl"
+  ],
+  "split": "inherited-train",
+  "source_class": "prompt-only-derivative-of-held-staged-evidence-source",
+  "admission": "held-pending-source-quality-and-actual-recovery-review",
+  "training_admission": false,
+  "corpus_publication_for_training": false,
+  "derived_from": [
+    "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1"
+  ],
+  "independent_new_worlds": 0,
+  "license": "Inherited authored operational source provenance",
+  "notes": "Same five sourcev4cases/fourgroups/golds/evidence/files/scopes;10literalpromptoccurrences add currentpass pendingfactreturn boundary. Source SHA9808161dafb1a3218071feee83fe9c3b3a4280becccafdc21678993d63ef1d7a. DOC-954 scripted currentruntime text-marker-emulation reference accepted/exactsixfilechecks/four scopedreads. Earlier failed wrapperdiagnostics explicitly superseded and retained. No provider/modelcalls in reference, no learnedchannelcertificate/admission. One separate actualZAI recovery fromfreshsource launched; activeoutputsexcluded."
+}

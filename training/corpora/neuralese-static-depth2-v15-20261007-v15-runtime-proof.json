@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-static-depth2-v15-20261007-v15-runtime-proof",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v15-runtime-proof",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Actual24case referenceproof288actions132reads zero provider/modelcalls; no semanticadmission",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

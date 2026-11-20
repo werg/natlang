@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-luna-v54-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-current-status-train-v54-runtimev14-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-generation-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "15 V5 train trajectories closed, 14 exact gold/file results and one pending placeholder rejection. Repeated original worlds, not new sources. Actual iterative and carry fidelity audit governs admission."
+}

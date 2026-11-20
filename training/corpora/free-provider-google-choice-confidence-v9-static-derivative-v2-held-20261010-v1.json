@@ -1,0 +1,41 @@
+{
+  "id": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v2",
+  "include": [
+    "cases.jsonl",
+    "label-manifest.json",
+    "native.held.jsonl",
+    "rejections.jsonl",
+    "replay.failures.jsonl",
+    "replay.results.jsonl",
+    "scorer-manifest.json",
+    "source-manifest.json",
+    "summary.json"
+  ],
+  "split": "evidence-only-inherited-groups",
+  "source_class": "source-bound-static-choice-label-derivative",
+  "training_admission": false,
+  "admission": "held-derivative-or-review-evidence-only",
+  "derived_from": [
+    "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+    "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+  ],
+  "notes": "source labels V9 / static derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+  "supersedes": "held-static-choice-confidence-v9-derivative",
+  "snapshot_pin": {
+    "files": 9,
+    "bytes": 390113,
+    "file_sha256": {
+      "cases.jsonl": "6b8083b143be175414dbfe09fada97a8ba837ad0a01ec28a36b943418f1d5a04",
+      "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+      "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+      "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+      "source-manifest.json": "563d040ec1fe942ccce40707ccaa4efb2dcdb587c0d9cf4bd4be193f4d6dcd90",
+      "summary.json": "144c49015d66b37b2cf77883b5f7832c1db044f66edc278b95500cbd27317644"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "luna-choice-confidence-v85-root-approval-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v85-v41-prefix-runtimev17-v1",
+  "include": [
+    "root-approved-plan-v1.json",
+    "root-independent-review-v1.json",
+    "root-supervisor-launch-v1.json"
+  ],
+  "split": "held-generation-approval-and-launch-evidence",
+  "source_class": "held-campaign-approval-review-and-supervisor-receipt",
+  "training_admission": false,
+  "admission": "root-approval-and-launch-lineage-only-no-output-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root approved plan SHA f9b47bb46ab5277ab121360d2930502db9e673038400bbff82adc037f35285b0; independent review SHA dd48638cbb445154da0ae28dc150add6e7b62cabeecdeee07d46e7a4c8d8cc40; supervisor launch receipt SHA cc4761e43c5cc3389ebd5bd82a449ed42fe55b08c04fc4937c08d5f3c0a19cd1. Five-worker generation results remain outside this immutable launch-evidence snapshot."
+}

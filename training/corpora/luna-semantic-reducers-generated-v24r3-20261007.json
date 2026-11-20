@@ -1,0 +1,18 @@
+{
+  "id": "luna-semantic-reducers-generated-v24r3-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v3",
+  "admission": "candidate-exact-native-trajectories-held-filehandle-and-graph-review",
+  "include": [
+    "launch-r3.json",
+    "worker-*/case-*.results.jsonl",
+    "worker-*/journal.jsonl",
+    "worker-*/supervisor.log",
+    "audit-r3.json",
+    "audit-r3.md"
+  ],
+  "derived_from": [
+    "luna-semantic-reducers-source-v24r3-20261007"
+  ],
+  "notes": "All8exactexports,7accepted/1rejected. Fourtrain/fourtest wholeworld splits; corrected library/museum/archive remain held/test replacements. Six transient FileHandle scope failures across4worlds; museum omits2positives but includes scopefailure, held from model-negative/DPO attribution pending runtime investigation. Final typed results and captured observations preserved. Candidate conversions/graph admission separate; no admission from reference replay or export success."
+}

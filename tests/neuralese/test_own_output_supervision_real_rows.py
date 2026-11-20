@@ -1,6 +1,6 @@
 """Own-output objective on real rendered rows of a registered corpus, with the LFM2.5 and LFM3 tokenizers.
 
-Corpus: ``natlang-native-turns-4962-wholetraj-render-20261013-v3`` (training/neuralese_corpora.json), LFM2.5 view.
+Corpus: ``natlang-native-turns-4962-wholetraj-render-20261013-v3`` (training/corpora), LFM2.5 view.
 Role labels from ``chat_roles`` are checked independently against the rendered ChatML template spans
 (``<|im_start|>assistant`` regions and ``<think>`` bodies) through the tokenizers' character offsets.
 """

@@ -307,7 +307,7 @@ is the plan this approach came from.
   assign blame.
 - **Data.** The training-data registry (`natlang_neuralese.common.data_registry`, CLI `scripts/data_registry.py`) knows
   every dataset: producers record what they write and consumers what they read, automatically; a run refuses data no
-  entry holds. Its git layer is `training/neuralese_corpora.json` with immutable SHA-256 manifests under
+  entry holds. Its git layer is `training/corpora/<id>.json` (one file per entry) with immutable SHA-256 manifests under
   `training/corpus-manifests/` (roles there select what trainers use: a pool is admitted with `data_registry.py promote
   ID --role grpo-pool`, never a code list), transferred with `scripts/sync_training_corpora.py`. Keep conversion,
   admission, staging and actual learner exposure separate and explicit. Every dataset and model license is acceptable:

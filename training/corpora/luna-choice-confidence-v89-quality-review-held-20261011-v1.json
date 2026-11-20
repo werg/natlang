@@ -1,0 +1,21 @@
+{
+  "id": "luna-choice-confidence-v89-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v89-choice-confidence-closeout-v1",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "inherited-source-train-quality-review",
+  "source_class": "held-source-bound-output-and-visibility-audit",
+  "training_admission": false,
+  "trace_admission": false,
+  "recurrence_admission": false,
+  "independent_new_worlds": 0,
+  "admission": "quality evidence only; no data admission",
+  "parent_registry_ids": [
+    "luna-choice-confidence-v89-v41-multiitem-closed-raw-held-20261011-v1",
+    "luna-choice-confidence-v89-v41-multiitem-inputs-held-20261011-v1"
+  ],
+  "notes": "Independent closeout of V89 output vs exact source annotations, files/maps, child request visibility, and typed invocation evidence. Agreement is source-label agreement, not a truth claim. The 8 items in the budget-failed program are unscored."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-annotation-folder-v62-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v62-annotation-folder-final-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Superseded initial audit retained. Ten expected-map text hits later diagnosed as model console outputs after decisions, not hidden gold injected into inputs. Finalv2 separate."
+}

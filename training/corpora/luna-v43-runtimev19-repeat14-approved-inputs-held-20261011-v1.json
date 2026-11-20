@@ -1,0 +1,19 @@
+{
+  "id": "luna-v43-runtimev19-repeat14-approved-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v43-runtimev19-repeat14-inputs-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "held-generation-plan-no-admission",
+  "source_class": "approved-same-world-comparison-inputs",
+  "training_admission": false,
+  "trace_admission": false,
+  "admission": "approved repeat inputs and bounded launch observation only; active journals, logs, results and mutable campaign status are excluded",
+  "derived_from": [
+    "luna-v43-runtimev19-main34-approved-inputs-held-20261011-v1",
+    "luna-v43-runtimev18-repeat14-approved-inputs-held-20261011-v1",
+    "luna-v43-runtimev18-repeat14-closed-raw-held-20261011-v1"
+  ],
+  "notes": "14 repeated source programs/111 items at seed base 43101, matching the approved V18 repeat14 IDs and seed mapping. Same-world qualification only; independent new worlds=0. Launch observation is cutoff-scoped."
+}

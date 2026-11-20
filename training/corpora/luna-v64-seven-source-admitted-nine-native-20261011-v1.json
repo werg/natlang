@@ -1,0 +1,15 @@
+{
+  "id": "luna-v64-seven-source-admitted-nine-native-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v64-seven-source-admitted-nine-native-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "reviewed-native-model-actions",
+  "training_admission": true,
+  "admission": "root-reviewed-exact-nine-native-actions-and-ordinary-SFT-only",
+  "independent_new_worlds": 0,
+  "notes": "Nine exact reviewed model targets from two source-bound V64 recovery programs/seven original DBpedia train items. Full S1+harness+protected closure, current68holds, per-action semantic approval and native source-quality binding verified; shared LFM350 renderer/token audit passes9/9, max16512,648supervisedtokens. Native/text views count the same9targets. Other20materializedtargets/firstwrongapprovaldiagnostic/neuraleseconversion remainheld. Not inrunningV8fixeddata; future declared intake required.",
+  "data_file": "selected-nine-native.jsonl"
+}

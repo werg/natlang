@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v37-launch-receipt-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v37-source",
+  "include": [
+    "root-launch-receipt-v1.json"
+  ],
+  "split": "inherited-train-launch-evidence",
+  "source_class": "provider-pool-launch-receipt",
+  "training_admission": false,
+  "admission": "held-launch-evidence-only",
+  "independent_new_worlds": 0,
+  "notes": "Separate immutable receipt binds the root-approved V37 launch (supervisor PID 1045263) to the V37 source and frozen free-pool inputs. This is launch evidence only; active labels, logs and output artifacts are excluded."
+}

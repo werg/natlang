@@ -1,0 +1,21 @@
+{
+  "id": "luna-derived-body-native-text-nine-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "admission": "Root-adopted nine derived observed typed-text body SFT targets plus nine faithful ordinary-text records; derived body supervision only, not original sampled action or eval hidden-state equivalence; R=0; not active training input.",
+  "derived_from": [
+    "luna-rwa-v7-nine-admitted-native-text-20261009-v1",
+    "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
+  ],
+  "notes": "Root composition adoption runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/root-derived-native-text-composition-adoption-v1.json (SHA 7c6df7c00ea810c13b30f5e3f6197e591de3b3a477a2e0dee021c6ff565eee11) approves exactly nine separately admitted derived native body targets and nine ordinary text records. Virtual union over the approved source lineage is 5506 native (3471 train/2035 test), 4738 text (3034 train/1704 test), R=4961 unchanged. Compact deltas only; no full-base copy. These derived targets are authenticated observed/computed body content, not sampled assistant actions and not original eval hidden-state equivalence. No recurrence, DPO, whole-trajectory admission, learned-writer/runtime qualification, model-performance claim, new-world credit, or active-input mutation. The prior River metadata replacement is nonadditive and contributes zero rows; no River target was duplicated here. Snapshot carries existing nine-action source/raw evidence plus derived-body candidate/admission receipts, exact compact outputs, frozen converter/renderer code, replay proofs, source/group/split pins, and root composition decision.",
+  "include_manifest": true,
+  "include_prefixes": [
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1",
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence",
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1",
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/source",
+    "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1",
+    "luna-staged-eval-return-writer-fix-20261009-v1/evidence",
+    "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3"
+  ]
+}

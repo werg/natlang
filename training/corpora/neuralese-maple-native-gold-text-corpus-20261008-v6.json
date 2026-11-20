@@ -1,0 +1,21 @@
+{
+  "id": "neuralese-maple-native-gold-text-corpus-20261008-v6",
+  "owner": "dgx",
+  "path": "runs/neuralese-maple-native-gold-text-corpus-20261008-v6",
+  "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
+  "include": [
+    "text.jsonl",
+    "receipt.json",
+    "provenance.jsonl",
+    "omissions.jsonl",
+    "source-coverage.jsonl",
+    "packet-manifest.json",
+    "output-manifest.json",
+    "README.md"
+  ],
+  "derived_from": [
+    "neuralese-native-gold-text-v17-bunny-v6-20261008",
+    "neuralese-maple-native-gold-text-corpus-20261008-v5"
+  ],
+  "notes": "Maple twin of V17 gold text (neuralese-native-gold-text-v17-bunny-v6-20261008): Maple packet v5 (V16 twin) as byte prefix + the same 32-record V17 delta (v17-bunny-held-proposal-v5 delta-inputs, assembled native-pieces, gold-source-selection) through scripts/build_neuralese_gold_text_delta.py --twin-of-text, bound to the V16 root admission via its output manifest; renderer files identical to V17's (text_corpus d833fda8, chat e263a479, trajectories aa302e26, inline_instructions ba52671b); Maple tokenizer e90b9305. 4470 docs (2771 train/1699 held), 0 omitted; IDs/splits identical to V17; same 3 hydrated reader contexts, 4 capture augmentations, 3 typed eval-finish markers. Inherits V17's root admission scope (runs/neuralese-v17-root-review-20261008-v1). Supersedes Maple packet v5."
+}

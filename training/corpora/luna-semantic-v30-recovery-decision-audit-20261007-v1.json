@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v30-recovery-decision-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v30-recovery-decision-audit-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "actual invocation/state audit; pending exact action-ID teacher selection",
+  "notes": "5 exact accepted finals and2 shape-rejected finals among7recoveries;52invocations and15clean observed ordered states. FileHandle transport blocked claim is model-authored, disproved by later successful calls. Context-wrapper/string returns, wrong signatures and overdelegation are distinct authoring failures. Preserve good native calls despite invalid parent outputs, no cross-prompt DPO."
+}

@@ -1,0 +1,22 @@
+{
+  "id": "google-choice-confidence-v34-static-reference-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v34-adapter-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-static-source-derived-reference-and-replay",
+  "training_admission": false,
+  "admission": "reference-replay-evidence-only",
+  "notes": "Label-derived static V34 adapter:55 programs/419 strict source-aligned labels,93 typed top-decision disagreements retained in rejections,55/55 actual reference replay successes. All files and component archive are evidence only; no provider-written trajectory or training admission.",
+  "include": [
+    "cases.jsonl",
+    "execution-components/**/*",
+    "label-manifest.json",
+    "native.held.jsonl",
+    "rejections.jsonl",
+    "replay.failures.jsonl",
+    "replay.results.jsonl",
+    "scorer-manifest.json",
+    "source-manifest.json",
+    "summary.json"
+  ]
+}

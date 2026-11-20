@@ -1,0 +1,24 @@
+{
+  "id": "neuralese-v24-v9-v1-context-render-omission-diagnostic-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-integration-20261008-v1",
+  "include": [
+    "input/selected-preview-native.jsonl",
+    "input/empty-recurrence.jsonl",
+    "input/empty-pieces.jsonl",
+    "conversion/*",
+    "text-append/README.md",
+    "text-append/anchor-selection.json",
+    "text-append/omissions.jsonl",
+    "text-append/output-manifest.json",
+    "text-append/packet-manifest.json",
+    "text-append/receipt.json",
+    "text-append/source-coverage.jsonl"
+  ],
+  "admission": "historical-conversion-and-text-omission-diagnostic-only; no-training-admission",
+  "notes": "Preserves the initial unconverted gold-text render evidence: ARC-531 and BB-540 were omitted because expected converter external_context_inputs were absent, while ARC-530 rendered. Also preserves the exact selected native preview, converter/13 output and pieces used in V2. The full superseded text stream is reproducible from the admitted V9 text prefix plus that V1 output; this diagnostic manifest includes the omission receipts and coverage rather than duplicating a 216 MB prefix.",
+  "derived_from": [
+    "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+    "neuralese-v24-root-action-admission-20261008-v1"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-successor-v15-prepared-20261007-candidate-v12",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v15-prepared-20261007-candidate-v12",
+  "include": [
+    "**/*"
+  ],
+  "admission": "Source-only defaultbuilder revision explicitcooperativeauthority; same24worlds/goldgroups/splits preserved, scriptedproof notsemanticadmission",
+  "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+}

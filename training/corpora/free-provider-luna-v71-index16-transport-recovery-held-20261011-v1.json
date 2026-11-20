@@ -1,0 +1,14 @@
+{
+  "id": "free-provider-luna-v71-index16-transport-recovery-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v71-index16-transport-recovery-prepared-v2",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-related-recovery",
+  "source_class": "single-case-provider-transport-recovery-held",
+  "training_admission": false,
+  "admission": "closed-recovery-observation-held-no-new-world-credit-no-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "One fresh, bounded retry of V71 original source index16 after its preserved transport failure. Same source/gold/group and frozen V15 runtime; fresh attempt lineage. Terminal accepted=true, files 10/10, zero scope failures. This is a related recovery observation, not independent-world credit and not training admission. Original attempt remains in the V71 raw snapshot."
+}

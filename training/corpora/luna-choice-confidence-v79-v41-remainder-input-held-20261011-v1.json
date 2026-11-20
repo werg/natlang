@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v79-v41-remainder-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v79-v41-remainder-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-provider-generation-input",
+  "source_class": "held-luna-generation-inputs-and-plan",
+  "training_admission": false,
+  "admission": "root-approved-launch-authorization-recorded-separately; generation-output-not-source-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Six fully visible authored static source programs/37 original train items from V41 JSON-object remainder, excluding the previously used V78 prefix. Prepared with frozen V17 and actual V78 predecessor lane records. Input plan/source review/snapshotted policy+preparer and five immutable queues are pinned. Mutable campaign-launch files, worker journals/logs, and generated outputs are deliberately excluded."
+}

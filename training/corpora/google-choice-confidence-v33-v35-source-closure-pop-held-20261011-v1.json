@@ -1,0 +1,14 @@
+{
+  "id": "google-choice-confidence-v33-v35-source-closure-pop-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v33-v35-source-closure-v1",
+  "include": [
+    "**/*"
+  ],
+  "split": "inherited-train-source-closure-input",
+  "source_class": "source-closure-evidence",
+  "training_admission": false,
+  "admission": "full-s1-dgx-key-closure-pending",
+  "independent_new_worlds": 0,
+  "notes": "V33/V35 exact lineage packet: 114 static programs and 824 original train source rows/groups; 75-row V16 quality policy had zero ID/group intersections. Pop harness4, protected, and exact-key checks found no hits. This packet requests DGX full S1 exact-key closure only; it does not certify semantic quality, source license, provider restrictions, teacher correctness, or grant source/native/training admission."
+}

@@ -1,0 +1,17 @@
+{
+  "id": "static-curriculum-s7k-b00-source-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/static-curriculum-s7k-b00-source-20261015-v1",
+  "include": [
+    "config.json",
+    "batches/b00/cases.ir.jsonl.zst",
+    "batches/b00/rows.jsonl.zst",
+    "batches/b00/turns.jsonl.zst",
+    "batches/b00/batch.json",
+    "batches/b00/case-ids.txt"
+  ],
+  "source_class": "static-native-reference-source-snapshot",
+  "training_admission": false,
+  "admission": "Immutable original b00 provenance only; rejected and process/semantic holds retained for assigned repair, not admitted as a whole. The old campaign is stopped; missing collector dist caused later seed replay failure.",
+  "license": "Per-source facts in original case IR; owner accepts all licenses."
+}

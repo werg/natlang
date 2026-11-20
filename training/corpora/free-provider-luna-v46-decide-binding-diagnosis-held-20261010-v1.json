@@ -1,0 +1,17 @@
+{
+  "id": "free-provider-luna-v46-decide-binding-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v46-decide-binding-diagnosis-v1",
+  "include": [
+    "review.json",
+    "review.md"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "evidence-only-inherited-train-groups",
+  "source_class": "provider-source-generation-diagnosis-review",
+  "training_admission": false,
+  "admission": "held-source-semantic-split-trace-quality-review",
+  "notes": "23 callable TypeError action events across22 invocations8programs; first arguments are data, no local decide declarations. Source evidence does not support a name collision; current guidance already documents function-first API."
+}

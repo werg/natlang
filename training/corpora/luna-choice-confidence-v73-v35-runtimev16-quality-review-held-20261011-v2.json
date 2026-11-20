@@ -1,0 +1,15 @@
+{
+  "id": "luna-choice-confidence-v73-v35-runtimev16-quality-review-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v73-choice-confidence-final-v2",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "inherited-train-quality-review-only",
+  "source_class": "held-luna-source-annotation-comparison-and-visibility-audit",
+  "training_admission": false,
+  "admission": "audit-only-no-semantic-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "V73 exact-row review v2. 55/55 programs; 376/395 exact source-annotation matches; 19 disagreements retained for review, not converted to negatives. All input files and returned/saved decision maps were exact. No source quality/training admission."
+}

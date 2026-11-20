@@ -1,0 +1,32 @@
+{
+  "admission": "supplemental-immutable-evidence-only",
+  "id": "neuralese-semantic-iterate-reducers-v19-source-20261008-v1-glob-supplement-20261010-v1",
+  "include": [
+    "authored-reference-cb892/case-000.reference.json",
+    "authored-reference-cb892/case-001.reference.json",
+    "authored-reference-cb892/case-002.reference.json",
+    "authored-reference-cb892/case-003.reference.json",
+    "authored-reference-cb892/case-004.reference.json",
+    "authored-reference-cb892/case-005.reference.json",
+    "authored-reference-cb892/case-006.reference.json",
+    "authored-reference-cb892/case-007.reference.json",
+    "authored-reference-cb892/case-008.reference.json",
+    "authored-reference-cb892/materializer-runtime-flags-attestation.jsonl",
+    "authored-reference-cb892/native-decisions.jsonl",
+    "authored-reference-cb892/reference-trajectories.jsonl",
+    "authored-reference-cb892/review-artifact-manifest.json",
+    "authored-reference-cb892/runtime-reference-proof.json",
+    "authored-reference-cb892/source-action-review.jsonl",
+    "authored-reference-cb892/source.cases.jsonl"
+  ],
+  "native_admission": false,
+  "notes": "Root approved current exact durable bytes for supplemental publication only; no claim these existed at original publication. Original source manifests unchanged, no independent examples or training/native/trace admission. Source neuralese-semantic-iterate-reducers-v19-source-20261008-v1; exact audited files, dynamic/ambiguous artifacts excluded.",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1",
+  "trace_admission": false,
+  "training_admission": false,
+  "split": "evidence-only-inherited-source",
+  "source_class": "supplemental-immutable-runtime-source-and-quality-evidence",
+  "source_snapshot": "neuralese-semantic-iterate-reducers-v19-source-20261008-v1",
+  "supplemental_worklist_sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
+}

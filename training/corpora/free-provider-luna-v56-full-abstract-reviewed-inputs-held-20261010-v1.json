@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-luna-v56-full-abstract-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v56-runtimev15-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-runtime-visibility-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-live-model-quality-review",
+  "notes": "Six full-abstract source-bound train programs /42items, V15 immutable runtime; five workers queued after allV55fullyaccounted. Original source groups retained, no new worlds. Reference replay visible; live model quality/admission pending.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "unapproved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

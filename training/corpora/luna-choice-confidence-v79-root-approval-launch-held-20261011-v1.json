@@ -1,0 +1,16 @@
+{
+  "id": "luna-choice-confidence-v79-root-approval-launch-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v79-v41-remainder-runtimev17-v1",
+  "include": [
+    "root-approved-plan-v1.json",
+    "root-independent-review-v1.json",
+    "root-supervisor-launch-v1.json"
+  ],
+  "split": "inherited-train-generation-authorization-evidence",
+  "source_class": "held-root-review-and-launch-receipt",
+  "training_admission": false,
+  "admission": "authorization-and-plan-review-only-not-data-admission",
+  "independent_new_worlds": 0,
+  "notes": "Root independently reviewed exact master rows, annotation bindings, disjointness, replay/capture and source pins, approved plan SHA 7174e4f635e38af7efa35a45187a4d1b18b15e7154617a4944618136aa3e9717 (prepared plan remains separately preserved), then launched supervisor PID 1096406. Campaign state/results are excluded."
+}

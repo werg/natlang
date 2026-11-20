@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v67-reviewed-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v67-runtimev15-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Five-worker56program403itemreviewed successorwaitsallV66completeaccounting. Approvald1dad62d/frozen62policy. FullS1sourceclosurepending noadmission.",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-approved-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "root-current-policy-at-approval-v1.json",
+    "worker-*/queue.jsonl"
+  ]
+}

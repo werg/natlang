@@ -1,0 +1,16 @@
+{
+  "id": "free-provider-v29-source-case-closure-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/luna-v29-s1-harness-closure-20261010-v2",
+  "include": [
+    "**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "train-source-components-review-only",
+  "source_class": "source-case-provenance-cross-corpus-closure",
+  "training_admission": false,
+  "admission": "superseded-closure-attempt-evidence-only",
+  "notes": "Earlier immutable closure analysis; superseded by hardened shared adapter V3. No admission or independent examples."
+}

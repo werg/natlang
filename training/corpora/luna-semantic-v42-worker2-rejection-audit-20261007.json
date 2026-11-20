@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v42-worker2-rejection-audit-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v42-worker2-cases00-01-audit-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "rejection diagnosis/action review evidence; no admission and no cross-prompt DPO pairs",
+  "notes": "262nativeactions/155invocationoutputs/12sourcefacts: schoolwrongobjectchildschema+truthiness vs Booleancriterion; watershedWAT215false despitecomplete qualifyingevidence. Actualsource/runtimebound, sourceambiguity/infrastructure notthecause oftheseerrors. V44targetedrecovery queued."
+}

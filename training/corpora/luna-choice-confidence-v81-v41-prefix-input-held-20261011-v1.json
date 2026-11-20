@@ -1,0 +1,17 @@
+{
+  "id": "luna-choice-confidence-v81-v41-prefix-input-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-confidence-v81-v41-prefix-runtimev17-v1",
+  "include": [
+    "reviewed-plan-v1.json",
+    "root-generation-source-review-v1.json",
+    "source-review/**/*",
+    "worker-*/queue.jsonl"
+  ],
+  "split": "inherited-train-provider-generation-input",
+  "source_class": "held-luna-generation-inputs-and-plan",
+  "training_admission": false,
+  "admission": "prepared-queue-only-root-review-required-no-generation-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Prepared no-call V81 buffer from the 21-program/151-label disjoint V41 prefix static derivative; exact prefix/case/source/criteria/replay receipts are separately registered. Uses runtime-small-teachers-v17 and completed V80 v2 predecessor lanes. Plan remains root_approved=false; no workers launched. Mutable status, worker journals/logs, results excluded."
+}

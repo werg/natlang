@@ -1,0 +1,10 @@
+{
+  "id": "decision-visible-answerability-v12-canonical-application-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-v12-canonical-application-v1",
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Five previously reviewed additiveholds folded into canonical62afterpinnedrecoveryclosed; prior/currentpolicybytes exact. Oldsourcesandsealedartifacts unchanged."
+}

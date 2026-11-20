@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-v24-v9-integration-root-admission-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-integration-admission-20261008-v1",
+  "include": [
+    "admission.json"
+  ],
+  "admission": "root-integration-admission-receipt; native-sft-and-ordinary-text-facets-only",
+  "notes": "Root-authorized scope-limited receipt for exact V2 final paths. It grants no additional recurrence, runtime replay, foundation, DPO, or autonomous stopping qualification.",
+  "derived_from": [
+    "neuralese-v24-v9-three-action-native-text-20261008-v2"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "free-provider-zai45-sourcev28-five-runtimev6-queue-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1",
+  "include": [
+    "queue.jsonl",
+    "launch-receipt-v1.json"
+  ],
+  "split": "inherited-train-only",
+  "source_class": "frozen-reviewed-generation-queue",
+  "training_admission": false,
+  "admission": "generation-only; evolving journal/results excluded",
+  "independent_new_worlds": 0,
+  "notes": "Root alias resolves to /srv output volume. Exact approved V28 train source and runtimev6 hashes pinned in launch. One case/request at a time. Separate snapshot avoids parent traversal omission of nested directory aliases."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v11",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v11",
+  "include": [
+    "*.json",
+    "*.jsonl"
+  ],
+  "admission": "current-native-reference-verified-no-hint-source-pending-semantic-split-trajectory-review"
+}

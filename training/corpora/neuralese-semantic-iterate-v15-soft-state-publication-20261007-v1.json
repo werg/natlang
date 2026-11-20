@@ -1,0 +1,13 @@
+{
+  "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "source-generation-reviewed-scripted-soft-state-proof-only-teacher-and-training-held",
+  "derived_from": [
+    "neuralese-semantic-iterate-v15-lineage-20261007-v1"
+  ],
+  "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1–V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
+}

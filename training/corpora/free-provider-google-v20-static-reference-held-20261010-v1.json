@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v20-static-reference-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v20-adapter-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "source-bound-generation-evidence",
+  "training_admission": false,
+  "admission": "held-source-semantic-native-runtime-quality-review",
+  "notes": "54 authored programs / 408 original train items, all actual replays and visibility pass. Cases actual SHA 64d68adce9320ef2367216cd332e67d616aedddd16b27261ddfa7df030f27704, independent of copied helper-message hash error. No semantic admission."
+}

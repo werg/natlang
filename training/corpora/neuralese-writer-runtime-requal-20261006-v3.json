@@ -1,0 +1,12 @@
+{
+  "id": "neuralese-writer-runtime-requal-20261006-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-runtime-requal-20261006-v3",
+  "admission": "exact-weight-runtime-and-host-preparation-parity-diagnostic-not-training",
+  "include": [
+    "**/*.json",
+    "**/*.jsonl",
+    "**/*.pt",
+    "**/*.safetensors"
+  ]
+}

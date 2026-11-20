@@ -1,0 +1,18 @@
+{
+  "admission": "supplemental-immutable-evidence-only",
+  "id": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1-glob-supplement-20261010-v1",
+  "include": [
+    "provider-zai45-sourcev5-research-pair-v1/case-001/results.jsonl",
+    "provider-zai45-sourcev5-research-pair-v1/case-001/results.jsonl.manifest.json"
+  ],
+  "native_admission": false,
+  "notes": "Root approved current exact durable bytes for supplemental publication only; no claim these existed at original publication. Original source manifests unchanged, no independent examples or training/native/trace admission. Source free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1; exact audited files, dynamic/ambiguous artifacts excluded.",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "source_class": "supplemental-immutable-runtime-source-and-quality-evidence",
+  "split": "inherited-train-only",
+  "trace_admission": false,
+  "training_admission": false,
+  "source_snapshot": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1",
+  "supplemental_worklist_sha256": "7e1c822ad1e8457f8967573b8fb52eb55113059f4abcbe541bb3e99fabe12298"
+}

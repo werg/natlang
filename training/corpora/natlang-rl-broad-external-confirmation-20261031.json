@@ -1,0 +1,12 @@
+{
+  "id": "natlang-rl-broad-external-confirmation-20261031",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-confirmation-20261031",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "cases.jsonl"
+  ],
+  "note": "Held confirmation packet of the broad external RL task mix (3558 verified cases across 22 sources; split confirmation). Upstream evaluation splits (or a 6% unit carve-out) of each source; related items share a split unit with their siblings. For per-source development and confirmation of RL outcomes; never a training source. Its db/table services read the assets of natlang-rl-broad-external-20261031.",
+  "kind": "held",
+  "protected": true
+}

@@ -1,0 +1,10 @@
+{
+  "id": "luna-semantic-v84-first-wave-quality-review-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v84-first-wave-quality-review-20261007-v1",
+  "include": [
+    "**/*"
+  ],
+  "admission": "held-evidence-and-quality-review-no-training-admission",
+  "notes": "Held graph and semantic quality review; 1/2 correct, RFQ4 wrong decision. No training admission."
+}

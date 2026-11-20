@@ -1,0 +1,24 @@
+{
+  "id": "s1-question-collection-v8-action-candidates-20261008-v1",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-v8-action-candidates-20261008-v1",
+  "include": [
+    "README.md",
+    "selection-summary.json",
+    "selected-actions.jsonl",
+    "raw-action-receipts.jsonl",
+    "selected-actions-convertible.jsonl",
+    "raw-action-receipts-convertible.jsonl",
+    "converter-omissions.jsonl",
+    "native-actions.jsonl",
+    "empty-pieces.jsonl",
+    "packet-summary.json",
+    "manifest.json",
+    "text-preview/**"
+  ],
+  "admission": "held-action-and-text-preview-no-training-admission",
+  "derived_from": [
+    "s1-question-collection-v8-quality-review-20261008-v3"
+  ],
+  "notes": "54 independently source-reviewed train-split child-action candidates; 49 passed shared held native materialization and shared gold-text review rendering. Five exact source-correct child actions remain explicit omissions because the enclosing source rows are quality_pending; raw outcomes and parent holds are unchanged. Targets are ordinary nl<string> outputs, not typed Neuralese writers, recurrence edges, DPO pairs, or parent approvals. Text preview is train-only review data; production gold text still requires independent train/held splits."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "neuralese-workflowevals-folder-inventory-20261008-v1",
+  "owner": "pop",
+  "path": "runs/workflowevals-folder-inventory-20261008-v1",
+  "admission": "held-source-inventory-candidate-shortlist-no-generation-or-training-admission",
+  "include": [
+    "**/*"
+  ],
+  "notes": "Read-only inventory and candidate shortlist for unused WorkflowEvals directory-reducer source IDs, bound to the existing source policy/release lineage. Candidate rows are for review/conversion only; reused source groups receive no independent-world credit and are not generation authorization."
+}

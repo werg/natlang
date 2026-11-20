@@ -1,0 +1,13 @@
+{
+  "id": "luna-choice-confidence-v70-v34-quality-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v70-folder-terminal-v9",
+  "split": "inherited-train-diagnostic",
+  "source_class": "held-source-and-trajectory-quality-review",
+  "training_admission": false,
+  "admission": "held-quality-review-no-training-admission-no-DPO",
+  "notes": "Held audit for luna-choice-confidence-v70-v34-closed-raw-held-20261011-v1, pinned to its 419 source items and exact source/runtime/replay inputs. Reports 34 parent accepted and 21 rejected; 382 observed source-label matches and 37 differences are not semantic judgments. Exact question/state pairs are evidenced in 251 child contexts; 168 source items lack direct same-child context proof. One DBpedia row saved the expected map but returned an empty map. The sealed review.json identifies v9; review.md retains a stale v4 heading, preserved without mutation. No admission or new-world credit.",
+  "include": [
+    "**/*"
+  ]
+}

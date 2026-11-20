@@ -1,0 +1,15 @@
+{
+  "id": "luna-direct-v3-drift-review-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/luna-neuralese-direct-v3-drift-review-20261011-v1",
+  "include": [
+    "audit.json",
+    "audit.md"
+  ],
+  "split": "held-training-drift-analysis-diagnostic",
+  "source_class": "direct-v3-step20-gate-and-drift-review",
+  "training_admission": false,
+  "admission": "additive-diagnostic-analysis-only-no-qualification-or-training-admission",
+  "independent_new_worlds": 0,
+  "notes": "Additive review of the guard-stopped V3 direct stage and drift metrics; bound to its exact evidence. Does not supersede or grant qualification; V3 remains unqualified."
+}

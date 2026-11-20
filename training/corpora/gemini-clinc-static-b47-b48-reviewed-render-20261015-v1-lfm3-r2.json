@@ -1,0 +1,190 @@
+{
+  "id": "gemini-clinc-static-b47-b48-reviewed-render-20261015-v1-lfm3-r2",
+  "owner": "dgx",
+  "path": "runs/lfm3-renders/gemini-clinc-static-b47-b48-reviewed-render-20261015-v1-r2",
+  "include": [
+    "receipt.json",
+    "student-verification.json",
+    "render-policy-binding.json",
+    "parts.json",
+    "merge.json",
+    "*/*/text-data.jsonl",
+    "*/*/text-data.jsonl.zst",
+    "*/*/omissions.jsonl",
+    "selection-omissions.jsonl",
+    "render-omissions/*/*",
+    "parts/*/receipt.json",
+    "parts/*/render-policy-binding.json",
+    "parts/*/*.jsonl",
+    "parts/*/*/*/omissions.jsonl",
+    "parts/*/*/*/omissions.jsonl.zst",
+    "parts/*/render-omissions/*/omissions.jsonl",
+    "native-graphs.sh",
+    "native-graphs/*/receipt.json",
+    "exact-subset/*/*/text-data.jsonl.zst",
+    "native-graphs/*/*/native-graphs.jsonl.zst"
+  ],
+  "source_class": "rendered-natlang-native-teacher-turn-text",
+  "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+  "license": "facts from the source rows (see the source corpora)",
+  "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+  "admission": "lfm3 render of the registered corpus gemini-clinc-static-b47-b48-reviewed-render-20261015-v1 (scripts/neuralese_data/student_rerender.py: its receipt's exact selection arguments, lfm3 tokenizer only); inherits that render's admission, splits and held decisions; no new example admission",
+  "training_admission": true,
+  "derived_from": [
+    "gemini-clinc-static-b47-b48-reviewed-render-20261015-v1",
+    "gemini-clinc-static-b47-b48-reviewed-20261015-v1"
+  ],
+  "renders": {
+    "full": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 974,
+            "supervised_tokens": 47839,
+            "tokens": 7560951,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 71012954,
+        "decoded_text_data_sha256": "57d6d0e1f79331693e89c52b689051df5eb7804790c450c6ccf0fcbb8d4d97a6",
+        "documents": 974,
+        "max_document_tokens": 10352,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "0156503aa548fed4275553f0fd29968db2d89ff22c0d8d1b859e874ff4e2a78f"
+      }
+    },
+    "program-header": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 0,
+            "documents": 974,
+            "supervised_tokens": 47839,
+            "tokens": 2419577,
+            "tool_tokens": 0
+          }
+        },
+        "decoded_text_data_bytes": 22416253,
+        "decoded_text_data_sha256": "d883e0aec2a7da03c60744d096f27777caffad3e9cbbcce46d614c9d2fe06a2b",
+        "documents": 974,
+        "max_document_tokens": 3072,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "6f5401e1d77c95731f2d54482b95966d098e1db4a38b725b4e6edcc4a5a0d71a"
+      }
+    },
+    "whole-trajectory": {
+      "lfm3": {
+        "by_split": {
+          "train": {
+            "assistant_tokens": 125546,
+            "documents": 487,
+            "opening_tokens": 69074,
+            "supervised_tokens": 52246,
+            "tokens": 3951315,
+            "tool_tokens": 684973
+          }
+        },
+        "decoded_text_data_bytes": 38147901,
+        "decoded_text_data_sha256": "9b179cc2aaedf794c871414f40c3e38f12577f85da41059fd0f43fe13a2918a9",
+        "documents": 487,
+        "max_document_tokens": 10352,
+        "text_data_file": "text-data.jsonl.zst",
+        "text_data_sha256": "a8884ed7290b0127799fb5608804becbe2ab8dd3316179f679f5f549ba86ea42"
+      }
+    }
+  },
+  "student_rerender": {
+    "reference_render": "gemini-clinc-static-b47-b48-reviewed-render-20261015-v1",
+    "student": "lfm3",
+    "identical_documents": false,
+    "views": {
+      "full": {
+        "documents": 974,
+        "reference_documents": 54,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 920
+      },
+      "program-header": {
+        "documents": 974,
+        "reference_documents": 974,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      },
+      "whole-trajectory": {
+        "documents": 487,
+        "reference_documents": 487,
+        "same_order": 0,
+        "only_reference": 0,
+        "only_student": 0
+      }
+    },
+    "target_parse": {
+      "full:exact": 974,
+      "program-header:exact": 974
+    }
+  },
+  "native_graph_views": {
+    "lfm3": {
+      "model_id": "lfm3:baf2f497392a14aff7dfd0753184e620c934b547ef9784a995548bda5c5763e5",
+      "views": {
+        "program-header": 974,
+        "whole-trajectory": 487
+      },
+      "detail": {
+        "program-header": {
+          "train": 974,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/gemini-clinc-static-b47-b48-reviewed-render-20261015-v1-r2/native-graphs/program-header/train/native-graphs.jsonl.zst",
+              "rows": 974,
+              "bytes": 180479,
+              "sha256": "689da0c2e0d457096f788a8c2598e0cf69f4de57e639b7281de0b66af66b45a9"
+            },
+            {
+              "path": "runs/lfm3-renders/gemini-clinc-static-b47-b48-reviewed-render-20261015-v1-r2/native-graphs/program-header/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        },
+        "whole-trajectory": {
+          "train": 487,
+          "test": 0,
+          "outputs": [
+            {
+              "path": "runs/lfm3-renders/gemini-clinc-static-b47-b48-reviewed-render-20261015-v1-r2/native-graphs/whole-trajectory/train/native-graphs.jsonl.zst",
+              "rows": 487,
+              "bytes": 268467,
+              "sha256": "ed98b84ce5c874253609b6a531de869445b9228a271ea8f80d91128e5853610d"
+            },
+            {
+              "path": "runs/lfm3-renders/gemini-clinc-static-b47-b48-reviewed-render-20261015-v1-r2/native-graphs/whole-trajectory/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "bytes": 13,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          ],
+          "expanded_tokenizer_fingerprint": "133504d493a77e3121f62cc8c83699cb222ee993c46959d604c4b683a2ffdaf3",
+          "role_token_ids": [
+            125033,
+            125034,
+            125035,
+            125036
+          ]
+        }
+      }
+    }
+  }
+}

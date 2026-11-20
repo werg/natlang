@@ -1,0 +1,19 @@
+{
+  "id": "free-provider-google-choice-confidence-v9-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9",
+  "include": [
+    "cases.jsonl",
+    "source-manifest.json",
+    "launch-receipt-v1.json",
+    "frozen-adapter-v1/**/*"
+  ],
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-source-case-review-only",
+  "source_class": "provider-decision-label-confidence-generation-inputs",
+  "training_admission": false,
+  "admission": "incomplete-publication-evidence-only",
+  "notes": "92same-IDchoice cases from V8; direct enum choice plus confidence, no fabricated probabilities or independent world credit. PID837661/free shared model quota lock; fresh committed9d106d05db adapter snapshot. Prompt qualification still unmeasured/48paired-pervariant debt, archived baseline model allocation differs. Publication omitted2root frozen metadatafiles due nestedglobbug; useV2completeinputsnapshot, originalmanifestimmutable."
+}

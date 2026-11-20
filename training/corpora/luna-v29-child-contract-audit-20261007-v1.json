@@ -1,0 +1,10 @@
+{
+  "id": "luna-v29-child-contract-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v29-child-contract-audit-20261007-v1",
+  "include": [
+    "**"
+  ],
+  "admission": "diagnostic-audit-only;ideal-stagecomparisonneedsactual-carried-draft-followup",
+  "notes": "Preserveactualcasehashes,32acceptedfinals, source/contextconfoundsandstalescripted12intermediatetargets. V1reportsideal-stage drift; notallpropagatedlaterdifferencesarelocalchildmistakes. Fresh v2actual-inputdiff auditrequested."
+}

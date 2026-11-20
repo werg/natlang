@@ -1,0 +1,15 @@
+{
+  "id": "neuralese-e2e-mined-free-provider-v73-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-free-provider-v73-archive-20261015-v1",
+  "include": [
+    "free-provider-v73.tar.zst",
+    "free-provider-v73.receipt.json",
+    "free-provider-v73.roundtrip-proof.json"
+  ],
+  "source_class": "mined-producer-consumer-source-archive",
+  "training_admission": false,
+  "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+  "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+  "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+}

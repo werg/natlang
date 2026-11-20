@@ -1,0 +1,13 @@
+{
+  "id": "free-provider-google-v25-static-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v25-adapter-v1",
+  "exclude_dirs": [
+    "__pycache__"
+  ],
+  "split": "inherited-train-evidence",
+  "source_class": "held-native-proof-and-quality-evidence",
+  "training_admission": false,
+  "admission": "held-pending-source-trace-review",
+  "notes": "Shared directory reducer scaffold: 53 programs, 402 decisions, 910 native turns. All authored-reference and full-input visibility gates passed. Canonical 25 quality holds have no source intersection. Full-S1 and semantic review remain separate."
+}
