@@ -35,7 +35,7 @@ def main(argv=None):
         raise TuneMathError('a distillation export holds only training-split tune turns')
     from ..serve import load_native_engine
     # Lowering only renders and tokenizes: the checkpoint's own dtype (an FP32 read of LFM3 is a whole-model cast).
-    engine = load_native_engine(args.checkpoint, base=args.base, device=args.device, dtype=None)
+    engine = load_native_engine(args.checkpoint, base=args.base, device=args.device, dtype=None, training_state=False)
     graphs = []
     # Production SFT reads bare native graphs: the tune binding is dropped (the base learns the behavior itself) and
     # the row's evidence weight scales its targets, as the tuner weighs it.

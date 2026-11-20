@@ -76,8 +76,13 @@ def configure_native_prefix_cache(engine, budget_gb: float = 2.0, block: int | N
 def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
                        prompt_rendering: str = "full", participant: str | None = None,
                        actor_view: dict | None = None, transported_actor: dict | None = None,
-                       store=None, engine_class=None, prefill_tokens: int | None = None):
-    """Restore a native-state checkpoint through the shared model loader and serving engine."""
+                       store=None, engine_class=None, prefill_tokens: int | None = None,
+                       training_state: bool = True):
+    """Restore a native-state checkpoint through the shared model loader and serving engine.
+
+    ``training_state=False``: the checkpoint's training state (optimizer moments, RNG, progress) is not kept on the
+    engine. Only the service's in-place optimizer step (serve/native_optim.py) continues it; adapter fitters and
+    appliers never do, and keeping it held 3.3 GB of host memory through a whole LFM3 program fit (2026-11-20)."""
     from ..common.hashing import sha256_file_hex_cached
     from ..model.native_model import load_native_checkpoint, native_identity
     from .engine import Engine
@@ -114,7 +119,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     engine.native_identity = identity
     engine.serving_config = serving_config
     engine.native_checkpoint = str(checkpoint)
-    engine.native_training_state = (_state.get('training') or _state.get('shared_training') or {})
+    engine.native_training_state = (_state.get('training') or _state.get('shared_training') or {}) if training_state else {}
     engine.native_actor_view = _state.get('actor_view')
     engine.native_inference_only = bool(engine.native_actor_view is not None
         or _state.get('inference_only') or _state.get('optimizer_pruned'))

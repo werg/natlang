@@ -454,7 +454,7 @@ def bank(args):
     config = {'store_scratch': args.store_scratch} if args.store_scratch else {}
     with fit_store_context(config) as store:
         engine = load_native_engine(str(args.checkpoint), base=args.base, device=args.device,
-                                    dtype=getattr(torch, args.dtype) if args.dtype else None, store=store)
+                                    dtype=getattr(torch, args.dtype) if args.dtype else None, store=store, training_state=False)
         rows, fits, held_dirs = [], {}, {}
         for directory in args.programs:
             made, family = program_rows(engine, directory, sha=sha)

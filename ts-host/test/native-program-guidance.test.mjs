@@ -241,3 +241,40 @@ test('withhold: frontmatter takes tools out of a function\'s schema and refuses 
   const feedback = requests[1].messages.find(message => message.role === 'tool' && !String(message.tool_call_id).startsWith('scope_'));
   assert.match(String(feedback.content), /edit_code is withheld from calls of careful by its definition; do this step with the tools this call offers/);
 });
+
+test('program guidance is primed at its real position in the first call that reads it, and reused after', async () => {
+  const text = 'Use the approved procedure.', current = identity('a');
+  const placeholder = 'nzs1_' + 'p'.repeat(52), primedId = 'nzs1_' + 'q'.repeat(52), trained = 'nzs1_' + 'r'.repeat(52);
+  const meta = (id, extra = {}) => ({ id, metadata: { schema: 'neuralese.native-state/1', text, ...current, ...extra } });
+  const run = async (options, programGuidanceValue = nativeProgramGuidance(text, 'fixture-program-' + Math.random())) => {
+    const primes = [], requests = [];
+    const store = { async pin() {}, async getNativeState(id) { return id === trained ? meta(id, { derivation: { step: 1 } }) : meta(id); } };
+    const driver = async request => { requests.push(request); return { calls: [['return_result', { status: 'success', value: 'done' }]] }; };
+    driver.neuralese = true;
+    const agent = new NativeToolAgent(driver, { programGuidance: programGuidanceValue, ...options,
+      neuralese: { store, nativeStateConsumer: current,
+        port: { dialect: 'native-state/fixture-native', async write(value) {
+          return { id: placeholder, dialect: 'native-state/fixture-native', length: 4, width: 8, dtype: 'f32',
+            native_state: { schema: 'neuralese.native-state/1', text: value, ...current } };
+        } },
+        async prime(call, from, value, type) { primes.push({ call, from, value, type }); return { id: primedId }; } } });
+    const runtime = interpreter({ agent: currentSession => agent.run(currentSession) });
+    for (let index = 0; index < 2; index++)
+      assert.equal((await runtime.run(lambda({ type: '() => string', instructions: 'Return a string.' }))).value, 'done');
+    const ids = requests.map(request => request.messages[1].content.filter(part => part.type === 'native_state').map(part => part.id));
+    return { primes, ids };
+  };
+  const primed = await run({});
+  assert.equal(primed.primes.length, 1, 'primed once, in the first call');
+  assert.equal(primed.primes[0].from, placeholder);
+  assert.equal(primed.primes[0].type, 'Neuralese<ProgramGuidance>');
+  assert.ok(JSON.stringify(primed.primes[0].call.messages).includes(placeholder), 'in the call\'s own opening');
+  assert.deepEqual(primed.ids, [[primedId], [primedId]]);
+  const plain = await run({ guidancePriming: 'text' });
+  assert.equal(plain.primes.length, 0);
+  assert.deepEqual(plain.ids, [[placeholder], [placeholder]], 'opt-out: the text write');
+  // A trained (refined) state is read as it is; an untrained stored one is primed again in its call.
+  const refined = await run({}, nativeProgramGuidance(binding(current, text, trained)));
+  assert.equal(refined.primes.length, 0);
+  assert.deepEqual(refined.ids, [[trained], [trained]]);
+});

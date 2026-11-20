@@ -183,9 +183,11 @@ def main(argv=None):
     parent_dir = Path(args.plan).parent / plan['parent'] if plan.get('parent') else None
     from ..serve import load_native_engine
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
+    from ..common.cuda_context import prepare_gpu
+    prepare_gpu(config.get('device', 'cpu'))   # GB10: context and large free blocks before the weights load
     with fit_store_context(config) as store:
         engine = load_native_engine(config['checkpoint'], base=config.get('base'), device=config.get('device', 'cpu'),
-                                    dtype=engine_dtype(config), store=store)
+                                    dtype=engine_dtype(config), store=store, training_state=False)
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
         import_archive(engine,

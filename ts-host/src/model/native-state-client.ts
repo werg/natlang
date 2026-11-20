@@ -47,7 +47,11 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const { grammarCapture } = await import('./native-operator.js');
   const capture = serves(info, 'native.capture') ? serverCapture({ ...options, info }) :
     (native as { production?: boolean }).production ? grammarCapture({ ...options, info }) : undefined;
-  return { store: options.store, dialect, nativeStateConsumer,
+  const { materializeNativeStateSentinels } = await import('./neuralese-server.js');
+  const prime = serves(info, 'native.init-body') ? async (call: { messages: unknown[]; tools: unknown[] }, placeholder: string,
+      text: string, type: string) => (await nativeTextOperation({ ...options, info }, 'init-body', {
+    messages: materializeNativeStateSentinels(call.messages), tools: call.tools, placeholder, text, type, gate: false })).meta : undefined;
+  return { store: options.store, dialect, nativeStateConsumer, ...(prime ? { prime } : {}),
     nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),
     ...(port ? { port } : {}), ...(capture ? { capture } : {}) };
 }

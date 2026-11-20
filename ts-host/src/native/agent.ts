@@ -544,6 +544,8 @@ export class NativeToolAgent {
        * whatever the context budget (default OPERATOR_COMPACT_CHARS, 8,000; env NATLANG_NEURALESE_COMPACTION_CHARS).
        */
       compactionChars?: number;
+      /** Program guidance states: `call` (default) primes them at their real position, `text` writes them from text alone. */
+      guidancePriming?: 'call' | 'text';
       /**
        * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
        * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
@@ -1681,8 +1683,40 @@ export class NativeToolAgent {
     if (!session.finish()) return fail('the generated choice does not satisfy the declared return type');
   }
 
+  /** How program guidance states are primed: `call` (default: at their real position in the call that uses them) or
+   * `text` (written from the text alone, from position 0): the agent option, else NATLANG_GUIDANCE_PRIMING. */
+  private guidancePriming(): 'call' | 'text' {
+    const value = this.options.guidancePriming ??
+      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_GUIDANCE_PRIMING;
+    return value === 'text' ? 'text' : 'call';
+  }
+
+  /** Prime this call's program guidance in its opening (`runtimeProgramGuidance` left a text-written placeholder):
+   * the state the call and every later call of the same guidance read. A failed priming keeps the text write, traced. */
+  private async primeGuidance(session: NativeSession, messages: Record<string, unknown>[]): Promise<void> {
+    const job = session.guidancePrime;
+    if (!job) return;
+    session.guidancePrime = undefined;
+    const neuralese = this.options.neuralese!;
+    let id = job.placeholder;
+    try {
+      const meta = await neuralese.prime!({ messages: structuredClone(this.softened(messages)), tools: this.toolsScope(session) },
+        job.placeholder, job.text, 'Neuralese<ProgramGuidance>');
+      const stored = await neuralese.store.getNativeState?.(meta.id);
+      if (!stored || stored.metadata.text !== job.text) throw new Error('the primed guidance state differs from its text');
+      await pinNativeProgramGuidance(neuralese.store, meta.id);
+      id = meta.id;
+      const from = nativeStateSentinel(job.placeholder), to = nativeStateSentinel(id);
+      for (const message of messages) if (typeof message.content === 'string' && message.content.includes(from))
+        message.content = message.content.split(from).join(to);
+    } catch (error) {
+      session.runtime.trace.emit('program_guidance', { call_id: session.runtime.currentCallId ?? null, priming: 'text',
+        error: String((error as Error)?.message ?? error).slice(0, 300) });
+    } finally { job.settle(id); }
+  }
+
   /** Encode stored policy against this runtime's exact native reader before any model call. */
-  private async runtimeProgramGuidance(guidance: NativeProgramGuidance | undefined): Promise<string> {
+  private async runtimeProgramGuidance(guidance: NativeProgramGuidance | undefined, session: NativeSession): Promise<string> {
     if (!guidance) return '';
     if (guidance.kind !== 'native-program-guidance') throw new TypeError('unknown program guidance binding');
     const neuralese = this.options.neuralese;
@@ -1714,8 +1748,12 @@ export class NativeToolAgent {
         if (stored.id !== binding.native_state_id || stored.metadata.schema !== 'neuralese.native-state/1' ||
             stored.metadata.text !== guidance.text || !matches(stored.metadata, binding.student) || !matches(stored.metadata, consumer))
           throw new NeuraleseUnsupportedError('memetic guidance artifact does not match its declared student or text');
-        await pinNativeProgramGuidance(neuralese.store, binding.native_state_id);
-        return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(stored.id) + '\n</natlang_program_guidance>\n';
+        // A trained state (refined guidance: it has a derivation) is used as it is; a state written from its text alone
+        // is primed again in its real position below (`guidancePriming`).
+        if (stored.metadata.derivation || this.guidancePriming() === 'text' || !neuralese.prime) {
+          await pinNativeProgramGuidance(neuralese.store, binding.native_state_id);
+          return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(stored.id) + '\n</natlang_program_guidance>\n';
+        }
       }
     }
     const port = neuralese.port;
@@ -1727,6 +1765,13 @@ export class NativeToolAgent {
     let cache = nativeProgramGuidanceWrites.get(neuralese.store);
     if (!cache) nativeProgramGuidanceWrites.set(neuralese.store, cache = new Map());
     let pending = cache.get(key);
+    // Primed in its real position (default): the first call that uses this guidance writes it from its text as a
+    // placeholder, renders its opening with it, and primes it there (`run`, `neuralese.prime`); later calls reuse the
+    // primed state. `NATLANG_GUIDANCE_PRIMING=text` (or the agent option) keeps the text write from position 0.
+    const inCall = !pending && this.guidancePriming() === 'call' && !!neuralese.prime;
+    let settle: ((id: string) => void) | undefined;
+    const primed = inCall ? new Promise<string>(resolve => { settle = resolve; }) : undefined;
+    if (primed) cache.set(key, primed);
     if (!pending) {
       pending = (async () => {
         const block = await port.write(guidance.text);
@@ -1741,6 +1786,12 @@ export class NativeToolAgent {
         await pinNativeProgramGuidance(neuralese.store, block.id);
         return block.id;
       })();
+      if (primed) {
+        let placeholder: string;
+        try { placeholder = await pending; } catch (error) { cache.delete(key); settle!(Promise.reject(error) as never); throw error; }
+        session.guidancePrime = { placeholder, text: guidance.text, settle: settle! };
+        return putInPrompt(placeholder);
+      }
       cache.set(key, pending);
       void pending.catch(() => { if (cache!.get(key) === pending) cache!.delete(key); });
       if (cache.size > 512) {
@@ -1765,7 +1816,7 @@ export class NativeToolAgent {
     session.pages.budget = this.pageChars(budget);
     // The program's guidance, in the call's opening message (which the decision readout reuses too).
     const guidance = [renderAuthoredTextGuidance(this.options.authoredTextGuidance) +
-      await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName)),
+      await this.runtimeProgramGuidance(guidanceForCall(this.options.programGuidance, session.lam.functionName), session),
       this.options.callAddendum ?? ''].map(text => text.trim()).filter(Boolean).join('\n\n');
     // One system prompt for every call, so every call's opening shares one cached prefix. What differs between calls
     // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
@@ -1811,6 +1862,7 @@ export class NativeToolAgent {
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
+    await this.primeGuidance(session, messages);
     // Training guidance: the policy's own calls (and calls below them) carry its identity and get none themselves.
     const trainingGuidance = this.options.trainingGuidance;
     const guidancePolicy = trainingGuidance?.policyOf(session.lam, session.runtime.currentCallId ?? null);
