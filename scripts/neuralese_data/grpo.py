@@ -2758,6 +2758,34 @@ def kl_stats(sums, d):
     sums['ref_dlogp_max'] = max(sums['ref_dlogp_max'], d.abs().max().item() if d.numel() else 0.)
 
 
+def close_probability(h, positions, weight, targets, target_logp, close_id, chunk=4096):
+    """p(``</think>``) at each target row (no grad): exp(z_close - z_target + log p(target)), i.e. the softmax's own
+    normalizer recovered from the target's logit and the log-probability the loss already computed (two dot products a
+    row, no second softmax over the vocabulary). ``h[positions]`` are the hidden rows that predict ``targets``."""
+    import torch
+    with torch.no_grad():
+        w_close = weight[close_id].float()
+        out = []
+        for a in range(0, positions.shape[0], chunk):
+            rows = h[positions[a:a + chunk]].float()
+            z_y = (rows * weight[targets[a:a + chunk]].float()).sum(-1)
+            out.append((rows @ w_close - z_y + target_logp[a:a + chunk].detach().float()).exp().clamp(max=1.))
+        return torch.cat(out) if out else torch.zeros(0, device=h.device)
+
+
+def close_push(coefficient, targets, p_close, close_id, mask):
+    """First-order push of one term on the ``</think>`` logit over the ``mask`` positions (reasoning tokens):
+    sum_t c_t (1[y_t = close] - p_close_t), c_t the term's -dLoss/dlogp(y_t) (policy: weight * A * token factor; KL:
+    beta * d for k2). Positive: the step raises the close logit where the policy reasons. On-policy the unweighted sum is
+    zero in expectation, so a term's push is its correlation of c with reasoning that closes earlier or later than the
+    policy's own hazard predicts (grpo-v4-run2 2026-11-20: the probe's hazard sits at the points right after the policy
+    names its next action)."""
+    import torch
+    with torch.no_grad():
+        delta = (targets == close_id).float() - p_close
+        return float((coefficient.float() * delta)[mask].sum())
+
+
 def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
     """(weight of the policy term, tail mask): the truncated importance ratio, zero where the actor sampled a tail token
     (its sampling logp below ``tail_floor``) in an episode with a positive advantage. Untruncated T=1 sampling draws
@@ -4123,8 +4151,11 @@ def train(args):
                     sums['non_student_tokens'] += int((~sampled).sum())
             else:
                 logp_rows = policy_rows = -exp0_sft.token_nll(model, h, positions, targets)
+            # p(</think>) at every target row for the per-term close push (``close_push``; --no-close-push opts out)
+            p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close)
+                            if args.close_push and think_close is not None else None)
             loss = 0.
-            for (index, _), logp, policy_logp in zip(items, logp_rows.split(counts), policy_rows.split(counts)):
+            for k, ((index, _), logp, policy_logp) in enumerate(zip(items, logp_rows.split(counts), policy_rows.split(counts))):
                 chain = chains[index]
                 actor, row_weight = behaviour_logp(chain, logp)
                 token_scale = scales[chain['episode']][0]
@@ -4151,11 +4182,19 @@ def train(args):
                     sums['mass_think'] += mass[thinking].sum().item()
                     sums['mass_post_think'] += mass[~thinking].sum().item()
                     sums['tail_masked'] += int(tail.sum())
+                    if p_close_rows is not None:
+                        chain_targets, chain_p_close = targets.split(counts)[k], p_close_rows.split(counts)[k]
+                        sums['close_push:' + (chain.get('role') or 'student')] += close_push(
+                            token_scale * advantage * weight, chain_targets, chain_p_close, think_close, thinking)
                 loss_terms = -(weight * advantage * policy_logp)
                 if ref is not None:
                     d = ref - logp
                     loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
                     kl_stats(sums, d)
+                    if p_close_rows is not None:   # the KL term's -dLoss/dlogp: beta * d (k2), beta * (e^d - 1) (k3)
+                        pull = d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1
+                        sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
+                                                            chain_p_close, think_close, thinking)
                 loss = loss + loss_terms.sum() * token_scale
                 if chain.get('role') == RRL_ROLE:
                     # the teacher actions' likelihood after the student's reasoning, and learner-actor agreement on the
@@ -4189,7 +4228,7 @@ def train(args):
             loss.backward()
             forward_tokens += len(ids)
             note_peak('policy', len(ids), len(items))
-            del h, logp_rows, policy_rows, loss
+            del h, logp_rows, policy_rows, loss, p_close_rows
             if time.time() - progress_mark > 300:
                 progress_mark = time.time()
                 log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
@@ -4371,6 +4410,8 @@ def train(args):
             grad_norm=round(grad_norm, 4),
             kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
             second_close_masked=int(sums['second_close_masked']), decision_token_kl_tokens=int(sums['decision_token_kl_tokens']),
+            close_push={key.split(':', 1)[1]: round(1e6 * value, 3) for key, value in sums.items()
+                        if key.startswith('close_push:')} or None,
             kl_k2_mean=round(sums['kl_k2'] / units, 7), kl_k3_max_share=round(sums['kl_k3_max'] / sums['kl'], 4) if sums['kl'] > 0 else None,
             ref_dlogp_pos_max=round(sums['ref_dlogp_pos_max'], 3),
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
@@ -4603,6 +4644,10 @@ def main():
                    help="a reply's second and later </think> and the tokens after each up to the action: context (default; "
                         'never reinforced at a positive advantage, in every learner row: episodes, SD, reasoning RL, replay, '
                         'teacher demonstrations; exp0_sft.second_close_mask); train: as any token (before 2026-11-19)')
+    t.add_argument('--no-close-push', dest='close_push', action='store_false',
+                   help="train.jsonl close_push: each term's first-order push on the </think> logit over the reasoning "
+                        'tokens it trains (policy roles and the KL term, x1e6; grpo.close_push). Positive raises the '
+                        'behaviour probe\'s close hazard; on by default')
     t.add_argument('--no-decision-token-kl', dest='decision_token_kl', action='store_false',
                    help="sampled decisions: no per-token KL on the chosen option's tokens (only the KL of the option "
                         'softmax, which ignores the tokens all options share; before 2026-11-19)')

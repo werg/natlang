@@ -4546,3 +4546,78 @@ origin/main, then `drive.sh` does pin -> SFT -> Pop base in parallel -> GRPO -> 
 - an exp0_sft step on this file (same format and trainer as sft-v4-run1, which trained cleanly);
 - `systemd-run --user` from inside the drive's ledger unit (the 11-18 drive used `systemctl --user` the same way);
 - the automatic run2 resume path in step 5 (it is the exact resume command of 2026-11-19 with budget 92).
+
+## 2026-11-20 12:00, grpo-v4-run2 `</think>` hazard, second wave (steps 27-37): where it sits, which terms push it (hazard investigation 3)
+
+**Observation.** Probe close_per_1k 0.54 (steps 1-5), up to 0.81 (12), down to 0.47-0.49 (21-26), up every step to 0.99
+(37), 0.96 (38, `--kl-beta 0.1` from 37). Held-v3 pass rate flat (51-55% vs 54.1%).
+
+**Where it sits (forward-only, probe calls one by one, base / step 12 / 24 / 38 = 0.543 / 0.801 / 0.467 / 0.952,
+reproducing the probe).** The top 1% of the 32,560 reasoning positions carry all of the step-38 increase. They are
+the ~40 positions where the base already had p(`</think>`) >= 0.01, right after the policy names its next action
+("... Let me call read_code for "qualify".", "Let's search."): mean log ratio there +1.3 to +1.6 nats at step 38, +0.8
+to +1.2 at 12, ~0 at 24; elsewhere a uniform +0.38 (step 38). At those points the base went on reasoning ("But I don't
+...", "Perhaps there are ...") and step 38 closes (p 0.19 -> 0.71, 0.07 -> 0.48, ...).
+
+**It is real behaviour on held tasks.** Median reasoning characters per call on held-v3 (same tasks, 2 samples): base
+2096, step 1 2151, 4 2071, 10 1720, 12 1650, 16 1817, 20 2082, 26 2178, 30 1782, 32 1676, 36 1651 (partial). Against
+the probe hazard at the same steps r = -0.97. Pass rate did not move with it.
+
+**Mechanism: what trains the close logit at those points.** Every term pushes it by sum_t c_t (1[y_t = close] - p_close,t)
+(c = the term's -dLoss/dlogp). On policy the unweighted sum is zero, so a term's push is the correlation of its
+coefficient with reasoning that closes earlier or later than the policy's own hazard.
+- No law mismatch at the close token. Step 37's exact batch (step-chains) under its own pre-step weights (step-00036):
+  student calls close 694 times against sum q_close 699.7 (learner nucleus; -0.8%), reasoning-RL samples 194 against
+  193.0.
+- Per term on step 37's batch (x1e6 token-factor units; bootstrap SE over episodes / reasoning-RL groups; KL from a
+  second pass under the base weights):
+  - GRPO episodes +7.8 +- 9.5 (failed episodes +8.6, successes -0.8);
+  - reasoning RL (weight 0.5) +4.7 +- 2.3: samples that go on past a decision point score lower on the teacher
+    action's likelihood, so the term's own objective selects closing right after naming the action;
+  - replay -0.01, sd_teacher 0 (its closes carry weight 0);
+  - KL (beta 0.1, k2) -8.3 (GRPO rows -5.3, reasoning RL -3.1), the only restoring term, proportional to the drift.
+  - Net +4.3 at hazard 0.96: the rise had slowed to +0.03 at step 37.
+  - Step 38's batch (under step-00036 weights, two versions stale): GRPO -13.5 +- 7.7, reasoning RL +2.2 +- 1.3,
+    replay -0.08, sd +0.05. The hazard fell 0.028 at step 38. The sign of the summed push matches the probe's move at
+    both steps. GRPO changed sign between the two steps; reasoning RL was positive at both (+4.7, +2.2 at weight 0.5).
+- GRPO's push is noise around zero, not a steady drive. Archived groups sampled by exactly one actor version, each under
+  that version's checkpoint (16/20/22 in the fall, 26/30/32/36 in the rise): push per group -0.77 +- 0.66 (29 groups,
+  fall) and +0.50 +- 0.49 (42 groups, rise), with the on-policy identity at 0 in both (-0.05 +- 0.09, 0.00 +- 0.08 per
+  episode). In the fall successes went on reasoning past decision points (task_success contribution -12), in the rise
+  they closed there (+15). One step's GRPO SE (~9.5) is twice reasoning RL's mean push.
+- Reading of the waves: reasoning RL pushes up at every step, in proportion to its weight. Before step 13 its unclosed
+  samples at A = -1 added a direct "close earlier" push (DECISIONS 11-19 04:30; filtered since). The KL term pulls back
+  in proportion to the drift, and GRPO adds a batch-dependent random walk that Adam's momentum stretches over ~10 steps.
+  The phases line up: rrl 1.0 and the unclosed push in steps 6-12 (rise); rrl 0.5, filter and KL 0.05 in 13-22
+  (fall, GRPO negative); rrl 1.0 from 23 (rise from 24-27, GRPO positive); rrl 0.5 from 31 (still rising: GRPO
+  positive and momentum); KL 0.1 from 37 (turned at 38). The size is not predicted: the logit push is first-order at
+  the trained positions, without Adam's preconditioning.
+
+**Ruled out, with evidence.**
+- Probe: reproduced with unpacked forwards (above).
+- New task rounds 17-20: at most 3 groups a step from step 27 (about 5% of groups).
+- Budget-stopped episodes: step 37 had none and still pushed +7.8. Across the phases their contribution is mixed
+  (-13.6 fall, -7.9 rise). Main drops them by default since 3124af06c (not on run2's pin).
+- Optimizer and resumes: bf16_changed_step_fraction is continuous across all 15 resumes (0.030-0.038 a step). The higher
+  grad_norm on the first step after a resume comes with that step's smaller reused batch (381-430 sequences against
+  600-875).
+- The prefix-tree walk rewrite at step 26 (453d55153): same pre-order, read and covered by its test.
+- KL reference: run2-state/reference-bf16.safetensors was written at the run's start (11-18 09:54) from base 5ff07638.
+- Second close: reclose_p 0.0001-0.0004 through the second wave; second_close_masked 0-11 a step as before.
+
+**Not checked.** The decision terms and decision-token KL on `</think>` (they act at the reply's first position, not at
+the probe's positions). SD own/search/rewrite rows (none in step 37, +0.05 in step 38). The reasoning-RL push at steps
+13-36 (its samples exist only in the last four step-chains; steps 35-36 were not measured). A gradient-level (Adam-preconditioned) attribution. The KL term's push in the
+fall phase.
+
+**Verdict.** This agent found no learner bug in its scope: the close-token identity, the per-term pushes on the exact
+batch, resumes, reference and probe. The drift is a direction that reasoning RL's objective selects and that GRPO's
+batch noise moves both ways, held by the KL term. A second, independent investigation is still owed before a "not a bug"
+verdict.
+
+**Action (default on, opt-out).** `train.jsonl` `close_push`: each term's push on the `</think>` logit over the
+reasoning tokens it trains, per role (student, reasoning_rl, sd, sd_teacher, replay, teacher) and for the KL term
+(`grpo.close_probability`, `grpo.close_push`; p(`</think>`) comes from the target's logit and log-probability, two dot
+products a row). The next hazard move is attributed from the step's own record, without hours of offline forward passes.
+`--no-close-push` opts out. Test: `test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero_on_policy`.
+Scripts: scratchpad `hz3/` (session 4c9bd489): poshaz.py, closepush{,2,3}.py, phase.py.

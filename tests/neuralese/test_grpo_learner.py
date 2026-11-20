@@ -350,6 +350,34 @@ def test_k2_kl_gradient_stays_linear_on_tail_tokens():
     assert sums['kl_k3_max'] / sums['kl'] > .99 and sums['ref_dlogp_pos_max'] == pytest.approx(10.5)
 
 
+def test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero_on_policy():
+    import torch
+    torch.manual_seed(0)
+    vocab, close = 11, 3
+    h = torch.randn(40, 8)
+    weight = torch.randn(vocab, 8)
+    positions = torch.arange(5, 35)
+    logits = (h[positions] @ weight.T).log_softmax(-1)
+    targets = torch.multinomial(logits.exp(), 1, generator=torch.Generator().manual_seed(1))[:, 0]
+    target_logp = logits.gather(1, targets[:, None])[:, 0]
+    p_close = grpo.close_probability(h, positions, weight, targets, target_logp, close, chunk=7)
+    assert p_close.tolist() == pytest.approx(logits[:, close].exp().tolist(), rel=1e-4)
+    mask = torch.ones(len(targets), dtype=torch.bool)
+    # a reinforced close raises the close logit; a pushed-down continuation raises it too (by its p_close)
+    one = torch.tensor([.1, .2, .3])
+    assert grpo.close_push(torch.ones(1), torch.tensor([close]), torch.tensor([.3]), close, torch.tensor([True])) \
+        == pytest.approx(.7)
+    assert grpo.close_push(-torch.ones(1), torch.tensor([0]), torch.tensor([.3]), close, torch.tensor([True])) \
+        == pytest.approx(.3)
+    assert grpo.close_push(torch.ones(3), torch.tensor([0, 1, 2]), one, close, torch.tensor([True, False, True])) \
+        == pytest.approx(-.4)
+    # on policy, a coefficient that does not depend on the draw pushes nothing in expectation
+    draws = torch.multinomial(logits.exp(), 4000, replacement=True, generator=torch.Generator().manual_seed(2))
+    pushes = [grpo.close_push(torch.ones(len(targets)), draws[:, j], logits[:, close].exp(), close, mask)
+              for j in range(draws.shape[1])]
+    assert abs(np.mean(pushes)) < 4 * np.std(pushes) / math.sqrt(len(pushes))
+
+
 def test_tail_guard_masks_only_tail_tokens_of_positive_episodes():
     import torch
     rho = torch.tensor([1., 3., .5, 1.])
