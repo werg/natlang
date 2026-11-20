@@ -41,6 +41,7 @@ VERIFIED = ('gold', 'checked')
 # The runtime's operator sites: compact-value and compact-params are view at the runtime's sites (one summarizer
 # family); each has its own state of view's body (system-prompts.ts scoped entries `view@<operator>`).
 SITE_OPERATORS = ('compact-value', 'compact-params')
+CASE_OPERATORS = ('compact-value', 'compact-params', 'extract')
 
 
 def binding(operator):
@@ -72,18 +73,22 @@ def turns(args):
     renderer = TokenRenderer(tokenizer, role_ids=roles)
     sites = RuntimeSites()
     held = HeldClosure.from_cases(args.held)
-    operators = set(args.operators.split(',')) if args.operators else None
+    # Case directories whose cases render at a runtime site (extract cases are string arguments: compact-params);
+    # compact-history is the model's own note, captured in place, with no operator call to prime.
+    operators = set(args.operators.split(',')) if args.operators else set(CASE_OPERATORS)
     counts = collections.Counter()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, 'w') as stream:
         for path in case_files(args.cases, operators):
             name = path.parent.name
-            kept = 0
+            kept = read = 0
             with open(path, 'rb') as handle:
                 for line in handle:
-                    if args.per_source and kept >= args.per_source:
+                    # A source whose cases are rarely compacted or verified is not read to its end.
+                    if args.per_source and (kept >= args.per_source or read >= 20 * args.per_source):
                         break
+                    read += 1
                     record = json.loads(line)
                     if record.get('split') in ('test', 'validation'):
                         continue   # test cases stay for the ablation and evaluation

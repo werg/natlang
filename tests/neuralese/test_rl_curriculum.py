@@ -513,6 +513,17 @@ def test_held_series_covers_scoring_sources():
     assert 'training/neuralese/natlang_neuralese/eval/task_packet.py' in held_eval.SCORING_SOURCES
 
 
+def test_a_prompt_state_build_is_its_own_held_series(tmp_path, monkeypatch):
+    (tmp_path/'result.json').write_text('{"softStates": []}')
+    monkeypatch.delenv('NATLANG_NEURALESE_PROMPT_STATES', raising=False)
+    plain=held_eval.series()
+    monkeypatch.setenv('NATLANG_NEURALESE_PROMPT_STATES', 'off')
+    assert held_eval.series()==plain
+    monkeypatch.setenv('NATLANG_NEURALESE_PROMPT_STATES', str(tmp_path))
+    built=held_eval.series()
+    assert built['key']!=plain['key'] and len(built['prompt_states'])==64
+
+
 def test_held_ran_out_counts_call_budget_repetition_and_wall_clock_stops_together():
     tasks=[(f't{i}',0) for i in range(8)]
     first,second=held_result('a',1,{k:0.0 for k in tasks}),held_result('b',2,{k:0.0 for k in tasks})

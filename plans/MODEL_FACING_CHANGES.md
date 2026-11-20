@@ -2700,3 +2700,20 @@ find each value, not the value (learned operator `guidance` v2 mirrors the text)
 writeGuidance/writeHint result containing one with the one-sentence tool error of hintCheck.ts `checkGuidance`.
 Opt-out: grpo `--guidance-answers show`. Evidence: grpo-v4-run1, 6 of 11 guided successes had the answer in their
 guidance (DECISIONS 2026-11-18).
+
+## 2026-11-20: soft prompt states for operators, per-lambda states at every rendering (first principles)
+
+- **Operator calls under their own soft prompt state.** With a prompt-state build configured
+  (`NATLANG_NEURALESE_PROMPT_STATES=BUILD_DIR` in the collector's environment; unset or `off`: text, as before), a
+  learned operator call (compact-value, compact-params) sends its own trained state `view@<operator>` where view's body
+  stood in the system message. The rest of the call is unchanged. The state is primed from view's body at that position
+  and trained on verified operator rows (`scripts/neuralese_data/operator_soft_states.py`, docs/TUNING.md "One
+  primed-state family"). The in-context capture of the reply keeps the import, so the captured state is the one the
+  sampled reply was written in.
+- **Soft instruction states stand where the call shows the text.** The instruction text a state is primed from and
+  matched against is the body as the opening message shows it (newlines trimmed). Before, training replaced
+  `"body\n"` and serving replaced the whole body, so the state was followed by one newline in training and two in
+  serving.
+- **Another rendering stays text, not untuned.** A call whose instruction text differs from the one its binding's state
+  was primed from (an inline lambda interpolating values; a drifted release) sends that text under the binding's
+  adapter stack. Before, it ran fully untuned. Training kept such rows as text under the stack too (`place_states`).

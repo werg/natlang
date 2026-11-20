@@ -100,6 +100,15 @@ managed backend by default (`tune.softStates: false` opts out; `tune/pipeline.ts
 
 **The learned operators' in-context capture** (OPERATORS_RESTORE_20261117.md) has a managed HTTP implementation and an engine primitive shared by the fork and page; the page runtime binding remains blocked as recorded below. The Python engine and the SGLang actor serve `native.capture`: the actor goes through the fork's capture request, the request its forced-producing parity covers. The managed llama-server and the page serve no write endpoints and write states only from produce spans; the managed HTTP `grammarCapture` client sends the call's own messages again with a grammar of the exact ids `<reply prefix> produce_open <content> produce_close`.
 
+**A capture whose prompt imported state** (an operator call under its own soft prompt state, 2026-11-20): the call's RL
+capture records the import as a `native_state` prompt segment, and the capture keeps it in place on every engine. The
+Python engine and the SGLang actor take `prompt_segments` in `native.capture` (the SGLang front sends the fork one
+capture request with the state's rows as `natlang_import`; `test_sglang_actor.py` checks it against the Python engine's
+capture tensor by tensor). The fork and the page re-send the call's own messages (the state as a `native_state` part) with
+the forced span (`grammarCapture`). Each returns the source capture with the state as a `native_state` segment of
+`token_count` rows. The learners read it as fixed stored context inside the producer document
+(`lower_rollout_turns.write_sources`, `lfm3_fast_train.passthrough_plan`). No gap.
+
 Live check, 2026-11-17: natlang-b12081 CPU with the natlang-lfm3-5ff07638 Q8_0 GGUF against the Python engine (BF16, CPU) on 5ff07638, two view sites, 400-token spans.
 - The fork's rendered prompt equals its RL capture's prompt ids.
 - The two states hold the same token ids and the same 38 tensors.

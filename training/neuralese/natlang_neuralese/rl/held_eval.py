@@ -317,9 +317,13 @@ def series(config=None):
     scoring_dirty = bool(_git(root, 'status', '--porcelain', '--untracked-files=no', '--', *SCORING_SOURCES))
     variants = ','.join(sorted(model_facing(config).split(',')))
     scored_by = ','.join(f'{path}={blob}' for path, blob in sorted(scoring.items()))
-    key = hashlib.sha256(f'{tree}|{scored_by}|{variants}'.encode()).hexdigest()[:12]
+    # Trained prompt states the collector serves (NATLANG_NEURALESE_PROMPT_STATES: the learned operators' own states,
+    # ts-host model/prompt-states.ts) change what those calls see: a build is its own series.
+    states = os.environ.get('NATLANG_NEURALESE_PROMPT_STATES')
+    states = None if not states or states == 'off' else hashlib.sha256((Path(states) / 'result.json').read_bytes()).hexdigest()
+    key = hashlib.sha256(f'{tree}|{scored_by}|{variants}{"|" + states if states else ""}'.encode()).hexdigest()[:12]
     return {'key': key, 'ts_host_tree': tree, 'ts_host_dirty': dirty, 'scoring_sources': scoring,
-            'scoring_dirty': scoring_dirty, 'model_facing': variants}
+            'scoring_dirty': scoring_dirty, 'model_facing': variants, **({'prompt_states': states} if states else {})}
 
 
 # ---- the measurement ----------------------------------------------------------------------------------------------------
