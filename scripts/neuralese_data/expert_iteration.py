@@ -820,8 +820,9 @@ class Cycle:
                           '--out', str(self.a.fill), '--corpus', str(self.dir / 'filled'), *failed])
         lines = [' '.join(map(_quote, s)) for s in steps]
         if not self.a.no_own_neuralese_graph:
-            lines.append(' '.join(map(_quote, self.own_neuralese_graph_command()))
-                         + " || echo 'own neuralese-graph failed: the build runs without it' >&2")
+            # a failure ends the stage (set -e): sft-v7's silently fell back to a mix without the student's own consumer
+            # calls, the ran-out fix; --no-own-neuralese-graph is the deliberate opt-out
+            lines.append(' '.join(map(_quote, self.own_neuralese_graph_command())))
         script = self.dir / 'data.sh'
         script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
         self.ledger(f'{self.a.name}-data', 8, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
