@@ -313,3 +313,19 @@ def test_cycle_pipeline_window_and_reuse_flags_default_on():
     parsed = _cycle_args(['--dir', 'd', '--name', 'n', '--start', 's', '--commit', 'c'])
     assert not parsed.no_pipeline and not parsed.no_fill_window and not parsed.no_held_reuse
     assert parsed.fill_inflight == 32 and parsed.next_commit == 'origin/main' and parsed.rejected_collection == 'auto'
+
+
+def test_wait_ends_the_cycle_when_the_stage_unit_failed(monkeypatch):
+    """sft-v7's data unit failed (unregistered archive path) and the stage was still marked done."""
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        failed = argv[:4] == ['systemctl', '--user', 'is-failed', '-q']
+        return type('R', (), {'returncode': 0 if failed else 3})()
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    with pytest.raises(SystemExit, match='x-data failed'):
+        ei.Cycle.wait(object.__new__(ei.Cycle), 'x-data')
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: type('R', (), {'returncode': 3})())
+    ei.Cycle.wait(object.__new__(ei.Cycle), 'x-data')     # ended cleanly: returns

@@ -460,15 +460,19 @@ class Cycle:
                    for suffix in ('', '-waiter'))
 
     def wait(self, unit, poll=60):
+        """Until ``unit`` ends; a failed unit ends the cycle (its stage must not be marked done)."""
         time.sleep(20)
         while self.active(unit):
             time.sleep(poll)
+        if subprocess.run(['systemctl', '--user', 'is-failed', '-q', f'{unit}.service']).returncode == 0:
+            raise SystemExit(f'{unit} failed: see its log; rerun the cycle to resume')
 
     def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
         ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin)."""
         if not self.active(unit):
-            shell = ' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
+            subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}.service'], stderr=subprocess.DEVNULL)
+            shell =' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
             values = {**self.env, **({'NATLANG_REPO': str(repo), 'PYTHONPATH': f'{repo}/training/neuralese:{repo}'}
                                      if repo else {})}
             env = ['/usr/bin/env', *[f'{k}={values[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH', 'HF_HUB_OFFLINE',
@@ -805,7 +809,9 @@ class Cycle:
         name = f'episodes-{self.a.name}'
         if not (w / f'{name}-extract.json').exists():
             steps.append(self.py('sft_sources.py', 'extract', '--work', w, '--rl',
-                                 f'{self.collect_dir}:{self.collect_dir / "rollouts"}', '--out-name', name))
+                                 # groups are read live from the run dir; the collection writes no zst archive, so
+                                 # the archive is the (registered) collect dir itself
+                                 f'{self.collect_dir}:{self.collect_dir}', '--out-name', name))
         steps.append(self.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                              '--runtime-repo', self.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
