@@ -11,6 +11,26 @@ import { scriptedModel } from './support/natlang.mjs';
 const RUNTIME = { url: new URL('../dist/index.js', import.meta.url).href,
   types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
 
+test('virtual builds can omit adaptation inventory while keeping declarations, code and checks', () => {
+  const project = { files: {
+    'answer.nl': '---\nreturns: number\n---\nReturn the answer.\n',
+    'entry.ts': 'export const value: number = 42;',
+  } };
+  const full = compileVirtualProject(project, runtimeNamespace);
+  const execution = compileVirtualProject(project, runtimeNamespace, { adaptation: false });
+  assert.equal(full.ok, true, JSON.stringify(full.diagnostics));
+  assert.equal(execution.ok, true, JSON.stringify(execution.diagnostics));
+  assert.ok(full.manifest.adaptation);
+  assert.equal(execution.manifest.adaptation, undefined);
+  assert.deepEqual(execution.outputs, full.outputs);
+  assert.deepEqual(execution.declarations, full.declarations);
+  assert.equal(execution.require('entry.ts').value, 42);
+  const invalid = { files: { ...project.files, 'entry.ts': 'export const value: number = "wrong";' } };
+  const diagnostics = compileVirtualProject(invalid, runtimeNamespace).diagnostics;
+  assert.ok(diagnostics.length);
+  assert.deepEqual(compileVirtualProject(invalid, runtimeNamespace, { adaptation: false }).diagnostics, diagnostics);
+});
+
 test('virtual directories merge indexed sources with mutable compiler outputs', () => {
   const files = virtualProjectFiles({
     'src/first.ts': 'original',
