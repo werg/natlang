@@ -538,15 +538,31 @@ class Cycle:
                              '--runtime-repo', self.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
             steps.append(self.py('filled_reasoning.py', 'build', '--out', self.a.fill, '--corpus', self.dir / 'filled'))
+        lines = [' '.join(map(_quote, s)) for s in steps]
+        if not self.a.no_own_neuralese_graph:
+            lines.append(' '.join(map(_quote, self.own_neuralese_graph_command()))
+                         + " || echo 'own neuralese-graph failed: the build runs without it' >&2")
         script = self.dir / 'data.sh'
-        script.write_text('set -e\n' + ''.join(' '.join(map(_quote, s)) + '\n' for s in steps))
+        script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
         self.ledger(f'{self.a.name}-data', 8, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
         self.mark('data')
+
+    def own_neuralese_graph_command(self):
+        """The verified own successes that carry Neuralese state (every consumer call that read a native import) as
+        whole-graph rows (``sft_sources neuralese-graph``). ``build`` skips these episodes (no text replay can carry
+        the state), so without this part a cycle's mix holds no consumer call of the student's own: held-v3 after
+        sft-v5 (DECISIONS 2026-11-21 "ran-out") showed the student calling Neuralese consumers twice as often while
+        they loop ~7.6 calls each. ``--no-own-neuralese-graph`` opts out."""
+        return self.py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
+                       '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1')
 
     def build_stage(self):
         aux = list(self.a.aux)
         if (self.dir / 'filled' / 'chains.pkl').exists():
             aux.append(f'filled={self.dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
+        own_graph = self.dir / 'neuralese-graph-own' / 'chains.pkl'
+        if not self.a.no_own_neuralese_graph and own_graph.exists():
+            aux.append(f'own-neuralese-graph={own_graph},share={self.a.own_neuralese_graph_share},task_tokens=40000')
         command = self.py('sft_sources.py', 'build', '--work', self.work, '--out', self.mix, '--tokenizer',
                           self.work / 'tokenizer', '--frontier', self.dir / 'frontier.json', '--allow-stale-teacher',
                           '--october-share', '0', '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
@@ -727,6 +743,10 @@ def main():
     y.add_argument('--teacher-budget', type=int, default=180_000_000)
     y.add_argument('--own-share', type=float, default=0.35)
     y.add_argument('--aux', action='append', default=[])
+    y.add_argument('--no-own-neuralese-graph', action='store_true',
+                   help="leave the WORK's own Neuralese successes (consumer calls included) out of the mix")
+    y.add_argument('--own-neuralese-graph-share', type=float, default=0.05,
+                   help='loss share cap of the own Neuralese graph part (an aux part; duplicates of other parts train once)')
     y.add_argument('--prefer-unseen', action='append', default=[])
     y.add_argument('--lr', default='5e-6')
     y.add_argument('--sft-budget', type=int, default=80)

@@ -1952,6 +1952,7 @@ def build(args):
     all_tokens = sum(sum(u['weighted'] for u in units) for part, units in loaded if part['share'] == 'all')
     total_tokens = (actions_tokens + all_tokens) / (1 - fixed_share)
     aux_report, replaced_rounds = {}, {}
+    taken_rounds = set()    # an episode two parts both hold (a cycle's own Neuralese graph and an older graph build) trains once
     for part, units in loaded:
         budget = None if part['share'] == 'all' else part['share'] * total_tokens
         rng.shuffle(units)
@@ -1961,6 +1962,9 @@ def build(args):
             if why:   # a filled teacher episode of a task the policy solves: its own successes train instead
                 used[why] += 1
                 continue
+            if (unit['task'], unit['round']) in taken_rounds:
+                used['duplicate_round'] += 1
+                continue
             if budget is not None and taken + unit['weighted'] > budget:   # a unit that would overshoot: a smaller one may fit
                 used['over_share'] += 1
                 continue
@@ -1969,6 +1973,7 @@ def build(args):
                 continue
             per_task[unit['task']] += unit['weighted']
             taken += unit['weighted']
+            taken_rounds.add((unit['task'], unit['round']))
             replaced = replaced_round(part, unit)
             if replaced is not None:
                 replaced_rounds[(part['replaces'], replaced)] = part['name']
@@ -2277,6 +2282,18 @@ def neuralese_text(args):
                                              'forward_tokens', 'target_tokens')}, indent=1))
 
 
+def extract_rl_specs(work):
+    """The ``--rl RUN_DIR:ARCHIVE_DIR`` specs of every extraction of WORK, in order, each once: ``extract`` writes
+    ``<out-name>-extract.json`` (``extract.json`` in WORKs older than ``--out-name``). Reading only ``extract.json``
+    left `neuralese-graph` unable to run on any current WORK (sft-sources-20261120b, the expert-iteration WORK)."""
+    specs = []
+    for path in sorted(Path(work).glob('*extract.json')):
+        for spec in json.loads(path.read_text()).get('rl') or ():
+            if spec not in specs:
+                specs.append(spec)
+    return specs
+
+
 def neuralese_graph(args):
     """Whole Neuralese episodes as whole-graph SFT rows: the verified successes `build` skips for their imported state
     (`has_native_state`), every call as the actor ran it (the exact prompt and sampled ids of its capture, read again
@@ -2308,11 +2325,14 @@ def neuralese_graph(args):
             for row in read_jsonl(work / 'replay' / record['name'] / 'rollouts.jsonl'):
                 surfaces.update(surface_key(t) for t in row.get('turns') or ())
     archives = {}
-    for spec in json.loads((work / 'extract.json').read_text())['rl']:
+    for spec in extract_rl_specs(work):
         run_dir, archive_dir = spec.split(':')
         archives['rl:' + '/'.join(Path(run_dir).parts[-2:])] = (run_dir, archive_dir)
+    excluded_runs = [re.compile(pattern) for pattern in getattr(args, 'exclude_run', None) or ()]
     episodes = [e for e in all_episodes(work) if has_native_state(e) and e.get('source') == 'rl-own']
     funnel['native_state_episodes'] = len(episodes)
+    funnel['excluded_run'] = sum(1 for e in episodes if any(p.search(e.get('run') or '') for p in excluded_runs))
+    episodes = [e for e in episodes if not any(p.search(e.get('run') or '') for p in excluded_runs)]
     excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
     kept = []
     for e in episodes:
@@ -2537,6 +2557,8 @@ def main():
     g.add_argument('--out', required=True)
     g.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     g.add_argument('--max-per-task', type=int, default=2)
+    g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
+                   help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
     args = p.parse_args()
     if hasattr(args, 'held_manifest') and not args.held_manifest:

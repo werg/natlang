@@ -600,3 +600,13 @@ def test_replay_matches_tool_call_arguments_the_runtime_reserialized():
     assert episode.answer({'messages': now})['choices'][0]['message']['content'] == 'done'
     assert episode.log[0]['kind'] == 'exact'
     assert s.arguments_key('not json') == 'not json'
+
+
+def test_extract_rl_specs_reads_every_named_extraction(tmp_path):
+    """``neuralese-graph`` finds the rollout archives of every ``<out-name>-extract.json`` (and a legacy
+    ``extract.json``), each spec once: it read only ``extract.json``, which no current WORK has."""
+    (tmp_path / 'episodes-own-extract.json').write_text(json.dumps({'rl': ['/r/a:/x/a', '/r/b:/x/b']}))
+    (tmp_path / 'episodes-sft-v7-extract.json').write_text(json.dumps({'rl': ['/r/c:/x/c', '/r/a:/x/a']}))
+    (tmp_path / 'episodes-teacher-extract.json').write_text(json.dumps({'rl': [], 'teacher': ['/t']}))
+    (tmp_path / 'extract.json').write_text(json.dumps({'rl': ['/r/d:/x/d']}))
+    assert s.extract_rl_specs(tmp_path) == ['/r/a:/x/a', '/r/b:/x/b', '/r/c:/x/c', '/r/d:/x/d']

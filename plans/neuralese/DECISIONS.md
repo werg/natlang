@@ -5780,3 +5780,85 @@ measured uncapped peak: 15 GB CUDA + 3.3 GB RSS, budget 19 GB.
 - The 970-goal source stage preserves 842 historical assignments. Its 234
   held goals remain source-separated. Managed evidence is required before the
   new scenarios enter a capture list.
+
+## 2026-11-21 01:30, sft-v5's ran-out +4.1 pts: more nl-function calls, above all Neuralese consumers that loop; the cycle's own Neuralese successes now enter its mix (ran-out strand)
+
+**Observation.** Held-v3, 2 samples, Pop: base 5ff07638 ran out (40-call budget) on 9.2% of episodes, sft-v5's
+checkpoint (grpo-v5-run1 step 1) on 13.3%, pass +4.3 pts. Probe `</think>` hazard 1.01 vs 0.55. Caveat: the two
+measurements ran on different code commits (base f9664edfe, step 1 ff12e9ba7), not one pin.
+
+**Method (offline, no GPU).** All 512 paired (task, sample) episodes of `sft-v5/held/base` and
+`grpo-v5/run1/held/step-00001`. A ran-out episode writes no `results.jsonl` record; its turns and actions come from
+`jobs/*.partial.json` and the `*.evidence-*.jsonl` trace (invocation starts give each child's definition and
+signature). Scripts and the per-episode table: the session scratchpad (`eps.pkl`, `defs.pkl`, `stats.py`, `seg.py`, `nt.py`).
+
+**Findings.**
+- Discordant pairs: 52 ran out only under the checkpoint (base outcome: 32 semantic_mismatch, 20 success) and 31 only
+  under the base (checkpoint: 19 success); 16 both. The pass effect of the discordant ones nearly cancels (-20 / +19).
+- The budget goes to child calls, not root turns. Root turns per episode are the same (8.8 vs 8.8). In the 52
+  checkpoint-only episodes the checkpoint made 11.2 root and 26.6 child calls over 9.9 invocations; the base made
+  10.6 and 6.5 on the same pairs. The 31 base-only episodes mirror it (base child 28.0, checkpoint 6.2). 42 of the 52
+  ended inside one root eval whose nl calls used the last ~20 calls.
+- The checkpoint calls the program's nl functions more often: child invocations per episode 2.04 -> 2.89; 87 tasks up
+  and 53 down (sign p 0.005); on the 149 tasks that call functions, episodes without any nl call 116 -> 89 of 298.
+  Each plain child got cheaper (1.97 -> 1.62 calls).
+- Neuralese tasks (152 of 512 episodes) carry 15 of the net +21 ran-out episodes: 13.2% -> 23.0% (plain tasks 7.5% ->
+  9.2%). Consumer calls (a Neuralese<...> parameter) take ~7.6 calls each in both policies: they probe the opaque
+  import with console.log, `read_inputs()`, `transcript.search`, `read()` without await, and read_code on the value's
+  name. The checkpoint reaches them twice as often (0.28 -> 0.52 per Neuralese episode; tasks up 27, down 8, sign
+  p 0.002). Its `read()` children came back as the literal text `${value}` 23 of 68 times (base 1 of 29).
+- **The size check.** Ran-out conditional on (child invocations bucket x consumer/reader invocations) is the same
+  for both policies. The base's conditional rates applied to the checkpoint's distribution predict 13.0% (observed
+  13.3%; +3.8 of +4.1 pts). The checkpoint's rates applied to the base's distribution give 9.3% (observed 9.2%). So
+  once you condition on how many nl calls it makes, the checkpoint runs out no more often than the base. The whole
+  increase comes from making more calls, Neuralese consumers above all.
+- Candidates checked and not supported:
+  - *Shorter reasoning leading to more calls.* Root reasoning median fell 1,732 -> 1,439 chars, but root turns did
+    not rise (8.8 both).
+  - *Error-recovery loops.* Child calls under a failing root eval other than the budget stop are ~0.1 per episode in
+    both. Repeated identical child invocations: 1.01 vs 0.72 per episode, 1.38 vs 1.26 calls.
+  - *A rejected format.* Rejected actions fell 2.59 -> 1.87 per episode.
+  - *Teacher action styles that need more root steps.* Root turns are unchanged.
+  - *Not dominant:* python-tool tracebacks rose 29 -> 81 (they cost a root turn each).
+
+**Traced to the data (`runs/sft-mix-20261120-v1/rows.jsonl.zst`; teacher model per row, same ids as
+teacher-provenance-20261120).**
+- *Delegation.* Teacher episodes are 2-4 root calls with 4.6-5.2 child calls (Haiku 3.0 and Luna 4.05 child
+  invocations per episode). Own episodes are ~10 root calls with 1.9-2.5 child calls. Teacher actions are ~70% of the
+  weighted loss, so the student learns to drive the program through its functions. That is the task as written, and
+  pass rose.
+- *No consumer demonstrations.* Teachers run on text endpoints that refuse Neuralese. The mix trains 2.6k teacher
+  producer calls (first replies) and holds 8.1k more after a `neuralese-unsupported-backend` refusal as context
+  (933 episodes, 12%: gap-v1 Haiku 317, pool-v2-rich Haiku 265 and Luna 129). It has **4** teacher consumer calls. The
+  student's own consumer calls never enter the core build: `build` skips every own success that carries native
+  state (902 in sft-v5's funnel, "native_state"). The only native consumer rows are the static
+  `sft-neuralese-graph-20261117-v1` (90 chains, 5%). The expert-iteration cycles reuse that same file, so a cycle's
+  own Neuralese successes would never train.
+- *`${value}`.* 29 teacher producer replies (Luna 24, Nemotron 5) return a Neuralese<string> wrapped as `"${...}"`.
+  The system prompt also spells out `${...}` (the marker sentence in `native/prompt.ts`). Not changed: it is
+  model-facing and would start a new scoring series. The ts-host Neuralese strand is editing `native/neuralese.ts` and
+  `runtime.ts` now.
+
+**Fix (default on, opt-out, targeted tests).**
+- `expert_iteration.py cycle`: the data stage runs `sft_sources neuralese-graph` on the cycle's WORK (into
+  `CYCLE/neuralese-graph-own`, with the build's run exclusions), and the build adds it as
+  `--aux own-neuralese-graph=...,share=0.05,task_tokens=40000`. The cycle's own verified Neuralese successes now train
+  whole-graph, consumer calls included. A failure of that step leaves the build without the part; it does not stop the
+  cycle. `--no-own-neuralese-graph` opts out, `--own-neuralese-graph-share` sets the cap.
+- `sft_sources neuralese-graph` read `WORK/extract.json`, which `extract` has not written since `--out-name`. It could
+  not run on any current WORK. It now reads every `*extract.json` (`extract_rl_specs`), and it gains `--exclude-run`.
+- `sft_sources build`: an episode that two aux parts both hold (the cycle's own graph and the static one) trains
+  once (`duplicate_round` in the part's report).
+- Expected: fewer consumer loops on Neuralese tasks in sft-v7 and later cycles. The size is unknown. It is bounded by
+  how many own Neuralese successes a 6 h collection yields. sft-v7's held ran-out and the consumer-call statistics
+  above (calls per consumer invocation, the `${value}` reader returns) are the read-out.
+
+**Not checked.**
+- Causality of the call-count shift (the conditional-rate model is observational).
+- Whether the 3,238 teacher rows trained after a refusal teach anything off-surface. These are 3,000 child calls in
+  2,357 new invocations that the detour spawned, ad-hoc `nl@eval:N` calls above all. Each child's own messages hold no
+  refusal, so `backend_workaround` keeps them. The spawning root actions are already context.
+- The `</think>` hazard rise beyond the reasoning lengths above.
+- The plain-task share of the increase (+6 episodes) beyond the call-count model.
+- The aux neuralese-graph/operators/live parts as sources.
+- Per-family task requirements: how many nl calls a correct solution needs within 40.
