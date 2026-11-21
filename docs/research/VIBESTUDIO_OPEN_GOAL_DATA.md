@@ -802,3 +802,28 @@ independent semantic reviewer. Pop verified the reviewer imports for the
 2,224-goal release and reported a configured Codex credential without a model
 turn. Cases that require a review still need the explicit choice of a reviewer
 model.
+
+The 2,294-goal release adds 20 native image lifecycle goals and five passive
+Android runtime audit goals. It contains 1,724 train and 570 held goals, with
+catalog SHA-256 `3a124b9e569bb630c4f678cedeb2fe6e4c0c1065c2d8d06abbfebe392c8dad03`.
+The registered `vibestudio-open-goal-composed-release-2294-20261121` archive
+contains 1,197 accepted references and 881 training selectors, including 871
+that require only a local managed workspace. It directly covers 145 of 151
+baseline agentic capabilities. [Commit pins](vibestudio-open-goal-pop-pins-composed-2294.tsv)
+
+Five managed image cases verified the production async job, retry and save
+path, with deterministic image bytes supplied at the provider boundary.
+Actual external generation and image quality still need their own check.
+Passive Android references cover connection, a missing package, a stopped
+app, a stale target, and a running process with a device screenshot. Their
+source fixtures passed. The managed variants require an assigned disposable
+emulator in the app state specified by the case.
+
+Public search receipts now bind the selected provider and result URLs to the
+citation readback. Owned HTTP fixtures verify the native public-session
+fetch, bounded cache continuation and citation steps. Live dynamic public
+search requires a working search provider in the managed workspace.
+
+A single managed System instance completed 24 model-free references under
+the 9.5 GiB cap. The combined Personal and System test unit peaked at
+8.6 GiB. Routine sweeps keep the existing 12-case recycle interval.
