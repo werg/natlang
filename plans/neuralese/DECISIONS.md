@@ -6355,3 +6355,11 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - **Enters:** sft-v8's build stage must run main's `filled_reasoning.py` (its pin 4a261bea4 predates this). The
   rendering path (`sft_sources`, `exp0_sft`, `serve`) is unchanged between 4a261bea4 and main, so main's build
   re-renders the same digests.
+
+## 2026-11-21 20:50 sft-v8's fill build on the joint length/hazard weighting
+
+- sft-v8's driver was restarted with `--fill-repo ops/ei/pin-633319ec9b1e` (main at 633319ec9, the joint length and
+  `</think>`-hazard block weighting), so its filled-reasoning build weights blocks to the student's own profile. Rendering
+  code is unchanged from its pin 4a261bea4 (the subagent checked sft_sources, exp0_sft and serve). `--fill-repo` is an
+  own flag, so sft-v9 goes back to its own pin.
+- sft-v7's candidate held restarted on Pop at 20:45 after the admission failure (b36ee40c2).
