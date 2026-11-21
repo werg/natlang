@@ -99,6 +99,10 @@ def run_batches(args, chosen, destination):
     for (workspace, baseline), cases in groups.items():
         size = args.cases_per_instance or len(cases)
         for index, offset in enumerate(range(0, len(cases), size), start=1):
+            if args.drain_file and args.drain_file.exists():
+                print(f'Drain requested at {args.drain_file}. Completed batches are available for --resume.',
+                      flush=True)
+                return 0 if all_passed else 1
             passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
                                                 args.model, destination, args.test_timeout_ms,
                                                 batch=index if len(cases) > size else None)
@@ -117,6 +121,8 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--resume', action='store_true',
                         help='Reuse accepted references in this exact output catalog and retain separate attempts')
+    parser.add_argument('--drain-file', type=Path,
+                        help='If this file appears, finish the current batch, stop its instance, and leave later batches for --resume')
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--case', action='append', default=[])
     parser.add_argument('--reuse-references', action='append', type=Path, default=[],
@@ -131,6 +137,8 @@ def main():
         parser.error('--test-timeout-ms must be positive')
     if args.cases_per_instance < 0:
         parser.error('--cases-per-instance cannot be negative')
+    if args.drain_file and not args.resume:
+        parser.error('--drain-file requires --resume')
 
     source, catalog = read_catalog(args.catalog)
     chosen = {case: row for case, row in catalog.items()

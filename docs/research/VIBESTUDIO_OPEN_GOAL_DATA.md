@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,583-goal release](vibestudio-open-goal-pop-pins-composed-1583.tsv)
-is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1583.mOFjQP`. To
+The [1,707-goal release](vibestudio-open-goal-pop-pins-composed-1707.tsv)
+is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1707.5P14Xq`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -358,6 +358,9 @@ matches the exact current goal. With `--resume`, the same output directory
 can continue from its accepted references after an interruption. Its catalog
 must match byte for byte and each attempt retains its own logs. Start a fresh
 output directory and omit reuse when retesting a changed fixture or verifier.
+With `--resume --drain-file PATH`, creating that file lets the current batch
+finish and release its instance before the driver exits. Remove the file
+before resuming the remaining batches on that catalog.
 
 ```sh
 python3 scripts/memory_ledger.py run \
@@ -706,3 +709,14 @@ accepted model-free managed references. Its 647 training selectors include
 637 goals with no device or deployment-package prerequisites. The source
 catalog maps all 66 installed skill sources. Each managed reference records
 the independent workspace checks for its individual goal.
+
+The [1,707-goal pin](vibestudio-open-goal-pop-pins-composed-1707.tsv) adds
+native template conflict triage, retained PTY continuation, owned incident
+and release work, workspace scaffolding, and panel launch-state
+reconciliation. It contains 1,293 train goals and 414 held goals. Pop
+reproduced catalog SHA-256
+`82cdfbaf5b8839e955a25889d09af675ff7396408352268e50c5159c3ea80125`
+and checked both the combined and System test compositions. The registered
+archive `vibestudio-open-goal-composed-release-1707-20261121` carries 914
+accepted model-free references. Its 692 training selectors include 682
+without device or deployment-package prerequisites.

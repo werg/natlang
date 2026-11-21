@@ -130,6 +130,36 @@ class QualificationBatchesTest(unittest.TestCase):
             log.write_text('Interrupted before readiness response.\n')
             self.assertFalse(terminal_startup_failure(log))
 
+    def test_drains_between_managed_batches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog = root / 'source.jsonl'
+            stop = root / 'drain'
+            catalog.write_text(''.join(json.dumps({
+                'scenario': f'open-goal-case-{index}', 'goalSha256': f'{index:064x}',
+                'interaction': 'open-user-goal', 'family': 'workspace-open-user-goal-demo',
+                'split': 'train', 'workspace': 'examples', 'sourceGroups': [f'demo-{index}'],
+            }) + '\n' for index in range(3)))
+            out = root / 'out'
+            argv = ['qualify_open_goals', '--host', str(root), '--catalog', str(catalog),
+                    '--out', str(out), '--resume', '--drain-file', str(stop), '--cases-per-instance', '2']
+
+            def completed(_host, _workspace, _baseline, cases, _model, destination, _timeout, *, batch):
+                self.assertEqual(cases, ['open-goal-oracle-case-0', 'open-goal-oracle-case-1'])
+                self.assertEqual(batch, 1)
+                (destination / 'complete').touch()
+                stop.touch()
+                return True, False
+
+            with patch.object(sys, 'argv', argv), patch('qualify_open_goals.qualify_group',
+                    side_effect=completed) as run:
+                self.assertEqual(main(), 0)
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(main(), 0)
+                self.assertEqual(run.call_count, 1)
+            self.assertEqual(len(list(out.glob('attempt-*/complete'))), 1)
+            self.assertEqual((out / 'catalog.jsonl').read_bytes(), catalog.read_bytes())
+
 
 if __name__ == '__main__':
     unittest.main()
