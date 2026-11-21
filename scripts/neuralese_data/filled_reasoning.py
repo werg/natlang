@@ -737,6 +737,43 @@ def status(args):
     print(json.dumps(report, indent=1))
 
 
+LENGTH_BINS = (0, 64, 128, 256, 512, 1024, 2048)
+
+
+def length_bin(n):
+    return max(i for i, edge in enumerate(LENGTH_BINS) if n >= edge)
+
+
+def length_weights(records, cap):
+    """Per length bin: the student's own share (closed unhinted candidates) over the selected blocks' share, capped
+    at ``cap`` (None: no reweighting). The improvement gate admits long blocks less often (sft-v7's first 30 episodes:
+    16% admitted at 512-1024 tokens vs 62% at 64-128; selected p50 191 tokens vs the student's 308), so unweighted the
+    filled set would teach shorter reasoning than the student's own, the sft-v3 failure mode."""
+    if not cap:
+        return None
+    own, chosen = collections.Counter(), collections.Counter()
+    for record in records:
+        for chain in record['chains']:
+            for fill in chain['calls']:
+                for c in fill.get('candidates', ()):
+                    if c['origin'] == 'unhinted' and c['closed']:
+                        own[length_bin(c['length'])] += 1
+                    if c.get('selected'):
+                        chosen[length_bin(c['length'])] += 1
+    n_own, n_chosen = sum(own.values()), sum(chosen.values())
+    if not n_own or not n_chosen:
+        return None
+    return {b: min(cap, (own[b] / n_own) / (chosen[b] / n_chosen)) for b in chosen}
+
+
+def reweight(rows, weights):
+    """Scale each row's trained reasoning tokens (``sampled``) by its block length's weight (``length_weights``)."""
+    for row in rows:
+        n = int(np.asarray(row['sampled']).sum())
+        if n and weights:
+            row['weight'] = np.where(row['sampled'], row['weight'] * weights.get(length_bin(n), 1.), row['weight'])
+
+
 def build(args):
     import pickle
     from exp0_sft import chains_of
@@ -747,6 +784,7 @@ def build(args):
     record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'])   # the fills as built
     records = list(read_fills(args.out))
     excluded = set(args.exclude_policy)
+    weights = length_weights(records, args.length_reweight_cap)
     renderers = {}
     chains, counts = [], collections.Counter()
     close = None
@@ -772,6 +810,7 @@ def build(args):
         name = f"filled:{record['key']}"
         for chain, filled in zip(source, record['chains']):
             rows += filled_rows(calls_of(chain, close), filled['calls'], close, name)
+        reweight(rows, weights)
         built = chains_of([{'task_id': record['task_id'], 'round': name, 'rows': rows}])
         for chain in built:
             chain['policy'] = record.get('policy_start')
@@ -781,7 +820,7 @@ def build(args):
         counts['episodes'] += 1
         counts['rows'] += len(rows)
     report = report_of(records)
-    report.update({'schema': SCHEMA, 'code': code_provenance(REPO), 'fills': str(args.out), 'counts': dict(counts),
+    report.update({'length_weights': weights, 'schema': SCHEMA, 'code': code_provenance(REPO), 'fills': str(args.out), 'counts': dict(counts),
                    'chains': len(chains), 'forward_tokens': int(sum(len(c['ids']) for c in chains)),
                    'weighted_target_tokens': int(sum(float(row['weight'].sum()) for c in chains
                                                      for _, _, row in c['segs'])),
@@ -1018,6 +1057,8 @@ def build_parser():
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
     b.add_argument('--corpus', required=True)
+    b.add_argument('--length-reweight-cap', type=float, default=4.,
+                   help='reweight trained blocks so their lengths follow the student\'s own (per-bin ratio, capped; 0 opts out)')
     b.add_argument('--exclude-policy', action='append', default=[], metavar='SHA',
                    help='leave out episodes any step of which this policy drew (a held-failed candidate)')
     a = sub.add_parser('audit')
