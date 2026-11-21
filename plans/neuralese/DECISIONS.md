@@ -6246,3 +6246,9 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   serves sft-v6 (the policy of sft-v7's fill window) on Pop and runs `filled_reasoning generate` from the DGX against it
   (ssh tunnel to its SGLang, same out dir, 32 running), so sft-v8's build gets more filled teacher trajectories. It
   stops when sft-v7's SFT unit ends; the held stage's serve-checkpoint replaces the Pop server.
+
+### 2026-11-21 — run the full Vibestudio Luna training split
+
+- The frozen catalog has 1,748 training goals and 579 held cases. Reuse the two verified open-goal Luna captures. Every other training goal enters the queue. The controller records every attempt and prioritizes first attempts before retries. The verifier keeps failed executions as evidence and exports passing Luna trajectories as native IR. Seven cases take independent review through GPT-5.6 Terra. Luna remains the only trajectory generator for this campaign.
+- Tick runs one 9.5 GiB managed collection lane. The DGX holds the archive on its external volume. Each sealed wave is checksum-matched before the DGX exports its native shard, and Tick reclaims the staging copy only after the archive receipt. The DGX uses a pinned Python export checkout with a 1.5 GiB ledger claim and a 15 GiB reserve. The archive already contains both verified seed shards.
+- The initial wave reproduced unavailable-skill routing. After it retires, the controller uses the revised compact opening that names actual descendant service bindings. Natlang `7ce1b21fd` and Base `b3a0944` carry this change. All 32 targeted Node tests passed. Workerd vendoring verified, the composed examples program checked 1,226 linked lambdas, and the catalog was byte-identical after updating the runtime.
