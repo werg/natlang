@@ -24,7 +24,7 @@ import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } 
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { dialectBinding, isNeuraleseRef, isTeacherTextNeuraleseId, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseUnsupportedError, sourceWithLiteralCalls,
+import { dialectBinding, isNeuraleseRef, isNoNeuraleseWriterFault, isTeacherTextNeuraleseId, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseNoWriterError, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
@@ -613,6 +613,17 @@ const itemRef = (container: Record<string, Value>, key: string, type: Type, env:
     set: value => { container[key] = value; },
     del: () => { delete container[key]; } });
 
+/** The source of type alias `name` as the program's items declare it (their folders' types.ts), nearest item first. */
+export function codebaseTypeAlias(codebase: Record<string, unknown>, name: string): string | undefined {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return undefined;
+  let level = Object.values(codebase as Record<string, ItemRecord>);
+  for (let depth = 0; level.length && depth < 64; depth++) {
+    for (const item of level) if (item.kind !== 'namespace' && Object.hasOwn(item.types ?? {}, name)) return item.types[name];
+    level = level.flatMap(item => Object.values(item.codebase ?? {}));
+  }
+  return undefined;
+}
+
 /** Find a codebase item by dotted path; module exports resolve to their module's source. */
 export function findCodebaseItem(codebase: Record<string, unknown>, name: string):
   { path: string[]; record: ItemRecord } | undefined {
@@ -822,8 +833,8 @@ export class NativeRuntime {
   }): Promise<Value> {
     const port = this.neuralese?.port;
     const type = formatType(wanted), bodySha = hexDigest(text);
-    if (!port) throw new NeuraleseUnsupportedError(`${metadata.sourceKind === 'typed-json-result' ? 'plain JSON' : 'plain-text'} ` +
-      `${type} needs a configured Neuralese write port`);
+    if (!port) throw new NeuraleseNoWriterError(`${metadata.sourceKind === 'typed-json-result' ? 'plain JSON' : 'plain-text'} ` +
+      `${type} cannot be written`);
     // The port writes only its own dialect; a slot of another dialect cannot hold what it writes.
     const wantedDialect = wanted.kind === 'neuralese' && wanted.dialect !== DEFAULT_DIALECT ? wanted.dialect : port.dialect;
     if (wantedDialect !== port.dialect) throw new Reject([{ path: metadata.argumentName ? `argument/${metadata.argumentName}` : 'return',
@@ -1648,6 +1659,8 @@ export class NativeSession {
         return record(await this.fileTool(name, args));
       return record(this.scopeTool(name, args));
     } catch (error) {
+      // No action can repair a runtime without a Neuralese writer: the run ends rather than the model retrying.
+      if (isNoNeuraleseWriterFault(error)) throw error;
       if (error instanceof Reject) return record(rejected(error));
       return record({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
@@ -1922,6 +1935,14 @@ export class NativeSession {
       // A type alias of this call (`Schedule`) is shown as its definition.
       if (name === 'read_code' && Object.hasOwn(this.lam.typesSrc ?? {}, requested)) {
         const alias = `type ${requested} = ${this.lam.typesSrc[requested]};`;
+        return { kind: 'ok', text: alias, value: alias };
+      }
+      // A type alias of the program in the callable folder (its types.ts), which this call's own scope need not have:
+      // read_code("Money") answered no-such-function and the declaration was nowhere to read (teacher-gen gap-v1
+      // field-type tasks ended blocked or guessed).
+      const programAlias = name === 'read_code' ? codebaseTypeAlias(this.lam.codebase, requested) : undefined;
+      if (programAlias !== undefined) {
+        const alias = `type ${requested} = ${programAlias};`;
         return { kind: 'ok', text: alias, value: alias };
       }
       // A bare method name of a scope service (`certificate` of greenhouse) is read as that service's declaration.
@@ -2571,6 +2592,8 @@ export class NativeSession {
     } catch (error) {
       // A failed eval (an error, a rejected value, its timeout) stops the natural-language calls it started.
       evalStop?.abort(new Error('the eval that started this call failed'));
+      // A runtime without a Neuralese writer (here or in a call the eval started) is not the model's to repair.
+      if (isNoNeuraleseWriterFault(error)) throw error;
       const message = error instanceof Error ? error.message : String(error);
       const note = this.captureScopeFailure(error instanceof EvalFailure ? 'runtime' : 'boundary',
         code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error, traceMark);

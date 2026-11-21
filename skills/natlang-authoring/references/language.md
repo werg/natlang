@@ -79,7 +79,7 @@ A callable folder holds code the program owns: helpers it was given and code it 
 - Importable packages are external too: `read_code("pkg")` lists a package's exports from its type declarations, `read_code("pkg.name")` shows one.
 - The built-ins of eval (`nl`, `iterateOn`, `transcript`) are documented, not defined, in the program: `read_code("nl")` shows how to use one.
 - `read_code` of the executing call's own name shows its instructions (the same text as its opening message).
-- `read_code` answers for every name a call can see, not only the program's functions: a source file name (`resolve.js`, `./resolve.js`) shows the function it defines; a type alias of the call shows its definition; a bare method name of a scope service (`certificate`) shows that service's declaration and the qualified call (`greenhouse.certificate()`); the call's own name says it is the call being executed (its opening message is all of its source: carry out the instructions there); a value in the eval scope says to inspect it in eval. None of these is an edit target.
+- `read_code` answers for every name a call can see, not only the program's functions: a source file name (`resolve.js`, `./resolve.js`) shows the function it defines; a type alias of the call, or one the program in its callable folder declares in a `types.ts` (`read_code("Money")`), shows its definition; a bare method name of a scope service (`certificate`) shows that service's declaration and the qualified call (`greenhouse.certificate()`); the call's own name says it is the call being executed (its opening message is all of its source: carry out the instructions there); a value in the eval scope says to inspect it in eval. None of these is an edit target.
 
 ## Callable-folder TypeScript
 

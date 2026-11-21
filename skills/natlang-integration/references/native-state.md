@@ -29,6 +29,11 @@ receipts and training capture are research interfaces documented in the reposito
 - `neuralese-native-empty-unavailable`: load the native library with its archived empty state.
 - A function declared `returns: Neuralese<string>` turns its final text reply into state through the configured
   writer; a reply that leaves the call without a result is incomplete, not success.
+- A runtime with no Neuralese writer (no native-state server and no literal-text transport) cannot produce a declared
+  `Neuralese<T>` result or argument: the run ends at that boundary with `neuralese-unsupported-backend: … this runtime
+  has no Neuralese writer`, instead of returning the error to the model, since no action can repair it. Configure a
+  writer: serve a native model, or, for a remote teacher, the collector's `--text-neuralese-emulation` (which
+  `run_bonsai_queue.py` gives every provider or HTTP transport without `--neuralese-server`).
 
 ## Student prompt rendering
 

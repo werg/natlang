@@ -3,6 +3,31 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-21 — teacher transports get a Neuralese writer; a runtime without one ends the run; read_code shows program types
+
+Audit of teacher-gen-20261119/gap-v1 (Haiku 5.5, Luna, Nemotron 3 Ultra, Gemini 3.5 Flash-Lite; 2,191 episodes ending
+`budget_exhaustion`, `invalid_action` or `unresolved` with turns): 1,833 of them (84%) met
+`neuralese-unsupported-backend: … needs a configured Neuralese write port` at a declared `Neuralese<T>` result or
+argument. `teacher_gen.py` runs `run_bonsai_queue.py` with `--provider` or `--server` but not `--neuralese-server`, and the
+collector's literal-text transport (`--text-neuralese-emulation`) was never turned on, so no Neuralese boundary could be
+written. Teachers retried the same return until the 40-call budget (Luna's empty replies, 1,692 of 1,694, all follow
+this error), or returned blocked (`invalid_action`, and `unresolved` when the blocked reason cited the backend). Changes:
+- `run_bonsai_queue.py` passes `--text-neuralese-emulation` for every provider or HTTP transport without
+  `--neuralese-server` and without program guidance (opt-out `--no-text-neuralese-emulation`; an entry's
+  `text_neuralese_emulation` wins). The teacher CLI accepts it together with `--chat-request-config` (the endpoint
+  teachers' sampling controls; their `x_natlang_guidance` still needs `--neuralese-server`). Teachers now see the
+  transport paragraph of `TEACHER_TEXT_NEURALESE_PROMPT` appended to the system prompt; student RL and held eval
+  (`--neuralese-server`) are unchanged.
+- The no-writer fault (`NeuraleseNoWriterError`, `native/neuralese.ts`) is a runtime configuration fault: the action
+  dispatcher and eval rethrow it (also from a nested call, by message across the eval boundary), so the run ends at the
+  first such boundary instead of feeding the model an error no action repairs.
+- `read_code("Money")` shows a type alias the callable folder's program declares in `types.ts` (`type Money = …;`)
+  instead of `no-such-function`. All 166 `ext_natlang-codebase_natlang_codebase_field_type` episodes asked about a type
+  declared only there; 57 ended blocked (`invalid_action`) because no tool could show it.
+Tests: `ts-host/test/neuralese-no-writer.test.mjs`, `tests/test_bonsai_queue.py`
+(`test_remote_transport_without_native_channel_gets_text_neuralese_writer`). The read_code change enters RL and held
+eval at the next pin (ts-host tree, changes the held series).
+
 ### 2026-11-19 — a reply that closes its reasoning a second time is answered with a one-sentence error; nothing in it runs
 
 grpo-v4-run2's policy learned to write a second `</think>` after a short answer instead of ending its turn (0.6-0.96 of
