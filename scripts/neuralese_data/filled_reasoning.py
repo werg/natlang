@@ -823,36 +823,97 @@ def length_bin(n):
     return max(i for i, edge in enumerate(LENGTH_BINS) if n >= edge)
 
 
-def length_weights(records, cap):
-    """Per length bin: the student's own share (closed unhinted candidates) over the selected blocks' share, capped
-    at ``cap`` (None: no reweighting). The improvement gate admits long blocks less often (sft-v7's first 30 episodes:
-    16% admitted at 512-1024 tokens vs 62% at 64-128; selected p50 191 tokens vs the student's 308), so unweighted the
-    filled set would teach shorter reasoning than the student's own, the sft-v3 failure mode."""
-    if not cap:
-        return None
-    own, chosen = collections.Counter(), collections.Counter()
+def own_and_chosen(records):
+    """(the student's own blocks, the chosen blocks): candidate stats. The student's own are the anchors of staged
+    steps (the only draws with the whole room) and every closed unhinted sample of parallel steps."""
+    own, chosen = [], []
     for record in records:
         for chain in record['chains']:
             for fill in chain['calls']:
                 cands = fill.get('candidates', ())
-                staged = any('anchor' in c for c in cands)   # staged draws: only anchors drew with the whole room
+                staged = any('anchor' in c for c in cands)
                 for c in cands:
                     if c['origin'] == 'unhinted' and c['closed'] and (c.get('anchor') or not staged):
-                        own[length_bin(c['length'])] += 1
+                        own.append(c)
                     if c.get('selected'):
-                        chosen[length_bin(c['length'])] += 1
-    n_own, n_chosen = sum(own.values()), sum(chosen.values())
-    if not n_own or not n_chosen:
+                        chosen.append(c)
+    return own, chosen
+
+
+def hazard_edges(own, bins):
+    """Quantile edges of the student's own ``</think>`` hazard (``bins`` classes)."""
+    values = sorted(c.get('hazard') or 0. for c in own)
+    return [values[int(len(values) * k / bins)] for k in range(1, bins)] if values and bins > 1 else []
+
+
+def block_cell(c, edges):
+    """(length bin, hazard class) of a block's stats."""
+    hazard = c.get('hazard') or 0.
+    return length_bin(c['length']), sum(hazard >= e for e in edges)
+
+
+def block_weights(records, cap, mode='joint', hazard_bins=3, smooth=0.5):
+    """Importance weights that make the trained blocks follow the student's own blocks (``own_and_chosen``): per cell,
+    the own share over the chosen share (add-``smooth`` counts over the cells either side has), capped at ``cap`` and
+    normalized to mean 1 over the chosen blocks (the corpus keeps its loss mass). ``mode`` 'joint' (default) cells by
+    length bin and ``</think>`` hazard class (quantiles of the student's own): the gates admit short blocks and blocks
+    that close readily more often (sft-v8's first staged fills: chosen median 138 tokens vs anchors' 276, hazard 1.97
+    vs 1.47 per 1k tokens), and length alone fixes only the first. 'length': length bins only (2026-11-21 06:00).
+    'off' or ``cap`` 0: None. Returns (weights {cell: w}, hazard edges) or None."""
+    if not cap or mode == 'off':
         return None
-    return {b: min(cap, (own[b] / n_own) / (chosen[b] / n_chosen)) for b in chosen}
+    own, chosen = own_and_chosen(records)
+    if not own or not chosen:
+        return None
+    edges = hazard_edges(own, hazard_bins) if mode == 'joint' else []
+    own_n = collections.Counter(block_cell(c, edges) for c in own)
+    chosen_n = collections.Counter(block_cell(c, edges) for c in chosen)
+    cells = set(own_n) | set(chosen_n)
+    total_own, total_chosen = len(own) + smooth * len(cells), len(chosen) + smooth * len(cells)
+    raw = {cell: min(cap, ((own_n[cell] + smooth) / total_own) / ((chosen_n[cell] + smooth) / total_chosen))
+           for cell in chosen_n}
+    mean = sum(raw[cell] * n for cell, n in chosen_n.items()) / len(chosen)
+    return {cell: w / mean for cell, w in raw.items()}, edges
 
 
-def reweight(rows, weights):
-    """Scale each row's trained reasoning tokens (``sampled``) by its block length's weight (``length_weights``)."""
-    for row in rows:
-        n = int(np.asarray(row['sampled']).sum())
-        if n and weights:
-            row['weight'] = np.where(row['sampled'], row['weight'] * weights.get(length_bin(n), 1.), row['weight'])
+def weighted_summary(records, weighting):
+    """Length median and mean hazard of the student's own blocks, the chosen blocks, and the chosen blocks under
+    ``weighting`` (``block_weights``): what the reweighting changes."""
+    own, chosen = own_and_chosen(records)
+
+    def median(pairs):
+        pairs = sorted(pairs)
+        total, acc = sum(w for _, w in pairs), 0.
+        for value, w in pairs:
+            acc += w
+            if acc >= total / 2:
+                return value
+        return None
+
+    def summary(blocks, weight):
+        ws = [weight(c) for c in blocks]
+        total = sum(ws) or 1.
+        return {'n': len(blocks), 'length_p50': median([(c['length'], w) for c, w in zip(blocks, ws)]),
+                'hazard_mean': round(sum((c.get('hazard') or 0.) * w for c, w in zip(blocks, ws)) / total, 4)}
+    out = {'own': summary(own, lambda c: 1.), 'chosen': summary(chosen, lambda c: 1.)}
+    if weighting:
+        weights, edges = weighting
+        out['chosen_weighted'] = summary(chosen, lambda c: weights.get(block_cell(c, edges), 1.))
+    return out
+
+
+def reweight(rows, fills, weighting):
+    """Scale each row's trained reasoning tokens (``sampled``) by its chosen block's cell weight (``block_weights``);
+    ``rows`` and ``fills`` are one chain's, call by call."""
+    if not weighting:
+        return
+    weights, edges = weighting
+    for row, fill in zip(rows, fills):
+        chosen = next((c for c in fill.get('candidates', ()) if c.get('selected')), None)
+        if chosen is None or not np.asarray(row['sampled']).any():
+            continue
+        row['weight'] = np.where(row['sampled'], row['weight'] * weights.get(block_cell(chosen, edges), 1.),
+                                 row['weight'])
 
 
 def build(args):
@@ -865,7 +926,7 @@ def build(args):
     record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'])   # the fills as built
     records = list(read_fills(args.out))
     excluded = set(args.exclude_policy)
-    weights = length_weights(records, args.length_reweight_cap)
+    weighting = block_weights(records, args.length_reweight_cap, args.block_reweight)
     renderers = {}
     chains, counts = [], collections.Counter()
     close = None
@@ -890,8 +951,9 @@ def build(args):
         rows = []
         name = f"filled:{record['key']}"
         for chain, filled in zip(source, record['chains']):
-            rows += filled_rows(calls_of(chain, close), filled['calls'], close, name)
-        reweight(rows, weights)
+            chain_rows = filled_rows(calls_of(chain, close), filled['calls'], close, name)
+            reweight(chain_rows, filled['calls'], weighting)
+            rows += chain_rows
         built = chains_of([{'task_id': record['task_id'], 'round': name, 'rows': rows}])
         for chain in built:
             chain['policy'] = record.get('policy_start')
@@ -901,7 +963,10 @@ def build(args):
         counts['episodes'] += 1
         counts['rows'] += len(rows)
     report = report_of(records)
-    report.update({'length_weights': weights, 'schema': SCHEMA, 'code': code_provenance(REPO), 'fills': str(args.out), 'counts': dict(counts),
+    report.update({'block_weights': {'mode': args.block_reweight, 'hazard_edges': weighting[1] if weighting else None,
+                                     'cells': {f'{k[0]}:{k[1]}': round(v, 4) for k, v in weighting[0].items()}
+                                     if weighting else None},
+                   'weighted': weighted_summary(records, weighting), 'schema': SCHEMA, 'code': code_provenance(REPO), 'fills': str(args.out), 'counts': dict(counts),
                    'chains': len(chains), 'forward_tokens': int(sum(len(c['ids']) for c in chains)),
                    'weighted_target_tokens': int(sum(float(row['weight'].sum()) for c in chains
                                                      for _, _, row in c['segs'])),
@@ -1150,7 +1215,10 @@ def build_parser():
     b.add_argument('--out', required=True)
     b.add_argument('--corpus', required=True)
     b.add_argument('--length-reweight-cap', type=float, default=4.,
-                   help='reweight trained blocks so their lengths follow the student\'s own (per-bin ratio, capped; 0 opts out)')
+                   help='cap of the per-cell weights that make trained blocks follow the student\'s own (0 opts out)')
+    b.add_argument('--block-reweight', choices=('joint', 'length', 'off'), default='joint',
+                   help='cells of the block reweighting: joint length bin x </think> hazard class (default), length '
+                        'bins only (before 2026-11-22), off')
     b.add_argument('--exclude-policy', action='append', default=[], metavar='SHA',
                    help='leave out episodes any step of which this policy drew (a held-failed candidate)')
     a = sub.add_parser('audit')

@@ -6303,3 +6303,55 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   Anthropic credit (the owner's call); the NVIDIA and Gemini teachers continue. Teacher supply is not the limit: about
   39k verified teacher episodes exist against about 500 filled. Filled reasoning is the bottleneck, and the fill-cost
   and close-hazard work (subagent) targets it.
+
+**2026-11-21 23:30, filled reasoning: trained blocks follow the student's own length *and* close hazard (default
+`--block-reweight joint`; `length` restores the 06:00 weighting, `off` and `--length-reweight-cap 0` opt out).**
+- **Finding (sft-v8's first staged fills):** chosen blocks had median 138 tokens against the anchors' 276, and mean
+  `</think>` hazard 1.97 against 1.47 per 1k tokens. Length reweighting fixed the length mix, not the close profile.
+- **Inventory: where filled blocks are selected, weighted or consumed.**
+  - `filled_reasoning.py`:
+    - gates `Filler._evaluate`, selection `Filler.step` and `select`;
+    - weights `block_weights` and `reweight`, applied in `build`.
+  - `expert_iteration.py`:
+    - the build stage runs `fill_repo()/filled_reasoning.py build` (l. 820);
+    - the mix takes `--aux filled=...,share=all,task_tokens=40000,replaces=teacher` (l. 855-856).
+  - `sft_sources.py`:
+    - `parse_aux` and `load_aux` take the chains as built: no weighting of their own, so the row weights carry the
+      correction;
+    - `ThinkTreatment` maps `filled` to `context` until a filled part exists (l. 584).
+  - `exp0_sft.sampled_targets` (l. 262-275) reads the per-row `sampled` flags and trains the weights it is given.
+  - `grpo.py` does not consume filled corpora; its reasoning RL has its own twin objective, and no `filled_reasoning`
+    import exists there.
+  - A `--replay-corpus` of a filled `chains.pkl` would carry the row weights unchanged.
+  - So the one place to correct is `build`'s weighting; every consumer reads its weights.
+- **Built:** importance weights per cell (length bin x `</think>`-hazard tertile of the student's own blocks).
+  - Weight = the student's own share over the chosen share, add-0.5 smoothed, capped at 4, normalized to mean 1 over
+    the chosen blocks, so the corpus keeps its loss mass.
+  - The student's own blocks are the staged anchors, or every closed unhinted sample for parallel steps.
+  - `report.json` gains `block_weights` and `weighted`: own, chosen and chosen-weighted length p50 and hazard.
+  - Tests: `test_length_reweighting_restores_the_students_own_length_mix`,
+    `test_joint_reweighting_corrects_the_close_hazard_too`, `test_length_reference_uses_only_anchors_once_draws_are_staged`;
+    88 passed (ledger unit `fr-test-joint-2`).
+- **Effect on the current fills** (778 episodes, 10,705 own blocks, 1,853 chosen):
+
+  | weighting | length p50 | hazard p50 / p90 | hazard classes (own: 1/3 each) |
+  |---|---|---|---|
+  | own blocks | 522 | 0.046 / 1.73 | 0.333 / 0.333 / 0.333 |
+  | chosen, unweighted | 316 | 0.014 / 1.97 | 0.427 / 0.285 / 0.288 |
+  | chosen, length-only weights | 518 | 0.010 / 1.27 | 0.458 / 0.286 / 0.256 |
+  | chosen, joint weights | 518 | 0.041 / 1.79 | 0.334 / 0.333 / 0.333 |
+
+  - The chosen set's close bias is not a uniformly higher hazard. It is too many blocks that almost never consider
+    closing, plus a heavier tail, so the mean rose while the median fell.
+  - Length-only weighting made the class shares worse. Joint weighting matches the student's own length and close
+    profile.
+  - The 38 staged episodes alone match the class shares too: 0.332 / 0.332 / 0.336 against own 0.326 / 0.337 / 0.337.
+    Their quantiles are too few to read.
+- **Not checked:**
+  - the joint cells' stability below ~100 chosen blocks (smoothing and the cap bound it; sft-v8's build has ~2k);
+  - whether hazard tertiles are the right close statistic, rather than the close position relative to the block's own
+    best close point;
+  - any held effect (the cycle's held gate judges it).
+- **Enters:** sft-v8's build stage must run main's `filled_reasoning.py` (its pin 4a261bea4 predates this). The
+  rendering path (`sft_sources`, `exp0_sft`, `serve`) is unchanged between 4a261bea4 and main, so main's build
+  re-renders the same digests.
