@@ -8,7 +8,7 @@ import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
-import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseType, type DialectBinding, type Type } from '../native/types.js';
+import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseTypeCached, type DialectBinding, type Type } from '../native/types.js';
 import { NeuraleseDialectError, NeuraleseUnsupportedError, dialectBinding, readerDialect } from '../native/neuralese.js';
 import { CRISP, representationType, type GenericResult, type Representation } from '../native/representation.js';
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
@@ -101,7 +101,7 @@ export function instantiateDefinition(frame: Frame, definition: CallableDefiniti
   const generic = definition.generic;
   if (!generic) {
     let declared: Type | undefined;
-    try { declared = parseType(definition.returns); } catch { declared = undefined; }
+    try { declared = parseTypeCached(definition.returns); } catch { declared = undefined; }
     if ((representation.kind === 'neuralese') === (declared?.kind === 'neuralese')) return definition;
     throw new TypeError(`${definition.name} returns ${definition.returns}, so it cannot run for ` +
       `${representationType(definition.returns, representation)}${where}. A function makes both forms when its result is ` +
@@ -294,8 +294,8 @@ function refinedSignature(definition: CallableDefinition): { env: TypeEnv; param
   const texts = [definition.returns, ...definition.params.map(parameter => parameter.type), ...Object.values(definition.types)];
   if (!texts.some(text => /\bIs\s*</.test(text))) return undefined;
   try {
-    const env = new TypeEnv(Object.fromEntries(Object.entries(definition.types).map(([name, text]) => [name, parseType(text)])));
-    const params = definition.params.map(parameter => parseType(parameter.type)), returns = parseType(definition.returns);
+    const env = new TypeEnv(Object.fromEntries(Object.entries(definition.types).map(([name, text]) => [name, parseTypeCached(text)])));
+    const params = definition.params.map(parameter => parseTypeCached(parameter.type)), returns = parseTypeCached(definition.returns);
     if (![...params, returns].some(type => containsRefinement(type, env))) return undefined;
     return { env, params, returns, refinedReturns: containsRefinement(returns, env) };
   } catch { return undefined; }
@@ -312,7 +312,7 @@ function checkedServices(task: Frame['task'], frame: Frame, services: Readonly<R
   const env = new TypeEnv();
   const types: Record<string, Type> = {};
   for (const [name, text] of Object.entries(declared)) {
-    try { types[name] = parseType(text); } catch (error) { throw new TypeError(`refinements.services.${name}: ${(error as Error).message}`); }
+    try { types[name] = parseTypeCached(text); } catch (error) { throw new TypeError(`refinements.services.${name}: ${(error as Error).message}`); }
   }
   const checker = task.refinementChecker(), judges = task.refinementJudges(model, frame);
   const registry = scopedUntrusted(task);

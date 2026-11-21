@@ -3,7 +3,7 @@
  * local annotated with one is checked and stored like any other.
  */
 import ts from 'typescript';
-import { parseType, typeAliasName, type Type } from './types.js';
+import { parseTypeCached, typeAliasName, type Type } from './types.js';
 
 /**
  * The top-level type aliases and interfaces (without type parameters or heritage) that `code` declares. One the type
@@ -25,7 +25,7 @@ export function evalTypeDeclarations(code: string): Record<string, Type> {
         text = `{ ${statement.members.map(member => member.getText(file).replace(/[;,]\s*$/, '')).join('; ')} }`;
       else continue;
       const name = namespace + statement.name.text;
-      try { declared[name] = parseType(text); } catch { declared[name] = parseType('unknown'); }
+      try { declared[name] = parseTypeCached(text); } catch { declared[name] = parseTypeCached('unknown'); }
       namespaces.set(name, namespace);
     }
   };

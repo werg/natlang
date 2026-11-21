@@ -10,7 +10,7 @@ import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceive
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices, type EffectEvent } from './effects.js';
-import { DEFAULT_DIALECT, TypeEnv, TypeSyntaxError, containsRefinement, formatType, parseType, typeAliasNames, type Type } from './types.js';
+import { DEFAULT_DIALECT, TypeEnv, TypeSyntaxError, containsRefinement, formatType, parseType, parseTypeCached, typeAliasNames, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   isPlainRecord, type LambdaNode, type Value } from './values.js';
@@ -678,7 +678,7 @@ const callableAliases = new WeakMap<ItemRecord, Record<string, Type>>();
 /** Transfer a callable's signature using its own types, rather than looking up private names in the caller. */
 function transferCallableType(record: Exclude<ItemRecord, { kind: 'namespace' }>, source: string, caller: TypeEnv): Type | undefined {
   let type: Type;
-  try { type = parseType(source); }
+  try { type = parseTypeCached(source); }
   catch (error) {
     if (!(error instanceof TypeSyntaxError)) throw error;
     return;
@@ -688,7 +688,7 @@ function transferCallableType(record: Exclude<ItemRecord, { kind: 'namespace' }>
   if (!aliases) {
     aliases = callableTypes(record.codebase);
     for (const [alias, text] of Object.entries(record.types)) {
-      try { aliases[alias] = parseType(text); }
+      try { aliases[alias] = parseTypeCached(text); }
       catch { /* TypeScript-only types stay outside portable checking. */ }
     }
     callableAliases.set(record, aliases);
@@ -847,7 +847,7 @@ export class NativeRuntime {
     inputs: readonly unknown[], parentCallId?: string): Promise<unknown[]> {
     const aliases: Record<string, Type> = {};
     for (const [name, source] of Object.entries(definition.types)) {
-      try { aliases[name] = parseType(source); } catch { /* Keep TypeScript-only aliases outside portable checks. */ }
+      try { aliases[name] = parseTypeCached(source); } catch { /* Keep TypeScript-only aliases outside portable checks. */ }
     }
     const env = new TypeEnv(aliases);
     env.dialects = dialectBinding(this.neuralese);
@@ -857,7 +857,7 @@ export class NativeRuntime {
       if (typeof input !== 'string') continue;
       const parameter = definition.params[index]!;
       let wanted: Type;
-      try { wanted = env.resolve(parseType(parameter.type)); }
+      try { wanted = env.resolve(parseTypeCached(parameter.type)); }
       catch { continue; }
       const element = wanted.kind === 'neuralese' ? env.resolve(wanted.element) : undefined;
       if (wanted.kind !== 'neuralese' || element?.kind !== 'prim' || element.name !== 'string') continue;
@@ -1329,7 +1329,7 @@ export class NativeSession {
     }
     for (const cell of Object.values(lam.captures ?? {})) {
       try {
-        const type = parseType(cell.type);
+        const type = parseTypeCached(cell.type);
         if (containsUntrusted(type, this.env)) registry.markTyped(cell.get(), type, this.env, `variable ${cell.name}`);
       } catch { /* an unreadable capture has nothing to mark */ }
     }
@@ -1570,7 +1570,7 @@ export class NativeSession {
   /** Materialize plain text or validated JSON only when the declared Neuralese element type makes that representation exact. */
   private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish',
     parseJsonFallback = false): Promise<Value> {
-    const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'));
+    const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseTypeCached('null'));
     const element = wanted.kind === 'neuralese' ? this.env.resolve(wanted.element) : undefined;
     if (typeof value === 'string' && wanted.kind === 'neuralese' && element?.kind === 'prim' && element.name === 'string') {
       try { return coerce(value, wanted, this.env, 'return'); }
@@ -1579,7 +1579,7 @@ export class NativeSession {
       catch (error) { if (!(error instanceof Reject) && !(error instanceof SyntaxError)) throw error; }
       return this.writeNeuraleseResult(value, wanted, source, 'typed-text-result');
     }
-    const resultType = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null');
+    const resultType = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseTypeCached('null');
     // A value eval computed (a service's or a callee's result) is assignable as in TypeScript: fields the declared
     // record does not list are kept, not refused, so returning it never asks for a retyped copy. A literal written
     // into return_result is still checked exactly.
@@ -2150,9 +2150,9 @@ export class NativeSession {
     const meta = callableMeta(value);
     if (!meta || !['inline', 'named'].includes(meta.kind)) return;
     try {
-      const returns = parseType(meta.definition.returns);
+      const returns = parseTypeCached(meta.definition.returns);
       const fields = meta.definition.params.map(parameter => {
-        return { name: parameter.name, type: parseType(parameter.type), optional: parameter.optional === true };
+        return { name: parameter.name, type: parseTypeCached(parameter.type), optional: parameter.optional === true };
       });
       const signature: Type = { kind: 'lambda', params: { kind: 'record', fields }, returns };
       this.env.child(availableTypes).checkNames(signature);
@@ -2257,7 +2257,7 @@ export class NativeSession {
     const declaredResult = this.lam.type.kind === 'lambda' ? this.env.resolve(this.lam.type.returns) : undefined;
     const neuraleseElement = declaredResult?.kind === 'neuralese' ? this.env.resolve(declaredResult.element) : undefined;
     const isNeuraleseType = (source: string): boolean => {
-      try { return this.env.resolve(parseType(source)).kind === 'neuralese'; } catch { return false; }
+      try { return this.env.resolve(parseTypeCached(source)).kind === 'neuralese'; } catch { return false; }
     };
     const hasUnsupportedMarkerExpression = computedNeuraleseMarkerConcatenation(written, this.lam.codebase as Record<string, ItemRecord>, isNeuraleseType,
       declaredResult?.kind === 'neuralese');
@@ -2525,7 +2525,7 @@ export class NativeSession {
         const stored = this.lam.letTypes[name];
         let type = annotations.has(name) || (stored?.kind === 'prim' && stored.name === 'null' && value !== null) ? undefined : stored;
         const annotation = annotations.get(name);
-        if (annotation) type = inlineDeclaredTypes(parseType(annotation), localTypes);
+        if (annotation) type = inlineDeclaredTypes(parseTypeCached(annotation), localTypes);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
         if (!type) type = await this.sourceCallableType(value, localTypes);
         if (!type) {
@@ -2708,7 +2708,7 @@ export class NativeSession {
     const first = parts.shift();
     if (first === 'return') {
       const ref = itemRef(this.lam as unknown as Record<string, Value>, 'return',
-        this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'), this.env, 'return');
+        this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseTypeCached('null'), this.env, 'return');
       return this.descend(ref, parts);
     }
     const name = parts.shift();
@@ -2776,7 +2776,7 @@ export function callableTypes(codebase: Record<string, unknown>): Record<string,
   visit(codebase ?? {});
   const types: Record<string, Type> = {};
   for (const [name, text] of texts) if (text !== null) {
-    try { types[name] = parseType(text); } catch { /* outside the portable grammar: checked by the compiler, not here */ }
+    try { types[name] = parseTypeCached(text); } catch { /* outside the portable grammar: checked by the compiler, not here */ }
   }
   return types;
 }

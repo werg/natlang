@@ -10,7 +10,7 @@ import ts from 'typescript';
 import YAML from 'yaml';
 import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
-import { parseType, TypeEnv } from '../native/types.js';
+import { parseTypeCached, TypeEnv } from '../native/types.js';
 import { finiteValues } from '../native/decision.js';
 import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
 import { closestName } from '../compiler/suggest.js';
@@ -235,9 +235,9 @@ function checkName(path: string, name: string): void {
 
 function checkSignature(path: string, args: Record<string, string>, returns: string, types: Record<string, string>,
   text = ''): void {
-  const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
+  const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseTypeCached(text)])));
   const check = (type: string, line: () => number | undefined) => {
-    try { env.checkNames(parseType(type)); }
+    try { env.checkNames(parseTypeCached(type)); }
     catch (error) {
       const unknown = /^unknown type name (\S+)/.exec((error as Error).message)?.[1];
       const near = unknown && closestName(unknown, [...Object.keys(types), ...PLAIN_TYPES]);
@@ -295,8 +295,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     throw new NatlangSourceError(path, `withhold lists tools this function's calls are not offered, from: ${WITHHOLDABLE_TOOLS.join(', ')}`,
       frontmatterLine(text, 'withhold'));
   if (meta.readout === 'decision') {
-    const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
-    if ((finiteValues(parseType(returns), env)?.length ?? 0) < 2)
+    const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseTypeCached(text)])));
+    if ((finiteValues(parseTypeCached(returns), env)?.length ?? 0) < 2)
       throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"',
         frontmatterLine(text, 'returns'));
   }

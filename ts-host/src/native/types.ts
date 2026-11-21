@@ -295,6 +295,41 @@ export function parseType(text: string): Type {
   return new Parser(tokenize(text)).parse();
 }
 
+// Cap both many small declarations and a few large ones. Source characters bound the
+// number of tokens and objects in the tree, so changing a program cannot grow the cache unbounded.
+const MAX_TYPE_CACHE_ENTRIES = 4096;
+const MAX_TYPE_CACHE_CHARACTERS = 512 * 1024;
+const MAX_CACHEABLE_TYPE_CHARACTERS = 16 * 1024;
+const typeCacheEnabled = typeof process === 'undefined' || process.env?.NATLANG_TYPE_PARSE_CACHE !== 'off';
+const typeCache = new Map<string, Type>();
+let typeCacheCharacters = 0;
+
+function freezeTypeTree(node: object): void {
+  if (Object.isFrozen(node)) return;
+  for (const value of Object.values(node))
+    if (value !== null && typeof value === 'object') freezeTypeTree(value);
+  Object.freeze(node);
+}
+
+/** Parse a static declaration for internal read-only use. The public parser still creates a mutable tree. */
+export function parseTypeCached(text: string): Type {
+  if (!typeCacheEnabled || typeof text !== 'string' || text.length > MAX_CACHEABLE_TYPE_CHARACTERS)
+    return parseType(text);
+  const hit = typeCache.get(text);
+  if (hit) return hit;
+
+  const type = parseType(text);
+  freezeTypeTree(type);
+  while (typeCache.size >= MAX_TYPE_CACHE_ENTRIES || typeCacheCharacters + text.length > MAX_TYPE_CACHE_CHARACTERS) {
+    const oldest = typeCache.keys().next().value!;
+    typeCacheCharacters -= oldest.length;
+    typeCache.delete(oldest);
+  }
+  typeCache.set(text, type);
+  typeCacheCharacters += text.length;
+  return type;
+}
+
 export function formatType(type: Type): string {
   switch (type.kind) {
     case 'prim': case 'name': return type.name;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TypeEnv, parseType, formatType, fitsType } from '../dist/index.js';
+import { parseTypeCached } from '../dist/native/types.js';
 import { checkHost } from '../dist/native/types.js';
 
 test('native type parser handles the complete structural grammar', () => {
@@ -70,4 +71,42 @@ test("a program's own type shadows a platform global of the same name", async ()
   assert.equal(new TypeEnv().resolve(parseType('Request')).kind, 'host');
   assert.equal(new TypeEnv({ Map: request }).resolve(parseType('Map<string, number>')).kind, 'host');
   assert.throws(() => new TypeEnv({ Request: parseType('Request') }).resolve(parseType('Request')), /only in terms of itself/);
+});
+
+test('internal type parsing caches immutable syntax without changing the public parser', () => {
+  const source = '{ item: { value: Item }[]; handle: Live<"Ledger", "shape", "id"> }';
+  const internal = parseTypeCached(source);
+  const copy = parseType(source);
+  assert.notEqual(copy, internal);
+  assert.deepEqual(copy, internal);
+  copy.fields[0].type.element.fields[0].type.name = 'Changed';
+  copy.fields[1].type.contract.members.push('other');
+  assert.equal(formatType(parseType(source)), formatType(internal));
+  assert.deepEqual(internal.fields[1].type.contract.members, ['id']);
+  if (process.env.NATLANG_TYPE_PARSE_CACHE === 'off') {
+    assert.notEqual(parseTypeCached(source), internal);
+  } else {
+    assert.equal(parseTypeCached(source), internal);
+    assert.throws(() => { internal.fields[0].type.element.fields[0].type.name = 'Changed'; }, TypeError);
+    assert.throws(() => internal.fields[1].type.contract.members.push('other'), TypeError);
+  }
+  const first = new TypeEnv({ Item: parseTypeCached('string') });
+  const second = new TypeEnv({ Item: parseTypeCached('number') });
+  const item = internal.fields[0].type.element.fields[0].type;
+  assert.equal(formatType(first.resolve(item)), 'string');
+  assert.equal(formatType(second.resolve(item)), 'number');
+});
+
+test('the parse cache evicts older declarations and skips oversized sources', () => {
+  const before = parseTypeCached('{ cacheAnchor: string }');
+  for (let index = 0; index < 4096; index++) parseTypeCached(JSON.stringify(`entry ${index}`));
+  assert.notEqual(parseTypeCached('{ cacheAnchor: string }'), before);
+  const byteAnchor = parseTypeCached('{ cacheByteAnchor: number }');
+  for (let index = 0; index < 64; index++) parseTypeCached(JSON.stringify(`long ${index}: ${'x'.repeat(9 * 1024)}`));
+  assert.notEqual(parseTypeCached('{ cacheByteAnchor: number }'), byteAnchor);
+  const source = JSON.stringify('x'.repeat(17 * 1024));
+  const large = parseTypeCached(source);
+  assert.equal(formatType(large), source);
+  assert.notEqual(parseTypeCached(source), large);
+  assert.throws(() => parseTypeCached('{ missing: }'), /unexpected/);
 });

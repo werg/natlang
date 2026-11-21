@@ -7,7 +7,7 @@
  * representation: the crisp instance as ordinary execution, the Neuralese instance as a template write
  * (DECISIONS.md 44). A function whose result is declared without a type parameter keeps that one representation.
  */
-import { DEFAULT_DIALECT, formatType, parseType, type Type } from './types.js';
+import { DEFAULT_DIALECT, formatType, parseTypeCached, type Type } from './types.js';
 
 /** Which instance of a representation-generic result a call runs. `dialect` absent: the declared (or default) one. */
 export type Representation = { kind: 'crisp' } | { kind: 'neuralese'; dialect?: string };
@@ -32,7 +32,7 @@ export function genericResult(generic: Record<string, string> | undefined, retur
   if (!IDENTIFIER.test(name) || name.endsWith('?')) throw new Error(`generic: ${JSON.stringify(name)} is not a type parameter name; name it R`);
   if (returns.trim() !== name) throw new Error(`generic declares ${name} for the result, so the result is returns: ${name}`);
   let type: Type;
-  try { type = parseType(constraint); } catch (error) { throw new Error(`generic: ${name}: ${(error as Error).message}`); }
+  try { type = parseTypeCached(constraint); } catch (error) { throw new Error(`generic: ${name}: ${(error as Error).message}`); }
   const members = type.kind === 'union' ? type.members : [type];
   const soft = members.filter(member => member.kind === 'neuralese') as Extract<Type, { kind: 'neuralese' }>[];
   const crisp = members.filter(member => member.kind !== 'neuralese');
