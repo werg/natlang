@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,479-goal release](vibestudio-open-goal-pop-pins-composed-1479.tsv)
-is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1479.TWX4al`. To
+The [1,583-goal release](vibestudio-open-goal-pop-pins-composed-1583.tsv)
+is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1583.mOFjQP`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -694,3 +694,15 @@ shares were 100% for this single-case schedule. The managed smoke peaked at
 8.3 GiB and learner assembly peaked at 637 MB. The capture, native IR, and
 schedule are under
 `/home/werg/data/vibestudio-open-goal-live/luna-composed-smoke-20261121.TjYJ0u`.
+
+The [1,583-goal pin](vibestudio-open-goal-pop-pins-composed-1583.tsv) adds
+Git Bridge delivery, Examples adoption, retained development runs and
+workspace claim review with the installed Workspace Evidence skill. It
+contains 1,201 train goals and 382 held goals. Pop reproduced catalog
+SHA-256 `95e5e727c2bfd3f6e381d81ae01dc358b34eeac2644563555be00fafa25620b6`
+and checked both the combined and System test compositions. The registered
+archive `vibestudio-open-goal-composed-release-1583-20261121` carries 861
+accepted model-free managed references. Its 647 training selectors include
+637 goals with no device or deployment-package prerequisites. The source
+catalog maps all 66 installed skill sources. Each managed reference records
+the independent workspace checks for its individual goal.
