@@ -319,3 +319,16 @@ def test_find_of_a_temporary_path_indexes_only_temporary_datasets(roots, monkeyp
     assert reg.find(data / 'a.jsonl')['id'] == 'tmp-ds'
     assert reg.find(roots / 'elsewhere' / 'b') is None
     assert 'far' not in reg._temp.datasets and not any('nonexistent-hdd' in d for d in listed)
+
+
+def test_promoted_role_file_follows_the_roles_members():
+    """grpo-sd-teacher members are sft_sources WORK directories: a promotion adds no role file; pool roles keep
+    cases.jsonl; an explicit --role-file wins."""
+    import types
+    import data_registry as cli
+    reg = types.SimpleNamespace(git={'w': {'roles': {'grpo-sd-teacher': {'order': 1}}},
+                                     'p': {'roles': {'grpo-pool': {'order': 0, 'file': 'cases.jsonl'}}}})
+    assert cli.role_spec(reg, 'grpo-sd-teacher', 2) == {'order': 2}
+    assert cli.role_spec(reg, 'grpo-pool', 1) == {'order': 1, 'file': 'cases.jsonl'}
+    assert cli.role_spec(reg, 'new-role', 0) == {'order': 0, 'file': 'cases.jsonl'}
+    assert cli.role_spec(reg, 'grpo-sd-teacher', 2, 'x.json') == {'order': 2, 'file': 'x.json'}

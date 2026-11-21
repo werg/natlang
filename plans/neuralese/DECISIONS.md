@@ -6110,3 +6110,37 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   reference. The parallel path keeps its scripted-engine test.
 - **Enters:** sft-v8's fill (sft-v8 pins origin/main at launch). sft-v7's fill window runs on `pin-817c43c567de`, which
   predates this.
+
+## 2026-11-21 October Qwen teacher trajectories replayed into the verified teacher pool (sft-teacher-qwen-october-20261120)
+
+- **What.** The October Qwen3.6-35B-A3B-NVFP4 (self-hosted vLLM) teacher rows under `sft-sources-20261117/october`
+  (qwen-s72, qwen-campaign, the Qwen rows of fallow-v13r2) were never replayed under the current runtime. New
+  `sft_sources extract --october-teacher GROUP.jsonl.zst [--october-model ID]` (775b0e756, 54ce47bdc): per-call rows
+  grouped by trajectory in decision order (two streamed passes; a group is GBs of JSON), the task row read back from
+  the source turns' `task.program_ir`, held closure out, `teacher: {model_id, provider: self-hosted-vllm-dgx}`. The
+  replay stage then verifies them like teacher_gen successes. WORK `/home/werg/data/sft-teacher-qwen-october-20261120`
+  (registry id of the same name, role `grpo-sd-teacher` order 3), replayed from pin 028f0321b, 3 workers.
+- **Result (13,694 trajectories; ~3 s/episode median, 7.9 s mean on fallow, ~12 h wall under ledger preemption):**
+  exact replay successes 1,092 (qwen-campaign 643 / 8,111, fallow-v13r2 442 / 3,445, qwen-s72 7 / 2,138). Another
+  10,017 succeed under today's oracle with the same actions but are not exact: in every one the first difference is in
+  what the runtime now shows (host scope preamble: `Entry.path`, a captured `decide`; tool-output display: cut-off note
+  wording, `undefined` for `null`, values shown instead of cut). 2,364 end at a call the recording has no reply for
+  (child calls opened with today's captured-variables preamble instead of `read_inputs()`, and October rows that were
+  dropped: 2,577 of the 13,694 trajectories have decision gaps), 139 score errors (scifact rows with incomplete source_groups), 71 budget stops.
+  Only exact replays are read by TeacherDemos and filled_reasoning (`verified_episodes`), so 1,092 enter now.
+- **Fixes found on the way (default on, tests):** (1) the replay matcher compared tool-call arguments as raw strings;
+  the runtime echoes a teacher's spaced JSON (`{"code": ...}`) compact, so 98 of the first 100 replays missed on that
+  alone; arguments now compare as canonical JSON (`arguments_key`). (2) Drift after a runtime-reworded opening was
+  reported as a missing call; drift now also matches by the call's signature line. (3) fallow-v13r2's October rows
+  carry the source turn's stale `program_id` as `task_id` (2,864 of 3,445 trajectories name a different task than the
+  one their messages show); extraction takes the turn's own program_ir and held-checks both ids. The October `--october`
+  build path still reads those stale ids (share 0 today). (4) `data_registry.py promote --role` gave every role the
+  file `cases.jsonl`; a grpo-sd-teacher member (a WORK directory) then resolved to a nonexistent path; the role file
+  now follows the role's members. (5) Registered `sft-sources-20261117-october`, the campaign turns inside the archive
+  inventory (`teacher-campaign-evidence-uncovered-turns-20261011-v1`) and `native-sft-v13-r2-recovered-20261031`.
+- **Older-surface native trajectories** (`runs/qwen36-verified-positive-native-graphs-20261023-internal-*`, scope-eval-v2,
+  contract 19): 0 of 15 distinct trial episodes replay; each misses at its first call because its host preamble declares
+  the retired `neuralese` text-marker constant. Skipped (pennyroyal Qwen3.8-Flash, same surface, not tried).
+- **Open:** the 10,017 drifted successes are the larger prize. Admitting them needs a decision to train actions chosen
+  against a slightly different display (the replayed record holds today's prompts with the same actions), or a
+  re-collection of those tasks.
