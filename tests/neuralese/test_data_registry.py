@@ -332,3 +332,16 @@ def test_promoted_role_file_follows_the_roles_members():
     assert cli.role_spec(reg, 'grpo-pool', 1) == {'order': 1, 'file': 'cases.jsonl'}
     assert cli.role_spec(reg, 'new-role', 0) == {'order': 0, 'file': 'cases.jsonl'}
     assert cli.role_spec(reg, 'grpo-sd-teacher', 2, 'x.json') == {'order': 2, 'file': 'x.json'}
+
+
+def test_a_producer_record_wins_over_an_earlier_inventory_of_the_same_directory(roots):
+    """The 2026-11-21 backfill registered the then-empty ei-sources WORK as an inventory; sft_sources' later record of
+    the same directory must make it a valid build input (sft-v7's build was refused)."""
+    work = roots / 'data_nvme' / 'ei-sources'
+    pool(work / 'replay.jsonl', ['a'])
+    dr.record_inventory('archive-ei-sources', work)
+    with pytest.raises(dr.UnregisteredData):
+        dr.require_registered([work])
+    dr.record_dataset('ei-sources', work, kind='trajectories', include=['*.jsonl'], format='f', closed=False)
+    dr.require_registered([work])
+    assert dr.load(repo=roots / 'repo', fresh=True).find(work)['id'] == 'ei-sources'
