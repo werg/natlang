@@ -86,7 +86,9 @@ export type VirtualProjectOptions = { platform: Platform; constrained?: boolean;
   importedGuidancePrograms?: readonly string[]; services?: ProgramDescriptor['services']; runtimeSpecifiers?: string[];
   target?: 'node' | 'browser'; modules?: Record<string, unknown>;
   /** Validate source and produce declarations without emitting JavaScript. */
-  emit?: boolean };
+  emit?: boolean;
+  /** Collect the program descriptor for adaptation. Defaults to true. */
+  adaptation?: boolean };
 
 /**
  * Compile a virtual project and return a loader for its modules. `runtime` is the namespace that
@@ -105,7 +107,7 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
   const specifiers = options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'];
   const result = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    target: options.target ?? (moduleTarget(platform) === 'await-restoring' ? 'browser' : 'node'), runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, surfaceSpecifiers: specifiers });
+    target: options.target ?? (moduleTarget(platform) === 'await-restoring' ? 'browser' : 'node'), runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
   const cache = new Map<string, { exports: Record<string, unknown> }>();
   const load = (path: string): Record<string, unknown> => {
     const found = cache.get(path);

@@ -69,6 +69,8 @@ export type BuildOptions = {
   programId?: string;
   guidance?: string;
   importedGuidancePrograms?: readonly string[];
+  /** Collect the program descriptor for adaptation. Defaults to true. */
+  adaptation?: boolean;
   /** Project directory or tsconfig path (absolute POSIX path when `files` is supplied). */
   project: string;
   /** File access; defaults to the Node filesystem (see `buildProject` in compiler/node-project.ts). */
@@ -359,6 +361,7 @@ export function compileProject(options: BuildOptions): BuildResult {
     try { contextRecords.set(dir, loadCallableFolder(dir, files)); }
     catch (error) { sourceProblem(dir, error); }
   }
+  const collectAdaptation = options.adaptation !== false;
   const optimizationComponents: ComponentDescriptor[] = [];
   const optimizationSources: Record<string, string> = {};
   const programId = options.programId ?? basename(root);
@@ -366,18 +369,18 @@ export function compileProject(options: BuildOptions): BuildResult {
   // A function listed in several functions' `uses:` (or also loaded as a named function) is described once.
   const described = new Set<string>();
   const describeNamed = (record: NatlangRecord) => {
-    if (described.has(record.source)) return;
+    if (!collectAdaptation || described.has(record.source)) return;
     described.add(record.source);
     optimizationComponents.push(namedDescriptor(programId, record));
   };
   const checkModules = (level: Record<string, ItemRecord>) => {
     for (const item of Object.values(level)) {
       if (item.kind !== 'namespace') item.programId = programId;
-      if (item.kind !== 'namespace') optimizationSources[item.source] = item.text;
+      if (collectAdaptation && item.kind !== 'namespace') optimizationSources[item.source] = item.text;
       if (item.kind === 'natlang') describeNamed(item);
       if (item.kind === 'module' && !described.has(item.source)) {
         described.add(item.source);
-        try { compileModule(item, level, plans => optimizationComponents.push(...plans.map(plan => inlineDescriptor(programId, plan)))); }
+        try { compileModule(item, level, collectAdaptation ? plans => optimizationComponents.push(...plans.map(plan => inlineDescriptor(programId, plan))) : undefined); }
         catch (error) { problem(item.source, error instanceof Error ? error.message : String(error)); }
       }
       checkModules(item.codebase);
@@ -385,7 +388,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   };
   for (const record of namedRecords.values()) {
     record.programId = programId;
-    optimizationSources[record.source] = record.text; describeNamed(record); checkModules(record.codebase);
+    if (collectAdaptation) optimizationSources[record.source] = record.text;
+    describeNamed(record); checkModules(record.codebase);
   }
   for (const records of contextRecords.values()) checkModules(records);
 
@@ -483,8 +487,10 @@ export function compileProject(options: BuildOptions): BuildResult {
     plans.set(file, analysis.plans);
     readouts.set(file, analysis.readouts);
     instantiations.set(file, analysis.instantiations);
-    optimizationSources[rel(file.fileName)] = file.text;
-    optimizationComponents.push(...analysis.plans.map(plan => inlineDescriptor(programId, plan)));
+    if (collectAdaptation) {
+      optimizationSources[rel(file.fileName)] = file.text;
+      optimizationComponents.push(...analysis.plans.map(plan => inlineDescriptor(programId, plan)));
+    }
   }
   // Include dependency resolutions/configuration and conservatively all authored project files.
   const collectSources = (dir: string): void => {
@@ -516,23 +522,25 @@ export function compileProject(options: BuildOptions): BuildResult {
       }
     }
   };
-  collectSources(root);
-  let dependencyRoot = root;
-  while (true) {
-    for (const lock of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
-      const path = join(dependencyRoot, lock);
-      if (fs.isFile(path)) optimizationSources['@dependency-lock/' + lock] = fs.read(path);
+  if (collectAdaptation) {
+    collectSources(root);
+    let dependencyRoot = root;
+    while (true) {
+      for (const lock of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
+        const path = join(dependencyRoot, lock);
+        if (fs.isFile(path)) optimizationSources['@dependency-lock/' + lock] = fs.read(path);
+      }
+      const parent = dirname(dependencyRoot); if (parent === dependencyRoot) break; dependencyRoot = parent;
     }
-    const parent = dirname(dependencyRoot); if (parent === dependencyRoot) break; dependencyRoot = parent;
   }
   const manifest: DefinitionManifest = { version: NATLANG_COMPILE_VERSION,
     inline: [...plans.values()].flat().map(plan => ({ id: plan.definitionId, source: plan.sourceSpan.file, line: plan.sourceSpan.line,
       signature: `(${plan.parameters.map(parameter => `${parameter.name}: ${parameter.type.text}`).join(', ')}) => ${plan.returns.text}` })),
     named: [...namedRecords.values()].map(record => ({ id: record.id, source: record.source,
       signature: `(${Object.entries(record.args).map(([name, type]) => `${name}: ${type}`).join(', ')}) => ${record.returns}` })),
-    sites: [], adaptation: describeProgram(programId, optimizationSources, optimizationComponents, options.guidance, options.importedGuidancePrograms,
+    sites: [], ...(collectAdaptation ? { adaptation: describeProgram(programId, optimizationSources, optimizationComponents, options.guidance, options.importedGuidancePrograms,
       options.services ? { declarations: Object.fromEntries(Object.entries(options.services.declarations).map(([name, text]) =>
-        [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)])), scopes: options.services.scopes } : undefined) };
+        [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)])), scopes: options.services.scopes } : undefined) } : {}) };
   const refinedSlots: RefinedSlot[] = [];
   const collectSlots = (level: Record<string, ItemRecord>) => {
     for (const item of Object.values(level)) {
