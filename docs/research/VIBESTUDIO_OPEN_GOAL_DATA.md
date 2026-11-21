@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,264-goal release](vibestudio-open-goal-pop-pins-1264.tsv) is staged on
-Pop at `/home/werg/vibestudio-worktrees/open-goal-release-1264.kt0OxV`. To
+The [1,320-goal release](vibestudio-open-goal-pop-pins-1320.tsv) is staged on
+Pop at `/home/werg/vibestudio-worktrees/open-goal-release-1320.DVlMTB`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -374,8 +374,11 @@ To audit the saved reference results against the pinned catalog, run:
 ```sh
 python scripts/vibestudio/audit_open_goal_references.py "$GOAL_CATALOG" "$REFERENCE_RESULTS" \
   --baseline docs/research/vibestudio-open-goal-baseline.jsonl \
-  --coverage docs/research/vibestudio-open-goal-coverage.json
+  --coverage "$RELEASE_COVERAGE"
 ```
+
+Set `RELEASE_COVERAGE` to the `coverage.json` saved in the evidence bundle
+for the selected release.
 
 The audit lists missing cases and binds accepted proofs to the current goal
 hash and the run's owned context. It records each accepted archive's digest
@@ -638,3 +641,13 @@ and the runtime check passed across 1,079 linked lambdas. The archive
 reference outcomes, including 204 held goals. Its exact train selector
 list has 612 cases. The list for Pop without device or deployment-package
 prerequisites has 602 cases.
+
+The [1,320-goal release](vibestudio-open-goal-pop-pins-1320.tsv) adds
+26 Personal editorial and 30 retained System release goals. It preserves
+the earlier catalog and all 842 historical assignments. The full host gate
+peaked at 5.8 GiB on Tick. Pop reproduced catalog SHA-256
+`693b0311f666e8694772f43ca9b691174d8190fc85868d41090618bfeb51579a`
+and passed the linked runtime check across 1,132 lambdas. The registered
+archive `vibestudio-open-goal-verified-release-1320-20261121` carries forward
+816 exact managed references and the same 612 train selectors. The current
+model-free sweep is appending new reference results under this release.
