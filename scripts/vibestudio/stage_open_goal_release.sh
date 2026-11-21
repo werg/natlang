@@ -67,5 +67,16 @@ actual_catalog_sha=$(sha256sum "$catalog")
 test "${actual_catalog_sha%% *}" = "$expected_catalog_sha"
 mv "$catalog" "$release/catalog.jsonl"
 test -z "$(git status --porcelain)"
+(
+  cd "$release/natlang"
+  npm ci --ignore-scripts --prefer-offline --no-audit
+  npm --prefix ts-host run --silent build:node
+  node --input-type=module -e '
+    const { createPiModelBackend } = await import("./ts-host/dist/model/pi-provider.js");
+    const { modelOracleJudge } = await import("./ts-host/dist/teacher/model-judge.js");
+    if (typeof createPiModelBackend !== "function" || typeof modelOracleJudge !== "function") process.exit(1);
+  '
+  test -z "$(git status --porcelain)"
+)
 touch "$release/staged"
 printf 'Verified %s catalog entries in %s\n' "$(wc -l < "$release/catalog.jsonl")" "$release"
