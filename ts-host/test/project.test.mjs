@@ -4,12 +4,38 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildProject, checkProject, createNatlangRuntime, compileVirtualProject } from '../dist/index.js';
+import { buildProject, checkProject, createNatlangRuntime, compileVirtualProject, virtualProjectFiles } from '../dist/index.js';
 import * as runtimeNamespace from '../dist/index.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const RUNTIME = { url: new URL('../dist/index.js', import.meta.url).href,
   types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
+
+test('virtual directories merge indexed sources with mutable compiler outputs', () => {
+  const files = virtualProjectFiles({
+    'src/first.ts': 'original',
+    'root.nl': 'root',
+    'src/nested/second.nl': 'nested',
+    '/config.json': '{}',
+  });
+  assert.deepEqual(files.list('/'), ['project', 'config.json']);
+  assert.deepEqual(files.list('/project/'), ['src', 'root.nl']);
+  assert.deepEqual(files.list('/project/src'), ['first.ts', 'nested']);
+  assert.equal(files.isDirectory('/project/src/nested/'), true);
+  assert.equal(files.isDirectory('/project/src/missing'), false);
+
+  files.write('/project/src/first.ts', 'shadow');
+  files.write('/project/build/first.js', 'compiled');
+  files.outputs.set('/project/src/generated/extra.ts', 'generated');
+  assert.equal(files.read('/project/src/first.ts'), 'original');
+  assert.deepEqual(files.list('/project'), ['src', 'root.nl', 'build']);
+  assert.deepEqual(files.list('/project/src'), ['first.ts', 'nested', 'generated']);
+  assert.equal(files.isDirectory('/project/build/'), true);
+  files.outputs.delete('/project/build/first.js');
+  assert.equal(files.isDirectory('/project/build'), false);
+  files.outputs.clear();
+  assert.deepEqual(files.list('/project/src'), ['first.ts', 'nested']);
+});
 
 function project(files) {
   const root = mkdtempSync(join(tmpdir(), 'natlang-project-'));

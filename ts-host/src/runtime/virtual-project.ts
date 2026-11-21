@@ -18,20 +18,41 @@ export type VirtualProject = { files: Record<string, string>; root?: string };
 export function virtualProjectFiles(files: Record<string, string>, root = '/project'): ProjectFiles & { outputs: Map<string, string> } {
   const store = new Map(Object.entries(files).map(([path, text]) => [path.startsWith('/') ? path : `${root}/${path}`, text]));
   const outputs = new Map<string, string>();
-  const directories = () => {
-    const dirs = new Set<string>(['/']);
-    for (const path of [...store.keys(), ...outputs.keys()]) {
-      let at = path.lastIndexOf('/');
-      while (at > 0) { dirs.add(path.slice(0, at)); at = path.lastIndexOf('/', at - 1); }
+  const sourceChildren = new Map<string, Set<string>>([['/', new Set()]]);
+  for (const path of store.keys()) {
+    let child = path;
+    for (let slash = child.lastIndexOf('/'); slash >= 0; slash = child.lastIndexOf('/')) {
+      const parent = child.slice(0, slash) || '/';
+      let entries = sourceChildren.get(parent);
+      if (!entries) {
+        entries = new Set();
+        sourceChildren.set(parent, entries);
+      }
+      entries.add(child.slice(slash + 1));
+      if (slash === 0) break;
+      child = parent;
     }
-    return dirs;
-  };
+  }
+  const directory = (path: string) => path.replace(/\/$/, '') || '/';
+  const prefixOf = (path: string) => path === '/' ? '/' : path + '/';
   return { outputs,
     isFile: path => store.has(path) || outputs.has(path),
-    isDirectory: path => directories().has(path.replace(/\/$/, '') || '/'),
-    list: dir => { const prefix = dir.replace(/\/$/, '') + '/';
-      return [...new Set([...store.keys(), ...outputs.keys()].filter(path => path.startsWith(prefix))
-        .map(path => path.slice(prefix.length).split('/')[0]!))]; },
+    isDirectory: path => {
+      const dir = directory(path);
+      if (sourceChildren.has(dir)) return true;
+      const prefix = prefixOf(dir);
+      for (const output of outputs.keys()) if (output.startsWith(prefix)) return true;
+      return false;
+    },
+    list: path => {
+      const dir = directory(path);
+      if (!outputs.size) return [...(sourceChildren.get(dir) ?? [])];
+      const entries = new Set(sourceChildren.get(dir));
+      const prefix = prefixOf(dir);
+      for (const output of outputs.keys())
+        if (output.startsWith(prefix)) entries.add(output.slice(prefix.length).split('/')[0]!);
+      return [...entries];
+    },
     read: path => { const text = store.get(path) ?? outputs.get(path); if (text === undefined) throw new Error(`no such file ${path}`); return text; },
     write: (path, text) => { outputs.set(path, text); } };
 }
