@@ -28,7 +28,9 @@ For a Codex teacher, `--approve-codex-session` lets the managed capture
 answer the model gateway's provider approval in its disposable workspace.
 It covers the gateway's authenticated Codex credential for that session.
 Other approval requests stay queued for their owners. Give longer workflows
-an explicit wall-clock budget with `--test-timeout-ms`.
+an explicit wall-clock budget with `--test-timeout-ms`. Cases whose catalog
+row has `requiresReview` need `--review-model PROVIDER:MODEL` with a model
+distinct from the teacher to evaluate the authored content independently.
 
 In the Natlang checkout, record each immutable capture directory in the data
 registry, then ingest each captured training manifest with
@@ -88,8 +90,9 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,812-goal release](vibestudio-open-goal-pop-pins-composed-1812.tsv)
-is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1812.OQb6LR`.
+The [1,916-goal release](vibestudio-open-goal-pop-pins-composed-1916.tsv)
+has verified detached compositions on Pop at
+`/home/werg/vibestudio-worktrees/open-goal-composed-1916.vUphMG`.
 To recreate a release, set `RELEASE` to a fresh directory, `RELEASE_PINS`
 to its TSV, and `CATALOG_SHA256` to the hash recorded below. Set
 `LEDGER_CHECKOUT` to the Natlang checkout with the current ledger and
@@ -727,3 +730,16 @@ and checked the combined and System test compositions. The registered archive
 model-free references. Its 701 training selectors include 691 without device
 or deployment-package prerequisites. Ten managed canaries passed on Tick
 before publication, including the repaired owned-worker and TestKit paths.
+
+The [1,916-goal pin](vibestudio-open-goal-pop-pins-composed-1916.tsv) adds
+intent discovery from workspace evidence, same-turn Eval recovery, durable
+GAD message and participant review, and live Tendril CDP and Build V2 work.
+The catalog contains 1,450 train goals and 466 held goals. Pop reproduced
+SHA-256 `b19d4efad6b8899fe4b8ec3b8d95b4d16fe0fd598f364918c9fe7e15fd0e7ee4`
+at `/home/werg/vibestudio-worktrees/open-goal-composed-1916.vUphMG` and
+verified the combined and System managed compositions. The registered
+`vibestudio-open-goal-composed-release-1916-20261121` archive contains
+989 accepted references, including 747 train selectors. The local selector
+file contains 737 of those. Full Host infrastructure verification on Pop
+waits for the ledger to admit its memory budget. The same staging procedure
+verified those native Host dependencies on Tick on the 1,812-goal release.
