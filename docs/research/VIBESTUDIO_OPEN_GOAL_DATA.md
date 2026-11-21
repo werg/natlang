@@ -257,6 +257,12 @@ at several depths. Compare the trained checkpoint with its starting
 checkpoint on the same pinned held evaluation. Keep the Vibestudio held
 goals and their source groups outside the training bundle.
 
+The expert-iteration driver also accepts the registered bundle through
+`--aux "vibestudio=$LEARNER_READY/chains.pkl,share=all"`. Supply those
+trajectories once in the mix. Read `build.json` under `mix` for the
+effective weights and open-goal shares, including auxiliary bundles.
+The same mixture checks apply before the learner starts.
+
 ## Capability coverage
 
 The [pinned baseline](vibestudio-open-goal-baseline.jsonl) contains 60 skill
