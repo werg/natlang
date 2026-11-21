@@ -6209,3 +6209,18 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   1,092 -> 10,165 (qwen-campaign 643 -> 7,485, fallow-v13r2 442 -> 2,179, qwen-s72 7 -> 501); sft-teacher-demos-20261118
   9,038 -> 9,179; sft-sources-20261117 10,694 -> 10,709; sft-teacher-demos-20261119 8,925 -> 9,082. Total
   29,749 -> 39,135. Enters at sft-v8's pin.
+
+## 2026-11-21 11:15, sft-v7 build inputs: registry inventory shadow and own Neuralese graph (expert-iteration strand)
+
+- **Build refused `/home/werg/data/ei-sources`** (the cycles' sft_sources WORK): the 04:20 journal backfill had
+  registered the then-empty directory as an inventory-only placeholder, which shadowed sft_sources' later record of the
+  same path. 53f44549e: a producer's record wins over an inventory placeholder (test). For sft-v7's pin the placeholder
+  id was re-recorded as the WORK. The 2642d02c9 failure check stopped the cycle at the build (09:49).
+- **The own Neuralese graph** (df3ca5c6f, the ran-out fix: the student's own consumer calls in the mix) had failed on
+  the same shadow behind an `|| echo` fallback, and its rerun admitted 0 of 146 own native-state episodes: the
+  current-surface set came only from the WORK's exact replays, whose verdicts were seeded from sft-v6's WORK under an
+  earlier pin (older system prompt, before d11a7020a). 8d5b08f9d: `--current-surface-run` marks the cycle's own
+  collection as current (both neuralese-graph and neuralese-text); 7eaa92b52: a failed own-graph step ends the stage.
+  Rebuilt with main's sft_sources (data preparation only; held scoring stays on the pin): 118 episodes, 706
+  native-state calls, 2.66M target tokens (the 749 native-state episodes of earlier GRPO runs have no rollout spec in
+  this WORK and stay out: earlier policies, older surfaces). sft-v7's SFT starts ~1.5 h later than planned.
