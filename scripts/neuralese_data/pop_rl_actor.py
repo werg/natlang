@@ -71,6 +71,9 @@ RAW_PREP_GB = 7.5
 POP_RESERVE_GB = 0.5
 POP_MIN_FREE = 8 * 2**30 + 512 * 2**20       # scratch floor on Pop
 RL_PORT = 18531
+# Pop ledger admission bound of an actor unit; the ssh that waits on it gets this plus a margin (a 600 s ssh timeout
+# under a 900 s admission ended sft-v7's candidate held, 2026-11-21).
+POP_ADMISSION_WAIT = 900
 STATE = ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
 SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
@@ -517,8 +520,8 @@ def start(args):
     cap = ['--host-max-gb', str(SGLANG_MEMORY_GB - .5)] if args.engine == 'sglang' else []
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                         '--budget-gb', budget, *cap, '--reserve-gb', str(POP_RESERVE_GB),
-                        '--class', 'experiment', '--no-resumable', '--wait', '900', *container, '--workdir', work, '--',
-                        '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
+                        '--class', 'experiment', '--no-resumable', '--wait', str(POP_ADMISSION_WAIT), *container, '--workdir', work, '--',
+                        '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']), timeout=POP_ADMISSION_WAIT + 300)
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
               'engine': args.engine, **({'sglang': sglang} if args.engine == 'sglang' else {}),
               'prepared_seconds': round(time.time() - started, 1), 'adapters': adapters}
@@ -622,7 +625,8 @@ def serve_checkpoint(args):
     # its own --memory, so this unit's budget is accounting for the driver, not the engine's limit.
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                     '--budget-gb', pop_sglang_budget_gb(), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
-                    '--no-resumable', '--wait', '900', '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']))
+                    '--no-resumable', '--wait', str(POP_ADMISSION_WAIT), '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']),
+        timeout=POP_ADMISSION_WAIT + 300)
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1),
               'adapters': adapters}
