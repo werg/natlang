@@ -249,6 +249,8 @@ def drive(args):
                 raise RuntimeError('insufficient local disk headroom for another managed collection wave')
             collect = ['pnpm', '--silent', 'natlang:teacher', '--model', LUNA, '--approve-codex-session',
                        '--cases-per-instance', str(args.wave_size), '--test-timeout-ms', '600000', '--out', str(capture)]
+            if args.concurrency > 1:
+                collect += ['--concurrency', str(args.concurrency)]
             if first.get('requiresReview'):
                 collect += ['--review-model', args.review_model]
             for name in names:
@@ -282,6 +284,7 @@ def main():
     run.add_argument('--review-model')
     run.add_argument('--attempts', type=int, default=2)
     run.add_argument('--wave-size', type=int, default=6)
+    run.add_argument('--concurrency', type=int, default=1)
     run.add_argument('--reserve-disk-gib', type=float, default=8)
     export = sub.add_parser('export-wave')
     export.add_argument('--archive', type=Path, required=True)
@@ -292,8 +295,8 @@ def main():
         export_trajectories(args.archive, read(args.receipt), held, training)
         return
     reviewer = (args.review_model or '').split(':')[-1].lower().split('-')
-    if args.attempts < 1 or args.wave_size < 1 or 'sol' in reviewer or 'luna' in reviewer:
-        parser.error('provide positive limits and, if configured, an independent non-Sol reviewer')
+    if args.attempts < 1 or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer:
+        parser.error('provide positive limits, concurrency within the wave size, and an independent non-Sol reviewer when configured')
     with (args.root / '.controller.lock').open('a') as owner:
         fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
         drive(args)
