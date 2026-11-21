@@ -53,3 +53,33 @@ test('a function of the folder named transcript takes the name from the eval bui
   assert.doesNotMatch(results[0], /duplicated/);
   assert.equal(value, 42);
 });
+
+test('relative type imports and renamed re-exports retain their own transitive aliases at runtime', async () => {
+  const files = {
+    'root.nl': '---\nargs: {}\nreturns: PublicReport\n---\nReport one record.\n',
+    'types.ts': `
+      export type Entry = string;
+      export type { Report as PublicReport } from './contracts/index.js';
+      import type { Entry as OtherEntry } from './records.js';
+      export type Inputs = OtherEntry[];
+    `,
+    'contracts/index.ts': `
+      import type { Entry } from '../records.js';
+      type State = "ready" | "held";
+      export type Report = { entry: Entry; state: State; label: "Entry" };
+    `,
+    'records.ts': 'type Count = number; export type Entry = { total: Count };',
+  };
+  const value = { entry: { total: 7 }, state: 'ready', label: 'Entry' };
+  let turns = 0;
+  const runtime = createNatlangRuntime({
+    model: async () => {
+      turns++;
+      return { calls: [['return_result', { status: 'success', value }]] };
+    },
+    seed: { mode: 'backend' },
+  });
+  const fn = loadVirtualNatlang(files, 'root.nl');
+  assert.deepEqual(await runtime.run(() => fn()), value);
+  assert.equal(turns, 1);
+});

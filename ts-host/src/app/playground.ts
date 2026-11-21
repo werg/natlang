@@ -6,7 +6,7 @@
 import { NativeTraceRecorder } from '../native/trace.js';
 import ts from 'typescript';
 import { parseType, type Type } from '../native/types.js';
-import { readTypeAliases } from '../native/type-aliases.js';
+import { readTypesFile } from '../runtime/linked-types.js';
 import { admitNativeTrace, type NativeScenarioContract } from '../native/scenario.js';
 import { compileProject, formatDiagnostics } from '../compiler/project.js';
 import { loadNamedFunction, NatlangSourceError } from '../runtime/loader.js';
@@ -112,7 +112,7 @@ export function projectSignature(files: Record<string, string>, path: string):
   let returns = main.type?.getText(source) ?? 'null';
   const promised = /^Promise<([\s\S]*)>$/.exec(returns);
   if (promised) returns = promised[1]!;
-  return { types: parse(files[typesPath] ? readTypeAliases(files[typesPath]!) : {}), returns: parseType(returns),
+  return { types: parse(files[typesPath] ? readTypesFile(`${ROOT}/${typesPath}`, sourceFiles(files)) : {}), returns: parseType(returns),
     fields: (input?.members ?? []).flatMap(member => ts.isPropertySignature(member) ? [{ name: member.name.getText(source),
       optional: !!member.questionToken, type: parseType(member.type?.getText(source) ?? 'string') }] : []) };
 }
