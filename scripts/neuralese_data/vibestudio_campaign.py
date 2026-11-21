@@ -78,11 +78,57 @@ def outcomes(capture, names, held, training, cases):
             entry = packet.get('execution') or {}
             teacher = (entry.get('diagnostics') or {}).get('natlangTeacher') or {}
             transport = (teacher.get('executionError') or {}).get('message')
+            reason = transport or entry.get('error') or test.get('reason')
             results[name] = {'status': 'export-rejected' if test.get('passed') else 'test-failed',
-                             'raw': str(raw.relative_to(capture)), 'reason': transport or entry.get('error') or test.get('reason')}
+                             'raw': str(raw.relative_to(capture)), 'reason': reason}
         else:
             results[name] = {'status': 'no-capture'}
     return results
+
+
+def workerd_reset(outcome):
+    reason = outcome.get('reason') or ''
+    return outcome['status'] == 'test-failed' and 'DO RPC ' in reason and 'ECONNRESET' in reason
+
+
+def infrastructure_failure(outcome, case):
+    if workerd_reset(outcome):
+        return True
+    if outcome['status'] == 'no-capture':
+        return True
+    reason = outcome.get('reason') or ''
+    return case.get('requiresAndroidEmulator') and 'ready disposable Android emulator' in reason
+
+
+def prerequisite_holds(cases, host):
+    holds = {}
+    if any(case.get('requiresAndroidEmulator') for case in cases.values()):
+        adb = shutil.which('adb')
+        devices = subprocess.run([adb, 'devices'], capture_output=True, text=True, check=False) if adb else None
+        emulators = []
+        if devices is not None and devices.returncode == 0:
+            for line in devices.stdout.splitlines():
+                fields = line.split()
+                if len(fields) == 2 and fields[0].startswith('emulator-') and fields[1] == 'device':
+                    emulators.append(fields[0])
+        booted = subprocess.run([adb, '-s', emulators[0], 'shell', 'getprop', 'sys.boot_completed'],
+                                capture_output=True, text=True, check=False) if len(emulators) == 1 else None
+        if booted is None or booted.returncode or booted.stdout.strip() != '1':
+            holds.update({name: 'requires one booted disposable Android emulator'
+                          for name, case in cases.items() if case.get('requiresAndroidEmulator')})
+    if any(case.get('requiresDeploymentPackage') for case in cases.values()):
+        node = shutil.which('node')
+        validation = subprocess.run([node, '--input-type=module', '-e', '''
+            import path from "node:path";
+            import { requireInstalledDeploymentPackage } from "./scripts/lib/owned-deployment-target.mjs";
+            const input = process.env.VIBESTUDIO_MANAGED_DEPLOYMENT_PACKAGE?.trim();
+            if (!input) process.exit(2);
+            await requireInstalledDeploymentPackage(path.resolve(input));
+        '''], cwd=host, capture_output=True, check=False) if node else None
+        if validation is None or validation.returncode:
+            holds.update({name: 'requires a validated installed deployment package'
+                          for name, case in cases.items() if case.get('requiresDeploymentPackage')})
+    return holds
 
 
 def transfer(source, remote, destination):
@@ -154,19 +200,25 @@ def export_trajectories(archive, receipt, held, training):
     publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None})
 
 
-def publish_status(root, cases, seeds, receipts, review_model, attempts):
+def publish_status(root, cases, seeds, receipts, review_model, attempts, holds):
     verified, counts = set(seeds), Counter()
     states = {}
+    infrastructure = Counter()
     for receipt in receipts:
         for name, outcome in receipt.items():
-            counts[name] += 1
             states[name] = outcome['status']
+            if infrastructure_failure(outcome, cases[name]):
+                infrastructure[name] += 1
+                continue
+            counts[name] += 1
             if outcome['status'] == 'verified':
                 verified.add(name)
     rows = {}
     for name, case in cases.items():
         if name in verified:
             status = 'verified'
+        elif name in holds:
+            status = 'prerequisite-unavailable'
         elif case.get('requiresReview') and not review_model:
             status = 'reviewer-required'
         elif counts[name] < attempts:
@@ -174,7 +226,13 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts):
         else:
             status = states[name]
         rows[name] = {'status': status, 'attempts': counts[name], 'last_outcome': states.get(name)}
-    summary = {'total': len(cases), 'attempted_goals': len(counts), 'attempts': sum(counts.values()),
+        if name in holds and status == 'prerequisite-unavailable':
+            rows[name]['hold_reason'] = holds[name]
+        if name in infrastructure:
+            rows[name]['infrastructure_failures'] = infrastructure[name]
+    summary = {'total': len(cases), 'attempted_goals': len(set(counts) | set(infrastructure)),
+               'attempts': sum(counts.values()) + sum(infrastructure.values()),
+               'infrastructure_failures': sum(infrastructure.values()),
                'counts': dict(Counter(row['status'] for row in rows.values()))}
     publish(root / 'status.json', {'model': LUNA, **summary, 'cases': rows})
     print(json.dumps(summary), flush=True)
@@ -209,10 +267,12 @@ def drive(args):
     held, training, cases = campaign_scope(root / 'catalog.jsonl', args.held)
     seeds = {}
     by_id = {row['taskId']: name for name, row in cases.items()}
-    for path in args.seed:
+    saved_seeds = root / 'reused.json'
+    paths = list(map(Path, read(saved_seeds).values())) if saved_seeds.exists() else []
+    for path in [*paths, *args.seed]:
         episode = verified_episode(path, held, training)
         seeds[by_id[episode['task_id']]] = str(path.resolve())
-    publish(root / 'reused.json', seeds)
+    publish(saved_seeds, seeds)
     waves = root / 'waves'
     jobs = waves / 'jobs'
     jobs.mkdir(exist_ok=True)
@@ -224,10 +284,11 @@ def drive(args):
         source = Path(path).parent
         remote_archive(args, args.archive / f'seed-{index:04d}',
                        {name: {'status': 'verified', 'manifest': 'manifest.json'}}, source)
+    holds = prerequisite_holds(cases, args.host)
     while True:
         plans = sorted(jobs.glob('[0-9]*.json'))
         receipts = [read(wave) for wave in sorted(waves.glob('*-result.json'))]
-        rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts)
+        rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds)
         sync_index(args, [root / 'status.json', root / 'reused.json'])
         if (root / 'stop-after-wave').exists():
             return
@@ -235,6 +296,8 @@ def drive(args):
         if not started:
             names = next_wave(cases, rows, args.wave_size)
             if not names:
+                if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
+                    return
                 publish(root / 'finished.json', {'collection_exhausted': True,
                                                  'all_goals_verified': all(row['status'] == 'verified' for row in rows.values())})
                 sync_index(args, [root / 'finished.json'])
@@ -245,6 +308,13 @@ def drive(args):
         first = cases[names[0]]
         capture = waves / f'{started.stem}-capture'
         if not capture.is_dir():
+            names = [name for name in names if rows[name]['status'] == 'pending']
+            if not names:
+                publish(waves / f'{started.stem}-result.json', {})
+                continue
+            if names != read(started)['cases']:
+                publish(started, {'cases': names})
+                first = cases[names[0]]
             if shutil.disk_usage(root).free < args.reserve_disk_gib * 1024**3:
                 raise RuntimeError('insufficient local disk headroom for another managed collection wave')
             collect = ['pnpm', '--silent', 'natlang:teacher', '--model', LUNA, '--approve-codex-session',
@@ -267,6 +337,12 @@ def drive(args):
         publish(waves / f'{started.stem}-result.json', receipt)
         # The matching remote copy and its IR export are durable.
         shutil.rmtree(capture)
+        resets = [name for name, outcome in receipt.items() if workerd_reset(outcome)]
+        captures_missing = all(outcome['status'] == 'no-capture' for outcome in receipt.values())
+        if len(resets) >= 2 or captures_missing:
+            publish(root / 'runtime-hold.json', {'wave': started.stem, 'workerd_resets': resets,
+                                                 'all_captures_missing': captures_missing})
+            (root / 'stop-after-wave').touch()
 
 
 def main():

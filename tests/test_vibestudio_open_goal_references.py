@@ -91,8 +91,8 @@ def test_inventory_links_count_only_after_a_reference_pass(tmp_path):
     baseline.write_text('\n'.join(map(json.dumps, [
         {'kind': 'snapshot', 'workspace_sources': {'base': ['base'], 'one': ['base', 'one'], 'two': ['base', 'two']},
          'pins': {'base': 'pinned'}},
-        {'kind': 'system-test', 'capability': 'retained-session'},
-        {'kind': 'system-test', 'capability': 'file-version'},
+        {'kind': 'system-test', 'capability': 'retained-session', 'origin': 'managed-teacher'},
+        {'kind': 'system-test', 'capability': 'file-version', 'origin': 'agent-orchestration'},
         {'kind': 'skill', 'id': 'source:session'},
     ])))
     path = tmp_path / 'crosswalk.json'
