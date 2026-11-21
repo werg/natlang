@@ -6081,3 +6081,32 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   one starts, and launches only with at least 15 GB of ledger headroom left after its budget. On completion it evaluates build-v3 on
   the same 565 test rows (short/long split). It repoints `served` to build-v3 only if build-v3 beats build-v2 overall and on long
   rows without losing on short rows.
+
+**2026-11-21 09:00, filled reasoning: staged draws cut the cost per kept step (default; `--draw parallel` opts out).**
+- **What changed in `Filler.step`:**
+  1. The no-reasoning baseline is scored first, by one prefill.
+  2. One plain student sample is drawn with the whole room: the anchor. Its length L is the student's own at this
+     step, and it sets the band [0.67L, 1.5L]. An unclosed anchor gets one more draw.
+  3. An anchor that passes the gates is chosen at once, with no hinted prefill and no further draws.
+  4. Otherwise the rest of the budget is drawn in waves (1 unhinted + 1 hinted, then 1 hinted). Each is capped at
+     1.5L + 1 tokens: a block still open there is out of the band and cannot be chosen (`past_band`). The waves stop
+     at the first wave with an admitted candidate inside the band, best improvement winning.
+  5. After `--trend-window` 3 fallbacks in a row, a trajectory draws only anchors until a step fills again.
+- **Length and close bias:**
+  - The anchor is an uncapped student sample, as the random anchor was before, and the band still decides membership.
+  - `length_weights` now takes the student's own length reference from anchors only, since band-capped draws are no
+    evidence of it. The trained length mix still follows the student's own (reweighting kept, cap 4).
+  - Early stopping lowers the selection pressure on the sequence score; the old rule was best of four.
+- **`--skip-certain-nll`** (no draws where the action is near-certain after an empty block) is built but **off by
+  default.** Replaying the rule on sft-v7's first 705 recorded steps showed those steps were the cheapest kept ones:
+  skipping cost 43 fills and raised tokens per kept step.
+- **Offline replay of the new rules on those 705 steps (`fills.jsonl`):**
+  - parallel: 11.1k generated tokens per kept step, 299 fills;
+  - staged: 7.0k tokens per kept step, 259 fills;
+  - total generated tokens 3.33M -> 1.81M.
+  - The fill loss comes from anchor-only bands (the parallel rule could anchor on either unhinted sample) and the trend
+    rule.
+- Tests (5 new): stop at an admitted anchor; band-capped waves and `past_band`; skip-certain; trend; anchor-only length
+  reference. The parallel path keeps its scripted-engine test.
+- **Enters:** sft-v8's fill (sft-v8 pins origin/main at launch). sft-v7's fill window runs on `pin-817c43c567de`, which
+  predates this.
