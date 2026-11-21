@@ -743,3 +743,24 @@ verified the combined and System managed compositions. The registered
 file contains 737 of those. Full Host infrastructure verification on Pop
 waits for the ledger to admit its memory budget. The same staging procedure
 verified those native Host dependencies on Tick on the 1,812-goal release.
+
+The [2,224-goal pin](vibestudio-open-goal-pop-pins-composed-2224.tsv) adds
+native workspace configuration, Android delivery, resident messaging recovery,
+board migration, coordinated document changes, and a broader set of writing
+and presentation goals. The catalog contains 1,674 train goals and 550 held
+goals across 107 families. Its SHA-256 is
+`66291e428c969effff062d8c730031e46744c7d9745c76d12137520c2165fa81`.
+The registered `vibestudio-open-goal-composed-release-2224-20261121` archive
+contains 1,077 accepted model-free references and directly exercises 141 of
+the 151 baseline agentic capabilities. It includes 788 training selectors,
+778 of which require only a local workspace. The archive retains the prior
+release's accepted training selectors.
+
+This pin enables `qualify_open_goals.py --retain-trajectories`. The managed run
+keeps each selected test's full evidence as it finishes the batch. Two native
+notification cases verified that path on Tick. The archived Luna document
+trajectory also rebuilt against this catalog, yielding eight action chains,
+three packs, and 1,596 weighted target tokens in a CPU-only learner schedule.
+A ground-truth oracle receipt verifies a workspace outcome. A teacher
+trajectory additionally records the sampled model decisions that the learner
+can supervise.
