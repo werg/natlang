@@ -110,7 +110,14 @@ python scripts/memory_ledger.py run --unit "$STAGE_UNIT" \
 The script installs the release's workspace links, verifies the native Host
 dependencies, builds infrastructure with one workspace job at a time, and
 checks both the combined and System managed compositions. The resulting
-`$RELEASE/staged` marker follows exact catalog verification. Set
+`$RELEASE/staged` marker follows exact catalog and Natlang reviewer verification.
+For a fresh release with a prepared Host on the same machine, pass
+`env VIBESTUDIO_INFRASTRUCTURE_DONOR="$PREPARED_RELEASE/host"` between the
+ledger's `--` and `bash`. Staging checks all infrastructure source and toolchain
+digests, copies the generated files, and verifies their output hashes before
+the Host checks. Omit the variable for a cold build or when inputs changed.
+
+Set
 `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
 `VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_RUNTIME_CHECKOUT`
 to `$RELEASE/natlang`. The last checkout supplies the release's vendored
@@ -183,7 +190,7 @@ capture, IR, and learner chains. A one-case smoke verifies data flow.
 Generate a capture list against the exact release catalog and the managed
 reference evidence. Add `--family` to choose a verified family. Use
 `--local-train-cases-out` for workspaces that lack attached devices, an
-Android emulator, deployment packages, or a public-web search provider.
+Android emulator, deployment packages, public URL access, or a search provider.
 The audit lists the prerequisites for each goal. Use `--local-only` when
 running the corresponding model-free reference sweep on that host.
 

@@ -8,6 +8,7 @@ fi
 pins=$(realpath "$1")
 release=$(realpath -m "$2")
 expected_catalog_sha=$3
+stage_scripts=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 host_source=${VIBESTUDIO_SOURCE_CHECKOUT:-"$HOME/vibestudio"}
 template_sources=${VIBESTUDIO_TEMPLATE_SOURCE_ROOT:-"$HOME/vibestudio-templates"}
 natlang_source=${NATLANG_SOURCE_CHECKOUT:-"$HOME/natlang"}
@@ -55,6 +56,9 @@ export npm_config_workspace_concurrency=1
 export NODE_OPTIONS=${NODE_OPTIONS:-"--max-old-space-size=850 --max-semi-space-size=8"}
 pnpm install --frozen-lockfile --ignore-scripts
 pnpm check:native-host-dependencies --repair
+if [[ -n ${VIBESTUDIO_INFRASTRUCTURE_DONOR:-} ]]; then
+  node "$stage_scripts/reuse_host_infrastructure.mjs" "$VIBESTUDIO_INFRASTRUCTURE_DONOR" "$PWD"
+fi
 pnpm build:infrastructure
 node --import tsx --input-type=module -e 'await import("./packages/rpc/src/wireJson.ts")'
 pnpm natlang:vendor --check
