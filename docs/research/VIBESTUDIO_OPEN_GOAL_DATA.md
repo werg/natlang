@@ -756,6 +756,10 @@ the 151 baseline agentic capabilities. It includes 788 training selectors,
 778 of which require only a local workspace. The archive retains the prior
 release's accepted training selectors.
 
+Pop verified the catalog, selector hashes, and native Host build in
+`/home/werg/vibestudio-worktrees/open-goal-composed-2224.LymeVV`. The release
+directory contains the `native-host-verified` marker and both selector files.
+
 This pin enables `qualify_open_goals.py --retain-trajectories`. The managed run
 keeps each selected test's full evidence as it finishes the batch. Two native
 notification cases verified that path on Tick. The archived Luna document
