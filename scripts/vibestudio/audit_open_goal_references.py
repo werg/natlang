@@ -47,6 +47,8 @@ def managed_prerequisites(row):
         requirements.append('android-emulator')
     if row.get('requiresDeploymentPackage'):
         requirements.append('deployment-package')
+    if row['family'] == 'workspace-open-user-goal-assigned-public-brief':
+        requirements.append('public-web-fetch')
     if row['family'] in {'workspace-open-user-goal-research', 'workspace-open-user-goal-research-and-edit'}:
         requirements.append('public-web-search-provider')
     return requirements

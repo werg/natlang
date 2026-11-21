@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from audit_open_goal_references import inventory_coverage, write_train_cases
+from audit_open_goal_references import inventory_coverage, managed_prerequisites, write_train_cases
 
 
 class CapabilityCoverageTest(unittest.TestCase):
@@ -36,6 +36,19 @@ class CapabilityCoverageTest(unittest.TestCase):
             self.assertEqual(report['agentic_without_verified_reference_links'], ['managed', 'orchestrated'])
             self.assertEqual(report['without_verified_reference_links'],
                              ['managed', 'new-goal', 'orchestrated', 'review', 'testkit'])
+
+
+class ManagedPrerequisitesTest(unittest.TestCase):
+    def test_distinguishes_assigned_public_fetch_from_dynamic_search(self):
+        for family, required in (
+            ('assigned-public-brief', ['public-web-fetch']),
+            ('research', ['public-web-search-provider']),
+            ('research-and-edit', ['public-web-search-provider']),
+            ('calendar', []),
+        ):
+            with self.subTest(family=family):
+                row = {'family': f'workspace-open-user-goal-{family}'}
+                self.assertEqual(managed_prerequisites(row), required)
 
 
 class TrainSelectorTest(unittest.TestCase):
