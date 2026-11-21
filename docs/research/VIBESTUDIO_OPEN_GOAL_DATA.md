@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [970-goal release](vibestudio-open-goal-pop-pins-970.tsv) is staged on Pop
-under `/home/werg/vibestudio-worktrees/open-goal-release-970.mmFw47`. To
+The [1,048-goal release](vibestudio-open-goal-pop-pins-1048.tsv) is staged on
+Pop under `/home/werg/vibestudio-worktrees/open-goal-release-1048.BBeBwM`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -613,3 +613,11 @@ and `3932ba18d0d4060af83b9db6baa95bd330ad8bfd25d989214a35a3b92687255f`,
 respectively. The package-review failure exposed a mismatch with Build V2's
 internal dependency validation. The next source release shares that rule
 and explains the blocked plan to the caller.
+
+The 1,048-goal release passed the full host gate at 5.5 GiB peak on Tick and
+was pushed. Pop reproduced catalog SHA-256
+`408061455cbc9bbb40195b382f90306b85bf0edf410450a02c0254872d974354`.
+Its `train-cases.txt` contains 474 independently verified training selectors,
+and `train-cases-no-device.txt` contains 464. The managed verification run on
+Tick reused 638 references for cases that require only the local harness and
+started verification of its remaining 393 cases.
