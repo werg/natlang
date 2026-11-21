@@ -18,6 +18,14 @@ distribution (DECISIONS 2026-11-20 "expert iteration"; owner-approved). A cycle:
             filled-reasoning generation on the same actor) -> frontier -> teacher frontier campaign -> extract, replay,
             filled build, frontier build -> Ambient SFT (exp0_sft default) -> Pop held of the candidate -> verdict, each
             stage resumable (DIR/stages/<name>.done) and pinned (one commit for actor, harness, scorer, learner and eval).
+            Pipelined (DECISIONS 2026-11-21 "pipelined cycles"; ``--no-pipeline`` opts out): when the SFT checkpoint
+            exists the driver launches the next cycle from it (``--speculative-after`` this cycle), which selects and
+            collects while Pop judges the candidate; its gate stage, after the collection, reads this cycle's verdict
+            and trains from the candidate (adopted) or from this cycle's start (rejected: a 'failure' verdict
+            recollects from that start, any other rejection keeps the sibling policy's verified collection and merges
+            the start's own frontier over it). Filled reasoning gets a dedicated actor of the trained policy in the
+            CPU-only window after the collection (``--no-fill-window``), closed before the SFT takes the GPU, and a
+            fixed share beside the collection (``--fill-inflight`` more engine slots than collection slots).
 
     expert_iteration.py select   --out TASKS.json [--rates-groups GLOB ...] [--frontier OLD.json ...]
     expert_iteration.py collect  --work W --checkpoint C --tasks TASKS.json [--k 4] [--hours 6] [--slots 128]
@@ -315,6 +323,74 @@ def frontier(args):
     log({'event': 'frontier', 'tasks': len(tasks), 'tiers': data['tiers']})
 
 
+def merge_frontier(exact, sibling):
+    """A frontier for a policy whose own collection (``exact``) measured only some tasks: the rest come from a sibling
+    policy's collection (one SFT step away, rejected by held), marked ``measured_by: sibling``."""
+    tasks = {t: {**v, 'measured_by': 'sibling'} for t, v in sibling['tasks'].items()}
+    tasks.update({t: {**v, 'measured_by': 'own'} for t, v in exact['tasks'].items()})
+    return {**exact, 'sibling_policy': sibling['policy'],
+            'collections': [*exact.get('collections', ()), *sibling.get('collections', ())],
+            'tiers': dict(collections.Counter(v['tier'] for v in tasks.values())), 'tasks': dict(sorted(tasks.items()))}
+
+
+def rejected_collection_mode(verdict, setting='auto'):
+    """What a speculative cycle does with its collection when the candidate it collected from is not adopted:
+    ``recollect`` from the start policy after a 'failure' (a significant held regression: maybe a bug, its behaviour
+    is not data), else ``keep`` (verified successes of a sibling policy one SFT step from the start, as close to the
+    start's distribution as the previous cycle's own data was to its candidate)."""
+    if setting != 'auto':
+        return setting
+    return 'recollect' if verdict == 'failure' else 'keep'
+
+
+def next_name(name):
+    """sft-v7 -> sft-v8 (None without a trailing number)."""
+    import re
+    match = re.match(r'^(.*?)(\d+)$', name)
+    return f'{match.group(1)}{int(match.group(2)) + 1}' if match else None
+
+
+# flags of `cycle` that name this cycle (replaced in the next one's argv); every one takes a value
+OWN_FLAGS = ('--dir', '--name', '--start', '--start-sha', '--commit', '--pin', '--speculative-after', '--prefer-unseen',
+             '--fallback-prefer-unseen', '--next-name', '--next-seed-work', '--fill-repo')
+
+
+def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous, prefer_unseen, fallback_prefer_unseen,
+                    extra_seed_work=()):
+    """The next pipelined cycle's ``cycle`` arguments: this cycle's (``argv`` after ``cycle``) with its own flags
+    replaced, speculative after ``previous``, the extra seed WORKs added."""
+    out, skip = [], False
+    for arg in argv:
+        if skip:
+            skip = False
+            continue
+        flag = arg.split('=', 1)[0]
+        if flag in OWN_FLAGS:
+            skip = '=' not in arg
+            continue
+        out.append(arg)
+    seeds = {out[i + 1] for i, a in enumerate(out[:-1]) if a == '--seed-work'}
+    out += [x for w in extra_seed_work if w not in seeds for x in ('--seed-work', str(w))]
+    out += ['--dir', str(directory), '--name', name, '--start', str(start), '--start-sha', start_sha, '--commit', commit,
+            '--speculative-after', str(previous), *[x for b in prefer_unseen for x in ('--prefer-unseen', str(b))],
+            *[x for b in fallback_prefer_unseen for x in ('--fallback-prefer-unseen', str(b))]]
+    return out
+
+
+def reusable_held(results, policy, samples, series_key):
+    """The first complete held result of ``policy`` at ``samples`` per task in one scoring series (a measurement an
+    earlier cycle made on the same series: pairing rules unchanged, Pop spared 3.5 h)."""
+    for path in results:
+        try:
+            r = json.loads(Path(path).read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (r.get('complete') and r.get('policy_id') == policy and r.get('samples_per_task') == samples
+                and (r.get('series') or {}).get('key') == series_key):
+            return Path(path)
+    return None
+
+
 # ---- cycle -----------------------------------------------------------------------------------------------------------
 TEACHER_POOLS = [OPS / 'teacher-gen-20261115' / p for p in ('pool-v1', 'pool-v2-rich', 'pool-progtune-decisions')] + [
     OPS / 'teacher-gen-20261119' / 'gap-v1']
@@ -342,6 +418,28 @@ class Cycle:
         self.collect_dir, self.held = self.dir / 'collect', self.dir / 'held'
         self.work = Path(args.sft_work)
         self.mix = self.dir / 'mix'
+        self.window_closed = threading.Event()
+        self.window_started = False
+
+    def gate(self):
+        path = self.dir / 'stages' / 'gate.done'
+        return json.loads(path.read_text()) if path.exists() else None
+
+    def train_policy(self):
+        """(checkpoint, sha, prefer-unseen builds) of the policy this cycle trains: the start, or after a speculative
+        cycle's gate the policy the previous verdict chose."""
+        g = self.gate()
+        if g:
+            return g['start'], g['start_sha'], g['prefer_unseen']
+        return self.a.start, self.start_sha, list(getattr(self.a, 'prefer_unseen', []))
+
+    def collect_policy(self):
+        """(checkpoint, sha) the collection serves: the start (speculatively the previous candidate), or the trained
+        policy after a gate that recollects."""
+        g = self.gate()
+        if g and g.get('collection') == 'recollect':
+            return g['start'], g['start_sha']
+        return self.a.start, self.start_sha
 
     def note(self, **record):
         line = json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S'), **record}, default=str)
@@ -366,12 +464,15 @@ class Cycle:
         while self.active(unit):
             time.sleep(poll)
 
-    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None):
-        """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined."""
+    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None):
+        """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
+        ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin)."""
         if not self.active(unit):
             shell = ' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
-            env = ['/usr/bin/env', *[f'{k}={self.env[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH', 'HF_HUB_OFFLINE',
-                                                                      'OMP_NUM_THREADS', 'MKL_NUM_THREADS')]]
+            values = {**self.env, **({'NATLANG_REPO': str(repo), 'PYTHONPATH': f'{repo}/training/neuralese:{repo}'}
+                                     if repo else {})}
+            env = ['/usr/bin/env', *[f'{k}={values[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH', 'HF_HUB_OFFLINE',
+                                                                    'OMP_NUM_THREADS', 'MKL_NUM_THREADS')]]
             subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', str(budget), '--priority', priority,
                             '--wait', '36000', '--detach', '--workdir', str(workdir or self.pin), '--',
                             *env, '/bin/sh', '-c', f'exec {shell}'], check=True)
@@ -397,12 +498,37 @@ class Cycle:
         result = out / 'result.json'
         if result.exists() and json.loads(result.read_text()).get('complete'):
             return out
+        if self.reuse_held(out, checkpoint):
+            return out
         mode = ['base', str(out), str(self.a.held_samples)] if checkpoint == BASE_CKPT else \
             ['ckpt', str(out), str(self.a.held_samples), str(checkpoint)]
         out.mkdir(parents=True, exist_ok=True)
         subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(self.pin), *mode],
                        stdout=(out / 'driver.log').open('a'), stderr=subprocess.STDOUT)
         return out
+
+    def reuse_held(self, out, checkpoint):
+        """Copy an earlier cycle's complete Pop measurement of this policy in this pin's scoring series into ``out``
+        (``--no-held-reuse`` opts out)."""
+        if getattr(self.a, 'no_held_reuse', False):
+            return False
+        from natlang_neuralese.common.hashing import sha256_file_hex_cached
+        policy = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
+        try:
+            key = subprocess.check_output([PY, '-c', 'from natlang_neuralese.rl.held_eval import series; '
+                                           "print(series()['key'])"], env=self.env, text=True, cwd=self.pin).strip()
+        except subprocess.CalledProcessError:
+            return False
+        mine = (out / 'result.json').resolve()
+        found = reusable_held([p for p in sorted(OPS.glob('ei/*/held/*/result.json')) if p.resolve() != mine],
+                              policy, self.a.held_samples, key)
+        if not found:
+            return False
+        out.mkdir(parents=True, exist_ok=True)
+        (out / 'result.json').write_bytes(found.read_bytes())
+        (out / 'reused.json').write_text(json.dumps({'from': str(found), 'series': key, 'policy': policy}) + '\n')
+        self.note(stage='held reuse', out=str(out), source=str(found), series=key)
+        return True
 
     def popbase_stage(self):
         """Base and start policy on Pop, in the background (Pop is idle while the DGX collects and trains)."""
@@ -411,7 +537,8 @@ class Cycle:
             subprocess.run(['systemd-run', '--user', '--unit', unit, '--collect', '--setenv', f'PATH={os.environ["PATH"]}',
                             *[f'--setenv={k}={self.env[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH')],
                             *self.py('expert_iteration.py', 'pop-held', '--dir', self.dir, '--pin', self.pin,
-                                     '--start', self.a.start, '--held-samples', self.a.held_samples)], check=True)
+                                     '--start', self.a.start, '--held-samples', self.a.held_samples,
+                                     *(('--after', self.a.speculative_after) if self.speculative else ()))], check=True)
         self.note(stage='popbase', started=unit)
 
     def select_stage(self):
@@ -424,25 +551,152 @@ class Cycle:
             raise SystemExit(f'select failed: {self.dir}/select.log')
         self.mark('select', **json.loads((self.dir / 'tasks.report.json').read_text()))
 
+    @property
+    def speculative(self):
+        return bool(getattr(self.a, 'speculative_after', None))
+
+    def max_running(self):
+        """The collect actor's running cap: the collection's slots plus the fill share (``--fill-inflight``), so
+        filled reasoning draws beside a full collection instead of queueing behind it."""
+        return self.a.slots + (self.a.fill_inflight if self.a.fill else 0)
+
+    def set_collect_aside(self, sha):
+        """A collection of another policy in DIR/collect (the speculative one before a recollection) moves to
+        DIR/collect-spec-<sha12>."""
+        runs = self.collect_dir / 'runs.jsonl'
+        if not runs.exists():
+            return
+        served = {json.loads(l)['checkpoint_sha256'] for l in runs.open() if l.strip()}
+        if served and served != {sha}:
+            aside = self.dir / f'collect-spec-{sorted(served)[0][:12]}'
+            os.replace(self.collect_dir, aside)
+            self.note(stage='collect', moved_aside=str(aside), served=sorted(served))
+
     def collect_stage(self):
-        unit = f'{self.a.name}-collect'
+        start, sha = self.collect_policy()
+        recollect = (self.gate() or {}).get('collection') == 'recollect'
+        self.set_collect_aside(sha)
+        unit = f'{self.a.name}-{"recollect" if recollect else "collect"}'
         budget = self.a.kv_gb + 24 + round(self.a.slots * 0.3)
         self.ledger(unit, budget, 'high',
-                    self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', self.a.start,
-                            '--checkpoint-sha256', self.start_sha, '--tasks', self.dir / 'tasks.json',
+                    self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
+                            '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
                             '--k', self.a.k, '--hours', self.a.collect_hours, '--slots', self.a.slots,
                             '--unit-prefix', unit, '--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
-                            '--actor-arg=--sglang-max-running', f'--actor-arg={self.a.slots}'),
+                            '--actor-arg=--sglang-max-running', f'--actor-arg={self.max_running()}'),
                     self.dir / 'collect.log', detach=True)
         if self.a.fill:
-            self.fill_alongside(unit)
-        self.wait(unit)
+            self.fill_alongside(unit, sha)
+        time.sleep(20)
+        while self.active(unit):
+            if self.speculative and not self.gate() and self.recollect_due():
+                self.stop_unit(unit)          # the candidate failed held: its collection is not data (gate recollects)
+                self.stop_unit(f'{self.a.name}-fill')
+                self.note(stage='collect', stopped='previous candidate failed held: recollect at the gate')
+                return
+            time.sleep(60)
+        if self.a.fill:
+            self.stop_unit(f'{self.a.name}-fill')   # its actor is gone: the fill window takes over
         summary = json.loads((self.collect_dir / 'collect.json').read_text())
         if summary.get('stopped'):
             raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
         self.mark('collect', **{k: v for k, v in summary.items() if k != 'run'})
 
-    def fill_alongside(self, collect_unit):
+    def previous_verdict(self):
+        path = Path(self.a.speculative_after) / 'verdict.json'
+        return json.loads(path.read_text()) if path.exists() else None
+
+    def recollect_due(self):
+        v = self.previous_verdict()
+        return bool(v) and not v['adopt'] and \
+            rejected_collection_mode(v['verdict'], self.a.rejected_collection) == 'recollect'
+
+    def gate_stage(self):
+        """A speculative cycle (started from the previous cycle's candidate while Pop judged it) learns the verdict:
+        adopted, it trains the candidate as collected; rejected, it trains the previous start (``rejected_collection_mode``
+        decides whether the collection is kept or redone)."""
+        while not self.previous_verdict():
+            time.sleep(300)
+        v = self.previous_verdict()
+        if v['adopt']:
+            info = {'start': self.a.start, 'start_sha': self.start_sha, 'prefer_unseen': list(self.a.prefer_unseen),
+                    'collection': 'adopted'}
+        else:
+            start = v['next_start']
+            info = {'start': start, 'start_sha': self.previous_start_sha(start),
+                    'prefer_unseen': list(self.a.fallback_prefer_unseen),
+                    'collection': rejected_collection_mode(v['verdict'], self.a.rejected_collection)}
+        info['previous_verdict'] = {k: v[k] for k in ('verdict', 'adopt', 'vs_start')}
+        (self.dir / 'stages' / 'gate.done').write_text(json.dumps({'time': time.time(), **info}) + '\n')
+        self.note(stage='gate', done=True, **info)
+        if info['collection'] == 'recollect':
+            (self.dir / 'stages' / 'collect.done').unlink(missing_ok=True)
+            self.collect_stage()
+            if not self.done('collect'):
+                raise SystemExit('recollection did not finish: rerun the cycle to resume it')
+
+    def previous_start_sha(self, start):
+        for line in (Path(self.a.speculative_after) / 'drive.log').open():
+            record = json.loads(line)
+            if record.get('stage') == 'cycle' and record.get('start') == start and record.get('start_sha'):
+                return record['start_sha']
+        return BASE_SHA if start == BASE_CKPT else \
+            subprocess.check_output(['sha256sum', start], text=True).split()[0]
+
+    # the fill window: a dedicated actor of the trained policy while the cycle's CPU stages run
+    def fill_window_open(self):
+        if (not self.a.fill or self.a.no_fill_window or self.done('sft') or self.window_closed.is_set()
+                or self.window_started):
+            return
+        self.window_started = True
+        threading.Thread(target=self._fill_window, daemon=True).start()
+
+    def fill_actor_command(self, checkpoint, sha):
+        """grpo's actor (``grpo.actor_command``: the held engine's serve args, SGLang overlap on) from the pin's
+        ``serve_native_checkpoint.py`` on its own port, for filled reasoning alone."""
+        import grpo
+        g = grpo.build_parser().parse_args(['train', '--work', str(self.dir / 'fill-actor'), '--checkpoint', checkpoint,
+                                            '--checkpoint-sha256', sha, '--actor-port', str(self.a.fill_actor_port),
+                                            '--no-actor-release', '--actor-overlap', 'on',
+                                            '--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
+                                            '--actor-arg=--sglang-max-running',
+                                            f'--actor-arg={self.a.fill_window_inflight}'])
+        g.held_manifest = grpo.default_held()
+        command, url = grpo.actor_command(g, self.dir / 'fill-actor', sha)
+        command[:2] = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'serve_native_checkpoint.py')]
+        return command, url
+
+    def _fill_window(self):
+        start, sha, _ = self.train_policy()
+        actor_unit, fill_unit = f'{self.a.name}-fillactor', f'{self.a.name}-fillw'
+        try:
+            command, url = self.fill_actor_command(start, sha)
+            self.ledger(actor_unit, self.a.kv_gb + 24, 'medium', command, self.dir / 'fill-actor.log', detach=True)
+            info = wait_actor(url, sha, None, None, timeout=3600)
+        except Exception as error:
+            self.note(stage='fill window', failed=repr(error)[:300])
+            return
+        if self.window_closed.is_set():
+            return
+        actor = {'url': url, 'sglang': url.rsplit(':', 1)[0] + ':' + str(self.a.fill_actor_port + 1000),
+                 'export': str(self.dir / 'fill-actor' / 'actor' / 'sglang-hf'), 'checkpoint_sha256': sha}
+        self.work_tokenizer()
+        self.ledger(fill_unit, 8, 'medium', self.fill_command(actor, window=True), self.dir / 'fill-window.log',
+                    detach=True, repo=self.fill_repo())
+        self.note(stage='fill window', started=[actor_unit, fill_unit], policy=sha,
+                  binding=(info.get('rl_policy_binding') or {}).get('checkpoint_sha256'))
+
+    def fill_window_close(self):
+        self.window_closed.set()
+        for unit in (f'{self.a.name}-fillw', f'{self.a.name}-fillactor'):
+            if self.active(unit):
+                self.stop_unit(unit)
+                self.note(stage='fill window', stopped=unit)
+
+    def fill_repo(self):
+        return Path(getattr(self.a, 'fill_repo', None) or self.pin)
+
+    def fill_alongside(self, collect_unit, sha=None):
         """Filled reasoning (filled_reasoning.py generate, the rationalization strand's tool) drawn from the same actor
         while it collects (polite: spare engine slots only); stopped when the collection ends."""
         deadline = time.time() + 7200
@@ -453,26 +707,34 @@ class Cycle:
             return
         self.work_tokenizer()      # --render-tokenizer: the data stage made it only after the collection
         actor = json.loads((self.collect_dir / 'actor.json').read_text())
-        if actor['checkpoint_sha256'] != self.start_sha:
+        if actor['checkpoint_sha256'] != (sha or self.start_sha):
             raise SystemExit('collect actor serves another policy')
-        self.ledger(f'{self.a.name}-fill', 6, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True)
+        self.ledger(f'{self.a.name}-fill', 6, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True,
+                    repo=self.fill_repo())
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
 
-    def fill_command(self, actor):
-        """filled_reasoning.py generate on the collect actor: the seed WORKs then the grpo-sd-teacher role's (first
-        WORK wins a key), teacher episodes of the tasks the student fails first (the select stage's rates: failed, then
-        unmeasured, then by rate; the frontier mix trains teacher trajectories there), and a fixed share of the actor
-        (``--fill-inflight`` draws in flight while collection keeps every slot busy, up to twice that when it does not;
-        spare-slot-only draws would starve beside a 128-slot collection)."""
+    def fill_command(self, actor, window=False):
+        """filled_reasoning.py generate: the seed WORKs then the grpo-sd-teacher role's (first WORK wins a key),
+        teacher episodes of the tasks the student fails first (the select stage's rates: failed, then unmeasured, then
+        by rate; the frontier mix trains teacher trajectories there). On the collect actor a fixed share: the actor runs
+        ``--fill-inflight`` more requests than the collection has slots and fill keeps that many draws in flight (twice
+        that when the engine has spare slots), with twice as many episode workers so the cap is reached (each worker
+        draws at most 4 candidates at a time and scores between them). In the fill window the dedicated actor's every
+        slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes)."""
         from natlang_neuralese.common import data_registry
         works = list(dict.fromkeys([*map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
         rates = self.dir / 'tasks.rates.json'
-        return self.py('filled_reasoning.py', 'generate', '--out', self.a.fill, '--sglang', actor['sglang'],
-                       '--front', actor['url'], '--render-tokenizer', self.work / 'tokenizer', '--export', actor['export'],
-                       '--polite', '--max-running', self.a.slots, '--min-inflight', self.a.fill_inflight,
-                       '--max-inflight', 2 * self.a.fill_inflight, '--workers', self.a.fill_inflight,
-                       *[x for w in works for x in ('--work', w)],
-                       *(('--prefer-rates', rates) if rates.exists() else ()))
+        if window:
+            share = ['--max-running', self.a.fill_window_inflight, '--max-inflight', self.a.fill_window_inflight,
+                     '--min-inflight', self.a.fill_window_inflight, '--workers', self.a.fill_window_workers]
+        else:
+            share = ['--polite', '--max-running', self.max_running(), '--min-inflight', self.a.fill_inflight,
+                     '--max-inflight', 2 * self.a.fill_inflight, '--workers', 2 * self.a.fill_inflight]
+        return [PY, str(self.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'generate',
+                *map(str, ['--out', self.a.fill, '--sglang', actor['sglang'], '--front', actor['url'],
+                           '--render-tokenizer', self.work / 'tokenizer', '--export', actor['export'], *share,
+                           *[x for w in works for x in ('--work', w)],
+                           *(('--prefer-rates', rates) if rates.exists() else ())])]
 
     def stop_unit(self, unit):
         subprocess.run([*LEDGER, 'cancel', '--unit', unit])
@@ -480,11 +742,21 @@ class Cycle:
             subprocess.run(['systemctl', '--user', 'stop', f'{unit}{suffix}.service'], stderr=subprocess.DEVNULL)
 
     def frontier_stage(self):
+        _, sha = self.collect_policy()
+        _, train_sha, _ = self.train_policy()
+        measured = self.dir / ('frontier.json' if sha == train_sha else 'frontier-sibling.json')
         self.ledger(f'{self.a.name}-frontier', 4, 'medium',
-                    self.py('expert_iteration.py', 'frontier', '--out', self.dir / 'frontier.json',
-                            '--collect', self.collect_dir, '--policy', self.start_sha), self.dir / 'frontier.log')
-        data = json.loads((self.dir / 'frontier.json').read_text())
-        self.mark('frontier', tiers=data['tiers'])
+                    self.py('expert_iteration.py', 'frontier', '--out', measured,
+                            '--collect', self.collect_dir, '--policy', sha), self.dir / 'frontier.log')
+        data = json.loads(measured.read_text())
+        if sha != train_sha:      # a kept sibling collection: the trained policy's own frontier (its cycle's) wins
+            own = Path(self.a.speculative_after) / 'frontier.json'
+            exact = json.loads(own.read_text()) if own.exists() else None
+            if not exact or exact.get('policy') != train_sha:
+                exact = {**data, 'policy': train_sha, 'collections': [], 'tasks': {}}
+            data = merge_frontier(exact, data)
+            (self.dir / 'frontier.json').write_text(json.dumps(data, indent=0) + '\n')
+        self.mark('frontier', tiers=data['tiers'], policy=data['policy'], sibling=data.get('sibling_policy'))
 
     def teacher_stage(self):
         """The policy's new failures feed the teacher campaign (teacher_gen gap tiers: student_rare first, from this
@@ -537,7 +809,9 @@ class Cycle:
         steps.append(self.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                              '--runtime-repo', self.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
-            steps.append(self.py('filled_reasoning.py', 'build', '--out', self.a.fill, '--corpus', self.dir / 'filled'))
+            failed = [x for p in self.failed_policies() for x in ('--exclude-policy', p)]
+            steps.append([PY, str(self.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'build',
+                          '--out', str(self.a.fill), '--corpus', str(self.dir / 'filled'), *failed])
         lines = [' '.join(map(_quote, s)) for s in steps]
         if not self.a.no_own_neuralese_graph:
             lines.append(' '.join(map(_quote, self.own_neuralese_graph_command()))
@@ -546,6 +820,16 @@ class Cycle:
         script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
         self.ledger(f'{self.a.name}-data', 8, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
         self.mark('data')
+
+    def failed_policies(self):
+        """Candidates held judged a 'failure' (every cycle's verdict in OPS/ei): their fills are not data."""
+        out = []
+        for path in sorted(OPS.glob('ei/*/verdict.json')):
+            v = json.loads(path.read_text())
+            sha = path.parent / 'sft' / 'sha256.txt'
+            if v.get('verdict') == 'failure' and sha.exists():
+                out.append(sha.read_text().strip())
+        return out
 
     def own_neuralese_graph_command(self):
         """The verified own successes that carry Neuralese state (every consumer call that read a native import) as
@@ -570,7 +854,7 @@ class Cycle:
                           '--max-task-target-tokens', '40000', '--val-episodes', '40',
                           *[x for p in TEACHER_POOLS for x in ('--teacher-pool', p)],
                           *[x for a in aux for x in ('--aux', a)],
-                          *[x for b in self.a.prefer_unseen for x in ('--prefer-unseen', b)])
+                          *[x for b in self.train_policy()[2] for x in ('--prefer-unseen', b)])
         self.ledger(f'{self.a.name}-build', 24, 'medium', command, self.dir / 'build.log')
         sha = subprocess.check_output(['sha256sum', str(self.mix / 'chains.pkl')], text=True).split()[0]
         (self.mix / 'chains.sha256').write_text(sha + '\n')
@@ -581,10 +865,11 @@ class Cycle:
     def sft_stage(self):
         run = self.dir / 'sft'
         unit = f'{self.a.name}-sft'
+        start, start_sha, _ = self.train_policy()
         if not (run / 'checkpoint.pt').exists() and not self.active(unit):
             sha = (self.mix / 'chains.sha256').read_text().split()[0]
-            env = {**os.environ, 'CHAINS': str(self.mix / 'chains.pkl'), 'CHAINS_SHA256': sha, 'CKPT': self.a.start,
-                   'SHA': self.start_sha, 'WORK': str(run), 'UNIT': unit, 'LR': self.a.lr, 'WARMUP': '8',
+            env = {**os.environ, 'CHAINS': str(self.mix / 'chains.pkl'), 'CHAINS_SHA256': sha, 'CKPT': start,
+                   'SHA': start_sha, 'WORK': str(run), 'UNIT': unit, 'LR': self.a.lr, 'WARMUP': '8',
                    'BLT': '32000', 'ACT': '16', 'BUDGET': str(self.a.sft_budget)}
             vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
             if vals:
@@ -616,7 +901,8 @@ class Cycle:
 
     def verdict_stage(self):
         """The declared criteria (DECISIONS): vs the start policy measured on this pin, and vs the base."""
-        base, start, candidate = self.held / 'base', self.held / ('base' if self.a.start == BASE_CKPT else 'start'), \
+        train_start = self.train_policy()[0]
+        base, start, candidate = self.held / 'base', self.held / ('base' if train_start == BASE_CKPT else 'start'), \
             self.held / 'candidate'
         vs_start = self.compare(start, candidate, self.dir / 'compare-vs-start.json')
         vs_base = self.compare(base, candidate, self.dir / 'compare-vs-base.json')
@@ -631,7 +917,7 @@ class Cycle:
         adopt = verdict == 'success' or (verdict == 'neutral' and d > 0 and ran_out <= 0.02)
         result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out},
                   'vs_base': {'delta': vs_base['primary']['delta'], 'p': vs_base['primary']['permutation_p']},
-                  'next_start': str(self.dir / 'sft' / 'checkpoint.pt') if adopt else self.a.start}
+                  'next_start': str(self.dir / 'sft' / 'checkpoint.pt') if adopt else train_start}
         (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
         if verdict == 'success' and vs_base['primary']['delta'] > 0:
             ckpt = self.dir / 'sft' / 'checkpoint.pt'
@@ -645,18 +931,51 @@ class Cycle:
                 indent=1) + '\n')
         self.mark('verdict', **result)
 
+    def next_stage(self):
+        """Launch the next cycle from this cycle's candidate (its own driver unit, as ops/ei/launch.sh does), pinned
+        to ``--next-commit`` (default origin/main now: improvements enter at the next pin)."""
+        if self.a.no_pipeline:
+            return self.mark('next', skipped=True)
+        name = self.a.next_name or next_name(self.a.name)
+        if not name:
+            return self.mark('next', skipped=f'no next name for {self.a.name}')
+        subprocess.run(['git', '-C', str(REPO), 'fetch', '-q', 'origin'])
+        commit = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', self.a.next_commit], text=True).strip()
+        start = self.dir / 'sft' / 'checkpoint.pt'
+        argv = next_cycle_argv(sys.argv[sys.argv.index('cycle') + 1:], directory=self.dir.parent / name, name=name,
+                               start=start, start_sha=(self.dir / 'sft' / 'sha256.txt').read_text().strip(),
+                               commit=commit, previous=self.dir, prefer_unseen=[self.mix],
+                               fallback_prefer_unseen=self.train_policy()[2], extra_seed_work=self.a.next_seed_work)
+        (self.dir.parent / name).mkdir(parents=True, exist_ok=True)
+        unit = f'{name}-drive-{int(time.time())}'
+        subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', '2', '--priority', 'medium', '--wait', '36000',
+                        '--detach', '--workdir', str(self.dir.parent / name), '--', '/usr/bin/env',
+                        f'PYTHONPATH={REPO}/training/neuralese:{REPO}', 'HF_HUB_OFFLINE=1', f'PATH={os.environ["PATH"]}',
+                        PY, str(REPO / 'scripts/neuralese_data/expert_iteration.py'), 'cycle', *argv], check=True)
+        self.mark('next', name=name, unit=unit, commit=commit, argv=argv)
+
     def run(self):
-        self.note(stage='cycle', start=self.a.start, start_sha=self.start_sha, commit=self.a.commit)
+        self.note(stage='cycle', start=self.a.start, start_sha=self.start_sha, commit=self.a.commit,
+                  speculative_after=getattr(self.a, 'speculative_after', None))
         stages = [('pin', self.pin_stage), ('popbase', self.popbase_stage), ('select', self.select_stage),
-                  ('collect', self.collect_stage), ('frontier', self.frontier_stage), ('teacher', self.teacher_stage),
-                  ('data', self.data_stage), ('build', self.build_stage), ('sft', self.sft_stage),
-                  ('held', self.held_stage), ('verdict', self.verdict_stage)]
+                  ('collect', self.collect_stage), ('gate', self.gate_stage), ('frontier', self.frontier_stage),
+                  ('teacher', self.teacher_stage), ('data', self.data_stage), ('build', self.build_stage),
+                  ('sft', self.sft_stage), ('next', self.next_stage), ('held', self.held_stage),
+                  ('verdict', self.verdict_stage)]
         for name, stage in stages:
+            if name == 'gate' and (not self.speculative or self.gate()):
+                continue
             if self.done(name):
                 continue
+            if name == 'frontier' or (name in ('teacher', 'data', 'build') and not self.done('sft')):
+                self.fill_window_open()        # idempotent: a running window is joined
+            if name == 'sft':
+                self.fill_window_close()       # the SFT has the GPU to itself
             if name == 'data' and self.a.fill:
                 self.stop_unit(f'{self.a.name}-fill')
             stage()
+            if name == 'collect' and not self.done('collect') and not self.speculative:
+                raise SystemExit('collection did not finish: rerun the cycle to resume it')
 
 
 def _quote(text):
@@ -667,12 +986,18 @@ def _quote(text):
 def pop_held(args):
     """Background unit of ``cycle``: the base, then (if it is not the base) the start policy, on Pop."""
     a = argparse.Namespace(dir=args.dir, pin=args.pin, start=args.start, start_sha=BASE_SHA, commit='x' * 40,
-                           held_samples=args.held_samples, sft_work='/dev/null')
+                           held_samples=args.held_samples, sft_work='/dev/null', no_held_reuse=args.no_held_reuse)
     c = Cycle(a)
     c.pin = Path(args.pin)
+    start = args.start
+    if args.after:        # a speculative cycle: Pop is busy with the previous candidate, whose verdict names the start
+        verdict = Path(args.after) / 'verdict.json'
+        while not verdict.exists():
+            time.sleep(300)
+        start = json.loads(verdict.read_text())['next_start']
     c.pop_held('base', BASE_CKPT)
-    if args.start != BASE_CKPT:
-        c.pop_held('start', args.start)
+    if start != BASE_CKPT:
+        c.pop_held('start', start)
 
 
 def cycle(args):
@@ -736,8 +1061,28 @@ def main():
     y.add_argument('--slots', type=int, default=128)
     y.add_argument('--kv-gb', type=int, default=12)
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
-    y.add_argument('--fill-inflight', type=int, default=16,
-                   help='filled-reasoning draws kept in flight on the collect actor (twice that when it has spare slots)')
+    y.add_argument('--fill-inflight', type=int, default=32,
+                   help='filled-reasoning draws kept in flight on the collect actor, which runs this many requests '
+                   'more than the collection has slots (twice that when it has spare slots)')
+    y.add_argument('--no-fill-window', action='store_true',
+                   help='no dedicated fill actor between the collection and the SFT')
+    y.add_argument('--fill-window-inflight', type=int, default=128, help="the fill window actor's running requests")
+    y.add_argument('--fill-window-workers', type=int, default=96, help='filled-reasoning episodes in the fill window')
+    y.add_argument('--fill-actor-port', type=int, default=8570)
+    y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
+                   'tooling outside the held scoring series)')
+    y.add_argument('--speculative-after', help='previous cycle DIR whose SFT candidate is --start: collect while Pop '
+                   'judges it, then train from what its verdict chooses (the gate stage)')
+    y.add_argument('--fallback-prefer-unseen', action='append', default=[],
+                   help='--prefer-unseen builds if the previous candidate is rejected (what its start trained on)')
+    y.add_argument('--rejected-collection', choices=('auto', 'keep', 'recollect'), default='auto',
+                   help="a rejected candidate's collection: auto recollects after 'failure', keeps it otherwise")
+    y.add_argument('--no-pipeline', action='store_true', help='do not launch the next cycle when the SFT checkpoint exists')
+    y.add_argument('--next-name', help='the next cycle (default: the trailing number + 1)')
+    y.add_argument('--next-commit', default='origin/main', help='the next cycle\'s pin (resolved when it launches)')
+    y.add_argument('--next-seed-work', action='append', default=[], help='seed WORKs the next cycle adds')
+    y.add_argument('--no-held-reuse', action='store_true',
+                   help="measure base and start on Pop even when an earlier cycle measured them in this series")
     y.add_argument('--no-teacher-campaign', action='store_true')
     y.add_argument('--replay-workers', type=int, default=8)
     y.add_argument('--teacher-budget', type=int, default=180_000_000)
@@ -759,6 +1104,8 @@ def main():
     h.add_argument('--pin', required=True)
     h.add_argument('--start', required=True)
     h.add_argument('--held-samples', type=int, default=2)
+    h.add_argument('--after', help='previous cycle DIR: wait for its verdict; its next_start is the start')
+    h.add_argument('--no-held-reuse', action='store_true')
     args = parser.parse_args()
     {'select': select, 'collect': collect, 'frontier': frontier, 'cycle': cycle, 'pop-held': pop_held}[args.command](args)
 

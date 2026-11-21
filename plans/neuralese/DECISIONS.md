@@ -5935,3 +5935,78 @@ teacher-provenance-20261120).**
   all of the above.
 - **Open:** re-admitting the 115 old-oracle flips (they are re-tried instead); decisions label-noise errata; Nemotron's
   yield (14%) is kept only because it is free and routing sends it the families it is best at.
+
+## 2026-11-21 05:30, pipelined expert-iteration cycles, a fill window and a larger fill share; Qwen October teacher data enters sft-v8 (expert-iteration strand)
+
+- **Observed (sft-v7, this morning).** (1) The DGX GPU idles while Pop measures a candidate (~3.5 h per cycle) and
+  during the CPU-only frontier/teacher/data/build stages; the next collection started only after the verdict. (2)
+  Filled reasoning ran ~100x below plan: 22 episodes in 2.2 h (mean ~21k generated tokens and ~48 min per episode,
+  7-140 min), ~55 tok/s of an engine that decodes ~1,460 tok/s at 128 running: 16 workers, 16-32 draws admitted
+  (the actor's running cap equalled the collection's 128 slots, so fill draws queued behind it), and it ran only during
+  the collection. Never-solved tasks get trained trajectories only through fill. (3) sft-v7's collection reaches ~430
+  groups in 6 h: the pass band (556) and part of the measured failures (439), never the unmeasured tier, so about half
+  its engine time goes to tasks measured at 0, where it yields little. (4) The Qwen October teacher WORK
+  (`/home/werg/data/sft-teacher-qwen-october-20261120`, 13,694 episodes, replay at 3,925 at 04:47, ~1,650/h, done ~10:45)
+  was in no cycle.
+- **Built (expert_iteration.py, filled_reasoning.py; targeted tests in tests/neuralese/test_expert_iteration.py and
+  test_filled_reasoning.py; every part default on with an opt-out):**
+  1. **Pipelined cycles** (`--no-pipeline`). A `next` stage after `sft` launches the next cycle (name +1, pin
+     `--next-commit` = origin/main at that moment, this cycle's flags with its own replaced, `--next-seed-work` added)
+     from the SFT candidate with `--speculative-after` this cycle. The next cycle pins, selects and collects (+ fill)
+     while Pop judges the candidate. Its **gate** stage, after the collection, reads the verdict. Adopted: it trains the
+     candidate on what it collected. Rejected: it trains the previous start (`prefer-unseen` = what that start trained
+     on, `--fallback-prefer-unseen`). After a **'failure'** (significant regression, maybe a bug) the collection is
+     redone from that start: the regressed policy's behaviour is not data. The collection is stopped as soon as the
+     verdict lands and moved to `collect-spec-<sha12>`. After any **other rejection** the collection is kept: its
+     verified successes come from a sibling one SFT step from the start, as close to the start's distribution as any
+     cycle's own data is to the candidate trained on it. Its frontier is merged under the start's own frontier (the
+     previous cycle's collection, exact, wins; sibling rates fill the rest, `measured_by` per task). The build still
+     prefers the trained policy's own successes (`policy` of the frontier). `--rejected-collection keep|recollect`
+     overrides. Fills drawn by a 'failure' candidate leave the filled build (`filled_reasoning build --exclude-policy`).
+     The verdict's start, the held `start` measurement and the SFT start all follow the gate.
+  2. **Held pairing is unchanged.** Each cycle still measures base, start and candidate on Pop under its own pin. A
+     speculative cycle's popbase waits for the previous verdict (Pop serves one policy; the verdict names the start).
+     An earlier cycle's complete Pop result of the same policy, sample count and scoring-series key is copied instead
+     of re-measured (`--no-held-reuse`): same series, same engine, so pairing does not change and Pop saves 3.5 h per
+     reused policy. sft-v7's own held measurements stay on pin b17d5fd8527d.
+  3. **Fill window** (`--no-fill-window`). From the frontier stage to the SFT a dedicated SGLang actor of the trained
+     policy (`<name>-fillactor`, grpo's actor command from the pin, port 8570, KV 12 GB, budget 36 GB, medium) serves
+     fill alone: `<name>-fillw`, 96 episode workers, 128 draws in flight, not polite. Both are stopped before the SFT
+     unit starts. GB10 time-slices, so no actor runs beside an SFT. The collection's fill unit stops when the
+     collection ends (it used to retry against a dead actor until the data stage).
+  4. **Fill share beside the collection.** `--fill-inflight` 16 -> 32. The collect actor runs slots + fill-inflight
+     requests (160), so fill no longer queues behind a full collection. Fill has 2x fill-inflight workers so the cap is
+     reached (a worker draws at most 4 candidates at once and scores between draws). That is ~20% of the engine,
+     against the ~4% it got. Why not more: the band tasks collection reaches first are where own successes come from.
+     The failed-tier half of collection is where fill's teacher episodes (failed tasks first, `--prefer-rates`) pay
+     off, and 20% moves roughly that half's low yield. Collection keeps all 128 of its slots.
+  5. **Fill resumes partial episodes** (`filled_reasoning generate`, `--no-partial`): finished steps sit in
+     OUT/partial/<key hash>.json, rewritten each step and checked against the settings and chain digest. A stopped
+     window resumes an episode at its step. Episodes run up to 2 h and windows now end every cycle. Each step records
+     the policy that drew it.
+  6. `--fill-repo` runs a newer checkout's filled_reasoning.py than the pin (fills are data tooling outside the held
+     scoring series). sft-v7 uses it so its fill window has partial resume.
+- **Qwen October WORK.** sft-v7's driver passes `--next-seed-work /home/werg/data/sft-teacher-qwen-october-20261120`,
+  so sft-v8 seeds its replay verdicts and extraction into the shared WORK at its data stage, ~12 h from now. The replay
+  will be done by then. Any episode still unreplayed is replayed by the data stage itself (`sft_sources replay` over
+  the shared WORK), so the build picks up everything without waiting. Its episodes are source `teacher`: think blocks
+  are context in the build (never targets), and they are fill candidates (sft-v8's fill works list holds the seed
+  WORKs) so they get student-filled reasoning where fill reaches them.
+- **Applied to the running work.** sft-v7's driver was restarted on the same pin and commit (b17d5fd8527d; every
+  stage resumes or joins its running unit; held scoring unchanged) with the new driver code, `--fill-repo` the pin of
+  this commit, and `--next-seed-work` Qwen. Timeline (estimates): collection ends ~08:20; fill window ~08:30 until the
+  SFT starts (after data/build, ~10:30); SFT ~4 h (sft-v6: 3.85 h, 53 GB peak) to ~14:30; then sft-v8 launches from
+  the candidate (pin origin/main then) and collects while Pop measures sft-v7's candidate (~18:00). The new ts-host
+  tree gives sft-v8 another series, so its popbase re-measures base and start on Pop after that verdict (~7 h),
+  finishing about when sft-v8's candidate exists.
+- **Memory.** Never two GPU users at once by construction: cycle N+1's collection starts only after cycle N's SFT
+  unit has ended, cycle N's later stages use Pop, and the fill window closes before every SFT. During a window: actor
+  36 + fill 8 + data 8 + build 24 GB, against the 74 GB the collection frees. The ledger admits everything.
+- **Expected fill throughput** (not measured, from the engine's 1,460 tok/s and ~21k tokens per episode): ~50
+  episodes/h beside a collection (about 300 per 6 h collection) and ~150-250/h in a window (about 200-500 per 1.5-3 h
+  data/build window), so roughly 0.5-0.8k filled episodes per cycle against ~60 at the old rate. The pool is 23k
+  episodes plus ~10k verified Qwen. Per-episode cost (4 candidates of up to 4,096 tokens per step) is unchanged here.
+- **Left out.** sft-v7's running collection keeps its 16-draw fill share (changing it means restarting the actor
+  mid-collection). Fill during the SFT is excluded on purpose (GB10 time-slicing would slow the high-priority SFT).
+  Fill per-episode cost (fewer candidates or shorter caps) is the rationalization strand's setting and was not
+  touched.
