@@ -25,8 +25,10 @@ def terminal_startup_failure(log):
     return False
 
 
-def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None):
+def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None, devices=()):
     group = f'{workspace}@{baseline}' if baseline else workspace
+    if devices:
+        group += '@' + '+'.join(devices)
     if batch is not None:
         group = f'{group}-{batch:03d}'
     output = destination / group
@@ -36,6 +38,8 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
     command = ['pnpm', '--silent', 'system-test', '--instance', instance, '--workspace', workspace]
     if baseline:
         command += ['--workspace-baseline', baseline]
+    for device in devices:
+        command += ['--device', device]
 
     def invoke(args, log, *, check=False):
         with (output / log).open('wb') as stream:
@@ -89,14 +93,15 @@ def run_batches(args, chosen, destination):
 
     groups = defaultdict(list)
     for case, row in chosen.items():
-        groups[row['workspace'], row.get('workspaceBaseline', '')].append(
+        devices = tuple(sorted(set(row.get('devices', []))))
+        groups[row['workspace'], row.get('workspaceBaseline', ''), devices].append(
             'open-goal-oracle-' + case.removeprefix('open-goal-'))
     if args.resume:
         destination = destination / f'attempt-{uuid.uuid4().hex[:12]}'
         destination.mkdir()
     all_passed = True
     host = args.host.resolve()
-    for (workspace, baseline), cases in groups.items():
+    for (workspace, baseline, devices), cases in groups.items():
         size = args.cases_per_instance or len(cases)
         for index, offset in enumerate(range(0, len(cases), size), start=1):
             if args.drain_file and args.drain_file.exists():
@@ -105,7 +110,7 @@ def run_batches(args, chosen, destination):
                 return 0 if all_passed else 1
             passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
                                                 args.model, destination, args.test_timeout_ms,
-                                                batch=index if len(cases) > size else None)
+                                                batch=index if len(cases) > size else None, devices=devices)
             all_passed &= passed
             if unavailable:
                 print(f'{workspace} startup is unrecoverable for this baseline. See the doctor log.',
@@ -151,6 +156,9 @@ def main():
             parser.error(f'Invalid managed workspace or baseline for {case}')
         if not re.fullmatch(r'open-goal-[a-z0-9-]+', case):
             parser.error(f'Invalid goal identifier {case}')
+        devices = row.get('devices', [])
+        if not isinstance(devices, list) or any(device not in ('desktop', 'terminal') for device in devices):
+            parser.error(f'Invalid managed device driver for {case}')
     destination = args.out.resolve()
     destination.mkdir(parents=True, exist_ok=args.resume)
     with (destination / '.reference-run.lock').open('a') as lock:

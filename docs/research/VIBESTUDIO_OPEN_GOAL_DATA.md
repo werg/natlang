@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,707-goal release](vibestudio-open-goal-pop-pins-composed-1707.tsv)
-is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1707.5P14Xq`. To
+The [1,812-goal release](vibestudio-open-goal-pop-pins-composed-1812.tsv)
+is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1812.OQb6LR`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -346,8 +346,9 @@ reserved domains. [W3C decorative images](https://www.w3.org/WAI/tutorials/image
 
 To verify a goal against the managed workspace, run its model-free oracle.
 Pass `--case` to select goals or `--family` to verify a family from the pinned
-catalog. The command groups cases by workspace and baseline, runs one owned
-instance at a time, and saves each full reference trajectory. It stops and
+catalog. The command groups cases by workspace, baseline, and declared device
+drivers. It runs one owned instance at a time and saves each full reference
+trajectory. It stops and
 recreates the instance every 12 cases by default to bound the lifetime of
 renderers, compiler caches, and test state. Completed batches retain their
 evidence if a later batch fails. Set `--cases-per-instance` to change the
@@ -720,3 +721,14 @@ and checked both the combined and System test compositions. The registered
 archive `vibestudio-open-goal-composed-release-1707-20261121` carries 914
 accepted model-free references. Its 692 training selectors include 682
 without device or deployment-package prerequisites.
+
+The [1,812-goal pin](vibestudio-open-goal-pop-pins-composed-1812.tsv) adds
+native server-log recovery, route authority review, local RPC settlement,
+and CLI gateway and context continuation. It contains 1,372 train goals and
+440 held goals. Pop reproduced catalog SHA-256
+`5bc2e720024f79b959c488bba17b7188717b0a2dc25aec69eefe9e7b999b5ba9`
+and checked the combined and System test compositions. The registered archive
+`vibestudio-open-goal-composed-release-1812-20261121` carries 926 accepted
+model-free references. Its 701 training selectors include 691 without device
+or deployment-package prerequisites. Ten managed canaries passed on Tick
+before publication, including the repaired owned-worker and TestKit paths.

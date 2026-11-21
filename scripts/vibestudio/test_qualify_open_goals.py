@@ -102,21 +102,23 @@ class QualificationBatchesTest(unittest.TestCase):
                 'workspace': 'examples',
                 'sourceGroups': [f'demo-{index}'],
                 **({'workspaceBaseline': 'a' * 40} if index == 13 else {}),
-            } for index in range(14)]
+                **({'devices': ['desktop']} if index == 14 else {}),
+            } for index in range(15)]
             catalog.write_text(''.join(json.dumps(row) + '\n' for row in rows))
             out = root / 'out'
             argv = ['qualify_open_goals', '--host', str(root), '--catalog', str(catalog),
                     '--out', str(out)]
             with patch.object(sys, 'argv', argv), patch('qualify_open_goals.qualify_group',
-                    side_effect=[(False, False), (True, False), (True, False)]) as run:
+                    side_effect=[(False, False), (True, False), (True, False), (True, False)]) as run:
                 self.assertEqual(main(), 1)
 
             calls = run.call_args_list
-            self.assertEqual([len(call.args[3]) for call in calls], [12, 1, 1])
-            self.assertEqual([call.kwargs['batch'] for call in calls], [1, 2, None])
-            self.assertEqual([call.args[2] for call in calls], ['', '', 'a' * 40])
+            self.assertEqual([len(call.args[3]) for call in calls], [12, 1, 1, 1])
+            self.assertEqual([call.kwargs['batch'] for call in calls], [1, 2, None, None])
+            self.assertEqual([call.args[2] for call in calls], ['', '', 'a' * 40, ''])
+            self.assertEqual([call.kwargs['devices'] for call in calls], [(), (), (), ('desktop',)])
             self.assertEqual([case for call in calls for case in call.args[3]],
-                             [f'open-goal-oracle-case-{index}' for index in range(14)])
+                             [f'open-goal-oracle-case-{index}' for index in range(15)])
             self.assertEqual((out / 'catalog.jsonl').read_bytes(), catalog.read_bytes())
 
     def test_doctor_distinguishes_transient_and_terminal_setup_errors(self):
@@ -129,6 +131,24 @@ class QualificationBatchesTest(unittest.TestCase):
             self.assertFalse(terminal_startup_failure(log))
             log.write_text('Interrupted before readiness response.\n')
             self.assertFalse(terminal_startup_failure(log))
+
+    def test_attaches_the_catalog_driver_to_the_managed_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            case = 'open-goal-oracle-desktop'
+
+            def invoke(command, **_kwargs):
+                self.assertEqual(command[7:9], ['--device', 'desktop'])
+                if command[9] == 'run':
+                    folder = root / 'examples@desktop' / 'results' / 'st_run'
+                    folder.mkdir(parents=True)
+                    (folder / f'trajectory-{case}-full.json.gz').touch()
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch('qualify_open_goals.subprocess.run', side_effect=invoke) as run:
+                self.assertEqual(qualify_group(root, 'examples', '', [case], 'model', root, None,
+                                               devices=('desktop',)), (True, False))
+            self.assertEqual([call.args[0][9] for call in run.call_args_list], ['doctor', 'run', 'stop'])
 
     def test_drains_between_managed_batches(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -144,9 +164,10 @@ class QualificationBatchesTest(unittest.TestCase):
             argv = ['qualify_open_goals', '--host', str(root), '--catalog', str(catalog),
                     '--out', str(out), '--resume', '--drain-file', str(stop), '--cases-per-instance', '2']
 
-            def completed(_host, _workspace, _baseline, cases, _model, destination, _timeout, *, batch):
+            def completed(_host, _workspace, _baseline, cases, _model, destination, _timeout, *, batch, devices):
                 self.assertEqual(cases, ['open-goal-oracle-case-0', 'open-goal-oracle-case-1'])
                 self.assertEqual(batch, 1)
+                self.assertEqual(devices, ())
                 (destination / 'complete').touch()
                 stop.touch()
                 return True, False
