@@ -132,3 +132,45 @@ test('a planning call with scoped services elsewhere sees its direct service bou
   assert.match(direct.opening, /In eval you can use calendarCatalog/);
   assert.doesNotMatch(direct.opening, /no directly bound host services/);
 });
+
+for (const layout of ['conflicting siblings', 'caller shadow']) test(
+  `eval locals retain callee alias dependencies with ${layout}`, async () => {
+  // Both the Gmail and unrelated event handoff scopes define ProviderRecord. The outer
+  // GmailGoalReport alias is unique, but its reference belongs to the Gmail scope.
+  const files = {
+    'root.nl': '---\nargs: {}\nreturns: string\n---\nVerify the carried case.\n',
+    'root/gmail/types.ts': 'type ProviderRecord = { subject: string }; type GmailGoalReport = { provider: ProviderRecord | null };',
+    'root/gmail/recover.nl': '---\nargs: {}\nreturns: GmailGoalReport\n---\nReturn the retained draft.\n',
+    'root/gmail/recoverProvider.nl': `---
+args: {}
+returns: 'GmailGoalReport["provider"]'
+---
+Return the retained provider.
+`,
+    'root/other/types.ts': 'type ProviderRecord = { eventId: number };',
+    'root/other/history.nl': '---\nargs: {}\nreturns: ProviderRecord\n---\nReturn the event history.\n',
+  };
+  if (layout === 'caller shadow') files['types.ts'] = 'type ProviderRecord = { eventId: number };';
+  const provider = { subject: 'Tire delivery' };
+  const steps = [
+    ['eval', { code: 'const draft = await gmail.recover(); draft.provider.subject;' }],
+    ['eval', { code: 'const providers = await Promise.all([1, 2].map(async index => gmail.recoverProvider())); providers.length;' }],
+    ['eval', { code: 'return [draft.provider.subject, providers[1].subject].join(" then ");', finish: true }],
+  ];
+  let turns = 0;
+  const runtime = createNatlangRuntime({
+    model: async request => {
+      const opening = request.messages[1].content;
+      if (opening.includes('inside this call: recoverProvider('))
+        return { calls: [['return_result', { status: 'success', value: provider }]] };
+      if (opening.includes('inside this call: recover('))
+        return { calls: [['return_result', { status: 'success', value: { provider } }]] };
+      assert.ok(steps[turns], String(request.messages.at(-1).content));
+      return { calls: [steps[turns++]] };
+    },
+    seed: { mode: 'backend' },
+  });
+  const fn = loadVirtualNatlang(files, 'root.nl');
+  assert.equal(await runtime.run(() => fn()), 'Tire delivery then Tire delivery');
+  assert.equal(turns, 3);
+});

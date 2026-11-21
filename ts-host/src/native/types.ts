@@ -328,6 +328,18 @@ function children(type: Type): Type[] {
   }
 }
 
+/** A name that can be redefined by the lexical type environment. */
+export function typeAliasName(type: Type): string | undefined {
+  if (type.kind === 'name' || type.kind === 'host' && type.contract.kind === 'tag' && type.contract.tag === type.name)
+    return type.name;
+}
+
+/** Names whose definitions participate in this portable type. */
+export function typeAliasNames(type: Type): string[] {
+  const name = typeAliasName(type);
+  return name === undefined ? children(type).flatMap(typeAliasNames) : [name];
+}
+
 export class TypeEnv {
   /** Constructors used to check `class` host contracts; inherited by child environments. */
   classes?: ReadonlyMap<string, Function>;

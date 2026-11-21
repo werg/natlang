@@ -24,25 +24,26 @@ export const kernelHooks: NativeRuntimeHooks = {
   checkFields: (session, source) => checkEvalFields(source, evalDeclarations(session)),
 };
 
-function importOf(name: string, record: ItemRecord): EvalImport {
-  const children = Object.entries(record.codebase).map(([child, item]) => importOf(child, item));
+function importOf(name: string, record: ItemRecord, session: NativeSession): EvalImport {
+  const children = Object.entries(record.codebase).map(([child, item]) => importOf(child, item, session));
   if (record.kind === 'namespace') return { name, params: [], returns: 'null', async: false, kind: 'module', children };
+  const describe = (type: string) => session.analysisCallableType(record, type);
   if (record.kind === 'module') {
     const exports = Object.entries(record.exports).filter(([key, spec]) => key !== 'default' && spec.kind === 'function')
       .map(([key, spec]) => ({ name: key, params: Object.entries(spec.kind === 'function' ? spec.args : {}).map(([raw, type]) =>
-        ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })), returns: spec.kind === 'function' ? spec.returns : 'null',
+        ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?') })), returns: spec.kind === 'function' ? describe(spec.returns) : 'null',
         async: spec.kind === 'function' && spec.async, kind: 'TypeScript' as const, children: [] }));
     const main = record.exports.default;
     if (main?.kind === 'function') return { name, params: Object.entries(main.args).map(([raw, type]) =>
-      ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })), returns: main.returns, async: main.async,
+      ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?') })), returns: describe(main.returns), async: main.async,
       kind: 'TypeScript', children: [...exports, ...children] };
     return { name, params: [], returns: 'null', async: false, kind: 'module', children: [...exports, ...children] };
   }
-  const params = Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') }));
+  const params = Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?') }));
   if (record.subtype === 'directory-reducer') params.unshift({ name: 'folder', type: 'Folder', optional: false });
-  return { name, params, returns: record.returns, async: true,
+  return { name, params, returns: record.generic ? record.returns : describe(record.returns), async: true,
     kind: record.subtype === 'directory-reducer' ? 'directory reducer' : 'natural language', children,
-    ...(record.generic ? { generic: { constraint: record.generic.constraint } } : {}) };
+    ...(record.generic ? { generic: { constraint: describe(record.generic.constraint) } } : {}) };
 }
 
 /** Describe a session's typed scope for the eval checker. */
@@ -77,7 +78,7 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     locals: Object.entries(lam.letTypes).filter(([name]) => Object.hasOwn(lam.let, name))
       .map(([name, type]) => ({ name, type: formatType(type), mutable: true })),
     captures: Object.values(lam.captures ?? {}).map(cell => ({ name: cell.name, type: cell.type, mutable: cell.mutable })),
-    imports: Object.entries(codebase).map(([name, record]) => importOf(name, record)),
+    imports: Object.entries(codebase).map(([name, record]) => importOf(name, record, session)),
     services: Object.keys(session.runtime.services),
     serviceDeclarations: session.runtime.declarations,
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,

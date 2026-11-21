@@ -3,7 +3,7 @@
  * local annotated with one is checked and stored like any other.
  */
 import ts from 'typescript';
-import { parseType, type Type } from './types.js';
+import { parseType, typeAliasName, type Type } from './types.js';
 
 /**
  * The top-level type aliases and interfaces (without type parameters or heritage) that `code` declares. One the type
@@ -49,15 +49,17 @@ export function evalTypeDeclarations(code: string): Record<string, Type> {
 /** `type` with the names `declared` defines replaced by their definitions, through declarations that use each other. */
 export function inlineDeclaredTypes(type: Type, declared: Record<string, Type>, seen: ReadonlySet<string> = new Set()): Type {
   const inline = (inner: Type) => inlineDeclaredTypes(inner, declared, seen);
+  const name = typeAliasName(type);
+  if (name !== undefined) {
+    const definition = Object.hasOwn(declared, name) ? declared[name] : undefined;
+    return definition && !seen.has(name) ? inlineDeclaredTypes(definition, declared, new Set([...seen, name])) : type;
+  }
   switch (type.kind) {
-    case 'name': {
-      const definition = Object.hasOwn(declared, type.name) ? declared[type.name] : undefined;
-      if (!definition || seen.has(type.name)) return type;
-      return inlineDeclaredTypes(definition, declared, new Set([...seen, type.name]));
-    }
     case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: inline(field.type) })) };
     case 'list': case 'dict': return { ...type, element: inline(type.element) };
-    case 'union': return { ...type, members: type.members.map(inline) };
+    case 'union': case 'intersection': return { ...type, members: type.members.map(inline) };
+    case 'index': case 'refined': case 'untrusted': return { ...type, base: inline(type.base) };
+    case 'neuralese': return { ...type, element: inline(type.element) };
     case 'lambda': return { ...type, params: inline(type.params) as typeof type.params, returns: inline(type.returns) };
     default: return type;
   }

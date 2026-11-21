@@ -10,7 +10,7 @@ import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceive
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices, type EffectEvent } from './effects.js';
-import { DEFAULT_DIALECT, TypeEnv, containsRefinement, formatType, parseType, type Type } from './types.js';
+import { DEFAULT_DIALECT, TypeEnv, TypeSyntaxError, containsRefinement, formatType, parseType, typeAliasNames, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   isPlainRecord, type LambdaNode, type Value } from './values.js';
@@ -661,25 +661,72 @@ function replaceCodebaseItem(codebase: Record<string, unknown>, path: string[], 
   const current = (codebase as Record<string, ItemRecord>)[head!]!;
   return { ...codebase, [head!]: rest.length ? { ...current, codebase: replaceCodebaseItem(current.codebase, rest, record) } : record };
 }
-/** Declared return type of a callable path in a codebase, for typing eval locals. */
-function returnTypeOf(codebase: Record<string, unknown>, name: string): string | undefined {
+/** Declared return type of the selected callable or module export. */
+function returnTypeOf(codebase: Record<string, unknown>, name: string, caller: TypeEnv): Type | undefined {
   const found = findCodebaseItem(codebase, name);
   if (!found || found.path.join('.') !== name.replace(/\//g, '.') && found.record.kind !== 'module') return;
   const record = found.record;
-  const expanded=(text:string)=>{
-    const aliases:Record<string,Type>={};
-    for(const [name,source]of Object.entries('types' in record ? record.types : {})){try{aliases[name]=parseType(source);}catch{/* TypeScript-only types stay outside portable checking. */}}
-    const shared=callableTypes(codebase);
-    for(const name of Object.keys(aliases))if(shared[name]&&formatType(shared[name]!)===formatType(aliases[name]!))delete aliases[name];
-    return formatType(inlineDeclaredTypes(parseType(text),aliases));
-  };
-  if (record.kind === 'natlang') return expanded(record.returns);
-  if (record.kind === 'module') {
-    const exportName = name.split('.').at(-1)!;
-    const spec = record.exports[exportName === record.name ? 'default' : exportName] ?? record.exports.default;
-    return spec?.kind === 'function' ? expanded(spec.returns) : undefined;
+  if (record.kind === 'namespace') return;
+  if (record.kind === 'natlang') return transferCallableType(record, record.returns, caller);
+  const exportName = name.split('.').at(-1)!;
+  const spec = record.exports[exportName === record.name ? 'default' : exportName] ?? record.exports.default;
+  return spec?.kind === 'function' ? transferCallableType(record, spec.returns, caller) : undefined;
+}
+
+const callableAliases = new WeakMap<ItemRecord, Record<string, Type>>();
+
+/** Transfer a callable's signature using its own types, rather than looking up private names in the caller. */
+function transferCallableType(record: Exclude<ItemRecord, { kind: 'namespace' }>, source: string, caller: TypeEnv): Type | undefined {
+  let type: Type;
+  try { type = parseType(source); }
+  catch (error) {
+    if (!(error instanceof TypeSyntaxError)) throw error;
+    return;
   }
-  return;
+  if (!typeAliasNames(type).length) return type;
+  let aliases = callableAliases.get(record);
+  if (!aliases) {
+    aliases = callableTypes(record.codebase);
+    for (const [alias, text] of Object.entries(record.types)) {
+      try { aliases[alias] = parseType(text); }
+      catch { /* TypeScript-only types stay outside portable checking. */ }
+    }
+    callableAliases.set(record, aliases);
+  }
+  const sourceAliases = aliases;
+  // A name may be kept only if its entire dependency chain resolves identically. A shared
+  // outer spelling can otherwise hide a conflicting, private, or caller-shadowed dependency.
+  const sharedAlias = (alias: string, seen: ReadonlySet<string>): boolean => {
+    if (seen.has(alias)) return true;
+    const from = Object.hasOwn(sourceAliases, alias) ? sourceAliases[alias] : undefined;
+    const to = caller.lookup(alias);
+    if (!from || !to) return from === to;
+    if (formatType(from) !== formatType(to)) return false;
+    const next = new Set([...seen, alias]);
+    return typeAliasNames(from).every(dependency => sharedAlias(dependency, next));
+  };
+  const privateAliases: Record<string, Type> = Object.create(null);
+  const seen = new Set<string>();
+  const collect = (signature: Type) => {
+    for (const alias of typeAliasNames(signature)) {
+      if (seen.has(alias)) continue;
+      seen.add(alias);
+      if (!Object.hasOwn(sourceAliases, alias) || sharedAlias(alias, new Set())) continue;
+      privateAliases[alias] = sourceAliases[alias]!;
+      collect(privateAliases[alias]);
+    }
+  };
+  collect(type);
+  const expanded = inlineDeclaredTypes(type, privateAliases);
+  // An incompatible recursive alias cannot be transferred as a finite structural type.
+  // Infer the observed local without borrowing its name.
+  if (typeAliasNames(expanded).some(alias => !sharedAlias(alias, new Set()))) return;
+  try { caller.checkNames(expanded); }
+  catch (error) {
+    if (!(error instanceof TypeSyntaxError)) throw error;
+    return;
+  }
+  return expanded;
 }
 
 /** Settle with `work`, or reject with the signal's reason once it aborts. */
@@ -1309,6 +1356,20 @@ export class NativeSession {
   localMutable(name: string): boolean { return this.scopeLocalMutability.get(name) ?? true; }
 
   /** Type aliases from prior evals, made visible to the next eval's inline signature analysis. */
+  private readonly analysisCallableTypes = new WeakMap<ItemRecord, Map<string, string>>();
+
+  /** Use the same lexical signature as runtime local inference in the static eval checker. */
+  analysisCallableType(record: Exclude<ItemRecord, { kind: 'namespace' }>, source: string): string {
+    let types = this.analysisCallableTypes.get(record);
+    if (!types) { types = new Map(); this.analysisCallableTypes.set(record, types); }
+    const known = types.get(source);
+    if (known !== undefined) return known;
+    const transferred = transferCallableType(record, source, this.env);
+    const text = transferred ? formatType(transferred) : source;
+    types.set(source, text);
+    return text;
+  }
+
   analysisTypeAliases(): Record<string, string> {
     return Object.fromEntries(Object.entries(this.localTypes).map(([name, type]) => [name, formatType(type)]));
   }
@@ -2124,18 +2185,18 @@ export class NativeSession {
     // A reduce result has the accumulator's type, which need not match its list.
     if (/\.(?:reduce|reduceRight)\s*\(/.test(source)) return;
     const directCall = /^(?:await\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
-    const directReturns = directCall ? returnTypeOf(this.lam.codebase, directCall[1]!) : undefined;
-    if (directReturns) return parseType(directReturns);
+    const directReturns = directCall ? returnTypeOf(this.lam.codebase, directCall[1]!, this.env) : undefined;
+    if (directReturns) return directReturns;
     // Only a map callback that is the call itself (`x => f(x)`, optionally async/await) gives the list the callee's
     // return type; a callback that wraps the call in an object or expression has a type this cannot see.
     const mappedCall = /^await\s+Promise\.all\(\s*[\s\S]*?\.map\(\s*(?:async\s+)?(?:\([\w$,\s]*\)|[A-Za-z_$][\w$]*)\s*=>\s*(?:await\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
-    let mappedReturns: string | undefined;
+    let mappedReturns: Type | undefined;
     if (mappedCall) {
       let depth = 1, at = mappedCall[0].length;
       for (; at < source.length && depth > 0; at++) depth += source[at] === '(' ? 1 : source[at] === ')' ? -1 : 0;
-      if (depth === 0 && /^\s*\)\s*\)\s*$/.test(source.slice(at))) mappedReturns = returnTypeOf(this.lam.codebase, mappedCall[1]!);
+      if (depth === 0 && /^\s*\)\s*\)\s*$/.test(source.slice(at))) mappedReturns = returnTypeOf(this.lam.codebase, mappedCall[1]!, this.env);
     }
-    if (mappedReturns) return parseType(`(${mappedReturns})[]`);
+    if (mappedReturns) return { kind: 'list', element: mappedReturns };
     const lastCollectionMethod = [...source.matchAll(/\.(find|filter|slice|map|flatMap)\s*\(/g)].at(-1)?.[1];
     const collection = ['find', 'filter', 'slice'].includes(lastCollectionMethod ?? '') ?
       /^(.*)\.(find|filter|slice)\s*\(.*\)$/s.exec(source) : null;
