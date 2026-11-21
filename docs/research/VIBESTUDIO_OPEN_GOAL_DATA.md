@@ -939,3 +939,13 @@ in `/home/werg/vibestudio-worktrees/open-goal-composed-2324.GGDHc7`.
 The verified local selector file is `train-cases-no-device.txt`. Two of
 its goals require a separate semantic-review model. The managed collector
 preflight is queued behind Pop's active held evaluation.
+
+The 08:00 local sweep checkpoint contains 1,644 accepted outcomes.
+It is registered as `vibestudio-open-goal-2324-sweep-20261121t0800` with
+manifest SHA-256
+`3189a84763496ba4ad6d50f4a2cdf9c339c314024cada359cf72f4621b7d8378`.
+In the same Pop release, `selector-snapshots/managed-1644-20261121T0800/`
+contains a verified superset of the initial selectors, with 1,215 training
+goals and 1,202 local training goals. Pop's pinned materializer also checked
+the transferred Luna manifest and emitted 25 eligible native training
+decisions.
