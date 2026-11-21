@@ -827,3 +827,28 @@ search requires a working search provider in the managed workspace.
 A single managed System instance completed 24 model-free references under
 the 9.5 GiB cap. The combined Personal and System test unit peaked at
 8.6 GiB. Routine sweeps keep the existing 12-case recycle interval.
+
+The 2,320-goal release adds owned automation activation, Calendar runbook
+reconciliation, and News editorial review. The catalog has 1,742 train
+and 578 held goals and preserves all 842 historical assignments. Its SHA-256
+is `5b8b27a990541fd5fa3e689953d16c47790b0f7d44a8afca2876bf77d358bfc9`.
+The registered `vibestudio-open-goal-composed-release-2320-20261121` archive
+contains 1,248 accepted references. It has 917 train selectors, including
+907 for local workspaces. Managed references exercise all 66 skills somewhere
+in the corpus and 145 of the 151 baseline agentic capabilities. The complete
+audit also tracks each skill in each workspace and the 2,164-reference floor.
+The continuing sweep prioritizes families that still need a local held
+reference. [Commit pins](vibestudio-open-goal-pop-pins-composed-2320.tsv)
+
+Pop verified the exact catalog, case selector hashes, native Host dependencies,
+and pinned Natlang reviewer in
+`/home/werg/vibestudio-worktrees/open-goal-composed-2320.fTYaju`. It verified
+all 14 infrastructure package input digests against a prepared release and
+revalidated the copied output hashes through the Host's own build checker.
+Staging fit while the held evaluation continued. The Pop credential status
+reported a configured Codex login.
+
+The archived Luna capture rebuilt against this exact catalog. The learner's
+CPU-only schedule contains eight action chains and 1,596 weighted target
+tokens. The gate still requires at least 80% open distinct goals and 80% open
+weighted target tokens for the actual train schedule. [Training pipeline](#bounded-multi-case-capture)
