@@ -68,7 +68,8 @@ def test_a_failed_task_goes_on_to_another_teacher_and_keeps_both_episodes(tmp_pa
 
 def test_min_failed_reserves_a_teacher_for_tasks_others_failed(tmp_path):
     cheap, sol = teacher('cheap'), teacher('sol', min_failed=1)
-    g = campaign(tmp_path, [task('f'), task('f', ['cheap'])], teachers=[cheap, sol])
+    earlier = [{**record(9, 'f', 'cheap', 'semantic_mismatch'), 'task_id': 'x'}]
+    g = campaign(tmp_path, [task('f'), task('f', ['cheap'])], earlier, teachers=[cheap, sol])
     assert g._take(sol) == 1
     assert g._take(cheap) == 0
     assert g._take(sol) is None
@@ -94,3 +95,16 @@ def test_a_harness_infrastructure_error_is_no_teacher_verdict(tmp_path):
     crash = {**record(0, 'f', 'a', 'infrastructure_error'), 'provider_failure': False}
     assert g._no_verdict(crash)
     assert not g._no_verdict(record(0, 'f', 'a', 'budget_exhaustion'))
+
+
+def test_voided_verdicts_are_no_try_and_keep_their_episode_directory(tmp_path):
+    failed = {**record(0, 'f', 'a', 'semantic_mismatch'), 'rollouts': '/x/t000000/rollouts.jsonl'}
+    earlier = [{**record(5, 'f', 'b', 'semantic_mismatch'), 'task_id': 'x', 'rollouts': '/old/t5/rollouts.jsonl'}]
+    a, b = teacher('a'), teacher('b')
+    g0 = campaign(tmp_path, [task('f', ['b'])], earlier, own=[failed], teachers=[a, b])
+    assert g0.tasks[0]['failed_by'] == ['a', 'b'] and 'a' in g0.tried[0]
+    (tmp_path / 'work' / 'voided.jsonl').write_text(json.dumps({'rollouts': failed['rollouts']}) + '\n')
+    (tmp_path / 'old' / 'voided.jsonl').write_text(json.dumps({'rollouts': '/old/t5/rollouts.jsonl'}) + '\n')
+    g = campaign(tmp_path, [task('f', ['b'])], earlier, own=[failed], teachers=[a, b])
+    assert g.tasks[0]['failed_by'] == [] and 0 not in g.tried and g.recorded[0] == 1
+    assert g._take(a) == 0                     # a may try again; its next episodes go to t000000-a1
