@@ -1838,14 +1838,14 @@ def renderer_tokenizer(export_dir, out):
 class TeacherDemos:
     """Verified teacher-pool successes for the self-distillation replay (``--sd-teacher-weight``): every success of the
     sft_sources WORKs (``--sd-teacher-source``; first WORK wins a key) of source ``teacher`` whose replay under that WORK's
-    runtime was exact (``sft_sources.verified_episodes``), on an eligible pool task (the run's task list, held closure
+    runtime was exact or only its display drifted (``sft_sources.verified_episodes``, ``drifted``), on an eligible pool task (the run's task list, held closure
     applied) and outside the held closure again (``sft_sources.held_excluded_ids``), at most ``max_per_task`` per task
     (teacher models taking turns, as ``sft_sources.capped``). ``take`` lowers the chosen ones with sft_sources' own
     rendering (``call_row`` on the replayed turns: the student-form prompt the runtime builds, the teacher's reply as
     target, an empty think block at weight 0)."""
 
     def __init__(self, works, by_id, held_manifest, tokenizer, max_per_task, seed, log=print, uses_path=None,
-                 take_seed=None):
+                 take_seed=None, drifted=True):
         import random as _random
         from sft_sources import TemplateRenderer, held_closure, held_excluded_ids, verified_episodes
         self.renderer = TemplateRenderer(tokenizer)
@@ -1857,7 +1857,7 @@ class TeacherDemos:
             if not (Path(work) / 'replay.jsonl').exists():
                 log({'event': 'sd teacher source missing', 'work': str(work)})
                 continue
-            for episode, record in verified_episodes(work, self.funnel, sources={'teacher'}):
+            for episode, record in verified_episodes(work, self.funnel, sources={'teacher'}, drifted=drifted):
                 if episode['task_id'] not in by_id or episode['key'] in found:
                     continue
                 tasks[episode['task_id']] = episode['task']
@@ -3822,7 +3822,8 @@ def train(args):
         teacher_demos = TeacherDemos(args.sd_teacher_source or default_sd_teacher_sources(), collector.by_id, args.held_manifest,
                                      renderer_tokenizer(args.actor_export, work / 'sd-teacher-tokenizer'),
                                      args.sd_teacher_max_per_task, args.seed, log=lambda r: log_line(log, r),
-                                     uses_path=work / 'teacher-demo-uses.json', take_seed=f'{args.seed}:{first_group}')
+                                     uses_path=work / 'teacher-demo-uses.json', take_seed=f'{args.seed}:{first_group}',
+                                     drifted=args.sd_teacher_admit_drifted == 'on')
     replay_corpora = []
     if args.replay_corpus and args.no_neuralese_passthrough:
         raise SystemExit('--replay-corpus consumers import their producer documents: drop --no-neuralese-passthrough')
@@ -5225,6 +5226,8 @@ def build_parser():
     t.add_argument('--sd-teacher-episodes', type=int, default=8, help='teacher demonstrations per step at most (one per task)')
     t.add_argument('--sd-teacher-max-per-task', type=int, default=4,
                    help='distinct verified teacher episodes kept per task (teacher models taking turns)')
+    t.add_argument('--sd-teacher-admit-drifted', choices=('on', 'off'), default='on',
+                   help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
     t.add_argument('--sd-teacher-source', action='append', default=None,
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
                         'default: the registry role grpo-sd-teacher)')

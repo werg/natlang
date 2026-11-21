@@ -737,6 +737,14 @@ class ReplayEpisode:
         self.served = [False] * len(turns)
         self.log = []
 
+    def closest(self, candidates, opening):
+        """The candidate whose recorded opening is most like the request's: sibling child calls (one nl() per item)
+        share a signature, so the first unserved one could be another item's call."""
+        if len(candidates) < 2:
+            return candidates[0] if candidates else None
+        import difflib
+        return max(candidates, key=lambda i: (difflib.SequenceMatcher(None, self.openings[i], opening).ratio(), -i))
+
     def answer(self, body):
         if 'prompt_logprobs' in body:
             # A decision readout's scoring request (ts-host/src/model/decision-scoring.ts). The recorded teacher could
@@ -758,17 +766,17 @@ class ReplayEpisode:
                     break
             if match is None:
                 reworded = reworded_key(messages)
-                for i, k in enumerate(self.reworded):
-                    if not self.served[i] and k == reworded:
-                        match, kind = i, 'reworded'
-                        break
+                match = self.closest([i for i, k in enumerate(self.reworded) if not self.served[i] and k == reworded],
+                                     opening)
+                kind = 'reworded' if match is not None else kind
             if match is None:
                 # the same invocation (its opening, else its signature when the runtime reworded the opening) with
                 # as many visible messages: a tool output that differs from the recording
                 signature = signature_key(messages)
                 for keys, want in ((self.openings, opening), (self.signatures, signature)):
-                    match = next((i for i in range(len(self.turns))
-                                  if not self.served[i] and keys[i] == want and self.lengths[i] == length), None)
+                    match = self.closest([i for i in range(len(self.turns))
+                                          if not self.served[i] and keys[i] == want and self.lengths[i] == length],
+                                         opening)
                     if match is not None:
                         kind = 'drifted'
                         break
@@ -917,6 +925,7 @@ def replay_episode(args, server, episode, env):
               'outcome': outcome, 'returncode': result.returncode, 'seconds': round(time.time() - started, 1),
               'recorded_turns': len(episode['turns']), 'replayed_turns': turns,
               'served': dict(kinds), 'unserved': replay.served.count(False),
+              'siblings_resolved': True,   # reworded/drifted matches chose the closest opening (ReplayEpisode.closest)
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
               'log': replay.log[:64]}
@@ -1149,21 +1158,40 @@ def water_fill(sizes, weights, budget):
     return budgets
 
 
-def drifted_success(record):
+DRIFTED_DEFAULT = True   # teacher replays whose display drifted are admitted by default (consumers' --admit-drifted off)
+
+
+def sibling_ambiguous(turns):
+    """Whether two recorded calls share a signature and a visible length but not their opening (sibling child calls,
+    e.g. one nl() per item): a replay matched without ``siblings_resolved`` may have served one sibling's recorded reply
+    to another's request, so a drifted success of such an episode is not admitted."""
+    seen = collections.defaultdict(set)
+    for t in turns:
+        seen[(signature_key(t['messages']), sum(m.get('role') != 'system' for m in t['messages']))].add(
+            opening_key(t['messages']))
+    return any(len(v) > 1 for v in seen.values())
+
+
+def drifted_success(record, turns=None):
     """A replay that succeeded with every recorded call served and nothing else asked, but where some call saw a
     display that differs from the recording (``drifted``: a tool output or host preamble rendered differently today).
-    The actions are the teacher's and the oracle accepted them under today's runtime."""
+    The actions are the teacher's and the oracle accepted them under today's runtime; the training rows render the
+    replayed (today's) prompts (``replayed_turns``). With the episode's recorded ``turns``, an episode whose sibling calls
+    a replay without ``siblings_resolved`` (the matcher before its best-opening choice) could have swapped is refused."""
     served = {k: v for k, v in (record.get('served') or {}).items() if k != 'scoring-declined'}
+    if turns is not None and not record.get('siblings_resolved') and sibling_ambiguous(turns):
+        return False
     return (record.get('outcome') == SUCCESS and not record.get('exact') and record.get('unserved') == 0
             and 'missing' not in served and set(served) <= {'exact', 'reworded', 'drifted'}
             and record.get('replayed_turns') == record.get('recorded_turns'))
 
 
-def verified_episodes(work, funnel, extracted=None, sources=None, drifted=False):
+def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTED_DEFAULT):
     """(episode, replay record) of every extracted success of WORK (of ``sources`` only, when given) whose replay under
     the replaying runtime was exact and succeeded (fixture tasks still admitted); counted per source in ``funnel``.
-    ``extracted`` (a set) collects every extracted key. ``drifted``: also successes whose display drifted
-    (``drifted_success``; counted as ``replayed_drifted``)."""
+    ``extracted`` (a set) collects every extracted key. ``drifted`` (default on): also teacher successes whose display drifted
+    (``drifted_success``; counted as ``replayed_drifted``; ``drifted_sibling_ambiguous`` the ones refused for a possible
+    sibling swap)."""
     work = Path(work)
     replays = {}
     replay_path = work / 'replay.jsonl'
@@ -1217,9 +1245,13 @@ def verified_episodes(work, funnel, extracted=None, sources=None, drifted=False)
             f['replay_failed'] += 1
             continue
         if not record.get('exact'):
-            if drifted and drifted_success(record):
+            drifted_here = drifted and source == 'teacher'   # own episodes keep exact replay (their sampled ids)
+            if drifted_here and drifted_success(record, episode['turns']):
                 f['replayed_drifted'] += 1
                 yield episode, record
+                continue
+            if drifted_here and drifted_success(record):
+                f['drifted_sibling_ambiguous'] += 1
                 continue
             f['replay_inexact'] += 1
             continue
@@ -1289,7 +1321,7 @@ def core_candidates(args, work, funnel, held):
     only (the turns are read again when rendering)."""
     candidates, tasks = [], {}
     extracted = set()
-    for episode, record in verified_episodes(work, funnel, extracted):
+    for episode, record in verified_episodes(work, funnel, extracted, drifted=getattr(args, 'admit_drifted', 'on') == 'on'):
         source = episode['source']
         task = episode['task']
         tasks[episode['task_id']] = task
@@ -2143,7 +2175,7 @@ def build(args):
                    'cap_rule': 'round(1 + (cap - 1) * (1 - base pass rate)); cap = rich_max_per_task for a task '
                                'declaring a held construct, else max_per_task',
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
-                   'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
+                   'admit_drifted': getattr(args, 'admit_drifted', 'on'), 'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
                    'teacher_think': args.teacher_think, 'think_treatment': treatment.report(),
                    'frontier': {'path': getattr(args, 'frontier', None), 'policy': frontier_policy,
@@ -2596,6 +2628,8 @@ def main():
                         f'{THINK_TREATMENT_ROLE} when registered, else --teacher-think for every episode)')
     b.add_argument('--frontier', help='expert_iteration.py frontier JSON: per-task pass rates and tiers of the policy '
                    'this build trains; each task keeps its cheapest verified source (frontier_drop)')
+    b.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
+                   help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
     b.add_argument('--anchor-per-task', type=int, default=1,
                    help='own episodes of a task the frontier marks solved (a light anchor)')
     n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')

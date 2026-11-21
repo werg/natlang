@@ -653,3 +653,49 @@ def test_extract_rl_specs_reads_every_named_extraction(tmp_path):
     (tmp_path / 'episodes-teacher-extract.json').write_text(json.dumps({'rl': [], 'teacher': ['/t']}))
     (tmp_path / 'extract.json').write_text(json.dumps({'rl': ['/r/d:/x/d']}))
     assert s.extract_rl_specs(tmp_path) == ['/r/a:/x/a', '/r/b:/x/b', '/r/c:/x/c', '/r/d:/x/d']
+
+
+def _drift_work(tmp_path, episodes, records):
+    writer = s.ZstdWriter(tmp_path / 'episodes.jsonl.zst')
+    for e in episodes:
+        writer.write(e)
+    writer.close()
+    (tmp_path / 'replay.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
+
+
+def test_drifted_teacher_successes_are_admitted_by_default_with_an_opt_out(tmp_path):
+    """A teacher replay that served every recorded call (some with a drifted display) and succeeded is verified by
+    default; an own episode keeps exact replay; a legacy record of an episode whose sibling calls it could have swapped
+    is refused unless the replay resolved siblings; ``drifted=False`` restores exact-only."""
+    import collections
+    plain = [turn([SYSTEM, {'role': 'user', 'content': 'You are inside this call: f()\n\nbody'}])]
+    siblings = [turn([SYSTEM, {'role': 'user', 'content': f'You are inside this call: nl@eval:1()\n\nitem {i}'}])
+                for i in range(2)]
+    episode = lambda key, source, turns: {'key': key, 'source': source, 'task_id': key, 'task': {'id': key},
+                                          'turns': turns}
+    drift = {'outcome': 'task_success', 'exact': False, 'unserved': 0, 'served': {'drifted': 1},
+             'replayed_turns': 1, 'recorded_turns': 1}
+    _drift_work(tmp_path, [episode('t', 'teacher', plain), episode('own', 'rl-own', plain),
+                           episode('sib', 'teacher', siblings), episode('sib2', 'teacher', siblings),
+                           episode('exact', 'teacher', plain)],
+                [{**drift, 'key': 't', 'name': 'a'}, {**drift, 'key': 'own', 'name': 'b'},
+                 {**drift, 'key': 'sib', 'name': 'c', 'replayed_turns': 2, 'recorded_turns': 2, 'served': {'drifted': 2}},
+                 {**drift, 'key': 'sib2', 'name': 'd', 'replayed_turns': 2, 'recorded_turns': 2, 'served': {'drifted': 2},
+                  'siblings_resolved': True},
+                 {**drift, 'key': 'exact', 'name': 'e', 'exact': True, 'served': {'exact': 1}}])
+    funnel = collections.defaultdict(collections.Counter)
+    assert [e['key'] for e, _ in s.verified_episodes(tmp_path, funnel)] == ['t', 'sib2', 'exact']
+    assert funnel['teacher']['replayed_drifted'] == 2 and funnel['teacher']['drifted_sibling_ambiguous'] == 1
+    assert funnel['rl-own']['replay_inexact'] == 1
+    off = collections.defaultdict(collections.Counter)
+    assert [e['key'] for e, _ in s.verified_episodes(tmp_path, off, drifted=False)] == ['exact']
+
+
+def test_replay_serves_the_sibling_call_whose_opening_is_closest():
+    """Sibling child calls share a signature: a reworded request gets the recorded call of its own item, not the first
+    unserved sibling."""
+    recorded = [turn([SYSTEM, {'role': 'user', 'content': f'You are inside this call: nl@eval:1()\n\nitem {i}\n\nold notes'}],
+                     content=f'answer {i}') for i in range(3)]
+    episode = s.ReplayEpisode(recorded)
+    now = [SYSTEM, {'role': 'user', 'content': 'You are inside this call: nl@eval:1()\n\nitem 2\n\nnew notes'}]
+    assert episode.answer({'messages': now})['choices'][0]['message']['content'] == 'answer 2'
