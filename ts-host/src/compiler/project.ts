@@ -546,39 +546,47 @@ export function compileProject(options: BuildOptions): BuildResult {
     refinedSlots.push(...refinedSlotsOf(plan.sourceSpan.file, plan.definitionId, Object.fromEntries(plan.parameters.map(parameter => [parameter.name, parameter.type.text])),
       plan.returns.text, {}));
   }
+  // Validate authored static imports in both check and emit modes. A stale declaration can make
+  // TypeScript accept an import without its source. Keep rewrite targets only for actual JS emit.
+  const emitting = options.emit !== false;
+  const generated = new Map<string, { record: NatlangRecord; commonjs: boolean; target: string }>();
+  const generatedNz = new Map<string, { bytes: Uint8Array; commonjs: boolean }>();
+  const importsBySource = new Map<ts.SourceFile, ReadonlySet<string>>();
+  const noNatlangImports = new Set<string>();
+  for (const file of program.getSourceFiles()) {
+    if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
+    const found = new Set<string>();
+    const commonjs = file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS;
+    for (const statement of file.statements) {
+      if ((!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) ||
+        !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (specifier.endsWith('.nz')) {
+        const target = resolve(dirname(file.fileName), specifier);
+        const bytes = nzFiles.get(target);
+        if (!bytes) { problem(rel(file.fileName), `cannot import ${specifier}: no such .nz file`); continue; }
+        if (emitting) {
+          found.add(specifier);
+          generatedNz.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js', { bytes, commonjs });
+        }
+      } else if (specifier.endsWith('.nl')) {
+        const target = resolve(dirname(file.fileName), specifier);
+        const record = namedRecords.get(target);
+        if (!record) { problem(rel(file.fileName), `cannot import ${specifier}: no such natlang function`); continue; }
+        if (emitting) {
+          found.add(specifier);
+          generated.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js', { record, target, commonjs });
+        }
+      }
+    }
+    if (found.size) importsBySource.set(file, found);
+  }
   const ok = !diagnostics.some(item => item.severity === 'error');
   const outputs: Record<string, string> = {};
   const rewrites: Record<string, RewriteRecord[]> = {};
   if (options.write !== false && options.writeDeclarations !== false && fs.write) for (const [path, text] of Object.entries(declarations))
     if (!fs.isFile(path) || fs.read(path) !== text) fs.write(path, text);
-  if (ok && options.emit !== false) {
-    const generated = new Map<string, { record: NatlangRecord; commonjs: boolean; target: string }>();
-    const generatedNz = new Map<string, { bytes: Uint8Array; commonjs: boolean }>();
-    const natlangImports = (file: ts.SourceFile) => {
-      const found = new Set<string>();
-      for (const statement of file.statements) {
-        if ((!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) ||
-          !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-        const specifier = statement.moduleSpecifier.text;
-        if (specifier.endsWith('.nz')) {
-          const target = resolve(dirname(file.fileName), specifier);
-          const bytes = nzFiles.get(target);
-          if (!bytes) { problem(rel(file.fileName), `cannot import ${specifier}: no such .nz file`); continue; }
-          found.add(specifier);
-          generatedNz.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js',
-            { bytes, commonjs: file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS });
-          continue;
-        }
-        if (!specifier.endsWith('.nl')) continue;
-        const target = resolve(dirname(file.fileName), specifier);
-        const record = namedRecords.get(target);
-        if (!record) { problem(rel(file.fileName), `cannot import ${specifier}: no such natlang function`); continue; }
-        found.add(specifier);
-        generated.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js',
-          { record, target, commonjs: file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS });
-      }
-      return found;
-    };
+  if (ok && emitting) {
     // Calls of named functions that make up a possible hand-off (compiler/call-flow.ts): the runtime matches them to planned edges.
     const fusionSitesOf = (file: ts.SourceFile): Map<string, string> => {
       const names = new Map<string, ItemRecord>();
@@ -606,7 +614,7 @@ export function compileProject(options: BuildOptions): BuildResult {
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
-        module: { natlangImports: natlangImports(source), rewrite: rewriteFor } })(context)(file);
+        module: { natlangImports: importsBySource.get(source) ?? noNatlangImports, rewrite: rewriteFor } })(context)(file);
     };
     const emit = (fileName: string, text: string) => {
       if ((options.constrained || /\b__natlang\.(?:fuseSite|instantiate)\(/.test(text)) && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
