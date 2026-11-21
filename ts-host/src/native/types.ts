@@ -383,29 +383,60 @@ export class TypeEnv {
   constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) {
     this.classes = parent?.classes;
     this.dialects = parent?.dialects;
-    for (const name of Object.keys(names)) this.checkRecursiveFunction(name);
+    this.checkRecursiveFunctions();
   }
   /**
    * Reject an alias that reaches itself through a function type (`type-recursive-function`): self-application
    * would make recursion expressible without a recursive definition. Recursive data types stay allowed.
    */
-  private checkRecursiveFunction(alias: string): void {
-    const visiting = new Set<string>();
-    const walk = (type: Type, throughFunction: boolean): void => {
+  private checkRecursiveFunctions(): void {
+    const aliases = Object.keys(this.names);
+    if (!aliases.length) return;
+    type Reference = { name: string; throughFunction: boolean };
+    // Extract each definition's direct edges once in this lexical scope. Checking
+    // multiple roots reuses these edges instead of walking their shared syntax.
+    const references = new Map<string, Reference[]>();
+    const collect = (type: Type, throughFunction: boolean, edges: Reference[]): void => {
       if (type.kind === 'name') {
-        if (type.name === alias && throughFunction)
-          throw new TypeSyntaxError(`type-recursive-function: type ${alias} refers to itself through a function type`);
-        const key = `${type.name}\0${throughFunction}`;
-        if (visiting.has(key)) return;
-        visiting.add(key);
-        const found = this.lookup(type.name);
-        if (found) walk(found, throughFunction);
+        edges.push({ name: type.name, throughFunction });
         return;
       }
-      for (const child of children(type)) walk(child, throughFunction || type.kind === 'lambda');
+      for (const child of children(type)) collect(child, throughFunction || type.kind === 'lambda', edges);
     };
-    const own = this.names[alias];
-    if (own) walk(own, false);
+    const edgesOf = (name: string): readonly Reference[] => {
+      let edges = references.get(name);
+      if (edges) return edges;
+      edges = [];
+      const type = this.lookup(name);
+      if (type) collect(type, false, edges);
+      references.set(name, edges);
+      return edges;
+    };
+    const reachable = new Set(aliases);
+    let hasFunctionEdge = false;
+    for (const name of reachable) {
+      for (const edge of edgesOf(name)) {
+        reachable.add(edge.name);
+        if (edge.throughFunction) hasFunctionEdge = true;
+      }
+    }
+    if (!hasFunctionEdge) return;
+    for (const alias of aliases) {
+      const plain = new Set([alias]);
+      const throughLambda = new Set<string>();
+      const pending = [...edgesOf(alias)];
+      while (pending.length > 0) {
+        const { name, throughFunction } = pending.pop()!;
+        if (name === alias && throughFunction)
+          throw new TypeSyntaxError(`type-recursive-function: type ${alias} refers to itself through a function type`);
+        const seen = throughFunction ? throughLambda : plain;
+        if (seen.has(name)) continue;
+        seen.add(name);
+        for (const edge of edgesOf(name)) {
+          pending.push(throughFunction && !edge.throughFunction ? { name: edge.name, throughFunction } : edge);
+        }
+      }
+    }
   }
   child(names: Record<string, Type>): TypeEnv { return Object.keys(names).length ? new TypeEnv({ ...names }, this) : this; }
   lookup(name: string): Type | undefined { return this.names[name] ?? this.parent?.lookup(name); }

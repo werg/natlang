@@ -97,6 +97,23 @@ test('internal type parsing caches immutable syntax without changing the public 
   assert.equal(formatType(second.resolve(item)), 'number');
 });
 
+test('recursive alias checks preserve function edges across inherited lexical scopes', () => {
+  assert.doesNotThrow(() => new TypeEnv({
+    Tree: parseType('{ children: Branch[] }'),
+    Branch: parseType('Tree | null'),
+    Project: parseType('(tree: Tree) => string'),
+  }));
+  const parent = new TypeEnv({
+    Container: parseType('{ operation: Operation }'),
+    Operation: parseType('(value: Terminal) => string'),
+  });
+  assert.doesNotThrow(() => parent.child({ Terminal: parseType('string') }));
+  assert.throws(
+    () => parent.child({ Terminal: parseType('Container') }),
+    /type-recursive-function: type Terminal refers to itself through a function type/
+  );
+});
+
 test('the parse cache evicts older declarations and skips oversized sources', () => {
   const before = parseTypeCached('{ cacheAnchor: string }');
   for (let index = 0; index < 4096; index++) parseTypeCached(JSON.stringify(`entry ${index}`));
