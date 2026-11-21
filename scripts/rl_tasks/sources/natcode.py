@@ -231,7 +231,17 @@ def _type_aliases(files):
     return out
 
 
+def _exposed(files):
+    """The program files the task root can reach: its `uses` lists the top-level operations (natlang_codebases), so an
+    operation, everything in its companion folder and the root types.ts. A namespace folder without an operation of its
+    own (`qualification/`) is not reachable: a question whose answer lies there cannot be answered (pool-errata
+    natcode-explore-unexposed-scope-20261121: 0 teacher successes in 94 episodes)."""
+    ops = {p[:-3] for p in files if p.endswith('.nl') and '/' not in p}
+    return {p: t for p, t in files.items() if p == 'types.ts' or ('/' not in p and p[:-3] in ops) or p.split('/', 1)[0] in ops}
+
+
 def _explore_questions(files, rng):
+    files = _exposed(files)
     nl, ts_children, items = _structure(files)
     functions = sorted(nl)
     out = []

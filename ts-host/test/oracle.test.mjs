@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agreement, checkFiles, checkFilesWithJudge, checkFileReturn, csvRows, checkOracle, containsQaSpan, qaAnswerCores, spanF1 } from '../dist/teacher/oracle.js';
+import { agreement, checkFiles, checkFilesWithJudge, checkFileReturn, csvRows, checkOracle, containsQaSpan, qaAnswerCores, qaSameAnswer, spanF1 } from '../dist/teacher/oracle.js';
 import { withTerminalNewlinePolicy } from '../dist/teacher/collector.js';
 
 test('normalized oracle accepts equivalent casing, spacing, numbers and dates', async () => {
@@ -237,7 +237,44 @@ test('a short QA answer holding the whole multi-token gold span passes; one-toke
   assert.equal(containsQaSpan('Celine Dion: Loved Me Because You', 'Because You Loved Me'), false);   // contiguous, in order
   assert.equal(containsQaSpan('Celine Dion: Because You Loved Me', 'Because You Loved Me'), true);
   assert.equal((await checkOracle('the 2010 UCI BMX World Championships', 'UCI BMX World Championships 2009', qa)).accepted, false);
+  // A unit word the answer adds needs the question that asks for it (below), or the rubric's judge.
   assert.equal((await checkOracle('14 surgeries', '14', qa)).accepted, false);
+});
+
+test('answer equivalence: number words, digit grouping, diacritics, asides, compound spacing and unit words', async () => {
+  const qa = { level: 'span', threshold: 0.8, normalization: 'qa' };
+  for (const [got, gold] of [['Eight', '8'], ['6', 'Six'], ['ten', 'Ten people'], ['1145', '1,145'], ['twenty-one', '21'],
+    ['Mustafa Kemal Atatürk', 'Kemal Ataturk'], ['Buffalo (bison)', 'Buffalo'], ['Léopoldville (Kinshasa)', 'Léopoldville'],
+    ['weatherstripping', 'weather stripping'], ['22', '22 provinces']])
+    assert.equal((await checkOracle(got, gold, qa)).accepted, true, `${got} / ${gold}`);
+  const points = { question: 'How many points did he score in the final?' };
+  assert.equal((await checkOracle('61 points', '61', qa, undefined, points)).accepted, true);
+  assert.equal((await checkOracle('61 rebounds', '61', qa, undefined, points)).accepted, false);   // a unit the question does not ask
+  for (const [got, gold] of [['Duke Lemur Center', 'Duke'], ['not 14', '14'], ['14 or 15', '14'], ['Seven', '8'],
+    ['1,145', '1,146'], ['Rivers and streams and lakes', 'Rivers'], ['Paris (or London)', 'London'], ['61 points', '62']])
+    assert.equal((await checkOracle(got, gold, qa)).accepted, false, `${got} / ${gold}`);
+  assert.equal(qaSameAnswer('14 surgeries', '14', 'How many surgeries did she have?'), true);
+  assert.equal(qaSameAnswer('14 days', '14', 'How many surgeries did she have?'), false);
+  assert.equal(qaSameAnswer('maybe 14', '14', 'Is it maybe 14?'), false);
+  // Plain normalized answers: a counted answer in words, "none" for zero, spacing around type punctuation.
+  for (const [got, gold] of [['1', 'one'], ['0', 'none'], ['string | null', 'string|null'], ['café', 'cafe']])
+    assert.equal((await checkOracle(got, gold, 'normalized')).accepted, true, `${got} / ${gold}`);
+  assert.equal((await checkOracle('2', 'one', 'normalized')).accepted, false);
+  assert.equal((await checkOracle('string[]', 'string', 'normalized')).accepted, false);
+  // QA alias maps compare each answer as a span-QA answer.
+  const map = { level: 'normalized', normalization: 'qa-alias-map' };
+  assert.equal((await checkOracle({ q1: 'Buffalo (bison)', q2: 'Eight' }, { q1: ['Buffalo'], q2: ['8'] }, map)).accepted, true);
+  assert.equal((await checkOracle({ q1: '6th century' }, { q1: ['5th'] }, map)).accepted, false);
+});
+
+test('NATLANG_QA_EQUIVALENCE=0 restores the earlier comparison', async () => {
+  const qa = { level: 'span', threshold: 0.8, normalization: 'qa' };
+  process.env.NATLANG_QA_EQUIVALENCE = '0';
+  try {
+    assert.equal((await checkOracle('14 surgeries', '14', qa)).accepted, false);
+    assert.equal((await checkOracle('Eight', '8', qa)).accepted, false);
+    assert.equal((await checkOracle('1', 'one', 'normalized')).accepted, false);
+  } finally { delete process.env.NATLANG_QA_EQUIVALENCE; }
 });
 
 test('a short QA answer is scored on its core when it restates the question or names a possessor, never when it hedges', async () => {
@@ -259,7 +296,7 @@ test('a short QA answer is scored on its core when it restates the question or n
   assert.equal((await checkOracle('Duke Lemur Center', 'Duke', qa, undefined,
     { question: 'Which university runs the lemur center in Durham?' })).accepted, false);
   assert.equal((await checkOracle("the alien's laser", 'The spaceship', qa)).accepted, false);
-  assert.equal((await checkOracle('14 surgeries', '14', qa, undefined, { question: 'How many surgeries did she have?' })).accepted, false);
+  assert.equal((await checkOracle('14 surgeries', '14', qa, undefined, { question: 'How many surgeries did she have?' })).accepted, true);
   assert.deepEqual(qaAnswerCores('just had sex', 'Sex', question), ['sex']);
   assert.deepEqual(qaAnswerCores('sex', 'Sex', question), []);                           // nothing to drop
 });
