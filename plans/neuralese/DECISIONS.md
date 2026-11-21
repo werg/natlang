@@ -6269,3 +6269,15 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - Wave 0009 finished and archived before the hold. Through 57 goal attempts the queue had four newly admitted trajectories and two reused trajectories. Three additional system-test passes were rejected by exporter constraints on the recorded route and serialized intermediate results. One was rejected solely by JSON key order. Open-goal export now uses the independent workspace outcome plus goal, capture and revision bindings. Browser generation, suite receipt and semantic review checks remain where relevant. All three originals were re-exported as native trajectory IR, checked against the held closure and recorded on the DGX as seed shards 0002–0004. No additional teacher inference was used.
 - The driver holds cases with unavailable Android or deployment prerequisites. It records connection reset, missing capture and known Android admission failures without spending the model-attempt allowance. Repeated Workerd resets or a wave with no captures stop the queue after its evidence is archived. Tick had zero running Android emulators and no validated deployment package. The full queue stays held during the candidate fixes.
 - A six-case model-free News control passed at concurrency three on the prior pins. The captured paid runs had resets before the first model call during joint program loading. The portable type resolver also rejected valid indexed access across the News union; it now requires the field to exist across the union and resolves the resulting union of field types.
+
+## 2026-11-21 16:55 Pop fill widened; operator soft-state fit retargeted to the serving policy
+
+- Pop's fill ran 24 staged episodes against 32 engine slots (GPU 18–36%, 360–1,385 tok/s): relaunched as
+  `popfill-fillw2` with 48 workers and 48 in flight (resumable; `popfill-stop2` stops it when sft-v7's SFT ends).
+- The uncapped operator fit's watcher had died, and it was set to fit on the old base 5ff07638 although the current
+  policy moved to sft-v6 at 10:40 (states are tied to the checkpoint they were fit on). Re-armed as the systemd unit
+  `softop-fit10-watch` (`natlang-operator-soft-20261120/watch/`): same gate (after sft-v7's SFT, beside sft-v8's
+  collection, never beside an SFT, 15 GB headroom), fit and eval on sft-v7's candidate, the policy sft-v8 trains from
+  (`plan-v3-sftv7.json`). Served only if it beats the text initialization on its own checkpoint overall and on long rows
+  and does not lose on short rows (build-v2 belongs to another policy, so it is no longer the comparison). If sft-v7
+  fails its gate, the states need a refit on sft-v6.
