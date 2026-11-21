@@ -194,7 +194,7 @@ def default_works():
     return data_registry.role_paths('grpo-sd-teacher')
 
 
-def teacher_episodes(works, held_manifest, funnel):
+def teacher_episodes(works, held_manifest, funnel, drifted=True):
     """[{key, work, name, task_id, teacher}] of every verified teacher success of WORKs (first WORK wins a key), held
     closure excluded (``TeacherDemos``' selection without the per-task cap: every episode is data)."""
     from sft_sources import held_closure, held_excluded_ids, verified_episodes
@@ -202,7 +202,7 @@ def teacher_episodes(works, held_manifest, funnel):
     for work in works:
         if not (Path(work) / 'replay.jsonl').exists():
             continue
-        for episode, record in verified_episodes(work, funnel, sources={'teacher'}):
+        for episode, record in verified_episodes(work, funnel, sources={'teacher'}, drifted=drifted):
             if episode['key'] in found or not record.get('name'):
                 continue
             tasks[episode['task_id']] = episode['task']
@@ -670,7 +670,7 @@ def generate(args):
     banned = (json.loads(manifest.read_text()).get('serving') or {}).get('banned_token_ids', []) if manifest.exists() else []
     stops = [i for i in (tokenizer.token_to_id('<|im_end|>'), tokenizer.token_to_id('<|endoftext|>')) if i is not None]
     funnel = collections.defaultdict(collections.Counter)
-    episodes = teacher_episodes(works, held, funnel)
+    episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on')
     done = done_keys(out)
     todo = [e for e in episodes if e['key'] not in done]
     random.Random(args.seed).shuffle(todo)
@@ -1122,6 +1122,9 @@ def build_parser():
     g.add_argument('--max-tokens', type=int, default=4096, help='reasoning cap per candidate')
     g.add_argument('--max-len', type=int, default=32000)
     g.add_argument('--band', type=float, nargs=2, default=(0.67, 1.5))
+    g.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
+                   help='also fill verified successes whose replay display drifted from the recording '
+                        '(sft_sources.drifted_success): the filled block is chosen under today\'s display')
     g.add_argument('--draw', choices=('staged', 'parallel'), default='staged',
                    help='staged: the anchor first, then band-capped waves until one admitted candidate is in band; '
                         'parallel: every candidate at once with the whole room')

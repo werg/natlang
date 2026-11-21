@@ -1149,10 +1149,21 @@ def water_fill(sizes, weights, budget):
     return budgets
 
 
-def verified_episodes(work, funnel, extracted=None, sources=None):
+def drifted_success(record):
+    """A replay that succeeded with every recorded call served and nothing else asked, but where some call saw a
+    display that differs from the recording (``drifted``: a tool output or host preamble rendered differently today).
+    The actions are the teacher's and the oracle accepted them under today's runtime."""
+    served = {k: v for k, v in (record.get('served') or {}).items() if k != 'scoring-declined'}
+    return (record.get('outcome') == SUCCESS and not record.get('exact') and record.get('unserved') == 0
+            and 'missing' not in served and set(served) <= {'exact', 'reworded', 'drifted'}
+            and record.get('replayed_turns') == record.get('recorded_turns'))
+
+
+def verified_episodes(work, funnel, extracted=None, sources=None, drifted=False):
     """(episode, replay record) of every extracted success of WORK (of ``sources`` only, when given) whose replay under
     the replaying runtime was exact and succeeded (fixture tasks still admitted); counted per source in ``funnel``.
-    ``extracted`` (a set) collects every extracted key."""
+    ``extracted`` (a set) collects every extracted key. ``drifted``: also successes whose display drifted
+    (``drifted_success``; counted as ``replayed_drifted``)."""
     work = Path(work)
     replays = {}
     replay_path = work / 'replay.jsonl'
@@ -1206,6 +1217,10 @@ def verified_episodes(work, funnel, extracted=None, sources=None):
             f['replay_failed'] += 1
             continue
         if not record.get('exact'):
+            if drifted and drifted_success(record):
+                f['replayed_drifted'] += 1
+                yield episode, record
+                continue
             f['replay_inexact'] += 1
             continue
         f['replayed_exact'] += 1

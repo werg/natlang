@@ -6144,3 +6144,23 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - **Open:** the 10,017 drifted successes are the larger prize. Admitting them needs a decision to train actions chosen
   against a slightly different display (the replayed record holds today's prompts with the same actions), or a
   re-collection of those tasks.
+
+**2026-11-21 10:30, Qwen October trajectories and drifted replays (rationalization strand).**
+- The replay subagent's result (its own entry, beeeb5b27): of 13,694 Qwen3.6 October trajectories, 1,092 replay
+  exactly. They are in WORK `sft-teacher-qwen-october-20261120`, role `grpo-sd-teacher`.
+- 10,017 more succeed with the teacher's own actions. In every one, the first difference is in what today's runtime
+  shows: host preamble, tool-output wording, values shown in full instead of cut.
+- **Decision: drifted successes enter the fill pass** (`filled_reasoning.py generate --admit-drifted on`, default;
+  `off` opts out).
+  - Admitted: every recorded call served, nothing unserved or missing, the oracle accepts (`sft_sources.drifted_success`).
+  - Why: the filled block is drawn and scored under today's display, and the improvement gate admits a block only if
+    the teacher's action becomes likelier after it in today's context. An action incoherent with today's display
+    finds no admitted block.
+  - Such episodes reach SFT only through the filled corpus; the plain teacher pool stays exact-only (`verified_episodes`
+    default unchanged).
+  - Today's display shows more than the teacher saw (values in full, not cut), so these actions do not use information
+    the training prompt hides.
+  - One remaining exposure: a drifted episode's fallback steps still train the teacher action after an empty block,
+    as exact teacher rows do.
+- Tests: `test_drifted_successes_are_a_separate_admission_class`. Enters: the next fill run that loads origin/main
+  (sft-v8's).

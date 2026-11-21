@@ -333,3 +333,14 @@ def test_actor_requests_retry_a_dropped_or_refused_connection(monkeypatch):
     import pytest
     with pytest.raises(ValueError):
         actor.post('/generate', {})
+
+
+def test_drifted_successes_are_a_separate_admission_class():
+    base = {'outcome': 'task_success', 'exact': False, 'unserved': 0, 'recorded_turns': 3, 'replayed_turns': 3}
+    assert sft_sources.drifted_success({**base, 'served': {'exact': 2, 'drifted': 1}})
+    assert not sft_sources.drifted_success({**base, 'served': {'exact': 2, 'missing': 1}})
+    assert not sft_sources.drifted_success({**base, 'served': {'exact': 3}, 'unserved': 1})
+    assert not sft_sources.drifted_success({**base, 'served': {'exact': 2, 'drifted': 1}, 'outcome': 'unresolved'})
+    assert not sft_sources.drifted_success({**base, 'exact': True, 'served': {'exact': 3}})   # exact ones are exact
+    assert fr.build_parser().parse_args(['generate', '--out', 'o', '--sglang', 's', '--export', 'e',
+                                         '--render-tokenizer', 't']).admit_drifted == 'on'
