@@ -1,5 +1,7 @@
 """Expert iteration (scripts/neuralese_data/expert_iteration.py) and its pool rules in sft_sources build."""
+import argparse
 import collections
+import os
 import json
 import random
 import sys
@@ -355,3 +357,31 @@ def test_data_repo_builds_the_mix_with_its_sft_sources_and_is_not_carried_to_the
                              start_sha='c' * 64, commit='d' * 40, previous='/p', prefer_unseen=[],
                              fallback_prefer_unseen=[])
     assert '--data-repo' not in out and '/main' not in out and '/f' in out
+
+
+def test_pop_held_measures_the_start_and_the_base_only_on_request(tmp_path, monkeypatch):
+    measured, reused = [], []
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda self, name, checkpoint: measured.append(name))
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: reused.append(out.name))
+    args = dict(dir=str(tmp_path), pin=str(tmp_path / 'pin'), held_samples=2, after=None, no_held_reuse=False)
+    ei.pop_held(argparse.Namespace(start='/v7.pt', held_base=False, **args))
+    assert (measured, reused) == (['start'], ['base'])
+    measured.clear()
+    ei.pop_held(argparse.Namespace(start='/v7.pt', held_base=True, **args))
+    ei.pop_held(argparse.Namespace(start=ei.BASE_CKPT, held_base=False, **args))
+    assert measured == ['start', 'base', 'base']
+
+
+def test_latest_base_takes_the_newest_complete_base_result_of_any_series(tmp_path):
+    paths = []
+    for i, r in enumerate([{'complete': True, 'policy_id': ei.BASE_SHA, 'samples_per_task': 2, 'series': {'key': 'a'}},
+                           {'complete': True, 'policy_id': ei.BASE_SHA, 'samples_per_task': 2, 'series': {'key': 'b'}},
+                           {'complete': False, 'policy_id': ei.BASE_SHA, 'samples_per_task': 2},
+                           {'complete': True, 'policy_id': 'other', 'samples_per_task': 2}]):
+        path = tmp_path / f'c{i}' / 'held' / 'base' / 'result.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(r))
+        os.utime(path, (i, i))
+        paths.append(path)
+    assert ei.latest_base(paths, 2) == paths[1].parent
+    assert ei.latest_base(paths, 4) is None

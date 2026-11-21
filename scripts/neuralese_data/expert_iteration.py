@@ -393,6 +393,19 @@ def reusable_held(results, policy, samples, series_key):
     return None
 
 
+def latest_base(results, samples):
+    """The newest complete held result of the base at ``samples`` per task, in any scoring series."""
+    found = []
+    for path in results:
+        try:
+            r = json.loads(Path(path).read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if r.get('complete') and r.get('policy_id') == BASE_SHA and r.get('samples_per_task') == samples:
+            found.append((Path(path).stat().st_mtime, Path(path).parent))
+    return max(found)[1] if found else None
+
+
 # ---- cycle -----------------------------------------------------------------------------------------------------------
 TEACHER_POOLS = [OPS / 'teacher-gen-20261115' / p for p in ('pool-v1', 'pool-v2-rich', 'pool-progtune-decisions')] + [
     OPS / 'teacher-gen-20261119' / 'gap-v1']
@@ -544,6 +557,7 @@ class Cycle:
                             *[f'--setenv={k}={self.env[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH')],
                             *self.py('expert_iteration.py', 'pop-held', '--dir', self.dir, '--pin', self.pin,
                                      '--start', self.a.start, '--held-samples', self.a.held_samples,
+                                     *(('--held-base',) if getattr(self.a, 'held_base', False) else ()),
                                      *(('--after', self.a.speculative_after) if self.speculative else ()))], check=True)
         self.note(stage='popbase', started=unit)
 
@@ -924,7 +938,10 @@ class Cycle:
         base, start, candidate = self.held / 'base', self.held / ('base' if train_start == BASE_CKPT else 'start'), \
             self.held / 'candidate'
         vs_start = self.compare(start, candidate, self.dir / 'compare-vs-start.json')
-        vs_base = self.compare(base, candidate, self.dir / 'compare-vs-base.json')
+        base_series = 'same'
+        if not (base / 'result.json').exists():     # not measured on this pin (--held-base): the latest other series
+            base, base_series = latest_base(OPS.glob('ei/*/held/base/result.json'), self.a.held_samples), 'other'
+        vs_base = self.compare(base, candidate, self.dir / 'compare-vs-base.json') if base else None
         d, p = vs_start['primary']['delta'], vs_start['primary']['permutation_p']
         ran_out = vs_start.get('ran_out_rate_delta') or 0
         if d < -self.a.fail_pts / 100 and p < 0.05:
@@ -935,10 +952,11 @@ class Cycle:
             verdict = 'neutral'
         adopt = verdict == 'success' or (verdict == 'neutral' and d > 0 and ran_out <= 0.02)
         result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out},
-                  'vs_base': {'delta': vs_base['primary']['delta'], 'p': vs_base['primary']['permutation_p']},
+                  'vs_base': vs_base and {'delta': vs_base['primary']['delta'], 'p': vs_base['primary']['permutation_p'],
+                                          'series': base_series, 'from': str(base)},
                   'next_start': str(self.dir / 'sft' / 'checkpoint.pt') if adopt else train_start}
         (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
-        if verdict == 'success' and vs_base['primary']['delta'] > 0:
+        if verdict == 'success' and (vs_base is None or vs_base['primary']['delta'] > 0):
             ckpt = self.dir / 'sft' / 'checkpoint.pt'
             (OPS / 'current-policy.json').write_text(json.dumps({
                 'schema': 'natlang.current-policy-pointer/1',
@@ -1003,7 +1021,9 @@ def _quote(text):
 
 
 def pop_held(args):
-    """Background unit of ``cycle``: the base, then (if it is not the base) the start policy, on Pop."""
+    """Background unit of ``cycle``: the start policy on Pop. The base only when it is the start, with ``--held-base``,
+    or when an earlier cycle measured it in this series: the verdict needs the start; vs-base is a reference that the
+    latest other series' base gives (DECISIONS 2026-11-22 "held base"), and re-measuring it on every pin cost Pop 3.3 h."""
     a = argparse.Namespace(dir=args.dir, pin=args.pin, start=args.start, start_sha=BASE_SHA, commit='x' * 40,
                            held_samples=args.held_samples, sft_work='/dev/null', no_held_reuse=args.no_held_reuse)
     c = Cycle(a)
@@ -1014,9 +1034,12 @@ def pop_held(args):
         while not verdict.exists():
             time.sleep(300)
         start = json.loads(verdict.read_text())['next_start']
-    c.pop_held('base', BASE_CKPT)
     if start != BASE_CKPT:
         c.pop_held('start', start)
+    if start == BASE_CKPT or args.held_base:
+        c.pop_held('base', BASE_CKPT)
+    else:
+        c.reuse_held(c.held / 'base', BASE_CKPT)
 
 
 def cycle(args):
@@ -1104,6 +1127,9 @@ def main():
     y.add_argument('--next-seed-work', action='append', default=[], help='seed WORKs the next cycle adds')
     y.add_argument('--no-held-reuse', action='store_true',
                    help="measure base and start on Pop even when an earlier cycle measured them in this series")
+    y.add_argument('--held-base', action='store_true',
+                   help='measure the base on this pin too (default: only the start; vs-base uses the latest base of '
+                        'another series when this one has none)')
     y.add_argument('--no-teacher-campaign', action='store_true')
     y.add_argument('--replay-workers', type=int, default=8)
     y.add_argument('--teacher-budget', type=int, default=180_000_000)
@@ -1127,6 +1153,7 @@ def main():
     h.add_argument('--held-samples', type=int, default=2)
     h.add_argument('--after', help='previous cycle DIR: wait for its verdict; its next_start is the start')
     h.add_argument('--no-held-reuse', action='store_true')
+    h.add_argument('--held-base', action='store_true')
     args = parser.parse_args()
     {'select': select, 'collect': collect, 'frontier': frontier, 'cycle': cycle, 'pop-held': pop_held}[args.command](args)
 
