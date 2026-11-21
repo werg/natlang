@@ -193,20 +193,42 @@ def test_fill_policies_name_every_policy_that_drew_a_step():
 
 
 def test_length_reweighting_restores_the_students_own_length_mix():
-    def cand(origin, length, selected=False):
-        return {'origin': origin, 'length': length, 'closed': True, 'selected': selected}
-    # the student reasons long half the time; the gate selected only short blocks plus one long one
-    calls = [{'candidates': [cand('unhinted', 100), cand('unhinted', 900), cand('hinted', 100, selected=True)]}] * 3
-    calls += [{'candidates': [cand('unhinted', 100), cand('unhinted', 900, selected=True)]}]
+    def cand(origin, length, selected=False, hazard=1.):
+        return {'origin': origin, 'length': length, 'closed': True, 'selected': selected, 'hazard': hazard}
+    # the student reasons long half the time; the gate selected mostly short blocks
+    calls = [{'candidates': [cand('unhinted', 100), cand('unhinted', 900), cand('hinted', 100, selected=True)]}] * 6
+    calls += [{'candidates': [cand('unhinted', 100), cand('unhinted', 900, selected=True)]}] * 2
     records = [{'chains': [{'calls': calls}]}]
-    w = fr.length_weights(records, cap=4.)
-    short, long_ = fr.length_bin(100), fr.length_bin(900)
-    assert abs(w[short] - 0.5 / 0.75) < 1e-9 and abs(w[long_] - 0.5 / 0.25) < 1e-9
-    assert fr.length_weights(records, cap=0) is None and fr.length_weights(records, cap=1.5)[long_] == 1.5
+    weights, edges = fr.block_weights(records, cap=4., mode='length')
+    short, long_ = (fr.length_bin(100), 0), (fr.length_bin(900), 0)
+    assert edges == [] and weights[long_] > 1 > weights[short]
+    assert abs((6 * weights[short] + 2 * weights[long_]) / 8 - 1) < 1e-9          # mean 1: the loss mass is kept
+    long_share = 2 * weights[long_] / (6 * weights[short] + 2 * weights[long_])
+    assert 0.25 < long_share <= 0.5                                                 # toward the student's 50%
+    assert fr.block_weights(records, cap=0) is None and fr.block_weights(records, cap=4., mode='off') is None
     row = {'sampled': np.array([True] * 900 + [False] * 3), 'weight': np.ones(903, np.float32)}
-    fr.reweight([row], w)
-    assert row['weight'][0] == 2. and row['weight'][-1] == 1.
+    fr.reweight([row], [{'candidates': [cand('unhinted', 900, selected=True)]}], (weights, edges))
+    assert abs(row['weight'][0] - weights[long_]) < 1e-6 and row['weight'][-1] == 1.
 
+
+def test_joint_reweighting_corrects_the_close_hazard_too():
+    def cand(origin, length, hazard, selected=False):
+        return {'origin': origin, 'length': length, 'closed': True, 'selected': selected, 'hazard': hazard}
+    # same lengths, but the chosen blocks close readily (high hazard) far more often than the student's own
+    own = [{'candidates': [cand('unhinted', 300, 0.5), cand('unhinted', 300, 1.0), cand('unhinted', 300, 4.0)]}] * 4
+    picked = [{'candidates': [cand('hinted', 300, 4.0, selected=True)]}] * 6
+    picked += [{'candidates': [cand('hinted', 300, 0.5, selected=True)]}] * 2
+    records = [{'chains': [{'calls': own + picked}]}]
+    weights, edges = fr.block_weights(records, cap=4.)
+    assert len(edges) == 2
+    high, low = fr.block_cell(cand('x', 300, 4.0), edges), fr.block_cell(cand('x', 300, 0.5), edges)
+    assert weights[low] > 1 > weights[high]
+    summary = fr.weighted_summary(records, (weights, edges))
+    own_h = summary['own']['hazard_mean']
+    assert abs(summary['chosen_weighted']['hazard_mean'] - own_h) < abs(summary['chosen']['hazard_mean'] - own_h)
+    # length-only weighting leaves the hazard untouched
+    w_len = fr.block_weights(records, cap=4., mode='length')
+    assert fr.weighted_summary(records, w_len)['chosen_weighted']['hazard_mean'] == summary['chosen']['hazard_mean']
 
 def scripted_filler(blocks, action_lp, args_extra=None):
     """A Filler on a scripted engine: draws return ``blocks[origin]`` (cut at max_new_tokens, never closing when cut);
@@ -287,11 +309,10 @@ def test_staged_waves_are_capped_at_the_band_and_skip_certain_actions():
 
 def test_length_reference_uses_only_anchors_once_draws_are_staged():
     def cand(length, **k):
-        return {'origin': 'unhinted', 'length': length, 'closed': True, **k}
+        return {'origin': 'unhinted', 'length': length, 'closed': True, 'hazard': 1., **k}
     staged = [{'candidates': [cand(900, anchor=True, selected=True), cand(100, anchor=False)]}]
-    w = fr.length_weights([{'chains': [{'calls': staged}]}], cap=4.)
-    assert w == {fr.length_bin(900): 1.0}     # the band-capped sample is no evidence of the student's own length
-
+    own, chosen = fr.own_and_chosen([{'chains': [{'calls': staged}]}])
+    assert [c['length'] for c in own] == [900] and [c['length'] for c in chosen] == [900]   # capped draws are no reference
 
 def test_a_trajectory_that_keeps_falling_back_draws_only_anchors():
     plain = lambda enc, close: enc(' something else entirely') * 4 + [close]   # noqa: E731

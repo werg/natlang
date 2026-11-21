@@ -699,3 +699,135 @@ def test_replay_serves_the_sibling_call_whose_opening_is_closest():
     episode = s.ReplayEpisode(recorded)
     now = [SYSTEM, {'role': 'user', 'content': 'You are inside this call: nl@eval:1()\n\nitem 2\n\nnew notes'}]
     assert episode.answer({'messages': now})['choices'][0]['message']['content'] == 'answer 2'
+
+
+class AheadRenderer:
+    """A renderer the spawned RenderAhead workers can build (module level): ids from the text, 'boom' fails."""
+    identity = {'ahead': True}
+
+    class tokenizer:
+        @staticmethod
+        def convert_tokens_to_ids(token):
+            return {'</think>': 7}.get(token, -1)
+
+        @staticmethod
+        def decode(ids):
+            return {7: '</think>'}.get(ids[0], 'x')
+
+    def render(self, messages, tools, target):
+        if target.get('content') == 'boom':
+            raise ValueError('cannot render')
+        return [len(m['content']) for m in messages], [7, 8, len(target.get('content') or '')]
+
+
+def ahead_work(tmp_path, n):
+    work = tmp_path / 'work'
+    candidates = []
+    for i in range(n):
+        name = f'e{i}'
+        content = 'boom' if i == 3 else 'x' * i
+        if i != 5:            # e5: no replay record (its turns cannot be read)
+            (work / 'replay' / name).mkdir(parents=True)
+            turns = [{'messages': [{'role': 'user', 'content': 'q' * (i + k)}], 'tools': [], 'invocation_id': 'root',
+                      'target': {'role': 'assistant', 'content': content}} for k in range(3)]
+            (work / 'replay' / name / 'rollouts.jsonl').write_text(json.dumps({'turns': turns}) + '\n')
+        candidates.append({'key': f'teacher:p:{name}', 'source': 'teacher' if i % 2 else 'rl-own', 'name': name,
+                           'task_id': f't{i}'})
+    return work, candidates
+
+
+def test_render_ahead_gives_the_serial_results_and_byte_identical_rows(tmp_path):
+    import functools
+    import pickle
+    work, candidates = ahead_work(tmp_path, 12)
+    think = lambda c: 'context'   # noqa: E731
+
+    def walk(workers, asked):
+        ahead = s.RenderAhead(AheadRenderer(), work, think, 'context', 'context', workers=workers,
+                              make_renderer=functools.partial(AheadRenderer), window=3)
+        ahead.walk(candidates)
+        results = {}
+        for c in asked:
+            results[c['key']] = ahead.get(c)
+            assert ahead.get(c) is results[c['key']]       # measurement and admission share one render
+        outside = {'key': 'teacher:p:e1-again', 'source': 'teacher', 'name': 'e1'}
+        results['outside'] = ahead.get(outside)               # not in the walk: rendered here
+        ahead.close()
+        return results
+
+    asked = [candidates[i] for i in (0, 1, 3, 5, 9, 10, 11)]  # skips inside and beyond the window
+    serial, parallel = walk(1, asked), walk(2, asked)
+    assert serial.keys() == parallel.keys()
+    for key in serial:
+        (t1, c1), (t2, c2) = serial[key], parallel[key]
+        if isinstance(t1, Exception):
+            assert type(t1) is type(t2) and c1 is None and c2 is None
+            continue
+        assert t1 == t2 and len(c1) == len(c2)
+        for a, b in zip(c1, c2):
+            assert (a == b) if isinstance(a, str) else (a[2] == b[2] and all(np.array_equal(x, y) for x, y in zip(a[:2], b[:2])))
+    assert isinstance(serial['teacher:p:e5'][0], FileNotFoundError)
+    assert all(isinstance(call, str) and 'cannot render' in call for call in serial['teacher:p:e3'][1])
+
+    def rows(results):
+        out = []
+        for c in asked:
+            turns, calls = results[c['key']]
+            if isinstance(turns, Exception) or any(isinstance(call, str) for call in calls):
+                continue
+            out += [s.rendered_row(call, c['source'], c['key'], i, turn)[0] for i, (turn, call) in enumerate(zip(turns, calls))]
+        return out
+    # pickle memoizes dtypes by identity: rows from worker processes must pickle to the same bytes as serial ones
+    assert pickle.dumps(rows(serial), protocol=4) == pickle.dumps(rows(parallel), protocol=4)
+    assert s.call_row(AheadRenderer(), 'teacher', 'k', 0, serial['teacher:p:e1'][0][0])[0]['weight'].tolist() == [0, 1, 1]
+
+
+def test_light_episodes_read_by_workers_equal_the_serial_reading(tmp_path):
+    work = tmp_path / 'work'
+    work.mkdir()
+    for name, keys in (('episodes.jsonl.zst', range(0, 150)), ('episodes-more.jsonl.zst', range(100, 200))):
+        writer = s.ZstdWriter(work / name)
+        for i in keys:       # 100..149 twice: the first extraction's record wins
+            calls = [('eval', json.dumps({'code': f'x{i % 7}'}))]
+            writer.write({'key': f'k{i}', 'source': 'teacher', 'task_id': f't{i}', 'file': name,
+                          'turns': [turn([SYSTEM, {'role': 'user', 'content': f'task {i % 5}\nmore'}], f'answer {i}', calls),
+                                    turn([SYSTEM, {'role': 'user', 'content': f'task {i % 5}\nother'}], 'done')]})
+        writer.close()
+    full = list(s.all_episodes(work))
+    serial, parallel = list(s.all_episodes(work, 1, light=True)), list(s.all_episodes(work, 3, light=True))
+    assert [e['key'] for e in full] == [e['key'] for e in serial] == [e['key'] for e in parallel]
+    assert all(e['file'] == 'episodes-more.jsonl.zst' for e in parallel if int(e['key'][1:]) >= 100)
+    for f, a, b in zip(full, serial, parallel):
+        assert 'turns' not in a and 'turns' not in b
+        assert a.keys() == b.keys() and {k: v for k, v in a.items() if k != 'facts'} == \
+            {k: v for k, v in b.items() if k != 'facts'}
+        facts = s.episode_facts(f['turns'])
+        for x in (a['facts'], b['facts']):
+            assert np.array_equal(x['signature'], facts['signature'])
+            assert x['backend_workaround'] == facts['backend_workaround']
+            assert x['sibling_ambiguous'] == facts['sibling_ambiguous'] is True
+
+
+def test_replay_surfaces_and_kept_episodes_read_by_workers_equal_the_serial_reading(tmp_path):
+    work = tmp_path / 'work'
+    (work / 'replay').mkdir(parents=True)
+    with (work / 'replay.jsonl').open('w') as replays:
+        for i in range(70):
+            name = f'r{i}'
+            replays.write(json.dumps({'key': f'k{i}', 'name': name, 'exact': i % 3 != 0}) + '\n')
+            (work / 'replay' / name).mkdir()
+            system = {'role': 'system', 'content': f'system {i % 4}'}
+            (work / 'replay' / name / 'rollouts.jsonl').write_text(json.dumps(
+                {'turns': [{'messages': [system, USER], 'tools': [{'function': {'name': f'f{i % 5}'}}]}]}) + '\n')
+    assert s.replay_surfaces(work, 1) == s.replay_surfaces(work, 3) and len(s.replay_surfaces(work, 1)) == 20
+    writer = s.ZstdWriter(work / 'episodes.jsonl.zst')
+    native = [{'type': 'native_state', 'id': 'nzs1_x'}]
+    for i in range(90):
+        content = native if i % 4 == 0 else 'plain'
+        writer.write({'key': f'k{i % 80}', 'source': 'rl-own', 'n': i,
+                      'turns': [{'messages': [SYSTEM, {'role': 'tool', 'content': content}], 'tools': [],
+                                 'target': {'role': 'assistant', 'content': 'a'}}]})
+    writer.close()
+    serial = list(s.all_episodes(work, 1, keep=s.has_native_state))
+    assert serial == list(s.all_episodes(work, 3, keep=s.has_native_state))
+    assert [e['n'] for e in serial] == [i for i in range(80) if i % 4 == 0]   # k0..k9 again at 80..89: first wins

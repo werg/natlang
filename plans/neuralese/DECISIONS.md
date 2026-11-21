@@ -6293,3 +6293,119 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   (`plan-v3-sftv7.json`). Served only if it beats the text initialization on its own checkpoint overall and on long rows
   and does not lose on short rows (build-v2 belongs to another policy, so it is no longer the comparison). If sft-v7
   fails its gate, the states need a refit on sft-v6.
+
+## 2026-11-21 20:55 cycle latency: sft_sources build speed; teacher campaign status
+
+- sft-v7's mix build ran 1 h 42 min on one core while the SFT waited, so it adds ~1.7 h to every cycle. A subagent profiles it
+  and parallelises the hot phases (default on, `--workers 1` opt-out, chains sha256 must stay identical to sft-v7's
+  8607730e). If verified before sft-v8's build (~02:00 11-22), that build runs main's sft_sources.
+- sft-v7's teacher campaign finished its 153 student-rare tasks: 311 scored attempts, 98 successes. Haiku retired on low
+  Anthropic credit (the owner's call); the NVIDIA and Gemini teachers continue. Teacher supply is not the limit: about
+  39k verified teacher episodes exist against about 500 filled. Filled reasoning is the bottleneck, and the fill-cost
+  and close-hazard work (subagent) targets it.
+
+**2026-11-21 23:30, filled reasoning: trained blocks follow the student's own length *and* close hazard (default
+`--block-reweight joint`; `length` restores the 06:00 weighting, `off` and `--length-reweight-cap 0` opt out).**
+- **Finding (sft-v8's first staged fills):** chosen blocks had median 138 tokens against the anchors' 276, and mean
+  `</think>` hazard 1.97 against 1.47 per 1k tokens. Length reweighting fixed the length mix, not the close profile.
+- **Inventory: where filled blocks are selected, weighted or consumed.**
+  - `filled_reasoning.py`:
+    - gates `Filler._evaluate`, selection `Filler.step` and `select`;
+    - weights `block_weights` and `reweight`, applied in `build`.
+  - `expert_iteration.py`:
+    - the build stage runs `fill_repo()/filled_reasoning.py build` (l. 820);
+    - the mix takes `--aux filled=...,share=all,task_tokens=40000,replaces=teacher` (l. 855-856).
+  - `sft_sources.py`:
+    - `parse_aux` and `load_aux` take the chains as built: no weighting of their own, so the row weights carry the
+      correction;
+    - `ThinkTreatment` maps `filled` to `context` until a filled part exists (l. 584).
+  - `exp0_sft.sampled_targets` (l. 262-275) reads the per-row `sampled` flags and trains the weights it is given.
+  - `grpo.py` does not consume filled corpora; its reasoning RL has its own twin objective, and no `filled_reasoning`
+    import exists there.
+  - A `--replay-corpus` of a filled `chains.pkl` would carry the row weights unchanged.
+  - So the one place to correct is `build`'s weighting; every consumer reads its weights.
+- **Built:** importance weights per cell (length bin x `</think>`-hazard tertile of the student's own blocks).
+  - Weight = the student's own share over the chosen share, add-0.5 smoothed, capped at 4, normalized to mean 1 over
+    the chosen blocks, so the corpus keeps its loss mass.
+  - The student's own blocks are the staged anchors, or every closed unhinted sample for parallel steps.
+  - `report.json` gains `block_weights` and `weighted`: own, chosen and chosen-weighted length p50 and hazard.
+  - Tests: `test_length_reweighting_restores_the_students_own_length_mix`,
+    `test_joint_reweighting_corrects_the_close_hazard_too`, `test_length_reference_uses_only_anchors_once_draws_are_staged`;
+    88 passed (ledger unit `fr-test-joint-2`).
+- **Effect on the current fills** (778 episodes, 10,705 own blocks, 1,853 chosen):
+
+  | weighting | length p50 | hazard p50 / p90 | hazard classes (own: 1/3 each) |
+  |---|---|---|---|
+  | own blocks | 522 | 0.046 / 1.73 | 0.333 / 0.333 / 0.333 |
+  | chosen, unweighted | 316 | 0.014 / 1.97 | 0.427 / 0.285 / 0.288 |
+  | chosen, length-only weights | 518 | 0.010 / 1.27 | 0.458 / 0.286 / 0.256 |
+  | chosen, joint weights | 518 | 0.041 / 1.79 | 0.334 / 0.333 / 0.333 |
+
+  - The chosen set's close bias is not a uniformly higher hazard. It is too many blocks that almost never consider
+    closing, plus a heavier tail, so the mean rose while the median fell.
+  - Length-only weighting made the class shares worse. Joint weighting matches the student's own length and close
+    profile.
+  - The 38 staged episodes alone match the class shares too: 0.332 / 0.332 / 0.336 against own 0.326 / 0.337 / 0.337.
+    Their quantiles are too few to read.
+- **Not checked:**
+  - the joint cells' stability below ~100 chosen blocks (smoothing and the cap bound it; sft-v8's build has ~2k);
+  - whether hazard tertiles are the right close statistic, rather than the close position relative to the block's own
+    best close point;
+  - any held effect (the cycle's held gate judges it).
+- **Enters:** sft-v8's build stage must run main's `filled_reasoning.py` (its pin 4a261bea4 predates this). The
+  rendering path (`sft_sources`, `exp0_sft`, `serve`) is unchanged between 4a261bea4 and main, so main's build
+  re-renders the same digests.
+
+## 2026-11-21 20:50 sft-v8's fill build on the joint length/hazard weighting
+
+- sft-v8's driver was restarted with `--fill-repo ops/ei/pin-633319ec9b1e` (main at 633319ec9, the joint length and
+  `</think>`-hazard block weighting), so its filled-reasoning build weights blocks to the student's own profile. Rendering
+  code is unchanged from its pin 4a261bea4 (the subagent checked sft_sources, exp0_sft and serve). `--fill-repo` is an
+  own flag, so sft-v9 goes back to its own pin.
+- sft-v7's candidate held restarted on Pop at 20:45 after the admission failure (b36ee40c2).
+
+## 2026-11-21 21:35 sft_sources build: candidates render in worker processes (`--workers`, default on)
+
+- **Profile** (py-spy, first 20 min of sft-v7's build rebuilt in a scratch dir): 76% rendering (`call_row` ->
+  `target_items`; 61% of all samples in the HF tokenizer's `_encode_plus`), and each episode rendered **twice**
+  (`EpisodeSizes.measure` 39%, then `admit` 38%). 21% `core_candidates`: JSON decoding of every extracted episode
+  (11%), MinHash/shingles (5%), `teacher_coverage` re-reading a group's cases.jsonl per manifest record (3%).
+- **Built** (`sft_sources.py`):
+  - `RenderAhead`: `render_candidate` (turns + per call `render_call`) of the candidates each loop walks (teacher,
+    own, validation), in loop order, by `--workers` spawned processes up to 4 x workers ahead; the selection stays
+    sequential, so budgets and caps see exactly the serial sizes. Size measurement and admission share one render.
+    `call_row` = `render_call` + `rendered_row` (unchanged output; grpo's TeacherDemos and filled_reasoning keep calling it).
+  - Byte identity across processes: pickle memoizes dtypes by identity, so arrays that crossed a process boundary are
+    re-viewed with numpy's canonical dtype (`rendered_row`); without it chains.pkl differs while equal in content.
+  - `all_episodes(work, workers, light, keep)`: workers parse episode lines; `light` sends back each episode with its
+    turns replaced by `episode_facts` (MinHash, backend refusal, sibling ambiguity), `keep` drops non-matching ones in the
+    worker. `core_candidates` reads light episodes; `neuralese-graph`/`neuralese-text` read `keep=has_native_state` and
+    `replay_surfaces` (parallel exact-replay surface scan, one implementation for both). `teacher_coverage` reads each
+    group's cases once. `cases.jsonl`'s quadratic task filter is a set.
+  - `--workers` on build, neuralese-graph and neuralese-text (default min(16, cpus - 4)); `--workers 1` is the serial
+    path. expert_iteration's data stage budget 8 -> 12 GB (graph reader processes).
+- **Verified:** sft-v7's mix rebuilt into a scratch dir (same inputs; `--admit-drifted off` and the treatment file
+  explicit, as b17d's build had them) with 12 workers: chains.pkl **8607730e** (identical), and rows.jsonl.zst,
+  val-own.pkl, val-teacher.pkl, cases.jsonl byte-identical; build.json differs only in paths, provenance and the
+  growing gap-v1 manifest count. Wall **848 s (14.1 min) vs 1 h 42 min** (with sft-v8's collection and an operator fit
+  on the machine). sft-v7's own neuralese-graph rebuilt with 12 workers: chains **6ad26b42** (identical), 127 s vs 252 s serial (old code, same work).
+  Tests: `test_render_ahead_gives_the_serial_results_and_byte_identical_rows`,
+  `test_light_episodes_read_by_workers_equal_the_serial_reading`,
+  `test_replay_surfaces_and_kept_episodes_read_by_workers_equal_the_serial_reading` (90 passed with
+  test_expert_iteration and test_grpo_sampling_supply).
+- **Left out:** the October path (`--october`, off in every cycle) still renders in the main process through
+  `admit(c, turns)`; grpo `TeacherDemos.take` renders a few episodes per step online (not a build); filled_reasoning's
+  generate is bound by the actor, not rendering. The remaining build time is ~4 min of setup (episode reading,
+  held closure, prefer-unseen rows) and ~9.5 min of rendering at 12 workers on a shared machine.
+- **Not checked:** the new `--workers 1` path on the full sft-v7 inputs (tests cover equality; the serial old-code
+  rebuild runs as `sftbuild-base-1` for the before time); memory at 16 workers (12 workers peaked 10.6 GB; the cycle's
+  build budget is 24 GB).
+
+## 2026-11-21 21:45 sft-v8 builds with the parallel sft_sources
+
+- `expert_iteration --data-repo` (2dfb377a2): the mix build runs that checkout's `sft_sources` with held scoring left on
+  the pin. It is an own flag, so it is not carried to the next cycle. sft-v8's driver now runs with `--fill-repo` and
+  `--data-repo` set to `ops/ei/pin-2dfb377a23a1` (main: the joint length/hazard fill weighting and the parallel build,
+  which rebuilt sft-v7's chains byte-identical in 14 min against 1 h 42 min). Its collection, fill, popbase and the
+  operator fit ran through the restart.
+- sft-v7's candidate held is on Pop at 9.5 GB (f8529635b); its verdict is due ~00:45.

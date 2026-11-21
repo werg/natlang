@@ -335,3 +335,23 @@ def test_wait_ends_the_cycle_when_the_stage_unit_failed(monkeypatch):
         ei.Cycle.wait(object.__new__(ei.Cycle), 'x-data')
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: type('R', (), {'returncode': 3})())
     ei.Cycle.wait(object.__new__(ei.Cycle), 'x-data')     # ended cleanly: returns
+
+
+def test_data_repo_builds_the_mix_with_its_sft_sources_and_is_not_carried_to_the_next_cycle(tmp_path):
+    """``--data-repo``: the mix build runs that checkout's sft_sources (on its NATLANG_REPO/PYTHONPATH) while held
+    scoring stays on the pin; the default is the pin, and the next pipelined cycle does not inherit it."""
+    import types
+    base = dict(dir=str(tmp_path / 'c'), pin=str(tmp_path / 'pin'), commit='a' * 40, start_sha='b' * 64, start='x',
+                sft_work=str(tmp_path / 'w'), no_own_neuralese_graph=False, own_neuralese_graph_share=0.05, aux=[],
+                teacher_budget=1, own_share=0.35, prefer_unseen=[])
+    pinned = ei.Cycle(types.SimpleNamespace(**base))
+    repo, command = pinned.build_command()
+    assert repo == Path(tmp_path / 'pin') and command[1] == str(tmp_path / 'pin/scripts/neuralese_data/sft_sources.py')
+    newer = ei.Cycle(types.SimpleNamespace(**base, data_repo=str(tmp_path / 'main')))
+    repo, command = newer.build_command()
+    assert repo == Path(tmp_path / 'main') and command[1] == str(tmp_path / 'main/scripts/neuralese_data/sft_sources.py')
+    assert command[2] == 'build' and command[command.index('--work') + 1] == str(tmp_path / 'w')
+    out = ei.next_cycle_argv(['--k', '4', '--data-repo', '/main', '--fill', '/f'], directory='/d', name='n', start='s',
+                             start_sha='c' * 64, commit='d' * 40, previous='/p', prefer_unseen=[],
+                             fallback_prefer_unseen=[])
+    assert '--data-repo' not in out and '/main' not in out and '/f' in out

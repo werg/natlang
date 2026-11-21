@@ -413,24 +413,92 @@ def episode_files(work):
     return sorted(Path(work).glob('episodes*.jsonl.zst'))
 
 
-def all_episodes(work):
-    """The extracted episodes of WORK, each key once (a later extraction of the same episode is the same record)."""
+def all_episodes(work, workers=1, light=False, keep=None):
+    """The extracted episodes of WORK, each key once (a later extraction of the same episode is the same record).
+    ``light``: an episode's ``turns`` are replaced by their ``facts`` (``episode_facts``: what the build's candidate
+    selection reads of them; observed-live episodes keep their turns), so ``workers`` > 1 processes can parse the
+    lines and send back only that (``bounded_map``); the episodes, their order and the facts are the serial ones.
+    ``keep``: a picklable predicate on the full episode; the others are not yielded (nor sent back)."""
     seen = set()
-    for path in episode_files(work):
-        for line in zstd_lines(path):
-            if line.strip():
-                episode = json.loads(line)
-                if episode['key'] not in seen:
-                    seen.add(episode['key'])
-                    if episode.get('trajectory_ir'):
-                        from live_teacher_sources import observed_training_turns
-                        episode['turns'] = observed_training_turns(episode['trajectory_ir'])
-                    yield episode
+    lines = (line for path in episode_files(work) for line in zstd_lines(path) if line.strip())
+    if workers > 1:
+        import concurrent.futures
+        import multiprocessing
+        with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context('spawn')) as pool:
+            for batch in bounded_map(pool, _parse_episodes, batched(lines, 8), 2 * workers, light, keep):
+                for episode in batch:
+                    if episode['key'] not in seen:
+                        seen.add(episode['key'])
+                        if isinstance(episode.get('error'), Exception):
+                            raise episode['error']
+                        if not episode.get('dropped'):
+                            yield episode
+        return
+    for line in lines:
+        episode = json.loads(line)
+        if episode['key'] not in seen:
+            seen.add(episode['key'])
+            episode = _episode_view(episode, light, keep)
+            if episode is not None:
+                yield episode
+
+
+def _episode_view(episode, light, keep=None):
+    if episode.get('trajectory_ir'):
+        from live_teacher_sources import observed_training_turns
+        episode['turns'] = observed_training_turns(episode['trajectory_ir'])
+    if keep is not None and not keep(episode):
+        return None
+    if light and episode.get('verification_mode') != 'observed-live':
+        episode['facts'] = episode_facts(episode.pop('turns'))
+    return episode
+
+
+def _parse_episodes(lines, light, keep=None):
+    out = []
+    for line in lines:
+        episode = json.loads(line)
+        try:
+            out.append(_episode_view(episode, light, keep) or {'key': episode['key'], 'dropped': True})
+        except Exception as error:   # raised by the reader only if this record is the one it yields
+            out.append({'key': episode['key'], 'error': error})
+    return out
+
+
+def episode_facts(turns):
+    """What candidate selection reads of an episode's turns: the action MinHash (near-duplicates), whether it met the
+    text backend's Neuralese refusal, and whether its sibling calls are ambiguous (``drifted_success``)."""
+    return {'signature': minhash(shingles(action_text(turns))), 'backend_workaround': backend_workaround(turns),
+            'sibling_ambiguous': sibling_ambiguous(turns)}
+
+
+def batched(items, n):
+    batch = []
+    for item in items:
+        batch.append(item)
+        if len(batch) == n:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+def bounded_map(pool, fn, items, window, *args):
+    """``fn(item, *args)`` over ``items`` in order by an executor, at most ``window`` items in flight (an executor's
+    own ``map`` submits every item at once)."""
+    pending = collections.deque()
+    for item in items:
+        pending.append(pool.submit(fn, item, *args))
+        if len(pending) >= window:
+            yield pending.popleft().result()
+    while pending:
+        yield pending.popleft().result()
 
 
 def teacher_coverage(pools, extracted):
     """(successes in the pools' manifests now, those not extracted yet): the build refuses a stale teacher snapshot."""
     total, missing = 0, []
+    fixtures = {}       # group directory -> its fixture task ids (records of one group share its cases.jsonl)
     for pool in pools:
         label = 'teacher:' + '/'.join(Path(pool).parts[-2:])
         for line in Path(pool, 'manifest.jsonl').open():
@@ -440,8 +508,10 @@ def teacher_coverage(pools, extracted):
             source_directory = Path(record['rollouts']).parent
             directory = source_directory.name
             from teacher_admission import fixture_task, check_record
-            cases = group_cases(source_directory)
-            fixture_ids = {task_id for task_id, task in cases.items() if fixture_task(task)}
+            if source_directory not in fixtures:
+                fixtures[source_directory] = {task_id for task_id, task in group_cases(source_directory).items()
+                                              if fixture_task(task)}
+            fixture_ids = fixtures[source_directory]
             reviewed = check_record(record, pool) if fixture_ids and record.get('admission') else {}
             for episode in record.get('episodes') or ():
                 if episode.get('outcome') == SUCCESS:
@@ -1172,21 +1242,23 @@ def sibling_ambiguous(turns):
     return any(len(v) > 1 for v in seen.values())
 
 
-def drifted_success(record, turns=None):
+def drifted_success(record, turns=None, ambiguous=None):
     """A replay that succeeded with every recorded call served and nothing else asked, but where some call saw a
     display that differs from the recording (``drifted``: a tool output or host preamble rendered differently today).
     The actions are the teacher's and the oracle accepted them under today's runtime; the training rows render the
     replayed (today's) prompts (``replayed_turns``). With the episode's recorded ``turns``, an episode whose sibling calls
     a replay without ``siblings_resolved`` (the matcher before its best-opening choice) could have swapped is refused."""
     served = {k: v for k, v in (record.get('served') or {}).items() if k != 'scoring-declined'}
-    if turns is not None and not record.get('siblings_resolved') and sibling_ambiguous(turns):
+    if ambiguous is None:     # ``ambiguous``: sibling_ambiguous(turns) computed already (``episode_facts``)
+        ambiguous = turns is not None and sibling_ambiguous(turns)
+    if ambiguous and not record.get('siblings_resolved'):
         return False
     return (record.get('outcome') == SUCCESS and not record.get('exact') and record.get('unserved') == 0
             and 'missing' not in served and set(served) <= {'exact', 'reworded', 'drifted'}
             and record.get('replayed_turns') == record.get('recorded_turns'))
 
 
-def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTED_DEFAULT):
+def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTED_DEFAULT, workers=1, light=False):
     """(episode, replay record) of every extracted success of WORK (of ``sources`` only, when given) whose replay under
     the replaying runtime was exact and succeeded (fixture tasks still admitted); counted per source in ``funnel``.
     ``extracted`` (a set) collects every extracted key. ``drifted`` (default on): also teacher successes whose display drifted
@@ -1202,7 +1274,7 @@ def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTE
                 replays[record['key']] = record
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     admission_cache, admission_digests = {}, {}
-    for episode in all_episodes(work):
+    for episode in all_episodes(work, workers, light):
         if extracted is not None:
             extracted.add(episode['key'])
         source = episode['source']
@@ -1246,7 +1318,8 @@ def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTE
             continue
         if not record.get('exact'):
             drifted_here = drifted and source == 'teacher'   # own episodes keep exact replay (their sampled ids)
-            if drifted_here and drifted_success(record, episode['turns']):
+            if drifted_here and drifted_success(record, episode.get('turns'),
+                                                (episode.get('facts') or {}).get('sibling_ambiguous')):
                 f['replayed_drifted'] += 1
                 yield episode, record
                 continue
@@ -1321,8 +1394,10 @@ def core_candidates(args, work, funnel, held):
     only (the turns are read again when rendering)."""
     candidates, tasks = [], {}
     extracted = set()
-    for episode, record in verified_episodes(work, funnel, extracted, drifted=getattr(args, 'admit_drifted', 'on') == 'on'):
+    for episode, record in verified_episodes(work, funnel, extracted, drifted=getattr(args, 'admit_drifted', 'on') == 'on',
+                                             workers=getattr(args, 'workers', None) or 1, light=True):
         source = episode['source']
+        facts = episode.get('facts') or episode_facts(episode['turns'])
         task = episode['task']
         tasks[episode['task_id']] = task
         candidates.append({'key': episode['key'], 'source': source, 'run': episode.get('run'),
@@ -1336,8 +1411,8 @@ def core_candidates(args, work, funnel, held):
                            if record.get('verification_mode') == 'observed-live' and task.get('interaction') else None,
                            'source_groups': task.get('source_groups', ()),
                            'guided': episode.get('role') == 'teacher',
-                           'backend_workaround': backend_workaround(episode['turns']),
-                           'signature': minhash(shingles(action_text(episode['turns'])))})
+                           'backend_workaround': facts['backend_workaround'],
+                           'signature': facts['signature']})
     total, missing = teacher_coverage(args.teacher_pool, extracted)
     funnel['teacher']['manifest_successes_now'] = total
     funnel['teacher']['manifest_successes_not_extracted'] = len(missing)
@@ -1485,12 +1560,28 @@ def call_row(renderer, source, key, index, turn, teacher_think='context', lead_i
     ``backend_workarounds`` 'context' a non-student call whose prompt holds the text backend's Neuralese refusal is all
     context, ``backend_workaround``). Training, validation and size measurement all render through here. Raises on a
     render error. Also returns (prompt length, target length, zero-weight lead)."""
+    return rendered_row(render_call(renderer, source, turn, teacher_think, lead_in, own_empty_think), source, key, index,
+                        turn, backend_workarounds)
+
+
+def render_call(renderer, source, turn, teacher_think='context', lead_in='context', own_empty_think='context'):
+    """The expensive half of ``call_row`` (chat template, tokenizer, think context): (prompt ids, target ids as int32
+    arrays, zero-weight lead). Raises on a render error."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
+    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
+    return np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
+
+
+def rendered_row(rendered, source, key, index, turn, backend_workarounds='context'):
+    """The cheap half of ``call_row``: the learner row of one ``render_call`` result. Arrays that crossed a process
+    boundary are re-viewed with numpy's canonical dtype objects: pickle memoizes a dtype by identity, so rows carrying
+    unpickled dtype copies would pickle into a different (if equivalent) chains.pkl."""
+    import numpy as np
+    prompt, target, context = rendered
     row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
     row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
-           'prompt': np.asarray(prompt, np.int32), 'sample': np.asarray(target, np.int32)}
-    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
+           'prompt': prompt.view(np.int32), 'sample': target.view(np.int32)}
     if context:
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
     if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
@@ -1503,6 +1594,129 @@ def replayed_turns(work, name):
     with (Path(work) / 'replay' / name / 'rollouts.jsonl').open() as handle:
         replayed = [json.loads(line) for line in handle if line.strip()][0]
     return mark_detour_spawned([semantic_turn(t, False) for t in replayed['turns']])
+
+
+def candidate_turns(work, c):
+    """The turns ``build`` renders for candidate ``c``: an observed-live episode's captured turns (its source checked
+    unchanged), else the replaying runtime's record."""
+    if c.get('verification_mode') == 'observed-live':
+        from live_teacher_sources import load_episode
+        source = c['live_source']
+        if sha256_file(source['path']) != source['sha256']:
+            raise ValueError('observed live source changed before rendering')
+        return mark_detour_spawned(load_episode(source['path'])['turns'])
+    return replayed_turns(work, c['name'])
+
+
+def render_candidate(renderer, work, c, think, lead_in, own_empty_think):
+    """(turns, calls) of candidate ``c``: its turns (``candidate_turns``) and per call its ``render_call`` result or
+    the render error's repr (a str). ``turns`` is the exception itself when the turns could not be read. Pure in its
+    inputs: the build renders candidates ahead in worker processes (``RenderAhead``)."""
+    try:
+        turns = candidate_turns(work, c)
+    except Exception as error:
+        return error, None
+    calls = []
+    for turn in turns:
+        try:
+            calls.append(render_call(renderer, c['source'], turn, think, lead_in, own_empty_think))
+        except Exception as error:
+            calls.append(repr(error))
+    return turns, calls
+
+
+class RenderError(Exception):
+    """A call ``render_candidate`` could not render (its message: the original error's repr)."""
+
+
+# Worker processes of ``RenderAhead``: one renderer each, set up once by the pool's initializer.
+_WORKER = {}
+
+
+def _render_worker_init(make_renderer, work, lead_in, own_empty_think):
+    os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+    _WORKER.update(renderer=make_renderer(), work=work, lead_in=lead_in, own_empty_think=own_empty_think)
+
+
+def _render_worker(c, think):
+    w = _WORKER
+    return render_candidate(w['renderer'], w['work'], c, think, w['lead_in'], w['own_empty_think'])
+
+
+RENDER_FIELDS = ('key', 'source', 'name', 'verification_mode', 'live_source')
+
+
+def default_workers():
+    return max(1, min(16, (os.cpu_count() or 2) - 4))
+
+
+class RenderAhead:
+    """``render_candidate`` of the candidates a build loop walks, in the loop's order, by ``workers`` processes up to
+    ``window`` candidates ahead of the loop. The loop asks for a candidate's result with ``get`` (it may skip
+    candidates; their renders are dropped); a candidate outside the order renders in this process. ``workers`` 1: no
+    processes, every result renders on demand (the serial build). Results equal the serial ones by construction: the
+    rendering is a pure function of the candidate, and the loop's selection stays sequential."""
+
+    def __init__(self, renderer, work, think_of, lead_in, own_empty_think, workers=1, make_renderer=None, window=None):
+        """``make_renderer``: a picklable callable building the workers' renderer (``functools.partial(TemplateRenderer,
+        tokenizer_dir)``)."""
+        self.renderer, self.work, self.think_of = renderer, work, think_of
+        self.lead_in, self.own_empty_think = lead_in, own_empty_think
+        self.workers, self.pool = workers, None
+        self.window = window or 4 * workers
+        self.order, self.position, self.cursor = [], {}, 0
+        self.pending, self.last = collections.OrderedDict(), (None, None)
+        if workers > 1:
+            import concurrent.futures
+            import multiprocessing
+            self.pool = concurrent.futures.ProcessPoolExecutor(
+                workers, mp_context=multiprocessing.get_context('spawn'), initializer=_render_worker_init,
+                initargs=(make_renderer, str(work), lead_in, own_empty_think))
+
+    def walk(self, candidates):
+        """Start a loop's order (the previous one's renders still ahead are dropped)."""
+        for future in self.pending.values():
+            future.cancel()
+        self.pending.clear()
+        self.order = list(candidates)
+        self.position = {c['key']: i for i, c in reversed(list(enumerate(self.order)))}
+        self.cursor = 0                  # the next candidate of the order to submit
+        self._fill()
+
+    def _submit(self):
+        c = self.order[self.cursor]
+        self.cursor += 1
+        if c['key'] not in self.pending:
+            self.pending[c['key']] = self.pool.submit(_render_worker, {k: c[k] for k in RENDER_FIELDS if k in c},
+                                                      self.think_of(c))
+
+    def _fill(self):
+        while self.pool is not None and len(self.pending) < self.window and self.cursor < len(self.order):
+            self._submit()
+
+    def get(self, c):
+        key = c['key']
+        if self.last[0] == key:          # size measurement and admission of one candidate share its render
+            return self.last[1]
+        if self.pool is not None and key not in self.pending and self.position.get(key, -1) >= self.cursor:
+            self.cursor = self.position[key]              # skipped past the window: move it to this candidate
+            self._submit()
+        if key in self.pending:
+            while next(iter(self.pending)) != key:        # candidates the loop skipped
+                self.pending.popitem(last=False)[1].cancel()
+            future = self.pending.pop(key)
+            self._fill()
+            result = future.result()
+        else:
+            result = render_candidate(self.renderer, self.work, c, self.think_of(c), self.lead_in, self.own_empty_think)
+        self.last = (key, result)
+        return result
+
+    def close(self):
+        if self.pool is not None:
+            self.walk(())
+            self.pool.shutdown(cancel_futures=True)
+            self.pool = None
 
 
 def wrapper_capped(selected, rng, funnel, is_wrapper, share, trained=frozenset()):
@@ -1549,20 +1763,20 @@ class EpisodeSizes:
                   'wrapped-refusal', 'detour-spawned']
         return hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
-    def measure(self, c, turns_of):
+    def measure(self, c, rendered):
+        """``rendered(c)``: the candidate's ``render_candidate`` result (``RenderAhead.get``), asked only on a cache
+        miss."""
         from exp0_sft import chains_of
         think = self.think_of(c)
         policy = self.policy(think)
         hit = self.cache.get((c['key'], policy))
         if hit is not None:
             return hit
-        rows = []
-        try:
-            for index, turn in enumerate(turns_of(c)):
-                rows.append(call_row(self.renderer, c['source'], c['key'], index, turn, think,
-                                     self.lead_in, self.backend_workarounds, self.own_empty_think)[0])
-        except Exception:
+        turns, calls = rendered(c)
+        if isinstance(turns, Exception) or any(isinstance(call, str) for call in calls):
             return None, None
+        rows = [rendered_row(call, c['source'], c['key'], index, turn, self.backend_workarounds)[0]
+                for index, (turn, call) in enumerate(zip(turns, calls))]
         forward = sum(len(chain['ids']) for chain in chains_of([{'task_id': c['task_id'], 'round': c['key'],
                                                                  'rows': rows}]))
         weighted = int(sum(float(r['weight'].sum()) if 'weight' in r else len(r['sample']) for r in rows))
@@ -1792,17 +2006,30 @@ def build(args):
     producers = collections.defaultdict(collections.Counter)
     target_mass = collections.defaultdict(collections.Counter)
 
-    def admit(c, turns):
-        """Render one trajectory's calls; write its rows; keep its token rows for the chains."""
+    def admit(c, turns, calls=None):
+        """Write one trajectory's rows and keep its token rows for the chains. ``calls``: its ``render_candidate``
+        results (rendered here when not given)."""
         source, rows, written = c['source'], [], []
-        for index, turn in enumerate(turns):
+        if isinstance(turns, Exception):
+            raise turns
+        if calls is None:
+            calls = []
+            for turn in turns:
+                try:
+                    calls.append(render_call(renderer, source, turn, treatment.render(c), args.teacher_lead_in,
+                                             args.own_empty_think))
+                except Exception as error:
+                    calls.append(repr(error))
+        for index, (turn, call) in enumerate(zip(turns, calls)):
             try:
-                row, context = call_row(renderer, source, c['key'], index, turn, treatment.render(c),
-                                        args.teacher_lead_in, args.backend_workarounds, args.own_empty_think)
+                if isinstance(call, str):
+                    raise RenderError(call)
+                row, context = rendered_row(call, source, c['key'], index, turn, args.backend_workarounds)
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
-                                  'error': repr(error)[:300]}), flush=True)
+                                  'error': (str(error) if isinstance(error, RenderError) else repr(error))[:300]}),
+                      flush=True)
                 if c['source'] in ('rl-own', 'teacher'):
                     return False   # a verified episode is admitted whole or not at all
                 continue
@@ -1880,14 +2107,14 @@ def build(args):
         sft_episodes.append(episode)
         return True
 
-    def turns_of(c):
-        if c.get('verification_mode') == 'observed-live':
-            from live_teacher_sources import load_episode
-            source = c['live_source']
-            if sha256_file(source['path']) != source['sha256']:
-                raise ValueError('observed live source changed before rendering')
-            return mark_detour_spawned(load_episode(source['path'])['turns'])
-        return replayed_turns(work, c['name'])
+    workers = getattr(args, 'workers', None) or 1
+    import functools
+    ahead = RenderAhead(renderer, work, treatment.render, args.teacher_lead_in, args.own_empty_think, workers=workers,
+                        make_renderer=functools.partial(TemplateRenderer, args.tokenizer))
+
+    def rendered(c):
+        """(turns, calls) of a candidate (``render_candidate``), rendered ahead by ``--workers`` processes."""
+        return ahead.get(c)
 
     episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, treatment.render, args.teacher_lead_in,
                                  args.backend_workarounds, args.own_empty_think)
@@ -1919,13 +2146,15 @@ def build(args):
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
     left_over = collections.defaultdict(list)    # candidates a budget or share left out: validation sets
     teacher_forward = 0
-    for c in breadth_first(teacher_pool, priority):
+    ordered = breadth_first(teacher_pool, priority)
+    ahead.walk(ordered)
+    for c in ordered:
         if args.teacher_forward_budget:
             if teacher_forward >= 0.995 * args.teacher_forward_budget:     # full: the rest is left over unmeasured
                 funnel[c['source']]['over_forward_budget'] += 1
                 left_over['teacher'].append(c)
                 continue
-            forward, weighted = episode_sizes.measure(c, turns_of)
+            forward, weighted = episode_sizes.measure(c, rendered)
             if forward is None:
                 funnel[c['source']]['render_error'] += 1
                 continue
@@ -1933,7 +2162,7 @@ def build(args):
                 funnel[c['source']]['over_forward_budget'] += 1
                 left_over['teacher'].append(c)
                 continue
-        if not admit(c, turns_of(c)):
+        if not admit(c, *rendered(c)):
             funnel[c['source']]['render_error'] += 1
             continue
         if c['key'] in trained_keys:
@@ -2089,12 +2318,14 @@ def build(args):
     #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``)
     own_budget = args.own_loss_share * total_tokens if args.own_loss_share else None
     own_tokens = 0
-    for c in breadth_first(own_pool, priority):
+    ordered = breadth_first(own_pool, priority)
+    ahead.walk(ordered)
+    for c in ordered:
         if own_budget is not None and own_tokens >= 0.99 * own_budget:     # full: the rest is left over unmeasured
             funnel[c['source']]['over_loss_share'] += 1
             left_over['own'].append(c)
             continue
-        forward, weighted = episode_sizes.measure(c, turns_of)
+        forward, weighted = episode_sizes.measure(c, rendered)
         if forward is None:
             funnel[c['source']]['render_error'] += 1
             continue
@@ -2105,7 +2336,7 @@ def build(args):
         if args.max_task_target_tokens and task_tokens[c['task_id']] + weighted > args.max_task_target_tokens:
             funnel[c['source']]['over_task_target_tokens'] += 1
             continue
-        if not admit(c, turns_of(c)):
+        if not admit(c, *rendered(c)):
             funnel[c['source']]['render_error'] += 1
             continue
         if c['key'] in trained_keys:
@@ -2136,15 +2367,18 @@ def build(args):
     validation = {}
     for kind, pool in sorted(left_over.items()):
         val_chains, val_tasks = [], set()
+        ahead.walk([c for c in pool if c['task_id'] not in trained_tasks] if args.val_episodes else [])
         for c in pool:
             if len(val_tasks) >= args.val_episodes:
                 break
             if c['task_id'] in trained_tasks or c['task_id'] in val_tasks:
                 continue
+            turns, calls = rendered(c)
+            if isinstance(turns, Exception) or any(isinstance(call, str) for call in calls):
+                continue
             try:
-                rows = [call_row(renderer, c['source'], c['key'], index, turn, treatment.render(c),
-                                 args.teacher_lead_in, args.backend_workarounds, args.own_empty_think)[0]
-                        for index, turn in enumerate(turns_of(c))]
+                rows = [rendered_row(call, c['source'], c['key'], index, turn, args.backend_workarounds)[0]
+                        for index, (turn, call) in enumerate(zip(turns, calls))]
             except Exception:
                 continue
             val_chains += chains_of([{'task_id': c['task_id'], 'round': c['key'], 'rows': rows}])
@@ -2157,6 +2391,7 @@ def build(args):
                 pickle.dump({'chains': val_chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
             validation[kind] = {'episodes': len(val_tasks), 'chains': len(val_chains),
                                 'forward_tokens': int(sum(len(chain['ids']) for chain in val_chains))}
+    ahead.close()
     rated = [base_rate(e['task_id']) for e in sft_episodes if e['round'].split(':')[0] in ('rl', 'teacher')]
     rated = [p for p in rated if p is not None]
     forward = int(sum(len(c['ids']) for c in chains))
@@ -2217,8 +2452,8 @@ def build(args):
                            'mean': round(float(np.mean(rated)), 3) if rated else None},
     }
     (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
-    (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks)
-                                             if any(e['task_id'] == t for e in sft_episodes)))
+    admitted_tasks = {e['task_id'] for e in sft_episodes}
+    (out / 'cases.jsonl').write_text(''.join(json.dumps(tasks[t]) + '\n' for t in sorted(tasks) if t in admitted_tasks))
     record_built(out, args, 'natlang.sft-sources-build/1')
     print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'forward_tokens',
                                              'target_tokens')}, indent=1))
@@ -2246,6 +2481,34 @@ def surface_key(turn):
             hashlib.sha256(json.dumps(turn.get('tools'), sort_keys=True).encode()).hexdigest()[:16])
 
 
+def _surfaces_of(names, work):
+    from natlang_neuralese.common.jsonio import read_jsonl
+    surfaces = set()
+    for name in names:
+        for row in read_jsonl(Path(work) / 'replay' / name / 'rollouts.jsonl'):
+            surfaces.update(surface_key(t) for t in row.get('turns') or ())
+    return surfaces
+
+
+def replay_surfaces(work, workers=1):
+    """The (system prompt, tool schemas) of every call of every exact replay of WORK: the surfaces the current runtime
+    renders (``workers`` processes read the replays)."""
+    names = []
+    for line in (Path(work) / 'replay.jsonl').open():
+        record = json.loads(line) if line.strip() else {}
+        if record.get('exact'):
+            names.append(record['name'])
+    if workers <= 1:
+        return _surfaces_of(names, work)
+    import concurrent.futures
+    import multiprocessing
+    surfaces = set()
+    with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context('spawn')) as pool:
+        for part in bounded_map(pool, _surfaces_of, batched(names, 64), 4 * workers, str(work)):
+            surfaces |= part
+    return surfaces
+
+
 def neuralese_text(args):
     """Text rows of the verified successes the build skips for their Neuralese state (`has_native_state`): every call
     whose messages hold no imported native state, i.e. the Neuralese producer invocations (the prompted calls whose
@@ -2260,7 +2523,6 @@ def neuralese_text(args):
     import numpy as np
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.common.jsonio import read_jsonl
     from natlang_neuralese.rl.held_eval import exclusion_ids
     from exp0_sft import MAX_LEN, chains_of
     work, out = Path(args.work), Path(args.out)
@@ -2268,15 +2530,9 @@ def neuralese_text(args):
     rng = random.Random(args.seed)
     held = held_closure(args.held_manifest)
     funnel = collections.Counter()
-    # the current runtime's surfaces: every call of every exact replay
-    surfaces = set()
-    for line in (work / 'replay.jsonl').open():
-        record = json.loads(line) if line.strip() else {}
-        if record.get('exact'):
-            path = work / 'replay' / record['name'] / 'rollouts.jsonl'
-            for row in read_jsonl(path):
-                surfaces.update(surface_key(t) for t in row.get('turns') or ())
-    episodes = [e for e in all_episodes(work) if has_native_state(e)]
+    workers = getattr(args, 'workers', None) or 1
+    surfaces = replay_surfaces(work, workers)    # the current runtime's surfaces: every call of every exact replay
+    episodes = list(all_episodes(work, workers, keep=has_native_state))
     funnel['native_state_episodes'] = len(episodes)
     excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
     kept = []
@@ -2399,7 +2655,6 @@ def neuralese_graph(args):
     import random
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.common.jsonio import read_jsonl
     from natlang_neuralese.rl.held_eval import exclusion_ids
     from exp0_sft import MAX_LEN, chains_of, source_tokens
     from lower_rollout_turns import episode_turns
@@ -2408,18 +2663,14 @@ def neuralese_graph(args):
     rng = random.Random(args.seed)
     held = held_closure(args.held_manifest)
     funnel = collections.Counter()
-    surfaces = set()
-    for line in (work / 'replay.jsonl').open():
-        record = json.loads(line) if line.strip() else {}
-        if record.get('exact'):
-            for row in read_jsonl(work / 'replay' / record['name'] / 'rollouts.jsonl'):
-                surfaces.update(surface_key(t) for t in row.get('turns') or ())
+    workers = getattr(args, 'workers', None) or 1
+    surfaces = replay_surfaces(work, workers)
     archives = {}
     for spec in extract_rl_specs(work):
         run_dir, archive_dir = spec.split(':')
         archives['rl:' + '/'.join(Path(run_dir).parts[-2:])] = (run_dir, archive_dir)
     excluded_runs = [re.compile(pattern) for pattern in getattr(args, 'exclude_run', None) or ()]
-    episodes = [e for e in all_episodes(work) if has_native_state(e) and e.get('source') == 'rl-own']
+    episodes = [e for e in all_episodes(work, workers, keep=has_native_state) if e.get('source') == 'rl-own']
     funnel['native_state_episodes'] = len(episodes)
     funnel['excluded_run'] = sum(1 for e in episodes if any(p.search(e.get('run') or '') for p in excluded_runs))
     episodes = [e for e in episodes if not any(p.search(e.get('run') or '') for p in excluded_runs)]
@@ -2641,8 +2892,12 @@ def main():
                    help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
     b.add_argument('--anchor-per-task', type=int, default=1,
                    help='own episodes of a task the frontier marks solved (a light anchor)')
+    b.add_argument('--workers', type=int, default=default_workers(),
+                   help='processes rendering candidates ahead of the sequential selection (RenderAhead; the output is '
+                        'identical for every value); 1: the serial build')
     n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')
     n.add_argument('--work', required=True)
+    n.add_argument('--workers', type=int, default=default_workers(), help='processes reading replays and episodes')
     n.add_argument('--out', required=True)
     n.add_argument('--tokenizer', required=True)
     n.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
@@ -2652,6 +2907,7 @@ def main():
     n.add_argument('--seed', type=int, default=20261117)
     g = sub.add_parser('neuralese-graph', help='whole Neuralese episodes (consumers included) as pass-through graph rows')
     g.add_argument('--work', required=True)
+    g.add_argument('--workers', type=int, default=default_workers(), help='processes reading replays and episodes')
     g.add_argument('--out', required=True)
     g.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     g.add_argument('--max-per-task', type=int, default=2)
