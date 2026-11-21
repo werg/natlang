@@ -353,7 +353,8 @@ def next_name(name):
 
 # flags of `cycle` that name this cycle (replaced in the next one's argv); every one takes a value
 OWN_FLAGS = ('--dir', '--name', '--start', '--start-sha', '--commit', '--pin', '--speculative-after', '--prefer-unseen',
-             '--fallback-prefer-unseen', '--next-name', '--next-seed-work', '--fill-repo')
+             '--fallback-prefer-unseen', '--next-name', '--next-seed-work', '--fill-repo',
+             '--data-repo')
 
 
 def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous, prefer_unseen, fallback_prefer_unseen,
@@ -851,22 +852,29 @@ class Cycle:
                        # this cycle's collection ran on the cycle's pin: its surfaces are current
                        '--current-surface-run', '^rl:' + re.escape('/'.join(self.collect_dir.parts[-2:])) + '$')
 
-    def build_stage(self):
+    def build_command(self):
+        """The mix build (``sft_sources build``) and the checkout it runs from: ``--data-repo`` (data preparation,
+        outside the held scoring series), else the pin."""
         aux = list(self.a.aux)
         if (self.dir / 'filled' / 'chains.pkl').exists():
             aux.append(f'filled={self.dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         own_graph = self.dir / 'neuralese-graph-own' / 'chains.pkl'
         if not self.a.no_own_neuralese_graph and own_graph.exists():
             aux.append(f'own-neuralese-graph={own_graph},share={self.a.own_neuralese_graph_share},task_tokens=40000')
-        command = self.py('sft_sources.py', 'build', '--work', self.work, '--out', self.mix, '--tokenizer',
-                          self.work / 'tokenizer', '--frontier', self.dir / 'frontier.json', '--allow-stale-teacher',
-                          '--october-share', '0', '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
-                          '--teacher-forward-budget', self.a.teacher_budget, '--own-loss-share', self.a.own_share,
-                          '--max-task-target-tokens', '40000', '--val-episodes', '40',
-                          *[x for p in TEACHER_POOLS for x in ('--teacher-pool', p)],
-                          *[x for a in aux for x in ('--aux', a)],
-                          *[x for b in self.train_policy()[2] for x in ('--prefer-unseen', b)])
-        self.ledger(f'{self.a.name}-build', 24, 'medium', command, self.dir / 'build.log')
+        repo = Path(getattr(self.a, 'data_repo', None) or self.pin)
+        command = [PY, repo / 'scripts' / 'neuralese_data' / 'sft_sources.py', 'build', '--work', self.work,
+                   '--out', self.mix, '--tokenizer', self.work / 'tokenizer', '--frontier', self.dir / 'frontier.json',
+                   '--allow-stale-teacher', '--october-share', '0', '--exclude-run', 'grpo-v2/',
+                   '--exclude-run', 'grpo-v4/run1', '--teacher-forward-budget', self.a.teacher_budget,
+                   '--own-loss-share', self.a.own_share, '--max-task-target-tokens', '40000', '--val-episodes', '40',
+                   *[x for p in TEACHER_POOLS for x in ('--teacher-pool', p)],
+                   *[x for a in aux for x in ('--aux', a)],
+                   *[x for b in self.train_policy()[2] for x in ('--prefer-unseen', b)]]
+        return repo, list(map(str, command))
+
+    def build_stage(self):
+        repo, command = self.build_command()
+        self.ledger(f'{self.a.name}-build', 24, 'medium', command, self.dir / 'build.log', repo=repo)
         sha = subprocess.check_output(['sha256sum', str(self.mix / 'chains.pkl')], text=True).split()[0]
         (self.mix / 'chains.sha256').write_text(sha + '\n')
         build = json.loads((self.mix / 'build.json').read_text())
@@ -1082,6 +1090,8 @@ def main():
     y.add_argument('--fill-actor-port', type=int, default=8570)
     y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
                    'tooling outside the held scoring series)')
+    y.add_argument('--data-repo', help="checkout whose sft_sources.py builds the mix (default the pin; data preparation "
+                   'outside the held scoring series, e.g. a faster build that keeps chains byte-identical)')
     y.add_argument('--speculative-after', help='previous cycle DIR whose SFT candidate is --start: collect while Pop '
                    'judges it, then train from what its verdict chooses (the gate stage)')
     y.add_argument('--fallback-prefer-unseen', action='append', default=[],
