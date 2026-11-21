@@ -49,6 +49,23 @@ class QualificationBatchesTest(unittest.TestCase):
                 self.assertEqual(main(), 0)
             self.assertEqual(run.call_args.args[3], ['open-goal-oracle-changed'])
 
+            out = root / 'out'
+            references.rename(out / 'completed-previous-batch')
+            with patch.object(sys, 'argv', [*argv[:7], '--resume']), patch(
+                    'qualify_open_goals.qualify_group', return_value=(True, False)) as run:
+                self.assertEqual(main(), 0)
+            self.assertEqual(run.call_args.args[3], ['open-goal-oracle-changed'])
+            self.assertEqual(run.call_args.args[5].parent, out)
+            self.assertTrue((out / 'completed-previous-batch').is_dir())
+
+            catalog.write_text(catalog.read_text().rstrip('\n'))
+            with patch.object(sys, 'argv', [*argv[:7], '--resume']), patch(
+                    'qualify_open_goals.qualify_group') as run:
+                with self.assertRaises(SystemExit) as error:
+                    main()
+            self.assertEqual(error.exception.code, 2)
+            run.assert_not_called()
+
     def test_does_not_reexport_automatically_retained_failure_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the exact model-free Vibestudio references in a pinned open-goal catalog."""
 import argparse
+import fcntl
 import json
 import re
 import signal
@@ -76,11 +77,46 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
     return failures == 0, unavailable
 
 
+def run_batches(args, chosen, destination):
+    roots = [*args.reuse_references, *([destination] if args.resume else [])]
+    if roots:
+        previous = audit(args.catalog, roots, set(args.family))['proofs']
+        pending = {case: row for case, row in chosen.items() if case not in previous}
+        print(f'Reusing {len(chosen) - len(pending)} verified references, {len(pending)} goals pending', flush=True)
+        chosen = pending
+    if not chosen:
+        return 0
+
+    groups = defaultdict(list)
+    for case, row in chosen.items():
+        groups[row['workspace'], row.get('workspaceBaseline', '')].append(
+            'open-goal-oracle-' + case.removeprefix('open-goal-'))
+    if args.resume:
+        destination = destination / f'attempt-{uuid.uuid4().hex[:12]}'
+        destination.mkdir()
+    all_passed = True
+    host = args.host.resolve()
+    for (workspace, baseline), cases in groups.items():
+        size = args.cases_per_instance or len(cases)
+        for index, offset in enumerate(range(0, len(cases), size), start=1):
+            passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
+                                                args.model, destination, args.test_timeout_ms,
+                                                batch=index if len(cases) > size else None)
+            all_passed &= passed
+            if unavailable:
+                print(f'{workspace} startup is unrecoverable for this baseline. See the doctor log.',
+                      file=sys.stderr, flush=True)
+                break
+    return 0 if all_passed else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host', type=Path, required=True)
     parser.add_argument('--catalog', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--resume', action='store_true',
+                        help='Reuse accepted references in this exact output catalog and retain separate attempts')
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--case', action='append', default=[])
     parser.add_argument('--reuse-references', action='append', type=Path, default=[],
@@ -101,38 +137,28 @@ def main():
               if (not args.case or case in args.case) and (not args.family or row['family'] in args.family)}
     if not chosen or set(args.case) - chosen.keys() or set(args.family) - {row['family'] for row in chosen.values()}:
         parser.error('Every requested case and family must match the pinned catalog')
-    if args.reuse_references:
-        previous = audit(args.catalog, args.reuse_references, set(args.family))['proofs']
-        pending = {case: row for case, row in chosen.items() if case not in previous}
-        print(f'Reusing {len(chosen) - len(pending)} verified references, {len(pending)} goals pending', flush=True)
-        chosen = pending
-
-    groups = defaultdict(list)
     for case, row in chosen.items():
         workspace, baseline = row['workspace'], row.get('workspaceBaseline', '')
         if not re.fullmatch(r'[a-z][a-z-]*', workspace) or (baseline and not re.fullmatch(r'[a-f0-9]{40}', baseline)):
             parser.error(f'Invalid managed workspace or baseline for {case}')
         if not re.fullmatch(r'open-goal-[a-z0-9-]+', case):
             parser.error(f'Invalid goal identifier {case}')
-        groups[workspace, baseline].append('open-goal-oracle-' + case.removeprefix('open-goal-'))
-
     destination = args.out.resolve()
-    destination.mkdir(parents=True)
-    (destination / 'catalog.jsonl').write_bytes(source)
-    all_passed = True
-    host = args.host.resolve()
-    for (workspace, baseline), cases in groups.items():
-        size = args.cases_per_instance or len(cases)
-        for index, offset in enumerate(range(0, len(cases), size), start=1):
-            passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
-                                                args.model, destination, args.test_timeout_ms,
-                                                batch=index if len(cases) > size else None)
-            all_passed &= passed
-            if unavailable:
-                print(f'{workspace} startup is unrecoverable for this baseline. See the doctor log.',
-                      file=sys.stderr, flush=True)
-                break
-    return 0 if all_passed else 1
+    destination.mkdir(parents=True, exist_ok=args.resume)
+    with (destination / '.reference-run.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.error(f'Another reference run owns {destination}')
+        pinned_catalog = destination / 'catalog.jsonl'
+        if pinned_catalog.exists():
+            if pinned_catalog.read_bytes() != source:
+                parser.error('The resume directory belongs to a different pinned catalog')
+        else:
+            temporary = destination / '.catalog.jsonl.pending'
+            temporary.write_bytes(source)
+            temporary.replace(pinned_catalog)
+        return run_batches(args, chosen, destination)
 
 
 if __name__ == '__main__':

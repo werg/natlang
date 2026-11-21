@@ -349,8 +349,10 @@ evidence if a later batch fails. Set `--cases-per-instance` to change the
 limit. A value of zero uses one instance per workspace and baseline.
 On a continuation, pass `--reuse-references RESULT_DIR` for each previous
 result or evidence bundle to skip cases whose existing managed outcome
-matches the exact current goal. Omit the option when retesting a changed
-fixture or verifier.
+matches the exact current goal. With `--resume`, the same output directory
+can continue from its accepted references after an interruption. Its catalog
+must match byte for byte and each attempt retains its own logs. Start a fresh
+output directory and omit reuse when retesting a changed fixture or verifier.
 
 ```sh
 python3 scripts/memory_ledger.py run \
