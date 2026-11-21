@@ -258,9 +258,12 @@ class Actor:
             try:
                 with urllib.request.urlopen(request, timeout=timeout) as response:
                     return json.loads(response.read())
-            except urllib.error.URLError as error:
-                refused = isinstance(getattr(error, 'reason', None), (ConnectionRefusedError, ConnectionResetError))
-                if not refused or time.time() > deadline:
+            except (urllib.error.URLError, ConnectionError) as error:
+                # refused (actor released or restarting) or dropped mid-request (sft-v7, 09:28: 14 episodes lost at
+                # once to RemoteDisconnected, the engine still up): the request is a pure function of its body
+                # (seeded draws, prefill scores), so it is retried
+                reason = getattr(error, 'reason', error)
+                if not isinstance(reason, ConnectionError) or time.time() > deadline:
                     raise
                 self.counts['actor_down_waits'] += 1
                 time.sleep(15)

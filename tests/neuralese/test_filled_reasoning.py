@@ -301,3 +301,35 @@ def test_a_trajectory_that_keeps_falling_back_draws_only_anchors():
     import random
     fill = filler.step(context, calls, 0, filler.text(context, special=True), random.Random(0), trend=3)
     assert fill['kind'] == 'fallback' and fill['trend_skip'] and len(log) == 1
+
+
+def test_actor_requests_retry_a_dropped_or_refused_connection(monkeypatch):
+    import http.client
+    import io
+    import urllib.error
+    answers = [http.client.RemoteDisconnected('closed'), urllib.error.URLError(ConnectionRefusedError(111, 'refused')),
+               io.BytesIO(b'{"ok": 1}')]
+
+    class Response:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self.body
+
+        def __exit__(self, *exc):
+            return False
+
+    def urlopen(request, timeout):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return Response(answer)
+    monkeypatch.setattr(fr.urllib.request, 'urlopen', urlopen)
+    monkeypatch.setattr(fr.time, 'sleep', lambda s: None)
+    actor = fr.Actor('http://x', None, False, 1, 1, 1)
+    assert actor.post('/generate', {}) == {'ok': 1} and actor.counts['actor_down_waits'] == 2
+    monkeypatch.setattr(fr.urllib.request, 'urlopen', lambda r, timeout: (_ for _ in ()).throw(ValueError('bad')))
+    import pytest
+    with pytest.raises(ValueError):
+        actor.post('/generate', {})
