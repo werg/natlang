@@ -92,7 +92,7 @@ export class SourceEvaluator implements ProgramEvaluator {
         }
       }
     }
-    const build = compileVirtualProject({ files }, runtime, { programId: this.contract.programId, constrained: true, target: 'node' });
+    const build = compileVirtualProject({ files }, runtime, { programId: this.contract.programId, constrained: true, target: 'node', emit: !this.contract.entry.endsWith('.nl') });
     diagnostics.push(...build.diagnostics.filter(item => item.severity === 'error').map(item => `${item.file}:${item.line}: ${item.message}`));
     if (!files[this.contract.entry]) diagnostics.push('external entry was removed');
     // Check declarations against the pinned external signature without executing user code.

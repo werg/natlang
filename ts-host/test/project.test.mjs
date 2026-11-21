@@ -165,6 +165,38 @@ test('a virtual project compiles and runs in-process through the same compiler',
   assert.equal(await runtime.run(() => compiled.require('main.ts').main({ mood: 'calm' })), 'TEAL');
 });
 
+test('virtual check-only mode preserves declarations while omitting JavaScript', () => {
+  const files = {
+    'choose.nl': '---\nargs:\n  mood: string\nreturns: string\n---\nName a color for mood.\n',
+    'main.ts': "import choose from './choose.nl';\nexport { choose };\nexport const answer = 42;\n",
+  };
+  const emitted = compileVirtualProject({ files }, runtimeNamespace, { target: 'node' });
+  const checked = compileVirtualProject({ files }, runtimeNamespace, { target: 'node', emit: false });
+  assert.equal(emitted.ok, true, JSON.stringify(emitted.diagnostics));
+  assert.equal(checked.ok, true, JSON.stringify(checked.diagnostics));
+  assert.match(checked.declarations['/project/choose.d.nl.ts'], /NatlangFunction<\[mood: string\], string>/);
+  assert.deepEqual(checked.declarations, emitted.declarations);
+  assert.deepEqual(checked.outputs, {});
+  assert.equal(emitted.require('main.ts').answer, 42);
+  assert.equal(typeof emitted.require('main.ts').choose, 'function');
+});
+
+test('check and build reject stale .nl and .nz declarations without their source', () => {
+  const declarations = 'declare const value: string; export default value;\n';
+  const files = {
+    'main.ts': "import missing from './absent.nl';\nexport { missing };\nexport { default as stale } from './absent.nz';\n",
+    'absent.d.nl.ts': declarations,
+    'absent.d.nz.ts': declarations,
+  };
+  for (const emit of [false, true]) {
+    const result = compileVirtualProject({ files }, runtimeNamespace, { target: 'node', emit });
+    assert.equal(result.ok, false);
+    assert.ok(result.diagnostics.some(item => item.message === 'cannot import ./absent.nl: no such natlang function'));
+    assert.ok(result.diagnostics.some(item => item.message === 'cannot import ./absent.nz: no such .nz file'));
+    assert.deepEqual(result.outputs, {});
+  }
+});
+
 test('Node ESM barrels re-export the actual named natlang callable and bind runtime exports', async () => {
   const root = project({ ...APP,
     'src/barrel.ts': "export { default as triage } from './triage.nl';\nexport * as triageModule from './triage.nl';\nexport { createNatlangRuntime } from '@natlang/node';\n",

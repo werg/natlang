@@ -18,7 +18,7 @@ parentPort!.on('message', message => {
   if (request) { pending.delete(message.id); message.error ? request.reject(new Error(message.error)) : request.resolve(message.value); }
 });
 try {
-  const build = compileVirtualProject({ files: workerData.files }, targetRuntime, { programId: workerData.contract.programId, constrained: true, target: 'node' });
+  const build = compileVirtualProject({ files: workerData.files }, targetRuntime, { programId: workerData.contract.programId, constrained: true, target: 'node', emit: !workerData.contract.entry.endsWith('.nl') });
   if (!build.ok) throw new Error('target build failed');
   const target = workerData.contract.entry.endsWith('.nl') ? loadVirtualNatlang(workerData.files, workerData.contract.entry) : build.require(workerData.contract.entry)[workerData.contract.exportName];
   const serviceDeclarations=Object.fromEntries(Object.entries(workerData.services??{}).map(([name,source])=>[name,ts.transpileDeclaration(source as string,{fileName:name+'.ts',compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText]));
