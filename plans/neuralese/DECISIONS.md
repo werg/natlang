@@ -6010,3 +6010,27 @@ teacher-provenance-20261120).**
   mid-collection). Fill during the SFT is excluded on purpose (GB10 time-slicing would slow the high-priority SFT).
   Fill per-episode cost (fewer candidates or shorter caps) is the rationalization strand's setting and was not
   touched.
+
+## 2026-11-21 05:30, operator soft state view@compact-value: final fit (120 steps) and held-out NLL (operator soft-state strand)
+
+The fit finished (`build-v2/result.json`, step 120) across softop-fit-5/7/8. Each resume continued from `state.json`:
+fit-7 picked up at 13 and fit-8 at 57, the coordinator having stopped fit-7 at step 56 to keep sft-v6 off a time-sliced GPU.
+Peak CUDA 7.8 GB allocated / 8.7 GB reserved, RSS 3.4 GB. Training loss in 20-step windows (row-mean; different rows per
+step): 1.33, 1.17, 0.66, 0.55, 0.53, 0.47.
+
+Held-out (`eval-final.json`, all 565 test-split verified compact-value turns, uncapped; per-token reply NLL on the frozen
+5ff07638 backbone, paired per row):
+
+| rows | text | primed | trained | trained - text | trained lower |
+|---|---|---|---|---|---|
+| all 565 | 1.157 | 1.117 | 0.467 | -0.690 +- 0.031 (-60%) | 565 / 565 |
+| short (<= 40k chars) 534 | 1.201 | 1.160 | 0.482 | -0.720 +- 0.032 (-60%) | 534 / 534 |
+| long (> 40k chars) 31 | 0.389 | 0.374 | 0.206 | -0.183 +- 0.008 (-47%) | 31 / 31 |
+
+Separation check: the 565 test turns share no input text, reply text or case root with the 448 training turns.
+The long rows the capped fit never saw gain less (-47% against -60%; at step 12 both were about -24%), which is the bias the
+cap was expected to cause. The next operator fit therefore takes all 448 verified rows uncapped (`turns --max-chars 0`), with a
+claim sized from the measured uncapped peak (softop-fit-2: 15 GB CUDA, plus 3.4 GB RSS: budget 19 GB, medium priority,
+base checkpoint on NVMe). The state is ready to serve as the default `view@compact-value` prompt state (`PROMPT_STATES`
+in `operator-stage.sh`, opt-out `NATLANG_NEURALESE_PROMPT_STATES=off`); task-level effect shows at the next held eval
+whose harness loads it.
