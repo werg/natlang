@@ -6164,3 +6164,23 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
     as exact teacher rows do.
 - Tests: `test_drifted_successes_are_a_separate_admission_class`. Enters: the next fill run that loads origin/main
   (sft-v8's).
+
+## 2026-11-21 10:40, sft-v6 beats the base on held-v3 and becomes the current policy; sft-v7 data stage failure (expert-iteration strand)
+
+- **sft-v6 held result** (base and sft-v6 measured on Pop under sft-v7's pin b17d5fd8, 2 samples, 512 episodes each):
+  base 49.8% (255/512), sft-v6 55.7% (285/512): **+5.86 pts, permutation p 0.0125, task-bootstrap CI [+1.2, +10.9]**;
+  ran-out +1.95 pts (50 -> 60 of 512, McNemar p 0.31), inside the +2 limit. This meets the expert-iteration success
+  rule (>= +2 with ran-out <= +2), so `ops/current-policy.json` now points at `ops/sft-v6/run1/checkpoint.pt`
+  (sha dc95f29d). sft-v7 started from it; its candidate is judged against this start on the same pin.
+- **sft-v7 data stage failed silently.** `sft_sources extract --rl RUN:ARCHIVE` got `collect/rollouts` as its archive,
+  a path that does not exist (the EI collection writes no zst archive; groups are read live from the run dir), so the
+  registry check refused it. The driver's `wait` never looked at the unit's result, marked `data` done and started the
+  build on a mix without this cycle's own collection. Caught at 09:50; build and driver stopped before any SFT.
+  Fix 2642d02c9: a failed stage unit ends the cycle (`wait` checks `is-failed`); a relaunched unit is reset-failed
+  first; the archive is the registered collect dir. The driver (which runs from the main checkout) was relaunched with
+  identical arguments; the data stage reruns, the fill window kept running. sft-v7's timeline moves about 30 min.
+- **Admitted drifted teacher replays** (decision on the Qwen entry's open item): successes under today's oracle with
+  the same actions, differing only in what the runtime displays, are trained with today's replayed prompts. The
+  display the model sees at inference is today's; the actions are verified under today's runtime; think blocks stay
+  context or are filled. Missing-reply and action-differing replays stay out. Being built as the default for all
+  teacher replays before sft-v8 pins main.
