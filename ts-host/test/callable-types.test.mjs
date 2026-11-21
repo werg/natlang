@@ -109,6 +109,7 @@ test('wide callable scopes show entry points and preserve scoped reads and deep 
   });
   assert.match(listing, /Entry points are listed here/);
   assert.match(opening, /Host services bound only in the listed callable scopes:\n- noteRead: root\/primary\/readNote\.nl/);
+  assert.ok(opening.indexOf('Host services bound') < opening.indexOf('Instructions:'));
   assert.doesNotMatch(opening, /unavailableRead/);
   assert.match(listing, /namespace primary/);
   assert.match(listing, /function read\(\): Row/);

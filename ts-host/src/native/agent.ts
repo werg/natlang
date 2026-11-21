@@ -1360,14 +1360,15 @@ export class NativeToolAgent {
     const names = [...lam.type.params.fields.map(field => field.name),
       ...Object.entries(lam.captures ?? {}).filter(([, cell]) => !isAdapterValue(capturedValue(cell))).map(([name]) => name),
       ...Object.keys(lam.codebase), ...Object.keys(services)];
-    return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
+    return [`You are inside this call: ${signature}`,
+      ...(delegated.length ? ['', 'Host services bound only in the listed callable scopes:', ...delegated] : []),
+      ...scopeTypes, '', 'Instructions:', program,
       ...(lam.handoff ? ['', lam.handoff] : []),
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
       ...(noDirectServices ? ['', 'This call has no directly bound host services. Work from its inputs and the callables available here.'] : []),
-      ...(delegated.length ? ['', 'Host services bound only in the listed callable scopes:', ...delegated] : []),
       ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
       '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
     ].join('\n');
