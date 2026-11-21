@@ -6432,3 +6432,19 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   which rebuilt sft-v7's chains byte-identical in 14 min against 1 h 42 min). Its collection, fill, popbase and the
   operator fit ran through the restart.
 - sft-v7's candidate held is on Pop at 9.5 GB (f8529635b); its verdict is due ~00:45.
+
+## 2026-11-22 00:50 held base on request; DGX disk
+
+- Pop is the gate machine: on a pin whose scoring series is new, a cycle measured the base (3.3 h) and the start
+  (3.5 h) before its candidate (3.5 h). sft-v8's pin 4a261bea4 is a new series (d479e8fd vs sft-v7's ba9aa56f: ts-host
+  callable-opening and service-binding commits), so it would hold Pop ~10 h. The verdict judges the candidate against
+  the start; vs-base only guards the policy pointer, and every adopted start already beat the base.
+- `expert_iteration` (this commit): `pop-held` measures the start, and the base only when it is the start, with
+  `--held-base`, or by reuse when this series already has it. The verdict's vs-base falls back to the newest complete
+  base result of another series (recorded as `series: other` with its path) and the pointer update needs vs-base > 0
+  only when one exists. `--held-base` opts out. Tests: 31 pass.
+- sft-v8's popbase and driver restarted on this code (pin 4a261bea4 harness; `NATLANG_POP_HELD_BUDGET_GB=9.5`
+  because that pin predates f8529635b); collection and the fill ran through.
+- DGX `/` was at 27 GB free (floor 40): deleted grpo-v4/run2's and grpo-v5/run1's `adam-moments.offload` (13.8 GB each;
+  both GRPO runs ended, their FP32 states are on /mnt/external) and the unused pins 0722eb609f51 and 817c43c567de with
+  prebase-0722eb609f51: 62 GB free.
