@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,048-goal release](vibestudio-open-goal-pop-pins-1048.tsv) is staged on
-Pop under `/home/werg/vibestudio-worktrees/open-goal-release-1048.BBeBwM`. To
+The [1,264-goal release](vibestudio-open-goal-pop-pins-1264.tsv) is staged on
+Pop at `/home/werg/vibestudio-worktrees/open-goal-release-1264.kt0OxV`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -122,6 +122,9 @@ links. Set `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
 to `$RELEASE/natlang`. The last checkout supplies the release's vendored
 runtime. Set `LEDGER_CHECKOUT` to the checkout with the current memory
 ledger and choose a fresh `SMOKE_UNIT` for each attempt.
+From the Host checkout, `node --import tsx scripts/check-open-goal-runtime.mjs`
+checks linked Natlang type environments and explicitly named callable paths
+using the installed Workerd runtime.
 
 Run one case at a time with the Natlang memory ledger. The collector starts
 and stops a managed workspace for the selected case and uses the configured
@@ -623,3 +626,15 @@ Its `train-cases.txt` contains 474 independently verified training selectors,
 and `train-cases-no-device.txt` contains 464. The managed verification run on
 Tick reused 638 references for cases that require only the local harness and
 started verification of its remaining 393 cases.
+
+The [1,264-goal release](vibestudio-open-goal-pop-pins-1264.tsv) preserves
+all 842 historical assignments and previous open goals. It repairs 16
+callable paths and pins the Workerd build that resolves imported aliases
+in their declaring modules. The full host gate peaked at 5.5 GiB on Tick.
+Pop reproduced catalog SHA-256
+`aba65637ae07b38f8c541141ad10fc4baa20a256ba98756143e05c1513c0a10f`
+and the runtime check passed across 1,079 linked lambdas. The archive
+`vibestudio-open-goal-verified-release-1264-20261121` retains 816 managed
+reference outcomes, including 204 held goals. Its exact train selector
+list has 612 cases. The list for Pop without device or deployment-package
+prerequisites has 602 cases.
