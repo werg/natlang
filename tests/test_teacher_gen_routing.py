@@ -87,3 +87,10 @@ def test_refused_account_retires_the_teacher_not_the_task(tmp_path):
     g = campaign(tmp_path, [task('f')], teachers=[a, b])
     a.enabled = False
     assert g._take(a) is None and g._eligible(0, b)
+
+
+def test_a_harness_infrastructure_error_is_no_teacher_verdict(tmp_path):
+    g = campaign(tmp_path, [task('f')], teachers=[teacher('a')])
+    crash = {**record(0, 'f', 'a', 'infrastructure_error'), 'provider_failure': False}
+    assert g._no_verdict(crash)
+    assert not g._no_verdict(record(0, 'f', 'a', 'budget_exhaustion'))

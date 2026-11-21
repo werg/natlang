@@ -358,10 +358,11 @@ class Generator:
 
     def _no_verdict(self, record):
         """Every episode ended unresolved before its first model turn or as an infrastructure error from exhausted provider
-        retries (e.g. a 429 mid-episode; a model-call budget stop is the teacher's own verdict): the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
+        retries (e.g. a 429 mid-episode; a model-call budget stop is the teacher's own verdict): the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried.
+        A harness infrastructure error (e.g. the collector's record digest failing while ts-host/dist is rebuilt) is
+        no verdict either: it would count against the teacher's family yield and use up one of the task's --attempts."""
         return 'unsupported' not in record and all(
-            (e['outcome'] == 'infrastructure_error' and record.get('provider_failure')) or
-            (e['outcome'] == 'unresolved' and e['turns'] == 0)
+            e['outcome'] == 'infrastructure_error' or (e['outcome'] == 'unresolved' and e['turns'] == 0)
             for e in record['episodes'])
 
     def _claim(self, index, teacher):
@@ -512,9 +513,11 @@ class Generator:
                 self.attempts[index] = self.attempts.get(index, 0) + 1
                 with (self.work / 'deferred.jsonl').open('a') as handle:
                     handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
-                teacher.failures += not refusal
-                teacher.cool_until = max(teacher.cool_until, time.time() + min(
-                    3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
+                provider = record.get('provider_failure') or any(e['outcome'] == 'unresolved' for e in record['episodes'])
+                if provider and not refusal:   # the harness failing is no reason to back the teacher off
+                    teacher.failures += 1
+                    teacher.cool_until = max(teacher.cool_until, time.time() + min(
+                        3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
                 if self.attempts[index] < 3:
                     self.retry.append((time.time() + 600, index))
                 self._release(index, 'deferred', teacher)
