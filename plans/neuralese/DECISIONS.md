@@ -5878,3 +5878,60 @@ teacher-provenance-20261120).**
   - A promise prints as unawaited.
   - `read_code` on a Neuralese parameter says its content is in the opening message.
   - Not changed: `JSON.stringify` of a Neuralese-holding object still shows the reference JSON. It changes the held series.
+
+## 2026-11-21 01:40, teacher yield: writerless teacher transport, Anthropic credit out, routing and retries (teacher-yield strand)
+
+- **Observation.** gap-v1 (`tgen-gap-v1s`) scored 554 tasks in an hour at 84 successes (15%): semantic_mismatch 242,
+  budget_exhaustion 144, unresolved 58, invalid_action 26. Over 23:06-00:44 it ran 653 episodes at 16.5% (~60
+  verified successes/h).
+- **Per teacher, whole gap-v1 before the fixes** (successes/episodes, slot-minutes and output tokens per success):
+  Haiku 5.5 medium 6920/10737 (64%, 0.9 min, 8.4k tok); Luna low 1681/4138 (41%, 1.7 min, 2.0k); Nemotron 3 Ultra
+  236/819 (29%, 13.9 min, 25.7k); Gemini 3.5 Flash-Lite 4/32 (12%, 36 min). On the teacher_failed tier: Haiku 51%,
+  Luna 22%, Nemotron 26%. Per family Luna low was near zero on the reading and service families (haystack 2/68, pubmed
+  2/73, neuralese_typed 5/72, tau-retail 2/94, natcode mentions 0/57) where Haiku got 40-90%.
+- **Causes found.**
+  1. **The Anthropic account has had no credit since 2026-11-20 01:17** ("credit balance is too low", re-checked
+     01:00): Haiku, the best teacher, did nothing for 24 h; its 8 slots woke hourly, failed and deferred tasks. Buying
+     credit is the owner's. teacher_gen now retires a teacher on a refused account (PERMANENT_PROVIDER_FAILURES) for
+     the launch; Haiku stays in the specs and comes back on its own once there is credit.
+  2. **Teacher transports had no Neuralese writer** (audit agents; fixed 7c6d00345): every `Neuralese<T>` boundary
+     failed with `neuralese-unsupported-backend`. It caused 1,833 of 2,191 budget/invalid/unresolved and about 2,400
+     of 4,706 semantic_mismatch episodes (blocked returns, the same return_result resent to the 40-call budget; Luna's
+     empty replies follow it). Also fixed there: no-writer ends the run, teacher-text blocks are no native-state
+     occurrences (every emulated episode failed `validate_rollout_graph`), `read_code` shows callable-folder type
+     aliases (field_type tasks, 166 episodes). The defect's verdicts are voided (`WORK/voided.jsonl`: gap-v1 4,314,
+     teacher-gen-20261115 pool-v1 918, pool-v2-rich 7,242, pool-progtune-decisions 204): teacher_gen treats them as no
+     verdict (not in failed_by, not in family routing, not a try), so those tasks go back to every teacher, the earlier
+     failer included (3966d8616).
+  3. **Scorer rejected correct answers** (115 of 3,029 answer-only mismatches; 01cfc137a, `NATLANG_QA_EQUIVALENCE=0`
+     opts out): number words, digit grouping, diacritics, trailing asides, compound spacing, unit words the question
+     asks for (bAbI07 "one"/"1", "Léopoldville (Kinshasa)", "string | null"). New held scoring series.
+  4. **natcode explore golds outside the exposed scope** (namespace folders absent from root `uses`): generator fixed,
+     109 pool tasks to `ops/pool-errata/natcode-explore-unexposed-scope-20261121.jsonl` (01cfc137a).
+  5. **Teacher errors left:** decisions folder_route/desk label noise (Banking77/CLINC; no errata yet), PubMed
+     maybe/yes ambiguity, Luna low acting on its first eval and over-literal tau policy (asks for confirmation). Budget
+     exhaustions after the writer fix (278): nl() fan-out per item (172), repeated skill reads (55), long Nemotron
+     decide exploration (36), genuinely > 30-call tasks (11). Not changed: the 40-call episode budget (only 9 need >= 40
+     by reference; a per-family 64 for bgkit/composed reading is the candidate if it shows up again).
+  6. **A harness infrastructure error counted as a teacher verdict** (5 from a broken in-place dist build): now no
+     verdict, retried, no cooldown (ab6d4340d).
+  7. **Ledger claim.** The campaign ran at priority low, 7 GB: every medium smoke or check-main preempted it (killing
+     its running paid episodes), and it sat queued 16:00-21:49 on 11-20. Now medium, 6 GB (peak 4.2 GB at 21 slots);
+     only a high-priority training run preempts it (`gap-v1/run.sh`, expert_iteration teacher stage).
+- **Changes in teacher_gen (c61c3022e, default on):** family routing (a teacher leaves a task to another whose shrunk
+  family yield is >= `--route-ratio` 2x its own, over the covered campaigns' and this campaign's verdicts; it takes it
+  itself once the cursor is through; below `--route-floor` 0.03 over >= 30 episodes it never takes the family);
+  in-campaign cross-teacher retries (`--attempts`, default 2; gap-v1 and the EI stage use 3; later attempts in
+  `episodes/tNNNNNN-aK`); `min_failed` teacher specs reserve a stronger teacher for tasks another teacher failed.
+  Execution-feedback retries were not built: the feedback would sit in the trajectory the student is trained on (or be
+  privileged context missing from it); a fresh attempt by another teacher gets the same retry without that.
+- **Teachers now (gap-v1 launch.sh and expert_iteration TEACHERS, so sft-v7's frontier campaign uses them):** Haiku
+  medium (retires while the account is empty), Luna at **medium** effort, **GPT-6.1 Sol** medium (the stronger model on
+  the same Codex subscription; min_failed 1, 3 slots in gap-v1, 2 in EI), Nemotron 2 slots. Gemini Flash-Lite dropped
+  (4/32, 36 slot-min per success). Note: Sol and Luna draw on the owner's ChatGPT subscription limits.
+- **After** (restart 01:24 with every fix; 13 min): 116 episodes, 38 successes (33%, ~175 verified successes/h of wall
+  clock against ~60/h before): Sol 17/40 (42%), Luna medium 18/54 (33%), Nemotron 3/22 (14%). Tasks are the hard tail
+  (teacher_failed and voided re-opened tasks). The sft-v7 teacher stage runs from the pin made at ~02:10, which holds
+  all of the above.
+- **Open:** re-admitting the 115 old-oracle flips (they are re-tried instead); decisions label-noise errata; Nemotron's
+  yield (14%) is kept only because it is free and routing sends it the families it is best at.
