@@ -40,6 +40,18 @@ def read_catalog(catalog_path):
     return catalog_bytes, catalog
 
 
+def managed_prerequisites(row):
+    """Identify scenarios which need more than a local managed workspace."""
+    requirements = [f'device:{device}' for device in row.get('devices', [])]
+    if row.get('requiresAndroidEmulator'):
+        requirements.append('android-emulator')
+    if row.get('requiresDeploymentPackage'):
+        requirements.append('deployment-package')
+    if row['family'] in {'workspace-open-user-goal-research', 'workspace-open-user-goal-research-and-edit'}:
+        requirements.append('public-web-search-provider')
+    return requirements
+
+
 def audit(catalog_path, roots, families):
     catalog_bytes, catalog = read_catalog(catalog_path)
     selected = {key: row for key, row in catalog.items() if not families or row['family'] in families}
@@ -102,7 +114,10 @@ def audit(catalog_path, roots, families):
             family for family, counts in coverage.items() if not counts['verified_held']
         ),
         'cases': {
-            scenario: {key: row[key] for key in ('family', 'workspace', 'split')}
+            scenario: {
+                **{key: row[key] for key in ('family', 'workspace', 'split')},
+                'prerequisites': managed_prerequisites(row),
+            }
             for scenario, row in selected.items()
         },
         'proofs': proofs,
@@ -120,10 +135,11 @@ def corpus_floor(baseline):
     return floor
 
 
-def write_train_cases(destination, result):
+def write_train_cases(destination, result, *, local_only=False):
     """Write exact training selectors backed by the accepted managed references."""
     cases = sorted(scenario for scenario in result['proofs']
-                   if result['cases'][scenario]['split'] == 'train')
+                   if result['cases'][scenario]['split'] == 'train' and
+                   (not local_only or not result['cases'][scenario]['prerequisites']))
     if not cases:
         raise ValueError('No independently verified training goals in the selected catalog')
     with destination.open('x', encoding='utf-8') as stream:
@@ -261,6 +277,8 @@ if __name__ == '__main__':
     parser.add_argument('--installed-skills', type=Path, help='live skill inventory from the managed workspace probe')
     parser.add_argument('--bundle-out', type=Path, help='new directory for accepted reference evidence and audit inputs')
     parser.add_argument('--train-cases-out', type=Path, help='new file with accepted train selectors, one per line')
+    parser.add_argument('--local-train-cases-out', type=Path,
+                        help='new file with accepted train selectors requiring only the local managed workspace')
     parser.add_argument('--require-complete', action='store_true')
     args = parser.parse_args()
     if args.baseline and args.family:
@@ -303,5 +321,7 @@ if __name__ == '__main__':
         })
     if args.train_cases_out and (not args.require_complete or not incomplete):
         write_train_cases(args.train_cases_out, result)
+    if args.local_train_cases_out and (not args.require_complete or not incomplete):
+        write_train_cases(args.local_train_cases_out, result, local_only=True)
     print(json.dumps(result, indent=2))
     raise SystemExit(int(args.require_complete and incomplete))

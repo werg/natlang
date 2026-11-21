@@ -115,9 +115,10 @@ while IFS=$'\t' read -r name sha; do
 done < "$RELEASE_PINS"
 ```
 
-Install the host dependencies with `pnpm install --frozen-lockfile` from
-`$RELEASE/host`. The detached checkout needs its own workspace dependency
-links. Set `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
+From `$RELEASE/host`, run `pnpm install --frozen-lockfile`,
+`pnpm check:native-host-dependencies --repair`, and `pnpm build:infrastructure`.
+The detached checkout needs its own workspace dependency links and built Host
+packages for the managed instance. Set `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
 `VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_RUNTIME_CHECKOUT`
 to `$RELEASE/natlang`. The last checkout supplies the release's vendored
 runtime. Set `LEDGER_CHECKOUT` to the checkout with the current memory
@@ -187,7 +188,11 @@ capture, IR, and learner chains. A one-case smoke verifies data flow.
 ### Bounded multi-case capture
 
 Generate a capture list against the exact release catalog and the managed
-reference evidence. Add `--family` to choose a verified family.
+reference evidence. Add `--family` to choose a verified family. Use
+`--local-train-cases-out` for workspaces that lack attached devices, an
+Android emulator, deployment packages, or a public-web search provider.
+The audit lists the prerequisites for each goal. Use `--local-only` when
+running the corresponding model-free reference sweep on that host.
 
 ```bash
 cd "$NATLANG_CHECKOUT"

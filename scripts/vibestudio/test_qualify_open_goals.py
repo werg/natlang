@@ -12,6 +12,35 @@ from qualify_open_goals import main, qualify_group, terminal_startup_failure
 
 
 class QualificationBatchesTest(unittest.TestCase):
+    def test_local_selection_defers_device_and_provider_prerequisites(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog = root / 'source.jsonl'
+            rows = [
+                ('native', {}),
+                ('android', {'requiresAndroidEmulator': True}),
+                ('phone', {'devices': ['desktop']}),
+                ('deployed', {'requiresDeploymentPackage': True}),
+                ('research', {'family': 'workspace-open-user-goal-research'}),
+            ]
+            catalog.write_text(''.join(json.dumps({
+                'scenario': f'open-goal-{name}', 'goalSha256': fingerprint(name),
+                'interaction': 'open-user-goal', 'family': 'workspace-open-user-goal-demo',
+                'split': 'train', 'workspace': 'examples', 'sourceGroups': [name], **fields,
+            }) + '\n' for name, fields in rows))
+            argv = ['qualify_open_goals', '--host', str(root), '--catalog', str(catalog),
+                    '--out', str(root / 'out'), '--local-only']
+            with patch.object(sys, 'argv', argv), patch('qualify_open_goals.qualify_group',
+                    return_value=(True, False)) as run:
+                self.assertEqual(main(), 0)
+            self.assertEqual(run.call_args.args[3], ['open-goal-oracle-native'])
+            with patch.object(sys, 'argv', [*argv, '--case', 'open-goal-android']), patch(
+                    'qualify_open_goals.qualify_group') as run:
+                with self.assertRaises(SystemExit) as error:
+                    main()
+            self.assertEqual(error.exception.code, 2)
+            run.assert_not_called()
+
     def test_reuses_only_accepted_reference_for_current_goal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -11,7 +11,7 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
-from audit_open_goal_references import audit, read_catalog
+from audit_open_goal_references import audit, managed_prerequisites, read_catalog
 
 
 def terminal_startup_failure(log):
@@ -130,6 +130,8 @@ def main():
                         help='If this file appears, finish the current batch, stop its instance, and leave later batches for --resume')
     parser.add_argument('--family', action='append', default=[])
     parser.add_argument('--case', action='append', default=[])
+    parser.add_argument('--local-only', action='store_true',
+                        help='Select goals requiring only a local managed workspace')
     parser.add_argument('--reuse-references', action='append', type=Path, default=[],
                         metavar='RESULT_DIR',
                         help='Skip goals already backed by an accepted managed reference in this directory')
@@ -159,6 +161,19 @@ def main():
         devices = row.get('devices', [])
         if not isinstance(devices, list) or any(device not in ('desktop', 'terminal') for device in devices):
             parser.error(f'Invalid managed device driver for {case}')
+    if args.local_only:
+        external = {case: requirements for case, row in chosen.items()
+                    if (requirements := managed_prerequisites(row))}
+        requested = sorted(set(args.case) & external.keys())
+        if requested:
+            summary = ', '.join(f'{case} ({", ".join(external[case])})' for case in requested)
+            parser.error(f'Explicit cases require more than a local managed workspace: {summary}')
+        if external:
+            print(f'Selected local workspaces only, deferring {len(external)} goals with prerequisites',
+                  flush=True)
+        chosen = {case: row for case, row in chosen.items() if case not in external}
+        if not chosen:
+            parser.error('No selected goals can run with only the local managed workspace')
     destination = args.out.resolve()
     destination.mkdir(parents=True, exist_ok=args.resume)
     with (destination / '.reference-run.lock').open('a') as lock:

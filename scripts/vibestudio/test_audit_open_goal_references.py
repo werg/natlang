@@ -61,6 +61,20 @@ class TrainSelectorTest(unittest.TestCase):
                 write_train_cases(empty_destination, result)
             self.assertFalse(empty_destination.exists())
 
+    def test_local_plan_excludes_accepted_training_cases_with_prerequisites(self):
+        result = {
+            'cases': {
+                'open-goal-local': {'split': 'train', 'prerequisites': []},
+                'open-goal-mobile': {'split': 'train', 'prerequisites': ['android-emulator']},
+                'open-goal-held': {'split': 'test', 'prerequisites': []},
+            },
+            'proofs': {'open-goal-local': {}, 'open-goal-mobile': {}, 'open-goal-held': {}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / 'capture-cases.txt'
+            write_train_cases(destination, result, local_only=True)
+            self.assertEqual(destination.read_text(), 'open-goal-local\n')
+
 
 if __name__ == '__main__':
     unittest.main()
