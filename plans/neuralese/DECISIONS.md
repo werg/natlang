@@ -6400,3 +6400,12 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - **Not checked:** the new `--workers 1` path on the full sft-v7 inputs (tests cover equality; the serial old-code
   rebuild runs as `sftbuild-base-1` for the before time); memory at 16 workers (12 workers peaked 10.6 GB; the cycle's
   build budget is 24 GB).
+
+## 2026-11-21 21:45 sft-v8 builds with the parallel sft_sources
+
+- `expert_iteration --data-repo` (2dfb377a2): the mix build runs that checkout's `sft_sources` with held scoring left on
+  the pin. It is an own flag, so it is not carried to the next cycle. sft-v8's driver now runs with `--fill-repo` and
+  `--data-repo` set to `ops/ei/pin-2dfb377a23a1` (main: the joint length/hazard fill weighting and the parallel build,
+  which rebuilt sft-v7's chains byte-identical in 14 min against 1 h 42 min). Its collection, fill, popbase and the
+  operator fit ran through the restart.
+- sft-v7's candidate held is on Pop at 9.5 GB (f8529635b); its verdict is due ~00:45.
