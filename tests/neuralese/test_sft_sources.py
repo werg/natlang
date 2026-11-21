@@ -40,6 +40,9 @@ def test_live_capture_root_requires_contained_verified_manifests(tmp_path):
     capture.mkdir()
     with pytest.raises(ValueError, match='No verified live teacher manifests'):
         s.live_manifest_paths([], [capture])
+    assert s.live_manifest_paths([], [capture], allow_empty=True) == []
+    with pytest.raises(ValueError, match='No verified live teacher manifests'):
+        s.live_manifest_paths([], [tmp_path / 'missing'], allow_empty=True)
 
     outside = tmp_path / 'unrelated'
     outside.mkdir()
