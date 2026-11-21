@@ -90,9 +90,9 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [2,324-goal release](vibestudio-open-goal-pop-pins-composed-2324.tsv)
+The [2,324-goal release](vibestudio-open-goal-pop-pins-composed-2324-framing.tsv)
 has verified detached compositions on Pop at
-`/home/werg/vibestudio-worktrees/open-goal-composed-2324.GGDHc7`.
+`/home/werg/vibestudio-worktrees/open-goal-composed-2324-framing.Q877LO`.
 To recreate a release, set `RELEASE` to a fresh directory, `RELEASE_PINS`
 to its TSV, and `CATALOG_SHA256` to the hash recorded below. Set
 `LEDGER_CHECKOUT` to the Natlang checkout with the current ledger and
@@ -949,3 +949,19 @@ contains a verified superset of the initial selectors, with 1,215 training
 goals and 1,202 local training goals. Pop's pinned materializer also checked
 the transferred Luna manifest and emitted 25 eligible native training
 decisions.
+
+The wider System sweep found two log-follower cases where Workerd emitted
+several lines in a single pipe read. The Host had indexed each read as one
+record. The corrected Host frames complete UTF-8 lines before assigning
+server-log records, with a bounded buffer for long lines. Both failing
+cases and two complete-window regressions passed against the corrected Host.
+The Workerd and server-log suites passed 106 tests.
+
+Pop verified the repaired Host, native dependencies, reviewer and
+unchanged catalog in
+`/home/werg/vibestudio-worktrees/open-goal-composed-2324-framing.Q877LO`.
+The registered `vibestudio-open-goal-2324-log-framing-20261121` archive
+contains 1,740 accepted outcomes, 1,284 training selectors, and 1,271
+local training selectors. It preserves the 08:00 selector snapshot in
+full. The managed collector preflight for this pin is queued behind the
+same Pop held evaluation. [Corrected commit pins](vibestudio-open-goal-pop-pins-composed-2324-framing.tsv)
