@@ -5862,3 +5862,19 @@ teacher-provenance-20261120).**
 - The plain-task share of the increase (+6 episodes) beyond the call-count model.
 - The aux neuralese-graph/operators/live parts as sources.
 - Per-family task requirements: how many nl calls a correct solution needs within 40.
+
+**2026-11-21 ~02:00, follow-up (coordinator): the two open findings are fixed.**
+- *Teacher detour calls* (`sft_sources.mark_detour_spawned`, `detour_call`): after an episode's first Neuralese
+  refusal, every call of an invocation that first appears after it is context. Before this, 3,238 such calls in
+  sft-mix-20261120-v1 trained, 3,000 of them children in 2,357 new invocations. The marking runs where replayed and live
+  turns are read (`replayed_turns`, `turns_of`), so `build`, validation, the episode-size cache (new policy key),
+  grpo.py's in-loop teacher demonstrations and filled_reasoning.py all get it. `--backend-workarounds
+  context-refused-only` keeps the previous behaviour. Test: `test_calls_the_detour_spawned_after_a_refusal_are_context_by_default`.
+- *Using a Neuralese input* (ts-host, model-facing; plans/MODEL_FACING_CHANGES.md 2026-11-21):
+  - The `${value}` reader returns are a `return_result` value stored as written. A single-placeholder value is now
+    rejected with the fix.
+  - The prompt's `${...}` sentence is gone.
+  - `console.log` advice and the stored-local advice say `await read(...)`.
+  - A promise prints as unawaited.
+  - `read_code` on a Neuralese parameter says its content is in the opening message.
+  - Not changed: `JSON.stringify` of a Neuralese-holding object still shows the reference JSON. It changes the held series.

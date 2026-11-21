@@ -10,6 +10,9 @@ import { compileEval, evalRealmBody } from './eval-compile.js';
 import { isNeuraleseRef, neuraleseDisplayText } from './neuralese.js';
 import { MEMORY_CHECK, instrumentMemoryChecks, memoryGuard, segmentGuard, type HeapProbe } from './eval-memory.js';
 
+/** How console output shows a promise: what it is and the fix, never `[object Promise]`. */
+export const UNAWAITED_DISPLAY = '[a Promise: not awaited yet; write await before the call to get its value]';
+
 /** Where compiled eval code runs: a JavaScript realm's global environment. */
 export interface Realm {
   /**
@@ -160,8 +163,11 @@ export class RealmEnvironment implements EvalEnvironment {
     const compiled = compileEval(request.code, { body: request.body, asyncBody, imports: imports?.validate.bind(imports),
       restoreAfterAwait: !!this.options.bindAwait, memoryChecks: !!memory });
     const realm = this.realm();
-    // A Neuralese value prints as one plain line, at any depth, never as its reference JSON.
+    // A Neuralese value prints as one plain line, at any depth, never as its reference JSON. A promise prints as what
+    // it is: `read(x)` without await printed [object Promise] and the call kept probing (held-v3 after sft-v5).
     const write = consoleWriter(logs, value => {
+      if (value !== null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function')
+        return UNAWAITED_DISPLAY;
       try {
         const data = portable(value);
         return isNeuraleseRef(data) ? neuraleseDisplayText(data) :

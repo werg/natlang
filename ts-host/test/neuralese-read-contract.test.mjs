@@ -143,8 +143,31 @@ test('a Neuralese value printed or stored in eval reads as one plain line', asyn
     console.log(note); console.log('note:', note); console.log({ notes: [note] });
   ` });
   assert.equal(result.kind, 'ok', result.text);
-  const line = '[Neuralese<string> value: opaque here; pass it on as is, or read it with read(value)]';
+  const line = '[Neuralese<string> value: opaque in code; its content is where it was given to you, so pass it on as is, ' +
+    'or write await read(value) for an ordinary copy]';
   assert.ok(result.text.includes(`console:\n${line}\nnote: ${line}\n{"notes":["${line}"]}\n`), result.text);
   assert.doesNotMatch(result.text.split('Stored local')[0], /\$neuralese|nzs1_/);
-  assert.match(result.text, /local note = \S+ \(Neuralese<string>: pass it on as is, or read it with read\(note\)\)/);
+  assert.match(result.text, /local note = \S+ \(Neuralese<string>: pass it on as is, or write await read\(note\) for an ordinary copy\)/);
+});
+
+test('the wrong forms of using a Neuralese input fail fast with what to do instead', async () => {
+  // held-v3 after sft-v5: calls that received a Neuralese value probed it ~7.6 model calls each (DECISIONS 2026-11-21)
+  const { session } = open({ type: '(notes: Neuralese<string>) => string', instructions: 'Return the notes as text.' }, {
+    agent: child => { child.lam.return = 'unused'; },
+  });
+  // read_code on the input's name says where its content is and how to get an ordinary copy
+  const code = await session.applyAsync('read_code', { name: 'notes' });
+  assert.equal(code.kind, 'rejected', code.text);
+  assert.match(code.text, /notes is this call's Neuralese input: its content is in your opening message, so use it from there, or write await read\(notes\) in eval/);
+  // a value that is one placeholder would be kept as those characters
+  for (const value of ['${value}', '${notes}', ' ${In the notes: two open items.} ']) {
+    const placeholder = await session.applyAsync('return_result', { status: 'success', value });
+    assert.equal(placeholder.kind, 'rejected', placeholder.text);
+    assert.match(placeholder.text, /return_result fills in no placeholder, so write out the text or value you mean/);
+  }
+  // a promise prints as what it is, not [object Promise]
+  const pending = await session.applyAsync('eval', { code: 'const p = Promise.resolve(1); console.log(p); await p;' });
+  assert.equal(pending.kind, 'ok', pending.text);
+  assert.match(pending.text, /console:\n\[a Promise: not awaited yet; write await before the call to get its value\]/);
+  assert.doesNotMatch(pending.text, /object Promise/);
 });

@@ -3,6 +3,38 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-21 — using a Neuralese input: each wrong form answers with the fix; the prompt no longer spells out `${...}`
+
+Held-v3 after sft-v5 (DECISIONS 2026-11-21 "ran-out"): a call that received a Neuralese argument took ~7.6 model calls in
+both the base and the SFT checkpoint, probing the opaque value instead of answering from the state in its opening
+message. Its `read()` children returned the literal text `${value}` in 23 of 68 calls (base: 1 of 29). The checkpoint
+reached these calls twice as often, and that carries most of its +4.1 pt ran-out. Changes (ts-host, every engine: the
+runtime is shared):
+- **Why `${value}`:** the runtime stored a `return_result` value as written. The reader model (`natlang.read`, told
+  "Return exactly the value it contains") wrote a template placeholder naming its parameter. The system prompt's
+  marker sentence spelled out `${...}` ("inside it is not JavaScript interpolation"), and 29 teacher producer replies
+  wrapped their value as `"${...}"`. A `return_result` value that is a single `${...}` placeholder is now rejected:
+  `rejected value: bad-action, expected the value itself: return_result fills in no placeholder, so write out the text
+  or value you mean`.
+- `SEMANTIC_RESULT_PROMPT` (`native/prompt.ts`): the sentence spelling out `${...}` and "never concatenate marker
+  strings" is replaced by "Use a Neuralese marker only for a literal body; return a computed string or structured value
+  according to T." `test/fixtures/builtin-prompts.json` and `training/prompt-pieces/pieces.json` are regenerated (the
+  table also caught up with earlier prompt edits; the old texts are kept as historical pieces).
+- `console.log` of a Neuralese value: `[… value: opaque in code; its content is where it was given to you, so pass it
+  on as is, or write await read(value) for an ordinary copy]` (was "read it with read(value)", which was followed by
+  un-awaited `read()` calls). The stored-local advice says `write await read(x)` too.
+- `console.log` of a promise prints `[a Promise: not awaited yet; write await before the call to get its value]`
+  instead of `[object Promise]`.
+- `read_code` on the name of a Neuralese parameter: `notes is this call's Neuralese input: its content is in your
+  opening message, so use it from there, or write await read(notes) in eval for an ordinary copy` (was "inspect it
+  with eval, for example console.log(notes)", which leads into the probing loop).
+- Not changed: `JSON.stringify` of an object that holds a Neuralese value still shows the reference JSON
+  (`{"$neuralese":…}`). Changing it means shadowing the realm's `JSON` in compiled eval bodies across realms; the
+  property access that usually follows is already rejected (`neuralese-opaque-access`).
+Tests: `ts-host/test/neuralese-read-contract.test.mjs` ("the wrong forms of using a Neuralese input fail fast"),
+`test/eval-guidance.test.mjs`, `test/builtin-programs.test.mjs`, `test/prompt-pieces-export.test.mjs`. This changes the
+held series (the ts-host tree and the system prompt): the next pin re-measures the base.
+
 ### 2026-11-21 — teacher transports get a Neuralese writer; a runtime without one ends the run; read_code shows program types
 
 Audit of teacher-gen-20261119/gap-v1 (Haiku 5.5, Luna, Nemotron 3 Ultra, Gemini 3.5 Flash-Lite; 2,191 episodes ending
