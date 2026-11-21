@@ -90,9 +90,9 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,916-goal release](vibestudio-open-goal-pop-pins-composed-1916.tsv)
+The [2,324-goal release](vibestudio-open-goal-pop-pins-composed-2324.tsv)
 has verified detached compositions on Pop at
-`/home/werg/vibestudio-worktrees/open-goal-composed-1916.vUphMG`.
+`/home/werg/vibestudio-worktrees/open-goal-composed-2324.GGDHc7`.
 To recreate a release, set `RELEASE` to a fresh directory, `RELEASE_PINS`
 to its TSV, and `CATALOG_SHA256` to the hash recorded below. Set
 `LEDGER_CHECKOUT` to the Natlang checkout with the current ledger and
@@ -227,6 +227,32 @@ python scripts/vibestudio/pending_open_goal_cases.py "$GOAL_CATALOG" "$TRAIN_CAS
 ```
 A case that fails leaves its logs in its own directory. Retry it with a
 fresh output directory and pass both roots in the same extraction.
+
+### Feeding the assembled data into the learner
+
+Use the registered `chains.pkl` produced by the build. On the DGX, set
+`LEARNER_PIN` to the detached Natlang experiment checkout,
+`NEURALESE_PYTHON` to the Neuralese Python interpreter, `LFM3_HF_BASE` to
+the model and tokenizer directory used to build the bundle, and
+`LFM3_NATIVE_START` to the matching native starting checkpoint. Choose a
+fresh run output directory and size the ledger claim for the planned batches.
+
+```bash
+python "$LEDGER_CHECKOUT/scripts/memory_ledger.py" run \
+  --unit "$TRAIN_UNIT" --priority high --hold-budget --no-resumable \
+  --budget-gb "$TRAIN_BUDGET_GB" --reserve-gb 15 --workdir "$LEARNER_PIN" \
+  --env "NATLANG_REPO=$LEARNER_PIN" \
+  --env "PYTHONPATH=$LEARNER_PIN/training/neuralese:$LEARNER_PIN" \
+  -- "$NEURALESE_PYTHON" "$LEARNER_PIN/scripts/neuralese_data/exp0_sft.py" train \
+  --chains "$LEARNER_READY/chains.pkl" --base "$LFM3_HF_BASE" \
+  --checkpoint "$LFM3_NATIVE_START" --out-dir "$TRAIN_OUT" \
+  --epochs "$TRAIN_EPOCHS" --lr "$TRAIN_LR"
+```
+
+The learner emits `planned_open_user_goals` for the actual schedule before
+loading model weights. Compare the trained checkpoint with its starting
+checkpoint on the same pinned held evaluation. Keep the Vibestudio held
+goals and their source groups outside the training bundle.
 
 ## Capability coverage
 
@@ -859,3 +885,47 @@ The archived Luna capture rebuilt against this exact catalog. The learner's
 CPU-only schedule contains eight action chains and 1,596 weighted target
 tokens. The gate still requires at least 80% open distinct goals and 80% open
 weighted target tokens for the actual train schedule. [Training pipeline](#bounded-multi-case-capture)
+
+The 2,324-goal release adds four assigned public briefs, including a held
+review that withholds a website-wide conformance claim. All four passed
+against live pages in the managed Examples workspace. This path uses only
+the assigned URLs and verifies actual text, cache, citations, and the
+resulting decision. It requires public HTTPS access. Dynamic public search
+still has its own provider prerequisite.
+
+The catalog contains 1,745 train and 579 held goals. Its SHA-256 is
+`de3601ae32d387aceb46c2989b38606387d2cea2c8a642103b3bc44b35d16bd4`.
+It preserves every released 2,320-goal row and all 842 historical
+assignments. All 15 installed compositions compiled. The combined
+composition links 1,809 Natlang lambdas and 236 explicit qualified
+references. [Commit pins](vibestudio-open-goal-pop-pins-composed-2324.tsv)
+
+The registered `vibestudio-open-goal-composed-release-2324-20261121`
+archive contains 1,404 accepted reference outcomes, 1,028 train selectors,
+and 1,015 train selectors for local managed workspaces. Its registry
+manifest SHA-256 is
+`c61d19322813c64a85f5710c262d8831b39d1d6588b7d5f4e64b0e84248a3763`.
+These references exercise all 66 skill sources somewhere in the corpus
+and directly cover 146 of the 151 baseline agentic capabilities. Each
+family with a local managed reference path has an accepted held outcome.
+The broader local sweep keeps adding evidence for individual cases.
+
+The remaining five baseline capability checks need live Android access.
+Use an assigned disposable emulator. Installation tests expect a clean
+start with the internal app absent. Pairing needs the desktop attachment
+and a compatible installed app. The passive runtime audits need the
+device state named by each goal, including absent, stopped, and running
+app states. These tests admit evidence against the exact assigned
+emulator and state.
+
+The archived Luna trajectory rebuilt against this release into eight
+action chains and 1,596 weighted target tokens. Both open-goal shares for
+its CPU-only schedule were 100%. The learner also checks both shares on
+the complete schedule of a training run.
+
+Pop verified the catalog, selector hashes, all 14 Host infrastructure
+packages, native Host runtime dependencies, and the pinned Natlang reviewer
+in `/home/werg/vibestudio-worktrees/open-goal-composed-2324.GGDHc7`.
+The verified local selector file is `train-cases-no-device.txt`. Two of
+its goals require a separate semantic-review model. The managed collector
+preflight is queued behind Pop's active held evaluation.
