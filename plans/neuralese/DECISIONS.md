@@ -6184,3 +6184,28 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   display the model sees at inference is today's; the actions are verified under today's runtime; think blocks stay
   context or are filled. Missing-reply and action-differing replays stay out. Being built as the default for all
   teacher replays before sft-v8 pins main.
+
+**2026-11-21 drifted teacher replays admitted by every verified-teacher consumer (242cbc801; supervisor decision).**
+- **Rule (one predicate, `sft_sources.drifted_success`, default on):** a teacher success replayed with every
+  recorded call served (exact, reworded or drifted; nothing unserved or missing; turn count equal) whose oracle accepts
+  it under today's runtime. Training rows render the replayed record (`replayed_turns`: today's prompts and tool
+  displays, the teacher's actions). Missing-reply ends (2,364 October) stay out. Own (`rl-own`) episodes stay
+  exact-only (their sampled ids belong to the recorded prompt).
+- **Inventory of consumers (all read `verified_episodes` or the predicate now):** `sft_sources build`
+  (`core_candidates`, `--admit-drifted on|off`, recorded in build.json), grpo `TeacherDemos` (SD replay and reasoning
+  RL demos, `--sd-teacher-admit-drifted`), `filled_reasoning` generate (`--admit-drifted`, 7a458c188) and its reasoning
+  audit (default), `program_tune rows` (`--admit-drifted`). Left exact-only on purpose: `teacher_admission`
+  (fixture admission reviews an exact replay of the reviewed file, teacher_admission.py:223, 304) and
+  `sft_sources neuralese-text/graph` surfaces (exact replays of native-state episodes define today's surfaces,
+  sft_sources.py `neuralese_text`). Held separation is unchanged: every consumer applies `held_excluded_ids` after
+  `verified_episodes`.
+- **Sibling guard (found while implementing):** the matcher served the first unserved call with a matching signature,
+  so sibling child calls (one `nl()` per item, same first line and length) could get another item's recorded reply,
+  and a drifted admission would then train item B's context with item A's action. The matcher now picks the sibling
+  with the closest opening (`ReplayEpisode.closest`) and records `siblings_resolved`; for older verdicts the predicate
+  refuses an episode with ambiguous siblings (95 October, 13 elsewhere). The same exposure exists for old exact
+  verdicts with reworded child calls (2 October episodes); not changed.
+- **Admitted per source (teacher, held excluded), exact-only -> with drift:** sft-teacher-qwen-october-20261120
+  1,092 -> 10,165 (qwen-campaign 643 -> 7,485, fallow-v13r2 442 -> 2,179, qwen-s72 7 -> 501); sft-teacher-demos-20261118
+  9,038 -> 9,179; sft-sources-20261117 10,694 -> 10,709; sft-teacher-demos-20261119 8,925 -> 9,082. Total
+  29,749 -> 39,135. Enters at sft-v8's pin.
