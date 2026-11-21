@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import sys
@@ -24,6 +25,17 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 
 from natlang_neuralese.common import data_registry as dr  # noqa: E402
 
+
+
+def role_spec(reg, role, order, role_file=None):
+    """A promoted dataset's role entry. Its file follows the role's current members when none is given (grpo-pool and
+    grpo-memetic-tasks read cases.jsonl; grpo-sd-teacher reads sft_sources WORK directories); a new role reads
+    cases.jsonl."""
+    if role_file is None:
+        files = [((e.get('roles') or {}).get(role) or {}).get('file') for e in reg.git.values()
+                 if isinstance((e.get('roles') or {}).get(role), dict)]
+        role_file = collections.Counter(files).most_common(1)[0][0] if files else 'cases.jsonl'
+    return {'order': order, **({'file': role_file} if role_file else {})}
 
 def _print(value):
     print(json.dumps(value, indent=1, ensure_ascii=False, default=str))
@@ -106,7 +118,9 @@ def main(argv=None) -> int:
     pr.add_argument('--no-check', action='store_true', help='skip check-main --quick in the registration commit')
     pr.add_argument('--role', help='give the promoted datasets this registry role, after the role\'s current members '
                     '(grpo-pool: a task-supply source enters training at the next pin)')
-    pr.add_argument('--role-file', default='cases.jsonl', help='the file of the dataset the role reads')
+    pr.add_argument('--role-file', default=None,
+                    help="the file of the dataset the role reads (default: the role's existing members' file, "
+                         "else cases.jsonl; a role whose members are directories, e.g. grpo-sd-teacher, takes none)")
     a = ap.parse_args(argv)
     if a.cmd == 'record':
         rec = dr.record_dataset(a.id, os.path.abspath(a.path), kind=a.kind, format=a.format, include=a.include,
@@ -177,7 +191,7 @@ def promote(reg, a) -> int:
             order = max([((e.get('roles') or {}).get(a.role) or {}).get('order', 0) for e in reg.git.values()
                          if a.role in (e.get('roles') or {})] + [x['roles'][a.role]['order'] for x in entries
                                                                  if a.role in (x.get('roles') or {})] + [-1]) + 1
-            entry['roles'] = {**(entry.get('roles') or {}), a.role: {'order': order, 'file': a.role_file}}
+            entry['roles'] = {**(entry.get('roles') or {}), a.role: role_spec(reg, a.role, order, a.role_file)}
         entries.append(entry)
     if a.dry_run or not entries:
         _print(entries)

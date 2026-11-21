@@ -154,7 +154,8 @@ def test_episode_walk_against_a_scripted_engine(monkeypatch):
     actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None, policy=lambda: {'p': 1})
     args = types.SimpleNamespace(unhinted=2, hinted=2, hint_horizon=3, hint_response_chars=1500, hint_max_tokens=6000,
                                  score_horizon=1, max_tokens=512, max_len=32000, band=(0.67, 1.5), close_floor=0.01,
-                                 min_improvement=0.0, ratio_floor=None, top_p=0.95, seed=0)
+                                 min_improvement=0.0, ratio_floor=None, top_p=0.95, seed=0, draw='parallel',
+                                 skip_certain_nll=0.01, trend_window=3)
     filler = fr.Filler(args, actor, tok, [im_end], [])
     renderer = types.SimpleNamespace(chains=lambda item: ([chain], None), tokenizer_dir='tok')
     out = filler.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
@@ -205,3 +206,141 @@ def test_length_reweighting_restores_the_students_own_length_mix():
     row = {'sampled': np.array([True] * 900 + [False] * 3), 'weight': np.ones(903, np.float32)}
     fr.reweight([row], w)
     assert row['weight'][0] == 2. and row['weight'][-1] == 1.
+
+
+def scripted_filler(blocks, action_lp, args_extra=None):
+    """A Filler on a scripted engine: draws return ``blocks[origin]`` (cut at max_new_tokens, never closing when cut);
+    action log-probabilities ``action_lp(block_is_empty)``. Returns (filler, chain, draw log)."""
+    import base64
+    import types
+    import pytest
+    from natlang_neuralese.common.paths import root
+    tok_path = root('data_nvme') / 'sft-sources-20261120b' / 'tokenizer' / 'tokenizer.json'
+    if not tok_path.exists():
+        pytest.skip('no LFM3 tokenizer on this machine')
+    from tokenizers import Tokenizer
+    from natlang_neuralese.serve.sglang_actor import TOP_K_KEY
+    tok = Tokenizer.from_file(str(tok_path))
+    close, im_end = tok.token_to_id('</think>'), tok.token_to_id('<|im_end|>')
+    enc = lambda text: list(tok.encode(text, add_special_tokens=False).ids)   # noqa: E731
+    prompt = enc('<|im_start|>system\nsys<|im_end|>\n<|im_start|>user\ntask<|im_end|>\n<|im_start|>assistant\n<think>')
+    action = enc('\n\nread the file') + [im_end]
+    rows = [{'id': 'a', 'invocation': 'i', 'index': 0, 'prompt': np.array(prompt, np.int32),
+             'sample': np.array([close] + action, np.int32)}]
+    [chain] = exp0_sft.chains_of([{'task_id': 't', 'round': 'teacher:k', 'rows': rows}])
+    record = base64.b64encode(np.float32(-0.5).tobytes() + np.int32(0).tobytes() + np.float16(0).tobytes()).decode()
+    log = []
+
+    def post(path, body, **_):
+        ids, params = body['input_ids'], body['sampling_params']
+        if params.get('max_new_tokens', 1) > 1:
+            hinted = 'Verified reference' in tok.decode(ids, skip_special_tokens=False)
+            full = blocks['hinted' if hinted else 'unhinted'](enc, close)
+            out = full[:params['max_new_tokens']]
+            log.append(('hinted' if hinted else 'unhinted', params['max_new_tokens'], len(out)))
+            return {'output_ids': out, 'meta_info': {TOP_K_KEY: [record] * len(out)}}
+        if not body.get('return_logprob'):
+            return {}
+        start = body['logprob_start_len']
+        lp = action_lp(ids[start + 1] == close)
+        return {'meta_info': {'input_token_logprobs': [[lp, i, None] for i in ids[start:]],
+                              'input_token_ids_logprobs': [[[-1.0, close, None]] for _ in ids[start:]]}}
+    actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None, policy=lambda: {'p': 1})
+    args = types.SimpleNamespace(unhinted=2, hinted=2, hint_horizon=3, hint_response_chars=1500, hint_max_tokens=6000,
+                                 score_horizon=1, max_tokens=512, max_len=32000, band=(0.67, 1.5), close_floor=0.01,
+                                 min_improvement=0.0, ratio_floor=None, top_p=0.95, seed=0, draw='staged',
+                                 skip_certain_nll=0.01, trend_window=3, **(args_extra or {}))
+    return fr.Filler(args, actor, tok, [im_end], []), chain, log
+
+
+def run_steps(filler, chain):
+    import types
+    renderer = types.SimpleNamespace(chains=lambda item: ([chain], None), tokenizer_dir='tok')
+    out = filler.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+    return out['chains'][0]['calls']
+
+
+def test_staged_draws_stop_at_an_admitted_anchor():
+    long_ = lambda enc, close: enc(' plan the read of the file carefully') * 4 + [close]   # noqa: E731
+    filler, chain, log = scripted_filler({'unhinted': long_, 'hinted': long_}, lambda empty: -1.0 if empty else -0.2)
+    [fill] = run_steps(filler, chain)
+    assert fill['kind'] == 'filled' and fill['origin'] == 'unhinted' and log == [('unhinted', 512, len(log) and log[0][2])]
+    assert fill['candidates'][0]['anchor'] and fill['generated_tokens'] == log[0][2]
+
+
+def test_staged_waves_are_capped_at_the_band_and_skip_certain_actions():
+    # the plain student reasons at length but its reasoning does not help; the hinted block runs past the band
+    plain = lambda enc, close: enc(' something else entirely') * 4 + [close]           # noqa: E731
+    rambling = lambda enc, close: enc(' and so on') * 200 + [close]                     # noqa: E731
+    filler, chain, log = scripted_filler({'unhinted': plain, 'hinted': rambling}, lambda empty: -0.2 if empty else -0.6)
+    [fill] = run_steps(filler, chain)
+    anchor_len = log[0][2]
+    cap = int(np.ceil(1.5 * anchor_len)) + 1
+    assert fill['kind'] == 'fallback' and log[0] == ('unhinted', 512, anchor_len)
+    assert all(m == cap for _, m, _ in log[1:]) and len(log) == 4      # anchor, wave (1 + 1), wave (1 hinted)
+    assert 'past_band' in [r for c in fill['candidates'] for r in c['rejected']]
+    # an action already near-certain after an empty block: no draws at all
+    filler, chain, log = scripted_filler({'unhinted': plain, 'hinted': plain}, lambda empty: -0.001)
+    [fill] = run_steps(filler, chain)
+    assert fill['kind'] == 'certain' and log == [] and fill['generated_tokens'] == 0
+
+
+def test_length_reference_uses_only_anchors_once_draws_are_staged():
+    def cand(length, **k):
+        return {'origin': 'unhinted', 'length': length, 'closed': True, **k}
+    staged = [{'candidates': [cand(900, anchor=True, selected=True), cand(100, anchor=False)]}]
+    w = fr.length_weights([{'chains': [{'calls': staged}]}], cap=4.)
+    assert w == {fr.length_bin(900): 1.0}     # the band-capped sample is no evidence of the student's own length
+
+
+def test_a_trajectory_that_keeps_falling_back_draws_only_anchors():
+    plain = lambda enc, close: enc(' something else entirely') * 4 + [close]   # noqa: E731
+    filler, chain, log = scripted_filler({'unhinted': plain, 'hinted': plain}, lambda empty: -0.2 if empty else -0.6)
+    calls = fr.calls_of(chain, filler.close)
+    context = [int(i) for i in calls[0]['prompt']]
+    import random
+    fill = filler.step(context, calls, 0, filler.text(context, special=True), random.Random(0), trend=3)
+    assert fill['kind'] == 'fallback' and fill['trend_skip'] and len(log) == 1
+
+
+def test_actor_requests_retry_a_dropped_or_refused_connection(monkeypatch):
+    import http.client
+    import io
+    import urllib.error
+    answers = [http.client.RemoteDisconnected('closed'), urllib.error.URLError(ConnectionRefusedError(111, 'refused')),
+               io.BytesIO(b'{"ok": 1}')]
+
+    class Response:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self.body
+
+        def __exit__(self, *exc):
+            return False
+
+    def urlopen(request, timeout):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return Response(answer)
+    monkeypatch.setattr(fr.urllib.request, 'urlopen', urlopen)
+    monkeypatch.setattr(fr.time, 'sleep', lambda s: None)
+    actor = fr.Actor('http://x', None, False, 1, 1, 1)
+    assert actor.post('/generate', {}) == {'ok': 1} and actor.counts['actor_down_waits'] == 2
+    monkeypatch.setattr(fr.urllib.request, 'urlopen', lambda r, timeout: (_ for _ in ()).throw(ValueError('bad')))
+    import pytest
+    with pytest.raises(ValueError):
+        actor.post('/generate', {})
+
+
+def test_drifted_successes_are_a_separate_admission_class():
+    base = {'outcome': 'task_success', 'exact': False, 'unserved': 0, 'recorded_turns': 3, 'replayed_turns': 3}
+    assert sft_sources.drifted_success({**base, 'served': {'exact': 2, 'drifted': 1}})
+    assert not sft_sources.drifted_success({**base, 'served': {'exact': 2, 'missing': 1}})
+    assert not sft_sources.drifted_success({**base, 'served': {'exact': 3}, 'unserved': 1})
+    assert not sft_sources.drifted_success({**base, 'served': {'exact': 2, 'drifted': 1}, 'outcome': 'unresolved'})
+    assert not sft_sources.drifted_success({**base, 'exact': True, 'served': {'exact': 3}})   # exact ones are exact
+    assert fr.build_parser().parse_args(['generate', '--out', 'o', '--sglang', 's', '--export', 'e',
+                                         '--render-tokenizer', 't']).admit_drifted == 'on'

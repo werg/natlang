@@ -1,0 +1,40 @@
+{
+  "id": "sft-teacher-qwen-october-20261120",
+  "owner": "dgx",
+  "path": "data_nvme:sft-teacher-qwen-october-20261120",
+  "include": [
+    "*.jsonl.zst",
+    "*.json",
+    "*.jsonl",
+    "replay/*/rollouts.jsonl",
+    "replay/*/*.json"
+  ],
+  "kind": "trajectories",
+  "format": "sft_sources WORK: episodes*.jsonl.zst (extracted episodes), replay.jsonl (verdicts), replay/<episode>/rollouts.jsonl (verified replays)",
+  "rows": 2247585,
+  "license": "nvidia/Qwen3.6-35B-A3B-NVFP4 teacher trajectories (self-hosted vLLM on the DGX, October 2026) on project-generated and adapted tasks, replayed under the project runtime",
+  "protected": false,
+  "producer": {
+    "script": "sft_sources.py",
+    "argv": [
+      "replay",
+      "--work",
+      "/home/werg/data/sft-teacher-qwen-october-20261120",
+      "--workers",
+      "3",
+      "--runtime-repo",
+      "/home/werg/data/sft-teacher-qwen-october-20261120/pin-028f0321bf34"
+    ],
+    "git_commit": "028f0321bf348abe075a74b05035f940b9738a74",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "990254d8d29ebaa3ae98582b977d9359bd1415f32c61926c9ee497fa436b2932",
+  "training_admission": "grpo-sd-teacher",
+  "roles": {
+    "grpo-sd-teacher": {
+      "order": 3
+    }
+  },
+  "note": "October Qwen3.6-35B-A3B-NVFP4 teacher trajectories (qwen-s72, qwen-campaign, the Qwen rows of fallow-v13r2; sft_sources extract --october-teacher) replayed under pin 028f0321b: 1,092 of 13,694 replay exactly and succeed; most others saw an older runtime surface (host scope preamble, tool-output display). grpo TeacherDemos and filled_reasoning read the exact ones."
+}

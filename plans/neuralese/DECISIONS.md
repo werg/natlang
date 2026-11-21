@@ -6069,6 +6069,162 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - **Default for the next SFT:** the filled part with the reweighting. The full-corpus pass waits for a dedicated actor
   window, and the next cycle gets its own collect-free fill stage (to build).
 
+## 2026-11-21 08:50, operator prompt state served; uncapped fit beside sft-v8's collection (operator soft-state strand)
+
+- **Served default.** `operator-stage.sh` named `$S/soft/build` as its default prompt states, and nothing was there, so no build
+  was actually served. It now defaults to `/home/werg/data/natlang-operator-soft-20261120/served`, a symlink to the best fit:
+  build-v2 today (fit on 5ff07638, the current policy in `ops/current-policy.json`). `PROMPT_STATES=off` opts out. The states
+  are tied to their base checkpoint, so a new current policy needs a refit on it.
+- **Uncapped fit (plan-v3, all 448 verified rows, 19 GB, medium).** Expert-iteration cycles are pipelined (817c43c56), so the
+  GPU has no idle window. The fit runs beside the next collection: a watcher launches it once sft-v7-sft has finished and
+  sft-v8-collect runs. It never starts while any `*-sft` unit is active, stops the fit (resumable, exact from `state.json`) if
+  one starts, and launches only with at least 15 GB of ledger headroom left after its budget. On completion it evaluates build-v3 on
+  the same 565 test rows (short/long split). It repoints `served` to build-v3 only if build-v3 beats build-v2 overall and on long
+  rows without losing on short rows.
+
+**2026-11-21 09:00, filled reasoning: staged draws cut the cost per kept step (default; `--draw parallel` opts out).**
+- **What changed in `Filler.step`:**
+  1. The no-reasoning baseline is scored first, by one prefill.
+  2. One plain student sample is drawn with the whole room: the anchor. Its length L is the student's own at this
+     step, and it sets the band [0.67L, 1.5L]. An unclosed anchor gets one more draw.
+  3. An anchor that passes the gates is chosen at once, with no hinted prefill and no further draws.
+  4. Otherwise the rest of the budget is drawn in waves (1 unhinted + 1 hinted, then 1 hinted). Each is capped at
+     1.5L + 1 tokens: a block still open there is out of the band and cannot be chosen (`past_band`). The waves stop
+     at the first wave with an admitted candidate inside the band, best improvement winning.
+  5. After `--trend-window` 3 fallbacks in a row, a trajectory draws only anchors until a step fills again.
+- **Length and close bias:**
+  - The anchor is an uncapped student sample, as the random anchor was before, and the band still decides membership.
+  - `length_weights` now takes the student's own length reference from anchors only, since band-capped draws are no
+    evidence of it. The trained length mix still follows the student's own (reweighting kept, cap 4).
+  - Early stopping lowers the selection pressure on the sequence score; the old rule was best of four.
+- **`--skip-certain-nll`** (no draws where the action is near-certain after an empty block) is built but **off by
+  default.** Replaying the rule on sft-v7's first 705 recorded steps showed those steps were the cheapest kept ones:
+  skipping cost 43 fills and raised tokens per kept step.
+- **Offline replay of the new rules on those 705 steps (`fills.jsonl`):**
+  - parallel: 11.1k generated tokens per kept step, 299 fills;
+  - staged: 7.0k tokens per kept step, 259 fills;
+  - total generated tokens 3.33M -> 1.81M.
+  - The fill loss comes from anchor-only bands (the parallel rule could anchor on either unhinted sample) and the trend
+    rule.
+- Tests (5 new): stop at an admitted anchor; band-capped waves and `past_band`; skip-certain; trend; anchor-only length
+  reference. The parallel path keeps its scripted-engine test.
+- **Enters:** sft-v8's fill (sft-v8 pins origin/main at launch). sft-v7's fill window runs on `pin-817c43c567de`, which
+  predates this.
+
+## 2026-11-21 October Qwen teacher trajectories replayed into the verified teacher pool (sft-teacher-qwen-october-20261120)
+
+- **What.** The October Qwen3.6-35B-A3B-NVFP4 (self-hosted vLLM) teacher rows under `sft-sources-20261117/october`
+  (qwen-s72, qwen-campaign, the Qwen rows of fallow-v13r2) were never replayed under the current runtime. New
+  `sft_sources extract --october-teacher GROUP.jsonl.zst [--october-model ID]` (775b0e756, 54ce47bdc): per-call rows
+  grouped by trajectory in decision order (two streamed passes; a group is GBs of JSON), the task row read back from
+  the source turns' `task.program_ir`, held closure out, `teacher: {model_id, provider: self-hosted-vllm-dgx}`. The
+  replay stage then verifies them like teacher_gen successes. WORK `/home/werg/data/sft-teacher-qwen-october-20261120`
+  (registry id of the same name, role `grpo-sd-teacher` order 3), replayed from pin 028f0321b, 3 workers.
+- **Result (13,694 trajectories; ~3 s/episode median, 7.9 s mean on fallow, ~12 h wall under ledger preemption):**
+  exact replay successes 1,092 (qwen-campaign 643 / 8,111, fallow-v13r2 442 / 3,445, qwen-s72 7 / 2,138). Another
+  10,017 succeed under today's oracle with the same actions but are not exact: in every one the first difference is in
+  what the runtime now shows (host scope preamble: `Entry.path`, a captured `decide`; tool-output display: cut-off note
+  wording, `undefined` for `null`, values shown instead of cut). 2,364 end at a call the recording has no reply for
+  (child calls opened with today's captured-variables preamble instead of `read_inputs()`, and October rows that were
+  dropped: 2,577 of the 13,694 trajectories have decision gaps), 139 score errors (scifact rows with incomplete source_groups), 71 budget stops.
+  Only exact replays are read by TeacherDemos and filled_reasoning (`verified_episodes`), so 1,092 enter now.
+- **Fixes found on the way (default on, tests):** (1) the replay matcher compared tool-call arguments as raw strings;
+  the runtime echoes a teacher's spaced JSON (`{"code": ...}`) compact, so 98 of the first 100 replays missed on that
+  alone; arguments now compare as canonical JSON (`arguments_key`). (2) Drift after a runtime-reworded opening was
+  reported as a missing call; drift now also matches by the call's signature line. (3) fallow-v13r2's October rows
+  carry the source turn's stale `program_id` as `task_id` (2,864 of 3,445 trajectories name a different task than the
+  one their messages show); extraction takes the turn's own program_ir and held-checks both ids. The October `--october`
+  build path still reads those stale ids (share 0 today). (4) `data_registry.py promote --role` gave every role the
+  file `cases.jsonl`; a grpo-sd-teacher member (a WORK directory) then resolved to a nonexistent path; the role file
+  now follows the role's members. (5) Registered `sft-sources-20261117-october`, the campaign turns inside the archive
+  inventory (`teacher-campaign-evidence-uncovered-turns-20261011-v1`) and `native-sft-v13-r2-recovered-20261031`.
+- **Older-surface native trajectories** (`runs/qwen36-verified-positive-native-graphs-20261023-internal-*`, scope-eval-v2,
+  contract 19): 0 of 15 distinct trial episodes replay; each misses at its first call because its host preamble declares
+  the retired `neuralese` text-marker constant. Skipped (pennyroyal Qwen3.8-Flash, same surface, not tried).
+- **Open:** the 10,017 drifted successes are the larger prize. Admitting them needs a decision to train actions chosen
+  against a slightly different display (the replayed record holds today's prompts with the same actions), or a
+  re-collection of those tasks.
+
+**2026-11-21 10:30, Qwen October trajectories and drifted replays (rationalization strand).**
+- The replay subagent's result (its own entry, beeeb5b27): of 13,694 Qwen3.6 October trajectories, 1,092 replay
+  exactly. They are in WORK `sft-teacher-qwen-october-20261120`, role `grpo-sd-teacher`.
+- 10,017 more succeed with the teacher's own actions. In every one, the first difference is in what today's runtime
+  shows: host preamble, tool-output wording, values shown in full instead of cut.
+- **Decision: drifted successes enter the fill pass** (`filled_reasoning.py generate --admit-drifted on`, default;
+  `off` opts out).
+  - Admitted: every recorded call served, nothing unserved or missing, the oracle accepts (`sft_sources.drifted_success`).
+  - Why: the filled block is drawn and scored under today's display, and the improvement gate admits a block only if
+    the teacher's action becomes likelier after it in today's context. An action incoherent with today's display
+    finds no admitted block.
+  - Such episodes reach SFT only through the filled corpus; the plain teacher pool stays exact-only (`verified_episodes`
+    default unchanged).
+  - Today's display shows more than the teacher saw (values in full, not cut), so these actions do not use information
+    the training prompt hides.
+  - One remaining exposure: a drifted episode's fallback steps still train the teacher action after an empty block,
+    as exact teacher rows do.
+- Tests: `test_drifted_successes_are_a_separate_admission_class`. Enters: the next fill run that loads origin/main
+  (sft-v8's).
+
+## 2026-11-21 10:40, sft-v6 beats the base on held-v3 and becomes the current policy; sft-v7 data stage failure (expert-iteration strand)
+
+- **sft-v6 held result** (base and sft-v6 measured on Pop under sft-v7's pin b17d5fd8, 2 samples, 512 episodes each):
+  base 49.8% (255/512), sft-v6 55.7% (285/512): **+5.86 pts, permutation p 0.0125, task-bootstrap CI [+1.2, +10.9]**;
+  ran-out +1.95 pts (50 -> 60 of 512, McNemar p 0.31), inside the +2 limit. This meets the expert-iteration success
+  rule (>= +2 with ran-out <= +2), so `ops/current-policy.json` now points at `ops/sft-v6/run1/checkpoint.pt`
+  (sha dc95f29d). sft-v7 started from it; its candidate is judged against this start on the same pin.
+- **sft-v7 data stage failed silently.** `sft_sources extract --rl RUN:ARCHIVE` got `collect/rollouts` as its archive,
+  a path that does not exist (the EI collection writes no zst archive; groups are read live from the run dir), so the
+  registry check refused it. The driver's `wait` never looked at the unit's result, marked `data` done and started the
+  build on a mix without this cycle's own collection. Caught at 09:50; build and driver stopped before any SFT.
+  Fix 2642d02c9: a failed stage unit ends the cycle (`wait` checks `is-failed`); a relaunched unit is reset-failed
+  first; the archive is the registered collect dir. The driver (which runs from the main checkout) was relaunched with
+  identical arguments; the data stage reruns, the fill window kept running. sft-v7's timeline moves about 30 min.
+- **Admitted drifted teacher replays** (decision on the Qwen entry's open item): successes under today's oracle with
+  the same actions, differing only in what the runtime displays, are trained with today's replayed prompts. The
+  display the model sees at inference is today's; the actions are verified under today's runtime; think blocks stay
+  context or are filled. Missing-reply and action-differing replays stay out. Being built as the default for all
+  teacher replays before sft-v8 pins main.
+
+**2026-11-21 drifted teacher replays admitted by every verified-teacher consumer (242cbc801; supervisor decision).**
+- **Rule (one predicate, `sft_sources.drifted_success`, default on):** a teacher success replayed with every
+  recorded call served (exact, reworded or drifted; nothing unserved or missing; turn count equal) whose oracle accepts
+  it under today's runtime. Training rows render the replayed record (`replayed_turns`: today's prompts and tool
+  displays, the teacher's actions). Missing-reply ends (2,364 October) stay out. Own (`rl-own`) episodes stay
+  exact-only (their sampled ids belong to the recorded prompt).
+- **Inventory of consumers (all read `verified_episodes` or the predicate now):** `sft_sources build`
+  (`core_candidates`, `--admit-drifted on|off`, recorded in build.json), grpo `TeacherDemos` (SD replay and reasoning
+  RL demos, `--sd-teacher-admit-drifted`), `filled_reasoning` generate (`--admit-drifted`, 7a458c188) and its reasoning
+  audit (default), `program_tune rows` (`--admit-drifted`). Left exact-only on purpose: `teacher_admission`
+  (fixture admission reviews an exact replay of the reviewed file, teacher_admission.py:223, 304) and
+  `sft_sources neuralese-text/graph` surfaces (exact replays of native-state episodes define today's surfaces,
+  sft_sources.py `neuralese_text`). Held separation is unchanged: every consumer applies `held_excluded_ids` after
+  `verified_episodes`.
+- **Sibling guard (found while implementing):** the matcher served the first unserved call with a matching signature,
+  so sibling child calls (one `nl()` per item, same first line and length) could get another item's recorded reply,
+  and a drifted admission would then train item B's context with item A's action. The matcher now picks the sibling
+  with the closest opening (`ReplayEpisode.closest`) and records `siblings_resolved`; for older verdicts the predicate
+  refuses an episode with ambiguous siblings (95 October, 13 elsewhere). The same exposure exists for old exact
+  verdicts with reworded child calls (2 October episodes); not changed.
+- **Admitted per source (teacher, held excluded), exact-only -> with drift:** sft-teacher-qwen-october-20261120
+  1,092 -> 10,165 (qwen-campaign 643 -> 7,485, fallow-v13r2 442 -> 2,179, qwen-s72 7 -> 501); sft-teacher-demos-20261118
+  9,038 -> 9,179; sft-sources-20261117 10,694 -> 10,709; sft-teacher-demos-20261119 8,925 -> 9,082. Total
+  29,749 -> 39,135. Enters at sft-v8's pin.
+
+## 2026-11-21 11:15, sft-v7 build inputs: registry inventory shadow and own Neuralese graph (expert-iteration strand)
+
+- **Build refused `/home/werg/data/ei-sources`** (the cycles' sft_sources WORK): the 04:20 journal backfill had
+  registered the then-empty directory as an inventory-only placeholder, which shadowed sft_sources' later record of the
+  same path. 53f44549e: a producer's record wins over an inventory placeholder (test). For sft-v7's pin the placeholder
+  id was re-recorded as the WORK. The 2642d02c9 failure check stopped the cycle at the build (09:49).
+- **The own Neuralese graph** (df3ca5c6f, the ran-out fix: the student's own consumer calls in the mix) had failed on
+  the same shadow behind an `|| echo` fallback, and its rerun admitted 0 of 146 own native-state episodes: the
+  current-surface set came only from the WORK's exact replays, whose verdicts were seeded from sft-v6's WORK under an
+  earlier pin (older system prompt, before d11a7020a). 8d5b08f9d: `--current-surface-run` marks the cycle's own
+  collection as current (both neuralese-graph and neuralese-text); 7eaa92b52: a failed own-graph step ends the stage.
+  Rebuilt with main's sft_sources (data preparation only; held scoring stays on the pin): 118 episodes, 706
+  native-state calls, 2.66M target tokens (the 749 native-state episodes of earlier GRPO runs have no rollout spec in
+  this WORK and stay out: earlier policies, older surfaces). sft-v7's SFT starts ~1.5 h later than planned.
+
 ### 2026-11-21 — reuse Vibestudio traces and pilot outcome-scored goals
 
 - Use `scripts/neuralese_data/inventory_live_teacher.py` to compare retained full system-test packets and exported manifests against the live split catalog, held source groups, and data registry. On Tick, 460 nonidentical full packets contained 38 Natlang teacher traces. Six distinct registered Luna tasks (149 supervised decisions) could be extracted immediately. One is an open-ended goal and the other five are earlier assigned workflows. Two additional passing raw packets with pins were from the stopped Sol batch. Preserve them with their original provenance.

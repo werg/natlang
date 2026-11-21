@@ -194,7 +194,7 @@ def default_works():
     return data_registry.role_paths('grpo-sd-teacher')
 
 
-def teacher_episodes(works, held_manifest, funnel):
+def teacher_episodes(works, held_manifest, funnel, drifted=True):
     """[{key, work, name, task_id, teacher}] of every verified teacher success of WORKs (first WORK wins a key), held
     closure excluded (``TeacherDemos``' selection without the per-task cap: every episode is data)."""
     from sft_sources import held_closure, held_excluded_ids, verified_episodes
@@ -202,7 +202,7 @@ def teacher_episodes(works, held_manifest, funnel):
     for work in works:
         if not (Path(work) / 'replay.jsonl').exists():
             continue
-        for episode, record in verified_episodes(work, funnel, sources={'teacher'}):
+        for episode, record in verified_episodes(work, funnel, sources={'teacher'}, drifted=drifted):
             if episode['key'] in found or not record.get('name'):
                 continue
             tasks[episode['task_id']] = episode['task']
@@ -258,9 +258,12 @@ class Actor:
             try:
                 with urllib.request.urlopen(request, timeout=timeout) as response:
                     return json.loads(response.read())
-            except urllib.error.URLError as error:
-                refused = isinstance(getattr(error, 'reason', None), (ConnectionRefusedError, ConnectionResetError))
-                if not refused or time.time() > deadline:
+            except (urllib.error.URLError, ConnectionError) as error:
+                # refused (actor released or restarting) or dropped mid-request (sft-v7, 09:28: 14 episodes lost at
+                # once to RemoteDisconnected, the engine still up): the request is a pure function of its body
+                # (seeded draws, prefill scores), so it is retried
+                reason = getattr(error, 'reason', error)
+                if not isinstance(reason, ConnectionError) or time.time() > deadline:
                     raise
                 self.counts['actor_down_waits'] += 1
                 time.sleep(15)
@@ -403,31 +406,10 @@ class Filler:
             close_p.append(math.exp(lp) if lp is not None else float('nan'))
         return means, [length for _, length in spans], block_logp, close_p
 
-    def step(self, context, calls, t, context_text, rng):
-        """Candidates, scores and the choice for step t (the module docstring, 1-5)."""
-        a, call = self.args, calls[t]
-        room = min(a.max_tokens, a.max_len - len(context) - len(call['action']) - 1)
-        if call['cut'] is None:
-            return {'kind': 'no_think'}
-        if room < MIN_ROOM:
-            return {'kind': 'context_full'}
-        hint_ids, hinted = self.hint(calls, t)
-        hinted_context = hint_context(context, hint_ids, self.im_start)
-        # shared prefixes once (LFM3's conv state is cached at track points: concurrent copies would each prefill)
-        self.prefill(context)
-        self.prefill(hinted_context)
-        jobs = [('unhinted', context)] * a.unhinted + [('hinted', hinted_context)] * a.hinted
-        seeds = [rng.randrange(1, 2**31) for _ in jobs]
-        with ThreadPoolExecutor(len(jobs) + 1) as pool:
-            base_future = pool.submit(self.score, context, [self.close], calls, t)
-            drawn = list(pool.map(lambda j: self.draw(j[1][1], room, j[0]), zip(seeds, jobs)))
-            baseline, lengths, _, _ = base_future.result()
-        candidates = []
-        for (origin, _), (ids, logp) in zip(jobs, drawn):
-            closed = bool(ids) and ids[-1] == self.close
-            candidates.append({'origin': origin, 'ids': ids, 'length': len(ids), 'closed': closed,
-                               'sample_logp': float(np.sum(logp)) if len(logp) else 0.})
-        scored = [c for c in candidates if c['closed']]
+    def _evaluate(self, context, calls, t, candidates, baseline, hinted, context_text):
+        """Score (one prefill each, on the unhinted trajectory) and gate the closed candidates in place."""
+        a = self.args
+        scored = [c for c in candidates if c['closed'] and 'improvement' not in c]
         with ThreadPoolExecutor(max(1, len(scored))) as pool:
             for c, (means, span_lengths, block_logp, close_p) in zip(
                     scored, pool.map(lambda c: self.score(context, c['ids'], calls, t), scored)):
@@ -440,9 +422,11 @@ class Filler:
                 if c['origin'] == 'hinted':   # per-token log ratio student / hinted proposal (how in-distribution)
                     c['log_ratio'] = (c['policy_logp'] - c['sample_logp']) / max(1, c['length'])
         for c in candidates:
+            if 'admitted' in c:
+                continue
             reasons = []
             if not c['closed']:
-                reasons.append('unclosed')
+                reasons.append('unclosed' if not c.get('capped') else 'past_band')
             else:
                 c['leak'] = leak(self.text(c['ids'][:-1]), hinted, context_text)
                 if c['leak'] and c['origin'] == 'hinted':
@@ -454,15 +438,104 @@ class Filler:
                 if c['origin'] == 'hinted' and a.ratio_floor is not None and c['log_ratio'] < a.ratio_floor:
                     reasons.append('off_distribution')
             c['admitted'], c['rejected'] = not reasons, reasons
-        chosen, anchor = select(candidates, a.band, rng)
+
+    def _candidates(self, jobs, room, rng):
+        """Draw ``jobs`` [(origin, context, max tokens)] in parallel: candidate dicts (``capped``: stopped at a band cap
+        below the step's room, so unclosed means it decoded past the band)."""
+        seeds = [rng.randrange(1, 2**31) for _ in jobs]
+        with ThreadPoolExecutor(max(1, len(jobs))) as pool:
+            drawn = list(pool.map(lambda j: self.draw(j[1][1], j[1][2], j[0]), zip(seeds, jobs)))
+        out = []
+        for (origin, _, cap), (ids, logp) in zip(jobs, drawn):
+            out.append({'origin': origin, 'ids': ids, 'length': len(ids), 'closed': bool(ids) and ids[-1] == self.close,
+                        'sample_logp': float(np.sum(logp)) if len(logp) else 0., 'capped': cap < room})
+        return out
+
+    def _result(self, candidates, chosen, anchor, baseline, room, **extra):
         stats = [{k: (round(v, 5) if isinstance(v, float) else (bool(v) if k == 'leak' else v))
                   for k, v in c.items() if k != 'ids'} for c in candidates]
-        for s, c in zip(stats, candidates):
-            s['selected'] = c is chosen
+        for s_, c in zip(stats, candidates):
+            s_['selected'] = c is chosen
         return {'kind': 'filled' if chosen else 'fallback', 'reasoning': chosen['ids'] if chosen else None,
                 'origin': chosen['origin'] if chosen else None, 'anchor': anchor, 'baseline': baseline,
-                'room': room, 'candidates': stats,
-                'generated_tokens': sum(c['length'] for c in candidates)}
+                'room': room, 'candidates': stats, 'generated_tokens': sum(c['length'] for c in candidates), **extra}
+
+    def step(self, context, calls, t, context_text, rng, trend=0):
+        """Candidates, scores and the choice for step t (the module docstring, 1-5). ``--draw staged`` (default) spends
+        draws only where they can still change the choice; ``parallel`` draws every candidate at once (before
+        2026-11-21). ``trend``: consecutive drawn steps of this trajectory that fell back."""
+        a, call = self.args, calls[t]
+        room = min(a.max_tokens, a.max_len - len(context) - len(call['action']) - 1)
+        if call['cut'] is None:
+            return {'kind': 'no_think'}
+        if room < MIN_ROOM:
+            return {'kind': 'context_full'}
+        if getattr(a, 'draw', 'staged') == 'parallel':
+            return self._step_parallel(context, calls, t, context_text, rng, room)
+        # 1. the no-reasoning baseline (one prefill; it also leaves the history in the radix cache for the draws). An
+        #    action already near-certain after an empty block cannot be made likelier: no draws (``--skip-certain-nll``)
+        baseline, _, _, _ = self.score(context, [self.close], calls, t)
+        if a.skip_certain_nll and -baseline[0] < a.skip_certain_nll:
+            return {'kind': 'certain', 'baseline': baseline, 'room': room, 'candidates': [], 'generated_tokens': 0}
+        hint_ids, hinted = self.hint(calls, t)
+        # 2. the anchor: a plain student sample with the whole room; its length L is the student's own at this step
+        #    and sets the band. An unclosed anchor (cut at the room) is no length: draw one more
+        candidates, anchor = [], None
+        for _ in range(max(1, a.unhinted)):
+            got = self._candidates([('unhinted', context, room)], room, rng)[0]
+            got['anchor'] = True
+            candidates.append(got)
+            if got['closed']:
+                anchor = got
+                break
+        if anchor is None:
+            return self._result(candidates, None, None, baseline, room)
+        self._evaluate(context, calls, t, [anchor], baseline, hinted, context_text)
+        if anchor['admitted']:
+            return self._result(candidates, anchor, anchor['length'], baseline, room)
+        lo, hi = a.band[0] * anchor['length'], a.band[1] * anchor['length']
+        cap = min(room, int(math.ceil(hi)) + 1)   # a block still open past the band cannot be chosen: stop it there
+        # 3. waves of the remaining budget, band-capped, until one admitted candidate lies in the band. After
+        #    ``--trend-window`` fallbacks in a row the trajectory's steps draw only the anchor (its teacher actions
+        #    are far from what the student reasons toward), until a step fills again
+        if a.trend_window and trend >= a.trend_window:
+            return self._result(candidates, None, anchor['length'], baseline, room, trend_skip=True)
+        unhinted_left = max(0, a.unhinted - sum(c['origin'] == 'unhinted' for c in candidates))
+        waves = [[('unhinted', context, cap)] * unhinted_left + [('hinted', None, cap)] * min(1, a.hinted),
+                 [('hinted', None, cap)] * max(0, a.hinted - 1)]
+        hinted_context = None
+        for wave in waves:
+            if not wave:
+                continue
+            if any(origin == 'hinted' for origin, _, _ in wave) and hinted_context is None:
+                hinted_context = hint_context(context, hint_ids, self.im_start)
+                self.prefill(hinted_context)   # once, before its parallel draws
+            jobs = [(origin, ctx if origin == 'unhinted' else hinted_context, c) for origin, ctx, c in wave]
+            drawn = self._candidates(jobs, room, rng)
+            candidates += drawn
+            self._evaluate(context, calls, t, drawn, baseline, hinted, context_text)
+            inside = [c for c in drawn if c['admitted'] and lo <= c['length'] <= hi]
+            if inside:
+                return self._result(candidates, max(inside, key=lambda c: c['improvement']), anchor['length'],
+                                    baseline, room)
+        return self._result(candidates, None, anchor['length'], baseline, room)
+
+    def _step_parallel(self, context, calls, t, context_text, rng, room):
+        """Every candidate drawn at once with the whole room, then chosen (``--draw parallel``)."""
+        a = self.args
+        hint_ids, hinted = self.hint(calls, t)
+        hinted_context = hint_context(context, hint_ids, self.im_start)
+        # shared prefixes once (LFM3's conv state is cached at track points: concurrent copies would each prefill)
+        self.prefill(context)
+        self.prefill(hinted_context)
+        jobs = [('unhinted', context, room)] * a.unhinted + [('hinted', hinted_context, room)] * a.hinted
+        with ThreadPoolExecutor(2) as pool:
+            base_future = pool.submit(self.score, context, [self.close], calls, t)
+            candidates = self._candidates(jobs, room, rng)
+            baseline, _, _, _ = base_future.result()
+        self._evaluate(context, calls, t, candidates, baseline, hinted, context_text)
+        chosen, anchor = select(candidates, a.band, rng)
+        return self._result(candidates, chosen, anchor, baseline, room)
 
     def episode(self, item, renderer):
         started = time.time()
@@ -480,14 +553,19 @@ class Filler:
             context = [int(i) for i in calls[0]['prompt']]
             context_text = self.text(context, special=True)
             fills = []
+            trend = 0   # consecutive drawn steps of this trajectory that fell back
             for t, call in enumerate(calls):
                 if t < len(done):     # finished before a stop: its block is the history the later steps reason on
                     fill = done[t]
                     resumed += 1
                 else:
-                    fill = self.step(context, calls, t, context_text, rng)
+                    fill = self.step(context, calls, t, context_text, rng, trend)
                     fill['policy'] = (self.actor.policy() or {}).get('checkpoint_sha256')
                 fills.append(fill)
+                if fill.get('kind') == 'filled':
+                    trend = 0
+                elif fill.get('kind') == 'fallback':
+                    trend += 1
                 block = fill.get('reasoning') or ([self.close] if call['cut'] is not None else [])
                 new = block + [int(i) for i in call['action']] if call['cut'] is not None else \
                     [int(i) for i in call['sample']]
@@ -526,8 +604,9 @@ def prefer(episodes, rates):
 
 
 def settings(args):
-    return {k: getattr(args, k) for k in ('unhinted', 'hinted', 'hint_horizon', 'score_horizon', 'max_tokens', 'band',
-                                          'close_floor', 'min_improvement', 'ratio_floor', 'top_p', 'max_len')}
+    keys = ('unhinted', 'hinted', 'hint_horizon', 'score_horizon', 'max_tokens', 'band', 'close_floor', 'min_improvement',
+            'ratio_floor', 'top_p', 'max_len', 'draw', 'skip_certain_nll', 'trend_window')
+    return {k: getattr(args, k, None) for k in keys}
 
 
 def partial_path(directory, key):
@@ -591,7 +670,7 @@ def generate(args):
     banned = (json.loads(manifest.read_text()).get('serving') or {}).get('banned_token_ids', []) if manifest.exists() else []
     stops = [i for i in (tokenizer.token_to_id('<|im_end|>'), tokenizer.token_to_id('<|endoftext|>')) if i is not None]
     funnel = collections.defaultdict(collections.Counter)
-    episodes = teacher_episodes(works, held, funnel)
+    episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on')
     done = done_keys(out)
     todo = [e for e in episodes if e['key'] not in done]
     random.Random(args.seed).shuffle(todo)
@@ -755,8 +834,10 @@ def length_weights(records, cap):
     for record in records:
         for chain in record['chains']:
             for fill in chain['calls']:
-                for c in fill.get('candidates', ()):
-                    if c['origin'] == 'unhinted' and c['closed']:
+                cands = fill.get('candidates', ())
+                staged = any('anchor' in c for c in cands)   # staged draws: only anchors drew with the whole room
+                for c in cands:
+                    if c['origin'] == 'unhinted' and c['closed'] and (c.get('anchor') or not staged):
                         own[length_bin(c['length'])] += 1
                     if c.get('selected'):
                         chosen[length_bin(c['length'])] += 1
@@ -1041,6 +1122,17 @@ def build_parser():
     g.add_argument('--max-tokens', type=int, default=4096, help='reasoning cap per candidate')
     g.add_argument('--max-len', type=int, default=32000)
     g.add_argument('--band', type=float, nargs=2, default=(0.67, 1.5))
+    g.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
+                   help='also fill verified successes whose replay display drifted from the recording '
+                        '(sft_sources.drifted_success): the filled block is chosen under today\'s display')
+    g.add_argument('--draw', choices=('staged', 'parallel'), default='staged',
+                   help='staged: the anchor first, then band-capped waves until one admitted candidate is in band; '
+                        'parallel: every candidate at once with the whole room')
+    g.add_argument('--skip-certain-nll', type=float, default=0.,
+                   help='no draws where the teacher action\'s NLL per token after an empty block is below this (default '
+                        'off: on sft-v7\'s first fills those steps were the cheapest kept ones)')
+    g.add_argument('--trend-window', type=int, default=3,
+                   help='after this many fallbacks in a row a trajectory draws only anchors until a step fills (0: off)')
     g.add_argument('--close-floor', type=float, default=0.01)
     g.add_argument('--min-improvement', type=float, default=0.0)
     g.add_argument('--ratio-floor', type=float, default=None)

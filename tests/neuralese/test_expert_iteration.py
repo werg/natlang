@@ -182,6 +182,12 @@ def test_cycle_builds_the_works_own_neuralese_graph_by_default(tmp_path):
     assert command[command.index('--work') + 1] == str(tmp_path / 'w')
     assert command[command.index('--out') + 1] == str(cycle.dir / 'neuralese-graph-own')
     assert [command[i + 1] for i, a in enumerate(command) if a == '--exclude-run'] == ['grpo-v2/', 'grpo-v4/run1']
+    current = command[command.index('--current-surface-run') + 1]
+    import re
+    label = 'rl:' + '/'.join(cycle.collect_dir.parts[-2:])
+    assert re.search(current, label) and not re.search(current, 'rl:grpo-v4/run2')
+    assert sft_sources.current_surface_run(types.SimpleNamespace(current_surface_run=[current]), {'run': label})
+    assert not sft_sources.current_surface_run(types.SimpleNamespace(current_surface_run=[]), {'run': label})
     import sys
     argv = sys.argv
     try:
@@ -313,3 +319,19 @@ def test_cycle_pipeline_window_and_reuse_flags_default_on():
     parsed = _cycle_args(['--dir', 'd', '--name', 'n', '--start', 's', '--commit', 'c'])
     assert not parsed.no_pipeline and not parsed.no_fill_window and not parsed.no_held_reuse
     assert parsed.fill_inflight == 32 and parsed.next_commit == 'origin/main' and parsed.rejected_collection == 'auto'
+
+
+def test_wait_ends_the_cycle_when_the_stage_unit_failed(monkeypatch):
+    """sft-v7's data unit failed (unregistered archive path) and the stage was still marked done."""
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        failed = argv[:4] == ['systemctl', '--user', 'is-failed', '-q']
+        return type('R', (), {'returncode': 0 if failed else 3})()
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    with pytest.raises(SystemExit, match='x-data failed'):
+        ei.Cycle.wait(object.__new__(ei.Cycle), 'x-data')
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: type('R', (), {'returncode': 3})())
+    ei.Cycle.wait(object.__new__(ei.Cycle), 'x-data')     # ended cleanly: returns

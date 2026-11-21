@@ -513,7 +513,7 @@ class Registry:
                     except OSError:
                         listings[d] = []
                 return listings[d]
-            for ident, ds in self.datasets.items():
+            for ident, ds in self._by_admission():
                 try:
                     p = absolute(ds['path'])
                 except (ValueError, KeyError):
@@ -554,12 +554,18 @@ class Registry:
             self._index = index
         return self._index
 
+    def _by_admission(self):
+        """Datasets with inventory-only entries last: a producer's record of a directory wins over the backfill's
+        inventory placeholder for the same path (the 2026-11-21 04:20 backfill registered the then-empty ei-sources
+        WORK as an inventory, which then refused sft-v7's build input although sft_sources had recorded it)."""
+        return sorted(self.datasets.items(), key=lambda item: item[1].get('admission') == INVENTORY)
+
     def _lexical(self):
         """(key -> dataset id of datasets whose includes are literal, glob bases): the registry's own paths, no
         filesystem call (``find``'s fast path)."""
         if getattr(self, '_lexical_index', None) is None:
             keys, bases, roots = {}, [], {}
-            for ident, ds in self.datasets.items():
+            for ident, ds in self._by_admission():
                 try:
                     p = absolute(ds['path'])
                 except (ValueError, KeyError):
@@ -588,7 +594,7 @@ class Registry:
         filesystem call; building the full index lists and resolves every dataset directory, minutes under HDD load)."""
         given = os.path.normpath(os.path.abspath(str(path)))
         keys, bases, roots = self._lexical()
-        if given in roots and given not in keys:
+        if given in roots and (given not in keys or self.datasets[keys[given]].get('admission') == INVENTORY):
             return self.datasets[roots[given]]
         probe = given
         while True:
@@ -636,7 +642,8 @@ class Registry:
                 src._keymap.setdefault(k, ident)
         best = None
         for c in candidates:      # the deepest ancestor (or the path itself) that a dataset names
-            if c in src._roots and c not in src._keymap:
+            if c in src._roots and (c not in src._keymap or
+                                    self.datasets[src._keymap[c]].get('admission') == INVENTORY):
                 return self.datasets[src._roots[c]]
             probe = c
             while True:

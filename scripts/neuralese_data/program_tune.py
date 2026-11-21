@@ -239,10 +239,11 @@ def sampled_episodes(directory):
             yield f"{label}:{row['group']}:{row['sample']}", row['task_id'], 'sampled', row['turns']
 
 
-def replayed_episodes(work, family, stats):
+def replayed_episodes(work, family, stats, drifted=True):
     """(key, task id, source, turns) of replay-verified successes in an `sft_sources.py` work directory: the current
-    runtime's replay of each recorded success (replay/<name>/rollouts.jsonl)."""
-    from sft_sources import zstd_lines
+    runtime's replay of each recorded success (replay/<name>/rollouts.jsonl). ``drifted``: also teacher successes whose
+    replay display drifted (``sft_sources.drifted_success``, the rule ``verified_episodes`` applies)."""
+    from sft_sources import drifted_success, zstd_lines
     work = Path(work)
     replays = {}
     for line in (work / 'replay.jsonl').open():
@@ -260,7 +261,9 @@ def replayed_episodes(work, family, stats):
             if replay is None:
                 stats['not_replayed'] += 1
                 continue
-            if replay.get('outcome') != 'task_success' or not replay.get('exact'):
+            if replay.get('outcome') != 'task_success' or not (
+                    replay.get('exact') or (drifted and episode.get('source') == 'teacher'
+                                            and drifted_success(replay, episode['turns']))):
                 stats['replay_failed'] += 1
                 continue
             replayed = read_jsonl(work / 'replay' / replay['name'] / 'rollouts.jsonl')[0]
@@ -275,7 +278,8 @@ def rows(args):
              'rejected_turns': 0, 'unverified_turns': 0, 'tasks': set(), 'by_source': {}, 'sources': []}
     episodes = []
     for work in args.sources or ():
-        episodes.append(replayed_episodes(work, record['family'], stats))
+        episodes.append(replayed_episodes(work, record['family'], stats,
+                                          drifted=getattr(args, 'admit_drifted', 'on') == 'on'))
     for sample in args.rollouts or ():
         stats['sources'].append({'path': str(Path(sample).resolve()), 'kind': 'support sample'})
         episodes.append(sampled_episodes(sample))
@@ -561,6 +565,8 @@ def main(argv=None):
     r = sub.add_parser('rows')
     r.add_argument('--dir', required=True)
     r.add_argument('--sources', action='append', help='an sft_sources.py work directory (extracted and replayed)')
+    r.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
+                   help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
     r.add_argument('--rollouts', action='append',
                    help='a held_eval measure directory of DIR/support/manifest.json (on-policy support samples)')
     p = sub.add_parser('plan')

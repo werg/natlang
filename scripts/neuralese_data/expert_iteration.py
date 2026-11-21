@@ -40,6 +40,7 @@ import json
 import os
 import random
 import signal
+import re
 import subprocess
 import sys
 import threading
@@ -460,15 +461,19 @@ class Cycle:
                    for suffix in ('', '-waiter'))
 
     def wait(self, unit, poll=60):
+        """Until ``unit`` ends; a failed unit ends the cycle (its stage must not be marked done)."""
         time.sleep(20)
         while self.active(unit):
             time.sleep(poll)
+        if subprocess.run(['systemctl', '--user', 'is-failed', '-q', f'{unit}.service']).returncode == 0:
+            raise SystemExit(f'{unit} failed: see its log; rerun the cycle to resume')
 
     def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
         ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin)."""
         if not self.active(unit):
-            shell = ' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
+            subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}.service'], stderr=subprocess.DEVNULL)
+            shell =' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
             values = {**self.env, **({'NATLANG_REPO': str(repo), 'PYTHONPATH': f'{repo}/training/neuralese:{repo}'}
                                      if repo else {})}
             env = ['/usr/bin/env', *[f'{k}={values[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH', 'HF_HUB_OFFLINE',
@@ -805,7 +810,9 @@ class Cycle:
         name = f'episodes-{self.a.name}'
         if not (w / f'{name}-extract.json').exists():
             steps.append(self.py('sft_sources.py', 'extract', '--work', w, '--rl',
-                                 f'{self.collect_dir}:{self.collect_dir / "rollouts"}', '--out-name', name))
+                                 # groups are read live from the run dir; the collection writes no zst archive, so
+                                 # the archive is the (registered) collect dir itself
+                                 f'{self.collect_dir}:{self.collect_dir}', '--out-name', name))
         steps.append(self.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                              '--runtime-repo', self.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
@@ -814,8 +821,9 @@ class Cycle:
                           '--out', str(self.a.fill), '--corpus', str(self.dir / 'filled'), *failed])
         lines = [' '.join(map(_quote, s)) for s in steps]
         if not self.a.no_own_neuralese_graph:
-            lines.append(' '.join(map(_quote, self.own_neuralese_graph_command()))
-                         + " || echo 'own neuralese-graph failed: the build runs without it' >&2")
+            # a failure ends the stage (set -e): sft-v7's silently fell back to a mix without the student's own consumer
+            # calls, the ran-out fix; --no-own-neuralese-graph is the deliberate opt-out
+            lines.append(' '.join(map(_quote, self.own_neuralese_graph_command())))
         script = self.dir / 'data.sh'
         script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
         self.ledger(f'{self.a.name}-data', 8, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
@@ -838,7 +846,9 @@ class Cycle:
         sft-v5 (DECISIONS 2026-11-21 "ran-out") showed the student calling Neuralese consumers twice as often while
         they loop ~7.6 calls each. ``--no-own-neuralese-graph`` opts out."""
         return self.py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
-                       '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1')
+                       '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
+                       # this cycle's collection ran on the cycle's pin: its surfaces are current
+                       '--current-surface-run', '^rl:' + re.escape('/'.join(self.collect_dir.parts[-2:])) + '$')
 
     def build_stage(self):
         aux = list(self.a.aux)
