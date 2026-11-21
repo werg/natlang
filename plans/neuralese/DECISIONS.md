@@ -6363,3 +6363,40 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   code is unchanged from its pin 4a261bea4 (the subagent checked sft_sources, exp0_sft and serve). `--fill-repo` is an
   own flag, so sft-v9 goes back to its own pin.
 - sft-v7's candidate held restarted on Pop at 20:45 after the admission failure (b36ee40c2).
+
+## 2026-11-21 21:35 sft_sources build: candidates render in worker processes (`--workers`, default on)
+
+- **Profile** (py-spy, first 20 min of sft-v7's build rebuilt in a scratch dir): 76% rendering (`call_row` ->
+  `target_items`; 61% of all samples in the HF tokenizer's `_encode_plus`), and each episode rendered **twice**
+  (`EpisodeSizes.measure` 39%, then `admit` 38%). 21% `core_candidates`: JSON decoding of every extracted episode
+  (11%), MinHash/shingles (5%), `teacher_coverage` re-reading a group's cases.jsonl per manifest record (3%).
+- **Built** (`sft_sources.py`):
+  - `RenderAhead`: `render_candidate` (turns + per call `render_call`) of the candidates each loop walks (teacher,
+    own, validation), in loop order, by `--workers` spawned processes up to 4 x workers ahead; the selection stays
+    sequential, so budgets and caps see exactly the serial sizes. Size measurement and admission share one render.
+    `call_row` = `render_call` + `rendered_row` (unchanged output; grpo's TeacherDemos and filled_reasoning keep calling it).
+  - Byte identity across processes: pickle memoizes dtypes by identity, so arrays that crossed a process boundary are
+    re-viewed with numpy's canonical dtype (`rendered_row`); without it chains.pkl differs while equal in content.
+  - `all_episodes(work, workers, light, keep)`: workers parse episode lines; `light` sends back each episode with its
+    turns replaced by `episode_facts` (MinHash, backend refusal, sibling ambiguity), `keep` drops non-matching ones in the
+    worker. `core_candidates` reads light episodes; `neuralese-graph`/`neuralese-text` read `keep=has_native_state` and
+    `replay_surfaces` (parallel exact-replay surface scan, one implementation for both). `teacher_coverage` reads each
+    group's cases once. `cases.jsonl`'s quadratic task filter is a set.
+  - `--workers` on build, neuralese-graph and neuralese-text (default min(16, cpus - 4)); `--workers 1` is the serial
+    path. expert_iteration's data stage budget 8 -> 12 GB (graph reader processes).
+- **Verified:** sft-v7's mix rebuilt into a scratch dir (same inputs; `--admit-drifted off` and the treatment file
+  explicit, as b17d's build had them) with 12 workers: chains.pkl **8607730e** (identical), and rows.jsonl.zst,
+  val-own.pkl, val-teacher.pkl, cases.jsonl byte-identical; build.json differs only in paths, provenance and the
+  growing gap-v1 manifest count. Wall **848 s (14.1 min) vs 1 h 42 min** (with sft-v8's collection and an operator fit
+  on the machine). sft-v7's own neuralese-graph rebuilt with 12 workers: chains **6ad26b42** (identical), 127 s.
+  Tests: `test_render_ahead_gives_the_serial_results_and_byte_identical_rows`,
+  `test_light_episodes_read_by_workers_equal_the_serial_reading`,
+  `test_replay_surfaces_and_kept_episodes_read_by_workers_equal_the_serial_reading` (90 passed with
+  test_expert_iteration and test_grpo_sampling_supply).
+- **Left out:** the October path (`--october`, off in every cycle) still renders in the main process through
+  `admit(c, turns)`; grpo `TeacherDemos.take` renders a few episodes per step online (not a build); filled_reasoning's
+  generate is bound by the actor, not rendering. The remaining build time is ~4 min of setup (episode reading,
+  held closure, prefer-unseen rows) and ~9.5 min of rendering at 12 workers on a shared machine.
+- **Not checked:** the new `--workers 1` path on the full sft-v7 inputs (tests cover equality; the serial old-code
+  rebuild runs as `sftbuild-base-1` for the before time); memory at 16 workers (12 workers peaked 10.6 GB; the cycle's
+  build budget is 24 GB).

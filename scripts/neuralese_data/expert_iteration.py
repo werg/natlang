@@ -826,7 +826,8 @@ class Cycle:
             lines.append(' '.join(map(_quote, self.own_neuralese_graph_command())))
         script = self.dir / 'data.sh'
         script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
-        self.ledger(f'{self.a.name}-data', 8, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
+        # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
+        self.ledger(f'{self.a.name}-data', 12, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
         self.mark('data')
 
     def failed_policies(self):
