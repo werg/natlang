@@ -24,7 +24,7 @@ import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } 
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { dialectBinding, isNeuraleseRef, isTeacherTextNeuraleseId, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseUnsupportedError, sourceWithLiteralCalls,
+import { dialectBinding, isNeuraleseRef, isNoNeuraleseWriterFault, isTeacherTextNeuraleseId, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseNoWriterError, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
@@ -231,6 +231,10 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
   'capture-conflict': 'Another caller changed that captured variable; run the eval again with its current value.',
 };
 /** Every tool the runtime can apply; a call's offer is a subset. */
+/** A return_result value that is a single `${...}` placeholder: return_result sends its value as written. */
+export const PLACEHOLDER_VALUE = /^\$\{[^{}]*\}$/;
+export const PLACEHOLDER_ADVICE = 'the value itself: return_result fills in no placeholder, so write out the text or ' +
+  'value you mean';
 const NATIVE_TOOLS = ['eval', 'read_page', 'compact_history', 'return_result', 'blocked', 'failed',
   'read_code', 'edit_code', 'diff_code',
   'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor'];
@@ -613,6 +617,17 @@ const itemRef = (container: Record<string, Value>, key: string, type: Type, env:
     set: value => { container[key] = value; },
     del: () => { delete container[key]; } });
 
+/** The source of type alias `name` as the program's items declare it (their folders' types.ts), nearest item first. */
+export function codebaseTypeAlias(codebase: Record<string, unknown>, name: string): string | undefined {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return undefined;
+  let level = Object.values(codebase as Record<string, ItemRecord>);
+  for (let depth = 0; level.length && depth < 64; depth++) {
+    for (const item of level) if (item.kind !== 'namespace' && Object.hasOwn(item.types ?? {}, name)) return item.types[name];
+    level = level.flatMap(item => Object.values(item.codebase ?? {}));
+  }
+  return undefined;
+}
+
 /** Find a codebase item by dotted path; module exports resolve to their module's source. */
 export function findCodebaseItem(codebase: Record<string, unknown>, name: string):
   { path: string[]; record: ItemRecord } | undefined {
@@ -822,8 +837,8 @@ export class NativeRuntime {
   }): Promise<Value> {
     const port = this.neuralese?.port;
     const type = formatType(wanted), bodySha = hexDigest(text);
-    if (!port) throw new NeuraleseUnsupportedError(`${metadata.sourceKind === 'typed-json-result' ? 'plain JSON' : 'plain-text'} ` +
-      `${type} needs a configured Neuralese write port`);
+    if (!port) throw new NeuraleseNoWriterError(`${metadata.sourceKind === 'typed-json-result' ? 'plain JSON' : 'plain-text'} ` +
+      `${type} cannot be written`);
     // The port writes only its own dialect; a slot of another dialect cannot hold what it writes.
     const wantedDialect = wanted.kind === 'neuralese' && wanted.dialect !== DEFAULT_DIALECT ? wanted.dialect : port.dialect;
     if (wantedDialect !== port.dialect) throw new Reject([{ path: metadata.argumentName ? `argument/${metadata.argumentName}` : 'return',
@@ -1369,6 +1384,13 @@ export class NativeSession {
     return Object.keys(this.lam.codebase).length > 0 && !this.codeEditsDenied();
   }
 
+  /** Whether `name` is a parameter of this call declared Neuralese<T>: its state is in the call's opening message. */
+  neuraleseParameter(name: string): boolean {
+    if (this.lam.type.kind !== 'lambda') return false;
+    const field = this.lam.type.params.fields.find(item => item.name === name);
+    return !!field && this.env.resolve(field.type).kind === 'neuralese';
+  }
+
   /** Whether this call's result is text (a string or Neuralese<string>, with nothing staged). */
   expectsTextResult(): boolean {
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING) return false;
@@ -1574,6 +1596,10 @@ export class NativeSession {
       }
       if (name === 'return_result' && (args.status ?? 'success') === 'success' && Object.hasOwn(args, 'value') &&
           this.lam.type.kind === 'lambda') {
+        // A value that is one `${...}` placeholder would be kept as those characters: return_result fills nothing in
+        // (held-v3 after sft-v5: natlang.read calls returned the text `${value}` 23 of 68 times).
+        if (typeof args.value === 'string' && PLACEHOLDER_VALUE.test(args.value.trim()))
+          throw new Reject([{ path: 'value', code: 'bad-action', expected: PLACEHOLDER_ADVICE }]);
         const value = await this.coerceReturn(args.value, 'return_result', true);
         return record(this.scopeTool(name, { ...args, value }));
       }
@@ -1648,6 +1674,8 @@ export class NativeSession {
         return record(await this.fileTool(name, args));
       return record(this.scopeTool(name, args));
     } catch (error) {
+      // No action can repair a runtime without a Neuralese writer: the run ends rather than the model retrying.
+      if (isNoNeuraleseWriterFault(error)) throw error;
       if (error instanceof Reject) return record(rejected(error));
       return record({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
@@ -1924,6 +1952,14 @@ export class NativeSession {
         const alias = `type ${requested} = ${this.lam.typesSrc[requested]};`;
         return { kind: 'ok', text: alias, value: alias };
       }
+      // A type alias of the program in the callable folder (its types.ts), which this call's own scope need not have:
+      // read_code("Money") answered no-such-function and the declaration was nowhere to read (teacher-gen gap-v1
+      // field-type tasks ended blocked or guessed).
+      const programAlias = name === 'read_code' ? codebaseTypeAlias(this.lam.codebase, requested) : undefined;
+      if (programAlias !== undefined) {
+        const alias = `type ${requested} = ${programAlias};`;
+        return { kind: 'ok', text: alias, value: alias };
+      }
       // A bare method name of a scope service (`certificate` of greenhouse) is read as that service's declaration.
       const owner = name === 'read_code' && /^[A-Za-z_$][\w$]*$/.test(requested) ? Object.entries(availableServices)
         .find(([service, value]) => Object.hasOwn(this.runtime.declarations, service) && value !== null && typeof value === 'object' &&
@@ -1950,6 +1986,8 @@ export class NativeSession {
         `${requested} is a native tool name but is not offered in this call` :
         requested === this.lam.functionName ? `${requested} is the call you are executing: the opening message has all of its ` +
           `signature and instructions. ${SELF_CALL_ADVICE.replace(/\.$/, '')}` :
+        this.neuraleseParameter(requested) ? `${requested} is this call's Neuralese input: its content is in your opening ` +
+          `message, so use it from there, or write await read(${requested}) in eval for an ordinary copy` :
         inScope.includes(requested) ? `${requested} is a value in this call's eval scope: inspect it with eval, for example console.log(${requested})` :
         // A text-typed call with no functions of its own (a writer) has nothing to read: it answers with its text.
         !own.length && this.expectsTextResult() ? 'This call returns text: send the text itself as the value of return_result' :
@@ -2491,7 +2529,7 @@ export class NativeSession {
         stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
       const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}` +
         // A Neuralese value is shown as its state; the words beside it say what it is and how to use it.
-        (isNeuraleseRef(value) ? ` (${value.$neuralese.type}: pass it on as is, or read it with read(${name}))` : ''));
+        (isNeuraleseRef(value) ? ` (${value.$neuralese.type}: pass it on as is, or write await read(${name}) for an ordinary copy)` : ''));
       // Variant effect-receipt: a successful eval lists the service calls it completed, as a failed one does, so a model
       // does not rerun an effectful eval that already succeeded.
       const performed = new Map<string, number>();
@@ -2571,6 +2609,8 @@ export class NativeSession {
     } catch (error) {
       // A failed eval (an error, a rejected value, its timeout) stops the natural-language calls it started.
       evalStop?.abort(new Error('the eval that started this call failed'));
+      // A runtime without a Neuralese writer (here or in a call the eval started) is not the model's to repair.
+      if (isNoNeuraleseWriterFault(error)) throw error;
       const message = error instanceof Error ? error.message : String(error);
       const note = this.captureScopeFailure(error instanceof EvalFailure ? 'runtime' : 'boundary',
         code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error, traceMark);

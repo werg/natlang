@@ -150,7 +150,8 @@ export function neuraleseRefSentinel(ref:NeuraleseRef):string {
  * to do with it. The reference's JSON (`{"$neuralese":{…,"id":"nzs1_…"}}`) read as garbled data, and its id as a page to read.
  */
 export function neuraleseDisplayText(ref: NeuraleseRef): string {
-  return `[${ref.$neuralese.type} value: opaque here; pass it on as is, or read it with read(value)]`;
+  return `[${ref.$neuralese.type} value: opaque in code; its content is where it was given to you, so pass it on as is, ` +
+    'or write await read(value) for an ordinary copy]';
 }
 
 /** The block a text consists of exactly, if it is one sentinel. */
@@ -239,6 +240,28 @@ export async function writeLiterals(text: string, port: NeuralesePort | undefine
 export class NeuraleseUnsupportedError extends Error {
   readonly code = 'neuralese-unsupported-backend';
   constructor(detail: string) { super(`neuralese-unsupported-backend: ${detail}`); this.name = 'NeuraleseUnsupportedError'; }
+}
+
+/** What every no-writer fault says, so it is recognised across the eval boundary (which keeps only an error's message). */
+export const NO_NEURALESE_WRITER = 'this runtime has no Neuralese writer; run it with a Neuralese port ' +
+  '(a native-state server, or the literal-text transport of a remote teacher)';
+
+/**
+ * A declared Neuralese<T> boundary needs a writer and the runtime has none: a fault of the runtime's configuration that
+ * no model action can repair. It ends the run instead of becoming a tool result (teacher-gen-20261119/gap-v1: models
+ * fed this error retried the same return until the 40-call budget, in 1,833 of 2,191 failed teacher episodes).
+ */
+export class NeuraleseNoWriterError extends NeuraleseUnsupportedError {
+  constructor(detail: string) { super(`${detail}: ${NO_NEURALESE_WRITER}`); this.name = 'NeuraleseNoWriterError'; }
+}
+
+/** Whether `error`, or any error in its cause chain, is a no-writer configuration fault (see NeuraleseNoWriterError). */
+export function isNoNeuraleseWriterFault(error: unknown): boolean {
+  for (let current = error, depth = 0; current && depth < 16; current = (current as { cause?: unknown }).cause, depth++) {
+    if (current instanceof NeuraleseNoWriterError) return true;
+    if (current instanceof Error && current.message.includes(NO_NEURALESE_WRITER)) return true;
+  }
+  return false;
 }
 
 /** A soft value met a reader or slot of another dialect. Values are never reused across dialects (NEURALESE_DIALECTS.md). */

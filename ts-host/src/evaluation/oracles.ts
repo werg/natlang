@@ -9,7 +9,7 @@ export { jsonStringRecordCanonical };
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'];
 /** Baseline answer comparison version; explicit specialized comparators carry their own verdict version. */
-export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/4';
+export const ANSWER_COMPARISON_VERSION = answerEquivalenceEnabled() ? 'normalized-decimal-exact/5' : 'normalized-decimal-exact/4';
 export type NumericListFieldSpec = { key: string; separator: '; '; empty_value: 'none' };
 export type SemanticStructuredComparisonSpec = { schema_version: string; unordered_paths: string[]; prose_paths: string[];
   ordered_paths?: string[]; witness_review_required?: boolean; witness_policy?: string; prose_policy?: string };
@@ -229,8 +229,32 @@ function jsonStringRecordAnswerCanonical(value: unknown, numericKeys: unknown, r
     jsonStringRecordWithRadixFieldsCanonical(value, radixFields) : jsonStringRecordWithNumericKeysCanonical(value, numericKeys);
 }
 
+/**
+ * Answer equivalences that hold for any reader (2026-11-21 teacher-failure audit): a number written as a word ("eight",
+ * "twenty-one"; a whole normalized answer "none" is 0) equals its digits, digit grouping ("1,145") and diacritics
+ * ("Atatürk") do not matter, whitespace next to type and list punctuation ("string | null") does not matter, and in
+ * extractive QA a trailing parenthetical, compound spacing ("weather stripping") and a unit word beside the same number
+ * ("14 surgeries" for "14") do not either. NATLANG_QA_EQUIVALENCE=0 restores the earlier comparison.
+ */
+export function answerEquivalenceEnabled(): boolean {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_QA_EQUIVALENCE !== '0';
+}
+const UNITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const NUMBER_WORD = new RegExp(`\\b(?:(${TENS.slice(2).join('|')})(?:[- ](${UNITS.slice(1, 10).join('|')}))?|(${UNITS.join('|')}))\\b`, 'gu');
+/** Lower-cased text with number words as digits, digit-grouping commas and diacritics removed. */
+export function foldAnswerText(text: string): string {
+  return text.normalize('NFKD').replace(/\p{M}/gu, '').normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/(?<=\d),(?=\d{3}(?!\d))/g, '')
+    .replace(NUMBER_WORD, (_, tens?: string, unit?: string, single?: string) =>
+      String(single !== undefined ? UNITS.indexOf(single) : TENS.indexOf(tens!) * 10 + (unit ? UNITS.indexOf(unit) : 0)));
+}
 function normalizeText(value: unknown): string {
-  const text = String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
+  let text = String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
+  if (answerEquivalenceEnabled()) {
+    text = text === 'none' ? '0' : foldAnswerText(text).replace(/\s*([|&,;:()[\]{}<>=])\s*/g, '$1');
+  }
   const number = text.replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, '');
   if (number.length <= 512 && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(number)) {
     // Reuse only TaTQA's exact decimal representation; generic normalized answers must never
@@ -250,7 +274,7 @@ function normalized(value: unknown): string {
   return normalizeText(value);
 }
 function qaAnswerText(value: string): string {
-  const normalized = value.normalize('NFKC').toLocaleLowerCase('en-US')
+  const normalized = (answerEquivalenceEnabled() ? foldAnswerText(value) : value.normalize('NFKC').toLocaleLowerCase('en-US'))
     .replace(/[\p{P}\p{S}]/gu, '');
   return normalized.split(/\s+/u).filter(token => token && !['a', 'an', 'the'].includes(token)).join(' ');
 }
@@ -268,12 +292,13 @@ export function qaStringMapCanonical(value: unknown): string | null {
     .map(([key, answer]) => [key, qaAnswerText(answer as string)]));
 }
 function words(value: unknown, qa = false): string[] {
-  const tokens = String(Array.isArray(value) ? value.join(' ') : value ?? '').normalize('NFKC')
-    .toLocaleLowerCase('en-US').match(/[\p{L}\p{N}]+/gu) ?? [];
+  const text = String(Array.isArray(value) ? value.join(' ') : value ?? '');
+  const tokens = (qa && answerEquivalenceEnabled() ? foldAnswerText(text) : text.normalize('NFKC').toLocaleLowerCase('en-US'))
+    .match(/[\p{L}\p{N}]+/gu) ?? [];
   return qa ? tokens.filter(word => !['a', 'an', 'the'].includes(word)) : tokens;
 }
 function qaNumbers(value: unknown): string[] {
-  return String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
+  return (answerEquivalenceEnabled() ? foldAnswerText(String(value)) : String(value)).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
     decimalForms(token)?.exact ?? token).sort() ?? [];
 }
 /** A yes/no answer's polarity: `true`, `"yes"` and `"true"` are true, `false`, `"no"` and `"false"` false, else undefined. */
@@ -334,12 +359,40 @@ export function qaAnswerCores(actual: unknown, expected: unknown, question?: str
     return tokens;
   };
   const possessorFree = actual.replace(QA_POSSESSOR, '');
-  for (const text of new Set([actual, possessorFree])) {
+  // A trailing parenthetical is an aside ("Buffalo (bison)", "Léopoldville (Kinshasa)"): the answer is what precedes it.
+  const asideFree = answerEquivalenceEnabled() ? actual.replace(/\s*\([^()]*\)\s*$/u, '') : actual;
+  for (const text of new Set([actual, possessorFree, asideFree, asideFree.replace(QA_POSSESSOR, '')])) {
     const core = echoFree(words(text, true));
     if (core.length) cores.add(core.join(' '));
   }
   cores.delete(words(actual, true).join(' '));
   return [...cores].filter(core => !core.split(' ').some(word => QA_HEDGES.has(word) && !gold.has(word)));
+}
+/**
+ * Extractive QA spellings of the same answer: compound spacing ("weather stripping" / "weatherstripping"), or the same
+ * nonempty numbers where one side adds at most two words around the other that are not hedges. Words the answer adds
+ * must restate the question ("14 surgeries" / "14" for "How many surgeries ...?"; "14 days" is not offered); words only
+ * the gold has are its unit ("22" / "22 provinces"). Off with NATLANG_QA_EQUIVALENCE=0.
+ */
+export function qaSameAnswer(actual: unknown, expected: unknown, question?: string): boolean {
+  if (!answerEquivalenceEnabled() || typeof actual !== 'string' || typeof expected !== 'string') return false;
+  const got = words(actual, true), want = words(expected, true);
+  if (!got.length || !want.length) return false;
+  if (got.join('') === want.join('')) return true;
+  const numbers = qaNumbers(actual);
+  if (!numbers.length || canonical(numbers) !== canonical(qaNumbers(expected))) return false;
+  const [short, long] = got.length <= want.length ? [got, want] : [want, got];
+  if (long.length - short.length > 2) return false;
+  const gold = new Set(want);
+  for (let start = 0; start + short.length <= long.length; start++) {
+    if (!short.every((word, index) => long[start + index] === word)) continue;
+    const extra = [...long.slice(0, start), ...long.slice(start + short.length)];
+    if (!extra.every(word => !QA_HEDGES.has(word) || gold.has(word))) return false;
+    if (long === want) return true;
+    const asked = new Set(question ? words(question, true) : []);
+    return extra.every(word => asked.has(word));
+  }
+  return false;
 }
 /** Multiset token F1; repeated words count only when they occur on both sides. */
 export function spanF1(actual: unknown, expected: unknown, qa = false): number {
@@ -981,9 +1034,19 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     return { accepted: candidates.some(candidate => answerListEqual(actual, candidate)), level, comparison_version: 'answer-list/1' };
   if (level === 'normalized' && spec.normalization === 'qa-alias-map') {
     const threshold = typeof spec.threshold === 'number' ? probability(spec.threshold, 'qa-alias-map') : 0.8;
-    const results = candidates.map(candidate => qaAliasMapScore(actual, candidate, (got, gold) => spanF1(got, gold, true), threshold));
+    // Each answer is compared as a span-QA answer: F1, then (with answer equivalence) polarity, the whole gold span,
+    // an answer's core, and the same answer spelled differently.
+    const equivalence = answerEquivalenceEnabled();
+    const score = (got: unknown, gold: unknown): number => {
+      const f1 = spanF1(got, gold, true);
+      if (!equivalence || f1 >= threshold) return f1;
+      const same = polarity(got) !== undefined && polarity(got) === polarity(gold) || containsQaSpan(got, gold) ||
+        qaSameAnswer(got, gold) || qaAnswerCores(got, gold).some(core => spanF1(core, gold, true) >= threshold);
+      return same ? 1 : f1;
+    };
+    const results = candidates.map(candidate => qaAliasMapScore(actual, candidate, score, threshold));
     const best = results.find(result => result.accepted) ?? results[0]!;
-    return { accepted: best.accepted, level, comparison_version: 'qa-alias-map/1',
+    return { accepted: best.accepted, level, comparison_version: equivalence ? 'qa-alias-map/2' : 'qa-alias-map/1',
       ...(best.failed.length ? { verdict: `keys below threshold: ${best.failed.join(', ')}` } : {}) };
   }
   const registered = level === 'normalized' ? recordComparator(spec.normalization) : undefined;
@@ -1019,6 +1082,8 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
       const core = Math.max(0, ...candidates.flatMap(candidate =>
         qaAnswerCores(actual, candidate, context.question).map(text => spanF1(text, candidate, true))));
       if (core >= threshold) return { accepted: true, level, score: core, comparison_version: 'qa-span-core/1' };
+      if (candidates.some(candidate => qaSameAnswer(actual, candidate, context.question)))
+        return { accepted: true, level, score, comparison_version: 'qa-same-answer/1' };
     }
     if (score < threshold && !judge && 'rubric' in spec && spec.rubric)
       return { accepted: false, level, score, needs_review: true, verdict: 'answer equivalence needs independent review' };

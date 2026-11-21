@@ -850,7 +850,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
               server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None,
               identical_turn_limit=0, neuralese_server=False, drain_file=None,
-              journal_spool_root=None):
+              journal_spool_root=None, text_neuralese=True):
     if provider and (server or chat_completions_url or api_key_env):
         raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
     if (chat_completions_url or api_key_env) and not server:
@@ -1032,7 +1032,12 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 command += ['--provider-request-config', str(provider_request_config)]
         if execution_plans:
             command.append('--execution-plans')
-        text_neuralese_emulation = entry.get('text_neuralese_emulation', False)
+        # A remote transport without the native value channel has no Neuralese writer of its own: without the literal-text
+        # transport every Neuralese<T> result or argument fails with neuralese-unsupported-backend, which the model cannot
+        # repair (teacher-gen-20261119/gap-v1: 1,833 of 2,191 budget/invalid/unresolved teacher episodes looped on it).
+        # Default on for such transports (--no-text-neuralese-emulation opts out); an entry's explicit value wins.
+        text_neuralese_emulation = entry.get('text_neuralese_emulation', bool(
+            text_neuralese and remote and not neuralese_server and 'program_guidance_file' not in entry))
         if not isinstance(text_neuralese_emulation, bool):
             raise ValueError('entry text_neuralese_emulation must be a boolean')
         if text_neuralese_emulation:
@@ -1252,6 +1257,8 @@ if __name__ == '__main__':
     parser.add_argument('--chat-completions-url', help='exact external completion URL, including its API path')
     parser.add_argument('--api-key-env', help='environment variable name only; never pass a key value')
     parser.add_argument('--neuralese-server', action='store_true', help='use native value-channel server transport')
+    parser.add_argument('--no-text-neuralese-emulation', dest='text_neuralese', action='store_false',
+                        help='do not give a remote transport without --neuralese-server the literal-text Neuralese writer (default: give it)')
     parser.add_argument('--chat-request-config', type=Path, help='external HTTP sampling controls passed unchanged to the collector')
     parser.add_argument('--provider-request-config', type=Path, help='explicit provider request controls passed unchanged to the collector')
     parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
@@ -1288,4 +1295,4 @@ if __name__ == '__main__':
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
               args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
               args.identical_turn_limit, args.neuralese_server, args.drain_file,
-              args.journal_spool_root))
+              args.journal_spool_root, args.text_neuralese))

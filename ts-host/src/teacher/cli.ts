@@ -94,7 +94,8 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   const provider = flags.get('--provider');
   if (flags.has('--text-neuralese-emulation') && (collectionRole !== 'teacher' || !provider && !flags.has('--server') ||
-      flags.has('--neuralese-server') || flags.has('--program-guidance-file') || flags.has('--chat-request-config')))
+      flags.has('--neuralese-server') || flags.has('--program-guidance-file')))
+    // Sampling controls (--chat-request-config) are compatible; their x_natlang_guidance needs --neuralese-server (below).
     throw new Error('--text-neuralese-emulation requires teacher role and an explicit provider/server, and excludes native Neuralese/guidance');
   if (flags.has('--neuralese-server') && (!flags.has('--server') || provider))
     throw new Error('--neuralese-server requires --server and excludes Pi');

@@ -20,6 +20,10 @@ receipts and training capture are research interfaces documented in the reposito
 - A `Neuralese<T>` value is an opaque typed reference. Pass the value itself to the next call, a capture or a typed
   result; never rebuild a reference from its artifact ID, and never return an ID or marker as answer text. For a
   string slot that reports `type-mismatch`, read the value through a function that returns the requested type.
+- A call that receives a `Neuralese<T>` argument has its content in the opening message, where the state is shown; it
+  answers from it there. In eval the value stays opaque (`console.log` prints one advice line, `read_code` on its name
+  says where its content is); `await read(value)` gives an ordinary copy at the cost of one more model call, and
+  `return_result` with a `${…}` placeholder value is rejected because nothing fills it in.
 - In conversation history, keep `{ type: 'native_state', id }` parts structured, including inside tool-call arguments.
   Only a complete canonical `nzs1_` ID refers to a state; a shortened one is ordinary text. On
   `neuralese-unknown-native-state`, restore that artifact into the store and retry the same request unchanged.
@@ -29,6 +33,11 @@ receipts and training capture are research interfaces documented in the reposito
 - `neuralese-native-empty-unavailable`: load the native library with its archived empty state.
 - A function declared `returns: Neuralese<string>` turns its final text reply into state through the configured
   writer; a reply that leaves the call without a result is incomplete, not success.
+- A runtime with no Neuralese writer (no native-state server and no literal-text transport) cannot produce a declared
+  `Neuralese<T>` result or argument: the run ends at that boundary with `neuralese-unsupported-backend: … this runtime
+  has no Neuralese writer`, instead of returning the error to the model, since no action can repair it. Configure a
+  writer: serve a native model, or, for a remote teacher, the collector's `--text-neuralese-emulation` (which
+  `run_bonsai_queue.py` gives every provider or HTTP transport without `--neuralese-server`).
 
 ## Student prompt rendering
 

@@ -591,6 +591,32 @@ def test_provider_request_controls_are_forwarded_by_canonical_runner(tmp_path, m
     assert '--provider-request-config' in help_result.stdout
 
 
+@pytest.mark.parametrize('transport, expected', [
+    ({'provider': 'openai-codex'}, True),
+    ({'server': 'http://127.0.0.1:43217'}, True),
+    ({'server': 'http://127.0.0.1:43217', 'neuralese_server': True}, False),
+    ({'provider': 'openai-codex', 'text_neuralese': False}, False),
+])
+def test_remote_transport_without_native_channel_gets_text_neuralese_writer(tmp_path, monkeypatch, transport, expected):
+    """A provider or plain HTTP teacher has no Neuralese writer of its own; without the literal-text transport every
+    Neuralese<T> boundary fails with neuralese-unsupported-backend, which no action can repair."""
+    entry = queue_entry(tmp_path)
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, **transport)
+    assert ('--text-neuralese-emulation' in commands[0].command) is expected
+
+
+def test_entry_text_neuralese_choice_overrides_the_remote_default(tmp_path, monkeypatch):
+    entry = {**queue_entry(tmp_path), 'text_neuralese_emulation': False}
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, provider='openai-codex')
+    assert '--text-neuralese-emulation' not in commands[0].command
+
+
 def test_invalid_provider_controls_fail_before_attempt_start(tmp_path, monkeypatch):
     entry = queue_entry(tmp_path)
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'

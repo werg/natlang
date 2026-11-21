@@ -34,3 +34,22 @@ def test_type_aliases_keep_the_last_member_before_the_closing_brace():
     assert sorted(aliases['HistoricPlan']) == ['areaId', 'drawingId', 'evidenceRef', 'feature', 'revision', 'sourceDate']
     assert aliases['HistoricPlan']['evidenceRef'] == (False, 'Ref')
     assert aliases['Note'] == {'text': (False, 'string'), 'tags': (True, 'string[]')}
+
+
+def test_explore_questions_stay_inside_the_scope_the_task_root_exposes():
+    # gap-v1 audit 2026-11-21: the root `uses` lists only top-level operations, so a namespace folder (qualification/)
+    # is unreachable, and golds naming its functions or types had 0 teacher successes in 94 episodes.
+    files = {
+        'natlang.json': '{}\n',
+        'op.nl': '---\nargs: { request: Req }\nreturns: Out\n---\nRead request.marker and request.target.\n',
+        'op/child.nl': '---\nargs: { request: Req }\nreturns: Out\n---\nCheck request.marker and request.target.\n',
+        'types.ts': 'export type Req = { marker: string; target: string; extra: string }; export type Out = { a: string; b: string; c: string };\n',
+        'qualification/check.nl': '---\nargs: { request: Req, gate: Gate }\nreturns: Gate\n---\nUse request.marker and gate.target.\n',
+        'qualification/types.ts': 'export type Gate = { target: string; level: string; owner: string };\n',
+    }
+    assert set(natcode._exposed(files)) == {'op.nl', 'op/child.nl', 'types.ts'}
+    questions = natcode._explore_questions(files, random.Random(1))
+    assert questions
+    for kind, x, answer in questions:
+        assert 'Gate' not in str(x) and not any(str(item).startswith('qualification') for item in (answer if isinstance(answer, list) else [answer])), (kind, x, answer)
+    assert ('mentions', 'marker', ['op', 'op.child']) in questions

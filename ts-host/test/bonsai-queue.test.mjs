@@ -91,6 +91,7 @@ with tempfile.TemporaryDirectory() as d:
   assert.equal(value('--provider'), 'openai-codex');
   assert.equal(value('--max-model-requests'), '568');
   assert.ok(command.includes('--execution-plans'));
-  assert.ok(!command.includes('--text-neuralese-emulation'));
+  // A provider transport has no Neuralese writer of its own: the literal-text transport is its default (MODEL_FACING_CHANGES 2026-11-21).
+  assert.ok(command.includes('--text-neuralese-emulation'));
   assert.ok(!command.includes('--server'));
 });

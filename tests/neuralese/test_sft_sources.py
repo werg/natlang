@@ -297,6 +297,31 @@ def test_call_row_weights_a_teacher_detour_after_the_refusal_as_context_for_trai
     assert 'weight' not in s.call_row(Renderer(), 'teacher', 'k', 0, before)[0]
 
 
+def test_calls_the_detour_spawned_after_a_refusal_are_context_by_default():
+    """A child invocation that first appears after the episode's first Neuralese refusal exists only because of the
+    detour: its calls are context though their own prompts hold no refusal; an invocation already running keeps its
+    calls; ``context-refused-only`` opts out."""
+    class Renderer:
+        tokenizer = _Tokens()
+
+        def render(self, messages, tools, target):
+            return [0], [3, 4, 5]
+    refused = {'role': 'tool', 'content': 'x failed: neuralese-unsupported-backend: no write port'}
+
+    def call(invocation, messages):
+        return {**turn(messages), 'invocation_id': invocation, 'target': {'role': 'assistant', 'content': ''},
+                'tools': None}
+    turns = s.mark_detour_spawned([call('root', [SYSTEM, USER]), call('producer', [SYSTEM, USER]),
+                                   call('root', [SYSTEM, USER, refused]), call('nl@eval:1', [SYSTEM, USER]),
+                                   call('producer', [SYSTEM, USER])])
+    assert [bool(t.get('detour_spawned')) for t in turns] == [False, False, False, True, False]
+    weights = [s.call_row(Renderer(), 'teacher', 'k', i, t)[0].get('weight') for i, t in enumerate(turns)]
+    assert [w is not None and not w.any() for w in weights] == [False, False, True, True, False]
+    opt_out = s.call_row(Renderer(), 'teacher', 'k', 3, turns[3], backend_workarounds='context-refused-only')[0]
+    assert 'weight' not in opt_out
+    assert 'weight' not in s.call_row(Renderer(), 'rl-own', 'k', 3, turns[3])[0]   # own calls are never detours
+
+
 def test_parse_aux_reads_share_task_cap_and_think_policy():
     part = s.parse_aux('operators=/x/chains.pkl,share=0.03,task_tokens=4000')
     assert part == {'name': 'operators', 'path': '/x/chains.pkl', 'share': 0.03, 'task_tokens': 4000,
@@ -600,3 +625,13 @@ def test_replay_matches_tool_call_arguments_the_runtime_reserialized():
     assert episode.answer({'messages': now})['choices'][0]['message']['content'] == 'done'
     assert episode.log[0]['kind'] == 'exact'
     assert s.arguments_key('not json') == 'not json'
+
+
+def test_extract_rl_specs_reads_every_named_extraction(tmp_path):
+    """``neuralese-graph`` finds the rollout archives of every ``<out-name>-extract.json`` (and a legacy
+    ``extract.json``), each spec once: it read only ``extract.json``, which no current WORK has."""
+    (tmp_path / 'episodes-own-extract.json').write_text(json.dumps({'rl': ['/r/a:/x/a', '/r/b:/x/b']}))
+    (tmp_path / 'episodes-sft-v7-extract.json').write_text(json.dumps({'rl': ['/r/c:/x/c', '/r/a:/x/a']}))
+    (tmp_path / 'episodes-teacher-extract.json').write_text(json.dumps({'rl': [], 'teacher': ['/t']}))
+    (tmp_path / 'extract.json').write_text(json.dumps({'rl': ['/r/d:/x/d']}))
+    assert s.extract_rl_specs(tmp_path) == ['/r/a:/x/a', '/r/b:/x/b', '/r/c:/x/c', '/r/d:/x/d']

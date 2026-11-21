@@ -156,3 +156,36 @@ def test_fill_takes_failed_then_unmeasured_tasks_first():
     episodes = [{'task_id': t, 'key': t} for t in ('solved', 'unmeasured', 'failed', 'band')]
     rates = {'solved': (4, 4), 'failed': (0, 4), 'band': (1, 4)}
     assert [e['task_id'] for e in filled_reasoning.prefer(episodes, rates)] == ['failed', 'unmeasured', 'band', 'solved']
+
+
+def test_cycle_builds_the_works_own_neuralese_graph_by_default(tmp_path):
+    """The own Neuralese successes (consumer calls included) enter each cycle's mix as a graph part: the data stage
+    runs ``sft_sources neuralese-graph`` on the WORK with the build's run exclusions; ``--no-own-neuralese-graph``
+    opts out (DECISIONS 2026-11-21 ran-out)."""
+    import types
+    args = types.SimpleNamespace(dir=str(tmp_path / 'c'), pin=str(tmp_path / 'pin'), commit='a' * 40, start_sha='b' * 64,
+                                 start='x', sft_work=str(tmp_path / 'w'), no_own_neuralese_graph=False,
+                                 own_neuralese_graph_share=0.05)
+    cycle = ei.Cycle(args)
+    command = cycle.own_neuralese_graph_command()
+    assert command[1].endswith('scripts/neuralese_data/sft_sources.py') and command[2] == 'neuralese-graph'
+    assert command[command.index('--work') + 1] == str(tmp_path / 'w')
+    assert command[command.index('--out') + 1] == str(cycle.dir / 'neuralese-graph-own')
+    assert [command[i + 1] for i, a in enumerate(command) if a == '--exclude-run'] == ['grpo-v2/', 'grpo-v4/run1']
+    import sys
+    argv = sys.argv
+    try:
+        sys.argv = ['expert_iteration.py', 'cycle', '--dir', 'd', '--name', 'n', '--start', 's', '--commit', 'c']
+        parser_args = {}
+
+        def capture(a):
+            parser_args['a'] = a
+        original = ei.cycle
+        ei.cycle = capture
+        try:
+            ei.main()
+        finally:
+            ei.cycle = original
+    finally:
+        sys.argv = argv
+    assert parser_args['a'].no_own_neuralese_graph is False and parser_args['a'].own_neuralese_graph_share == 0.05

@@ -77,15 +77,34 @@ def base_rank(rates, band):
     return rank
 
 
+def voided(work):
+    """Rollouts paths of WORK/voided.jsonl: verdicts a harness defect produced (e.g. the teacher transport without a
+    Neuralese writer before 7c6d00345). They count as no verdict: not a teacher's failure, not a try of the task."""
+    path = Path(work, 'voided.jsonl')
+    if not path.exists():
+        return set()
+    return {json.loads(line)['rollouts'] for line in path.open() if line.strip()}
+
+
+def verdicts(work):
+    """The manifest records of a teacher_gen WORK that are teacher verdicts (voided ones left out)."""
+    path = Path(work, 'manifest.jsonl')
+    if not path.exists():
+        return
+    void = voided(work)
+    for line in path.open():
+        if line.strip():
+            record = json.loads(line)
+            if record.get('rollouts') not in void:
+                yield record
+
+
 def teacher_coverage(works):
     """task id -> {'success': bool, 'failed_by': teacher model ids with a scored non-success} over earlier campaigns'
-    manifests (deferred, no-verdict records never enter a manifest)."""
+    manifests (deferred, no-verdict records never enter a manifest; voided ones are left out)."""
     coverage = {}
     for work in works:
-        for line in Path(work, 'manifest.jsonl').open():
-            if not line.strip():
-                continue
-            record = json.loads(line)
+        for record in verdicts(work):
             entry = coverage.setdefault(record['task_id'], {'success': False, 'failed_by': set()})
             for episode in record['episodes']:
                 if episode['outcome'] == 'task_success' and (episode.get('reward') or 0) >= 1:
@@ -99,12 +118,8 @@ def family_stats(works):
     """(family, teacher model id) -> [successes, scored episodes] over teacher_gen manifests (routing's evidence)."""
     stats = {}
     for work in works:
-        path = Path(work, 'manifest.jsonl')
-        if not path.exists():
-            continue
-        for line in path.open():
-            if line.strip():
-                add_stats(stats, json.loads(line))
+        for record in verdicts(work):
+            add_stats(stats, record)
     return stats
 
 
@@ -286,10 +301,24 @@ class Generator:
             entry[0], entry[1] = entry[0] + wins, entry[1] + scored
         self.tried = {}           # index -> teacher model ids with a verdict on it in this campaign
         self.solved = set()
+        self.recorded = {}        # index -> manifest records (voided included): the next attempt's episode directory
         if self.manifest.exists():
             for line in self.manifest.open():
                 if line.strip():
-                    self._note_verdict(json.loads(line))
+                    index = json.loads(line)['index']
+                    self.recorded[index] = self.recorded.get(index, 0) + 1
+            for record in verdicts(self.work):
+                self._note_verdict(record)
+        if args.covered_by:   # failed_by as the earlier campaigns' verdicts stand now (voided ones dropped since)
+            coverage = teacher_coverage(args.covered_by)
+            for task in self.tasks:
+                if 'failed_by' in task:
+                    failed = (coverage.get(task['row']['id']) or {}).get('failed_by') or set()
+                    task['failed_by'] = sorted(set(task['failed_by']) & failed)
+            for record in verdicts(self.work):   # this campaign's own failures stay counted
+                if record['index'] < len(self.tasks) and record['index'] not in self.solved:
+                    task = self.tasks[record['index']]
+                    task['failed_by'] = sorted({*task.get('failed_by', ()), record['teacher']['model_id']})
         self.done = {index for index in self.tried if self._finished(index)}
         (self.work / 'claims').mkdir(exist_ok=True)
         self.retry = []           # tasks whose episodes the provider failed (no verdict), retried after the cursor
@@ -358,10 +387,11 @@ class Generator:
 
     def _no_verdict(self, record):
         """Every episode ended unresolved before its first model turn or as an infrastructure error from exhausted provider
-        retries (e.g. a 429 mid-episode; a model-call budget stop is the teacher's own verdict): the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried."""
+        retries (e.g. a 429 mid-episode; a model-call budget stop is the teacher's own verdict): the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried.
+        A harness infrastructure error (e.g. the collector's record digest failing while ts-host/dist is rebuilt) is
+        no verdict either: it would count against the teacher's family yield and use up one of the task's --attempts."""
         return 'unsupported' not in record and all(
-            (e['outcome'] == 'infrastructure_error' and record.get('provider_failure')) or
-            (e['outcome'] == 'unresolved' and e['turns'] == 0)
+            e['outcome'] == 'infrastructure_error' or (e['outcome'] == 'unresolved' and e['turns'] == 0)
             for e in record['episodes'])
 
     def _claim(self, index, teacher):
@@ -451,7 +481,7 @@ class Generator:
         from natlang_neuralese.rl import task_rollouts
         a, task = self.args, self.tasks[index]
         row = task['row']
-        attempt = len(self.tried.get(index, ()))   # a later teacher's attempt keeps the earlier ones' episodes
+        attempt = self.recorded.get(index, 0)   # a later attempt keeps the earlier ones' episodes (voided included)
         directory = self.work / 'episodes' / (f't{index:06d}' if not attempt else f't{index:06d}-a{attempt}')
         if directory.exists():   # an unscored attempt (stopped mid-episode) is redone whole
             shutil.rmtree(directory)
@@ -512,9 +542,11 @@ class Generator:
                 self.attempts[index] = self.attempts.get(index, 0) + 1
                 with (self.work / 'deferred.jsonl').open('a') as handle:
                     handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
-                teacher.failures += not refusal
-                teacher.cool_until = max(teacher.cool_until, time.time() + min(
-                    3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
+                provider = record.get('provider_failure') or any(e['outcome'] == 'unresolved' for e in record['episodes'])
+                if provider and not refusal:   # the harness failing is no reason to back the teacher off
+                    teacher.failures += 1
+                    teacher.cool_until = max(teacher.cool_until, time.time() + min(
+                        3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
                 if self.attempts[index] < 3:
                     self.retry.append((time.time() + 600, index))
                 self._release(index, 'deferred', teacher)
@@ -525,6 +557,7 @@ class Generator:
                 handle.write(json.dumps(record) + '\n')
             record_episode_files(self.work, directory)
             self._note_verdict(record)
+            self.recorded[index] = self.recorded.get(index, 0) + 1
             if self._finished(index):
                 self.done.add(index)
                 self._release(index, 'done', teacher)
@@ -612,7 +645,7 @@ def record_campaign(work, args, teachers):
             license='teacher outputs of ' + ', '.join(sorted({f"{t.model_id} ({t.provider or t.endpoint})" for t in teachers}))
                     + '; tasks keep their pools\' licenses')
         data_registry.record_files(campaign_id(work), [p for p in (work / name for name in (
-            'pool.json', 'inputs.json', 'tasks.jsonl')) if p.exists()], work)
+            'pool.json', 'inputs.json', 'tasks.jsonl', 'voided.jsonl')) if p.exists()], work)
     except Exception as error:
         print(json.dumps({'event': 'data registry error', 'error': repr(error)[:300]}), flush=True)
 

@@ -7,6 +7,13 @@ from collections import Counter
 TYPED_RESULT_KINDS = ('typed-text-result', 'typed-json-result')
 
 
+def _teacher_text(event):
+    """A teacher-text block (the literal-text Neuralese transport of a remote teacher, `nzt1_` IDs) is exact text in the
+    prompt, never a native state: no sampling capture holds it, so it is not part of the native-state inventory
+    (teacher-gen-20261119: every emulated episode failed this binding and its budget prefix was dropped)."""
+    return event.get('format')=='teacher-text' or event.get('producer')=='teacher-text-emulation'
+
+
 def _source(event):
     inputs=event.get('inputs')
     if not isinstance(inputs,list):raise ValueError('native occurrence read lacks exact input edges')
@@ -23,10 +30,12 @@ def capture_occurrences(name,capture,nodes):
     graph; their actual prompt token/import coordinates always come from capture.
     Different origins require explicit transported source-occurrence metadata.
     """
-    writes=[event for event in nodes.values() if event.get('kind')=='block_write' and event.get('turn')==name]
+    writes=[event for event in nodes.values() if event.get('kind')=='block_write' and event.get('turn')==name
+            and not _teacher_text(event)]
     forced=[event for event in writes if event.get('source_kind') in TYPED_RESULT_KINDS and event.get('producer') is None]
     writes=[event for event in writes if event not in forced]
-    reads=[event for event in nodes.values() if event.get('kind')=='block_read' and event.get('turn')==name]
+    reads=[event for event in nodes.values() if event.get('kind')=='block_read' and event.get('turn')==name
+           and not _teacher_text(event)]
     for event in writes+reads:
         if not isinstance(event.get('block'),str) or not isinstance(event.get('node'),str):
             raise ValueError('native occurrence requires exact block and graph node identities')
