@@ -1940,6 +1940,19 @@ export class NativeSession {
       }
       const toolDocumentation = name === 'read_code' ? this.toolDocumentation(requested) : undefined;
       if (toolDocumentation !== undefined) return { kind: 'ok', text: toolDocumentation, value: toolDocumentation };
+      // A large scope shows entry signatures first. Their type names can collide across
+      // branches, so a qualified lookup uses the exact declaring callable's aliases.
+      const separator = requested.lastIndexOf('.');
+      if (name === 'read_code' && separator > 0) {
+        const parent = findCodebaseItem(this.lam.codebase, requested.slice(0, separator))?.record;
+        const alias = requested.slice(separator + 1);
+        const record = parent && (this.runtime.frame?.task.programView?.record(parent) ?? parent);
+        if (record && record.kind !== 'namespace' && Object.hasOwn(record.types, alias)) {
+          const declaration = (record.kind === 'module' ? record.declarations?.[alias] : undefined) ??
+            `type ${alias} = ${record.types[alias]};`;
+          return { kind: 'ok', text: declaration, value: declaration };
+        }
+      }
       const availableServices = this.availableServices();
       if (name === 'read_code' && Object.hasOwn(availableServices, requested)) {
         const declaration = `Host service object declaration (type only, not implementation or field values):\n` +
@@ -1997,6 +2010,11 @@ export class NativeSession {
     const view = this.runtime.frame?.task.programView;
     const record = view ? view.record(found.record) : found.record;
     const expectedRevision = view?.revisionId ?? 0;
+    if (record.kind === 'namespace' && name === 'read_code') {
+      const paths = Object.keys(record.codebase).map(child => `${requested}.${child}`);
+      const text = `Callable namespace ${requested}:\n${paths.join('\n')}`;
+      return { kind: 'ok', text: this.show(text), value: paths };
+    }
     if (record.kind === 'namespace')
       throw new Reject([{ path: requested, code: 'no-such-function', expected: `an item inside ${requested}: ${Object.keys(record.codebase).join(', ')}` }]);
     if (name === 'read_code') {

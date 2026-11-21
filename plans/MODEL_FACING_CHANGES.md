@@ -3,6 +3,24 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-21 — show entry signatures first for large callable scopes
+
+The System Vibestudio open-goal program rendered 104,742 LFM3 tokens before
+the first action. The opening recursively printed the signatures and type
+closures of descendants owned by other Natlang lambdas. At more than 96
+callable and module-export entries, the opening now shows the immediate
+callable interfaces. The runtime keeps every available scope binding.
+`read_code` lists a namespace and resolves a type alias at its qualified
+declaring path. The call heading gives its direct type declarations.
+
+The revised System opening, including the simplified route instructions,
+rendered 21,670 tokens through the learner's actual template. The Node,
+browser and Workerd builds share the renderer. The model-serving engines
+consume its existing request protocol. The scope remains fully expanded for
+small programs. To compare the prior rendering, set
+`NATLANG_MODEL_FACING=effect-receipt`. No learner or teacher run was used to
+measure the opening.
+
 ### 2026-11-21 — using a Neuralese input: each wrong form answers with the fix; the prompt no longer spells out `${...}`
 
 Held-v3 after sft-v5 (DECISIONS 2026-11-21 "ran-out"): a call that received a Neuralese argument took ~7.6 model calls in

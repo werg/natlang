@@ -278,18 +278,31 @@ function pythonJson(value: unknown): string {
 }
 
 function referencedTypeAliases(signatures: string[], definitions: Record<string, string>,
-  declarations: Record<string, string> = {}): string[] {
+  declarations: Record<string, string> = {}, transitive = true): string[] {
   const found = new Set<string>();
   const visit = (text: string): void => {
     for (const name of Object.keys(definitions)) {
       if (found.has(name) || !new RegExp(`\\b${name}\\b`).test(text)) continue;
       found.add(name);
-      visit(declarations[name] ?? definitions[name]!);
+      if (transitive) visit(declarations[name] ?? definitions[name]!);
     }
   };
   for (const signature of signatures) visit(signature);
   // A class or method-bearing interface is shown as its TypeScript declaration, not its live-value alias.
   return [...found].map(name => declarations[name] ?? `type ${name} = ${definitions[name]};`);
+}
+
+/** A wide or deeply composed scope can exhaust the model context before its first action. */
+function largeCallableScope(codebase: Readonly<Record<string, unknown>>): boolean {
+  const pending = Object.values(codebase) as Record<string, unknown>[];
+  let remaining = 96;
+  while (pending.length) {
+    const item = pending.pop()!;
+    remaining -= 1 + Object.keys(item.exports ?? {}).length;
+    if (remaining < 0) return true;
+    for (const child of Object.values(item.codebase ?? {}) as Record<string, unknown>[]) pending.push(child);
+  }
+  return false;
 }
 
 /**
@@ -1317,11 +1330,15 @@ export class NativeToolAgent {
     const program = (lam.originalBody ?? lam.body).replace(/^\n+|\n+$/g, '');
     const scopeTypes = referencedTypeAliases([
       ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns)
-    ], lam.typesSrc);
+    ], lam.typesSrc, {}, !this.compactCallableScope(session));
     const signature = `${lam.functionName || 'run'}(` +
       lam.type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ${formatType(field.type)}`).join(', ') +
       `): ${formatType(lam.type.returns)}`;
     return { signature, scopeTypes, program };
+  }
+
+  private compactCallableScope(session: NativeSession): boolean {
+    return modelFacing('compact-callable-scope') && largeCallableScope(session.lam.codebase);
   }
 
   /** The call's opening message: its signature and instructions, then the names eval can use (the call's notes follow,
@@ -1349,6 +1366,7 @@ export class NativeToolAgent {
   /** Ambient TypeScript declarations for the functions this call can use, with the aliases they reference. */
   private callableDeclarations(session: NativeSession): string[] {
     const lam = session.lam, aliases = new Set<string>(), lines: string[] = [];
+    const compact = this.compactCallableScope(session);
     const params = (args: Record<string, string>) => Object.entries(args)
       .map(([key, value]) => `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`);
     type Export = { kind: string; args?: Record<string, string>; returns?: string; async?: boolean; type?: string; doc?: string };
@@ -1357,30 +1375,30 @@ export class NativeToolAgent {
       [`${indent}/** ${text.trim().replace(/\s+/g, ' ').replace(/\*\//g, '* /')} */`] : [];
     const returns = (spec: Export) => spec.async ? `Promise<${spec.returns}>` : String(spec.returns);
     const propertyName = (name: string) => /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
-    const propertyTree = (raw: Record<string, unknown>): string => {
+    const propertyTree = (raw: Record<string, unknown>, depth = 0): string => {
       const entries: string[] = [];
       if (raw.kind === 'namespace') {
         for (const [key, child] of Object.entries((raw.codebase ?? {}) as Record<string, Record<string, unknown>>))
-          entries.push(`${propertyName(key)}: ${propertyTree(child)}`);
+          entries.push(`${propertyName(key)}: ${compact && depth >= 1 ? 'unknown' : propertyTree(child, depth + 1)}`);
       } else if (raw.kind === 'module') {
         const exports = (raw.exports ?? {}) as Record<string, Export>;
         for (const [key, spec] of Object.entries(exports)) {
-          for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''],
+          if (!compact) for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''],
             (raw.types ?? {}) as Record<string, string>, (raw.declarations ?? {}) as Record<string, string>)) aliases.add(line);
           entries.push(spec.kind === 'function' ? `${propertyName(key)}: (${params(spec.args ?? {}).join(', ')}) => ${returns(spec)}` :
             `${propertyName(key)}: ${spec.type ?? 'unknown'}`);
         }
         for (const [key, child] of Object.entries((raw.codebase ?? {}) as Record<string, Record<string, unknown>>))
-          entries.push(`${propertyName(key)}: ${propertyTree(child)}`);
+          entries.push(`${propertyName(key)}: ${compact && depth >= 1 ? 'unknown' : propertyTree(child, depth + 1)}`);
       } else {
         const args = (raw.args ?? {}) as Record<string, string>;
-        for (const line of referencedTypeAliases([...Object.values(args), String(raw.returns ?? 'unknown')],
+        if (!compact) for (const line of referencedTypeAliases([...Object.values(args), String(raw.returns ?? 'unknown')],
           (raw.types ?? {}) as Record<string, string>)) aliases.add(line);
         entries.push(`(${params(args).join(', ')}) => Promise<${String(raw.returns ?? 'unknown')}>`);
       }
       return `{ ${entries.join('; ')} }`;
     };
-    const declare = (name: string, raw: Record<string, unknown>, indent: string): void => {
+    const declare = (name: string, raw: Record<string, unknown>, indent: string, depth = 0): void => {
       const lead = indent ? indent : 'declare ';
       const types = (raw.types ?? {}) as Record<string, string>;
       const members: [string, Record<string, unknown>][] = Object.entries((raw.codebase ?? {}) as Record<string, Record<string, unknown>>);
@@ -1388,7 +1406,7 @@ export class NativeToolAgent {
       if (raw.kind === 'module') {
         const exports = (raw.exports ?? {}) as Record<string, Export>;
         for (const [exportName, spec] of Object.entries(exports)) {
-          for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''], types,
+          if (!compact) for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''], types,
             (raw.declarations ?? {}) as Record<string, string>)) aliases.add(line);
           if (exportName === 'default') {
             if (spec.kind === 'function') lines.push(...doc(spec.doc, indent),
@@ -1404,12 +1422,16 @@ export class NativeToolAgent {
         if (reducer) lines.push(`${indent}/** Directory reducer: calling it uses only its result and discards its file changes; handle.apply(${name}, ...) keeps them. */`);
         else lines.push(...doc(raw.description, indent));
         lines.push(`${lead}function ${name}(${list.join(', ')}): Promise<${raw.returns}>;${reducer ? '' : '  // natural language'}`);
-        for (const line of referencedTypeAliases([...Object.values((raw.args ?? {}) as Record<string, string>), String(raw.returns)], types)) aliases.add(line);
+        if (!compact) for (const line of referencedTypeAliases([...Object.values((raw.args ?? {}) as Record<string, string>), String(raw.returns)], types)) aliases.add(line);
       }
-      if (!inner.length && !members.length) return;
+      const expand = !compact || (depth === 0 && raw.kind !== 'natlang');
+      if (compact && !expand && members.length) {
+        lines.push(`${indent}// ${name} also has ${members.length} callable-scope entries. Read its source or inspect properties in eval.`);
+      }
+      if (!inner.length && (!expand || !members.length)) return;
       lines.push(`${lead}namespace ${name} {`);
       for (const line of inner) lines.push(`${indent}  ${line}`);
-      for (const [child, item] of members) declare(child, item, `${indent}  `);
+      if (expand) for (const [child, item] of members) declare(child, item, `${indent}  `, depth + 1);
       lines.push(`${indent}}`);
     };
     for (const [name, raw] of Object.entries(lam.codebase)) {
@@ -1423,6 +1445,11 @@ export class NativeToolAgent {
       }
       declare(name, record, '');
     }
+    if (compact) return [
+      '// Entry points are listed here. Use read_code("namespace") to see its members, read_code("namespace.function") for source,',
+      '// or read_code("namespace.function.TypeName") for the exact type there. Nested callables remain available in eval.',
+      ...lines,
+    ];
     const own = new Set(referencedTypeAliases([...(lam.type.kind === 'lambda' ? [
       ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns)] : [])], lam.typesSrc));
     return [...[...aliases].filter(line => !own.has(line)), ...lines,

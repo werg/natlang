@@ -83,3 +83,30 @@ test('relative type imports and renamed re-exports retain their own transitive a
   assert.deepEqual(await runtime.run(() => fn()), value);
   assert.equal(turns, 1);
 });
+
+test('wide callable scopes show entry points and preserve scoped reads and deep calls', async () => {
+  const files = {
+    'root/primary/api.ts': 'export type Row = { units: number }; export function read(): Row { return { units: 7 }; }',
+    'root/secondary/api.ts': 'export type Row = { label: string }; export function read(): Row { return { label: "other" }; }',
+    'root/primary/deep/counter.ts': 'export function count(): number { return 41 }',
+  };
+  for (let index = 0; index < 120; index++) {
+    files[`root/primary/deep/leaf${index}.ts`] = 'export function value(): number { return 1 }';
+  }
+  const { listing, results, value } = await script(files, [
+    ['read_code', { name: 'primary.deep' }],
+    ['read_code', { name: 'secondary.api.Row' }],
+    ['read_code', { name: 'primary.api.Row' }],
+    ['eval', { code: 'return primary.deep.counter.count();' }],
+    ['return_result', { status: 'success', value: 41 }],
+  ]);
+  assert.match(listing, /Entry points are listed here/);
+  assert.match(listing, /namespace primary/);
+  assert.match(listing, /function read\(\): Row/);
+  assert.doesNotMatch(listing, /leaf119|type Row =/);
+  assert.match(results[0], /primary\.deep\.counter/);
+  assert.match(results[1], /type Row = \{ label: string \}/);
+  assert.match(results[2], /type Row = \{ units: number \}/);
+  assert.match(results[3], /41/);
+  assert.equal(value, 41);
+});
