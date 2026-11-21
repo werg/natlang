@@ -206,6 +206,18 @@ shorter-lived workspaces.
 Register each complete capture directory and pass it to extraction with
 `--live-capture-root "$CAPTURE_DIRECTORY"`. The importer discovers the
 verified manifests and validates each before converting it to trajectory IR.
+
+To continue an interrupted batch, plan its pending selectors against the same
+catalog and write the next capture to a fresh directory. The planner uses the
+same manifest verifier as the training importer. It checks the captured goal
+text, family, and source groups against the current catalog before reusing it.
+Pass `--capture-root` once for each earlier batch. Keep successful artifacts
+from every batch as inputs to extraction.
+
+```bash
+python scripts/vibestudio/pending_open_goal_cases.py "$GOAL_CATALOG" "$TRAIN_CASES" \
+  --capture-root "$PRIOR_CAPTURE_DIRECTORY" > "$PENDING_CASES"
+```
 A case that fails leaves its logs in its own directory. Retry it with a
 fresh output directory and pass both roots in the same extraction.
 

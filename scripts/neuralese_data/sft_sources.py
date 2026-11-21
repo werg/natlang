@@ -259,14 +259,14 @@ def october_teacher_episodes(path, models, held_manifest, c):
                'base_rank': None, 'task': task, 'root_mode': 'student', 'turns': turns, 'execution_graph_events': 0}
 
 
-def live_manifest_paths(manifests, capture_roots):
+def live_manifest_paths(manifests, capture_roots, *, allow_empty=False):
     paths = [Path(path).resolve() for path in manifests]
     for directory in capture_roots:
         root = Path(directory).resolve()
         candidates = [root / 'verified/manifest.json',
                       *sorted((root / 'cases').glob('*/verified/manifest.json'))]
         discovered = [path.resolve() for path in candidates if path.is_file()]
-        if not discovered:
+        if not discovered and (not allow_empty or not root.is_dir()):
             raise ValueError(f'No verified live teacher manifests under {root}')
         if any(not path.is_relative_to(root) for path in discovered):
             raise ValueError(f'Verified live teacher manifest escapes the capture directory {root}')
