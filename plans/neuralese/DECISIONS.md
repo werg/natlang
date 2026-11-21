@@ -6293,3 +6293,13 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   (`plan-v3-sftv7.json`). Served only if it beats the text initialization on its own checkpoint overall and on long rows
   and does not lose on short rows (build-v2 belongs to another policy, so it is no longer the comparison). If sft-v7
   fails its gate, the states need a refit on sft-v6.
+
+## 2026-11-21 20:55 cycle latency: sft_sources build speed; teacher campaign status
+
+- sft-v7's mix build ran 1 h 42 min on one core while the SFT waited, so it adds ~1.7 h to every cycle. A subagent profiles it
+  and parallelises the hot phases (default on, `--workers 1` opt-out, chains sha256 must stay identical to sft-v7's
+  8607730e). If verified before sft-v8's build (~02:00 11-22), that build runs main's sft_sources.
+- sft-v7's teacher campaign finished its 153 student-rare tasks: 311 scored attempts, 98 successes. Haiku retired on low
+  Anthropic credit (the owner's call); the NVIDIA and Gemini teachers continue. Teacher supply is not the limit: about
+  39k verified teacher episodes exist against about 500 filled. Filled reasoning is the bottleneck, and the fill-cost
+  and close-hazard work (subagent) targets it.
