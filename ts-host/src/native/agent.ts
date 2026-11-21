@@ -1348,16 +1348,23 @@ export class NativeToolAgent {
     if (lam.type.kind !== 'lambda') return 'Scope:';
     const { signature, scopeTypes, program } = this.callHeading(session);
     const writable = Object.values(lam.captures ?? {}).filter(cell => cell.mutable).map(cell => cell.name);
+    const services = session.availableServices();
+    const delegated = this.compactCallableScope(session)
+      ? Object.entries(session.runtime.serviceScopes)
+        .filter(([name]) => Object.hasOwn(session.runtime.services, name) && !Object.hasOwn(services, name))
+        .map(([name, scopes]) => `- ${name}: ${scopes.join(', ')}`)
+      : [];
     // What eval can use, by name: a model that reads only this message should know it can call these in code.
     const names = [...lam.type.params.fields.map(field => field.name),
       ...Object.entries(lam.captures ?? {}).filter(([, cell]) => !isAdapterValue(capturedValue(cell))).map(([name]) => name),
-      ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
+      ...Object.keys(lam.codebase), ...Object.keys(services)];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(lam.handoff ? ['', lam.handoff] : []),
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
+      ...(delegated.length ? ['', 'Host services bound only in the listed callable scopes:', ...delegated] : []),
       ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
       '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
     ].join('\n');

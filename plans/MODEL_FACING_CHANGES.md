@@ -2801,3 +2801,14 @@ that text as a placeholder, renders its opening with it, and primes the state at
 That call and every later call with the same guidance and actor read the primed state. A trained (refined) state is
 read as it is. Opt-out: `NATLANG_GUIDANCE_PRIMING=text` (agent option `guidancePriming: 'text'`). The text the model sees
 is unchanged; only the state's values change.
+
+### 2026-11-21 — show which services are bound in compact callable scopes
+
+The compact opening showed all the installed callable names in Vibestudio. For a
+local document goal, Luna selected an automation or public-research route whose
+required service was absent. The opening now lists the actual bindings that are
+available through named callable scopes, using the existing task service scopes.
+It leaves the eval permissions intact. NativeToolAgent produces these messages
+for Node, browser, and Workerd. The serving engines and source collectors consume
+the same request and trajectory records. The existing `compact-callable-scope`
+setting controls the compact opening and its service list.

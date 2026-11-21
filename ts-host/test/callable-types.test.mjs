@@ -3,20 +3,23 @@ import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 
 /** Run root.nl with scripted root tool calls; returns the opening listing and each tool result. */
-async function script(files, calls) {
+async function script(files, calls, options = {}) {
   const results = [];
-  let listing = '', step = 0;
+  let listing = '', opening = '', step = 0;
   const model = async request => {
-    if (!listing) listing = JSON.parse(request.messages[2].tool_calls[0].function.arguments).code;
+    if (!listing) {
+      opening = request.messages[1].content;
+      listing = JSON.parse(request.messages[2].tool_calls[0].function.arguments).code;
+    }
     else results.push(String(request.messages.at(-1).content));
     const call = calls[step++];
     return call ? { calls: [call] } : { calls: [['return_result', { status: 'failed', reason: 'The scripted test has no more calls.' }]] };
   };
-  const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
+  const runtime = createNatlangRuntime({ ...options, model, seed: { mode: 'backend' } });
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: {}\nreturns: number\n---\nUse the helpers.\n', ...files }, 'root.nl');
   let value;
   try { value = await runtime.run(() => fn()); } catch {}
-  return { listing, results, value };
+  return { listing, opening, results, value };
 }
 
 test('a callable module\'s type aliases can be used in eval annotations', async () => {
@@ -89,18 +92,24 @@ test('wide callable scopes show entry points and preserve scoped reads and deep 
     'root/primary/api.ts': 'export type Row = { units: number }; export function read(): Row { return { units: 7 }; }',
     'root/secondary/api.ts': 'export type Row = { label: string }; export function read(): Row { return { label: "other" }; }',
     'root/primary/deep/counter.ts': 'export function count(): number { return 41 }',
+    'root/primary/readNote.nl': '---\nargs: {}\nreturns: string\n---\nRead the fixture note.\n',
   };
   for (let index = 0; index < 120; index++) {
     files[`root/primary/deep/leaf${index}.ts`] = 'export function value(): number { return 1 }';
   }
-  const { listing, results, value } = await script(files, [
+  const { listing, opening, results, value } = await script(files, [
     ['read_code', { name: 'primary.deep' }],
     ['read_code', { name: 'secondary.api.Row' }],
     ['read_code', { name: 'primary.api.Row' }],
     ['eval', { code: 'return primary.deep.counter.count();' }],
     ['return_result', { status: 'success', value: 41 }],
-  ]);
+  ], {
+    services: { noteRead: { read: () => 'fixture' } },
+    serviceScopes: { noteRead: ['root/primary/readNote.nl'], unavailableRead: ['root/secondary/readNote.nl'] },
+  });
   assert.match(listing, /Entry points are listed here/);
+  assert.match(opening, /Host services bound only in the listed callable scopes:\n- noteRead: root\/primary\/readNote\.nl/);
+  assert.doesNotMatch(opening, /unavailableRead/);
   assert.match(listing, /namespace primary/);
   assert.match(listing, /function read\(\): Row/);
   assert.doesNotMatch(listing, /leaf119|type Row =/);
