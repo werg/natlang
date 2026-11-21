@@ -6068,3 +6068,9 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   - sft-v7's pin predates the fix and builds its ~55 fill episodes unweighted. They are a negligible part of its mix.
 - **Default for the next SFT:** the filled part with the reweighting. The full-corpus pass waits for a dedicated actor
   window, and the next cycle gets its own collect-free fill stage (to build).
+
+### 2026-11-21 — reuse Vibestudio traces and pilot outcome-scored goals
+
+- Use `scripts/neuralese_data/inventory_live_teacher.py` to compare retained full system-test packets and exported manifests against the live split catalog, held source groups, and data registry. On Tick, 460 nonidentical full packets contained 38 Natlang teacher traces. Six distinct registered Luna tasks (149 supervised decisions) could be extracted immediately. One is an open-ended goal and the other five are earlier assigned workflows. Two additional passing raw packets with pins were from the stopped Sol batch. Preserve them with their original provenance.
+- Stage the six independently of the open-goal learner mixture. Build the earlier open goal under the existing 80% minimum measured by distinct goals and weighted targets. The archived training exposure plus the reused and pilot IDs and source groups had no overlap with held-v3. The held closure also checks the pinned held-v2 predecessor.
+- Pilot one local workspace with three goals and two usable skills. Each goal uses real workspace reads and an outcome check for current authority, final contents, preservation, and concurrent work where applicable. Verify the original goal and actual call tree in export, with no named route requirement. The model-facing root uses the available scoped services when selecting skills. Compare model-free reference and an alternate evidence path before interpreting the Luna yield. Keep authored references for selective supervision where their actions add coverage.
