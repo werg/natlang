@@ -25,7 +25,8 @@ def terminal_startup_failure(log):
     return False
 
 
-def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None, devices=()):
+def qualify_group(host, workspace, baseline, cases, model, destination, test_timeout_ms, batch=None, devices=(),
+                  retain_trajectories=False):
     group = f'{workspace}@{baseline}' if baseline else workspace
     if devices:
         group += '@' + '+'.join(devices)
@@ -58,6 +59,8 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
         args = ['run', *cases, '--json', '--concurrency', '1', '--model', model, '--out-dir', str(results)]
         if test_timeout_ms is not None:
             args += ['--test-timeout-ms', str(test_timeout_ms)]
+        if retain_trajectories:
+            args.append('--retain-trajectories')
         failures += bool(invoke(args, 'run.log'))
         runs = [folder for folder in results.glob('st_*') if folder.is_dir()]
         if len(runs) != 1:
@@ -110,7 +113,8 @@ def run_batches(args, chosen, destination):
                 return 0 if all_passed else 1
             passed, unavailable = qualify_group(host, workspace, baseline, cases[offset:offset + size],
                                                 args.model, destination, args.test_timeout_ms,
-                                                batch=index if len(cases) > size else None, devices=devices)
+                                                batch=index if len(cases) > size else None, devices=devices,
+                                                retain_trajectories=args.retain_trajectories)
             all_passed &= passed
             if unavailable:
                 print(f'{workspace} startup is unrecoverable for this baseline. See the doctor log.',
@@ -138,6 +142,8 @@ def main():
     parser.add_argument('--model', default='openai-codex:gpt-6-luna')
     parser.add_argument('--cases-per-instance', type=int, default=12,
                         help='Recycle the managed workspace after this many cases (0 keeps one per workspace)')
+    parser.add_argument('--retain-trajectories', action='store_true',
+                        help='Use a compatible Host pin to save full trajectories during each test run')
     parser.add_argument('--test-timeout-ms', type=int)
     args = parser.parse_args()
     if args.test_timeout_ms is not None and args.test_timeout_ms <= 0:

@@ -118,6 +118,25 @@ class QualificationBatchesTest(unittest.TestCase):
                                  (False, False))
             self.assertEqual(exported, [cases[1]])
 
+    def test_reuses_trajectories_retained_by_the_foreground_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            case = 'open-goal-oracle-passed'
+
+            def invoke(command, **_kwargs):
+                if command[7] == 'run':
+                    self.assertIn('--retain-trajectories', command)
+                    folder = root / 'examples' / 'results' / 'st_run'
+                    folder.mkdir(parents=True)
+                    (folder / f'trajectory-{case}-full.json.gz').touch()
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch('qualify_open_goals.subprocess.run', side_effect=invoke) as run:
+                result = qualify_group(root, 'examples', '', [case], 'model', root, None,
+                                       retain_trajectories=True)
+            self.assertEqual(result, (True, False))
+            self.assertEqual([call.args[0][7] for call in run.call_args_list], ['doctor', 'run', 'stop'])
+
     def test_recycles_instances_and_continues_after_a_failed_batch(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -193,10 +212,12 @@ class QualificationBatchesTest(unittest.TestCase):
             argv = ['qualify_open_goals', '--host', str(root), '--catalog', str(catalog),
                     '--out', str(out), '--resume', '--drain-file', str(stop), '--cases-per-instance', '2']
 
-            def completed(_host, _workspace, _baseline, cases, _model, destination, _timeout, *, batch, devices):
+            def completed(_host, _workspace, _baseline, cases, _model, destination, _timeout, *, batch,
+                          devices, retain_trajectories):
                 self.assertEqual(cases, ['open-goal-oracle-case-0', 'open-goal-oracle-case-1'])
                 self.assertEqual(batch, 1)
                 self.assertEqual(devices, ())
+                self.assertFalse(retain_trajectories)
                 (destination / 'complete').touch()
                 stop.touch()
                 return True, False
