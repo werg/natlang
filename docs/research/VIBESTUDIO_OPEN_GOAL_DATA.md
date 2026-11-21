@@ -250,7 +250,10 @@ python "$LEDGER_CHECKOUT/scripts/memory_ledger.py" run \
 ```
 
 The learner emits `planned_open_user_goals` for the actual schedule before
-loading model weights. Compare the trained checkpoint with its starting
+loading model weights. The build's `open_user_goal_depths` and the learner's
+`planned_open_user_goal_depths` show how much supervised weight goes to
+root and nested invocations. Depth 0 is the root. One goal can contribute
+at several depths. Compare the trained checkpoint with its starting
 checkpoint on the same pinned held evaluation. Keep the Vibestudio held
 goals and their source groups outside the training bundle.
 
@@ -920,8 +923,9 @@ emulator and state.
 
 The archived Luna trajectory rebuilt against this release into eight
 action chains and 1,596 weighted target tokens. Both open-goal shares for
-its CPU-only schedule were 100%. The learner also checks both shares on
-the complete schedule of a training run.
+its CPU-only schedule were 100%. Of that weight, 1,446 tokens came from
+nested invocations at depths 1 through 4. The learner checks both shares
+on the complete schedule of a training run.
 
 Pop verified the catalog, selector hashes, all 14 Host infrastructure
 packages, native Host runtime dependencies, and the pinned Natlang reviewer

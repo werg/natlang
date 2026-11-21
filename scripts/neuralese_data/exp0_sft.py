@@ -480,6 +480,23 @@ def open_goal_exposure(chains):
     }
 
 
+def open_goal_depth_report(chains):
+    """Report supervised open-goal weight by distance below the original root invocation."""
+    weights = collections.Counter()
+    goals = collections.defaultdict(set)
+    for chain in chains:
+        goal = chain.get('open_goal_fingerprint')
+        if not goal:
+            continue
+        weight = chain_mass(chain)
+        if weight > 0:
+            depth = str(chain.get('open_goal_depth', 'unknown'))
+            weights[depth] += weight
+            goals[depth].add(goal)
+    return {depth: {'distinct_goals': len(goals[depth]), 'weighted_target_tokens': weight}
+            for depth, weight in weights.items()}
+
+
 def check_open_goal_exposure(report, minimum):
     report['distinct_goal_share'] = report['distinct_goals'] / max(1, report['trajectories'])
     report['required_share'] = minimum
@@ -857,6 +874,8 @@ def train(args):
             raise SystemExit('Invalid minimum open user goal share in the training chains')
         report = open_goal_exposure(chains[index] for step in steps for index in step)
         print(json.dumps({'planned_open_user_goals': check_open_goal_exposure(report, minimum)}), flush=True)
+        depths = open_goal_depth_report(chains[index] for step in steps for index in step)
+        print(json.dumps({'planned_open_user_goal_depths': depths}), flush=True)
     model, state, special = load_model(args.checkpoint, args.base)
     state = {k: v for k, v in state.items() if k != 'training'}   # the source's optimizer state (5.5 GB host): never used
     # FP32 master weights live in the optimizer; the model computes in BF16 (as the actor does) and its BF16 gradients

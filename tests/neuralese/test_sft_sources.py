@@ -21,6 +21,21 @@ SYSTEM = {'role': 'system', 'content': 'old system prompt'}
 USER = {'role': 'user', 'content': 'task'}
 
 
+def test_open_goal_depth_report_uses_effective_chain_weights():
+    from exp0_sft import open_goal_depth_report
+
+    child = {'open_goal_fingerprint': 'goal-a', 'open_goal_depth': 2,
+             'segs': [(0, 3, {'weight': np.array([1., 0., .5])})]}
+    root = {**child, 'open_goal_depth': 0, 'segs': [(0, 2, {})]}
+    masked = {**child, 'open_goal_depth': 3, 'segs': [(0, 1, {'weight': np.array([0.])})]}
+    legacy = {'open_goal_fingerprint': 'goal-b', 'segs': [(0, 4, {})]}
+    assert open_goal_depth_report([child, child, root, masked, legacy, {'segs': [(0, 8, {})]}]) == {
+        '0': {'distinct_goals': 1, 'weighted_target_tokens': 2},
+        '2': {'distinct_goals': 1, 'weighted_target_tokens': 3},
+        'unknown': {'distinct_goals': 1, 'weighted_target_tokens': 4},
+    }
+
+
 def test_live_capture_root_discovery_keeps_verified_manifests_in_order(tmp_path):
     single = tmp_path / 'single' / 'verified' / 'manifest.json'
     first = tmp_path / 'batch' / 'cases' / 'first' / 'verified' / 'manifest.json'

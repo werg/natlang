@@ -1595,7 +1595,7 @@ def open_goal_key(goal):
 def mix_report(chains, aux_report):
     """Per part (source or aux name): chains, forward and weighted target tokens and their shares; loss concentration
     over tasks (top 10 tasks, top 1% of tasks, the largest task)."""
-    from exp0_sft import chain_mass, open_goal_exposure, source_tokens
+    from exp0_sft import chain_mass, open_goal_depth_report, open_goal_exposure, source_tokens
     parts = collections.defaultdict(collections.Counter)
     per_task = collections.Counter()
     for chain in chains:
@@ -1618,6 +1618,7 @@ def mix_report(chains, aux_report):
                                    'top1pct_tasks_share': round(sum(ranked[:top1]) / total_w, 4),
                                    'max_task_tokens': int(ranked[0]) if ranked else 0},
             'open_user_goals': open_goal_exposure(chains),
+            'open_user_goal_depths': open_goal_depth_report(chains),
             'aux': aux_report}
 
 
@@ -1809,10 +1810,19 @@ def build(args):
         episode_chains = chains_of([episode])
         goal_fingerprint = (hashlib.sha256(open_goal_key(episode['open_goal']).encode()).hexdigest()
                             if episode['open_goal'] else None)
+        goal_depths = {}
+        if goal_fingerprint:
+            for turn in turns:
+                ancestry = (turn.get('live_exchange') or {}).get('call_ancestry')
+                if ancestry:
+                    goal_depths[turn['invocation_id']] = len(ancestry) - 1
         for chain in episode_chains:
             chain['part'] = source
             if goal_fingerprint:
                 chain['open_goal_fingerprint'] = goal_fingerprint
+                invocation = chain['segs'][0][2]['invocation']
+                if invocation in goal_depths:
+                    chain['open_goal_depth'] = goal_depths[invocation]
         for row in rows:          # a chain holds its prompts in 'ids'; the per-row copies only cost memory
             row.pop('prompt', None)
         all_chains.extend(episode_chains)
