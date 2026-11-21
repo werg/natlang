@@ -1,5 +1,6 @@
 """Filled-in reasoning for teacher trajectories (scripts/neuralese_data/filled_reasoning.py): leakage, the hint turn's
 place, length-banded selection, rows with the filled history, per-row sampled flags, and the build's ``replaces``."""
+import json
 import random
 import sys
 from pathlib import Path
@@ -165,3 +166,26 @@ def test_episode_walk_against_a_scripted_engine(monkeypatch):
     built = fr.filled_rows(fr.calls_of(chain, close), calls, close, 'filled:teacher:k')
     assert list(built[0]['sample']) == long_block + action1
     assert list(built[1]['prompt']) == prompt + long_block + action1 + suffix   # the filled block is history
+
+    # a stopped generation resumes an episode at the step it reached (OUT/partial/), its blocks as history
+    import tempfile
+    with tempfile.TemporaryDirectory() as partial:
+        args.partial_dir = Path(partial)
+        first = filler.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+        saved = fr.load_partial(args.partial_dir, 'teacher:k', json.loads(json.dumps(fr.settings(args))))
+        assert [len(v) for v in saved.values()] == [2] and first['resumed_steps'] == 0
+        saved_chain = {'digest': fr.chain_digest(chain), 'calls': list(saved.values())[0][:1]}
+        fr.save_partial(args.partial_dir, 'teacher:k', json.loads(json.dumps(fr.settings(args))), [saved_chain])
+        draws = seen['hinted_prompts']
+        again = filler.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+        assert again['resumed_steps'] == 1 and seen['hinted_prompts'] == draws + 2   # only step 2 drawn again
+        assert again['chains'][0]['calls'][0] == saved_chain['calls'][0]
+        args.max_tokens = 256                                   # other settings: the partial file is not used
+        assert fr.load_partial(args.partial_dir, 'teacher:k', json.loads(json.dumps(fr.settings(args)))) == {}
+
+
+def test_fill_policies_name_every_policy_that_drew_a_step():
+    record = {'policy_start': {'checkpoint_sha256': 'a'}, 'policy_end': {'checkpoint_sha256': 'b'},
+              'chains': [{'calls': [{'policy': 'c'}, {'kind': 'no_think'}]}]}
+    assert fr.fill_policies(record) == {'a', 'b', 'c'}
+    assert fr.fill_policies({'policy_start': None, 'chains': []}) == set()

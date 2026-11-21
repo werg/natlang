@@ -33,8 +33,11 @@ on; its scoring prefill already left that history in the radix cache, so a step 
     filled_reasoning.py build    --out DIR --corpus OUT       # chains.pkl for sft_sources build --aux filled=...
 
 Generation is resumable and incremental: DIR/fills.jsonl holds one line per finished episode (the key, its WORK, the
-policy identity served while it ran, per call the chosen block and every candidate's statistics); a rerun takes only
-episodes without a line, so new teacher episodes are covered as the campaigns add them. ``build`` re-renders each
+policy identity served while it ran, per call the chosen block, the policy that drew it and every candidate's
+statistics); a rerun takes only episodes without a line, so new teacher episodes are covered as the campaigns add them.
+An episode in progress keeps its finished steps in DIR/partial/ (one file per episode, rewritten after every step), so
+a stopped generation (the expert-iteration cycle runs it in windows that end when the engine is needed elsewhere)
+resumes it at the step it reached instead of redrawing up to two hours of steps (``--no-partial`` opts out). ``build`` re-renders each
 episode from its WORK (``sft_sources.call_row``, checked against the recorded digest), rebuilds the prompts with the
 filled history and writes OUT/chains.pkl (rounds ``filled:<episode key>``; per-row ``sampled`` flags: the block was
 sampled by the student, the action was not, ``exp0_sft.sampled_targets``) and OUT/report.json.
@@ -466,14 +469,24 @@ class Filler:
         rng = random.Random(f"{self.args.seed}:{item['key']}")
         chains, _ = renderer.chains(item)
         policy_start = self.actor.policy()
-        out_chains = []
+        directory = getattr(self.args, 'partial_dir', None)
+        current = json.loads(json.dumps(settings(self.args)))
+        saved = load_partial(directory, item['key'], current)
+        out_chains, resumed = [], 0
         for chain in chains:
             calls = calls_of(chain, self.close)
+            digest = chain_digest(chain)
+            done = saved.get(digest, [])[:len(calls)]
             context = [int(i) for i in calls[0]['prompt']]
             context_text = self.text(context, special=True)
             fills = []
             for t, call in enumerate(calls):
-                fill = self.step(context, calls, t, context_text, rng)
+                if t < len(done):     # finished before a stop: its block is the history the later steps reason on
+                    fill = done[t]
+                    resumed += 1
+                else:
+                    fill = self.step(context, calls, t, context_text, rng)
+                    fill['policy'] = (self.actor.policy() or {}).get('checkpoint_sha256')
                 fills.append(fill)
                 block = fill.get('reasoning') or ([self.close] if call['cut'] is not None else [])
                 new = block + [int(i) for i in call['action']] if call['cut'] is not None else \
@@ -481,11 +494,14 @@ class Filler:
                 new += [int(i) for i in call['suffix']]
                 context += new
                 context_text += self.text(new, special=True)
-            out_chains.append({'digest': chain_digest(chain), 'calls': fills})
+                if directory is not None and t >= len(done):
+                    save_partial(directory, item['key'], current, out_chains + [{'digest': digest, 'calls': fills}])
+            out_chains.append({'digest': digest, 'calls': fills})
         return {'schema': SCHEMA, 'key': item['key'], 'work': item['work'], 'name': item['name'],
                 'task_id': item['task_id'], 'teacher': item['teacher'], 'render_tokenizer': renderer.tokenizer_dir,
                 'policy_start': policy_start,
                 'policy_end': self.actor.policy(), 'seconds': round(time.time() - started, 1), 'finished': time.time(),
+                'resumed_steps': resumed,
                 'settings': settings(self.args), 'chains': out_chains}
 
 
@@ -512,6 +528,37 @@ def prefer(episodes, rates):
 def settings(args):
     return {k: getattr(args, k) for k in ('unhinted', 'hinted', 'hint_horizon', 'score_horizon', 'max_tokens', 'band',
                                           'close_floor', 'min_improvement', 'ratio_floor', 'top_p', 'max_len')}
+
+
+def partial_path(directory, key):
+    return Path(directory) / (hashlib.sha1(key.encode()).hexdigest()[:24] + '.json')
+
+
+def load_partial(directory, key, settings_now):
+    """{chain digest: finished step fills} of an episode's partial file, if it was drawn under the same settings."""
+    if directory is None:
+        return {}
+    try:
+        data = json.loads(partial_path(directory, key).read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if data.get('key') != key or data.get('settings') != settings_now:
+        return {}
+    return {c['digest']: c['calls'] for c in data.get('chains', ())}
+
+
+def save_partial(directory, key, settings_now, chains):
+    path = partial_path(directory, key)
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps({'key': key, 'settings': settings_now, 'chains': chains}))
+    os.replace(tmp, path)
+
+
+def fill_policies(record):
+    """The policy shas a fills record was drawn by (episode start/end and every step's)."""
+    shas = {(record.get(k) or {}).get('checkpoint_sha256') for k in ('policy_start', 'policy_end')}
+    shas |= {f.get('policy') for c in record.get('chains', ()) for f in c.get('calls', ())}
+    return {s for s in shas if s}
 
 
 def done_keys(out):
@@ -552,6 +599,9 @@ def generate(args):
         todo = prefer(todo, load_rates(args.prefer_rates))
     if args.limit:
         todo = todo[:args.limit]
+    args.partial_dir = None if args.no_partial else out / 'partial'
+    if args.partial_dir is not None:
+        args.partial_dir.mkdir(exist_ok=True)
     actor = Actor(args.sglang, args.front, args.polite, args.max_inflight, args.min_inflight, args.max_running)
     filler = Filler(args, actor, tokenizer, stops, banned)
     renderer = Renderer(args.render_tokenizer)
@@ -582,6 +632,8 @@ def generate(args):
         with write_lock:
             fills.write(json.dumps(record) + '\n')
             fills.flush()
+        if args.partial_dir is not None:
+            partial_path(args.partial_dir, item['key']).unlink(missing_ok=True)
     with ThreadPoolExecutor(args.workers) as pool:
         list(pool.map(one, todo))
     log.write(json.dumps({'event': 'end', 'failures': dict(failures), 'time': time.time()}) + '\n')
@@ -694,10 +746,14 @@ def build(args):
     starts = [json.loads(l) for l in (Path(args.out) / 'generate.log').open() if '"event": "start"' in l]
     record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'])   # the fills as built
     records = list(read_fills(args.out))
+    excluded = set(args.exclude_policy)
     renderers = {}
     chains, counts = [], collections.Counter()
     close = None
     for record in records:
+        if fill_policies(record) & excluded:   # drawn by a policy the cycle rejected as failed (expert_iteration gate)
+            counts['excluded_policy'] += 1
+            continue
         item = {k: record[k] for k in ('key', 'work', 'name', 'task_id')}
         try:
             if record['render_tokenizer'] not in renderers:
@@ -955,11 +1011,15 @@ def build_parser():
     g.add_argument('--prefer-rates', action='append', default=[],
                    help='task pass rates ({id: {successes, scored}}): episodes of failed tasks first, then unmeasured')
     g.add_argument('--max-failures', type=int, default=200)
+    g.add_argument('--no-partial', action='store_true',
+                   help='do not keep finished steps of episodes in progress (OUT/partial/): a stop redraws them')
     s = sub.add_parser('status')
     s.add_argument('--out', required=True)
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
     b.add_argument('--corpus', required=True)
+    b.add_argument('--exclude-policy', action='append', default=[], metavar='SHA',
+                   help='leave out episodes any step of which this policy drew (a held-failed candidate)')
     a = sub.add_parser('audit')
     a.add_argument('--out', required=True)
     a.add_argument('--work', action='append', default=[])

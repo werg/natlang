@@ -148,7 +148,17 @@ def test_cycle_fill_command_parses_as_filled_reasoning_generate(tmp_path, monkey
     parsed = filled_reasoning.build_parser().parse_args(command[2:])
     assert parsed.command == 'generate' and parsed.work == ['/data/seed', '/data/demos']
     assert parsed.prefer_rates == [str(cycle.dir / 'tasks.rates.json')] and parsed.polite
-    assert (parsed.min_inflight, parsed.max_inflight, parsed.max_running) == (16, 32, 128)
+    # beside the collection: the actor runs fill_inflight more requests than collection slots; 2x workers reach the cap
+    assert (parsed.min_inflight, parsed.max_inflight, parsed.max_running, parsed.workers) == (16, 32, 144, 32)
+    assert cycle.max_running() == 144
+    args.fill_window_inflight, args.fill_window_workers = 128, 96
+    window = filled_reasoning.build_parser().parse_args(cycle.fill_command(
+        {'sglang': 'http://127.0.0.1:1', 'url': 'http://127.0.0.1:2', 'export': '/e'}, window=True)[2:])
+    assert not window.polite and (window.min_inflight, window.max_inflight, window.max_running, window.workers) == \
+        (128, 128, 128, 96)
+    args.fill_repo = str(tmp_path / 'newer')        # fills may run newer data tooling than the pin
+    assert cycle.fill_command({'sglang': 'a', 'url': 'b', 'export': 'c'})[1] == \
+        str(tmp_path / 'newer' / 'scripts/neuralese_data/filled_reasoning.py')
 
 
 def test_fill_takes_failed_then_unmeasured_tasks_first():
@@ -189,3 +199,117 @@ def test_cycle_builds_the_works_own_neuralese_graph_by_default(tmp_path):
     finally:
         sys.argv = argv
     assert parser_args['a'].no_own_neuralese_graph is False and parser_args['a'].own_neuralese_graph_share == 0.05
+
+
+def test_merge_frontier_lets_the_trained_policys_own_rates_win_over_the_siblings():
+    exact = {'schema': ei.FRONTIER_SCHEMA, 'policy': 'start', 'collections': ['/own'],
+             'tasks': {'a': {'successes': 0, 'scored': 4, 'tier': 'never'}}}
+    sibling = {'schema': ei.FRONTIER_SCHEMA, 'policy': 'cand', 'collections': ['/spec'],
+               'tasks': {'a': {'successes': 4, 'scored': 4, 'tier': 'solved'},
+                         'b': {'successes': 1, 'scored': 4, 'tier': 'sometimes'}}}
+    merged = ei.merge_frontier(exact, sibling)
+    assert merged['policy'] == 'start' and merged['sibling_policy'] == 'cand'
+    assert merged['tasks']['a'] == {'successes': 0, 'scored': 4, 'tier': 'never', 'measured_by': 'own'}
+    assert merged['tasks']['b']['measured_by'] == 'sibling' and merged['tiers'] == {'never': 1, 'sometimes': 1}
+    assert merged['collections'] == ['/own', '/spec']
+
+
+@pytest.mark.parametrize('verdict,setting,expected', [('failure', 'auto', 'recollect'), ('neutral', 'auto', 'keep'),
+                                                      ('neutral', 'recollect', 'recollect'), ('failure', 'keep', 'keep')])
+def test_rejected_collection_mode(verdict, setting, expected):
+    assert ei.rejected_collection_mode(verdict, setting) == expected
+
+
+def test_next_cycle_argv_replaces_this_cycles_own_flags_and_adds_seed_works():
+    assert ei.next_name('sft-v7') == 'sft-v8' and ei.next_name('sft-v9') == 'sft-v10' and ei.next_name('x') is None
+    argv = ['--dir', '/ops/ei/sft-v7', '--name', 'sft-v7', '--start', '/v6.pt', '--commit', 'c7', '--k', '4',
+            '--aux', 'live=/l/chains.pkl,share=all', '--seed-work', '/s1', '--start-sha=aaa', '--prefer-unseen', '/m6',
+            '--fill', '/fill', '--next-seed-work', '/qwen', '--fill-repo', '/pin-new', '--no-teacher-campaign']
+    out = ei.next_cycle_argv(argv, directory='/ops/ei/sft-v8', name='sft-v8', start='/v7/sft/checkpoint.pt',
+                             start_sha='bbb', commit='c8', previous='/ops/ei/sft-v7', prefer_unseen=['/ops/ei/sft-v7/mix'],
+                             fallback_prefer_unseen=['/m6'], extra_seed_work=['/qwen', '/s1'])
+    parsed = _cycle_args(out)
+    assert (parsed.dir, parsed.name, parsed.start, parsed.start_sha, parsed.commit) == \
+        ('/ops/ei/sft-v8', 'sft-v8', '/v7/sft/checkpoint.pt', 'bbb', 'c8')
+    assert parsed.seed_work == ['/s1', '/qwen'] and parsed.next_seed_work == [] and parsed.fill_repo is None
+    assert parsed.speculative_after == '/ops/ei/sft-v7' and parsed.prefer_unseen == ['/ops/ei/sft-v7/mix']
+    assert parsed.fallback_prefer_unseen == ['/m6'] and parsed.aux == ['live=/l/chains.pkl,share=all']
+    assert parsed.no_teacher_campaign and parsed.fill == '/fill' and parsed.k == 4 and not parsed.no_pipeline
+
+
+def _cycle_args(argv):
+    import sys
+    captured = []
+    old_argv, old_cycle = sys.argv, ei.cycle
+    sys.argv, ei.cycle = ['expert_iteration.py', 'cycle', *argv], captured.append
+    try:
+        ei.main()
+    finally:
+        sys.argv, ei.cycle = old_argv, old_cycle
+    return captured[0]
+
+
+def test_reusable_held_takes_only_a_complete_result_of_the_policy_in_the_series(tmp_path):
+    def result(name, **kw):
+        path = tmp_path / name / 'result.json'
+        path.parent.mkdir()
+        path.write_text(json.dumps({'complete': True, 'policy_id': 'p', 'samples_per_task': 2,
+                                    'series': {'key': 's1'}, **kw}))
+        return path
+    paths = [result('a', complete=False), result('b', series={'key': 's0'}), result('c', samples_per_task=4),
+             result('d', policy_id='q'), result('e')]
+    assert ei.reusable_held(paths, 'p', 2, 's1') == paths[-1]
+    assert ei.reusable_held(paths[:-1], 'p', 2, 's1') is None
+
+
+def _speculative_cycle(tmp_path, verdict):
+    import types
+    prev = tmp_path / 'sft-v7'
+    (prev / 'stages').mkdir(parents=True)
+    (prev / 'drive.log').write_text(json.dumps({'stage': 'cycle', 'start': '/v6.pt', 'start_sha': 'six'}) + '\n')
+    if verdict:
+        (prev / 'verdict.json').write_text(json.dumps(verdict))
+    args = types.SimpleNamespace(dir=str(tmp_path / 'sft-v8'), pin=str(tmp_path / 'pin'), commit='a' * 40,
+                                 start_sha='cand', start='/v7.pt', sft_work=str(tmp_path / 'w'), fill=None,
+                                 speculative_after=str(prev), prefer_unseen=['/v7/mix'], fallback_prefer_unseen=['/m6'],
+                                 rejected_collection='auto', slots=128, fill_inflight=32)
+    return ei.Cycle(args)
+
+
+def test_gate_trains_the_adopted_candidate_as_collected(tmp_path):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'success', 'adopt': True, 'vs_start': {}, 'next_start': '/v7.pt'})
+    assert cycle.speculative and cycle.train_policy() == ('/v7.pt', 'cand', ['/v7/mix'])
+    cycle.gate_stage()
+    assert cycle.train_policy() == ('/v7.pt', 'cand', ['/v7/mix']) and cycle.collect_policy() == ('/v7.pt', 'cand')
+    assert cycle.gate()['collection'] == 'adopted'
+
+
+def test_gate_keeps_a_neutral_rejections_collection_and_trains_the_previous_start(tmp_path):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'neutral', 'adopt': False, 'vs_start': {}, 'next_start': '/v6.pt'})
+    assert not cycle.recollect_due()
+    cycle.gate_stage()
+    assert cycle.train_policy() == ('/v6.pt', 'six', ['/m6'])
+    assert cycle.collect_policy() == ('/v7.pt', 'cand')          # the sibling's collection stays
+
+
+def test_gate_recollects_from_the_previous_start_after_a_failure(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'failure', 'adopt': False, 'vs_start': {}, 'next_start': '/v6.pt'})
+    assert cycle.recollect_due()
+    (cycle.collect_dir).mkdir()
+    (cycle.collect_dir / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': 'cand'}) + '\n')
+    served = []
+
+    def fake_collect():
+        served.append(cycle.collect_policy())
+        cycle.set_collect_aside(cycle.collect_policy()[1])
+        cycle.mark('collect')
+    monkeypatch.setattr(cycle, 'collect_stage', fake_collect)
+    cycle.gate_stage()
+    assert served == [('/v6.pt', 'six')] and cycle.train_policy()[:2] == ('/v6.pt', 'six')
+    assert (cycle.dir / 'collect-spec-cand').exists() and not cycle.collect_dir.exists()
+
+
+def test_cycle_pipeline_window_and_reuse_flags_default_on():
+    parsed = _cycle_args(['--dir', 'd', '--name', 'n', '--start', 's', '--commit', 'c'])
+    assert not parsed.no_pipeline and not parsed.no_fill_window and not parsed.no_held_reuse
+    assert parsed.fill_inflight == 32 and parsed.next_commit == 'origin/main' and parsed.rejected_collection == 'auto'
