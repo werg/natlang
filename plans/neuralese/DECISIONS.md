@@ -6388,7 +6388,7 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   explicit, as b17d's build had them) with 12 workers: chains.pkl **8607730e** (identical), and rows.jsonl.zst,
   val-own.pkl, val-teacher.pkl, cases.jsonl byte-identical; build.json differs only in paths, provenance and the
   growing gap-v1 manifest count. Wall **848 s (14.1 min) vs 1 h 42 min** (with sft-v8's collection and an operator fit
-  on the machine). sft-v7's own neuralese-graph rebuilt with 12 workers: chains **6ad26b42** (identical), 127 s.
+  on the machine). sft-v7's own neuralese-graph rebuilt with 12 workers: chains **6ad26b42** (identical), 127 s vs 252 s serial (old code, same work).
   Tests: `test_render_ahead_gives_the_serial_results_and_byte_identical_rows`,
   `test_light_episodes_read_by_workers_equal_the_serial_reading`,
   `test_replay_surfaces_and_kept_episodes_read_by_workers_equal_the_serial_reading` (90 passed with
