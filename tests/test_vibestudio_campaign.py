@@ -53,3 +53,8 @@ def test_only_cases_with_unavailable_prerequisites_are_held(monkeypatch, tmp_pat
 
     monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', probes)
     assert set(vibestudio_campaign.prerequisite_holds(cases, tmp_path)) == {'deployment'}
+
+
+def test_failed_accepted_eval_reconciliation_is_an_infrastructure_failure():
+    outcome = {'status': 'test-failed', 'reason': 'eval: status reconciliation failed for accepted run example'}
+    assert vibestudio_campaign.infrastructure_failure(outcome, {})

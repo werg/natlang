@@ -86,13 +86,16 @@ def outcomes(capture, names, held, training, cases):
     return results
 
 
-def workerd_reset(outcome):
+def workerd_failure(outcome):
     reason = outcome.get('reason') or ''
-    return outcome['status'] == 'test-failed' and 'DO RPC ' in reason and 'ECONNRESET' in reason
+    return outcome['status'] == 'test-failed' and (
+        ('DO RPC ' in reason and 'ECONNRESET' in reason)
+        or 'eval: status reconciliation failed for accepted run ' in reason
+    )
 
 
 def infrastructure_failure(outcome, case):
-    if workerd_reset(outcome):
+    if workerd_failure(outcome):
         return True
     if outcome['status'] == 'no-capture':
         return True
@@ -337,7 +340,7 @@ def drive(args):
         publish(waves / f'{started.stem}-result.json', receipt)
         # The matching remote copy and its IR export are durable.
         shutil.rmtree(capture)
-        resets = [name for name, outcome in receipt.items() if workerd_reset(outcome)]
+        resets = [name for name, outcome in receipt.items() if workerd_failure(outcome)]
         captures_missing = all(outcome['status'] == 'no-capture' for outcome in receipt.values())
         if len(resets) >= 2 or captures_missing:
             publish(root / 'runtime-hold.json', {'wave': started.stem, 'workerd_resets': resets,
