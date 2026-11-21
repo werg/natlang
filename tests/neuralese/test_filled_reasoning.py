@@ -189,3 +189,19 @@ def test_fill_policies_name_every_policy_that_drew_a_step():
               'chains': [{'calls': [{'policy': 'c'}, {'kind': 'no_think'}]}]}
     assert fr.fill_policies(record) == {'a', 'b', 'c'}
     assert fr.fill_policies({'policy_start': None, 'chains': []}) == set()
+
+
+def test_length_reweighting_restores_the_students_own_length_mix():
+    def cand(origin, length, selected=False):
+        return {'origin': origin, 'length': length, 'closed': True, 'selected': selected}
+    # the student reasons long half the time; the gate selected only short blocks plus one long one
+    calls = [{'candidates': [cand('unhinted', 100), cand('unhinted', 900), cand('hinted', 100, selected=True)]}] * 3
+    calls += [{'candidates': [cand('unhinted', 100), cand('unhinted', 900, selected=True)]}]
+    records = [{'chains': [{'calls': calls}]}]
+    w = fr.length_weights(records, cap=4.)
+    short, long_ = fr.length_bin(100), fr.length_bin(900)
+    assert abs(w[short] - 0.5 / 0.75) < 1e-9 and abs(w[long_] - 0.5 / 0.25) < 1e-9
+    assert fr.length_weights(records, cap=0) is None and fr.length_weights(records, cap=1.5)[long_] == 1.5
+    row = {'sampled': np.array([True] * 900 + [False] * 3), 'weight': np.ones(903, np.float32)}
+    fr.reweight([row], w)
+    assert row['weight'][0] == 2. and row['weight'][-1] == 1.

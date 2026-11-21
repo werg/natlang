@@ -6034,3 +6034,37 @@ claim sized from the measured uncapped peak (softop-fit-2: 15 GB CUDA, plus 3.4 
 base checkpoint on NVMe). The state is ready to serve as the default `view@compact-value` prompt state (`PROMPT_STATES`
 in `operator-stage.sh`, opt-out `NATLANG_NEURALESE_PROMPT_STATES=off`); task-level effect shows at the next held eval
 whose harness loads it.
+
+**2026-11-21 06:00, sft-v7's fill: first 30 episodes (214 steps).** Fill on sft-v7's collect actor beside 128-slot
+best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin b17d5fd85.
+
+- **Throughput: 8.9 episodes/h, 66 steps/h, ~74 generated tok/s** (930k tokens in 3.5 h). That is 9.9k generated tokens
+  per filled step: four candidates, plus the fallback steps' draws.
+  - Beside a saturated collection the fill only gets the per-sequence decode rate of a full engine (~15 tok/s).
+  - Each step waits for its slowest candidate; draws are capped at 4,096 tokens, with p90 2.3k.
+  - At this share the ~23k-episode corpus would take ~2,600 h. Beside collection this is a trickle, not the corpus
+    pass. The corpus needs a dedicated 128-slot actor window.
+- **Coverage:** 44% of steps filled (94), 56% fell back to an empty block. Rejections among non-selected candidates:
+  - no improvement: 293 unhinted, 247 hinted;
+  - hinted leak: 150, so 34% of hinted blocks quoted the hint, and the gate removed them;
+  - unclosed: 63; forced close: 3.
+- **Quality:**
+  - Action NLL per token after the filled block: p50 0.0013 (mean 0.057), against 0.17 (mean 0.37) after an empty block.
+  - Selected blocks are 74 unhinted and 20 hinted.
+  - The hinted blocks that passed the gates sit close to the student's own distribution: per-token log ratio
+    student/hinted p50 -0.019. All hinted blocks: p50 -0.13.
+- **Length bias found.**
+  - Selected blocks have p50 191 tokens (p75 514); the student's unhinted samples at the same steps have p50 308
+    (p75 1,015). The `</think>` hazard along selected blocks has mean 1.9, against 1.6 for the student's own.
+  - Mechanism: the improvement gate. Longer student reasoning lowers the teacher action's likelihood more often:
+    mean improvement -0.05 at 64-128 tokens, -0.17 at 512-1,024 and -0.27 beyond 2,048. Admission falls with it, from
+    62% to 16% to 10%.
+  - Steps that fell back are the long-reasoning ones (student median 600 tokens), and filled steps are the short ones
+    (320). The within-step length band does not remove this, because it acts on which steps get filled. This is the
+    sequence-score selection bias again, now acting through a threshold.
+  - Fix (default, `--length-reweight-cap 0` opts out): `build` weights each trained block by the student's own
+    length-bin share over the selected blocks' share, capped at 4x, so the trained length mix follows the student's.
+    Test `test_length_reweighting_restores_the_students_own_length_mix`.
+  - sft-v7's pin predates the fix and builds its ~55 fill episodes unweighted. They are a negligible part of its mix.
+- **Default for the next SFT:** the filled part with the reweighting. The full-corpus pass waits for a dedicated actor
+  window, and the next cycle gets its own collect-free fill stage (to build).
