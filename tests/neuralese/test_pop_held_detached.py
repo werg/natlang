@@ -151,8 +151,9 @@ def test_start_and_serve_checkpoint_claim_one_admissible_pop_budget(monkeypatch)
     # 10.5 GB was refused beside Pop's gdm greeter (10.8 GiB free, 2026-11-20); both actor paths claim the same budget
     import inspect
     monkeypatch.delenv('NATLANG_POP_HELD_BUDGET_GB', raising=False)
-    assert float(pop_rl_actor.pop_sglang_budget_gb()) + pop_rl_actor.POP_RESERVE_GB <= 10.8
-    monkeypatch.setenv('NATLANG_POP_HELD_BUDGET_GB', '9.5')
-    assert pop_rl_actor.pop_sglang_budget_gb() == '9.5'
+    # 10.2 GiB admissible beside other agents' resident Pop processes (2026-11-21): 10 + 0.5 timed out twice
+    assert float(pop_rl_actor.pop_sglang_budget_gb()) + pop_rl_actor.POP_RESERVE_GB <= 10.2
+    monkeypatch.setenv('NATLANG_POP_HELD_BUDGET_GB', '9.0')
+    assert pop_rl_actor.pop_sglang_budget_gb() == '9.0'
     for path in (pop_rl_actor.start, pop_rl_actor.serve_checkpoint):
         assert 'pop_sglang_budget_gb()' in inspect.getsource(path)

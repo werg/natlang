@@ -110,8 +110,10 @@ SGLANG_MEMORY_GB = 11   # 8 GiB was OOM-killed at CUDA-graph capture (2026-11-12
 def pop_sglang_budget_gb():
     """Pop ledger budget of an SGLang actor unit (start and serve-checkpoint alike): Pop's 15 GB leave 10.9-11.5 GiB
     admissible (10.9 with the gdm greeter after a desktop logout), and the engine's own limits bound its memory, so
-    the unit claims SGLANG_MEMORY_GB - 1. NATLANG_POP_HELD_BUDGET_GB overrides."""
-    return os.environ.get('NATLANG_POP_HELD_BUDGET_GB', str(SGLANG_MEMORY_GB - 1.))
+    the unit claims SGLANG_MEMORY_GB - 1.5 (other agents' resident Pop processes left 10.2 GiB admissible on 2026-11-21,
+    so 10 + the 0.5 reserve timed out sft-v7's candidate held twice; MemoryMax stays SGLANG_MEMORY_GB - 0.5).
+    NATLANG_POP_HELD_BUDGET_GB overrides."""
+    return os.environ.get('NATLANG_POP_HELD_BUDGET_GB', str(SGLANG_MEMORY_GB - 1.5))
 
 
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
