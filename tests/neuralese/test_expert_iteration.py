@@ -182,6 +182,12 @@ def test_cycle_builds_the_works_own_neuralese_graph_by_default(tmp_path):
     assert command[command.index('--work') + 1] == str(tmp_path / 'w')
     assert command[command.index('--out') + 1] == str(cycle.dir / 'neuralese-graph-own')
     assert [command[i + 1] for i, a in enumerate(command) if a == '--exclude-run'] == ['grpo-v2/', 'grpo-v4/run1']
+    current = command[command.index('--current-surface-run') + 1]
+    import re
+    label = 'rl:' + '/'.join(cycle.collect_dir.parts[-2:])
+    assert re.search(current, label) and not re.search(current, 'rl:grpo-v4/run2')
+    assert sft_sources.current_surface_run(types.SimpleNamespace(current_surface_run=[current]), {'run': label})
+    assert not sft_sources.current_surface_run(types.SimpleNamespace(current_surface_run=[]), {'run': label})
     import sys
     argv = sys.argv
     try:

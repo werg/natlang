@@ -40,6 +40,7 @@ import json
 import os
 import random
 import signal
+import re
 import subprocess
 import sys
 import threading
@@ -845,7 +846,9 @@ class Cycle:
         sft-v5 (DECISIONS 2026-11-21 "ran-out") showed the student calling Neuralese consumers twice as often while
         they loop ~7.6 calls each. ``--no-own-neuralese-graph`` opts out."""
         return self.py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
-                       '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1')
+                       '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
+                       # this cycle's collection ran on the cycle's pin: its surfaces are current
+                       '--current-surface-run', '^rl:' + re.escape('/'.join(self.collect_dir.parts[-2:])) + '$')
 
     def build_stage(self):
         aux = list(self.a.aux)

@@ -2230,6 +2230,14 @@ def neuralese_parts(messages):
                                                           for part in m['content']) for m in messages)
 
 
+def current_surface_run(args, episode):
+    """An own episode collected by a run on the current runtime (``--current-surface-run REGEX`` on its run label,
+    e.g. the expert-iteration cycle's own collection on the cycle's pin): its surfaces are current by construction.
+    The replay-derived set holds only the surfaces the WORK's exact replays rendered, and a WORK seeded with an earlier
+    pin's verdicts renders that pin's prompts: sft-v7's 146 own Neuralese successes were all dropped as unseen."""
+    return any(re.search(pattern, episode.get('run') or '') for pattern in getattr(args, 'current_surface_run', None) or ())
+
+
 def surface_key(turn):
     """(system prompt, tool schemas) of a call: what the runtime surface renders around the task."""
     system = ''.join(m['content'] if isinstance(m['content'], str) else json.dumps(m['content'])
@@ -2299,7 +2307,7 @@ def neuralese_text(args):
                 s['calls_after_import'] += 1
                 s['target_tokens_after_import'] += turn.get('completion_tokens') or 0
                 continue
-            if surface_key(turn) not in surfaces:
+            if surface_key(turn) not in surfaces and not current_surface_run(args, e):
                 s['calls_unseen_surface'] += 1
                 continue
             try:
@@ -2448,6 +2456,7 @@ def neuralese_graph(args):
                         for field in ('logp', 'probabilities'):
                             call.pop(field, None)
                     lowered_of[samples[row['sample']]['key']] = (
+                        current_surface_run(args, samples[row['sample']]) or
                         all(surface_key(t) in surfaces for t in row['turns'] if t.get('messages')), counters, calls)
                 del row
     per_task = collections.Counter()
@@ -2638,12 +2647,16 @@ def main():
     n.add_argument('--tokenizer', required=True)
     n.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     n.add_argument('--max-per-task', type=int, default=4)
+    n.add_argument('--current-surface-run', action='append', default=[], metavar='REGEX',
+                   help='own runs on the current runtime (episode run label): their calls count as on a current surface')
     n.add_argument('--seed', type=int, default=20261117)
     g = sub.add_parser('neuralese-graph', help='whole Neuralese episodes (consumers included) as pass-through graph rows')
     g.add_argument('--work', required=True)
     g.add_argument('--out', required=True)
     g.add_argument('--held-manifest', help='default: the registry role held-eval (held-v3)')
     g.add_argument('--max-per-task', type=int, default=2)
+    g.add_argument('--current-surface-run', action='append', default=[], metavar='REGEX',
+                   help='own runs on the current runtime (episode run label): their calls count as on a current surface')
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
