@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,320-goal release](vibestudio-open-goal-pop-pins-1320.tsv) is staged on
-Pop at `/home/werg/vibestudio-worktrees/open-goal-release-1320.DVlMTB`. To
+The [1,320-goal composition-corrected release](vibestudio-open-goal-pop-pins-composed-1320.tsv)
+is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1320.k9Vlke`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -124,7 +124,9 @@ runtime. Set `LEDGER_CHECKOUT` to the checkout with the current memory
 ledger and choose a fresh `SMOKE_UNIT` for each attempt.
 From the Host checkout, `node --import tsx scripts/check-open-goal-runtime.mjs`
 checks linked Natlang type environments and explicitly named callable paths
-using the installed Workerd runtime.
+using the installed Workerd runtime. Pass a template name such as `system`
+to inspect that workspace, or `system+system-testing` for its managed test
+composition.
 
 Run one case at a time with the Natlang memory ledger. The collector starts
 and stops a managed workspace for the selected case and uses the configured
@@ -493,7 +495,7 @@ with five call levels on its longest path. It yielded nine learner chains, 1,735
 and 1,712 weighted target tokens with the production LFM3 tokenizer. Both
 open-goal shares were 100% for this one-goal smoke. The learner's CPU input
 loader packed all nine chains and reproduced the weighted target count.
-The longest chain was 25,875 tokens under its 32,000-token limit. The Tick unit peaked at
+The longest chain was 25,875 tokens with a 32,000-token packing target. The Tick unit peaked at
 7.3 GiB over 3 minutes 10 seconds. No campaign or training was launched.
 
 The [462-goal release](vibestudio-open-goal-pop-pins-462.tsv) preserves all
@@ -648,6 +650,24 @@ the earlier catalog and all 842 historical assignments. The full host gate
 peaked at 5.8 GiB on Tick. Pop reproduced catalog SHA-256
 `693b0311f666e8694772f43ca9b691174d8190fc85868d41090618bfeb51579a`
 and passed the linked runtime check across 1,132 lambdas. The registered
-archive `vibestudio-open-goal-verified-release-1320-20261121` carries forward
-816 exact managed references and the same 612 train selectors. The current
-model-free sweep is appending new reference results under this release.
+archive `vibestudio-open-goal-verified-release-1320-20261121` carried forward
+816 exact managed references and the same 612 train selectors. The initial
+model-free sweep contributed its completed batches to the corrected release.
+
+The [composition-corrected 1,320-goal pin](vibestudio-open-goal-pop-pins-composed-1320.tsv)
+keeps the same catalog digest. A branch that needs mounted workspace code is
+loaded only when all of that branch's required mounts are present. The
+release passed all individual template checks with and without System
+Testing, plus the combined check. Pop reproduced the corrected bundle and
+the System test composition. The registered evidence bundle
+`vibestudio-open-goal-composed-release-1320-20261121` has 853 managed reference
+outcomes, including 214 held goals. Pop has 639 training selectors, of which
+629 have no device or deployment-package prerequisites.
+
+Using the LFM3 learner's tokenizer and request renderer, the corrected
+System program's scripted opening measured 21,670 tokens. The previous
+recursive scope listing measured 104,742. The new listing gives entry
+signatures first. Models can inspect deeper callables and their exact
+types with `read_code`. The opening measurement used a scripted callback
+and no model weights. Across the seven individual templates, the scripted
+opening measured 21,292 to 22,157 tokens.
