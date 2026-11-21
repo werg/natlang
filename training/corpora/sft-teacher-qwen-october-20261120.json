@@ -1,0 +1,36 @@
+{
+  "id": "sft-teacher-qwen-october-20261120",
+  "owner": "dgx",
+  "path": "data_nvme:sft-teacher-qwen-october-20261120",
+  "include": [
+    "*.jsonl.zst",
+    "*.json",
+    "*.jsonl",
+    "replay/*/rollouts.jsonl",
+    "replay/*/*.json"
+  ],
+  "kind": "trajectories",
+  "format": "sft_sources WORK: episodes*.jsonl.zst (extracted episodes), replay.jsonl (verdicts), replay/<episode>/rollouts.jsonl (verified replays)",
+  "rows": 1633142,
+  "license": "derived: each input keeps its registered license (teacher providers, own rollouts, task sources)",
+  "protected": false,
+  "producer": {
+    "script": "slice.py",
+    "argv": [
+      "/home/werg/data/sft-teacher-qwen-october-20261120",
+      "/home/werg/data/sft-teacher-qwen-october-20261120/pin-7442c8d16091",
+      "100"
+    ],
+    "git_commit": "b942d5eaf69c020e69bbe793468aadd8064fe0ce",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "849bc83e1b3abf0914aba1d4b9a9b85589fa7f46f2c3a4d880163ec46ddb811b",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-sd-teacher": {
+      "order": 3,
+      "file": "cases.jsonl"
+    }
+  }
+}
