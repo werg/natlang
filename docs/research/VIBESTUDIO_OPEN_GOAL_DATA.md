@@ -88,8 +88,8 @@ context masks and any step limit, before loading model weights.
 
 ### One-case smoke on Pop
 
-The [1,320-goal composition-corrected release](vibestudio-open-goal-pop-pins-composed-1320.tsv)
-is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1320.k9Vlke`. To
+The [1,479-goal release](vibestudio-open-goal-pop-pins-composed-1479.tsv)
+is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1479.TWX4al`. To
 recreate detached worktrees, set `RELEASE` to a fresh directory and
 `RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
 dependency installation.
@@ -671,3 +671,26 @@ signatures first. Models can inspect deeper callables and their exact
 types with `read_code`. The opening measurement used a scripted callback
 and no model weights. Across the seven individual templates, the scripted
 opening measured 21,292 to 22,157 tokens.
+
+The [1,479-goal pin](vibestudio-open-goal-pop-pins-composed-1479.tsv) adds
+TestKit closeouts, content archive recovery, Phone first-run planning,
+first-party Chat continuity, Grimoire scene care, and webhook admission
+review. The catalog contains 1,123 train goals and 356 held goals. It keeps
+all previous goals and 842 historical assignments. Pop reproduced catalog
+SHA-256 `b246d44d03f3e8cdeef71aa694ae82e586f84835a6bb301395f0f5b033b701a1`
+and checked both the combined and System test compositions. The registered
+archive `vibestudio-open-goal-composed-release-1479-20261121` carries 853
+accepted managed reference outcomes and retains the same 639 train
+selectors. Of those, 629 have no device or deployment-package prerequisites.
+
+A bounded Luna smoke ran `open-goal-reconcile-workshop-update` in the managed
+Examples composition on Tick. Its five independent readback checks passed,
+including rejecting a stale write, preserving the concurrent edit and other
+documents, and reading back the saved revision. Eleven bound calls imported
+as `natlang.teacher_trajectory.native/1` with 28 sampled action records.
+CPU-only learner assembly scheduled eight action-bearing chains in three
+packs and one step, with 1,596 post-mask weighted target tokens. Both open-goal
+shares were 100% for this single-case schedule. The managed smoke peaked at
+8.3 GiB and learner assembly peaked at 637 MB. The capture, native IR, and
+schedule are under
+`/home/werg/data/vibestudio-open-goal-live/luna-composed-smoke-20261121.TjYJ0u`.
