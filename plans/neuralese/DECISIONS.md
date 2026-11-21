@@ -6068,3 +6068,16 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   - sft-v7's pin predates the fix and builds its ~55 fill episodes unweighted. They are a negligible part of its mix.
 - **Default for the next SFT:** the filled part with the reweighting. The full-corpus pass waits for a dedicated actor
   window, and the next cycle gets its own collect-free fill stage (to build).
+
+## 2026-11-21 08:50, operator prompt state served; uncapped fit beside sft-v8's collection (operator soft-state strand)
+
+- **Served default.** `operator-stage.sh` named `$S/soft/build` as its default prompt states, and nothing was there, so no build
+  was actually served. It now defaults to `/home/werg/data/natlang-operator-soft-20261120/served`, a symlink to the best fit:
+  build-v2 today (fit on 5ff07638, the current policy in `ops/current-policy.json`). `PROMPT_STATES=off` opts out. The states
+  are tied to their base checkpoint, so a new current policy needs a refit on it.
+- **Uncapped fit (plan-v3, all 448 verified rows, 19 GB, medium).** Expert-iteration cycles are pipelined (817c43c56), so the
+  GPU has no idle window. The fit runs beside the next collection: a watcher launches it once sft-v7-sft has finished and
+  sft-v8-collect runs. It never starts while any `*-sft` unit is active, stops the fit (resumable, exact from `state.json`) if
+  one starts, and launches only with at least 15 GB of ledger headroom left after its budget. On completion it evaluates build-v3 on
+  the same 565 test rows (short/long split). It repoints `served` to build-v3 only if build-v3 beats build-v2 overall and on long
+  rows without losing on short rows.
