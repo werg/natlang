@@ -492,7 +492,8 @@ indexed access with a literal key (`State['status']`), literal unions, optional 
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
 `Neuralese<T, D>` for soft values (see [Neuralese](ext/neuralese.md)). Built-in host classes (`Date`, `Map`,
 `URL`, `Request`, `Response`, ...) are checked as live values, but a program's own alias of the same name
-shadows the built-in in its scope, as in TypeScript. Values are checked at call
+shadows the built-in in its scope, as in TypeScript. Indexing a union selects the field
+from each variant and requires the field to be available on every variant. Values are checked at call
 boundaries, after each eval, and at completion. Simple scalar mistakes may be
 coerced when the declared type is unambiguous. A value eval computed and returns
 (`return value;`, a final expression with `finish: true`) is assignable as in

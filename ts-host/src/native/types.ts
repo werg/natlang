@@ -18,7 +18,7 @@ export type Type =
   /** `A & B`: resolves (TypeEnv.resolve) to one merged record, dictionary or the common type. Object types written
    * inline merge when parsed; an alias among the members merges when it is resolved. */
   | { kind: 'intersection'; members: Type[] }
-  /** `T['field']`: the type of a field of a record, or the element of a dictionary, found when it is resolved. */
+  /** `T['field']`: a record field, a dictionary element, or the union of the selected members. */
   | { kind: 'index'; base: Type; key: string }
   /** `Untrusted<T>`: a `T` that came from outside the program. Structurally `base`; the model-facing renderer always
    * shows it as a quoted data block (native/untrusted.ts) and it never enters instruction text (plans/REFINEMENT_TYPES.md). */
@@ -379,7 +379,7 @@ export class TypeEnv {
         // `type Request = { id: string }` makes `Request` that record, not fetch's Request.
         type = { kind: 'name', name: type.name };
       } else if (type.kind === 'intersection') type = mergeIntersection(type.members, member => this.resolve(member));
-      else if (type.kind === 'index') type = indexedType(this.resolve(type.base) as never, type.key, member => this.resolve(member));
+      else if (type.kind === 'index') type = indexedType(type.base, type.key, member => this.resolve(member));
       else return type;
     }
   }
@@ -495,16 +495,30 @@ export function fitObligations(source: Type, target: Type, env = new TypeEnv(), 
  */
 export const refinements: Record<string, (value: unknown) => boolean | undefined> = Object.create(null);
 
-/** The field `key` of a record (an optional field also admits null), or a dictionary's element. */
-function indexedType(base: Type, key: string, resolve: (type: Type) => Type): Type {
+/** Select a field from every possible base. Optional fields also admit null. */
+function indexedType(base: Type, key: string, resolve: (type: Type) => Type, activeUnions = new Set<Type>()): Type {
   const resolved = resolve(base);
+  if (resolved.kind === 'union') {
+    if (activeUnions.has(resolved))
+      throw new TypeSyntaxError(`cannot index field ${JSON.stringify(key)} through a recursive union`);
+    activeUnions.add(resolved);
+    try {
+      const members = resolved.members.flatMap(member => {
+        const field = indexedType(member, key, resolve, activeUnions);
+        return field.kind === 'union' ? field.members : [field];
+      });
+      return { kind: 'union', members };
+    } finally {
+      activeUnions.delete(resolved);
+    }
+  }
   if (resolved.kind === 'record') {
     const field = resolved.fields.find(item => item.name === key);
     if (!field) throw new TypeSyntaxError(`${formatType(resolved)} has no field ${JSON.stringify(key)}; index it with one of its field names`);
     return field.optional ? { kind: 'union', members: [field.type, { kind: 'prim', name: 'null' }] } : field.type;
   }
   if (resolved.kind === 'dict') return resolved.element;
-  throw new TypeSyntaxError(`${formatType(resolved)}[${JSON.stringify(key)}] indexes a record or dictionary; index a record type, or name the field's type directly`);
+  throw new TypeSyntaxError(`${formatType(resolved)}[${JSON.stringify(key)}] requires a record, dictionary, or a union of indexable types`);
 }
 
 /** One type from `A & B`: records merge field by field, dictionaries merge their elements, equal types are that type. */

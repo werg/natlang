@@ -40,6 +40,23 @@ test('indexed access types resolve to the field type', () => {
   assert.equal(formatType(parseType("State['status']")), 'State["status"]');
 });
 
+test('indexed access resolves a common field of a union', () => {
+  const env = new TypeEnv({
+    ReaderSelection: parseType('{ kind: "inbox" | "saved" | "backlog" } | { kind: "archive", query: string }'),
+    Part: parseType('{ value?: number } | Record<string, boolean>'),
+    Nested: parseType('Part | { value: string }'),
+    Recursive: parseType('Recursive | { value: string }'),
+  });
+  const kind = parseType('ReaderSelection["kind"]');
+  assert.equal(formatType(env.resolve(kind)), '"inbox" | "saved" | "backlog" | "archive"');
+  assert.equal(fitsType(parseType('"archive"'), kind, env), true);
+  assert.equal(fitsType(parseType('"missing"'), kind, env), false);
+  assert.throws(() => env.resolve(parseType('ReaderSelection["query"]')), /no field "query"/);
+  assert.equal(formatType(env.resolve(parseType('Nested["value"]'))), 'number | null | boolean | string');
+  assert.equal(formatType(env.resolve(parseType('({ item: { name: string } } | { item: Record<string, number> })["item"]["name"]'))), 'string | number');
+  assert.throws(() => env.resolve(parseType('Recursive["value"]')), /recursive union/);
+});
+
 test('the same types are valid TypeScript in declarations', () => {
   for (const text of ['A & { b: string }', '{ [k: string]: number }', "State['status']"])
     assert.equal(typeScriptText(text, new Set()), text);
