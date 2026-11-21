@@ -301,12 +301,13 @@ def drive(args):
         remote_archive(args, args.archive / f'seed-{index:04d}',
                        {name: {'status': 'verified', 'manifest': 'manifest.json'}}, source)
     holds = prerequisite_holds(cases, args.host)
+    completed_waves = 0
     while True:
         plans = sorted(jobs.glob('[0-9]*.json'))
         receipts = [read(wave) for wave in sorted(waves.glob('*-result.json'))]
         rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds)
         sync_index(args, [root / 'status.json', root / 'reused.json'])
-        if (root / 'stop-after-wave').exists():
+        if (root / 'stop-after-wave').exists() or completed_waves == args.max_waves:
             return
         started = next((plan for plan in plans if not (waves / f'{plan.stem}-result.json').exists()), None)
         if not started:
@@ -352,6 +353,7 @@ def drive(args):
         destination = args.archive / started.stem
         remote_archive(args, destination, receipt, capture)
         publish(waves / f'{started.stem}-result.json', receipt)
+        completed_waves += 1
         # The matching remote copy and its IR export are durable.
         shutil.rmtree(capture)
         resets = [name for name, outcome in receipt.items() if workerd_failure(outcome)]
@@ -379,6 +381,7 @@ def main():
     run.add_argument('--review-model')
     run.add_argument('--attempts', type=int, default=2)
     run.add_argument('--wave-size', type=int, default=6)
+    run.add_argument('--max-waves', type=int, help='stop after archiving this many waves and syncing status')
     run.add_argument('--concurrency', type=int, default=1)
     run.add_argument('--reserve-disk-gib', type=float, default=8)
     export = sub.add_parser('export-wave')
@@ -390,7 +393,8 @@ def main():
         export_trajectories(args.archive, read(args.receipt), held, training)
         return
     reviewer = (args.review_model or '').split(':')[-1].lower().split('-')
-    if args.attempts < 1 or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer:
+    if (args.attempts < 1 or (args.max_waves is not None and args.max_waves < 1)
+            or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer):
         parser.error('provide positive limits, concurrency within the wave size, and an independent non-Sol reviewer when configured')
     with (args.root / '.controller.lock').open('a') as owner:
         fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
