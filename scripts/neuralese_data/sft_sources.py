@@ -1231,6 +1231,32 @@ def backend_workaround(turns):
     return False
 
 
+def mark_detour_spawned(turns):
+    """Mark (``turn['detour_spawned']``) every call of an invocation that first appears after the episode's first
+    Neuralese refusal (``backend_workaround``): the children the detour started (ad-hoc ``nl`` calls, a function
+    re-invoked to work around the refusal). Their own prompts hold no refusal, yet they exist only because of the
+    detour, which the student's actor never takes: 3,238 such teacher calls trained in sft-mix-20261120-v1 (DECISIONS
+    2026-11-21 ran-out). Invocations already running before the refusal keep their calls. Returns ``turns``."""
+    before, refused = set(), False
+    for turn in turns:
+        invocation = turn.get('invocation_id')
+        if not refused and backend_workaround([turn]):
+            refused = True
+        if not refused:
+            before.add(invocation)
+        elif invocation not in before:
+            turn['detour_spawned'] = True
+    return turns
+
+
+def detour_call(turn, backend_workarounds):
+    """Whether ``call_row`` weights a non-student call as context under ``backend_workarounds``: its prompt holds the
+    refusal (``context`` and ``context-refused-only``) or the detour spawned it (``context`` only)."""
+    if backend_workarounds not in ('context', 'context-refused-only'):
+        return False
+    return backend_workaround([turn]) or (backend_workarounds == 'context' and bool(turn.get('detour_spawned')))
+
+
 def held_excluded_ids(held_manifest, tasks, held):
     """Task ids among ``tasks`` ({id: task row}) in the held closure: ``held_eval.exclusion_ids`` (held tasks and their
     split groups) plus every row sharing a source group or source id with a held row (``held``: ``held_closure``)."""
@@ -1420,7 +1446,7 @@ def call_row(renderer, source, key, index, turn, teacher_think='context', lead_i
     context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
     if context:
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
-    if source not in OWN_SOURCES and backend_workarounds == 'context' and backend_workaround([turn]):
+    if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
     return row, context
 
@@ -1429,7 +1455,7 @@ def replayed_turns(work, name):
     """The semantic turns of a replayed episode (WORK/replay/NAME/rollouts.jsonl, the replaying runtime's record)."""
     with (Path(work) / 'replay' / name / 'rollouts.jsonl').open() as handle:
         replayed = [json.loads(line) for line in handle if line.strip()][0]
-    return [semantic_turn(t, False) for t in replayed['turns']]
+    return mark_detour_spawned([semantic_turn(t, False) for t in replayed['turns']])
 
 
 def wrapper_capped(selected, rng, funnel, is_wrapper, share, trained=frozenset()):
@@ -1473,7 +1499,7 @@ class EpisodeSizes:
 
     def policy(self, think):
         policy = [self.renderer.identity, think, self.lead_in, self.backend_workarounds, self.own_empty_think,
-                  'wrapped-refusal']
+                  'wrapped-refusal', 'detour-spawned']
         return hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
     def measure(self, c, turns_of):
@@ -1732,8 +1758,7 @@ def build(args):
                 if c['source'] in ('rl-own', 'teacher'):
                     return False   # a verified episode is admitted whole or not at all
                 continue
-            if (source not in OWN_SOURCES and args.backend_workarounds == 'context'
-                    and backend_workaround([turn])):
+            if source not in OWN_SOURCES and detour_call(turn, args.backend_workarounds):
                 stats[source]['backend_detour_calls'] += 1   # call_row weighted the detour as context
             if source in OWN_SOURCES and context:
                 stats[source]['own_unsampled_think_calls'] += 1
@@ -1804,7 +1829,7 @@ def build(args):
             source = c['live_source']
             if sha256_file(source['path']) != source['sha256']:
                 raise ValueError('observed live source changed before rendering')
-            return load_episode(source['path'])['turns']
+            return mark_detour_spawned(load_episode(source['path'])['turns'])
         return replayed_turns(work, c['name'])
 
     episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, treatment.render, args.teacher_lead_in,
@@ -2511,10 +2536,13 @@ def main():
     b.add_argument('--guided', choices=('train', 'exclude'), default='exclude',
                    help='JOLT+ guided attempts (own, student form): exclude (default: grpo-v4-run1 guided successes '
                         'refer to the removed guidance in 4 of 11 and 6 of 11 had the answer in it) or train')
-    b.add_argument('--backend-workarounds', choices=('context', 'exclude', 'train'), default='context',
+    b.add_argument('--backend-workarounds', choices=('context', 'context-refused-only', 'exclude', 'train'),
+                   default='context',
                    help="teacher episodes that met the text backend's Neuralese refusal: context (default: every call "
-                        "whose prompt holds the refusal is zero weight; the calls before it, e.g. the producer's own "
-                        "return, train), exclude (the whole episode) or train")
+                        "whose prompt holds the refusal, and every call of an invocation the detour started after it, "
+                        "is zero weight; the calls before it, e.g. the producer's own return, train), "
+                        "context-refused-only (only the calls whose prompt holds the refusal), exclude (the whole "
+                        "episode) or train")
     b.add_argument('--own-empty-think', choices=('context', 'train'), default='context',
                    help="an own reply without reasoning (a decision readout the actor scored, not sampled): its "
                         "template empty think block is context (default) or trains")
