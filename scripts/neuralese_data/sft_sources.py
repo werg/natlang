@@ -205,12 +205,17 @@ def october_teacher_episodes(path, models, held_manifest, c):
             continue
         counts[provenance['trajectory']] += 1
         sources.setdefault(provenance['trajectory'], provenance['source_file'])
-    data_registry.require_registered(sorted(set(sources.values())))
+    for source in sorted(set(sources.values())):   # a runs/ link or its target may be the registered path
+        try:
+            data_registry.require_registered([source])
+        except data_registry.UnregisteredData:
+            data_registry.require_registered([str(Path(source).resolve())])
     tasks = october_task_rows(sorted(set(sources.values())), counts)
     by_id = {}
     for task in tasks.values():
         by_id.setdefault(task['id'], task)
-    excluded = held_excluded_ids(held_manifest, by_id, held_closure(held_manifest)) if by_id else set()
+    held = held_closure(held_manifest)
+    excluded = held_excluded_ids(held_manifest, by_id, held) if by_id else set()
     pending = collections.defaultdict(list)
     for line in zstd_lines(path):
         provenance = json.loads(line).get('provenance') or {}
@@ -230,9 +235,11 @@ def october_teacher_episodes(path, models, held_manifest, c):
             c['no_task_row'] += 1
             continue
         if task['id'] != rows[0].get('task_id'):
-            c['task_row_mismatch'] += 1
-            continue
-        if task['id'] in excluded:
+            # fallow-v13r2 rows carry the source turn's stale `program_id`; the turn's own program_ir is the task its
+            # messages show (and the replay verifies it). Both ids go through the held closure.
+            c['task_id_from_program_ir'] += 1
+        if task['id'] in excluded or held_hit(rows[0].get('task_id'), rows[0].get('source_ids') or (),
+                                              rows[0].get('source_groups') or (), held):
             c['held_excluded'] += 1
             continue
         if fixture_task(task):
@@ -654,6 +661,18 @@ def check_render(args):
 
 
 # ---- replay ----------------------------------------------------------------------------------------------------------
+def arguments_key(arguments):
+    """Tool-call arguments as compact sorted JSON: the runtime echoes a recorded call's arguments re-serialized
+    (`{"code":"..."}` for a teacher's `{"code": "..."}`, 98 of 100 October Qwen replays missed on that alone), and
+    the same arguments are the same action. Unparseable arguments stay as they are."""
+    if not isinstance(arguments, str):
+        return arguments
+    try:
+        return json.dumps(json.loads(arguments), ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    except ValueError:
+        return arguments
+
+
 def visible_key(messages):
     """What a call saw, minus the runtime's own wording: every non-system message's role, text, tool calls (name and
     arguments) and tool output. Tool-call ids and reasoning are left out (the runtime echoes them as it received them)."""
@@ -661,7 +680,7 @@ def visible_key(messages):
     for m in messages:
         if m.get('role') == 'system':
             continue
-        calls = [((c.get('function') or {}).get('name'), (c.get('function') or {}).get('arguments'))
+        calls = [((c.get('function') or {}).get('name'), arguments_key((c.get('function') or {}).get('arguments')))
                  for c in m.get('tool_calls') or []]
         content = m.get('content')
         if isinstance(content, list):   # content parts: their text in order
@@ -691,6 +710,16 @@ def opening_key(messages):
     return ''
 
 
+def signature_key(messages):
+    """``opening_key`` cut to the opening message's first line (the call's signature), as ``reworded_key`` cuts it."""
+    for m in messages:
+        if m.get('role') != 'system':
+            content = m.get('content')
+            return json.dumps([m.get('role'), content.split('\n', 1)[0] if isinstance(content, str) else content],
+                              ensure_ascii=False)
+    return ''
+
+
 class ReplayEpisode:
     """The recorded calls of one episode, served once each: an exact visible-history match first; otherwise the next
     unserved call of the same invocation with as many visible messages (a tool output that differs from the recording,
@@ -703,6 +732,7 @@ class ReplayEpisode:
         self.keys = [visible_key(t['messages']) for t in turns]
         self.reworded = [reworded_key(t['messages']) for t in turns]
         self.openings = [opening_key(t['messages']) for t in turns]
+        self.signatures = [signature_key(t['messages']) for t in turns]
         self.lengths = [sum(m.get('role') != 'system' for m in t['messages']) for t in turns]
         self.served = [False] * len(turns)
         self.log = []
@@ -733,9 +763,14 @@ class ReplayEpisode:
                         match, kind = i, 'reworded'
                         break
             if match is None:
-                for i in range(len(self.turns)):
-                    if not self.served[i] and self.openings[i] == opening and self.lengths[i] == length:
-                        match, kind = i, 'drifted'
+                # the same invocation (its opening, else its signature when the runtime reworded the opening) with
+                # as many visible messages: a tool output that differs from the recording
+                signature = signature_key(messages)
+                for keys, want in ((self.openings, opening), (self.signatures, signature)):
+                    match = next((i for i in range(len(self.turns))
+                                  if not self.served[i] and keys[i] == want and self.lengths[i] == length), None)
+                    if match is not None:
+                        kind = 'drifted'
                         break
             entry = {'kind': kind, 'turn': match, 'messages': length}
             if match is None:   # what the runtime asked that no recorded call saw (its last two visible messages)

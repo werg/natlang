@@ -80,8 +80,9 @@ def test_task_a_teacher_failed_goes_to_another_teacher_first(tmp_path):
              {'row': {'id': 'y'}, 'base_rank': 'teacher_failed'},
              {'row': {'id': 'z'}, 'base_rank': 'teacher_failed', 'failed_by': ['haiku', 'luna']}]
     (tmp_path / 'tasks.jsonl').write_text(''.join(json.dumps(t) + '\n' for t in tasks))
-    haiku, luna = (SimpleNamespace(model_id=m, cool_until=0., failures=0) for m in ('haiku', 'luna'))
-    generator = teacher_gen.Generator(SimpleNamespace(work=str(tmp_path), limit=0, shard=(0, 1)), [haiku, luna])
+    haiku, luna = (teacher_gen.make_teacher({'model_id': m, 'provider': 'p'}) for m in ('haiku', 'luna'))
+    generator = teacher_gen.Generator(SimpleNamespace(work=str(tmp_path), limit=0, shard=(0, 1), covered_by=[], attempts=2,
+                                                      route_ratio=2.0, route_floor=0.03, route_min_scored=30), [haiku, luna])
     assert generator._take(haiku) == 1          # x passed on, y taken
     assert generator._take(luna) == 0           # luna takes the passed x first
     assert generator._take(haiku) == 2          # every teacher failed z: no one to pass it to

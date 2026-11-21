@@ -90,9 +90,9 @@ def test_replay_serves_a_call_whose_opening_message_the_runtime_reworded():
     episode = s.ReplayEpisode([first, second])
     assert episode.answer({'messages': [SYSTEM, other]}) is None            # another signature is another call
     assert episode.answer({'messages': [SYSTEM, reworded]}) is not None
-    assert episode.answer({'messages': [SYSTEM, reworded, call, {'role': 'tool', 'content': '2'}]}) is None or \
-        episode.log[-1]['kind'] == 'drifted'                                 # a different tool output is never reworded
-    assert [e['kind'] for e in episode.log][:2] == ['missing', 'reworded']
+    # a different tool output after a reworded opening is drift (the same invocation by its signature), never reworded
+    assert episode.answer({'messages': [SYSTEM, reworded, call, {'role': 'tool', 'content': '2'}]}) is not None
+    assert [e['kind'] for e in episode.log] == ['missing', 'reworded', 'drifted']
 
 
 def test_replay_declines_a_decision_readout_as_the_recorded_teacher_did():
@@ -543,16 +543,18 @@ def test_replay_skips_keys_with_a_verdict(tmp_path, monkeypatch):
 
 def test_october_teacher_rows_become_replayable_teacher_episodes(tmp_path, monkeypatch):
     """October per-call rows of one model, grouped by trajectory in decision order, become `teacher` episodes with the
-    task row read back from the source turns; held tasks, fixtures and trajectories without a task row are dropped."""
+    task row read back from the source turns (its program_ir wins over a stale row task_id, both held-checked); held
+    tasks, fixtures and trajectories without a task row are dropped."""
     import types
     monkeypatch.setattr(s.data_registry, 'require_registered', lambda paths: None)
     monkeypatch.setattr(s.data_registry, 'record_dataset', lambda *a, **k: None)
-    monkeypatch.setattr(s, 'held_closure', lambda manifest: (set(), set(), set()))
+    monkeypatch.setattr(s, 'held_closure', lambda manifest: ({'held-row-id'}, set(), set()))
     monkeypatch.setattr(s, 'held_excluded_ids', lambda manifest, tasks, held: {'held-task'})
     source = tmp_path / 'turns.jsonl'
     programs = {'tr-a': {'id': 'task-a', 'family': 'f', 'split': 'train'},
                 'tr-held': {'id': 'held-task', 'split': 'train'},
-                'tr-fixture': {'id': 'fixture', 'split': 'train', 'kind': 'evaluation_fixture'}}
+                'tr-fixture': {'id': 'fixture', 'split': 'train', 'kind': 'evaluation_fixture'},
+                'tr-stale': {'id': 'task-s', 'split': 'train'}, 'tr-stale-held': {'id': 'task-sh', 'split': 'train'}}
     source.write_text(''.join(json.dumps({'id': f'{t}:decision:0000', 'source_ref': {'trajectory_id': t},
                                           'task': {'program_ir': p}}) + '\n' for t, p in programs.items()))
 
@@ -563,7 +565,8 @@ def test_october_teacher_rows_become_replayable_teacher_episodes(tmp_path, monke
                 'provenance': {'model': model, 'trajectory': trajectory, 'invocation': 'i', 'source_file': str(source),
                                'target_tokens': 2}}
     rows = [row('tr-a', 'task-a', 1), row('tr-held', 'held-task', 0), row('tr-a', 'task-a', 0),
-            row('tr-other', 'task-o', 0, model='luna'), row('tr-fixture', 'fixture', 0), row('tr-none', 'task-n', 0)]
+            row('tr-other', 'task-o', 0, model='luna'), row('tr-fixture', 'fixture', 0), row('tr-none', 'task-n', 0),
+            row('tr-stale', 'stale-id', 0), row('tr-stale-held', 'held-row-id', 0)]
     group = tmp_path / 'qwen-s72.jsonl.zst'
     writer = s.ZstdWriter(group)
     for r in rows:
@@ -573,12 +576,27 @@ def test_october_teacher_rows_become_replayable_teacher_episodes(tmp_path, monke
     s.extract(types.SimpleNamespace(work=str(work), rl=[], teacher=[], out_name='episodes-october',
                                     october_teacher=[str(group)], october_model=['qwen'], held_manifest='held'))
     episodes = [json.loads(line) for line in s.zstd_lines(work / 'episodes-october.jsonl.zst')]
-    assert [e['key'] for e in episodes] == ['october-teacher:qwen-s72:tr-a']
+    assert [e['key'] for e in episodes] == ['october-teacher:qwen-s72:tr-a', 'october-teacher:qwen-s72:tr-stale']
+    assert episodes[1]['task_id'] == 'task-s'
     episode = episodes[0]
     assert episode['source'] == 'teacher' and episode['task'] == programs['tr-a']
     assert episode['teacher']['model_id'] == 'qwen' and episode['teacher']['provider'] == 'self-hosted-vllm'
     assert [t['target']['content'] for t in episode['turns']] == ['0', '1']   # decision order
     assert episode['turns'][0]['completion_tokens'] == 2
     census = json.loads((work / 'episodes-october-extract.json').read_text())['sources']['october-teacher:qwen-s72']
-    assert census == {'rows': 6, 'rows_other_model': 1, 'trajectories': 4, 'episodes': 1, 'held_excluded': 1,
-                      'fixture_not_admitted': 1, 'no_task_row': 1}
+    assert census == {'rows': 8, 'rows_other_model': 1, 'trajectories': 6, 'episodes': 2, 'held_excluded': 2,
+                      'fixture_not_admitted': 1, 'no_task_row': 1, 'task_id_from_program_ir': 2}
+
+
+def test_replay_matches_tool_call_arguments_the_runtime_reserialized():
+    """A teacher's spaced JSON arguments echoed back compact by the runtime are the same recorded call."""
+    recorded = turn([SYSTEM, USER, {'role': 'assistant', 'content': '', 'tool_calls': [
+        {'id': 'a', 'type': 'function', 'function': {'name': 'eval', 'arguments': '{"code": "1", "finish": true}'}}]},
+        {'role': 'tool', 'content': 'ok'}], content='done')
+    episode = s.ReplayEpisode([recorded])
+    now = [SYSTEM, USER, {'role': 'assistant', 'content': '', 'tool_calls': [
+        {'id': 'b', 'type': 'function', 'function': {'name': 'eval', 'arguments': '{"finish":true,"code":"1"}'}}]},
+        {'role': 'tool', 'content': 'ok'}]
+    assert episode.answer({'messages': now})['choices'][0]['message']['content'] == 'done'
+    assert episode.log[0]['kind'] == 'exact'
+    assert s.arguments_key('not json') == 'not json'

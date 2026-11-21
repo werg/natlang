@@ -318,9 +318,13 @@ def frontier(args):
 # ---- cycle -----------------------------------------------------------------------------------------------------------
 TEACHER_POOLS = [OPS / 'teacher-gen-20261115' / p for p in ('pool-v1', 'pool-v2-rich', 'pool-progtune-decisions')] + [
     OPS / 'teacher-gen-20261119' / 'gap-v1']
+# the teacher campaign's teachers (DECISIONS 2026-11-21 teacher yield): Haiku retires itself while the Anthropic account
+# has no credit; Luna at medium effort (low failed most reading families); GPT-6.1 Sol, the stronger model on the same
+# Codex subscription, only on tasks another teacher failed (min_failed); family routing and --attempts in teacher_gen
 TEACHERS = [
     {'model_id': 'claude-haiku-5-5', 'provider': 'anthropic', 'reasoning_effort': 'medium', 'slots': 4},
-    {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'low', 'slots': 4},
+    {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 4},
+    {'model_id': 'gpt-6.1-sol', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 2, 'min_failed': 1},
     {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': 'https://integrate.api.nvidia.com/v1',
      'api_key_env': 'NVIDIA_API_KEY', 'slots': 1}]
 
@@ -499,13 +503,15 @@ class Cycle:
                    *[x for c in covered if Path(c) != work and (Path(c) / 'manifest.jsonl').exists()
                      for x in ('--covered-by', str(c))],
                    '--student-groups', str(self.collect_dir / 'groups' / 'g*'), '--rare-rate', '0.25',
-                   '--limit', str(len(rare)), *[x for t in TEACHERS for x in ('--teacher', json.dumps(t))]]
+                   '--limit', str(len(rare)), '--attempts', '3', *[x for t in TEACHERS for x in ('--teacher', json.dumps(t))]]
         script = work / 'launch.sh'
         script.write_text('#!/bin/bash\n# expert-iteration teacher frontier (expert_iteration.py teacher_stage)\nset -u\n'
                           f'set -a; for f in nvidia gemini anthropic; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
                           f'cd {self.pin}\nexec ' + ' '.join(map(_quote, command)) + '\n')
         script.chmod(0o755)
-        self.ledger(f'{self.a.name}-teacher', 7, 'low', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
+        # CPU/API-bound, ~4 GB at 20 slots: medium so medium-priority smokes and evals do not preempt it (each preemption
+        # kills its running paid episodes); a high-priority training run still can
+        self.ledger(f'{self.a.name}-teacher', 6, 'medium', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
         self.mark('teacher', frontier_tasks=len(rare), work=str(work))
 
     def work_tokenizer(self):
