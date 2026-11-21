@@ -89,36 +89,26 @@ context masks and any step limit, before loading model weights.
 ### One-case smoke on Pop
 
 The [1,812-goal release](vibestudio-open-goal-pop-pins-composed-1812.tsv)
-is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1812.OQb6LR`. To
-recreate detached worktrees, set `RELEASE` to a fresh directory and
-`RELEASE_PINS` to the TSV for the intended release. Use the ledger for the
-dependency installation.
+is staged on Pop at `/home/werg/vibestudio-worktrees/open-goal-composed-1812.OQb6LR`.
+To recreate a release, set `RELEASE` to a fresh directory, `RELEASE_PINS`
+to its TSV, and `CATALOG_SHA256` to the hash recorded below. Set
+`LEDGER_CHECKOUT` to the Natlang checkout with the current ledger and
+`STAGE_UNIT` to a fresh unit name for the Host dependency and compiler checks.
 
 ```bash
-set -euo pipefail
-mkdir -p "$RELEASE/templates"
-while IFS=$'\t' read -r name sha; do
-  case "$name" in
-    natlang) repo=/home/werg/natlang ;;
-    host) repo=/home/werg/vibestudio ;;
-    templates/*) repo="/home/werg/vibestudio-templates/${name#templates/}" ;;
-    *) exit 1 ;;
-  esac
-  if ! git -C "$repo" cat-file -e "$sha^{commit}" 2>/dev/null; then
-    git -C "$repo" fetch origin main
-  fi
-  if [[ ! -e "$RELEASE/$name" ]]; then
-    git -C "$repo" worktree add --detach "$RELEASE/$name" "$sha"
-  fi
-  test "$(git -C "$RELEASE/$name" rev-parse HEAD)" = "$sha"
-  test -z "$(git -C "$RELEASE/$name" status --porcelain)"
-done < "$RELEASE_PINS"
+cd "$LEDGER_CHECKOUT"
+python scripts/memory_ledger.py run --unit "$STAGE_UNIT" \
+  --budget-gb 3.2 --host-max-gb 3.2 --reserve-gb 4 --hold-budget \
+  --no-resumable --priority low --wait 4200 \
+  -- bash scripts/vibestudio/stage_open_goal_release.sh \
+    "$RELEASE_PINS" "$RELEASE" "$CATALOG_SHA256"
 ```
 
-From `$RELEASE/host`, run `pnpm install --frozen-lockfile`,
-`pnpm check:native-host-dependencies --repair`, and `pnpm build:infrastructure`.
-The detached checkout needs its own workspace dependency links and built Host
-packages for the managed instance. Set `VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
+The script installs the release's workspace links, verifies the native Host
+dependencies, builds infrastructure with one workspace job at a time, and
+checks both the combined and System managed compositions. The resulting
+`$RELEASE/staged` marker follows exact catalog verification. Set
+`VIBESTUDIO_TEMPLATE_CHECKOUTS` to `$RELEASE/templates`,
 `VIBESTUDIO_CHECKOUT` to `$RELEASE/host`, and `NATLANG_RUNTIME_CHECKOUT`
 to `$RELEASE/natlang`. The last checkout supplies the release's vendored
 runtime. Set `LEDGER_CHECKOUT` to the checkout with the current memory
