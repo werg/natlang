@@ -174,10 +174,34 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts):
         else:
             status = states[name]
         rows[name] = {'status': status, 'attempts': counts[name], 'last_outcome': states.get(name)}
-    summary = dict(Counter(row['status'] for row in rows.values()))
-    publish(root / 'status.json', {'model': LUNA, 'total': len(cases), 'counts': summary, 'cases': rows})
-    print(json.dumps({'total': len(cases), 'counts': summary}), flush=True)
+    summary = {'total': len(cases), 'attempted_goals': len(counts), 'attempts': sum(counts.values()),
+               'counts': dict(Counter(row['status'] for row in rows.values()))}
+    publish(root / 'status.json', {'model': LUNA, **summary, 'cases': rows})
+    print(json.dumps(summary), flush=True)
     return rows
+
+
+def next_wave(cases, rows, size):
+    pending = [name for name, row in rows.items() if row['status'] == 'pending']
+    if not pending:
+        return []
+    attempts = Counter()
+    for name, row in rows.items():
+        attempts[cases[name]['workspace']] += row['attempts']
+    first = min(pending, key=lambda name: (rows[name]['attempts'], attempts[cases[name]['workspace']]))
+    scope = cases[first]
+    families = {}
+    for name in pending:
+        case = cases[name]
+        if (rows[name]['attempts'] == rows[first]['attempts'] and case['workspace'] == scope['workspace'] and
+                case.get('requiresReview') == scope.get('requiresReview')):
+            families.setdefault(case['family'], []).append(name)
+    names = []
+    for offset in range(size):
+        names.extend(family[offset] for family in families.values() if len(family) > offset)
+        if len(names) >= size:
+            break
+    return names[:size]
 
 
 def drive(args):
@@ -209,17 +233,12 @@ def drive(args):
             return
         started = next((plan for plan in plans if not (waves / f'{plan.stem}-result.json').exists()), None)
         if not started:
-            pending = [name for name, row in rows.items() if row['status'] == 'pending']
-            if not pending:
+            names = next_wave(cases, rows, args.wave_size)
+            if not names:
                 publish(root / 'finished.json', {'collection_exhausted': True,
                                                  'all_goals_verified': all(row['status'] == 'verified' for row in rows.values())})
                 sync_index(args, [root / 'finished.json'])
                 return
-            pending.sort(key=lambda name: (rows[name]['attempts'], cases[name]['workspace']))
-            first = cases[pending[0]]
-            names = [name for name in pending if rows[name]['attempts'] == rows[pending[0]]['attempts'] and
-                     cases[name]['workspace'] == first['workspace'] and
-                     cases[name].get('requiresReview') == first.get('requiresReview')][:args.wave_size]
             started = jobs / f'{int(plans[-1].stem) + 1 if plans else 0:04d}.json'
             publish(started, {'cases': names})
         names = read(started)['cases']
