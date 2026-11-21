@@ -768,3 +768,25 @@ three packs, and 1,596 weighted target tokens in a CPU-only learner schedule.
 A ground-truth oracle receipt verifies a workspace outcome. A teacher
 trajectory additionally records the sampled model decisions that the learner
 can supervise.
+
+The [2,269-goal pin](vibestudio-open-goal-pop-pins-composed-2269.tsv) adds
+45 open goals for recorded change rationale, counteractions, workspace unit
+design, and visual identity. Its SHA-256 is
+`bd478f07d0105917951c9bd7faaeee7d13f4b8bb9ceed0f1afa1069ca3cc7887`.
+It contains 1,707 train and 562 held goals. All 842 historical assignments
+remain byte-identical. The registry entry
+`vibestudio-open-goal-composed-release-2269-20261121` contains 1,108 accepted
+references, including 811 train goals and 801 local train goals. The pinned
+archive directly covers 144 of the 151 baseline agentic capabilities.
+
+Seven managed checks passed for the new provenance and unit paths and the
+Grimoire Portfolio repair. The active local sweep uses complete receipts from
+prior batches to resume without repeating accepted cases. The collector now
+provisions each declared device profile as part of its workspace group, so
+readiness checks, execution, and evidence export use the same attachments.
+
+Release staging also builds the pinned Natlang Node modules used for the
+independent semantic reviewer. Pop verified the reviewer imports for the
+2,224-goal release and reported a configured Codex credential without a model
+turn. Cases that require a review still need the explicit choice of a reviewer
+model.
