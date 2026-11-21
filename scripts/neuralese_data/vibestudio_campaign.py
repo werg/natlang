@@ -4,7 +4,9 @@ import argparse
 from collections import Counter
 import fcntl
 import gzip
+import hashlib
 import json
+import os
 from pathlib import Path
 import shlex
 import shutil
@@ -265,6 +267,17 @@ def next_wave(cases, rows, size):
     return names[:size]
 
 
+def collection_environment(release_pins):
+    release = read(release_pins)['release']
+    manifest = Path(release['manifest']).resolve(strict=True)
+    if manifest.name != 'release.json' or manifest.parent.name != 'userland-builds':
+        raise ValueError(f'invalid workspace release manifest path: {manifest}')
+    if hashlib.sha256(manifest.read_bytes()).hexdigest() != release['sha256']:
+        raise ValueError(f'workspace release manifest does not match its pin: {manifest}')
+    # VibeStudio verifies the complete release and its build identity at startup.
+    return {**os.environ, 'VIBESTUDIO_WORKSPACE_RELEASE_ROOT': str(manifest.parent.parent)}
+
+
 def drive(args):
     root = args.root.resolve()
     held, training, cases = campaign_scope(root / 'catalog.jsonl', args.held)
@@ -328,8 +341,9 @@ def drive(args):
                 collect += ['--review-model', args.review_model]
             for name in names:
                 collect += ['--case', name]
+            env = collection_environment(args.release_pins)
             with (waves / f'{started.stem}-collector.log').open('ab') as log:
-                completed = subprocess.run(collect, cwd=args.host, stdout=log, stderr=subprocess.STDOUT)
+                completed = subprocess.run(collect, cwd=args.host, env=env, stdout=log, stderr=subprocess.STDOUT)
             publish(waves / f'{started.stem}-exit.json', {'status': completed.returncode})
             if not capture.is_dir():
                 raise RuntimeError(f'collector failed before creating {capture}; see the collector log')
@@ -355,6 +369,8 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     run = sub.add_parser('drive')
     run.add_argument('--host', type=Path, required=True)
+    run.add_argument('--release-pins', type=Path, required=True,
+                     help='JSON pin containing the completed workspace release manifest path and SHA-256')
     run.add_argument('--archive-host', required=True)
     run.add_argument('--archive', type=Path, required=True)
     run.add_argument('--archive-repo', type=Path, required=True)
