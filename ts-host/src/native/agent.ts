@@ -1349,6 +1349,8 @@ export class NativeToolAgent {
     const { signature, scopeTypes, program } = this.callHeading(session);
     const writable = Object.values(lam.captures ?? {}).filter(cell => cell.mutable).map(cell => cell.name);
     const services = session.availableServices();
+    const noDirectServices = modelFacing('compact-callable-scope') &&
+      Object.keys(services).length === 0 && Object.keys(session.runtime.services).length > 0;
     const delegated = this.compactCallableScope(session)
       ? Object.entries(session.runtime.serviceScopes)
         .filter(([name]) => Object.hasOwn(session.runtime.services, name) && !Object.hasOwn(services, name))
@@ -1364,6 +1366,7 @@ export class NativeToolAgent {
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
+      ...(noDirectServices ? ['', 'This call has no directly bound host services. Work from its inputs and the callables available here.'] : []),
       ...(delegated.length ? ['', 'Host services bound only in the listed callable scopes:', ...delegated] : []),
       ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
       '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,

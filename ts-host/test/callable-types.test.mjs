@@ -119,3 +119,15 @@ test('wide callable scopes show entry points and preserve scoped reads and deep 
   assert.match(results[3], /41/);
   assert.equal(value, 41);
 });
+
+test('a planning call with scoped services elsewhere sees its direct service boundary', async () => {
+  const actions = [['return_result', { status: 'success', value: 1 }]];
+  const services = { calendarCatalog: { list: () => [] } };
+  const scoped = await script({}, actions, {
+    services, serviceScopes: { calendarCatalog: ['another-call.nl'] },
+  });
+  assert.match(scoped.opening, /This call has no directly bound host services\. Work from its inputs/);
+  const direct = await script({}, actions, { services });
+  assert.match(direct.opening, /In eval you can use calendarCatalog/);
+  assert.doesNotMatch(direct.opening, /no directly bound host services/);
+});
