@@ -6263,3 +6263,15 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 
 - The first two-worker wave on Tick peaked at 10.4 GiB through the observed startup and case setup. The largest sampled instant had 7.35 GiB anonymous memory, 2.17 GiB file cache, and 0.46 GiB kernel memory. Workerd, esbuild, template preparation, and the workspace server dominated the proportional resident memory. The two-worker wave was still active when sampled. Treat the serial 9.5 GiB peak as capped and avoid estimating an exact per-worker cost from the different cases.
 - After that wave fully archives, try three concurrent cases in one Vibestudio instance with a 14 GiB ledger budget and 7.5 GiB host reserve. Preserve the queue and shards across the handoff. An OOM restores two workers from the same queue. Compare verified trajectories per hour and the full-wave memory peaks before increasing concurrency again.
+
+## 2026-11-21 16:55 Pop fill widened; operator soft-state fit retargeted to the serving policy
+
+- Pop's fill ran 24 staged episodes against 32 engine slots (GPU 18–36%, 360–1,385 tok/s): relaunched as
+  `popfill-fillw2` with 48 workers and 48 in flight (resumable; `popfill-stop2` stops it when sft-v7's SFT ends).
+- The uncapped operator fit's watcher had died, and it was set to fit on the old base 5ff07638 although the current
+  policy moved to sft-v6 at 10:40 (states are tied to the checkpoint they were fit on). Re-armed as the systemd unit
+  `softop-fit10-watch` (`natlang-operator-soft-20261120/watch/`): same gate (after sft-v7's SFT, beside sft-v8's
+  collection, never beside an SFT, 15 GB headroom), fit and eval on sft-v7's candidate, the policy sft-v8 trains from
+  (`plan-v3-sftv7.json`). Served only if it beats the text initialization on its own checkpoint overall and on long rows
+  and does not lose on short rows (build-v2 belongs to another policy, so it is no longer the comparison). If sft-v7
+  fails its gate, the states need a refit on sft-v6.
