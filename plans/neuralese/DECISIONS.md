@@ -7387,3 +7387,16 @@ re-verified against main 0f87d11a4 are corrected in place.
   prose style spread.
 - Correction recorded: the "owner conservative prompt-shortening rule" (2026-11-13) cited in an earlier brief is not an
   owner position and was never a DECISIONS entry. The plans do not rely on it.
+
+## 2026-11-23 01:10 Held results reuse and pair across series (owner)
+
+Owner 2026-11-22: "I don't care that much if held results are comparable." Eval hours count more than same-series
+pairing.
+- **Reuse:** `reusable_held(..., any_series=True)`, the default in cycles, `pop-held` and `async-drive`. When no
+  result exists in the same series, host and samples per task, any complete result of the policy at >= 2 samples per
+  task is reused; an exact match is preferred. `--strict-held-reuse` restores the old rule.
+- **Pairing:** `held_eval.compare` now pairs results from two engine hosts (Pop and DGX) with a recorded warning;
+  `strict_series` refuses them as before. Different engine settings (engine kind, weight dtype, KV dtype, speculative
+  decoding) are still refused.
+- **Effect now:** aei1's first verdict pairs round 1 against sft-v7's existing Pop result. Without this, the reference
+  needed 8-10 h of DGX held.

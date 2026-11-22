@@ -665,6 +665,9 @@ def test_held_reuse_and_the_latest_base_never_cross_hosts(tmp_path):
     assert ei.reusable_held([pop], 'p', 4, 'k', host='dgx') is None      # one key (an old pin), another host
     assert ei.reusable_held([pop, dgx_old], 'p', 4, 'k', host='dgx') == dgx_old
     assert ei.reusable_held([dgx, pop], 'p', 4, 'k', host='pop') == pop
+    # any_series: without an exact match, any complete result of the policy at >= 2 samples, exact preferred
+    assert ei.reusable_held([pop], 'p', 4, 'k', host='dgx', any_series=True) == pop
+    assert ei.reusable_held([pop, dgx], 'p', 4, 'k', host='dgx', any_series=True) == dgx
     bases = [_held_result(tmp_path / f'base{i}', policy=ei.BASE_SHA, host=h, fmt=f)
              for i, (h, f) in enumerate([(None, 'sglang-pop-rtx4060-x'), ('dgx', 'sglang-hf-x')])]
     os.utime(bases[0], (5, 5))
@@ -674,7 +677,7 @@ def test_held_reuse_and_the_latest_base_never_cross_hosts(tmp_path):
 
 def test_compare_refuses_a_pop_result_against_a_dgx_one():
     from natlang_neuralese.rl import held_eval
-    sample = {'task_id': 't', 'sample': 0, 'ran': True, 'scored': True, 'success': True, 'outcome': 'pass'}
+    sample = {'task_id': 't', 'sample': 0, 'ran': True, 'scored': True, 'success': True, 'outcome': 'pass', 'reward': 1.0}
 
     def result(**kw):
         return {'complete': True, 'policy_id': 'p', 'series': {'key': 'k'}, 'samples': [sample], 'ran': 1, 'scored': 1,
@@ -683,8 +686,10 @@ def test_compare_refuses_a_pop_result_against_a_dgx_one():
     dgx = result(engine={'engine': 'sglang', 'export_format': 'sglang-hf-bfloat16-vendor-projection-kv-fp8_e4m3'})
     assert held_eval.engine_host_of(pop) == 'pop' and held_eval.engine_host_of(dgx) == 'dgx'
     assert held_eval.engine_host_of({**dgx, 'series': {'key': 'k', 'engine_host': 'colab_g4'}}) == 'colab_g4'
-    with pytest.raises(ValueError, match='different engine hosts'):
-        held_eval.compare(pop, dgx)
+    with pytest.raises(ValueError, match='different engine'):
+        held_eval.compare(pop, dgx, strict_series=True)   # refused (engine settings or hosts)
+    # by default (owner 2026-11-22) two hosts pair, with the difference recorded as a warning
+    assert any('different engine hosts' in w for w in held_eval.compare(pop, dgx, resamples=10)['warnings'])
 
 
 def test_the_dgx_series_key_has_its_host_and_pops_stays(monkeypatch):

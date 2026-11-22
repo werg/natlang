@@ -907,13 +907,18 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     if refused:
         raise ValueError('results served by different engine settings are not paired: ' + json.dumps(refused))
     hosts = engine_host_of(first), engine_host_of(second)
-    if None not in hosts and hosts[0] != hosts[1]:
+    cross_host = None not in hosts and hosts[0] != hosts[1]
+    # owner 2026-11-22: comparability across held series matters less than eval hours; results of two hosts (same
+    # engine settings, checked above) pair with a warning, and --strict-series refuses them as before
+    if strict_series and cross_host:
         raise ValueError(f'results measured on different engine hosts ({hosts[0]} and {hosts[1]}) are different held '
-                         'series and are not paired; measure both policies on one host')
+                         'series and are not paired (--strict-series); measure both policies on one host')
     if strict_series and (series_differences or first['series']['key'] != second['series']['key']):
         raise ValueError('results of different scoring series are not paired (--strict-series): '
                          + json.dumps(series_differences))
     warnings = []
+    if cross_host:
+        warnings.append(f'different engine hosts ({hosts[0]} and {hosts[1]})')
     if first['series']['key'] != second['series']['key'] or series_differences:
         warnings.append('different code or series (' + ', '.join(sorted(series_differences)) + ')')
     if engine_differences:
