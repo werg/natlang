@@ -155,6 +155,8 @@ def remote_archive(args, destination, receipt, capture):
     publish(metadata / 'receipt.json', receipt)
     target = f'{args.archive_host}:{destination}/receipt.json'
     subprocess.run(['rsync', '-a', '--protect-args', str(metadata / 'receipt.json'), target], check=True)
+    if args.defer_export:
+        return
     repo = args.archive_repo
     remote_command = ['env', f'PYTHONPATH={repo}/scripts/neuralese_data:{repo}/training/neuralese:{repo}',
                       'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', str(repo / '.venv-neuralese/bin/python'),
@@ -354,7 +356,7 @@ def drive(args):
         remote_archive(args, destination, receipt, capture)
         publish(waves / f'{started.stem}-result.json', receipt)
         completed_waves += 1
-        # The matching remote copy and its IR export are durable.
+        # The remote capture and receipt are durable. Deferred exports read those copies.
         shutil.rmtree(capture)
         resets = [name for name, outcome in receipt.items() if workerd_failure(outcome)]
         captures_missing = all(outcome['status'] == 'no-capture' for outcome in receipt.values())
@@ -377,6 +379,8 @@ def main():
     run.add_argument('--archive', type=Path, required=True)
     run.add_argument('--archive-repo', type=Path, required=True)
     run.add_argument('--archive-held', type=Path, required=True)
+    run.add_argument('--defer-export', action='store_true',
+                     help='archive captures and receipts for a separate export worker')
     run.add_argument('--seed', action='append', type=Path, default=[])
     run.add_argument('--review-model')
     run.add_argument('--attempts', type=int, default=2)
