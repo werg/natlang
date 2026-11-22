@@ -484,7 +484,7 @@ def prepare(model, compile_layers=True, *, fp8_base: bool | None = None, paramet
     # Only enable FP8 frozen-base GEMMs when the base backbone is actually frozen (LoRA) or explicitly requested.
     if fp8_base is None and any(p.requires_grad for p in model.model.layers.parameters()):
         use_fp8 = False
-    param_mode = canonical_parameterization(parameterization) or (
+    param_mode = parameterization_key(parameterization) or (
         'lora+rows' if getattr(model, '_lfm3_adapters', None) is not None else 'full')
     import weakref
     model.lm_head.weight._lfm3_owner = weakref.ref(model)     # linear_nll's default trainable rows (_head_rows)
@@ -976,7 +976,7 @@ def activation_bytes_per_token_layer(model=None, *, parameterization: str | None
         parameterization = fast.get('parameterization') or (
             'lora+rows' if getattr(model, '_lfm3_adapters', None) is not None else 'full'
         )
-    parameterization = canonical_parameterization(parameterization) or 'lora+rows'
+    parameterization = parameterization_key(parameterization) or 'lora+rows'
     if device_arch is None and model is not None:
         try:
             device_arch = _device_arch(model.model.embed_tokens.weight.device)
@@ -1003,7 +1003,7 @@ def activation_bytes_per_token_layer(model=None, *, parameterization: str | None
 PARAMETERIZATION_ALIASES = {'lora': 'lora+rows', 'lora+rows': 'lora+rows', 'full': 'full'}
 
 
-def canonical_parameterization(parameterization: str | None) -> str | None:
+def parameterization_key(parameterization: str | None) -> str | None:
     """``'lora'`` (the name callers use) and ``'lora+rows'`` (the table key) are one parameterization."""
     if parameterization is None:
         return None
