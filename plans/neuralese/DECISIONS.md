@@ -7144,3 +7144,53 @@ the default with tests that fail on each (mutants checked).
   driver's commit.
 - **Success:** aei1's first measured round is at least neutral against sft-v7 with no rise in ran-out above 2 pts.
   **Failure:** below the declared failure threshold with p < 0.05; the driver halts for the bug hunt.
+
+## 2026-11-22 16:30 GRPO on the LoRA core: publication, attestation and resume fixed; learner bench and a real-actor cycle
+
+Independent reviews of 07efc838c/c9932d915 found `grpo.py train` could not start (missing learner API), the KL
+reference ran a no-grad graph, attestation echoed the rebind request, rebinds broke exact Neuralese splicing, and the
+publication had races, an unbounded host-memory cost and no working rollback. Fixed on main as defaults:
+
+- **Learner and resume.** grpo uses the learner core's API (checkpoint_state, special_ids, native_rows, FP8 off by
+  default); every policy id, learner state and meta.json binds the start checkpoint's digest; a resume verifies the
+  base and refuses a full-FT `training-state.safetensors`; the learner state saves every step (`--state-every 1`).
+- **KL reference** runs the policy's own training graph again (grad mode, reference leaves that require grad, B = 0 at a
+  fresh start), not `torch.no_grad`.
+- **Publication (`WeightSync`).** Snapshot = GPU clones of factors and rows (the next optimizer step cannot tear an
+  export); merge into one of two prefaulted, page-locked tmpfs slots (current + staging, 6.8 GB; no fresh pageable
+  memory per step); the native checkpoint is written from the same bytes. Attestation is measured: SGLang's own
+  `/model_info` plus the front's hash of that file, the reloaded native model's tensor identity (every name matched),
+  and a sentinel sequence's log-probabilities (SGLang, native, learner). A failure serves the last good version (at
+  first the start export) on every route, retries once, then stops the run.
+- **Actor front.** Exact Neuralese splicing keys on the lineage (a block from an earlier version of the run splices
+  exactly; plans/MODEL_FACING_CHANGES.md); native calls drain at a call boundary before a reload; one native lock
+  orders lazy loads and rebinds; native-engine spans are stored by the native path (was a KeyError, and a stall behind
+  a paused SGLang).
+- **Held remote Colab** carries `host_profile` to the detached job.
+- **LR 1e-4, activation 22 GiB** in `ops/grpo-v4/launch-grpo.sh` and grpo's defaults.
+- **Learner bench** (merged main 7c9038cf5, `ops/grpo-v6/bench-lora-20261122/bench.sh`: replay of grpo-v4/run2's
+  archive on its fresh-init start, 6 groups/step, 6 steps, `--activation-gb 6` to fit beside sft-v9's collection):
+  6 steps, a native checkpoint each. Step 1 (B = 0): KL exactly 0 and |dlogp| vs reference 0, so the reference pass
+  is the policy's graph. Chain steps 2-5: grad_norm 0.18-0.31, kl_mean 0.003-0.007 (0.38 at step 5 with decisions),
+  rho_mean 1.000, |log rho| 0.03-0.07, no OOM retry. CUDA peak 17.5-18.1 GiB; tmpfs slots 7.5 GB shmem. Publication
+  per step: merge 2.4-5.2 s, digests 6-7.4 s, checkpoint write 24-108 s (HDD direct, NVMe floor), all off the learner's
+  path. Steps 1 and 6 were decisions only: grad_norm 65 and 23 (clipped to 1). Step 6's decision option scores were
+  ~5 nats from the reference after 5 steps at LR 2.5e-5, because the replay repeats the same three-option decision 16-24
+  times a step. kl_mean 860 per unit there is decision-token k2 over 24 units. Telemetry, not a stop. Watch decision
+  KL in the first real run at 1e-4.
+- Wall time per step was dominated by the behaviour probe (53-62 s) and the reference forward (8-64 s, compile
+  warm-up); the policy forward/backward took 10-18 s.
+- **Real-actor publication cycle** (`ops/grpo-v6/bench-lora-20261122/cycle.py`: `serve_native_checkpoint.py --engine
+  sglang`, vendor projection, FP8 KV, sft-v5 start, the r=32 learner with perturbed factors). Three versions passed
+  with routes attested on the first attempt. v1: SGLang slot-a, native pending. A forced native load then reloaded v1
+  and verified the claimed tensor identity. v2: the resident native engine reloaded and attested. v3
+  (`publish_start`): the start export came back on every route. Per version: merge 0.7-1.1 s, digests 3.7 s, SGLang
+  `update_weights_from_disk` 27-40 s, rebind 3-37 s (the native reload is in it). Sentinel |dlogp|, as mean/max:
+  SGLang vs learner 0.066-0.076/0.34-0.42, native vs learner 0.034/0.30, SGLang vs native 0.072-0.085/0.33-0.59.
+  The tolerance is now (0.2, 2.0) mean/max, about 2.5x the measured noise. It catches wrong or torn weights; a
+  one-step-stale engine is caught by the measured directory, version and digest, not by the sentinel.
+- **tmpfs slots are owned** (`common/owned_scratch.py`): the check left 7.5 GB on /dev/shm after its unit ended, which
+  kept sft-v9's SFT unadmitted for ~30 min. WeightSync now claims its directory with an owner pid, removes it on close,
+  at exit and on SIGTERM, and sweeps dead owners' slot sets when it starts. The operator fits' spill stores
+  (`tune/build.fit_store`) use the same helper and now also go on SIGTERM. /dev/shm has no other user in the training
+  stack: the only other match, `run_status.py`, reads disk usage.
