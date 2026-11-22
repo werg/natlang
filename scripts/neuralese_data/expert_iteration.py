@@ -633,10 +633,26 @@ class Cycle:
             raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
         self.mark('collect', **{k: v for k, v in summary.items() if k != 'run'})
 
+    def held_schedule(self):
+        """(unmeasured cycles before this one, the interval in force), from the previous verdict: an unmeasured one
+        counts on; a measured success doubles the interval (up to ``--held-every-max``: reliable progress needs fewer
+        evals), a neutral result returns to ``--held-every``, a failure measures the next cycle too (debugging).
+        Without a previous verdict that records them, ``--since-held`` and ``--held-every``."""
+        base, top = getattr(self.a, 'held_every', 1), max(getattr(self.a, 'held_every_max', 1), 1)
+        v = self.previous_verdict() if self.speculative else None
+        if not v or 'held_every' not in v:
+            return getattr(self.a, 'since_held', 0), base
+        if v['verdict'] == 'unmeasured':
+            return v['since_held'] + 1, v['held_every']
+        if v['verdict'] == 'success':
+            return 0, min(2 * v['held_every'], top)
+        return 0, 1 if v['verdict'] == 'failure' else base
+
     def measured(self):
-        """Whether this cycle's candidate gets a held eval: every ``--held-every``-th cycle (DECISIONS 2026-11-22
-        "held every"); the others are adopted unmeasured and Pop's hours go to rollouts."""
-        return getattr(self.a, 'since_held', 0) + 1 >= getattr(self.a, 'held_every', 1)
+        """Whether this cycle's candidate gets a held eval (``held_schedule``; DECISIONS 2026-11-22 "held every"); the
+        others are adopted unmeasured and Pop's hours go to rollouts."""
+        since, every = self.held_schedule()
+        return since + 1 >= every
 
     def reference(self):
         """The last held-measured policy this cycle's training descends from: what a measured candidate is judged
@@ -1022,6 +1038,7 @@ class Cycle:
         if not self.measured():
             result = {'verdict': 'unmeasured', 'adopt': True, 'vs_start': {}, 'next_start': candidate_ckpt,
                       'reference': self.reference()}
+            result['since_held'], result['held_every'] = self.held_schedule()
             (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
             return self.mark('verdict', **result)
         reference = self.reference()
@@ -1048,6 +1065,7 @@ class Cycle:
                                           'series': base_series, 'from': str(base)},
                   'next_start': candidate_ckpt if adopt else str(train_start),
                   'reference': {'checkpoint': candidate_ckpt} if adopt else {'checkpoint': str(train_start)}}
+        result['since_held'], result['held_every'] = self.held_schedule()
         if verdict == 'failure':      # a regression is a bug until shown otherwise: the supervisor opens the hunt
             result['debug'] = f'regression vs {reference["checkpoint"]}: hunt it (AGENTS.md "degradation means bug")'
         (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
@@ -1078,7 +1096,7 @@ class Cycle:
                                start=start, start_sha=(self.dir / 'sft' / 'sha256.txt').read_text().strip(),
                                commit=commit, previous=self.dir, prefer_unseen=[self.mix],
                                fallback_prefer_unseen=self.train_policy()[2], extra_seed_work=self.a.next_seed_work,
-                               since_held=0 if self.measured() else getattr(self.a, 'since_held', 0) + 1)
+                               since_held=0 if self.measured() else self.held_schedule()[0] + 1)
         (self.dir.parent / name).mkdir(parents=True, exist_ok=True)
         unit = f'{name}-drive-{int(time.time())}'
         subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', '2', '--priority', 'medium', '--wait', '36000',
@@ -1231,6 +1249,8 @@ def main():
                    help="measure base and start on Pop even when an earlier cycle measured them in this series")
     y.add_argument('--held-every', type=int, default=2,
                    help='held-eval every Nth cycle\'s candidate; the others are adopted unmeasured (1 = every cycle)')
+    y.add_argument('--held-every-max', type=int, default=8,
+                   help='the interval a run of measured successes doubles up to')
     y.add_argument('--since-held', type=int, default=0, help='unmeasured cycles before this one (set by the pipeline)')
     y.add_argument('--held-pin', help="pin whose harness and scoring run the held evals (default this cycle's pin); "
                    'carried to the next cycle, so the series stays fixed and the start reuses the previous candidate')

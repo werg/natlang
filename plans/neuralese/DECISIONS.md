@@ -6469,3 +6469,7 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - `filled_reasoning generate` claims each episode (OUT/claims/, O_EXCL; a dead process's claim is taken over) and
   skips one another generator finished, so generators sharing OUT draw disjoint episodes (`--no-claims` opts out).
 - Tests: 57 pass (test_filled_reasoning, test_expert_iteration).
+- **Adaptive interval** (owner: "if we make progress somewhat reliably we should do evals less frequently than every
+  2"): each verdict records `since_held` and `held_every`. A measured success doubles the interval up to
+  `--held-every-max` (8), a neutral result returns it to `--held-every` (2) and a failure measures the next cycle too.
+  Tests: 43 pass.

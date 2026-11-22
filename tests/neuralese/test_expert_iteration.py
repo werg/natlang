@@ -474,3 +474,17 @@ def test_pop_fill_draws_at_pops_running_cap_and_opts_out(tmp_path, monkeypatch):
     cycle = ei.Cycle(_cycle_args([*argv, '--no-pop-fill']))
     cycle.pop_fill_open()
     assert not started
+
+
+@pytest.mark.parametrize('previous,expected', [
+    ({'verdict': 'unmeasured', 'since_held': 0, 'held_every': 4}, (1, 4)),
+    ({'verdict': 'success', 'since_held': 1, 'held_every': 2}, (0, 4)),
+    ({'verdict': 'success', 'since_held': 7, 'held_every': 8}, (0, 8)),
+    ({'verdict': 'neutral', 'since_held': 3, 'held_every': 4}, (0, 2)),
+    ({'verdict': 'failure', 'since_held': 1, 'held_every': 2}, (0, 1)),
+    ({'verdict': 'success'}, (0, 2))])                # an older verdict: the flags
+def test_held_interval_doubles_on_success_and_resets_otherwise(tmp_path, previous, expected):
+    cycle = _speculative_cycle(tmp_path, {'adopt': True, 'vs_start': {}, 'next_start': '/v7.pt', **previous})
+    cycle.a.held_every, cycle.a.held_every_max, cycle.a.since_held = 2, 8, 0
+    assert cycle.held_schedule() == expected
+    assert cycle.measured() == (expected[0] + 1 >= expected[1])
