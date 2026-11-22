@@ -110,6 +110,9 @@ def main() -> None:
     parser.add_argument('--sglang-kv-cache-dtype', default='auto', choices=('fp8_e4m3', 'auto'),
                         help='KV cache dtype (auto: the model dtype, BF16). FP8 halves the bytes every decode step reads '
                              'per context token; the learner recomputes logprobs and corrects the gap with TIS')
+    parser.add_argument('--sglang-weight-dtype', default='bfloat16', choices=('bfloat16', 'fp8'),
+                        help='SGLang linear weight precision (async-train §3): bfloat16 (default, required for held eval '
+                             'and GRPO) or fp8 (SFT collection actors only; conv states and lm_head stay BF16)')
     parser.add_argument('--sglang-mamba-strategy', default='extra_buffer', choices=('extra_buffer', 'no_buffer'),
                         help='radix cache for the conv/recurrent state: extra_buffer also keeps the state every track '
                              'interval, so a prompt can reuse a prefix that ends inside an earlier sequence (Pop, FP8 KV, '
@@ -506,8 +509,10 @@ def launch_sglang(engine, args, checkpoint, release=None):
                    if args.sglang_spec_draft > 0 and source.get('speculative_ngram') else None)
     swa = (['--swa-full-tokens-ratio', str(args.sglang_swa_ratio)] if layout == 'hybrid-swa'
            else ['--disable-hybrid-swa-memory'] if args.sglang_full_kv else [])
+    weight_dtype = getattr(args, 'sglang_weight_dtype', 'bfloat16')
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
                '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', f'{fraction:.4f}',
+               *(['--quantization', 'fp8'] if weight_dtype == 'fp8' else []),
                '--context-length', str(context), '--max-total-tokens', str(total),
                '--max-running-requests', str(args.sglang_max_running),
                '--kv-cache-dtype', args.sglang_kv_cache_dtype,
@@ -554,6 +559,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
                        kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout,
+                       weight_dtype=weight_dtype,
                        max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')),
                        speculative=speculative)
     return process

@@ -321,7 +321,8 @@ class SglangEngine(Engine):
 
     def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
-                    max_running=None, warm_openings=None, track_input_end=False, speculative=None):
+                    weight_dtype='bfloat16', max_running=None, warm_openings=None, track_input_end=False,
+                    speculative=None):
         self.sglang_url = url.rstrip('/')
         self.__dict__.setdefault('_native_lock', threading.RLock())
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
@@ -369,14 +370,22 @@ class SglangEngine(Engine):
         # per episode and corrects it with the loss's importance weights (rl.native_replay DEFAULT_ENGINE_GUARD).
         if projection not in ('native', 'vendor'):
             raise ValueError('SGLang projection policy must be native or vendor')
-        # A quantized KV cache is part of the actor law (format suffix); BF16 KV keeps the historical format string.
+        # A quantized KV cache or FP8 linear weights (async-train §3 collection profile; conv & lm_head stay BF16) are
+        # part of the attested actor law, so held eval and GRPO automatically refuse an FP8-weight collection actor.
+        if weight_dtype not in ('bfloat16', 'fp8'):
+            raise ValueError(f'SGLang weight_dtype must be bfloat16 or fp8, got {weight_dtype!r}')
         kv = '' if kv_cache_dtype in ('auto', None, export_manifest['dtype']) else f'-kv-{kv_cache_dtype}'
-        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}-{projection}-projection{kv}",
+        w_tag = '-w-fp8' if weight_dtype == 'fp8' else ''
+        self.sglang_weight_dtype = weight_dtype
+        self.sglang_actor_export = {'kind': 'exact', 'format': f"sglang-hf-{export_manifest['dtype']}-{projection}-projection{kv}{w_tag}",
                                     'sha256': export_manifest['weights_sha256']}
         binding = getattr(self, 'rl_policy_binding', None)
         if binding is not None:
             binding['serving_engine'] = {'engine': 'sglang', 'fork': dict(fork),
-                'hf_export_weights_sha256': export_manifest['weights_sha256'], 'dtype': export_manifest['dtype'],
+                'hf_export_weights_sha256': export_manifest['weights_sha256'],
+                'dtype': 'fp8' if weight_dtype == 'fp8' else export_manifest['dtype'],
+                'weight_dtype': weight_dtype,
+                'conv_and_head_dtype': export_manifest['dtype'],
                 'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'), 'projection': projection,
                 'overlap_schedule': bool(overlap_schedule), 'kv_cache_dtype': kv_cache_dtype, 'kv_layout': kv_layout,
                 # SGLang's running-sequence cap (and its decode CUDA-graph batch sizes): batch composition changes the

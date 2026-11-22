@@ -103,17 +103,37 @@ COLAB_MAX_RUNNING = 128
 COLAB_MEM_FRACTION = 0.88
 
 
-def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING, profile='pop'):
-    """(job['sglang'] settings, actor export format) of a remote SGLang engine (Pop or Colab G4)."""
+def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING, profile='pop',
+               weight_dtype='bfloat16'):
+    """(job['sglang'] settings, actor export format) of a remote SGLang engine (Pop or Colab G4).
+    ``weight_dtype`` is ``'bfloat16'`` (held and GRPO) or ``'fp8'`` (SFT collection actors, async-train §3)."""
+    if weight_dtype not in ('bfloat16', 'fp8'):
+        raise ValueError(f'weight_dtype must be bfloat16 or fp8, got {weight_dtype!r}')
     fp8 = kv_cache_dtype != 'auto'
+    w_suffix = '-w-fp8' if weight_dtype == 'fp8' else ''
+    w_extra = {'weight_dtype': 'fp8'} if weight_dtype == 'fp8' else {}
     if str(profile).lower().replace('-', '_') == 'colab_g4':
         cap = max_running if max_running is not None else COLAB_MAX_RUNNING
         settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': cap, 'mem_fraction': COLAB_MEM_FRACTION,
-                    'max_total_tokens': 2097152 if fp8 else 1048576}
-        return settings, COLAB_SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '')
+                    'max_total_tokens': 2097152 if fp8 else 1048576, **w_extra}
+        return settings, COLAB_SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '') + w_suffix
     settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'mem_fraction': POP_MEM_FRACTION,
-                'max_total_tokens': 524288 if fp8 else 262144}
-    return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '')
+                'max_total_tokens': 524288 if fp8 else 262144, **w_extra}
+    return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '') + w_suffix
+
+
+def ensure_colab_mps(host):
+    """Ensure the NVIDIA MPS daemon is running on a Colab G4 VM so an SFT learner and capped collection actor share
+    SMs concurrently (async-train §1). Non-fatal when MPS is unavailable in a restricted container; opt out with
+    ``NATLANG_COLAB_MPS=0``."""
+    if os.environ.get('NATLANG_COLAB_MPS', '1') == '0':
+        return {'host': host, 'mps': 'disabled'}
+    out = ssh_host(host, 'pgrep -x nvidia-cuda-mps-control >/dev/null 2>&1 && echo running '
+                         '|| (nvidia-cuda-mps-control -d >/dev/null 2>&1 && echo started || echo unavailable)',
+                   check=False, timeout=30).strip()
+    status = out.splitlines()[-1] if out else 'unavailable'
+    log(event='Colab G4 MPS checked', host=host, mps=status)
+    return {'host': host, 'mps': status}
 
 
 def colab_hosts(explicit=None):
@@ -756,23 +776,163 @@ def stop_colab_g4(host):
     return state
 
 
-def colab_serve_command(cfg, *, checkpoint, sha, port, work, beside_learner, kv_cache_dtype):
+def colab_serve_command(cfg, *, checkpoint, sha, port, work, beside_learner, kv_cache_dtype,
+                        weight_dtype='bfloat16'):
     """(serve argv, admission claim) of a Colab G4 SGLang actor: alone it takes the GPU (mem fraction 0.88, 128
     running); beside the SFT learner under MPS (async-train §1) it is capped at 24 GB KV and 64 running and claims only
     that share, so the learner's admission still fits."""
     sizing = G4_ACTOR_BESIDE_LEARNER if beside_learner else G4_ACTOR_ALONE
-    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab_g4')
+    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab_g4',
+                                       weight_dtype=weight_dtype)
     memory = (['--sglang-kv-gb', str(sizing['kv_gb'])] if sizing['kv_gb'] else
               ['--sglang-mem-fraction', str(sglang['mem_fraction'])])
     if sizing['kv_gb']:
         sglang = {**{k: v for k, v in sglang.items() if k != 'mem_fraction'}, 'kv_gb': sizing['kv_gb']}
+    weight_args = ['--sglang-weight-dtype', 'fp8'] if weight_dtype == 'fp8' else []
     serve = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/serve_native_checkpoint.py',
              '--store-dir', f'{work}/store', '--checkpoint', checkpoint, '--checkpoint-sha256', sha,
              '--base', cfg['base'], '--host', '0.0.0.0', '--port', str(port), '--prompt-rendering', 'full',
              '--engine', 'sglang', '--sglang-python', cfg['sglang_python'], '--sglang-projection', 'vendor',
              '--sglang-kv-cache-dtype', sglang['kv_cache_dtype'], '--sglang-max-running', str(sglang['max_running']),
-             *memory, '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
+             *weight_args, *memory, '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
     return serve, {'vram_gib': sizing['vram_gib'], 'host_ram_gib': sizing['host_ram_gib']}, sglang, sglang_format
+
+
+def _http_json(url, payload=None, *, host=None, timeout=600):
+    """GET (``payload is None``) or POST JSON to ``url``; when ``host`` is set and ``url`` targets loopback
+    (e.g. a remote SGLang server on ``127.0.0.1``), execute the HTTP request over SSH on ``host``."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    use_ssh = bool(host) and parsed.hostname in ('127.0.0.1', 'localhost', '::1')
+    if use_ssh:
+        script = (
+            'import json, sys, urllib.request\n'
+            'url, timeout, body = sys.argv[1], float(sys.argv[2]), sys.stdin.read()\n'
+            'req = urllib.request.Request(url, data=(body.encode() if body else None),\n'
+            '    headers=({"Content-Type": "application/json"} if body else {}))\n'
+            'with urllib.request.urlopen(req, timeout=timeout) as r:\n'
+            '    sys.stdout.write(r.read().decode())\n'
+        )
+        raw = ssh_host(host, shlex.join(['python3', '-I', '-c', script, url, str(timeout)]),
+                       input=(json.dumps(payload) if payload is not None else ''), timeout=int(timeout) + 30)
+        return json.loads(raw) if raw.strip() else {}
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers = {'Content-Type': 'application/json'} if data is not None else {}
+    req = urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode()
+    return json.loads(raw) if raw.strip() else {}
+
+
+def _default_sglang_url(front_url):
+    from urllib.parse import urlparse
+    parsed = urlparse(front_url)
+    port = (parsed.port or 80) + 1000
+    return f'http://127.0.0.1:{port}'
+
+
+def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=None, factors_dir=None,
+                                  base_checkpoint=None):
+    """Stage a versioned HF export directory on ``host`` for in-place rebind.
+    When ``factors_dir`` is given (async-train §7.1), ships only the ~130 MB / ~0.5 GB FP32 factors and runs
+    ``merge_factors_to_checkpoint`` + ``export.native_hf.export`` on the remote host against its local base
+    checkpoint; otherwise syncs ``export_dir`` directly. Returns ``(remote_export_dir, weights_sha256)``."""
+    remote_export = f'{cfg["work_root"]}/sglang-hf-v{version}-{policy_id[:12]}'
+    if factors_dir is not None:
+        factors_dir = Path(factors_dir)
+        manifest = json.loads((factors_dir / 'policy_manifest.json').read_text())
+        base_sha = manifest['base_checkpoint_sha256']
+        remote_factors = f'{cfg["work_root"]}/rebind-factors/{policy_id[:12]}-v{version}'
+        ssh_host(host, shlex.join(['mkdir', '-p', remote_factors, remote_export, cfg['checkpoints']]))
+        sync_to_remote(str(factors_dir / 'adapter_factors_fp32.safetensors'),
+                       f'{remote_factors}/adapter_factors_fp32.safetensors', host)
+        sync_to_remote(str(factors_dir / 'policy_manifest.json'),
+                       f'{remote_factors}/policy_manifest.json', host)
+        remote_base = base_checkpoint or f'{cfg["checkpoints"]}/{base_sha}.pt'
+        remote_merged = f'{cfg["checkpoints"]}/{policy_id}.pt'
+        merge_script = (
+            'import json, sys\n'
+            'from pathlib import Path\n'
+            'sys.path[:0] = [sys.argv[1] + "/training/neuralese", sys.argv[1]]\n'
+            'from natlang_neuralese.train.learner_state import merge_factors_to_checkpoint\n'
+            'from natlang_neuralese.export.native_hf import export\n'
+            'repo, base_ckpt, factors_dir, out_ckpt, base_dir, out_hf = sys.argv[2:8]\n'
+            'merge_factors_to_checkpoint(base_ckpt, factors_dir, out_ckpt)\n'
+            'res = export(out_ckpt, base_dir, out_hf)\n'
+            'print(json.dumps({"export_dir": str(out_hf), "weights_sha256": res["weights_sha256"]}))\n'
+        )
+        out = ssh_host(host, shlex.join([cfg['python'], '-c', merge_script, cfg['repo'], cfg['repo'],
+                                         remote_base, remote_factors, remote_merged, cfg['base'], remote_export]),
+                       timeout=1800)
+        info = json.loads(out.strip().splitlines()[-1])
+        return info['export_dir'], info['weights_sha256']
+    if not export_dir:
+        raise ValueError('rebind_actor requires export_dir or factors_dir')
+    local_export = Path(export_dir)
+    if local_export.is_dir():
+        ssh_host(host, shlex.join(['mkdir', '-p', remote_export]))
+        sync_to_remote(f'{local_export}/', f'{remote_export}/', host)
+        weights_file = local_export / 'model.safetensors'
+        weights_sha = None
+        if weights_file.is_file():
+            from natlang_neuralese.common.hashing import sha256_file_hex
+            weights_sha = sha256_file_hex(weights_file)
+        return remote_export, weights_sha
+    # Already a remote path on host
+    _, weights_sha = remote_identity(host, f'{export_dir}/model.safetensors')
+    return str(export_dir), weights_sha
+
+
+def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha256=None, tensor_identity=None,
+                 export_dir=None, factors_dir=None, base_checkpoint=None, host=None, host_profile='colab_g4',
+                 timeout=600):
+    """In-place weight update + 4-route measured attestation of a standing SGLang actor (DGX local or remote G4/Pop).
+    Pause (retract) -> ``update_weights_from_disk`` -> ``/v1/neuralese/rebind-policy`` -> ``attest_all_routes`` ->
+    ``continue_generation`` (always resumed in ``finally``). When ``host`` and ``factors_dir`` are provided, ships only
+    FP32 LoRA factors and merges + exports on the remote host (async-train §5, §7.1)."""
+    from natlang_neuralese.serve.sglang_actor import attest_all_routes
+    started = time.time()
+    front_url = front_url.rstrip('/')
+    sglang_url = (sglang_url or _default_sglang_url(front_url)).rstrip('/')
+    target_dir = str(export_dir) if export_dir is not None else None
+    if host:
+        cfg = host_config(host_profile, host=host)
+        target_dir, measured_sha = _prepare_remote_rebind_export(
+            host=host, cfg=cfg, policy_id=policy_id, version=version,
+            export_dir=export_dir, factors_dir=factors_dir, base_checkpoint=base_checkpoint)
+        weights_sha256 = weights_sha256 or measured_sha
+    else:
+        if target_dir is None:
+            raise ValueError('local rebind_actor requires export_dir')
+        if weights_sha256 is None and (Path(target_dir) / 'model.safetensors').is_file():
+            from natlang_neuralese.common.hashing import sha256_file_hex
+            weights_sha256 = sha256_file_hex(Path(target_dir) / 'model.safetensors')
+    _http_json(f'{sglang_url}/pause_generation', {'mode': 'retract'}, host=host, timeout=timeout)
+    try:
+        upd = _http_json(f'{sglang_url}/update_weights_from_disk',
+                         {'model_path': target_dir, 'flush_cache': True, 'weight_version': str(version)},
+                         host=host, timeout=timeout)
+        if not upd.get('success', False):
+            raise RuntimeError(f'update_weights_from_disk failed on {sglang_url}: {json.dumps(upd)[:400]}')
+        rebind_body = {'policy_id': policy_id, 'version': version, 'export_dir': target_dir}
+        if weights_sha256 is not None:
+            rebind_body['weights_sha256'] = weights_sha256
+        if tensor_identity is not None:
+            rebind_body['tensor_identity'] = tensor_identity
+        _http_json(f'{front_url}/v1/neuralese/rebind-policy', rebind_body, host=host, timeout=timeout)
+        info = _http_json(f'{front_url}/v1/neuralese/info', None, host=host, timeout=min(timeout, 120))
+        expected = {'policy_id': policy_id, 'version': version, 'model_path': target_dir,
+                    'weights_sha256': weights_sha256, 'tensor_identity': tensor_identity}
+        ok, mismatches = attest_all_routes(info, expected)
+        if not ok:
+            raise RuntimeError(f'rebind_actor route attestation failed for {front_url}: {json.dumps(mismatches)[:600]}')
+    finally:
+        _http_json(f'{sglang_url}/continue_generation', {}, host=host, timeout=min(timeout, 120))
+    result = {'front_url': front_url, 'sglang_url': sglang_url, 'host': host, 'policy_id': policy_id,
+              'version': version, 'export_dir': target_dir, 'weights_sha256': weights_sha256,
+              'routes_attested': True, 'seconds': round(time.time() - started, 2)}
+    log(event='Actor rebound in place', **result)
+    return result
 
 
 def serve_colab_g4(args):
@@ -783,11 +943,13 @@ def serve_colab_g4(args):
     if not host:
         raise RuntimeError('set --host, NATLANG_COLAB_HOSTS, or "colab_hosts" in ' + str(ROOT / 'config.json'))
     sha, commit = args.policy_id, args.commit
+    beside_learner = bool(getattr(args, 'beside_learner', False))
+    weight_dtype = getattr(args, 'weight_dtype', 'bfloat16')
     remote_ckpt = f'{cfg["checkpoints"]}/{sha}.pt'
     remote_work = f'{cfg["work_root"]}/actor-{sha[:12]}'
     serve_cmd, claim, sglang, sglang_format = colab_serve_command(
         cfg, checkpoint=remote_ckpt, sha=sha, port=args.port, work=remote_work,
-        beside_learner=bool(getattr(args, 'beside_learner', False)), kv_cache_dtype=args.kv_cache_dtype)
+        beside_learner=beside_learner, kv_cache_dtype=args.kv_cache_dtype, weight_dtype=weight_dtype)
     state_file = colab_state_path(host)
     previous = read_json(state_file)
     if (previous and previous.get('policy_id') == sha and previous.get('code') == commit
@@ -796,6 +958,8 @@ def serve_colab_g4(args):
         return previous
     if previous:
         stop_colab_g4(host)
+    if beside_learner:
+        ensure_colab_mps(host)
     started = time.time()
     bind_ip = args.bind_host or host_address(host)
     endpoint = f'http://{bind_ip}:{args.port}'
@@ -886,8 +1050,17 @@ def run_remote_sft(args):
     local_state = local_work / 'learner-state'
     if (local_state / 'learner_manifest.json').exists():     # exact resume across a preemption (DGX holds the state)
         sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
+    ensure_colab_mps(host)
+    round_id = getattr(args, 'round_id', None)
+    factors_only = bool(getattr(args, 'factors_only', False))
+    extra_sft = []
+    if round_id:
+        extra_sft += ['--round-id', round_id]
+    if factors_only:
+        extra_sft += ['--export-factors-dir', f'{remote_run}/factors', '--factors-only']
     sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *remap_sft_args(recipe, mapping),
-               *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
+               *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes),
+               *extra_sft]
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(args.vram_gib), '--host-ram-gib',
                 str(args.host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
                 '--', *sft_cmd]
@@ -919,14 +1092,39 @@ def run_remote_sft(args):
         except Exception as err:
             log(event='Colab SFT post-run pull warning', error=repr(err)[:200])
     sha = None
+    factors_sha = None
     if rc == 0:
-        try:
-            sha = pull_verified(f'{remote_run}/checkpoint.pt', local_work / 'checkpoint.pt', host)
-        except Exception as err:
-            rc = 1
-            log(event='Colab SFT checkpoint pull failed', host=host, error=repr(err)[:300])
+        if factors_only:
+            local_factors = local_work / 'factors'
+            local_factors.mkdir(parents=True, exist_ok=True)
+            try:
+                pull_verified(f'{remote_run}/factors/policy_manifest.json',
+                              local_factors / 'policy_manifest.json', host)
+                factors_sha = pull_verified(f'{remote_run}/factors/adapter_factors_fp32.safetensors',
+                                            local_factors / 'adapter_factors_fp32.safetensors', host)
+                manifest = json.loads((local_factors / 'policy_manifest.json').read_text())
+                if manifest.get('adapter_factors_sha256') != factors_sha:
+                    raise RuntimeError('pulled adapter_factors_fp32.safetensors does not match policy_manifest.json')
+            except Exception as err:
+                rc = 1
+                pending = {'schema': 'natlang.pending-upload/1', 'host': host, 'run_name': args.run_name,
+                           'round_id': round_id, 'remote_factors_dir': f'{remote_run}/factors',
+                           'error': repr(err)[:300], 'at': round(time.time(), 1)}
+                write_json(local_work / 'pending-upload.json', pending)
+                try:
+                    ssh_host(host, shlex.join(['bash', '-c', f'cat > {shlex.quote(remote_run + "/pending-upload.json")}']),
+                             input=json.dumps(pending), check=False, timeout=30)
+                except Exception:
+                    pass
+                log(event='Colab SFT factors pull failed; recorded pending-upload.json', host=host, error=repr(err)[:300])
+        else:
+            try:
+                sha = pull_verified(f'{remote_run}/checkpoint.pt', local_work / 'checkpoint.pt', host)
+            except Exception as err:
+                rc = 1
+                log(event='Colab SFT checkpoint pull failed', host=host, error=repr(err)[:300])
     log(event='Colab G4 SFT finished', host=host, returncode=rc, seconds=round(time.time() - started, 1),
-        checkpoint_sha256=sha)
+        checkpoint_sha256=sha, adapter_factors_sha256=factors_sha)
     return rc
 
 
@@ -1086,6 +1284,8 @@ def main(argv=None):
         sub.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='pop')
         sub.add_argument('--host', help='explicit SSH host alias (default: Pop or first Colab G4 host)')
         sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE)
+        sub.add_argument('--weight-dtype', choices=('bfloat16', 'fp8'), default='bfloat16',
+                         help='SGLang linear weight dtype (fp8 for SFT collection actors; bfloat16 for held and GRPO)')
         sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='Pop running cap (a Colab actor '
                          'runs 128 alone, 64 with --beside-learner)')
         sub.add_argument('--beside-learner', action='store_true',
@@ -1098,6 +1298,19 @@ def main(argv=None):
     c.add_argument('--bind-host')
     c.add_argument('--ready-seconds', type=int, default=1800)
     c.add_argument('--adapter-release')
+    rb = commands.add_parser('rebind', help='in-place rebind + 4-route attestation of a standing SGLang actor')
+    rb.add_argument('--front-url', required=True)
+    rb.add_argument('--sglang-url', help='SGLang server URL (default: http://127.0.0.1:<front_port + 1000>)')
+    rb.add_argument('--policy-id', required=True)
+    rb.add_argument('--version', type=int, required=True)
+    rb.add_argument('--weights-sha256')
+    rb.add_argument('--tensor-identity')
+    rb.add_argument('--export-dir', help='HF export directory (local or remote)')
+    rb.add_argument('--factors-dir', help='FP32 adapter factors dir to ship and merge locally on --host')
+    rb.add_argument('--base-checkpoint', help='base checkpoint path on --host when using --factors-dir')
+    rb.add_argument('--host', help='remote SSH host alias (omit for local DGX actor)')
+    rb.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='colab_g4')
+    rb.add_argument('--timeout', type=int, default=600)
     f = commands.add_parser('prefetch')
     f.add_argument('--checkpoint', required=True)
     f.add_argument('--policy-id', required=True)
@@ -1107,10 +1320,13 @@ def main(argv=None):
     rs = commands.add_parser('run-sft', help='run the DGX SFT recipe on a Colab G4 VM with periodic state sync back')
     rs.add_argument('--host', required=True)
     rs.add_argument('--run-name', required=True)
-    rs.add_argument('--work', required=True, help='local DGX work directory (receives learner-state and checkpoint.pt)')
+    rs.add_argument('--work', required=True, help='local DGX work directory (receives learner-state and checkpoint.pt or factors/)')
     rs.add_argument('--launch-json', required=True,
                     help="the DGX preflight's launch.json (launch-sft.sh PREFLIGHT_ONLY=1): its exp0_sft_args run")
     rs.add_argument('--commit')
+    rs.add_argument('--round-id', help='round identifier recorded in the learner dedup ledger (async-train §2)')
+    rs.add_argument('--factors-only', action='store_true',
+                    help='export and pull ~0.5 GB FP32 LoRA factors instead of a 3.4 GB merged checkpoint (async-train §2)')
     rs.add_argument('--state-sync-minutes', type=float, default=15.0)
     rs.add_argument('--vram-gib', type=float, default=G4_VRAM_GIB - G4_ACTOR_BESIDE_LEARNER['vram_gib'] - 1.0,
                     help='admission claim (default: the GPU less a capped actor beside it)')
@@ -1146,6 +1362,13 @@ def main(argv=None):
         return 0
     if args.action == 'serve-checkpoint':
         print(json.dumps(serve_checkpoint(args)), flush=True)
+        return 0
+    if args.action == 'rebind':
+        print(json.dumps(rebind_actor(
+            front_url=args.front_url, sglang_url=args.sglang_url, policy_id=args.policy_id, version=args.version,
+            weights_sha256=args.weights_sha256, tensor_identity=args.tensor_identity,
+            export_dir=args.export_dir, factors_dir=args.factors_dir, base_checkpoint=args.base_checkpoint,
+            host=args.host, host_profile=args.host_profile, timeout=args.timeout)), flush=True)
         return 0
     if args.action == 'prefetch':
         prefetch(args)
