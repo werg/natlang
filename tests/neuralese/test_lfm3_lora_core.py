@@ -368,7 +368,7 @@ def test_weight_sync_7step_atomic_publication_and_rollback(tmp_path, monkeypatch
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
     import grpo
 
-    learner = _make_learner(r=4, alpha=8.0, trainable_rows=True)
+    learner = _make_learner(rank=4, alpha=8.0, trainable_rows=True)
     export_dir = tmp_path / 'init-export'
     export_dir.mkdir()
     init_tensors = {k: v.detach().to(torch.bfloat16).cpu() for k, v in learner.model.named_parameters() if k != 'lm_head.weight'}
@@ -405,10 +405,10 @@ def test_weight_sync_7step_atomic_publication_and_rollback(tmp_path, monkeypatch
         return FakeResponse({
             'rl_policy_binding': {'checkpoint_sha256': pid, 'served_weights_sha256': wsha},
             'routes': {
-                'generation': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
-                'decision_scoring': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
-                'logprob_capture': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
-                'native_fallback': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
+                'generation': {'policy_sha256': pid, 'weights_sha256': wsha},
+                'decision': {'policy_sha256': pid, 'weights_sha256': wsha},
+                'capture': {'policy_sha256': pid, 'weights_sha256': wsha},
+                'native_fallback': {'policy_sha256': pid, 'weights_sha256': wsha, 'synchronized': True},
             },
         })
 

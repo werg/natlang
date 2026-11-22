@@ -189,7 +189,8 @@ def frontier_collector(base):
         def setup(self, order, deadline, endpoints=None):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
-            self.endpoints = list(endpoints) if endpoints else [(self.args.actor, self.args.slots)]
+            self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
+                                                                 getattr(self.args, 'slots', 1))]
             self._learnable()
 
         def _pick(self):

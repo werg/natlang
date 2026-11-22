@@ -230,28 +230,30 @@ authoritative.
 - **Loss and optimizer.** `-min(rho, 2) * A * logp + 0.02 * k2(start || policy)` on per-call sequences, `A`
   group-normalized, `--loss-norm token`, policy term under the learner's nucleus, `--tail-logp-floor -7` for A > 0,
   sampled decisions at most 8 token units, Neuralese consumer calls with the imported state as fixed context.
-  FP32-master AdamW, `--lr 1e-5` (under review), `--warmup 2`, `--clip 1.0`, LR scaled by groups-with-spread / 12
-  (`lr_data_scale`). The KL reference runs the policy's own graph from a reference-weights file.
-- **Compute.** `lfm3_fast_train`; layers beyond `--activation-gb 12` recompute; shared prompt prefixes (>= 256 tokens)
-  run once as a prefix tree; no new episodes start while the learner runs (`--learner-phase-slots 0`; the GB10
-  time-slices the two, so overlap buys nothing: GRPO_STEP_THROUGHPUT_20261117.md).
-- **Sync and state.** Each step's BF16 weights go to the actor's safetensors on /dev/shm and SGLang reloads them in
-  place; the front attests the served sha. Native checkpoints every 2 steps (last 2 plus held-evaluated ones kept), the
-  FP32 state every 4 to `/mnt/external/natlang-grpo-v1`. `--branch-states N` keeps the last N FP32 states (~21 GB
-  each), `--keep-checkpoints-until N` every early checkpoint; `--resume [--resume-state FILE]`. Between optimizer
-  steps the AdamW moments (13.6 GB) live in `WORK/adam-moments.offload` (`--keep-moments-resident` opts out).
+  Shared LoRA+rows core (`natlang_neuralese/train/lfm3_learner.py` + `train/lfm3_fast.py`): frozen BF16 base (with
+  Blackwell FP8 frozen-base GEMMs, opt-out `--no-fp8-base`), FP32 LoRA factors on all 9 LFM3 projection families plus
+  trainable Neuralese marker/override rows (SFT `r=128/alpha=128/lr=5e-5`; RL `r=32/alpha=32/lr=1e-4`), trainable-only
+  AdamW, `--warmup 2`, `--clip 1.0`, LR scaled by groups-with-spread / 12 (`lr_data_scale`). The KL reference runs the
+  policy's own compiled graph via `learner.reference_view` (zero 3.4 GB file swap).
+- **Compute.** `natlang_neuralese/train/lfm3_fast.py`; layers beyond `--activation-gib 56` (DGX) / `80` (Colab G4)
+  recompute (parameterized activation table, OOM retry plan, token-length buckets, compile-health tracker); shared
+  prompt prefixes (>= 256 tokens) run once as a prefix tree; no new episodes start while the learner runs
+  (`--learner-phase-slots 0`).
+- **Sync and state.** `WeightSync.for_learner` runs the 7-step atomic merged-export publication state machine
+  (`SNAPSHOT -> EXPORT -> PAUSE -> REFIT & INVALIDATE -> BIND ALL ROUTES -> ATTEST & RESUME`, with `ROLLBACK` to `k-1`),
+  reloading all 4 routes (including `sglang_actor.py`'s native fallback) and verifying `attest_all_routes`. Native
+  checkpoints (`learner_state.export_merged_checkpoint`, recording actual `learner_step` and `source_step`) save every
+  2 steps; resumable FP32 learner states (`learner_state.save_learner_state`, including `rl_rollout_ledger` and RNG)
+  save atomically every `--state-every` steps (SFT: every 15 min for Colab preemption safety).
 - **Held evals.** By default on the training actor (collection pauses): the start policy at 4 samples, then a
-  checkpoint at 2 samples every 4 h, compared with step 0 in `WORK/held/step-N/`. `--held-remote pop` keeps the DGX
-  training: the start policy is measured once on Pop's engine, then the newest checkpoint back to back
-  (`pop_rl_actor.py serve-checkpoint`, `--held-remote-slots 20`, FP8 KV and 20 running on Pop, attested as
-  `max_running`; longest-expected-first dispatch within a sample, `held-pop.log`; POP_HELD_THROUGHPUT_20261117.md).
-  Each Pop evaluation is its own DGX ledger unit (`<unit-prefix>-popheld-N-*`, 11 GB) that a grpo restart adopts
-  rather than kills, and the next checkpoint is copied to Pop while the current one is measured.
+  checkpoint at 2 samples every 4 h, compared with step 0 in `WORK/held/step-N/`. `--held-remote pop|colab_g4` keeps
+  the DGX training (`pop_rl_actor.py` unified remote-actor module): Pop runs 20 running / 2 samples, while Colab G4
+  runs its own held series (`engine_host=colab_g4` in `held_eval.series()`), sharded across all reachable G4 sessions
+  at 4 samples per task.
 - **Sentinels** (`train.jsonl`): `grad_spike` (> 5x the run's median grad_norm), `reasoning_shift`, k3 `kl_mean` with
-  `ref_dlogp_max`, rho statistics, and the behaviour probe after every step (`behaviour_probe.py`,
-  `ops/grpo-v2/behaviour-probe-v2.json`: logp change, entropy and `</think>` hazard on 48 start-policy calls, and
-  p(`<|im_end|>`) after 24 short decision answers (`end_logp_change`, `reclose_p`; 10.6k more tokens), flagged as
-  `behaviour_shift`). `cuda_peak_by_phase_gb` gives each phase's memory peak.
+  `ref_dlogp_max`, rho statistics, per-family LoRA grad norms, `compile_health`, `oom_retries`, and the behaviour probe
+  after every step (`behaviour_probe.py`, `ops/grpo-v2/behaviour-probe-v2.json`, flagged as `behaviour_shift`).
+  `cuda_peak_by_phase_gib` gives each phase's memory peak in GiB.
 - **Learner bench** (minutes): `grpo.py train --replay ROLLOUTS --replay-max-group-tokens 16000 --min-groups 6
   --max-groups 6 --max-steps 6 --keep-checkpoints-until 6`; `--advantage-control shuffle|zero` are reward-free
   controls; `--replay-schedule` replays a run's exact batches. The 2026-11-15 hunt's runs are in `ops/grpo-v2/hunt/`.
@@ -261,10 +263,14 @@ authoritative.
 
 # Machines
 
-- **DGX (GB10, 128 GB unified memory)** trains: the learner, the SGLang actor and diagnostics. **Pop** (RTX 4060
-  8 GB, 14 GB host RAM) runs held evals of pinned runs first. When none is queued, it runs forward-only probes and
-  checks of the 1.7B BF16 model (not the learner); a held eval preempts them. The DGX supervisor drives Pop over ssh.
-  Cloud (CoreWeave) is unavailable. Both machines use `/home/werg/natlang` as the canonical checkout.
+- **DGX (GB10, 128 GB unified memory)** is the durable coordinator, data store and local trainer/actor. **Colab G4**
+  (RTX PRO 6000 Blackwell, 96 GB discrete VRAM, ~1.8 TB/s, ~13 CU/h; bootstrapped via `scripts/colab/bootstrap.py` over
+  Tailscale userspace networking, admitted via `scripts/colab/admission.py` with separate VRAM/host-RAM checks) runs
+  high-throughput LoRA SFT (15-min learner-state sync back to DGX; Colab disk is scratch), sharded collection, and
+  sharded 4-sample held evals on its own held series (`ExecutionProfile` `colab_g4`, with automatic 30-min unreachable
+  fallback to DGX; L4 is excluded). **Pop** (RTX 4060 8 GB, 14 GB host RAM) runs held evals and forward-only probes
+  when idle. The DGX drives both Colab G4 and Pop over ssh via the unified remote-actor module (`pop_rl_actor.py`).
+  DGX and Pop use `/home/werg/natlang` as the canonical checkout.
 - **Memory ledger.** On the DGX every build, test and probe runs through
   `scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`. Units are asynchronous: wait and read the
   log. Priority is `--priority high` for training/GPU runs, `low` for data generation and check-main, and the default

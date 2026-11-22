@@ -547,7 +547,7 @@ def test_sft_gets_the_activation_memory_flag(tmp_path, monkeypatch):
     argv = ['--dir', str(tmp_path / 'sft-v9'), '--name', 'sft-v9', '--start', '/v8.pt', '--start-sha', 'bbb',
             '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
     args = _cycle_args(argv)
-    assert args.sft_activation_gb == 40 and args.sft_budget == 100
+    assert args.sft_activation_gb == 56 and args.sft_budget == 100
     cycle = ei.Cycle(_cycle_args([*argv, '--sft-activation-gb', '24']))
     (cycle.mix).mkdir(parents=True)
     (cycle.mix / 'chains.sha256').write_text('abc\n')

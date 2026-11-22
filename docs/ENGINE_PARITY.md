@@ -107,7 +107,17 @@ capture request with the state's rows as `natlang_import`; `test_sglang_actor.py
 capture tensor by tensor). The fork and the page re-send the call's own messages (the state as a `native_state` part) with
 the forced span (`grammarCapture`). Each returns the source capture with the state as a `native_state` segment of
 `token_count` rows. The learners read it as fixed stored context inside the producer document
-(`lower_rollout_turns.write_sources`, `lfm3_fast_train.passthrough_plan`). No gap.
+(`lower_rollout_turns.write_sources`, `natlang_neuralese.train.lfm3_fast.passthrough_plan`). No gap.
+
+**Merged BF16 export & 4-route reload parity (2026-11-22, lfm3opti.md):** Both SFT (`exp0_sft.py`) and GRPO (`grpo.py`)
+train with the shared `lora+rows` core (`natlang_neuralese.train.lfm3_learner` + `lfm3_fast`) and publish immutable
+merged BF16 exports (`learner_state.export_merged_checkpoint` / `export_merged_hf_safetensors`) so all four serving
+engines (managed llama-server, in-page wllama, Python native, SGLang actor) consume identical standard checkpoints.
+On in-place RL policy rebind (`POST /v1/neuralese/rebind-policy`), `sglang_actor.py` reloads its resident or
+lazy-loaded native fallback engine weights and Neuralese marker/override rows from the immutable export directory,
+flushes `native_adapter_cache` and `prefix_cache` (`NATLANG_REBIND_NATIVE_RELOAD=0` opts out), and attests all four
+routes (`generation`, `decision_scoring`, `logprob_capture`, `native_fallback`) in `GET /v1/neuralese/info`
+(`attest_all_routes`). No gap.
 
 Live check, 2026-11-17: natlang-b12081 CPU with the natlang-lfm3-5ff07638 Q8_0 GGUF against the Python engine (BF16, CPU) on 5ff07638, two view sites, 400-token spans.
 - The fork's rendered prompt equals its RL capture's prompt ids.

@@ -254,6 +254,19 @@ def export_merged_checkpoint(learner: Lfm3Learner, state: dict, out_path, *, sou
     """
     out_path = Path(out_path)
     backbone, interface = learner.merged_backbone_and_interface(device='cpu', dtype=torch.bfloat16)
+    if not interface and state.get('interface_state'):
+        interface = {k: (v.detach().cpu().clone() if torch.is_tensor(v) else v)
+                     for k, v in state['interface_state'].items()}
+        if learner.trainable_rows is not None:
+            mc = state.get('model_config') or {}
+            marker_ids = list(mc.get('marker_ids') or ())
+            override_ids = list(mc.get('token_override_ids') or ())
+            tr_map = {int(tid): row.detach().to(device='cpu', dtype=torch.bfloat16)
+                      for tid, row in zip(learner.trainable_rows.token_ids.tolist(), learner.trainable_rows.rows)}
+            if marker_ids and 'input_rows' in interface and all(t in tr_map for t in marker_ids):
+                interface['input_rows'] = torch.stack([tr_map[t] for t in marker_ids]).to(interface['input_rows'].dtype)
+            if override_ids and 'extra_input_rows' in interface and all(t in tr_map for t in override_ids):
+                interface['extra_input_rows'] = torch.stack([tr_map[t] for t in override_ids]).to(interface['extra_input_rows'].dtype)
     original_backbone = state.get('backbone_state') or {}
     changed = 0
     if special_ids and base_embedding_rows is not None:
