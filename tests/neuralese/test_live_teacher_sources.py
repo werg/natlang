@@ -332,6 +332,8 @@ def test_application_entry_binds_native_function_and_all_typed_inputs(tmp_path, 
     interaction.update(program=entry['program'], entry=entry)
     verification['interaction'] = copy.deepcopy(interaction)
     detail['record']['definition']['name'] = 'reconcileDraft'
+    detail['record']['definition']['source'] = 'reconcileDraft.nl'
+    detail['record']['program_root'] = 'skills/documents'
     detail['record']['inputs'] = {
         name: dict(zip(('bytes', 'hash'), live.open_goal_fingerprint(value)), complete=True)
         for name, value in arguments.items()}

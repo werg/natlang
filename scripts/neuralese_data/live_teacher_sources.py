@@ -28,6 +28,12 @@ def verify_entry(interaction, root, *, partial=False):
             '..' in Path(entry['program']).parts or not entry.get('callable') or
             interaction.get('program') != entry['program'] or not isinstance(entry.get('arguments'), dict)):
         raise ValueError('invalid application entry attestation')
+    if interaction.get('entry') is not None:
+        source = root.get('definition', {}).get('source')
+        program_root = root.get('program_root')
+        if (not isinstance(source, str) or not isinstance(program_root, str) or
+                str(Path(program_root) / source) != entry['program']):
+            raise ValueError('application entry path differs from the recorded source')
     inputs = root.get('inputs') or {}
     arguments = entry['arguments']
     if (root.get('definition', {}).get('name') != entry['callable'] or
@@ -384,6 +390,7 @@ def load_episode(path):
                            'code': spec['code'], 'model_id': ','.join(sorted(models)),
                            'source_manifest': source, 'verification': spec['verification']},
             'outcome': {'accepted': True, 'status': verification['status'], 'world': world, 'checks': checks,
+                        'task_completed': verification['status'] == 'passed',
                         'root_call_ids': attested_roots,
                         **({'training_scope': verification['training_scope']} if training_scope is not None else {}),
                         'invocation_ledger': observed_graph(details, ancestry, scopes, exclusions)},
