@@ -33,10 +33,11 @@ SPLITS = {'dev': 'dev', 'confirmation': 'confirmation'}
 
 
 def registered_ids(registry):
+    from natlang_neuralese.common import corpus_registry
     ids = set()
     for entry in registry['corpora']:
         if str(entry.get('id', '')).startswith(PREFIX) and entry.get('admission') == 'evaluation-only-never-training':
-            path = REPO / entry['path'] / 'cases.jsonl'
+            path = corpus_registry.entry_root(entry, REPO) / 'cases.jsonl'
             ids |= {json.loads(line)['id'] for line in path.read_text().splitlines() if line.strip()}
     return ids
 

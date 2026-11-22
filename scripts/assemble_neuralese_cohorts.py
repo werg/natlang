@@ -52,7 +52,7 @@ def registered_file(corpus_id, name):
     files = [item for item in manifest['files'] if item['path'] == name]
     if len(files) != 1:
         raise ValueError(f'{corpus_id} has no manifest file {name}')
-    return REPO / entry['path'] / name, files[0]['sha256'], entry
+    return _corpus_registry().entry_root(entry, REPO) / name, files[0]['sha256'], entry
 
 
 def pinned(spec):

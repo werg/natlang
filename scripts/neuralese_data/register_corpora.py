@@ -185,7 +185,7 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
                 raise ValueError('candidate admission verifier build failed: ' + build.stderr[-1500:])
             for entry in candidates:
                 verified = subprocess.run([sys.executable, str(REPO / 'scripts/neuralese_data/render_native_turn_corpus.py'),
-                    '--corpus-id', entry['id'], '--source', str(REPO / entry['path'] / 'turns.jsonl'),
+                    '--corpus-id', entry['id'], '--source', str(corpus_registry.entry_root(entry, REPO) / 'turns.jsonl'),
                     '--verify-admission-only', '--admission-registry-file', str(registry_file),
                     '--admission-manifest-file', str(manifests_dir / (entry['id'] + '.json'))],
                     cwd=REPO, capture_output=True, text=True)

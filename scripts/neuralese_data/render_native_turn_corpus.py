@@ -258,7 +258,7 @@ def registered_source_pieces(sources):
         source_bytes, source_hash = source_path.stat().st_size, file_sha(source_path)
         matches, listed_paths = [], []
         for corpus_id, entry in registered.items():
-            corpus_root = ROOT / entry['path']
+            corpus_root = corpus_registry.entry_root(entry, ROOT)
             real_corpus_root = corpus_root.resolve()
             possible_relatives = set()
             try:
@@ -316,7 +316,7 @@ def registered_source_pieces(sources):
                    'manifest': str(manifest_path.relative_to(ROOT)), 'manifest_sha256': file_sha(manifest_path),
                    'piece_table': None}
         if piece_rel:
-            piece_path = ROOT / entry['path'] / piece_rel
+            piece_path = corpus_registry.entry_root(entry, ROOT) / piece_rel
             if piece_path.stat().st_size != item.get('bytes') or file_sha(piece_path) != item.get('sha256'):
                 raise ValueError(f'registered piece table hash mismatch: {piece_rel}')
             binding['piece_table'] = {'path': (Path(entry['path']) / piece_rel).as_posix(),
@@ -389,7 +389,7 @@ def registered_candidate_selection_admission(corpus_id, sources, *, registry_fil
             admission.get('decision') != 'admit-reviewed-candidate-selection' or
             admission.get('training_admission') is not True or admission.get('trace_admission') is not False):
         raise ValueError(f'candidate-selection registry admission is malformed or out of scope: {corpus_id}')
-    corpus_root = (ROOT / entry['path']).resolve(strict=True)
+    corpus_root = corpus_registry.entry_root(entry, ROOT).resolve(strict=True)
     if any(path.resolve(strict=True).parent != corpus_root for path in sources):
         raise ValueError('candidate-selection admission must render directly from the registered packet files')
     registry_manifest_path = (Path(manifest_file) if manifest_file is not None else

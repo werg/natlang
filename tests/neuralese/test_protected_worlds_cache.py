@@ -115,3 +115,24 @@ def test_protected_worlds_cache_tracks_nested_packet_registry_and_cases(tmp_path
     assert ('id', 'held-b') in updated.identities
     assert ('id', 'held-a') not in updated.identities
     assert nested_reads == [packet_registry.resolve(), packet_registry.resolve()]
+
+
+def test_evaluation_packets_resolve_portable_root_paths(tmp_path, monkeypatch):
+    """held-v2/v3 registry entries name ``data_nvme:...`` paths (2026-11-20): custody resolves the logical root
+    instead of joining it to the checkout (every default GRPO run with JOLT+ died on this)."""
+    data = tmp_path / 'nvme'
+    packet = data / 'ops' / 'held-vX'
+    packet.mkdir(parents=True)
+    (packet / 'cases.jsonl').write_text('{"id":"held-1","source_groups":["held-group"]}\n')
+    monkeypatch.setenv('NATLANG_DATA_NVME', str(data))
+    repo = tmp_path / 'repo'
+    (repo / 'training' / 'corpora').mkdir(parents=True)
+    (repo / 'training' / 'corpora' / 'held-vX.json').write_text(json.dumps({
+        'id': 'held-vX', 'path': 'data_nvme:ops/held-vX', 'include': ['cases.jsonl'],
+        'admission': custody.PROTECTED_ADMISSION}))
+    (repo / 'registry.json').write_text(json.dumps({
+        'schema': custody.REGISTRY_SCHEMA,
+        'sources': [{'id': 'packets', 'kind': 'evaluation-packets', 'registry': 'training/corpora'}]}))
+    worlds = ProtectedWorlds.load(root=repo, registry='registry.json')
+    assert ('id', 'held-1') in worlds.identities and ('group', 'held-group') in worlds.identities
+    assert json.loads(worlds.sources[0])['packets'][0]['id'] == 'held-vX'
