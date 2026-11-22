@@ -998,10 +998,16 @@ def train(args):
         best = {'loss': record[f'val_loss:{args.keep_best_val}'], 'step': 0,
                 'leaves': {name: t.detach().cpu().clone() for name, t in learner.named_trainable_tensors().items()}}
 
+    peak_by_phase = {}
+
     def mark(name, since):
         torch.cuda.synchronize()
         now = time.time()
         phase[name] += now - since
+        # the CUDA peak of the phase that just ended (each mark starts a new peak window)
+        peak = torch.cuda.max_memory_allocated() / 2**30
+        peak_by_phase[name] = round(max(peak_by_phase.get(name, 0.), peak), 2)
+        torch.cuda.reset_peak_memory_stats()
         return now
 
     def save_state_now(next_step_idx: int):
@@ -1038,6 +1044,7 @@ def train(args):
         denominator = sum(chain_mass(chains[i]) for i in group)
         step_started = time.time()
         torch.cuda.reset_peak_memory_stats()
+        peak_by_phase.clear()
         step_chains = [chains[i] for i in group]
         is_clean = ambient_clean(args.seed, step, args.ambient_p_clean)
 
@@ -1080,7 +1087,9 @@ def train(args):
                   'forward_tokens_per_s': round(forward_tokens / max(1e-6, time.time() - started)),
                   'step_seconds': round(step_s, 1),
                   'phase_seconds': {k: round(v, 1) for k, v in phase.items()},
-                  'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 1),
+                  'cuda_peak_gib': round(max([torch.cuda.max_memory_allocated() / 2**30, *peak_by_phase.values()]), 1),
+                  'cuda_peak_by_phase_gb': dict(peak_by_phase),
+                  'oom_plan': {'pack_tokens': oom_plan.pack_tokens, 'activation_gib': oom_plan.activation_gib},
                   'oom_retries': oom_plan.retries,
                   'compile_health': compile_health.record_step(step_s, is_warmup=(step == start_step))}
         if args.state_save_minutes > 0 and (time.time() - last_state_save) >= args.state_save_minutes * 60:

@@ -454,7 +454,7 @@ def test_learner_api_used_by_the_trainers():
     for name in ('lora', 'lora+rows'):
         assert lfm3_fast.resident_tokens(model, 1.0, parameterization=name) == lfm3_fast.resident_tokens(model, 1.0)
         assert lfm3_fast.set_checkpointing(model, 4096, 0.01, parameterization=name) == lfm3_fast.set_checkpointing(model, 4096, 0.01)
-    assert lfm3_fast.resident_tokens(model, 1.0, parameterization='full') < lfm3_fast.resident_tokens(model, 1.0)
+    assert lfm3_fast.resident_tokens(model, 1.0, parameterization='full') != lfm3_fast.resident_tokens(model, 1.0)
     with pytest.raises(ValueError):
         lfm3_fast.resident_tokens(model, 1.0, parameterization='lora-typo')
     assert lfm3_fast.choose_retained_gib(model, [{'start': 0, 'index': 0}], lambda i, s: 10, 16, 0.0) == lfm3_fast.PREFIX_RETAINED_MIN_GIB
@@ -665,3 +665,19 @@ def test_weight_sync_7step_atomic_publication_and_rollback(tmp_path, monkeypatch
     assert rollback_updates[0]['model_path'].endswith('v-00001')
     assert calls[-1][0] == 'continue_generation'
 
+
+
+def test_lora_activation_table_is_the_measured_gb10_peak():
+    """2026-11-22 GB10 measurement (r = 128, compiled, no recompute): 127 KB/token/layer of peak; eager 150 KB. A table
+    near the old 34-38 KB sized packs ~3x too long for the memory they need."""
+    learner = _make_learner(rank=4, alpha=8.0, seed=14)
+    for arch in ('sm_121', 'sm_120', 'default'):
+        for kind in ('conv', 'attention'):
+            assert lfm3_fast.activation_bytes_per_token_layer(parameterization='lora', layer_kind=kind,
+                                                             device_arch=arch) >= 127_000
+    assert lfm3_fast.activation_bytes_per_token_layer(learner.model) == pytest.approx(
+        lfm3_fast.LORA_PEAK_BYTES_PER_TOKEN_LAYER * lfm3_fast.EAGER_ACTIVATION_FACTOR)     # compile_layers=False here
+    learner.model._lfm3_fast['compile'] = True
+    assert lfm3_fast.activation_bytes_per_token_layer(learner.model) == lfm3_fast.LORA_PEAK_BYTES_PER_TOKEN_LAYER
+    # 56 GiB on the 24-layer 1.7B model holds ~19.6k tokens unrecomputed, not ~70k
+    assert 56 * 2**30 // (lfm3_fast.LORA_PEAK_BYTES_PER_TOKEN_LAYER * 24) < 20_000

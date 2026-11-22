@@ -486,6 +486,9 @@ def prepare(model, compile_layers=True, *, fp8_base: bool | None = None, paramet
         use_fp8 = False
     param_mode = parameterization_key(parameterization) or (
         'lora+rows' if getattr(model, '_lfm3_adapters', None) is not None else 'full')
+    if _os.environ.get('NATLANG_BF16_REDUCED_REDUCTION') != '1':
+        # cuBLAS may otherwise reduce split-K partial sums of BF16-output GEMMs (head logits, low-rank branch) in BF16
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = False
     import weakref
     model.lm_head.weight._lfm3_owner = weakref.ref(model)     # linear_nll's default trainable rows (_head_rows)
     model._lfm3_fast = {
@@ -927,21 +930,20 @@ def tree_tokens(nodes, lengths):
 
 
 # --- parameterized activation memory table (lfm3opti.md §3 & §6 item 1) -----------------------------------------------
-# Keyed by (parameterization, layer_kind, device_arch). Filled initially from measured GB10 full-FT (84.8 KB/tok/layer)
-# and LoRA savings (no frozen base weight-grad saved inputs), and updatable at runtime via `calibrate_activation_bytes`.
+# Keyed by (parameterization, layer_kind, device_arch): CUDA bytes per token per layer that one unrecomputed layer adds
+# to the step's PEAK (saved activations plus the backward's transient gradients), so `--activation-gb` bounds the
+# activation part of the real peak. Measured 2026-11-22 on the GB10, the 1.7B model, r = 128 on all 9 families, trainable
+# rows, compiled layers, no recompute, slope between 1024 and 3072 tokens: saved 105 KB, peak 127 KB per token per layer
+# (eager: saved 127 KB, peak 150 KB; `EAGER_ACTIVATION_FACTOR`). The LoRA branch saves its BF16 input for dA and the
+# rank-wide intermediate beside everything the frozen layer itself saves, so LoRA is not cheaper than full FT here.
+# The bytes are a property of the saved tensors (shapes, dtypes), not of the SM, so the G4 (sm_120) entry is the same
+# per-layer byte model. Full FT: measured 84.8 KB on the GB10 (88 KB kept). Update at runtime: `calibrate_activation_bytes`.
+LORA_PEAK_BYTES_PER_TOKEN_LAYER = 128_000.0
+EAGER_ACTIVATION_FACTOR = 150.0 / 127.0
 ACTIVATION_BYTES_TABLE: dict[tuple[str, str, str], float] = {
-    ('full', 'conv', 'default'): 88_000.0,
-    ('full', 'attention', 'default'): 88_000.0,
-    ('full', 'conv', 'sm_121'): 88_000.0,
-    ('full', 'attention', 'sm_121'): 88_000.0,
-    ('full', 'conv', 'sm_120'): 88_000.0,
-    ('full', 'attention', 'sm_120'): 88_000.0,
-    ('lora+rows', 'conv', 'default'): 34_000.0,
-    ('lora+rows', 'attention', 'default'): 38_000.0,
-    ('lora+rows', 'conv', 'sm_121'): 34_000.0,
-    ('lora+rows', 'attention', 'sm_121'): 38_000.0,
-    ('lora+rows', 'conv', 'sm_120'): 34_000.0,
-    ('lora+rows', 'attention', 'sm_120'): 38_000.0,
+    **{('full', kind, arch): 88_000.0 for kind in ('conv', 'attention') for arch in ('default', 'sm_121', 'sm_120')},
+    **{('lora+rows', kind, arch): LORA_PEAK_BYTES_PER_TOKEN_LAYER
+       for kind in ('conv', 'attention') for arch in ('default', 'sm_121', 'sm_120')},
 }
 
 # Retained as default reference constant for full-FT callers/tests.
@@ -989,15 +991,18 @@ def activation_bytes_per_token_layer(model=None, *, parameterization: str | None
                 or ACTIVATION_BYTES_TABLE.get((parameterization, kind, 'default'))
                 or ACTIVATION_BYTES_PER_TOKEN_LAYER)
 
+    eager = 1.0
+    if parameterization == 'lora+rows' and model is not None and not (getattr(model, '_lfm3_fast', None) or {}).get('compile', True):
+        eager = EAGER_ACTIVATION_FACTOR                 # eager layers keep more intermediates than the compiled graphs
     if layer_kind is not None:
-        return lookup(layer_kind)
+        return lookup(layer_kind) * eager
     if model is None:
         return 0.5 * (lookup('conv') + lookup('attention'))
     layers = model.model.layers
     if not layers:
-        return lookup('conv')
+        return lookup('conv') * eager
     total = sum(lookup('attention' if layer.is_attention_layer else 'conv') for layer in layers)
-    return total / len(layers)
+    return total / len(layers) * eager
 
 
 PARAMETERIZATION_ALIASES = {'lora': 'lora+rows', 'lora+rows': 'lora+rows', 'full': 'full'}
