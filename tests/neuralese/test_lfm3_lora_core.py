@@ -724,6 +724,24 @@ def test_the_sentinel_catches_an_engine_that_computes_with_other_weights(tmp_pat
     assert 'sentinel log-probabilities disagree' in rig.sync.last['answer']
 
 
+def test_weight_sync_owns_its_tmpfs_slots_sweeps_dead_owners_and_removes_them(tmp_path, monkeypatch):
+    """The slots are memory outside the ledger on the GB10 (a 7.5 GB set left by a finished check kept a 100 GB SFT
+    unadmitted, 2026-11-22): a dead owner's set is swept at start, ours goes on close and at exit."""
+    import subprocess
+    dead = subprocess.Popen([sys.executable, '-c', 'pass'])
+    dead.wait()
+    stale = tmp_path / 'natlang-old-actor-weights'
+    (stale / 'slot-a').mkdir(parents=True)
+    (stale / 'owner.pid').write_text(f'{dead.pid}\n')
+    rig = _publication_rig(tmp_path, monkeypatch)
+    assert not stale.exists()
+    weights = tmp_path / 'weights'
+    assert (weights / 'owner.pid').read_text().strip() == str(__import__('os').getpid())
+    assert (weights / 'slot-a' / 'model.safetensors').exists()
+    rig.sync.close()
+    assert not weights.exists()
+
+
 def test_reference_snapshot_is_the_start_policy_on_the_policy_graph_and_never_aliases_it():
     import grpo
     learner = _make_learner(rank=4, alpha=8.0, seed=4, trainable_rows=True)

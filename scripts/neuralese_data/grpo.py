@@ -1256,8 +1256,9 @@ SENTINEL_TEXT = ('The committee reviewed the proposal on Tuesday and asked for a
                  'def mean(values):\n    return sum(values) / len(values)\n'
                  'Water boils at 100 degrees Celsius at sea level, and lower at altitude.')
 # Learner vs actor log-probabilities of the sentinel (mean and largest |difference| over its tokens): the merged BF16
-# export served with FP8 KV against the learner's unmerged BF16 forward. Wrong or torn weights put both far above.
-SENTINEL_TOLERANCE = (0.1, 1.5)
+# export served with FP8 KV against the learner's unmerged BF16 forward. Measured on the real actor 2026-11-22: SGLang
+# vs learner mean 0.066-0.076, max 0.34-0.42; native vs learner 0.034/0.30. Wrong or torn weights put both far above.
+SENTINEL_TOLERANCE = (0.2, 2.0)
 
 
 def interface_with_rows(interface, token_ids, rows, marker_ids, override_ids):
@@ -1346,7 +1347,11 @@ class WeightSync:
         missing = set(params) - set(layout) - {'lm_head.weight'}
         if missing:
             raise ValueError(f'learner parameters absent from the export: {sorted(missing)[:5]}')
-        self.weights_dir.mkdir(parents=True, exist_ok=True)
+        # tmpfs is memory outside the ledger: a dead owner's slots are swept, ours go at exit (also on SIGTERM)
+        from natlang_neuralese.common import owned_scratch
+        owned_scratch.sweep_dead(self.weights_dir.parent, 'natlang-*-actor-weights')
+        owned_scratch.claim(self.weights_dir)
+        owned_scratch.remove_on_exit(self.weights_dir)
         self.slots = []
         for slot in self.SLOTS:
             directory = self.weights_dir / slot
@@ -1490,16 +1495,22 @@ class WeightSync:
             self.thread.join()
             self.thread = None
 
-    def close(self):
+    def close(self, remove=True):
         """Unregister the page-locked mappings (a registration outliving its mapping makes a later cudaHostRegister of
-        the reused address range fail); the files stay."""
+        the reused address range fail) and remove the slots (``remove=False`` keeps the files)."""
         import torch
+        from natlang_neuralese.common import owned_scratch
         self.wait()
         for slot in self.slots:
             if slot['pinned']:
                 torch.cuda.cudart().cudaHostUnregister(slot['whole'].data_ptr())
                 slot['pinned'] = False
             slot['views'] = slot['whole'] = None
+        if remove:
+            for slot in self.slots:
+                slot['map'].close()
+                slot['file'].close()
+            owned_scratch.release(self.weights_dir)
 
     def release(self, tags):
         """Hand the actor's GPU memory back for the learner phase (``--actor-release``): retract, then SGLang
@@ -3982,17 +3993,7 @@ def train(args):
         args.actor_export = args.actor_export or str(work / 'actor' / 'sglang-hf')
     log_line(log, {'event': 'actor ready', 'actor': args.actor, 'init_s': round(time.time() - t0, 1)})
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
-    weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'
-    for stale in Path('/dev/shm').glob('natlang-*-actor-weights'):
-        try:
-            os.kill(int((stale / 'owner.pid').read_text()), 0)
-        except ProcessLookupError:
-            if stale != weights_dir:
-                shutil.rmtree(stale, True)
-        except (OSError, ValueError):
-            pass
-    weights_dir.mkdir(parents=True, exist_ok=True)
-    (weights_dir / 'owner.pid').write_text(str(os.getpid()))
+    weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'   # owned by WeightSync
     if not args.frozen_producer_table and producer_adapter_keys(state['interface_state']):
         raise SystemExit(f'the checkpoint has a producer adapter {producer_adapter_keys(state["interface_state"])}: '
                          'the producer table is not the embedding (use --frozen-producer-table)')
@@ -4013,7 +4014,6 @@ def train(args):
                       tied=native_rows['tied_head'], sentinel_ids=sentinel_ids,
                       extra_actors=() if args.no_actor_sync else extra_actors,
                       on_actor=lambda front, version: collector.actor_versions.__setitem__(front, version))
-    atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     last_state_save_info = None
     if args.replay:

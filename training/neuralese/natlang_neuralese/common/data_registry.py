@@ -584,6 +584,10 @@ class Registry:
                     continue
                 for target in ([p / pattern for pattern in include] if include else [p]):
                     keys.setdefault(os.path.normpath(str(target)), ident)
+                if include and os.path.normpath(str(p)) not in {os.path.normpath(str(p / x)) for x in include}:
+                    # as in ``_paths``: the directory of a dataset with literal includes names it too, so an ancestor's
+                    # inventory entry (a run directory archived whole) does not shadow its held-eval step directories
+                    roots.setdefault(os.path.normpath(str(p)), ident)
             self._lexical_index = keys, bases, roots
         return self._lexical_index
 

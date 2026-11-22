@@ -345,3 +345,21 @@ def test_a_producer_record_wins_over_an_earlier_inventory_of_the_same_directory(
     dr.record_dataset('ei-sources', work, kind='trajectories', include=['*.jsonl'], format='f', closed=False)
     dr.require_registered([work])
     assert dr.load(repo=roots / 'repo', fresh=True).find(work)['id'] == 'ei-sources'
+
+
+def test_an_inventory_of_a_run_directory_does_not_shadow_literal_include_datasets_below_it(roots):
+    """grpo-v4's run directory is archived whole (inventory); its ``run2/held/step-N`` held-eval results are datasets with
+    literal includes. The lexical fast path walked up to the archive and returned it (check-main's catalog coverage failed
+    for 12 step directories), where the full index names the step's own dataset."""
+    run = roots / 'data_nvme' / 'ops' / 'grpo-v4'
+    step = run / 'run2' / 'held' / 'step-00004'
+    pool(step / 'rewards.jsonl', ['a'])
+    pool(step / 'result.json', ['b'])
+    pool(run / 'other.jsonl', ['c'])
+    dr.record_inventory('archive-grpo-v4', run)
+    dr.record_dataset('held-step', step, kind='held-eval', protected=True, format='f',
+                      include=['result.json', 'rewards.jsonl'])
+    reg = dr.load(repo=roots / 'repo', fresh=True)
+    assert reg.find(step)['id'] == reg._find_full(step)['id'] == 'held-step'
+    assert reg.find(step / 'result.json')['id'] == 'held-step'
+    assert reg.find(run / 'other.jsonl')['id'] == 'archive-grpo-v4'

@@ -427,6 +427,22 @@ def test_rollback_returns_to_the_reference_and_previous_is_never_the_rejected_po
     assert ctrl.state['reference_policy']['sha256'] == _policy(2)[1]
 
 
+def test_an_unmeasured_start_is_judged_against_the_given_reference_and_rolls_back_to_it(tmp_path):
+    """--reference: a start from speculative cycles (sft-v9 on sft-v7's verdict) measures against the last adopted
+    policy, and a neutral rollback returns to that policy, not to the unmeasured start."""
+    import expert_iteration as ei
+    ref = ('/ckpt/ref.pt', 'f' * 64)
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1, reference_checkpoint=ref[0], reference_sha=ref[1])
+    ctrl.record_round_published('r1', *_policy(1), base_sha256=ctrl.current['sha256'])
+    assert ctrl.held_due()
+    assert ctrl.start_measurement()['reference'] == {'checkpoint': ref[0], 'sha256': ref[1]}
+    ev = ctrl.record_verdict({'verdict': 'neutral', 'adopt': False, 'checkpoint': _policy(1)[0],
+                              'sha256': _policy(1)[1]})
+    assert ev['action'] == 'rollback'
+    assert ctrl.current['sha256'] == ref[1] and not ctrl.in_lineage('0' * 64)
+
+
 def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path):
     import expert_iteration as ei
     ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
@@ -489,7 +505,12 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
         (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
     monkeypatch.setattr(d.c, 'active', lambda unit: False)
     monkeypatch.setattr(d.c, 'wait', finished)
+    stops = []
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: stops.append((kw, len(launched))))
     assert d.train_sft(rd, cur) == rd / 'sft' / 'factors'
+    # the DGX collection (a high claim the ledger will not preempt) yields before the learner launches; remote
+    # actors keep collecting
+    assert stops == [({'remote': False}, 0)]
     (argv, env), = launched
     assert argv[:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')] and 'PREFLIGHT_ONLY' not in env
     # launch-sft.sh itself execs memory_ledger.py run (the learner is a ledger unit)
@@ -533,7 +554,7 @@ def test_rounds_publish_advance_and_a_crash_after_the_merge_resumes_without_retr
     monkeypatch.setattr(d, 'held_loop', lambda: None)
     monkeypatch.setattr(d, 'ensure_collection', lambda p: calls.append(('collect', p['version'])))
     monkeypatch.setattr(d, 'ensure_remote_collection', lambda p: None)
-    monkeypatch.setattr(d, 'stop_collections', lambda: calls.append(('stop',)))
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: calls.append(('stop',)))
     monkeypatch.setattr(d, 'prepare_ahead', lambda rd, pols: None)
 
     def prepare(rd, pols):
@@ -602,7 +623,7 @@ def test_a_failure_verdict_ends_the_experiment_and_the_collection_serves_the_ref
     collected = []
     monkeypatch.setattr(d, 'ensure_collection', lambda p: collected.append(p['sha256']))
     for name in ('ensure_remote_collection', 'stop_collections'):
-        monkeypatch.setattr(d, name, lambda *a: None)
+        monkeypatch.setattr(d, name, lambda *a, **kw: None)
     monkeypatch.setattr(d, 'prepare_ahead', lambda rd, pols: None)
     monkeypatch.setattr(d, 'prepare', lambda rd, pols: None)
     monkeypatch.setattr(ei, 'update_round_manifest', lambda *a, **k: None)
