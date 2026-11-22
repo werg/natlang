@@ -213,42 +213,47 @@ def bootstrap(
         root_path.mkdir(parents=True, exist_ok=True)
         ts_state.mkdir(parents=True, exist_ok=True)
 
-    # 1. Tailscale with userspace networking (Colab has no /dev/net/tun)
-    _run('command -v tailscaled >/dev/null 2>&1 || curl -fsSL https://tailscale.com/install.sh | sh',
-         shell=True, dry_run=dry_run)
-    _run(tailscaled_start_command(ts_state, root_path), shell=True, dry_run=dry_run)
+    # Tailscale only with an auth key: without one the DGX reaches the VM through `colab ssh --proxy-mode` as an
+    # OpenSSH ProxyCommand (ssh, rsync and -L tunnels work through it; DECISIONS 2026-11-22 "Colab over colab ssh")
+    if tailscale_authkey:
+        # 1. Tailscale with userspace networking (Colab has no /dev/net/tun)
+        _run('command -v tailscaled >/dev/null 2>&1 || curl -fsSL https://tailscale.com/install.sh | sh',
+             shell=True, dry_run=dry_run)
+        _run(tailscaled_start_command(ts_state, root_path), shell=True, dry_run=dry_run)
 
-    # 2. Join the tailnet: the key goes as a file (never on a command line, in a log or an error message)
-    key_file = ts_state / 'authkey'
-    if not dry_run:
-        key_file.touch(mode=0o600)
-        key_file.write_text(tailscale_authkey.strip() + '\n')
-    try:
-        _run(['tailscale', f'--socket={ts_state / "tailscaled.sock"}', 'up', f'--auth-key=file:{key_file}',
-              f'--hostname={hostname}', '--ssh=false'], dry_run=dry_run)
-    finally:
+        # 2. Join the tailnet: the key goes as a file (never on a command line, in a log or an error message)
+        key_file = ts_state / 'authkey'
         if not dry_run:
-            key_file.unlink(missing_ok=True)
+            key_file.touch(mode=0o600)
+            key_file.write_text(tailscale_authkey.strip() + '\n')
+        try:
+            _run(['tailscale', f'--socket={ts_state / "tailscaled.sock"}', 'up', f'--auth-key=file:{key_file}',
+                  f'--hostname={hostname}', '--ssh=false'], dry_run=dry_run)
+        finally:
+            if not dry_run:
+                key_file.unlink(missing_ok=True)
 
-    # 3. sshd with the authorized key
-    _run('command -v sshd >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq openssh-server rsync)',
-         shell=True, dry_run=dry_run)
-    if not dry_run:
-        ssh_dir = Path.home() / '.ssh'
-        ssh_dir.mkdir(mode=0o700, exist_ok=True)
-        auth_file = ssh_dir / 'authorized_keys'
-        existing = auth_file.read_text() if auth_file.exists() else ''
-        if ssh_authorized_key.strip() not in existing:
-            auth_file.write_text((existing.rstrip('\n') + '\n' + ssh_authorized_key.strip() + '\n').lstrip('\n'))
-        auth_file.chmod(0o600)
-        Path('/run/sshd').mkdir(parents=True, exist_ok=True)
-    _run(
-        f'grep -q "^Port {ssh_port}$" /etc/ssh/sshd_config || echo "Port {ssh_port}" >> /etc/ssh/sshd_config; '
-        'sed -i "s/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config; '
-        'sed -i "s/^#*PasswordAuthentication.*/PasswordAuthentication no/" /etc/ssh/sshd_config; '
-        'pgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd',
-        shell=True, dry_run=dry_run,
-    )
+    # sshd only with a key to authorize (colab ssh brings its own)
+    if ssh_authorized_key:
+        # 3. sshd with the authorized key
+        _run('command -v sshd >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq openssh-server rsync)',
+             shell=True, dry_run=dry_run)
+        if not dry_run:
+            ssh_dir = Path.home() / '.ssh'
+            ssh_dir.mkdir(mode=0o700, exist_ok=True)
+            auth_file = ssh_dir / 'authorized_keys'
+            existing = auth_file.read_text() if auth_file.exists() else ''
+            if ssh_authorized_key.strip() not in existing:
+                auth_file.write_text((existing.rstrip('\n') + '\n' + ssh_authorized_key.strip() + '\n').lstrip('\n'))
+            auth_file.chmod(0o600)
+            Path('/run/sshd').mkdir(parents=True, exist_ok=True)
+        _run(
+            f'grep -q "^Port {ssh_port}$" /etc/ssh/sshd_config || echo "Port {ssh_port}" >> /etc/ssh/sshd_config; '
+            'sed -i "s/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config; '
+            'sed -i "s/^#*PasswordAuthentication.*/PasswordAuthentication no/" /etc/ssh/sshd_config; '
+            'pgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd',
+            shell=True, dry_run=dry_run,
+        )
 
     # 4. The repository at the pinned commit
     if not dry_run and (repo_dir / '.git').is_dir():
@@ -345,8 +350,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     # secrets come from the environment only: a command-line flag would show in ps and in shell history
     authkey, ssh_key = os.environ.get('TAILSCALE_AUTHKEY', ''), os.environ.get('SSH_AUTHORIZED_KEY', '')
-    if not args.dry_run and (not authkey or not ssh_key):
-        raise SystemExit('set TAILSCALE_AUTHKEY and SSH_AUTHORIZED_KEY in the environment')
+    if not args.dry_run and bool(authkey) != bool(ssh_key):
+        raise SystemExit('set both TAILSCALE_AUTHKEY and SSH_AUTHORIZED_KEY (tailnet access), or neither (colab ssh)')
     try:
         ready = bootstrap(tailscale_authkey=authkey, ssh_authorized_key=ssh_key, hostname=args.hostname,
                           repo_url=args.repo_url, commit=args.commit, root=args.root, base_model=args.base_model,

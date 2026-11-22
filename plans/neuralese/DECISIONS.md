@@ -6847,3 +6847,19 @@ Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc
     /mnt/external. / is back to 46 GB.
   - Mechanism fix: `tune/build.fit_store` writes the owner pid into its store and first removes sibling stores whose
     owner is dead. This covers every fit caller.
+
+## 2026-11-22 14:20 Colab over `colab ssh`; first session is an A100 80GB
+
+- **Access.** The DGX's Colab CLI was not logged in. ADC is now minted with the Colab scopes; the old ADC file is backed
+  up as `~/.config/gcloud/application_default_credentials.json.bak-20261122`. The balance is 412 CU.
+- **Hardware.**
+  - G4 assignment answered 503 ("Service Unavailable") three times, and H100 is not entitled.
+  - Session `g4a` is an A100-SXM4-80GB, high-RAM (167 GB host, 12 vCPU), at 8.88 CU/h: about 46 h of budget.
+- **No Tailscale.** `colab ssh --proxy-mode` is an OpenSSH ProxyCommand, so the DGX reaches the VM as `ssh colab-g4`
+  (~/.ssh/config), with rsync and -L tunnels working.
+  - The runtime allows one ssh connection (HTTP 429 for a second), so all traffic shares a ControlMaster connection.
+  - Throughput through the proxy is a few MB/s: a 3.4 GB checkpoint takes over 10 minutes.
+- **Bootstrap.** `scripts/colab/bootstrap.py` joins a tailnet and installs sshd only when TAILSCALE_AUTHKEY and
+  SSH_AUTHORIZED_KEY are given; with neither, it relies on colab ssh.
+- **First production use.** The VM serves sft-v9's collection policy (sft-v8 candidate 66422fcf) for filled-reasoning
+  draws, as Pop fill did, so it is never idle. Per the owner, the monitored production run is its own smoke test.
