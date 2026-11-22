@@ -1974,20 +1974,56 @@ def load_aux(part, tokenizer, held):
 
 
 def replaced_round(part, unit):
-    """The admitted episode (chain round) an aux unit stands in for (``parse_aux`` ``replaces``), or None."""
+    """The episode key (chain round) an aux unit stands in for (``parse_aux`` ``replaces``: a round
+    ``<prefix>:<episode key>``), or None. The build drops the chains of that round whose part is the ``replaces``
+    source, so any key form matches its own episode: ``teacher:``, ``october-teacher:`` and observed-live ``live:``
+    teacher keys alike (the key's own prefix once had to equal the source, so October and live fills trained beside
+    the teacher chains they replace)."""
     if not part.get('replaces') or ':' not in unit['round']:
         return None
-    key = unit['round'].split(':', 1)[1]
-    return key if key.split(':', 1)[0] == part['replaces'] else None
+    return unit['round'].split(':', 1)[1]
 
 
 def open_goal_key(goal):
     return ' '.join(normalize('NFKC', goal).lower().split())
 
 
-def mix_report(chains, aux_report):
+def mark_open_goal(chains, goal, turns):
+    """Mark an open-goal episode's chains (``open_goal_fingerprint``, and ``open_goal_depth`` below the root invocation
+    from the turns' live call ancestry) for the open-goal exposure check; no goal, no marks. The build's own chains and
+    the filled-reasoning chains that replace them (filled_reasoning.py build) carry the same marks."""
+    if not goal:
+        return
+    fingerprint = hashlib.sha256(open_goal_key(goal).encode()).hexdigest()
+    depths = {}
+    for turn in turns:
+        ancestry = (turn.get('live_exchange') or {}).get('call_ancestry')
+        if ancestry:
+            depths[turn['invocation_id']] = len(ancestry) - 1
+    for chain in chains:
+        chain['open_goal_fingerprint'] = fingerprint
+        invocation = chain['segs'][0][2].get('invocation')
+        if invocation in depths:
+            chain['open_goal_depth'] = depths[invocation]
+
+
+def drop_unfilled_live(chains, mode, aux_parts):
+    """(chains, episodes dropped): ``mode`` drop leaves out the observed-live teacher episodes (rounds ``live:...``,
+    a live campaign's: no usable teacher reasoning) that no filled-reasoning unit replaced, so they train only with the
+    student's filled reasoning, never after an empty or teacher think block; ``auto`` drops when a ``replaces=teacher``
+    part is in the build (an expert-iteration round), else trains them (``train``) like other teacher episodes."""
+    if mode == 'auto':
+        mode = 'drop' if any(part.get('replaces') == 'teacher' for part in aux_parts) else 'train'
+    if mode != 'drop':
+        return chains, 0
+    unfilled = {str(c.get('round')) for c in chains if c.get('part') == 'teacher' and str(c.get('round')).startswith('live:')}
+    return [c for c in chains if not (c.get('part') == 'teacher' and str(c.get('round')) in unfilled)], len(unfilled)
+
+
+def mix_report(chains, aux_report, open_goal_scope=None):
     """Per part (source or aux name): chains, forward and weighted target tokens and their shares; loss concentration
-    over tasks (top 10 tasks, top 1% of tasks, the largest task)."""
+    over tasks (top 10 tasks, top 1% of tasks, the largest task); the open-goal exposure over ``open_goal_scope``'s
+    chains (``exp0_sft.in_open_goal_scope``)."""
     from exp0_sft import chain_mass, open_goal_depth_report, open_goal_exposure, source_tokens
     parts = collections.defaultdict(collections.Counter)
     per_task = collections.Counter()
@@ -2010,7 +2046,7 @@ def mix_report(chains, aux_report):
             'loss_concentration': {'top10_tasks_share': round(sum(ranked[:10]) / total_w, 4),
                                    'top1pct_tasks_share': round(sum(ranked[:top1]) / total_w, 4),
                                    'max_task_tokens': int(ranked[0]) if ranked else 0},
-            'open_user_goals': open_goal_exposure(chains),
+            'open_user_goals': {**open_goal_exposure(chains, open_goal_scope), 'scope': open_goal_scope or 'all'},
             'open_user_goal_depths': open_goal_depth_report(chains),
             'aux': aux_report}
 
@@ -2217,21 +2253,9 @@ def build(args):
         episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows, 'source': source,
                    'open_goal': c.get('open_goal')}
         episode_chains = chains_of([episode])
-        goal_fingerprint = (hashlib.sha256(open_goal_key(episode['open_goal']).encode()).hexdigest()
-                            if episode['open_goal'] else None)
-        goal_depths = {}
-        if goal_fingerprint:
-            for turn in turns:
-                ancestry = (turn.get('live_exchange') or {}).get('call_ancestry')
-                if ancestry:
-                    goal_depths[turn['invocation_id']] = len(ancestry) - 1
         for chain in episode_chains:
             chain['part'] = source
-            if goal_fingerprint:
-                chain['open_goal_fingerprint'] = goal_fingerprint
-                invocation = chain['segs'][0][2]['invocation']
-                if invocation in goal_depths:
-                    chain['open_goal_depth'] = goal_depths[invocation]
+        mark_open_goal(episode_chains, episode['open_goal'], turns)
         for row in rows:          # a chain holds its prompts in 'ids'; the per-row copies only cost memory
             row.pop('prompt', None)
         all_chains.extend(episode_chains)
@@ -2511,9 +2535,12 @@ def build(args):
             if 'replaced_episodes' in r:
                 r['replaced_episodes'] = len(r['replaced_episodes'])
         all_chains[:] = kept
-
+    all_chains[:], unfilled = drop_unfilled_live(all_chains, getattr(args, 'unfilled_live_teacher', 'auto'), aux_parts)
+    if unfilled:
+        funnel['teacher']['unfilled_live_dropped'] += unfilled
     chains = all_chains
-    mix = mix_report(chains, aux_report)
+    open_goal_scope = getattr(args, 'open_goal_scope', None) or 'all'
+    mix = mix_report(chains, aux_report, open_goal_scope)
     minimum_open_goal_share = getattr(args, 'min_open_goal_share', None)
     if minimum_open_goal_share is None and (open_goals_only or any(
             task.get('source') == 'observed-live-workspace' and
@@ -2524,7 +2551,7 @@ def build(args):
     rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
         pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1',
-                     **({'minimum_open_goal_share': minimum_open_goal_share}
+                     **({'minimum_open_goal_share': minimum_open_goal_share, 'open_goal_scope': open_goal_scope}
                         if minimum_open_goal_share is not None else {})}, handle, protocol=4)
     os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
 
@@ -2992,6 +3019,15 @@ def main():
                    help='live-only build: do not require coverage of the historical default teacher pool')
     b.add_argument('--min-open-goal-share', type=float, choices=[0.8],
                    help='require at least 80%% distinct open user goals and weighted targets, even with no such captures')
+    b.add_argument('--open-goal-scope', choices=('vibestudio', 'all'), default='vibestudio',
+                   help='chains the open-goal minimum is measured over: vibestudio (default: the Vibestudio tasks\' '
+                        'chains, so a mixed expert-iteration build holds its open goals to the contract against the '
+                        'historical Vibestudio assignments, not against every other part) or all (every chain)')
+    b.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default='auto',
+                   help='observed-live teacher episodes without a filled reasoning unit (--aux ...,replaces=teacher): '
+                        'drop (they train only with the student\'s filled reasoning), train (their actions after the '
+                        'teacher\'s think block as context, like other teacher episodes) or auto (default: drop when '
+                        'a replaces=teacher part is given, else train)')
     b.add_argument('--open-goals-only', action='store_true',
                    help='assemble only independently verified open user goal trajectories')
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))

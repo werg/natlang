@@ -395,7 +395,43 @@ def test_open_goal_mix_counts_distinct_goals_and_all_weighted_targets():
     first['open_goal_fingerprint'] = s.open_goal_key('Update the notice')
     second['open_goal_fingerprint'] = s.open_goal_key('ＵＰＤＡＴＥ   the notice')
     mix = s.mix_report([first, second, auxiliary], {})['open_user_goals']
-    assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8}
+    assert mix == {'distinct_goals': 1, 'trajectories': 3, 'weighted_target_share': 0.8, 'scope': 'all'}
+
+
+def test_open_goal_share_of_a_mixed_build_is_measured_over_the_vibestudio_chains(tmp_path):
+    """A mixed expert-iteration build (open goals beside every other part) holds its Vibestudio data to the open-goal
+    contract: the share counts Vibestudio tasks' chains (open goals against historical assignments), not the rest; the
+    bundle carries the scope and the learner's planned-schedule check measures the same chains."""
+    import exp0_sft
+
+    def chain(task, round_id, n, goal=None):
+        row = {'sample': np.zeros(n, np.int32)}
+        return {'ids': np.zeros(n + 10, np.int32), 'segs': [(10, n, row)], 'task': task, 'round': round_id,
+                'part': 'teacher', **({'open_goal_fingerprint': goal} if goal else {})}
+    goals = [chain(f'vibestudio:edit:g{i}', f'live:{i}', 50, f'goal{i}') for i in range(8)]
+    legacy = chain('vibestudio:unit-repair:assigned', 'live:assigned', 40)
+    other = [chain(f'task{i}', f'teacher:{i}', 500) for i in range(20)]
+    scoped = s.mix_report([*goals, legacy, *other], {}, 'vibestudio')['open_user_goals']
+    assert scoped['scope'] == 'vibestudio' and scoped['trajectories'] == 9 and scoped['distinct_goals'] == 8
+    assert exp0_sft.check_open_goal_exposure(dict(scoped), 0.8)['weighted_target_share'] == 400 / 440
+    with pytest.raises(SystemExit, match='Open user goal minimum not met'):
+        exp0_sft.check_open_goal_exposure(s.mix_report([*goals, legacy, *other], {}, 'all')['open_user_goals'], 0.8)
+    assert exp0_sft.open_goal_exposure([*goals, legacy, *other], 'vibestudio')['distinct_goals'] == 8
+    assert not exp0_sft.in_open_goal_scope(other[0], 'vibestudio') and exp0_sft.in_open_goal_scope(other[0], None)
+
+
+def test_open_goal_marks_follow_the_live_call_ancestry():
+    rows = [{'invocation': 'root'}, {'invocation': 'child'}]
+    chains = [{'segs': [(0, 1, rows[0])]}, {'segs': [(0, 1, rows[1])]}]
+    turns = [{'invocation_id': 'root', 'live_exchange': {'call_ancestry': ['root']}},
+             {'invocation_id': 'child', 'live_exchange': {'call_ancestry': ['root', 'child']}}]
+    s.mark_open_goal(chains, 'Update  the Notice', turns)
+    assert {c['open_goal_fingerprint'] for c in chains} == {
+        __import__('hashlib').sha256(s.open_goal_key('update the notice').encode()).hexdigest()}
+    assert [c['open_goal_depth'] for c in chains] == [0, 1]
+    bare = [{'segs': [(0, 1, rows[0])]}]
+    s.mark_open_goal(bare, None, turns)
+    assert 'open_goal_fingerprint' not in bare[0]
 
 
 def test_optimizer_exposure_rejects_a_post_mask_or_partial_schedule_below_the_floor(tmp_path):
@@ -928,3 +964,17 @@ def test_extract_pass_rates_count_student_samples_only_and_policies_come_from_ea
     assert json.loads((work / 'rl-group-rates.json').read_text())['t'] == {'successes': 1, 'scored': 2}
     own = [json.loads(line) for line in s.zstd_lines(work / 'episodes.jsonl.zst') if '"rl-own"' in line]
     assert own[0]['policies'] == ['p1', 'p2']                          # an episode straddling a rebind
+
+
+def test_unfilled_live_teacher_episodes_train_only_through_their_filled_unit():
+    """In a build with filled reasoning (``replaces=teacher``) an observed-live teacher episode no filled unit replaced
+    is left out (its action would train after an empty or teacher think block); other teacher chains and the filled
+    units stay; without a filled part (a Vibestudio-only build) they train as before."""
+    chains = [{'part': 'teacher', 'round': 'live:vibestudio:a:1'}, {'part': 'teacher', 'round': 'live:vibestudio:a:1'},
+              {'part': 'teacher', 'round': 'teacher:pool:t:0'}, {'part': 'filled', 'round': 'filled:live:vibestudio:b:2'}]
+    filled = [s.parse_aux('filled=/f.pkl,share=all,replaces=teacher')]
+    kept, n = s.drop_unfilled_live(chains, 'auto', filled)
+    assert n == 1 and [c['round'] for c in kept] == ['teacher:pool:t:0', 'filled:live:vibestudio:b:2']
+    assert s.drop_unfilled_live(chains, 'auto', [s.parse_aux('live=/l.pkl')]) == (chains, 0)
+    assert s.drop_unfilled_live(chains, 'train', filled) == (chains, 0)
+    assert s.drop_unfilled_live(chains, 'drop', [])[1] == 1

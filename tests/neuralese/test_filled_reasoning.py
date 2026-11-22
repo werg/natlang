@@ -103,7 +103,10 @@ def test_aux_replaces_names_the_episode_a_filled_unit_stands_in_for():
     part = sft_sources.parse_aux('filled=/x/chains.pkl,share=0.2,replaces=teacher')
     assert part['replaces'] == 'teacher' and part['share'] == 0.2
     assert sft_sources.replaced_round(part, {'round': 'filled:teacher:pool:t1:0'}) == 'teacher:pool:t1:0'
-    assert sft_sources.replaced_round(part, {'round': 'filled:rl:run:g1'}) is None
+    # every teacher key form names its own episode (the build drops only chains of part ``teacher`` with that round)
+    assert sft_sources.replaced_round(part, {'round': 'filled:october-teacher:g:t'}) == 'october-teacher:g:t'
+    assert sft_sources.replaced_round(part, {'round': 'filled:live:vibestudio:x:ab12'}) == 'live:vibestudio:x:ab12'
+    assert sft_sources.replaced_round(part, {'round': 'nocolon'}) is None
     assert sft_sources.replaced_round(sft_sources.parse_aux('ops=/x.pkl'), {'round': 'filled:teacher:a'}) is None
 
 
@@ -383,3 +386,52 @@ def test_claims_keep_generators_sharing_out_on_disjoint_episodes(tmp_path):
 def test_finished_finds_a_key_in_fills(tmp_path):
     (tmp_path / 'fills.jsonl').write_text(json.dumps({'schema': 's', 'key': 'teacher:a:1', 'chains': [1] * 100}) + '\n')
     assert fr.finished(tmp_path, 'teacher:a:1') and not fr.finished(tmp_path, 'teacher:a:2')
+
+
+def test_prefer_work_episodes_go_first_and_a_rescan_queues_new_ones_ahead():
+    """``--prefer-work``: a live WORK's episodes before every other WORK's (each group keeps the shuffled, rate-preferred
+    order); a standing queue takes a rescan's new episodes at its front, each key once, and waits when empty."""
+    import threading
+    episodes = [{'key': f'teacher:{i}', 'work': 'old', 'task_id': f't{i}'} for i in range(6)]
+    live = [{'key': f'live:{i}', 'work': 'live', 'task_id': f'v{i}'} for i in range(3)]
+    order = fr.ordered([*episodes, *live], ['live'], {'t0': (0, 4)}, seed=1)
+    assert [e['work'] for e in order] == ['live'] * 3 + ['old'] * 6
+    assert order[3]['key'] == 'teacher:0'                 # the failed task first among the rest
+    assert fr.ordered(episodes, [], None, 1) == fr.ordered(episodes, ['live'], None, 1)
+    q = fr.EpisodeQueue(order[:4], seen={'live:9'}, standing=True)
+    assert q.add_first([live[0], {'key': 'live:9', 'work': 'live'}, {'key': 'live:3', 'work': 'live'}]) == 1
+    assert q.next()['key'] == 'live:3'
+    assert [q.next()['key'] for _ in range(4)] == [e['key'] for e in order[:4]]
+    got = []
+    t = threading.Thread(target=lambda: got.append(q.next()))
+    t.start()
+    t.join(0.2)
+    assert t.is_alive() and not got                     # standing: waits for the next rescan
+    q.add_first([{'key': 'live:4', 'work': 'live'}])
+    t.join(2)
+    assert got[0]['key'] == 'live:4'
+    assert fr.EpisodeQueue([]).next() is None           # not standing: an empty queue ends the workers
+    args = fr.build_parser().parse_args(['generate', '--out', 'o', '--sglang', 's', '--export', 'e', '--render-tokenizer',
+                                         't', '--prefer-work', 'W', '--rescan-minutes', '30'])
+    assert args.prefer_work == ['W'] and args.rescan_minutes == 30
+
+
+def test_observed_live_episodes_are_fill_sources_and_their_records_name_the_bound_source(tmp_path, monkeypatch):
+    """A live campaign WORK has no replays: its observed-live teacher successes (no replay name, a bound source) are
+    filled, and a fill record carries what the build needs to render the episode again."""
+    work = tmp_path / 'live'
+    work.mkdir()
+    (work / 'episodes-0000.jsonl.zst').write_bytes(b'')
+    binding = {'path': '/c/manifest.json', 'sha256': 'ab'}
+    found = [({'key': 'live:vibestudio:x:ab', 'task_id': 'vibestudio:x', 'task': {'id': 'vibestudio:x'},
+               'teacher': {'model_id': 'luna'}},
+              {'name': None, 'verification_mode': 'observed-live', 'live_source': binding}),
+             ({'key': 'teacher:y', 'task_id': 'y', 'task': {'id': 'y'}}, {'name': None})]   # no replay: skipped
+    monkeypatch.setattr(sft_sources, 'verified_episodes', lambda w, funnel, **kw: iter(found))
+    monkeypatch.setattr(sft_sources, 'held_closure', lambda m: (set(), set(), set()))
+    monkeypatch.setattr(sft_sources, 'held_excluded_ids', lambda m, tasks, held: set())
+    [item] = fr.teacher_episodes([str(work)], 'held.json', {'teacher': {}})
+    assert item['verification_mode'] == 'observed-live' and item['live_source'] == binding and item['name'] is None
+    record = {'schema': fr.SCHEMA, **fr.item_of(item), 'teacher': 'luna', 'chains': []}
+    assert fr.item_of(record) == {k: item[k] for k in fr.ITEM_KEYS}
+    assert fr.open_goal_of({'key': 'teacher:y', 'work': 'w', 'name': 'n', 'task_id': 'y'}) is None

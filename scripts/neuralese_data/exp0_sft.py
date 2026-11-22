@@ -465,11 +465,24 @@ def chain_mass(chain):
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
 
 
-def open_goal_exposure(chains):
-    """Count distinct verified goals and training weight in the selected chains."""
+OPEN_GOAL_SCOPES = ('vibestudio', 'all')
+
+
+def in_open_goal_scope(chain, scope):
+    """Whether a chain counts toward the open-goal shares: ``vibestudio`` (a build's default) counts the Vibestudio
+    tasks' chains (open goals and historical assignments; a mixed expert-iteration build's other parts are outside the
+    contract), ``all`` (and bundles from before the scope) every chain."""
+    return scope in (None, 'all') or str(chain.get('task') or '').startswith('vibestudio:')
+
+
+def open_goal_exposure(chains, scope=None):
+    """Count distinct verified goals and training weight in the selected chains (those in ``scope``,
+    ``in_open_goal_scope``)."""
     goals, trajectories = set(), set()
     open_mass = total_mass = 0.
     for chain in chains:
+        if not in_open_goal_scope(chain, scope):
+            continue
         mass = chain_mass(chain)
         if mass <= 0:
             continue
@@ -914,7 +927,10 @@ def train(args):
     if minimum is not None and args.open_goal_mix_check == 'on':
         if type(minimum) not in (float, int) or not 0. <= minimum <= 1.:
             raise SystemExit('Invalid minimum open user goal share in the training chains')
-        report = open_goal_exposure(chains[index] for step in steps for index in step)
+        scope = bundle.get('open_goal_scope')
+        if scope not in (None, *OPEN_GOAL_SCOPES):
+            raise SystemExit(f'Invalid open user goal scope in the training chains: {scope!r}')
+        report = open_goal_exposure((chains[index] for step in steps for index in step), scope)
         print(json.dumps({'planned_open_user_goals': check_open_goal_exposure(report, minimum)}), flush=True)
         depths = open_goal_depth_report(chains[index] for step in steps for index in step)
         print(json.dumps({'planned_open_user_goal_depths': depths}), flush=True)

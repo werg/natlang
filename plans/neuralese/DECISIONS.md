@@ -7197,3 +7197,112 @@ publication had races, an unbounded host-memory cost and no working rollback. Fi
   at exit and on SIGTERM, and sweeps dead owners' slot sets when it starts. The operator fits' spill stores
   (`tune/build.fit_store`) use the same helper and now also go on SIGTERM. /dev/shm has no other user in the training
   stack: the only other match, `run_status.py`, reads disk usage.
+
+## 2026-11-22 22:00 The Colab A100 is aei1's round learner; run-sft fixes from its first real run
+
+- **Change.** aei1 trains its rounds on the Colab A100 (`--sft-profile colab --colab-hosts colab-g4`, pin d3ad57fb21db;
+  `ops/ei/watch/sft-v10-guard.sh`, restarted as `sft-v10-guard2` because a running bash keeps reading the replaced
+  file). The guard's argv also carries `--live-work /home/werg/data/sft-teacher-vibestudio-luna-yci2lb1n`, as the
+  22:10 entry asks; a dry run on the pin resolves it. The DGX then collects through the round instead of yielding to a ~7 h DGX SFT (bd0217420). The DGX takes the
+  round over after 30 min without a session, from the synced learner state.
+- **Placement on the A100: alternate, not share.** The learner runs alone (77 GiB, activation 58 GiB, ~20k resident
+  tokens) and the actor runs alone between rounds (70 GiB, 128 running). `run-sft` stops a recorded actor served
+  alone and serves it again after the round. The fill keeper relaunches its client only while the actor answers.
+  Why: rounds are at least 6 h apart (`--snapshot-min-hours 6`) and train ~2 h on the A100, so the actor decodes for
+  most of each round's interval either way. The round gates the next policy, and it runs at the full box rather than
+  at activation 33 GiB beside a KV-20 GiB / 53-running actor under MPS.
+- **Real run** (`ops/ei/colab/smoke-r1`: sft-v9's real mix and sft-v8's real checkpoint, recipe from the DGX
+  preflight, `--max-steps 6`):
+  - A100 steps 4-6, compile warm: 8.6-9.4 s for 135-591k chain tokens (112-174k computed).
+  - Step 1 took 173 s (compile). The first Ambient step took 79 s (+70 s teacher compile).
+  - DGX sft-v9 on the same mix: 36.8 s/step mean. A 720-step round is ~2-2.5 h on the A100, against ~7.4 h on the DGX.
+  - Link: 2.4 MB/s up, 4.8 down.
+  - Chains 1.5 GB: 53 s with zstd (~10 min raw).
+  - Factors back: 515 MB in 110 s.
+  - Learner state: 2.2 GB, ~8 min per pull.
+  - VM preparation: 29 s (70 s when ts-host is rebuilt).
+  - The start policy, 3.46 GB, would take ~20-24 min to ship. The VM merges it from the previous round's factors
+    in 42 s instead.
+  - The DGX merge of the same factors gave sha 155e06b9, bit-equal to the VM's (x86 torch 2.14 vs aarch64 torch 2.11).
+    torch.save names its archive after the file, so the VM writes the merge as `checkpoint.pt` and checks it against
+    the published sha before renaming.
+- **Fixes, each with a test** (1793a7043, fb59e78bd, c8917c475):
+  - verified VM checkout; ts-host rebuilt when its tree changes;
+  - the old factor rebind wrote `CHECKPOINTS/<sha>.pt` unverified, and its bytes cannot hash to that name;
+  - rsync `-z`;
+  - the learner runs detached under setsid with pid and rc files. The old foreground learner died with a dropped
+    `colab ssh` link. A later call waits for a learner that is still running and never reruns one that finished;
+  - the chains read is recorded on the DGX registry. The VM has no registry, so its exp0_sft refused the sha-verified
+    copy;
+  - the launch `rm && setsid ... &` backgrounded a subshell that held the channel open;
+  - the learner state arrives as one save. It is a hardlink snapshot whose directory kept its inode. An rsync of the
+    live directory across the learner's rotation mixed two saves ("file has vanished");
+  - one state pull at a time;
+  - a finished round pulls its factors before any 2 GB state;
+  - `published.json` records `factors_dir`;
+  - `serve-checkpoint` on Colab had the same `. env && setsid ... &` launch (d3ad57fb2). It had never worked over the
+    ProxyCommand: the launch timed out and the recorded pid named a subshell that `stop_colab` could not signal.
+- **The A100 fill actor is now a recorded actor:** `serve-checkpoint`, sft-v8 66422fcf, 70 GiB alone, ready in 91 s.
+  `run-sft` can stop and restore it. The keeper relaunches the DGX client only while the actor answers.
+- **Pending, queued:**
+  - the first DGX `publish-round` (merge plus SGLang and GGUF exports) of the smoke factors, unit
+    `aei-smoke-r1-publish`, 24 GB, admitted once sft-v9's SFT frees memory;
+  - `ensure_remote_checkpoint` of that publication on the VM ('merged' expected).
+- **Not checked:**
+  - a full-length A100 round: s/step past step 6, new length buckets compiling, peak memory at activation 58;
+  - a takeover from a Colab-synced state;
+  - the actor restore inside a real round;
+  - whether the A100 actor wants `--sglang-overlap-schedule` (the DGX fill actor uses it; `colab_serve_command` does
+    not pass it).
+- **Incident.** The `colab-g4a-tunnel` master dropped at ~21:48. The proxy then answered every reconnect with HTTP 429
+  ("another colab ssh is connected") while no DGX process held a connection.
+  - Cause: the VM kept the dead master's `sshd: root@notty` session, which held the bridge's one connection.
+  - Ending it through `colab exec` (the kernel channel) let the tunnel reconnect at once.
+  - A healer unit now does this: `colab-g4a-tunnel-heal`, `ops/ei/colab/g4a-tunnel-heal.sh`. It acts only when the
+    tunnel cannot connect and its journal shows 429s, and it ends sshd sessions, never the listener.
+
+## 2026-11-22 22:10 The live Vibestudio Luna campaign feeds expert iteration continuously
+
+The campaign `/mnt/external/natlang-vibestudio-full-luna-campaign-yci2LB1N` (1,748 held-separated open goals, Luna
+teacher, another agent's) keeps adding verified waves for days. Its trajectories carry no usable reasoning, so they
+must train with the student's filled reasoning.
+
+- **Path (existing mechanism):** each wave's verified manifests → `sft_sources extract --live-run` (observed-live
+  episodes, `live_teacher_sources.load_episode`) → an sft_sources WORK. Rounds link the WORK's extractions into the
+  driver's WORK the way seed WORKs are linked. `filled_reasoning` fills them, and the build trains them as
+  `filled=...,replaces=teacher`.
+- **Standing ingester** `scripts/neuralese_data/live_campaign_ingest.py poll`, unit `vsingest-poll2`, 3 GB, every 30 min.
+  It writes WORK `/home/werg/data/sft-teacher-vibestudio-luna-yci2lb1n` (log `...yci2lb1n.poll.log`, script `...poll.sh`).
+  - Commit marker: a directory is read only once its `exported.json` exists.
+  - Idempotent: `ingest.jsonl` holds one line per directory.
+  - Separation: held-v3/v2 through `held_excluded_ids` (`held_eval.exclusion_ids` plus source groups and ids), the
+    catalog's held open goals, and the catalog registration of each goal.
+  - Duplicates: duplicate keys and repeated goals are dropped.
+  - Registry: extract registers the WORK. The catalog is copied to `live-holdout-registry.jsonl` and must stay unchanged.
+  - One extraction per scan, because each registry lookup of a campaign path indexes every dataset (minutes under HDD load).
+  - First scan: 27 committed directories, 28 verified, **28 episodes converted**, 0 held hits, 0 duplicates.
+- **Fill:** `generate --prefer-work W` fills W's episodes first. `--rescan-minutes M` queues new ones at the front and
+  keeps the generation running. Observed-live episodes are fill sources (no replay; bound source in the record).
+  - `async-drive --live-work W` gives its fill `--work W --prefer-work W --rescan-minutes 30`.
+  - The Colab keeper script (`ops/ei/colab/g4a-fill-keep.sh`, backup `.bak-20261122-pin0724`) now runs pin c6bbe8f82def
+    with the WORK added. Another agent had stopped the keeper and fill at 21:22 for the A100 SFT run, then restarted
+    the keeper at 22:16 with a tunnel-heal unit. It relaunches the fill with this argv once the ledger admits it and
+    the tunnel holds.
+- **Build:**
+  - `async-drive --live-work` links new extractions at every round's prepare (no restart per wave) and passes
+    `--live-holdout-registry`.
+  - The open-goal minimum (0.8) is measured over Vibestudio chains (`--open-goal-scope vibestudio`, default;
+    `all` opts out); measured over the whole mix, a mixed round build would always fail.
+  - Filled chains carry the open-goal marks.
+  - In a build with a `replaces=teacher` part, observed-live teacher episodes that no fill replaced are dropped
+    (`--unfilled-live-teacher auto|drop|train`), so they never train after an empty or teacher think block.
+- **Bug fixed:** `replaced_round` matched only `teacher:` keys. Filled units of `october-teacher:` episodes (2,026 of
+  6,516 fills) trained beside the teacher chains they replace (sft-v9: 1,352 of 5,330 filled units replaced). They now
+  replace them, as do `live:` fills.
+- **Verified on the real WORK:**
+  - 28 episodes listed as fill sources and rendered: 348 chains, all with open-goal marks.
+  - Synthetic no-reasoning fill records in a scratch OUT (no engine was free) built 28 filled units.
+  - A scratch `sft_sources build` with the seed-v2 aux: the filled units replaced the 11 admitted core episodes (153 chains),
+    open goals 28 of 30 Vibestudio trajectories, weighted share 0.87 ≥ 0.8.
+- **Driver restart needed:** aei1 (pin bd0217420) has no `--live-work`. It needs a pin at or after this entry's commit
+  and the guard's argv plus `--live-work /home/werg/data/sft-teacher-vibestudio-luna-yci2lb1n`.

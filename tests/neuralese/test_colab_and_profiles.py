@@ -768,3 +768,62 @@ def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remo
     events.clear()
     pop_rl_actor.write_json(pop_rl_actor.colab_state_path('g4'), {**record, 'beside_learner': True})
     assert pop_rl_actor.run_remote_sft(args) == 0 and events == []
+
+
+def test_learner_state_arrives_as_one_save_or_not_at_all(tmp_path, monkeypatch):
+    """An rsync of the live learner-state directory across the learner's rotation (stage -> root) pulled files of
+    two saves. The pull copies a hardlink snapshot taken while the directory kept its inode, into a staging directory
+    that replaces the local state whole; a learner that has saved nothing leaves the local state as it was."""
+    local = tmp_path / 'learner-state'
+    local.mkdir()
+    (local / 'learner_manifest.json').write_text('old')
+    (local / 'stale.pt').write_text('old')
+    replies, sent = ['ok'], []
+
+    def ssh_host(host, command, **kw):
+        sent.append(command)
+        return replies.pop(0) + '\n'
+
+    def sync_from(remote_path, local_path, host, **kw):
+        dest = Path(local_path)
+        dest.mkdir(parents=True)
+        (dest / 'learner_manifest.json').write_text('new')
+        (dest / 'adapter_factors_fp32.safetensors').write_text('new')
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'sync_from_remote', sync_from)
+    assert pop_rl_actor.pull_learner_state('g4', '/r', local) is True
+    assert sorted(p.name for p in local.iterdir()) == ['adapter_factors_fp32.safetensors', 'learner_manifest.json']
+    assert (local / 'learner_manifest.json').read_text() == 'new' and not list(tmp_path.glob('learner-state.*'))
+    assert 'cp -al /r/learner-state /r/learner-state.snap' in sent[0] and 'stat -c %i /r/learner-state' in sent[0]
+    replies[:] = ['empty']
+    assert pop_rl_actor.pull_learner_state('g4', '/r', local) is False and (local / 'learner_manifest.json').exists()
+    replies[:] = ['busy']
+    with pytest.raises(RuntimeError, match='consistent snapshot'):
+        pop_rl_actor.pull_learner_state('g4', '/r', local)
+    assert (local / 'learner_manifest.json').read_text() == 'new'
+
+
+def test_serve_colab_launches_the_actor_as_its_own_statement_and_records_its_serve(tmp_path, monkeypatch):
+    """`. env && setsid nohup ... & echo $!` backgrounded the and-list in a subshell: the launch held the SSH channel
+    until its 60 s timeout and `$!` named the subshell, whose group stop_colab could not signal. The record carries the
+    serve's arguments (run-sft serves a yielded actor again from them)."""
+    sent = []
+
+    def ssh_host(host, command, **kw):
+        sent.append(command)
+        return '4242\n' if 'setsid nohup' in command else ''
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: dict(A100))
+    monkeypatch.setattr(pop_rl_actor, 'ensure_remote_checkpoint', lambda *a: 'present')
+    monkeypatch.setattr(pop_rl_actor, 'colab_checkout', lambda *a: None)
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind=None: 'http://127.0.0.1:18731')
+    monkeypatch.setattr(pop_rl_actor, 'attested', lambda endpoint, sha, adapters=None: True)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    args = types.SimpleNamespace(host='g4', policy_id='p' * 64, commit='c' * 40, port=8570, bind_host=None,
+                                 kv_cache_dtype='fp8_e4m3', weight_dtype='bfloat16', beside_learner=False,
+                                 checkpoint='/dgx/ckpt.pt', ready_seconds=60)
+    result = pop_rl_actor.serve_colab(args)
+    (launch,) = [c for c in sent if 'setsid nohup' in c]
+    assert '&& setsid' not in launch and launch.rstrip().endswith('& echo $!') and result['pid'] == 4242
+    assert result['serve_args']['port'] == 8570 and result['serve_args']['checkpoint'] == '/dgx/ckpt.pt'
