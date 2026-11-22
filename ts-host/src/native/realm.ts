@@ -8,7 +8,8 @@ import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type E
   type EvalResult, type HostEvent } from './evaluator.js';
 import { compileEval, evalRealmBody } from './eval-compile.js';
 import { isNeuraleseRef, neuraleseDisplayText } from './neuralese.js';
-import { MEMORY_CHECK, instrumentMemoryChecks, memoryGuard, segmentGuard, type HeapProbe } from './eval-memory.js';
+import { MEMORY_CHECK, combinedGuard, instrumentMemoryChecks, memoryGuard, segmentGuard, syncGuard, syncLimitMessage,
+  type HeapProbe } from './eval-memory.js';
 
 /** How console output shows a promise: what it is and the fix, never `[object Promise]`. */
 export const UNAWAITED_DISPLAY = '[a Promise: not awaited yet; write await before the call to get its value]';
@@ -78,6 +79,11 @@ export type RealmEnvironmentOptions = {
    * platform's `probe`. Absent or a limit of 0: unbounded (a platform that cannot read its heap).
    */
   memory?: { limitMb: number; probe: HeapProbe };
+  /**
+   * The run-time bound in seconds of one synchronous stretch of eval and callable-folder module code (native/eval-memory.ts
+   * `syncGuard`; the realm's own interrupt bounds the first stretch too, builtins included). Absent or 0: unbounded.
+   */
+  syncLimitSeconds?: number;
   scopeCapabilities?: { allowModules: boolean; allowNetwork: boolean };
   observe?: (event: HostEvent) => void;
   /** Restores the natlang task after each `await` in eval code (platforms whose context store cannot follow promises). */
@@ -114,6 +120,8 @@ export class RealmEnvironment implements EvalEnvironment {
 
   /** The eval memory bound in MB, or undefined when evals are unbounded. */
   get memoryLimitMb(): number | undefined { return this.options.memory?.limitMb || undefined; }
+  /** The run-time bound of one synchronous stretch in seconds, or undefined when unbounded. */
+  get syncLimitSeconds(): number | undefined { return this.options.syncLimitSeconds || undefined; }
 
   fork(): EvalEnvironment {
     if (!this.options.fork) throw new Error(`${this.authority} cannot fork`);
@@ -160,8 +168,11 @@ export class RealmEnvironment implements EvalEnvironment {
       throw new TypeError('invalid eval request');
     const imports = asyncBody ? this.importer() : undefined;
     const memory = this.memoryLimitMb ? this.options.memory : undefined;
+    const syncSeconds = this.syncLimitSeconds, syncMessage = syncSeconds && syncLimitMessage('eval', syncSeconds);
+    const check = combinedGuard(memory && memoryGuard(memory.limitMb, memory.probe),
+      syncSeconds && syncGuard(syncSeconds, syncMessage as string));
     const compiled = compileEval(request.code, { body: request.body, asyncBody, imports: imports?.validate.bind(imports),
-      restoreAfterAwait: !!this.options.bindAwait, memoryChecks: !!memory });
+      restoreAfterAwait: !!this.options.bindAwait, memoryChecks: !!check });
     const realm = this.realm();
     // A Neuralese value prints as one plain line, at any depth, never as its reference JSON. A promise prints as what
     // it is: `read(x)` without await printed [object Promise] and the call kept probing (held-v3 after sft-v5).
@@ -179,9 +190,18 @@ export class RealmEnvironment implements EvalEnvironment {
       if (!imports) throw new Error(`cannot import ${specifier}: eval has no package imports here`);
       return imports.load(specifier);
     }, console: logger, ...(this.options.bindAwait ? { __natlang_bindAwait: this.options.bindAwait } : {}),
-      ...(memory ? { [MEMORY_CHECK]: memoryGuard(memory.limitMb, memory.probe) } : {}), ...this.extraBindings() };
-    return realm.call(evalRealmBody(compiled, request.body), Object.keys(bound), Object.values(bound),
-      { timeoutMs: request.timeoutMs ?? this.timeoutMs });
+      ...(check ? { [MEMORY_CHECK]: check } : {}), ...this.extraBindings() };
+    // The realm's interrupt bounds the first synchronous stretch, a long builtin call included (a backtracking regex);
+    // the guard calls bound every later one.
+    const requested = request.timeoutMs ?? this.timeoutMs, syncMs = syncSeconds ? Math.ceil(syncSeconds * 1000) : undefined;
+    const interrupt = requested === undefined ? syncMs : syncMs === undefined ? requested : Math.min(requested, syncMs);
+    try {
+      return realm.call(evalRealmBody(compiled, request.body), Object.keys(bound), Object.values(bound), { timeoutMs: interrupt });
+    } catch (error) {
+      if (syncMs !== undefined && interrupt === syncMs && (requested === undefined || syncMs < requested) &&
+          (error as { code?: unknown })?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new RangeError(syncMessage as string);
+      throw error;
+    }
   }
 
   execute(request: EvalRequest): EvalResult {
@@ -207,8 +227,10 @@ export class RealmEnvironment implements EvalEnvironment {
   evaluateModule(code: string, bindings: Record<string, unknown>): unknown {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     // Module functions run for many callers at unknown times: each synchronous run of them is bounded (segmentGuard).
-    const memory = this.memoryLimitMb ? this.options.memory : undefined;
-    if (memory) { code = instrumentMemoryChecks(code, MEMORY_CHECK, 'js'); bindings = { ...bindings, [MEMORY_CHECK]: segmentGuard(memory.limitMb, memory.probe) }; }
+    const memory = this.memoryLimitMb ? this.options.memory : undefined, syncSeconds = this.syncLimitSeconds;
+    const check = combinedGuard(memory && segmentGuard(memory.limitMb, memory.probe),
+      syncSeconds && syncGuard(syncSeconds, syncLimitMessage('callable-folder code', syncSeconds), false));
+    if (check) { code = instrumentMemoryChecks(code, MEMORY_CHECK, 'js'); bindings = { ...bindings, [MEMORY_CHECK]: check }; }
     return this.moduleRealm().call(code, Object.keys(bindings), Object.values(bindings));
   }
 

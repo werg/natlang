@@ -2812,3 +2812,14 @@ It leaves the eval permissions intact. NativeToolAgent produces these messages
 for Node, browser, and Workerd. The serving engines and source collectors consume
 the same request and trajectory records. The existing `compact-callable-scope`
 setting controls the compact opening and its service list.
+
+### 2026-11-22 — an eval that computes for 60 s without pausing fails with a teaching error
+
+An eval's unpruned recursive search (no `timeout_ms`) blocked a shared collector's
+event loop for an hour, and 7 co-hosted held episodes timed out with it (DECISIONS
+2026-11-22 02:30). On Node hosts one synchronous stretch of an eval or of
+callable-folder module code now stops after 60 s with "eval stopped: it computed
+for more than 60 s without pausing; use a bounded or faster approach (prune the
+search, check the input sizes, or compute in smaller parts)". The call continues
+and the model sees the error as the eval's observation. `NATLANG_EVAL_SYNC_SECONDS`
+sets the bound (0 turns it off). Browser evals are not bounded.

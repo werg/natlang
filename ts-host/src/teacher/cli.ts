@@ -281,9 +281,36 @@ async function serve(argv: string[]): Promise<void> {
   // Event-loop stalls (an invocation's synchronous work, swap-in, GC) hold every invocation of this process and its
   // greetings: logged with their length so a slow collection can be traced to them.
   let tick = Date.now();
+  // A stall that does not end takes every co-hosted invocation with it, and a blocked loop cannot end it: a watchdog
+  // thread kills the process once the loop has not ticked for --stall-kill-seconds (default 300;
+  // NATLANG_COLLECTOR_STALL_KILL_SECONDS, 0 turns it off). Its clients see the connection close without an exit and
+  // resume their episodes from their journals in their own processes (run_bonsai_queue.SharedChild `lost`). Eval code
+  // is bounded per synchronous stretch (native/eval-memory.ts syncGuard, 60 s); this covers what the guard cannot
+  // interrupt. sft-v7 held candidate 2026-11-22: one eval's runaway recursion held s000 for 60 min, 8 episodes timed out.
+  const stallKillSeconds = integer(flags, '--stall-kill-seconds', Number(process.env.NATLANG_COLLECTOR_STALL_KILL_SECONDS ?? 300));
+  const heartbeat = new Int32Array(new SharedArrayBuffer(8));   // [seconds since start at the last tick, active]
+  const startedAt = Date.now();
+  if (stallKillSeconds > 0) {
+    const { Worker } = await import('node:worker_threads');
+    new Worker(`
+      const { workerData } = require('node:worker_threads');
+      const { writeSync } = require('node:fs');
+      const { heartbeat, startedAt, limit, pid } = workerData;
+      setInterval(() => {
+        const now = (Date.now() - startedAt) / 1000, last = Atomics.load(heartbeat, 0);
+        if (now - last < limit) return;
+        try { writeSync(1, JSON.stringify({ event: 'loop_stall_kill', stall_seconds: Math.round(now - last), limit_seconds: limit,
+          active: Atomics.load(heartbeat, 1), pid, time: new Date().toISOString() }) + '\\n'); } catch {}
+        process.kill(pid, 'SIGKILL');
+      }, 1000);`, { eval: true, workerData: { heartbeat, startedAt, limit: stallKillSeconds, pid: process.pid } })
+      // A watchdog that fails is logged; it never ends the process serving the invocations.
+      .on('error', error => process.stdout.write(JSON.stringify({ event: 'stall_watchdog_error', error: String(error) }) + '\n'))
+      .unref();
+  }
   setInterval(() => {
     const now = Date.now(), lag = now - tick - 1000;
     tick = now;
+    Atomics.store(heartbeat, 0, Math.floor((now - startedAt) / 1000)); Atomics.store(heartbeat, 1, active);
     if (lag >= 5000) process.stdout.write(JSON.stringify({ event: 'loop_stall', stall_ms: lag, active,
       time: new Date(now).toISOString() }) + '\n');
     if (recycleRssMb > 0 && listening) {

@@ -961,6 +961,130 @@ def test_shared_collector_skips_a_stalled_server_without_sending_it_the_request(
         shutil.rmtree(short, ignore_errors=True)
 
 
+def test_an_episode_whose_shared_server_died_resumes_in_its_own_process(tmp_path, monkeypatch):
+    """A shared server that died under an invocation (stall watchdog, OOM killer) answers no exit: the episode is not
+    scored as the server's failure but resumes from its journal in an own process (NATLANG_COLLECTOR_FAILOVER=0 opts
+    out). sft-v7 held candidate 2026-11-22: 8 episodes of one blocked server were scored as 3600 s timeouts."""
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    source = tmp_path / 'source.ir.jsonl'
+    source_rows(source, 1)
+    queue.write_text(json.dumps(queue_entry(tmp_path, source=source, output=tmp_path / 'out.jsonl')) + '\n')
+    processes = successful_child(monkeypatch)
+    monkeypatch.setenv('NATLANG_COLLECTOR_SHARED', '8')
+    shared = []
+
+    class LostServer:
+        lost = False
+        supported = staticmethod(lambda cli: True)
+
+        def __init__(self, command, log, capacity):
+            self.server_pid, self.returncode = 4242, None
+            shared.append(self)
+
+        def wait(self, timeout=None):
+            self.lost, self.returncode = True, 1
+            return 1
+
+        def terminate(self):
+            pass
+        kill = terminate
+    monkeypatch.setattr(queue_module, 'SharedChild', LostServer)
+    run_queue(queue, journal, TS_HOST, seconds=30)
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row['event'] for row in rows] == ['start', 'shared_collector_lost', 'finish']
+    assert rows[1]['server_pid'] == 4242 and len(shared) == 1 and len(processes) == 1
+    assert rows[2]['status'] == 'complete'
+    journal.unlink()
+    monkeypatch.setenv('NATLANG_COLLECTOR_FAILOVER', '0')
+    run_queue(queue, journal, TS_HOST, seconds=30)
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row['event'] for row in rows] == ['start', 'finish'] and rows[1]['status'] == 'incomplete'
+    assert len(processes) == 1
+
+
+def test_a_runaway_eval_fails_alone_and_a_blocked_server_is_killed(tmp_path, monkeypatch):
+    """The incident: an eval whose search never returns (no timeout_ms) held a shared server's event loop for an hour.
+    With the eval bound (NATLANG_EVAL_SYNC_SECONDS) the eval fails with the teaching error and the episode goes on to
+    its next model call; with the bound off, the server's stall watchdog (NATLANG_COLLECTOR_STALL_KILL_SECONDS) kills
+    the blocked process and its invocations end as lost (resumed by run_queue)."""
+    import http.server, tempfile, threading, shutil
+    # Structural recursion on a smaller argument, as the incident's search was: it terminates, after 2^60 calls.
+    RUNAWAY = 'function grow(n: number): number { return n <= 0 ? 1 : grow(n - 1) + grow(n - 1); }\ngrow(60);'
+    cli = TS_HOST / 'dist/teacher/cli.js'
+    if not queue_module.SharedChild.supported(cli) or 'loop_stall_kill' not in cli.read_text():
+        pytest.skip('ts-host dist is not built with the stall watchdog')
+    requests = []
+
+    class Chat(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+            requests.append(json.loads(self.rfile.read(int(self.headers['content-length'] or 0))))
+            call = {'id': f'c{len(requests)}', 'type': 'function', 'function': {
+                'name': 'eval', 'arguments': json.dumps({'code': RUNAWAY})}}
+            data = json.dumps({'id': 'x', 'object': 'chat.completion', 'created': 0, 'model': 'fake',
+                               'choices': [{'index': 0, 'finish_reason': 'tool_calls', 'message': {
+                                   'role': 'assistant', 'content': '', 'tool_calls': [call]}}],
+                               'usage': {'prompt_tokens': 1000, 'completion_tokens': 50}}).encode()
+            self.send_response(200)
+            self.send_header('content-type', 'application/json')
+            self.send_header('content-length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Chat)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f'http://127.0.0.1:{server.server_address[1]}'
+    short = tempfile.mkdtemp(dir='/tmp', prefix='nlsk')
+    monkeypatch.setattr(queue_module.SharedChild, 'ROOT', short)
+    source = tmp_path / 'source.ir.jsonl'
+    root = 'solve.nl'
+    source.write_text(json.dumps({
+        'version': 'natlang.program/2', 'id': 'nl-case-0', 'kind': 'lambda_source',
+        'source_layout': {'root': root, 'subfunctions': {}},
+        'semantics': {'root': root, 'files': {root: '---\nargs:\n  problem: "string"\nreturns: "number"\n---\n'
+                                                     'Work out the answer and return it as a plain number.\n'},
+                      'inputs': {'problem': 'What is 2 plus 2?'}, 'expected': 4, 'oracle': 'normalized'}}) + '\n')
+
+    def command(name):
+        jobs = tmp_path / f'jobs-{name}'
+        jobs.mkdir()
+        return ['node', '--x', str(cli), str(source), str(jobs), str(tmp_path / f'out-{name}.jsonl'), '--start', '0',
+                '--limit', '1', '--model-id', 'fake', '--root-seed', '0', '--workers', '1', '--max-turns', '20',
+                '--model-concurrency', '1', '--max-model-requests', '2', '--transport-retries', '0',
+                '--temperature', '1.0', '--server', url, '--context-tokens', '32768', '--kv-tokens', '0',
+                '--chat-completions-url', url + '/v1/chat/completions']
+    log = io.StringIO()
+    try:
+        monkeypatch.setenv('INVOCATION_ID', 'test-shared-collector-bounded')
+        monkeypatch.setenv('NATLANG_EVAL_SYNC_SECONDS', '1')
+        child = queue_module.SharedChild(command('bounded'), log, 2)
+        child.wait(120)
+        assert not child.lost
+        observations = [message.get('content') for request in requests[1:] for message in request['messages']
+                        if message.get('role') == 'tool']
+        assert any('computed for more than 1 s without pausing' in str(text) for text in observations), observations
+        os.kill(child.server_pid, 15)
+
+        monkeypatch.setenv('INVOCATION_ID', 'test-shared-collector-blocked')
+        monkeypatch.setenv('NATLANG_EVAL_SYNC_SECONDS', '0')
+        monkeypatch.setenv('NATLANG_COLLECTOR_STALL_KILL_SECONDS', '3')
+        started = time.time()
+        blocked = queue_module.SharedChild(command('blocked'), log, 2)
+        assert blocked.wait(120) == 1 and blocked.lost
+        assert time.time() - started < 60
+        kills = [json.loads(line) for path in Path(short).glob('*/*/s*.log') for line in path.read_text().splitlines()
+                 if '"loop_stall_kill"' in line]
+        assert len(kills) == 1 and kills[0]['pid'] == blocked.server_pid and kills[0]['limit_seconds'] == 3
+    finally:
+        server.shutdown()
+        shutil.rmtree(short, ignore_errors=True)
+
+
 def test_orphan_temporaries_of_dead_writers_are_swept(tmp_path):
     dead = subprocess.Popen(['true']); dead.wait()
     orphan = tmp_path / f'results.jsonl.tmp-{dead.pid}-01234567-89ab-cdef-0123-456789abcdef'

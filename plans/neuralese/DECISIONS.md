@@ -6473,3 +6473,58 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
   2"): each verdict records `since_held` and `held_every`. A measured success doubles the interval up to
   `--held-every-max` (8), a neutral result returns it to `--held-every` (2) and a failure measures the next cycle too.
   Tests: 43 pass.
+
+## 2026-11-22 02:30 shared collector: a runaway eval held s000 for an hour (eval run-time bound, stall watchdog, failover)
+
+**Observation.** sft-v7's candidate held eval (pin b17d5fd8527d, popheld-candidate-1795291994) had 9 episodes end as
+3600 s timeouts (start policy: 0). 8 of them ran on shared collector server s000 (pid 974965), started 00:29-00:38 and
+got no observation after ~00:38; s000.log ends at 00:38:30 with no `loop_stall` (logged only after a stall ends).
+
+**Root cause (established).** The last event in s000.log is a `teacher_action_frame` of attempt ee2623a3
+(s7-task-228-01, row-228): the model's eval (no `timeout_ms`) ran `find(allValues(nums))`, an unpruned recursive search
+over a 40-element list (each level tries every pair and 4 operators on 1 fewer element; the elements were arrays, so
+`+` built strings and the target test never held). Eval code runs synchronously in the shared node process
+(`environment.ts` VmRealm `runInContext`, a `timeout` only when the eval passes `timeout_ms`), so the event loop
+stopped: the other 7 invocations (058, 254, 199, 124, 020, 099, 175; each had sent its next request or was about to)
+never processed a reply. Every other attempt in the log tail continued after its last frame; ee2623a3 is the only one
+whose action frame is the last event. Nothing ended the stall (the memory bound did not trip: recursion depth <= 40,
+string growth only) until the client wall. The same mechanism shows in earlier logs: `loop_stall` of 2-67 min on
+2026-11-19..21 (4044 s, 1972 s, 1603 s, 1224 s, 351 s, ...) in /tmp/natlang-collector-1000/*/s*.log, each holding up to
+8 co-hosted episodes. The 9th timeout (s7-task-251-01, s002) is different: 31 turns, still replying ~5 min before the
+wall (not investigated further).
+
+**Consequence for sft-v7's verdict.** 7 of the candidate's failures (s7-task-058/254/199/124/020/099/175, sample 01)
+are harness failures, not policy outcomes; s7-task-228-01's own eval would have timed out alone. Re-measure those 7
+rows (or discount them) before reading sft-v7's candidate as a regression.
+
+**Fix (default on, opt-outs, targeted tests).**
+- *Eval run-time bound* (`native/eval-memory.ts` `syncGuard`, wired in `native/realm.ts`): one synchronous stretch of
+  eval code (up to its next `await`) may run 60 s (`NATLANG_EVAL_SYNC_SECONDS`, 0 off; `TypeScriptEnvironment`
+  `syncLimitSeconds`). It reuses the memory bound's guard calls (every loop iteration and function body) and the vm
+  interrupt covers the first stretch, builtins included (a backtracking regex). Over the bound the eval fails with a
+  one-sentence teaching error ("eval stopped: it computed for more than 60 s without pausing; use a bounded or faster
+  approach ..."), sticky for that eval; the episode continues. A smaller `timeout_ms` keeps its own error.
+  Callable-folder module code gets the same bound per synchronous run. 60 s is above the p90 of all logged stalls
+  (25 s; those include GC) and ends the hour-long ones.
+- *Stall watchdog* (`teacher/cli.ts` serve): a worker thread kills the server (SIGKILL, `loop_stall_kill` logged with
+  `writeSync` so a blocked loop cannot hold it) once the event loop has not ticked for 300 s
+  (`--stall-kill-seconds`, `NATLANG_COLLECTOR_STALL_KILL_SECONDS`, 0 off). It covers what the guard cannot interrupt.
+- *Failover* (`scripts/run_bonsai_queue.py`): a shared invocation whose connection closes without an exit (watchdog,
+  OOM killer) is `lost`; `run_queue` records `shared_collector_lost` and resumes the episode from its journal (saved
+  replies replay, nothing is sampled twice) in its own process, within the same case budget, once
+  (`NATLANG_COLLECTOR_FAILOVER=0` opts out). An invocation that blocked its server can then block only itself.
+- Tests: ts-host environment.test.mjs (incident-shaped search, stretch after await, catch-and-continue, regex, pausing
+  work passes, timeout_ms precedence, setting); tests/test_bonsai_queue.py (failover and opt-out; end to end through a
+  real shared server and a fake chat model: the bounded eval's error reaches the model's next request; with the bound
+  off the watchdog kills the blocked server in seconds and the client sees `lost`). 52 + env tests pass.
+
+**Consumers covered.** Every collector episode goes through `run_bonsai_queue.run_queue` -> `SharedChild`/own process
+and every node eval through `TypeScriptEnvironment`: held_eval measure (rl/held_eval.py:486), grpo collection
+(grpo.py:532), expert_iteration collect (exp1_collect.py:164), teacher_gen (teacher_gen.py:257), memetic_workspace,
+replenish_luna_held_shapes, run_reviewed_luna_dispatcher; collector.ts:1745, runtime/node.ts:46/268, node-runtime.ts:47.
+sft_sources replay already opts out of sharing (sft_sources.py:1032) and gets the eval bound. Left out: the browser
+TypeScriptEnvironment (browser/environment.ts, browser/index.ts:34): it hosts no co-hosted episodes and a runaway ends
+only the user's tab, as with the memory bound. function-effects.ts already bounds its calls (vm timeout 1 s, lines
+29/41/53); folder python has its 30 s watchdog (folder-python.ts:106/143); folder bash refuses open loops and caps
+loop iterations (folder-shell.ts:188/347). Pinned runtimes (b17d5fd8527d and the running sft-v8 pin) have none of
+this until their next pin; the failover needs only the new run_bonsai_queue.py and a dying server.

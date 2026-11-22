@@ -89,6 +89,61 @@ export function segmentGuard(limitMb: number, probe: HeapProbe, message = module
 }
 
 /**
+ * The run-time bound of one synchronous stretch of model-written code (up to its next `await` or the end of a
+ * callback). Eval code runs on its host's event loop, which a shared collector process shares with up to 8 episodes:
+ * a search that never returns held the loop, so every co-hosted episode got no model reply for the rest of its case
+ * budget (sft-v7 held candidate 2026-11-22: one eval's exponential recursion, 8 episodes scored as timeouts after 3600 s;
+ * loop stalls of 2-67 min in 2026-11-19..21 collector logs). The same guard calls as the memory bound read a monotonic
+ * clock every `CHECK_EVERY` calls; the first call of a stretch starts its clock and a microtask ends it. A stretch over
+ * the bound throws the teaching error, and once tripped every later check of that evaluation throws again (code that
+ * catches it cannot keep spinning). An `await` ends a stretch, so asynchronous work is bounded only by `timeout_ms` and
+ * the case budget; its synchronous parts let other episodes run in between.
+ */
+export const DEFAULT_EVAL_SYNC_SECONDS = 60;
+
+/** The bound in seconds: `NATLANG_EVAL_SYNC_SECONDS` (0 turns it off), else `DEFAULT_EVAL_SYNC_SECONDS`. */
+export function evalSyncLimitSeconds(env: Record<string, string | undefined> =
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}): number {
+  const text = env.NATLANG_EVAL_SYNC_SECONDS?.trim();
+  if (!text) return DEFAULT_EVAL_SYNC_SECONDS;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0) throw new RangeError(`NATLANG_EVAL_SYNC_SECONDS must be a number of seconds >= 0 (0: unbounded), got ${text}`);
+  return value;
+}
+
+/** The one-sentence teaching error of a stretch that ran past the bound. */
+export function syncLimitMessage(subject: string, limitSeconds: number): string {
+  return `${subject} stopped: it computed for more than ${limitSeconds} s without pausing; use a bounded or faster ` +
+    'approach (prune the search, check the input sizes, or compute in smaller parts)';
+}
+
+/** The run-time guard of one evaluation (`sticky`) or of one synchronous run of module code (not sticky). */
+export function syncGuard(limitSeconds: number, message: string, sticky = true,
+    now: () => number = () => performance.now()): () => void {
+  const limit = limitSeconds * 1000;
+  let started: number | undefined, ticks = 0, tripped = false;
+  const fail = () => { tripped = true; throw new RangeError(message); };
+  return () => {
+    if (tripped) fail();
+    if (started === undefined) {
+      started = now(); ticks = 0;
+      queueMicrotask(() => { started = undefined; if (!sticky) tripped = false; });
+      return;
+    }
+    if (++ticks < CHECK_EVERY) return;
+    ticks = 0;
+    if (now() - started > limit) fail();
+  };
+}
+
+/** One guard from the bounds that are on (memory, run time); undefined when none is. */
+export function combinedGuard(...guards: (false | 0 | undefined | (() => void))[]): (() => void) | undefined {
+  const on = guards.filter((guard): guard is () => void => typeof guard === 'function');
+  if (on.length < 2) return on[0];
+  return () => { for (const guard of on) guard(); };
+}
+
+/**
  * `source` with a guard call at the top of every loop iteration and of every function body except constructors
  * (their loops are instrumented). Edits are insertions on the lines they belong to, so line numbers do not move.
  * Source that does not parse is returned as it is: compilation reports its errors.

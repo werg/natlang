@@ -5,7 +5,7 @@ import { packageNameFromSpecifier } from './package-specifier.js';
 import { markRaces } from './runtime/context.js';
 import type { EnvironmentMode, HostEvent } from './native/evaluator.js';
 import { RealmEnvironment, type EvalImports, type Realm } from './native/realm.js';
-import { evalMemoryLimitMb, type HeapProbe } from './native/eval-memory.js';
+import { evalMemoryLimitMb, evalSyncLimitSeconds, type HeapProbe } from './native/eval-memory.js';
 export { EvalFailure } from './native/evaluator.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
 
@@ -91,12 +91,15 @@ export const nodeHeap: HeapProbe = {
   },
 };
 
-export { evalMemoryLimitMb };
+export { evalMemoryLimitMb, evalSyncLimitSeconds };
 
 export type TypeScriptEnvironmentOptions = { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
   workspace?: string; network?: boolean;
   /** Heap growth in MB one eval may keep before it fails (native/eval-memory.ts); default `evalMemoryLimitMb()`, 0: unbounded. */
-  memoryLimitMb?: number };
+  memoryLimitMb?: number;
+  /** Seconds one synchronous stretch of eval code may run (native/eval-memory.ts `syncGuard`); default
+   * `evalSyncLimitSeconds()`, 0: unbounded. */
+  syncLimitSeconds?: number };
 
 /**
  * Node evaluator: a `vm` context in this process, under the shared realm evaluator. Eval sees Node's host globals as
@@ -113,11 +116,12 @@ export class TypeScriptEnvironment extends RealmEnvironment {
   constructor(options: TypeScriptEnvironmentOptions = {}) {
     const workspace = options.workspace ?? findPackageWorkspace(process.cwd());
     const memoryLimitMb = options.memoryLimitMb ?? evalMemoryLimitMb();
+    const syncLimitSeconds = options.syncLimitSeconds ?? evalSyncLimitSeconds();
     super({ authority: 'shared-node-host', mode: options.mode, timeoutMs: options.timeoutMs, observe: options.observe,
       scopeCapabilities: { allowModules: true, allowNetwork: options.network ?? true },
-      memory: { limitMb: memoryLimitMb, probe: nodeHeap },
+      memory: { limitMb: memoryLimitMb, probe: nodeHeap }, syncLimitSeconds,
       fork: () => new TypeScriptEnvironment({ mode: 'fresh', timeoutMs: options.timeoutMs, observe: options.observe,
-        workspace, network: options.network, memoryLimitMb }) });
+        workspace, network: options.network, memoryLimitMb, syncLimitSeconds }) });
     this.workspace = workspace;
     if (workspace) this.modules = new WorkspaceModules(workspace, event => this.packageEvents.push(event));
   }
