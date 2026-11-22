@@ -1,5 +1,5 @@
-// Browser enrollment on the existing native owner, open while it runs. It never
-// opens a second signing store or replaces a retained transition after an uncertain send.
+// Reviewed enrollment on the existing native owner. It never opens a
+// second signing store or replaces a retained transition after an uncertain send.
 import { peerDigest, verifyAuthorityBundle, signTransitionRequest } from '@chronolog/peer-session';
 import { createDevicePairingClient } from '@tendriller/core/pairing';
 import { readPrivate, savePrivate } from './local.mjs';
@@ -8,7 +8,6 @@ const PREFIX = 'pairing:';
 const pauseId = id => PREFIX + id;
 const saved = (id, kind) => `pairing-${id}-${kind}.json`;
 const fail = (code, message) => Object.assign(new Error(message), { code });
-
 /** Pure identity checks used before a host result can influence retained state. */
 export function assertPairingContext(status, { applicationId, serviceOrigin, pageOrigin }, pairingId) {
   const c = status?.challenge;
@@ -25,9 +24,9 @@ export function assertPairingContext(status, { applicationId, serviceOrigin, pag
   return status;
 }
 
-/** One tick is exported for deterministic lifecycle tests; callers use the
- * bounded window below. The actual signed-control selector remains the host. */
-export async function advancePairing({ session, pairing, retain = savePrivate, restore = readPrivate, onStatus = () => {}, signal }) {
+/** One retained-request reconciliation pass. The notification-driven supervisor
+ * serializes calls; the signed-control selector remains the host. */
+export async function advancePairing({ session, pairing, retain = savePrivate, restore = readPrivate, onStatus = () => {}, allowBrowserCoordinator = false, signal }) {
   signal?.throwIfAborted();
   const persist = async (name, value) => {
     await retain(name, value);
@@ -104,7 +103,7 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
   if (!prepared) {
     const before = verified.control.payload;
     const control = { epoch: before.epoch, keyDigest: before.keyDigest, grants: [...before.grants,
-      { publicKey: c.publicKey, reader: true, writer: c.rights.writer, coordinator: false, recovery: false,
+      { publicKey: c.publicKey, reader: true, writer: c.rights.writer, coordinator: Boolean(allowBrowserCoordinator), recovery: Boolean(allowBrowserCoordinator),
         administrator: false, publisher: false, dataRole: 'member' }], recoveryFloor: before.recoveryFloor,
       accounts: [{ publicKey: c.publicKey, accountId: c.accountId }] };
     const request = await pairing.signTransition({ applicationId: c.applicationId, profile: pairing.descriptor.payload.profile,
@@ -138,7 +137,7 @@ export async function advancePairing({ session, pairing, retain = savePrivate, r
   return result;
 }
 
-/** Compatibility for the explicit `npm run pair` command and other native
+/** Single-pass processor for the explicit `npm run pair` command and other native
  * consumers. All passes share one owner and serialize the exact same lifecycle. */
 export function createReviewedPairingProcessor({ handle, host, descriptor, session, identity, store, client, pairing: supplied }) {
   const pairing = supplied ?? { applicationId: handle.application.id, serviceOrigin: new URL(handle.api).origin,
@@ -158,71 +157,3 @@ export function createReviewedPairingProcessor({ handle, host, descriptor, sessi
   };
 }
 
-const validDuration = value => value === Infinity || Number.isSafeInteger(value) && value >= 1;
-function wakeableDelay(ms, signal, wakeups) {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) { reject(signal.reason); return; }
-    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); wakeups.removeEventListener('pairing', done); resolve(); };
-    const abort = () => { clearTimeout(timer); wakeups.removeEventListener('pairing', done); reject(signal.reason); };
-    const timer = setTimeout(done, ms);
-    signal.addEventListener('abort', abort, { once: true }); wakeups.addEventListener('pairing', done, { once: true });
-  });
-}
-
-/** Checks pending pairings for as long as the participant runs (or a finite
- * `durationMs`). Idle checks back off; a host notice (`wakeups` dispatching
- * 'pairing', or `wake()`) checks immediately. Ending never releases a pause. */
-export function startReviewedPairingLoop(process, { signal, report = () => {}, intervalMs = 2000,
-  maxIdleMs = 30000, durationMs = Infinity, wakeups = new EventTarget() } = {}) {
-  if (!validDuration(durationMs) || !Number.isSafeInteger(intervalMs) || intervalMs < 250 || intervalMs > 10000 ||
-      !Number.isSafeInteger(maxIdleMs) || maxIdleMs < intervalMs || maxIdleMs > 30000 || typeof wakeups?.addEventListener !== 'function')
-    throw fail('PAIRING_WINDOW_INVALID', 'Use a positive (or unbounded) pairing duration with bounded idle backoff.');
-  const stopped = new AbortController(), lifetime = AbortSignal.any([stopped.signal,
-    ...(durationMs === Infinity ? [] : [AbortSignal.timeout(durationMs)]), ...[signal].filter(Boolean)]);
-  let woken = false;
-  const wake = () => { woken = true; };
-  wakeups.addEventListener('pairing', wake);
-  const completion = (async () => {
-    let delayMs = intervalMs;
-    while (!lifetime.aborted) {
-      woken = false;
-      try {
-        const results = await process({ signal: lifetime });
-        for (const result of results) report({ pairing: result });
-        delayMs = results.some(result => ['pending', 'approved', 'committing', 'committed'].includes(result.state))
-          ? intervalMs : Math.min(maxIdleMs, delayMs * 2);
-      } catch (error) {
-        if (lifetime.aborted) break;
-        report({ pairing: { state: 'inspection_unavailable', code: error.code || error.name, nextAction: error.message } });
-        delayMs = Math.min(maxIdleMs, delayMs * 2);
-      }
-      // A notice that arrived during the pass is not lost: check again at once.
-      if (woken) { delayMs = intervalMs; continue; }
-      try { await wakeableDelay(delayMs, lifetime, wakeups); } catch { break; }
-    }
-    wakeups.removeEventListener('pairing', wake);
-  })();
-  return Object.freeze({ done: completion, wake() { wakeups.dispatchEvent(new Event('pairing')); },
-    async close() { stopped.abort(); await completion; } });
-}
-
-/** Keeps enrollment open for the native participant's lifetime by default.
- * `owned.notices` (from openSession) wakes it as soon as a browser asks or the
- * owner approves. Closing never releases an uncertain ordering pause; the next
- * pass of the same owner reconciles the exact retained request. */
-export function startPairingWindow({ owned, durationMs = Infinity, intervalMs = 2000, maxIdleMs = 30000, signal, onStatus = () => {} }) {
-  if (!validDuration(durationMs) || !Number.isSafeInteger(intervalMs) || intervalMs < 250 || intervalMs > 10000)
-    throw fail('PAIRING_WINDOW_INVALID', 'Use a positive (or unbounded) pairing duration.');
-  if (!owned?.session || !owned.pairing) throw fail('PAIRING_OWNER_REQUIRED', 'Use the existing retained native owner returned by openSession.');
-  const process = owned.processPairings ?? createReviewedPairingProcessor({ session: owned.session, pairing: owned.pairing });
-  const loop = startReviewedPairingLoop(process, { durationMs, intervalMs, maxIdleMs, ...(owned.notices ? { wakeups: owned.notices } : {}),
-    signal: AbortSignal.any([owned.session.signal, ...[signal].filter(Boolean)]), report: ({ pairing }) => onStatus(pairing) });
-  const done = (async () => {
-    await loop.done;
-    const pause = await owned.session.orderingPause().catch(() => undefined);
-    onStatus({ state: 'window_closed', orderingPaused: Boolean(pause),
-      nextAction: pause ? 'A reviewed or uncertain transition still holds ordering. Start this same native peer again; its first pass reconciles the original request.'
-        : 'Enrollment stopped with this native peer. Start it again to accept browser requests.' });
-  })();
-  return Object.freeze({ done, wake: loop.wake, async close() { await loop.close(); await done; } });
-}

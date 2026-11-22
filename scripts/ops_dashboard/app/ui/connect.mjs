@@ -4,9 +4,10 @@
 //   command(name, input)      a declared command with a retained operation id (pending ops survive reloads)
 //   edits / inbox             live views of the retained queries
 // The preview server (preview_server.py) supplies the same interface over HTTP for layout checks with real data.
-import { openBrowserOwner } from '@tendriller/core/collaboration/browser';
+import { openBrowserOwner } from '@tendriller/core/browser-owner';
+import { createLiveView } from '@chronolog/peer-session/browser';
 import { createApplicationBackend } from '@chronolog/peer-session/tendriller';
-import { createLiveView } from '../helpers/live-view.mjs';
+import { browserProfileId } from '../helpers/browser-profile.mjs';
 import { createBrowserPairing } from '../pairing-browser.mjs';
 import { createQueryClient, TOPICS } from '../ops-protocol.mjs';
 import { reloadOnOwnerReplaced } from './connection.mjs';
@@ -87,7 +88,7 @@ function commandTracker(session, onChange) {
  */
 export async function createConnection(ui) {
   const configuration = await fetch(new URL('./configuration.json', document.baseURI)).then(r => r.json());
-  const profileId = `natlang-ops-${configuration.applicationId}`;
+  const profileId = browserProfileId(configuration.applicationId);
   const onPublishedOrigin = location.origin === new URL(configuration.page_url).origin;
   const pairing = createBrowserPairing({ configuration, profileId, workerUrl: new URL('./pairing-worker.mjs', document.baseURI) });
   const show = status => ui.pairing(status);
@@ -95,10 +96,10 @@ export async function createConnection(ui) {
     configuration, onPublishedOrigin, pairing, retained: () => pairing.read(),
     async request(newReview = false) { show(await pairing.request({ newReview, signal: AbortSignal.timeout(35000) })); },
     async refresh() { show(await pairing.refresh({ signal: AbortSignal.timeout(15000) })); },
-    async connect() {
+    async connect({ signal } = {}) {
       const identity = window.tendril?.identity;
       const attachment = await openBrowserOwner({ workerUrl: new URL('./worker.mjs', document.baseURI), profileId,
-        applicationId: configuration.applicationId, definitionId: definition.id, definitionVersion: definition.version, timeoutMs: 30000,
+        applicationId: configuration.applicationId, definitionId: definition.id, definitionVersion: definition.version, signal, timeoutMs: 30000,
         context: { viewId: sessionStorage.getItem('ops.view') || (() => { const v = crypto.randomUUID(); sessionStorage.setItem('ops.view', v); return v; })(),
           ...(identity?.documentPath ? { documentPath: identity.documentPath } : {}), ...(identity?.publication ? { publicationId: identity.publication } : {}) },
         // The browser's device owner moved (another tab took it over, or it restarted): reconnect by reloading, at most once a minute.

@@ -1,10 +1,8 @@
 // Node-only private project state. This module is never bundled into the page.
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { createClient, requireServiceOrigin } from '@tendriller/core';
-
 import { homedir } from 'node:os';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createClient, requireServiceOrigin } from '@tendriller/core';
 
 // Private setup state (handle, signer, epoch key, descriptor) lives outside the repository:
 // NATLANG_OPS_PRIVATE, default ~/.local/share/tendriller/natlang-ops-app/private/.

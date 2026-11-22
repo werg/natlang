@@ -3,13 +3,16 @@ import { verifyAuthorityBundle, signTransitionRequest } from '@chronolog/peer-se
 import { openNativeApplication, openNativeDevice } from '@chronolog/peer-session/native';
 import { connectApplicationOwner } from '@chronolog/peer-session/browser';
 import { createApplicationOwner } from '@chronolog/peer-session/worker';
-import { openWebSocketConnection } from '@chronolog/peer-session/websocket';
-import { createPeerIntroductions } from '@tendriller/core/peers';
+import { readTransportDiagnostics } from '@tendriller/core/transport-diagnostics';
+import { participateNativeApplication } from '@tendriller/core/native-rtc';
 import { createDevicePairingClient } from '@tendriller/core/pairing';
-import { attachNativeSession, createNativeAttachmentKey, createNativeSessionSupervisor } from '@tendriller/core/collaboration/native';
+import { attachNativeSession, createNativeAttachmentKey, createNativeSessionSupervisor } from '@tendriller/core/native-owner';
 import { definition } from './domain.mjs';
 import { devicePath, privateDirectory, project, readPrivate, readHostHandle, savePrivate } from './local.mjs';
-import { startPairingWindow, createReviewedPairingProcessor } from './pairing-native.mjs';
+import { watchApplicationSetup } from '@tendriller/core/setup';
+import { createCliLifetime } from './helpers/cli-lifetime.mjs';
+import { superviseParticipant } from './helpers/participant-lifecycle.mjs';
+import { createReviewedPairingProcessor } from './pairing-native.mjs';
 
 function paths(profile = 'main') {
   if (!/^[A-Za-z0-9_-]{1,48}$/u.test(profile)) throw Error('Choose a retained native profile name.');
@@ -37,12 +40,11 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
   const selected = paths(profile);
   let binding = await readPrivate(selected.credential, true);
   if (!binding) binding = await savePrivate(selected.credential, { id: 'local-terminal', token: createNativeAttachmentKey() });
-  // Content-free host wake-ups: a browser asked to pair, or the owner approved one.
-  const notices = new EventTarget();
-  let session, control, pairing, processPairings;
+  let session, control, pairing, processPairings, setupHandle;
   const supervisor = await createNativeSessionSupervisor({ directory: selected.directory, profileId: profile, signal,
     bindings: [binding], openOwner: async () => {
       const { host, handle } = await project({ signal });
+      setupHandle = handle;
       const authority = await host.peers.application({ signal });
       const descriptor = await readPrivate('descriptor.json');
       await verifyAuthorityBundle(authority, descriptor);
@@ -65,23 +67,22 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
         processPairings = createReviewedPairingProcessor({ session, pairing });
         const controlHost = { exchange: (message, options) => host.peers.exchange(message, options) };
         control = session.connectControlParticipant(controlHost);
-        await session.participate({ control, ...createPeerIntroductions({
-          peers: host.peers, identity: session.deviceId,
-          openDirectConnection: async () => { throw Error('TUTORIAL_NATIVE_RTC_NOT_CONFIGURED'); },
-          openRelayConnection: ({ relay, signal }) => openWebSocketConnection(relay, { ready: relay.ready, signal }),
-          onNotice: () => notices.dispatchEvent(new Event('pairing')),
-        }) });
+        participateNativeApplication(session, { peers: host.peers, control });
         signal?.throwIfAborted();
         return createApplicationOwner(session, { host: control });
       } catch (error) { if (session) await session.close(); else await device.close(); throw error; }
     } });
-  return { session, control, supervisor, pairing, processPairings, notices, close: () => supervisor.close() };
+  return { session, control, supervisor, pairing, processPairings,
+    watchSetup: callbacks => watchApplicationSetup({ api: setupHandle.api, token: setupHandle.token, ...callbacks }), close: () => supervisor.close() };
 }
 
-export async function runPeer({ signal, profile = 'main' } = {}) {
+export async function runPeer({ signal, profile = 'main' } = {}, { onOwned, onClosed } = {}) {
   const owned = await openSession({ signal, profile });
-  const pairing = startPairingWindow({ owned, signal, onStatus: status => console.log(JSON.stringify({ pairing: status })) });
+  let lifecycle;
   try {
+    onOwned?.();
+    lifecycle = superviseParticipant({ owned, signal, watch: owned.watchSetup,
+      report: status => console.log(JSON.stringify(status)) });
     console.log(JSON.stringify({ running: true, profile, deviceId: owned.session.deviceId,
       ownerInstanceId: owned.supervisor.ownerInstanceId, terminal: 'tendril --session ./session.mjs --mode attach self' }));
     owned.session.participation.onStatus(status => console.log(JSON.stringify({ connection: status.phase, error: status.error })));
@@ -89,14 +90,18 @@ export async function runPeer({ signal, profile = 'main' } = {}) {
       const snapshot = await owned.session.query('edits', null);
       console.log(JSON.stringify({ edits: snapshot.value.edits.length, revision: snapshot.revision, change: change.kind }));
     }
-  } finally { try { await pairing.close(); } finally { await owned.close(); } }
+  } finally { try { await lifecycle?.close(); } finally { await owned.close(); } onClosed?.(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const stopped = new AbortController();
-  const stop = () => stopped.abort();
-  process.once('SIGINT', stop); process.once('SIGTERM', stop);
-  try { await runPeer({ signal: stopped.signal, profile: process.argv[2] ?? 'main' }); }
-  catch (error) { if (!stopped.signal.aborted) { console.error(`${error.code ?? error.name}: ${error.message}`); process.exitCode = 1; } }
-  finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); }
+  const cli = createCliLifetime();
+  try {
+    if (['status', 'diagnostics'].includes(process.argv[2])) {
+      const attached = await attachSession({ signal: cli.signal, profile: process.argv[3] ?? 'main' }); cli.opened();
+      try { console.log(JSON.stringify(await readTransportDiagnostics(attached.session.participation, { signal: cli.signal }))); }
+      finally { await attached.detach(); cli.closed(); }
+    } else await runPeer({ signal: cli.signal, profile: process.argv[2] ?? 'main' }, { onOwned: cli.opened, onClosed: cli.closed });
+  }
+  catch (error) { cli.fail(error); }
+  process.exit(await cli.finish());
 }

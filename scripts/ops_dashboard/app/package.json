@@ -6,6 +6,8 @@
     "node": ">=24"
   },
   "scripts": {
+    "setup:prepare": "node account-setup.mjs prepare",
+    "setup:finish": "node account-setup.mjs finish",
     "create": "node setup.mjs create",
     "host:adopt": "node host-adoption.mjs",
     "init": "node setup.mjs init",
@@ -15,9 +17,9 @@
     "peer": "node ops-peer.mjs"
   },
   "dependencies": {
-    "@chronolog/peer-session": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/chronolog-peer-session-15573014f4536369d7bd2f8a4b894a0d9fb69812.tgz",
-    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-pr73/tendriller-sdk-0.3.0-rc.16-pr73-752b069.tgz",
-    "@tendriller/tools": "file:../../../../.local/share/tendriller/natlang-ops-app/kit/packages/tendriller-tools-0.3.0-rc.16.tgz"
+    "@chronolog/peer-session": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-rc17/packages/chronolog-peer-session-6f8b00fb3a80854690689be959b1b1c062b0d460.tgz",
+    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-rc17/packages/tendriller-sdk-0.3.0-rc.17.tgz",
+    "@tendriller/tools": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-rc17/packages/tendriller-tools-0.3.0-rc.17.tgz"
   },
   "devDependencies": {
     "esbuild": "0.28.2"
