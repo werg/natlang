@@ -196,22 +196,43 @@ def default_works():
 
 def teacher_episodes(works, held_manifest, funnel, drifted=True):
     """[{key, work, name, task_id, teacher}] of every verified teacher success of WORKs (first WORK wins a key), held
-    closure excluded (``TeacherDemos``' selection without the per-task cap: every episode is data)."""
-    from sft_sources import held_closure, held_excluded_ids, verified_episodes
+    closure excluded (``TeacherDemos``' selection without the per-task cap: every episode is data). A replayed episode
+    names its replay (``name``); an observed-live one (``live_teacher_sources``: Vibestudio campaigns, no portable
+    replay) carries its bound source instead (``verification_mode``, ``live_source``)."""
+    from sft_sources import episode_files, held_closure, held_excluded_ids, verified_episodes
     found, tasks = {}, {}
     for work in works:
-        if not (Path(work) / 'replay.jsonl').exists():
+        if not (Path(work) / 'replay.jsonl').exists() and not episode_files(work):
             continue
         for episode, record in verified_episodes(work, funnel, sources={'teacher'}, drifted=drifted):
-            if episode['key'] in found or not record.get('name'):
+            live = record.get('verification_mode') == 'observed-live'
+            if episode['key'] in found or not (record.get('name') or live):
                 continue
             tasks[episode['task_id']] = episode['task']
-            found[episode['key']] = {'key': episode['key'], 'work': str(work), 'name': record['name'],
+            found[episode['key']] = {'key': episode['key'], 'work': str(work), 'name': record.get('name'),
                                      'task_id': episode['task_id'],
-                                     'teacher': (episode.get('teacher') or {}).get('model_id') or ''}
+                                     'teacher': (episode.get('teacher') or {}).get('model_id') or '',
+                                     **({'verification_mode': 'observed-live', 'live_source': record['live_source']}
+                                        if live else {})}
     excluded = held_excluded_ids(held_manifest, tasks, held_closure(held_manifest))
     funnel['teacher']['held_excluded_filled'] = sum(e['task_id'] in excluded for e in found.values())
     return [e for e in found.values() if e['task_id'] not in excluded]
+
+
+ITEM_KEYS = ('key', 'work', 'name', 'task_id', 'verification_mode', 'live_source')
+
+
+def item_of(record):
+    """The episode a fill record names (``teacher_episodes``' item fields it carries)."""
+    return {k: record[k] for k in ITEM_KEYS if k in record}
+
+
+def open_goal_of(item):
+    """An observed-live open-goal episode's goal (its bound source's interaction), else None."""
+    if item.get('verification_mode') != 'observed-live':
+        return None
+    from live_teacher_sources import load_episode
+    return (load_episode(item['live_source']['path'])['task'].get('interaction') or {}).get('goal')
 
 
 class Renderer:
@@ -225,12 +246,16 @@ class Renderer:
         self.lock = threading.Lock()
 
     def chains(self, item):
+        """(chains, renderer) of an episode: its replayed turns, or an observed-live episode's captured ones (its
+        source checked unchanged, ``sft_sources.candidate_turns``), open-goal chains marked (``mark_open_goal``)."""
         from exp0_sft import chains_of
-        from sft_sources import call_row, replayed_turns
+        from sft_sources import call_row, candidate_turns, mark_open_goal
+        turns = candidate_turns(item['work'], item)
         with self.lock:
-            rows = [call_row(self.renderer, 'teacher', item['key'], index, turn)[0]
-                    for index, turn in enumerate(replayed_turns(item['work'], item['name']))]
-        return chains_of([{'task_id': item['task_id'], 'round': item['key'], 'rows': rows}]), self.renderer
+            rows = [call_row(self.renderer, 'teacher', item['key'], index, turn)[0] for index, turn in enumerate(turns)]
+        chains = chains_of([{'task_id': item['task_id'], 'round': item['key'], 'rows': rows}])
+        mark_open_goal(chains, open_goal_of(item), turns)
+        return chains, self.renderer
 
 
 # ---- the actor -------------------------------------------------------------------------------------------------------
@@ -575,8 +600,7 @@ class Filler:
                 if directory is not None and t >= len(done):
                     save_partial(directory, item['key'], current, out_chains + [{'digest': digest, 'calls': fills}])
             out_chains.append({'digest': digest, 'calls': fills})
-        return {'schema': SCHEMA, 'key': item['key'], 'work': item['work'], 'name': item['name'],
-                'task_id': item['task_id'], 'teacher': item['teacher'], 'render_tokenizer': renderer.tokenizer_dir,
+        return {'schema': SCHEMA, **item_of(item), 'name': item.get('name'), 'teacher': item['teacher'], 'render_tokenizer': renderer.tokenizer_dir,
                 'policy_start': policy_start,
                 'policy_end': self.actor.policy(), 'seconds': round(time.time() - started, 1), 'finished': time.time(),
                 'resumed_steps': resumed,
@@ -601,6 +625,43 @@ def prefer(episodes, rates):
             return (1, 0.)
         return (0, 0.) if s == 0 else (2, s / n)
     return sorted(episodes, key=rank)
+
+
+def ordered(episodes, prefer_works, rates, seed):
+    """The generation order: shuffled (``seed``), tasks the student fails first (``prefer``, with ``rates``), and
+    episodes of the ``prefer_works`` WORKs before every other (stable: each group keeps that order)."""
+    episodes = list(episodes)
+    random.Random(seed).shuffle(episodes)
+    if rates is not None:
+        episodes = prefer(episodes, rates)
+    first = set(prefer_works)
+    return sorted(episodes, key=lambda e: e['work'] not in first)
+
+
+class EpisodeQueue:
+    """The episodes left to fill, shared by the generation's workers. ``add_first`` puts episodes no earlier listing
+    held at the front (a rescan of growing WORKs); a ``standing`` queue waits for them when empty instead of ending."""
+
+    def __init__(self, items, seen=(), standing=False):
+        self.items, self.seen, self.standing = collections.deque(items), set(seen), standing
+        self.seen.update(e['key'] for e in items)
+        self.cond = threading.Condition()
+
+    def next(self):
+        with self.cond:
+            while not self.items:
+                if not self.standing:
+                    return None
+                self.cond.wait()
+            return self.items.popleft()
+
+    def add_first(self, items):
+        new = [e for e in items if e['key'] not in self.seen]
+        with self.cond:
+            self.seen.update(e['key'] for e in new)
+            self.items.extendleft(reversed(new))
+            self.cond.notify_all()
+        return len(new)
 
 
 def settings(args):
@@ -702,7 +763,8 @@ def generate(args):
     from natlang_neuralese.common.code_provenance import code_provenance
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    works = args.work or default_works()
+    prefer_works = [str(w) for w in getattr(args, 'prefer_work', None) or ()]
+    works = list(dict.fromkeys([*prefer_works, *(args.work or default_works())]))
     held = args.held_manifest or data_registry.role_path('held-eval')
     data_registry.consume([*works, held], run=f'filled-reasoning:{out}', how='teacher episodes to fill')
     export = Path(args.export)
@@ -716,12 +778,11 @@ def generate(args):
     funnel = collections.defaultdict(collections.Counter)
     episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on')
     done = done_keys(out)
-    todo = [e for e in episodes if e['key'] not in done]
-    random.Random(args.seed).shuffle(todo)
-    if args.prefer_rates:
-        todo = prefer(todo, load_rates(args.prefer_rates))
+    rates = load_rates(args.prefer_rates) if args.prefer_rates else None
+    todo = ordered([e for e in episodes if e['key'] not in done], prefer_works, rates, args.seed)
     if args.limit:
         todo = todo[:args.limit]
+    queue = EpisodeQueue(todo, seen=done | {e['key'] for e in episodes}, standing=bool(args.rescan_minutes))
     args.partial_dir = None if args.no_partial else out / 'partial'
     if args.partial_dir is not None:
         args.partial_dir.mkdir(exist_ok=True)
@@ -775,8 +836,29 @@ def generate(args):
             fills.flush()
         if args.partial_dir is not None:
             partial_path(args.partial_dir, item['key']).unlink(missing_ok=True)
+    def rescan():
+        """Every ``--rescan-minutes``: the ``--prefer-work`` WORKs' new episodes (a standing ingester extends them)
+        go to the front of the queue; the generation then runs until it is stopped."""
+        while True:
+            time.sleep(60 * args.rescan_minutes)
+            try:
+                found = teacher_episodes(prefer_works, held, collections.defaultdict(collections.Counter),
+                                         drifted=args.admit_drifted == 'on')
+                added = queue.add_first(ordered(found, prefer_works, rates, args.seed))
+                event = {'event': 'rescan', 'works': prefer_works, 'episodes': len(found), 'added': added}
+            except Exception as error:      # a WORK caught mid-extraction: the next rescan reads it again
+                event = {'event': 'rescan failed', 'error': repr(error)[:400]}
+            with write_lock:
+                log.write(json.dumps({**event, 'time': time.time()}) + '\n')
+                log.flush()
+    if args.rescan_minutes and prefer_works:
+        threading.Thread(target=rescan, daemon=True).start()
+
+    def worker():
+        while (item := queue.next()) is not None:
+            one(item)
     with ThreadPoolExecutor(args.workers) as pool:
-        list(pool.map(one, todo))
+        list(pool.map(lambda _: worker(), range(args.workers)))
     log.write(json.dumps({'event': 'end', 'failures': dict(failures), 'skipped': dict(skipped), 'time': time.time()})
               + '\n')
     log.close()
@@ -997,7 +1079,7 @@ def build(args):
         if fill_policies(record) & excluded:   # drawn by a policy the cycle rejected as failed (expert_iteration gate)
             counts['excluded_policy'] += 1
             continue
-        item = {k: record[k] for k in ('key', 'work', 'name', 'task_id')}
+        item = item_of(record)
         try:
             if record['render_tokenizer'] not in renderers:
                 renderers[record['render_tokenizer']] = Renderer(record['render_tokenizer'])
@@ -1018,8 +1100,17 @@ def build(args):
             reweight(chain_rows, filled['calls'], weighting)
             rows += chain_rows
         built = chains_of([{'task_id': record['task_id'], 'round': name, 'rows': rows}])
+        goal = next((c['open_goal_fingerprint'] for c in source if c.get('open_goal_fingerprint')), None)
+        depths = {c['segs'][0][2].get('invocation'): c['open_goal_depth'] for c in source if 'open_goal_depth' in c}
         for chain in built:
             chain['policy'] = record.get('policy_start')
+            if goal:     # an open goal's filled chains count for its exposure as the chains they replace did
+                chain['open_goal_fingerprint'] = goal
+                invocation = chain['segs'][0][2].get('invocation')
+                if invocation in depths:
+                    chain['open_goal_depth'] = depths[invocation]
+            if goal:
+                counts['open_goal_chains'] += 1
             for _, _, row in chain['segs']:
                 row.pop('prompt', None)
         chains += built
@@ -1269,6 +1360,11 @@ def build_parser():
     g.add_argument('--limit', type=int, default=0)
     g.add_argument('--prefer-rates', action='append', default=[],
                    help='task pass rates ({id: {successes, scored}}): episodes of failed tasks first, then unmeasured')
+    g.add_argument('--prefer-work', action='append', default=[], metavar='WORK',
+                   help='a WORK (also read as --work, first) whose episodes are filled before every other WORK\'s')
+    g.add_argument('--rescan-minutes', type=float, default=0.,
+                   help='list the --prefer-work WORKs again this often and queue their new episodes first; the '
+                        'generation then keeps running until stopped (a standing fill beside an ingester)')
     g.add_argument('--max-failures', type=int, default=200)
     g.add_argument('--no-claims', action='store_true',
                    help='do not claim episodes in OUT/claims/ (generators sharing OUT would then draw the same ones)')

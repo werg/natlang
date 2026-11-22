@@ -741,9 +741,42 @@ def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_ex
     return len(rare)
 
 
-def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None):
+LIVE_REGISTRY = 'live-holdout-registry.jsonl'
+
+
+def link_live_works(work, live_works):
+    """Link every extraction of the ``--live-work`` WORKs (observed-live teacher episodes a standing ingester keeps
+    extending, ``live_campaign_ingest.py``) into WORK, as the seed WORKs' are: each round's build then reads the
+    extractions present when it prepares, without a restart. Returns the number of new links."""
+    n = 0
+    for live in map(Path, live_works):
+        for f in sorted(live.glob('episodes*.jsonl.zst')):
+            link = Path(work) / f'{f.name[:-len(".jsonl.zst")]}-{live.name}.jsonl.zst'
+            if not link.is_symlink() and not link.exists():
+                os.symlink(f.resolve(), link)
+                n += 1
+    return n
+
+
+def live_holdout_registry(live_works):
+    """The open-goal holdout registry (catalog copy) the ``--live-work`` WORKs carry, for the build's
+    ``--live-holdout-registry`` (an open-goal episode trains only against its catalog's registration), or None."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    found = {}
+    for live in map(Path, live_works):
+        path = live / LIVE_REGISTRY
+        if path.exists():
+            found.setdefault(sha256_file_hex(path), path)
+    if len(found) > 1:
+        raise SystemExit(f'--live-work WORKs carry {len(found)} different holdout registries; the build takes one')
+    return next(iter(found.values()), None)
+
+
+def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
+                      live_registry=None):
     """The mix build (``sft_sources build``) of a cycle or an async round: Ambient frontier build from WORK's replayed
-    successes (own first, then teacher), the teacher pools, aux parts and the lineage's prefer-unseen builds."""
+    successes (own first, then teacher; observed-live teacher episodes against ``live_registry``), the teacher pools,
+    aux parts and the lineage's prefer-unseen builds."""
     return [PY, Path(repo) / 'scripts' / 'neuralese_data' / 'sft_sources.py', 'build', '--work', work,
             '--out', out, '--tokenizer', Path(work) / 'tokenizer', '--frontier', frontier,
             '--allow-stale-teacher', '--october-share', '0', '--exclude-run', 'grpo-v2/',
@@ -752,7 +785,8 @@ def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_
             *[x for p in TEACHER_POOLS for x in ('--teacher-pool', p)],
             *[x for a in aux for x in ('--aux', a)],
             *[x for b in prefer_unseen for x in ('--prefer-unseen', b)],
-            *(['--previous-policy', previous_policy] if previous_policy else [])]
+            *(['--previous-policy', previous_policy] if previous_policy else []),
+            *(['--live-holdout-registry', live_registry] if live_registry else [])]
 
 
 def judge(vs_start, success_pts, fail_pts):
@@ -1395,7 +1429,8 @@ class Cycle:
         draws at most 4 candidates at a time and scores between them). In the fill window the dedicated actor's every
         slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes)."""
         from natlang_neuralese.common import data_registry
-        works = list(dict.fromkeys([*map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
+        live = [str(w) for w in getattr(self.a, 'live_work', None) or ()]
+        works = list(dict.fromkeys([*live, *map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
         rates = self.dir / 'tasks.rates.json'
         if pop:
             n = self.a.pop_fill_running
@@ -1410,6 +1445,9 @@ class Cycle:
                 *map(str, ['--out', self.a.fill, '--sglang', actor['sglang'], '--front', actor['url'],
                            '--render-tokenizer', self.work / 'tokenizer', '--export', actor['export'], *share,
                            *[x for w in works for x in ('--work', w)],
+                           # the live WORKs' episodes first, and their new ones as the ingester adds them
+                           *[x for w in live for x in ('--prefer-work', w)],
+                           *(('--rescan-minutes', 30) if live else ()),
                            *(('--prefer-rates', rates) if rates.exists() else ())])]
 
     def stop_unit(self, unit):
@@ -1460,6 +1498,7 @@ class Cycle:
                     link = w / f'{f.name[:-len(".jsonl.zst")]}-{old.name}.jsonl.zst'
                     if not link.exists():
                         os.symlink(f.resolve(), link)
+        link_live_works(w, getattr(self.a, 'live_work', None) or ())
         name = f'episodes-{self.a.name}'
         if not (w / f'{name}-extract.json').exists():
             steps.append(self.py('sft_sources.py', 'extract', '--work', w, '--rl',
@@ -1516,7 +1555,8 @@ class Cycle:
         repo = Path(getattr(self.a, 'data_repo', None) or self.pin)
         command = mix_build_command(repo, work=self.work, out=self.mix, frontier=self.dir / 'frontier.json', aux=aux,
                                     prefer_unseen=self.train_policy()[2], teacher_budget=self.a.teacher_budget,
-                                    own_share=self.a.own_share)
+                                    own_share=self.a.own_share,
+                                    live_registry=live_holdout_registry(getattr(self.a, 'live_work', None) or ()))
         return repo, list(map(str, command))
 
     def build_stage(self):
@@ -2160,7 +2200,7 @@ class AsyncRoundDriver:
         a = self.a
         return argparse.Namespace(
             dir=str(self.root), name=a.name, start=a.start, start_sha=a.start_sha or BASE_SHA, commit=a.commit,
-            pin=a.pin, sft_work=a.sft_work, seed_work=a.seed_work, k=a.k, collect_hours=a.collect_hours, slots=a.slots,
+            pin=a.pin, sft_work=a.sft_work, seed_work=a.seed_work, live_work=a.live_work, k=a.k, collect_hours=a.collect_hours, slots=a.slots,
             kv_gb=a.kv_gb, fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts, held_profile='dgx',
@@ -2323,7 +2363,8 @@ class AsyncRoundDriver:
         build = mix_build_command(self.c.pin, work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
                                   aux=aux, prefer_unseen=self.controller.state['prefer_unseen'],
                                   teacher_budget=self.a.teacher_budget, own_share=self.a.own_share,
-                                  previous_policy=prev['sha256'] if prev else None)
+                                  previous_policy=prev['sha256'] if prev else None,
+                                  live_registry=live_holdout_registry(self.a.live_work))
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 
     def failed_policies(self):
@@ -2356,6 +2397,9 @@ class AsyncRoundDriver:
             time.sleep(60)
         for d in self.collections_of(policies):
             record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
+        # the live WORKs' extractions so far (the ingester keeps adding waves; each round takes what is there)
+        if self.a.live_work:
+            self.note(live_links=link_live_works(self.c.work, self.a.live_work))
         frontier, lines, build = self.prepare_plan(round_dir, policies)
         self.c.ledger(f'{self.a.name}-{round_dir.name}-frontier', 4, 'medium', frontier, round_dir / 'frontier.log')
         self.c.work_tokenizer()
@@ -2790,6 +2834,8 @@ def main():
     y.add_argument('--pin')
     y.add_argument('--sft-work', default=str(root('data_nvme') / 'ei-sources'), help='sft_sources WORK shared by the cycles')
     y.add_argument('--seed-work', action='append', default=[], help='earlier sft_sources WORKs: verdicts and extractions')
+    y.add_argument('--live-work', action='append', default=[], metavar='WORK',
+                   help='a growing WORK of observed-live teacher episodes (live_campaign_ingest.py; async-drive\'s flag)')
     y.add_argument('--select-args', default='', help='more select flags (e.g. "--limit 3000")')
     y.add_argument('--k', type=int, default=4)
     y.add_argument('--neuralese-variants', default=str(REPO / 'runs/natlang-rl-neuralese-variants-20261113/cases.jsonl'),
@@ -2930,6 +2976,10 @@ def main():
     ad.add_argument('--held-pin', help='pin of the held series (default --pin)')
     ad.add_argument('--sft-work', default=str(root('data_nvme') / 'ei-sources'))
     ad.add_argument('--seed-work', action='append', default=[], help='earlier sft_sources WORKs (fill sources)')
+    ad.add_argument('--live-work', action='append', default=[], metavar='WORK',
+                    help='a growing WORK of observed-live teacher episodes (live_campaign_ingest.py): each round links '
+                         'its extractions into --sft-work and builds against its holdout registry; the fill takes '
+                         'its episodes first and rescans it')
     ad.add_argument('--sft-profile', choices=('colab', 'dgx'), default='dgx',
                     help='where rounds train: colab (a reachable Colab session, DGX takeover after '
                          '--fallback-wait-minutes) or dgx')
