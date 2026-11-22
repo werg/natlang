@@ -15,7 +15,9 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'scripts/neuralese_data'))
 import grpo  # noqa: E402
 
-REAL_RUN = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/grpo-v5/run1')
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+REAL_RUN = Path(resolve('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'grpo-v5', 'run1'))
 
 
 def same(a, b, where='payload'):
