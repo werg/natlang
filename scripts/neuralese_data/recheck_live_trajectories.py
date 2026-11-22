@@ -147,6 +147,27 @@ def structural_coverage(manifests):
             'unreadable_manifests': rejected}
 
 
+def catalog_coverage(catalog_path, entries_path):
+    """Count declared application entries separately from observed learned behavior."""
+    entries = read(entries_path)
+    programs, signatures, splits = Counter(), Counter(), Counter()
+    missing = []
+    goals = set()
+    for row in map(json.loads, Path(catalog_path).read_text().splitlines()):
+        kind = row.get('kind') or row.get('family', '').removeprefix('workspace-open-user-goal-')
+        entry = row.get('entry') or entries.get(kind)
+        splits[row.get('split', 'unknown')] += 1
+        if not entry:
+            missing.append(row['scenario'])
+            continue
+        programs[entry['program']] += 1
+        signatures[entry.get('resultType', 'unknown')] += 1
+        if row.get('goalSha256'):
+            goals.add(row['goalSha256'])
+    return {'declared_task_entries': dict(programs), 'declared_return_types': dict(signatures),
+            'task_splits': dict(splits), 'distinct_goal_hashes': len(goals), 'unmapped_tasks': missing}
+
+
 def audit_captures(captures, catalog_path):
     """Inventory every outcome without using whole-run failure as a data deletion rule."""
     catalog = {row['scenario']: row for row in map(json.loads, Path(catalog_path).read_text().splitlines())}
@@ -203,6 +224,8 @@ def main():
     coverage = commands.add_parser('coverage')
     coverage.add_argument('manifests', type=Path, nargs='+')
     coverage.add_argument('--out', type=Path, required=True)
+    coverage.add_argument('--catalog', type=Path)
+    coverage.add_argument('--entries', type=Path)
     audit = commands.add_parser('audit')
     audit.add_argument('captures', type=Path, nargs='+')
     audit.add_argument('--catalog', type=Path, required=True)
@@ -212,6 +235,10 @@ def main():
         print(json.dumps(recover(args.packet, args.pins, args.assessment, args.catalog, args.held, args.out)))
     elif args.command == 'coverage':
         result = structural_coverage(args.manifests)
+        if args.catalog or args.entries:
+            if not args.catalog or not args.entries:
+                parser.error('catalog coverage needs both --catalog and --entries')
+            result['catalog'] = catalog_coverage(args.catalog, args.entries)
         args.out.write_text(json.dumps(result, indent=2) + '\n')
         print(json.dumps({'episodes': result['episodes'], 'entries': len(result['entry_points']),
                           'functions': len(result['learned_functions']), 'unreadable': len(result['unreadable_manifests'])}))

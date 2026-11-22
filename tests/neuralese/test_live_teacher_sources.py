@@ -498,3 +498,19 @@ def test_rejection_inventory_keeps_all_failed_calls_visible(tmp_path):
     assert audit['observed_functions'] == {'createDraft': 1}
     assert audit['captures'][0]['status'] == 'requires-independent-reassessment'
     assert json.loads(original.read_text()) == packet
+
+
+def test_declared_entry_coverage_is_separate_from_learned_behavior(tmp_path):
+    from recheck_live_trajectories import catalog_coverage
+    catalog = tmp_path / 'catalog.jsonl'
+    catalog.write_text('\n'.join(json.dumps(row) for row in [
+        {'scenario': 'draft-a', 'family': 'workspace-open-user-goal-draft', 'goalSha256': 'a', 'split': 'train'},
+        {'scenario': 'draft-b', 'family': 'workspace-open-user-goal-draft', 'goalSha256': 'b', 'split': 'test'},
+        {'scenario': 'missing', 'family': 'other', 'split': 'train'}]) + '\n')
+    entries = tmp_path / 'entries.json'
+    entries.write_text(json.dumps({'draft': {'program': 'skills/draft/reconcile.nl', 'resultType': 'ProposedRevision'}}))
+    result = catalog_coverage(catalog, entries)
+    assert result['declared_task_entries'] == {'skills/draft/reconcile.nl': 2}
+    assert result['declared_return_types'] == {'ProposedRevision': 2}
+    assert result['task_splits'] == {'train': 2, 'test': 1}
+    assert result['unmapped_tasks'] == ['missing']
