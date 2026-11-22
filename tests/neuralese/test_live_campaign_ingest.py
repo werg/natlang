@@ -140,3 +140,16 @@ def test_partial_decisions_never_reserve_a_whole_goal_or_displace_completed_data
     assert [row['task_completed'] for row in records] == [False, True, False]
     assert dropped == {'duplicate_episode': 1}
     assert seen_goals == {sft_sources.open_goal_key('Same user goal')}
+
+
+def test_evidence_only_completed_trajectory_does_not_reserve_goal(monkeypatch):
+    monkeypatch.setattr(sft_sources, 'held_excluded_ids', lambda *args: set())
+    monkeypatch.setattr(sft_sources, 'require_registered_open_goal', lambda *args: None)
+    def load(path):
+        return {'key': str(path), 'task_id': 'registered-task', 'turns': [] if path == 'evidence' else [1],
+                'task': {'source_groups': ['registered-source'], 'interaction': {'goal': 'Same user goal'}},
+                'trajectory_ir': {'outcome': {'task_completed': True}}}
+    kept, records, dropped = ing.select(['evidence', 'usable'], 'held', set(), {}, set(), set(), load=load)
+    assert kept == ['evidence', 'usable']
+    assert [row['decisions'] for row in records] == [0, 1]
+    assert dropped == {}

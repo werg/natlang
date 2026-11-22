@@ -106,11 +106,12 @@ def select(manifests, held_manifest, held, training, seen_keys, seen_goals, load
             dropped['duplicate_episode'] += 1
             continue
         completed = (episode.get('trajectory_ir') or {}).get('outcome', {}).get('task_completed', True)
-        if completed and open_goal_key(goal) in seen_goals:
+        supervised = bool(episode['turns'])
+        if completed and supervised and open_goal_key(goal) in seen_goals:
             dropped['repeated_open_goal'] += 1
             continue
         seen_keys.add(episode['key'])
-        if completed:
+        if completed and supervised:
             seen_goals.add(open_goal_key(goal))
         kept.append(path)
         records.append({'key': episode['key'], 'task_id': episode['task_id'], 'goal': open_goal_key(goal),
@@ -134,7 +135,7 @@ def ingest_once(campaign, work, held_manifest=None, extract=None):
         earlier = ingested(work)
         done = {r['directory'] for r in earlier}
         seen_keys = {e['key'] for r in earlier for e in r['episodes']}
-        seen_goals = {e['goal'] for r in earlier for e in r['episodes'] if e.get('task_completed', True)}
+        seen_goals = {e['goal'] for r in earlier for e in r['episodes'] if e.get('task_completed', True) and e.get('decisions', 1) > 0}
         batch = []
         for directory in committed(campaign):
             if directory.name in done:

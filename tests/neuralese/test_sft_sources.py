@@ -991,3 +991,16 @@ def test_partial_actions_do_not_displace_completed_demonstrations_for_same_goal(
     selected = s.distinct_candidates([partial, complete, repeated], 0.8, funnel)
     assert [row['key'] for row in selected] == ['complete', 'partial']
     assert funnel['teacher']['repeated_open_goal'] == 1
+
+
+def test_evidence_only_live_episodes_do_not_enter_supervised_candidates(monkeypatch, tmp_path):
+    import types
+    monkeypatch.setattr(s, 'verified_episodes', lambda *args, **kwargs: iter([
+        ({'source': 'teacher', 'verification_mode': 'observed-live', 'turns': []}, {})]))
+    monkeypatch.setattr(s, 'teacher_coverage', lambda *args: (0, []))
+    monkeypatch.setattr(s, 'held_excluded_ids', lambda *args: set())
+    args = types.SimpleNamespace(teacher_pool=[], allow_stale_teacher=False, held_manifest='held')
+    funnel = collections.defaultdict(collections.Counter)
+    candidates, _ = s.core_candidates(args, tmp_path, funnel, set())
+    assert candidates == []
+    assert funnel['teacher']['observed_evidence_without_supervised_targets'] == 1

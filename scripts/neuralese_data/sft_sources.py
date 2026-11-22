@@ -1480,6 +1480,9 @@ def core_candidates(args, work, funnel, held):
     for episode, record in verified_episodes(work, funnel, extracted, drifted=getattr(args, 'admit_drifted', 'on') == 'on',
                                              workers=getattr(args, 'workers', None) or 1, light=True):
         source = episode['source']
+        if episode.get('verification_mode') == 'observed-live' and not episode['turns']:
+            funnel[source]['observed_evidence_without_supervised_targets'] += 1
+            continue  # Keep the native trajectory in the corpus, without reserving a learner task slot.
         if source == 'rl-own' and episode.get('role') == 'teacher':
             source = 'jolt-guided'
         facts = episode.get('facts') or episode_facts(episode['turns'])
