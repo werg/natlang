@@ -124,3 +124,19 @@ def test_rounds_link_the_live_works_build_against_their_registry_and_fill_them_f
     with pytest.raises(SystemExit, match='different holdout registries'):
         ei.live_holdout_registry([live, tmp_path / 'other'])
     assert ei.live_holdout_registry([tmp_path]) is None
+
+
+def test_partial_decisions_never_reserve_a_whole_goal_or_displace_completed_data(monkeypatch):
+    monkeypatch.setattr(sft_sources, 'held_excluded_ids', lambda *args: set())
+    monkeypatch.setattr(sft_sources, 'require_registered_open_goal', lambda *args: None)
+    def load(path):
+        return {'key': str(path), 'task_id': 'registered-task', 'turns': [1],
+                'task': {'source_groups': ['registered-source'], 'interaction': {'goal': 'Same user goal'}},
+                'trajectory_ir': {'outcome': {'task_completed': str(path) == 'complete'}}}
+    seen_keys, seen_goals = set(), set()
+    kept, records, dropped = ing.select(['partial-before', 'complete', 'partial-after', 'complete'],
+        'held', set(), {}, seen_keys, seen_goals, load=load)
+    assert kept == ['partial-before', 'complete', 'partial-after']
+    assert [row['task_completed'] for row in records] == [False, True, False]
+    assert dropped == {'duplicate_episode': 1}
+    assert seen_goals == {sft_sources.open_goal_key('Same user goal')}

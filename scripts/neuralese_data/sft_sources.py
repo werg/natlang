@@ -1492,7 +1492,8 @@ def core_candidates(args, work, funnel, held):
                            'teacher': (episode.get('teacher') or {}).get('model_id'), 'policy': episode.get('policy'),
                            'policies': ep_policies,
                            'name': record['name'],
-                           **({'live_source': record['live_source'], 'world': episode['world'], 'verification_mode': 'observed-live'}
+                           **({'live_source': record['live_source'], 'world': episode['world'], 'verification_mode': 'observed-live',
+                               'task_completed': (episode.get('trajectory_ir') or {}).get('outcome', {}).get('task_completed', True)}
                               if record.get('verification_mode') == 'observed-live' else {}),
                            'open_goal': task['interaction']['goal']
                            if record.get('verification_mode') == 'observed-live' and task.get('interaction') else None,
@@ -2062,6 +2063,26 @@ def publish_sft_rows(rows, mix, minimum_open_goal_share):
     rows.close()
 
 
+def distinct_candidates(core, threshold, funnel):
+    """Prefer whole successful demonstrations, while keeping distinct independently checked partial actions."""
+    core = sorted(core, key=lambda c: (not bool(c.get('open_goal')), c.get('task_completed') is False, c['source'] != 'teacher'))
+    dedup = NearDuplicates(threshold)
+    unique = []
+    seen_goals = set()
+    for c in core:
+        goal = open_goal_key(c['open_goal']) if c.get('open_goal') else None
+        if c.get('task_completed') is not False and goal in seen_goals:
+            funnel[c['source']]['repeated_open_goal'] += 1
+        elif dedup.seen(c['signature']):
+            funnel[c['source']]['near_duplicate'] += 1
+        else:
+            unique.append(c)
+            if goal is not None and c.get('task_completed') is not False:
+                seen_goals.add(goal)
+
+    return unique
+
+
 def build(args):
     data_registry.require_registered(build_inputs(args))
     import random
@@ -2123,20 +2144,7 @@ def build(args):
             kept.append(c)
     core = kept
     rng.shuffle(core)
-    core.sort(key=lambda c: (not bool(c.get('open_goal')), c['source'] != 'teacher'))
-    dedup = NearDuplicates(args.dup_threshold)
-    unique = []
-    seen_goals = set()
-    for c in core:
-        goal = open_goal_key(c['open_goal']) if c.get('open_goal') else None
-        if goal in seen_goals:
-            funnel[c['source']]['repeated_open_goal'] += 1
-        elif dedup.seen(c['signature']):
-            funnel[c['source']]['near_duplicate'] += 1
-        else:
-            unique.append(c)
-            if goal is not None:
-                seen_goals.add(goal)
+    unique = distinct_candidates(core, args.dup_threshold, funnel)
 
     constructs = {task_id: task_constructs(task) for task_id, task in tasks.items()}
 

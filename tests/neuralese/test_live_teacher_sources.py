@@ -561,7 +561,7 @@ def test_entry_rejects_boolean_number_alias_and_missing_exact_json():
     ('return_result', {'status': 'success', 'value': {'incorrectReceipt': True}}),
     ('eval', {'code': 'return {incorrectReceipt: true}', 'finish': True}),
 ])
-def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp_path, terminal_tool, terminal_args, retain_prior_action):
+def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp_path, terminal_tool, terminal_args, retain_prior_action, monkeypatch):
     path, spec, detail, verification = fixture(tmp_path)
     open_goal(detail, spec, verification)
     detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
@@ -586,3 +586,23 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
     assert decisions[-1]['training_admission'] == {'approved': False,
         'reason': 'application return failed independent outcome checks'}
     assert episode['trajectory_ir']['outcome']['task_completed'] is True
+    # Extraction stores native IR; SFT and student reasoning fill must project the same masked targets.
+    import sft_sources
+    extracted = copy.deepcopy(episode)
+    del extracted['turns']
+    assert sft_sources._episode_view(extracted, False)['turns'] == episode['turns']
+    candidate = {'verification_mode': 'observed-live', 'live_source': episode['live_source'],
+                 'key': episode['key'], 'task_id': episode['task_id'], 'work': str(tmp_path)}
+    assert len(sft_sources.candidate_turns(tmp_path, candidate)) == int(retain_prior_action)
+    import filled_reasoning
+    import exp0_sft
+    import threading
+    monkeypatch.setattr(sft_sources, 'call_row', lambda renderer, source, key, index, turn: (turn['target'], 0))
+    monkeypatch.setattr(exp0_sft, 'chains_of', lambda episodes: episodes[0]['rows'])
+    monkeypatch.setattr(sft_sources, 'mark_open_goal', lambda *args: None)
+    renderer = object.__new__(filled_reasoning.Renderer)
+    renderer.renderer, renderer.lock = object(), threading.Lock()
+    chains, _ = renderer.chains(candidate)
+    assert len(chains) == int(retain_prior_action)
+    assert all('terminal-id' not in json.dumps(chain) for chain in chains)
+

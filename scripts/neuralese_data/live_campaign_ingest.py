@@ -12,8 +12,8 @@ validator and effect artifacts checked):
      test open goals added (``live_holdout_registry``), dropped as ``held``;
   2. the goal must match the catalog's training registration (``require_registered_open_goal``: id, source groups,
      goal hash), else ``unregistered_open_goal``;
-  3. an episode key already ingested (``duplicate_episode``) or a goal already ingested (``repeated_open_goal``: the
-     build keeps one trajectory per goal) is dropped.
+  3. an episode key already ingested (``duplicate_episode``) or a completed goal already ingested (``repeated_open_goal``). Independently checked partial decisions
+     use episode identity and never reserve a whole goal is dropped.
 
 A scan's kept manifests are extracted together by ``sft_sources.extract --live-run`` into
 ``WORK/episodes-<first directory with episodes>.jsonl.zst`` (extract registers the WORK with the manifests as inputs;
@@ -105,14 +105,16 @@ def select(manifests, held_manifest, held, training, seen_keys, seen_goals, load
         if episode['key'] in seen_keys:
             dropped['duplicate_episode'] += 1
             continue
-        if open_goal_key(goal) in seen_goals:
+        completed = (episode.get('trajectory_ir') or {}).get('outcome', {}).get('task_completed', True)
+        if completed and open_goal_key(goal) in seen_goals:
             dropped['repeated_open_goal'] += 1
             continue
         seen_keys.add(episode['key'])
-        seen_goals.add(open_goal_key(goal))
+        if completed:
+            seen_goals.add(open_goal_key(goal))
         kept.append(path)
         records.append({'key': episode['key'], 'task_id': episode['task_id'], 'goal': open_goal_key(goal),
-                        'decisions': len(episode['turns'])})
+                        'decisions': len(episode['turns']), 'task_completed': completed})
     return kept, records, dropped
 
 
@@ -132,7 +134,7 @@ def ingest_once(campaign, work, held_manifest=None, extract=None):
         earlier = ingested(work)
         done = {r['directory'] for r in earlier}
         seen_keys = {e['key'] for r in earlier for e in r['episodes']}
-        seen_goals = {e['goal'] for r in earlier for e in r['episodes']}
+        seen_goals = {e['goal'] for r in earlier for e in r['episodes'] if e.get('task_completed', True)}
         batch = []
         for directory in committed(campaign):
             if directory.name in done:

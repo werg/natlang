@@ -978,3 +978,16 @@ def test_unfilled_live_teacher_episodes_train_only_through_their_filled_unit():
     assert s.drop_unfilled_live(chains, 'auto', [s.parse_aux('live=/l.pkl')]) == (chains, 0)
     assert s.drop_unfilled_live(chains, 'train', filled) == (chains, 0)
     assert s.drop_unfilled_live(chains, 'drop', [])[1] == 1
+
+
+def test_partial_actions_do_not_displace_completed_demonstrations_for_same_goal():
+    def candidate(key, text, completed):
+        return {'key': key, 'source': 'teacher', 'open_goal': 'Same goal', 'task_completed': completed,
+                'signature': s.minhash(s.shingles(text))}
+    partial = candidate('partial', 'inspect independently bound original source and verify current revision', False)
+    complete = candidate('complete', 'write requested correction then read persisted application output', True)
+    repeated = candidate('repeated', 'a wholly different successful path for same user goal', True)
+    funnel = collections.defaultdict(collections.Counter)
+    selected = s.distinct_candidates([partial, complete, repeated], 0.8, funnel)
+    assert [row['key'] for row in selected] == ['complete', 'partial']
+    assert funnel['teacher']['repeated_open_goal'] == 1
