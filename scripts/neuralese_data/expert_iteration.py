@@ -2261,10 +2261,13 @@ class AsyncRoundDriver:
                           work / 'collect.log', detach=True)
             self.note(remote_collection=unit, host=host, endpoint=endpoint)
 
-    def stop_collections(self):
+    def stop_collections(self, *, remote=True):
+        """Stop the DGX collections and their fills (they hold the GPU the DGX learner needs) and, with ``remote``,
+        the remote actors' collection clients too."""
         for work in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
             unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
-            for u in (unit, f'{unit}-fill', *(f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor)))):
+            remotes = [f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor))] if remote else []
+            for u in (unit, f'{unit}-fill', *remotes):
                 if self.c.active(u):
                     self.c.stop_unit(u)
 
@@ -2458,6 +2461,9 @@ class AsyncRoundDriver:
                 return factors
         unit = f'{self.a.name}-{round_dir.name}-sft'
         if not self.c.active(unit):
+            # the standing DGX collection is a high-priority claim too (74 GB beside a ~100 GB learner on 128 GB):
+            # the ledger does not preempt it for the SFT, so it yields here; the next round's collection restarts it
+            self.stop_collections(remote=False)
             self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
         self.c.wait(unit, poll=120)
         if not (factors / 'policy_manifest.json').exists():
