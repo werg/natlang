@@ -374,7 +374,7 @@ def test_claims_keep_generators_sharing_out_on_disjoint_episodes(tmp_path):
     path = next(tmp_path.glob('*.claim'))
     path.write_text(json.dumps({'pid': 1, 'host': os.uname().nodename}))       # pid 1 is not a generator: stale
     assert fr.claim(tmp_path, 'e1')
-    path.write_text(json.dumps({'pid': os.getpid(), 'host': 'pop-os'}))       # another host's live claim
+    path.write_text(json.dumps({'pid': os.getpid(), 'host': 'elsewhere'}))       # another host's live claim
     assert not fr.claim(tmp_path, 'e1')
     fr.release(tmp_path, 'e1')
     assert fr.claim(tmp_path, 'e1')

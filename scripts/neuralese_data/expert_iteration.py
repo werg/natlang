@@ -763,9 +763,11 @@ class Cycle:
         if self.done('data'):
             return
         if not self.active(tunnel):
+            import pop_rl_actor
             subprocess.run(['systemd-run', '--user', '--unit', tunnel, '--collect', '/usr/bin/ssh', '-N', '-o',
                             'ExitOnForwardFailure=yes', '-o', 'ServerAliveInterval=30', '-L',
-                            f'{self.POP_FILL_PORT}:127.0.0.1:19531', 'pop-os'], check=True)
+                            f'{self.POP_FILL_PORT}:127.0.0.1:{pop_rl_actor.RL_PORT + 1000}', pop_rl_actor.POP],
+                           check=True)
             time.sleep(5)
         collected = json.loads((self.collect_dir / 'actor.json').read_text())
         actor = {'url': state['endpoint'], 'sglang': f'http://127.0.0.1:{self.POP_FILL_PORT}',
