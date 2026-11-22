@@ -400,7 +400,11 @@ def test_held_pin_measures_on_its_harness_and_is_carried_to_the_next_cycle(tmp_p
             '--commit', 'c' * 40, '--pin', '/pin-new', '--held-pin', '/pin-held']
     cycle = ei.Cycle(_cycle_args(argv))
     monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
+    import pop_rl_actor
+    stopped = []
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: stopped.append(1))
     cycle.pop_held('candidate', tmp_path / 'c.pt')
+    assert stopped                     # a measurement first stops any Pop fill
     assert calls[-1][0][2] == '/pin-held' and calls[-1][1] is None
     assert cycle.held_env['NATLANG_REPO'] == '/pin-held' and cycle.env['NATLANG_REPO'] == '/pin-new'
     out = ei.next_cycle_argv(argv, directory='/sft-v9', name='sft-v9', start='/v8.pt', start_sha='ccc', commit='d' * 40,
@@ -494,3 +498,24 @@ def test_held_interval_doubles_on_success_and_resets_otherwise(tmp_path, previou
     cycle.a.held_every, cycle.a.held_every_max, cycle.a.since_held = 2, 8, 0
     assert cycle.held_schedule() == expected
     assert cycle.measured() == (expected[0] + 1 >= expected[1])
+
+
+def test_pop_serves_stop_earlier_pop_fills(monkeypatch):
+    import pop_rl_actor
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        out = 'sft-v8-popfill.service loaded active running x\nsft-v8-popfill-tunnel.service loaded active running y\n'
+        return type('R', (), {'stdout': out if argv[:2] == ['systemctl', '--user'] and argv[2] == 'list-units' else '',
+                              'returncode': 0})()
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', run)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    pop_rl_actor.stop_pop_fills()
+    stopped = [a[-1] for a in calls if a[:3] == ['systemctl', '--user', 'stop']]
+    assert stopped == ['sft-v8-popfill-waiter.service', 'sft-v8-popfill.service',
+                       'sft-v8-popfill-tunnel-waiter.service', 'sft-v8-popfill-tunnel.service']
+    monkeypatch.setattr(pop_rl_actor, 'ssh', lambda *a, **k: '')
+    calls.clear()
+    pop_rl_actor.stop_pop_actors()
+    assert any(a[:3] == ['systemctl', '--user', 'stop'] for a in calls)

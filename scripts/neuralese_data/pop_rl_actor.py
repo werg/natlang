@@ -468,6 +468,7 @@ def start(args):
             and attested(previous['endpoint'], args.policy_id, adapters)):
         log(event='Pop RL actor already serves the policy', endpoint=previous['endpoint'])
         return previous
+    stop_pop_fills()
     if previous:
         stop_unit(previous)
     host = args.bind_host or pop_host_address()
@@ -555,8 +556,26 @@ def pop_actor_units():
     return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
 
 
+def pop_fill_units():
+    """DGX units drawing fills from Pop's server (expert_iteration ``<cycle>-popfill`` and its tunnel)."""
+    out = subprocess.run(['systemctl', '--user', 'list-units', '*-popfill.service', '*-popfill-tunnel.service',
+                          '--state=active,activating', '--plain', '--no-legend'], capture_output=True, text=True).stdout
+    return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+
+
+def stop_pop_fills():
+    """A cycle's Pop fill runs on until Pop serves something else (DECISIONS 2026-11-22 "Pop fills through build"):
+    every serve stops it first, so no fill draws from a policy it did not start on."""
+    for unit in pop_fill_units():
+        subprocess.run(['/usr/bin/python3', LEDGER, 'cancel', '--unit', unit], stderr=subprocess.DEVNULL)
+        for suffix in ('-waiter', ''):
+            subprocess.run(['systemctl', '--user', 'stop', f'{unit}{suffix}.service'], stderr=subprocess.DEVNULL)
+        log(event='stopped Pop fill', unit=unit)
+
+
 def stop_pop_actors():
     """Stop every Pop actor unit and wait until the GPU has no compute process (the driver refuses a busy GPU)."""
+    stop_pop_fills()
     for unit in pop_actor_units():
         stop_unit({'unit': unit})
     for _ in range(45):

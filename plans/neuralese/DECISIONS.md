@@ -6663,3 +6663,12 @@ a long episode).
 - **Served.** `served` points back at build-v2. Both builds are fit on 5ff07638, while `ops/current-policy.json` now names
   sft-v6 (dc95f29d), so a served operator state needs a refit on whichever policy serves. `plan-v3-sftv7.json` (sft-v7
   candidate) is written; the next fit takes all 448 rows with about 165 steps on that policy.
+
+## 2026-11-22 04:50 Pop fills through build and SFT
+
+- Pop sat idle from each cycle's data stage until the next cycle's popbase or fill (sft-v8: since 04:10, the build
+  and SFT take ~2-3 h). Fills go to the shared `--fill` directory, so draws after the data stage feed the next cycle's
+  mix (one policy step stale, as the DGX fill window already is). The Pop fill now runs on past the data stage
+  (`--pop-fill-stop-at-data` opts out); every Pop serve stops it first (`pop_rl_actor.stop_pop_fills` in `start` and
+  `stop_pop_actors`, and in expert_iteration's held measurement and Pop fill, whose held pin may predate it), so no fill
+  draws from a policy it did not start on. sft-v8's Pop fill restarted by hand on 9ebc for the rest of its build/SFT.

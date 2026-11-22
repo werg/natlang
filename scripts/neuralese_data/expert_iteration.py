@@ -537,6 +537,8 @@ class Cycle:
             return out
         if self.reuse_held(out, checkpoint):
             return out
+        import pop_rl_actor
+        pop_rl_actor.stop_pop_fills()       # the held pin's pop_rl_actor may predate the stop in its serves
         mode = ['base', str(out), str(self.a.held_samples)] if checkpoint == BASE_CKPT else \
             ['ckpt', str(out), str(self.a.held_samples), str(checkpoint)]
         out.mkdir(parents=True, exist_ok=True)
@@ -775,6 +777,8 @@ class Cycle:
                 return
             time.sleep(60)
         checkpoint, sha = self.collect_policy()
+        import pop_rl_actor
+        pop_rl_actor.stop_pop_fills()       # an earlier cycle's fill (the held pin's actor may predate the stop)
         actor_py = [PY, str(self.held_pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
         try:
             subprocess.run([*actor_py, 'serve-checkpoint', '--checkpoint', str(checkpoint), '--policy-id', sha,
@@ -1136,7 +1140,8 @@ class Cycle:
                 self.fill_window_close()       # the SFT has the GPU to itself
             if name == 'data' and self.a.fill:
                 self.stop_unit(f'{self.a.name}-fill')
-                self.pop_fill_close()
+                if getattr(self.a, 'pop_fill_stop_at_data', False):
+                    self.pop_fill_close()   # default: Pop draws on for the next cycle until a Pop serve stops it
             stage()
             if name == 'collect' and not self.done('collect') and not self.speculative:
                 raise SystemExit('collection did not finish: rerun the cycle to resume it')
@@ -1242,6 +1247,9 @@ def main():
     y.add_argument('--no-pop-fill', action='store_true',
                    help='leave Pop idle between held evals (default: it serves the collected policy for fills)')
     y.add_argument('--pop-fill-running', type=int, default=32, help="Pop fill server's running requests")
+    y.add_argument('--pop-fill-stop-at-data', action='store_true',
+                   help='stop the Pop fill at the data stage (default: it draws on through build and SFT for the next '
+                   "cycle's mix until a Pop serve stops it)")
     y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
                    'tooling outside the held scoring series)')
     y.add_argument('--data-repo', help="checkout whose sft_sources.py builds the mix (default the pin; data preparation "
