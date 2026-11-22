@@ -415,9 +415,11 @@ def test_partial_success_requires_independent_scoped_evidence(tmp_path, mutation
         live.load_episode(path)
 
 
-def test_partial_scope_can_recover_actions_without_supervising_wrong_final_status(tmp_path):
+@pytest.mark.parametrize('outcome', ['done', 'error'])
+def test_partial_scope_can_recover_actions_without_supervising_wrong_final_status(tmp_path, outcome):
     path, spec, verification = partial_fixture(tmp_path)
     detail = json.loads((tmp_path / 'child.json').read_text())
+    detail['record']['outcome'] = outcome
     later = copy.deepcopy(detail['record']['model_turns'][0])
     later['reply']['raw_calls'][0]['id'] = 'later-report'
     later['reply']['raw_response']['vibestudio']['response']['content'][0]['id'] = 'later-report'

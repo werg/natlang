@@ -100,7 +100,8 @@ def verified_training_scope(verification, records, root):
         call_id = invocation.get('call_id')
         checks = invocation.get('checks')
         evidence = invocation.get('evidence')
-        if (call_id not in records or call_id in selected or records[call_id].get('outcome') != 'done' or
+        if (call_id not in records or call_id in selected or
+                records[call_id].get('outcome') != 'done' and invocation.get('ordinals') is None or
                 not isinstance(checks, dict) or not checks or any(value is not True for value in checks.values()) or
                 not isinstance(evidence, list) or not evidence):
             raise ValueError('recovered invocation lacks independent successful outcome evidence')
@@ -330,7 +331,8 @@ def load_episode(path):
     for binding, detail in details:
         record = detail['record']
         call_id = record['call_id']
-        selected_executor = record['executor']['kind'] != 'crisp' and record.get('outcome') == 'done'
+        selected_executor = record['executor']['kind'] != 'crisp' and (record.get('outcome') == 'done' or
+            training_scope is not None and call_id in training_scope and training_scope[call_id] is not None)
         if not selected_executor and interaction is None:
             continue  # exact mechanism and failed attempts remain evidence, never successful demonstration targets
         exclusions[call_id] = failed_action_turns(detail)
