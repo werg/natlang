@@ -554,3 +554,35 @@ def test_entry_rejects_boolean_number_alias_and_missing_exact_json():
     del entry['argumentJson']
     with pytest.raises(ValueError, match='exact native argument JSON'):
         live.verify_entry(interaction, root)
+
+
+@pytest.mark.parametrize('retain_prior_action', [True, False])
+@pytest.mark.parametrize('terminal_tool,terminal_args', [
+    ('return_result', {'status': 'success', 'value': {'incorrectReceipt': True}}),
+    ('eval', {'code': 'return {incorrectReceipt: true}', 'finish': True}),
+])
+def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp_path, terminal_tool, terminal_args, retain_prior_action):
+    path, spec, detail, verification = fixture(tmp_path)
+    open_goal(detail, spec, verification)
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    terminal = copy.deepcopy(detail['record']['model_turns'][0])
+    terminal['reply']['raw_calls'] = [{'id': 'terminal-id', 'type': 'function',
+        'function': {'name': terminal_tool, 'arguments': json.dumps(terminal_args)}}]
+    terminal['reply']['calls'] = [[terminal_tool, terminal_args]]
+    terminal['reply']['raw_response']['vibestudio']['response']['content'] = [
+        {'type': 'toolCall', 'id': 'terminal-id', 'name': terminal_tool, 'arguments': terminal_args}]
+    detail['record']['model_turns'] = ([detail['record']['model_turns'][0]] if retain_prior_action else []) + [terminal]
+    detail['events'].append({'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'terminal-id'})
+    verification['evidence'] = [{**artifact(tmp_path, 'outcome-readback.json', {'proof': {
+        'passed': True, 'outcomeDimensions': {'effects': {'passed': True},
+            'returnedValue': {'required': False, 'passed': False, 'checks': {'receiptMatches': False}}}}}),
+        'kind': 'workspace'}]
+    rewrite(tmp_path, spec, detail, verification)
+    episode = live.load_episode(path)
+    assert len(episode['turns']) == int(retain_prior_action)
+    decisions = episode['trajectory_ir']['trajectory']
+    if retain_prior_action:
+        assert decisions[0]['training_admission']['approved'] is True
+    assert decisions[-1]['training_admission'] == {'approved': False,
+        'reason': 'application return failed independent outcome checks'}
+    assert episode['trajectory_ir']['outcome']['task_completed'] is True

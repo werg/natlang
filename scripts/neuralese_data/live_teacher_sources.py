@@ -260,9 +260,15 @@ def load_episode(path):
         raise ValueError('independent live task checks did not all pass')
     bound_file(verification['validator'], path.parent)
     kinds = set()
+    incorrect_optional_return = False
     for evidence in verification.get('evidence') or []:
-        bound_file(evidence, path.parent)
+        evidence_path = bound_file(evidence, path.parent)
         kinds.add(evidence.get('kind'))
+        if evidence.get('kind') == 'workspace':
+            proof = json.loads(evidence_path.read_text()).get('proof') or {}
+            returned = (proof.get('outcomeDimensions') or {}).get('returnedValue') or {}
+            if returned.get('required') is False and returned.get('passed') is False:
+                incorrect_optional_return = True
     required = set(spec.get('required_effect_kinds') or [])
     if not required or not required <= {'workspace', 'cdp'} or not required <= kinds:
         raise ValueError('missing actual workspace/CDP effect readback evidence')
@@ -327,6 +333,13 @@ def load_episode(path):
             chain.append(current)
             current = records[current]['parent_call_id']
         ancestry[call_id] = list(reversed(chain))
+    incorrect_returns = {}
+    if interaction is not None and incorrect_optional_return:
+        for call_id in roots:
+            generations = [index for index, exchange in enumerate(records[call_id].get('model_turns') or [])
+                           if exchange.get('kind') == 'generation']
+            if generations:
+                incorrect_returns[call_id] = generations[-1]
     exclusions, decisions = {}, []
     for binding, detail in details:
         record = detail['record']
@@ -384,6 +397,8 @@ def load_episode(path):
             if interaction is not None:
                 denial = ('invocation lacks independent outcome evidence' if training_scope is not None and call_id not in training_scope else
                           'decision lacks independent outcome evidence' if training_scope is not None and training_scope[call_id] is not None and index not in training_scope[call_id] else
+                          'application return failed independent outcome checks'
+                          if incorrect_returns.get(call_id) == index else
                           'executor did not complete' if not selected_executor else
                           'decision contains a failed action' if index in exclusions[call_id] else
                           'decision contains an action without execution evidence'
@@ -395,8 +410,7 @@ def load_episode(path):
                         {'id': call['id'], 'source_tool': call['name'], 'arguments': call['arguments']}
                         for call in original_calls],
                      'raw_calls': calls}, denial))
-                if denial is None:
-                    models.add(gateway['model'])
+                models.add(gateway['model'])
                 continue
             if training_scope is not None and call_id not in training_scope:
                 continue
@@ -435,7 +449,7 @@ def load_episode(path):
             'trajectory': decisions,
         }
         turns = observed_training_turns(trajectory)
-    if not turns:
+    if not turns and not (trajectory is not None and incorrect_optional_return):
         raise ValueError('workflow call coverage incomplete or has no generated executor targets')
     return {'key': episode_key, 'source': 'teacher', 'run': str(path),
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,
