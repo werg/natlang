@@ -36,6 +36,14 @@ at once (one on the G4s, one on the DGX).
 
 ## 1. Machines and placement
 
+**Placement and the training loop are specified in `plans/neuralese/async-train.md`**, which supersedes this section,
+§2 items 4-5, §4 and §6 "Learner/actor overlap" where they differ. In brief:
+- the G4 runs the LoRA learner (back-to-back SFT rounds) and an actor beside it under MPS;
+- the DGX collects, runs the teacher and fill, builds, merges, publishes and runs the held eval (BF16 series);
+- collection is continuous from the newest policy.
+
+The rest of this section is the original v3 placement.
+
 | Machine | Why | Work |
 |---|---|---|
 | **Colab G4** (96 GB GDDR7, Blackwell) | ~6x the GB10's memory bandwidth and several times its tensor throughput; preemptible | the main lineage's collection actor, SFT and held eval (G4 engine series, §4). Extra sessions take collection and held-eval shards. |
@@ -82,7 +90,7 @@ generalizes the Pop pattern built in b14f425de, and Colab preemption is handled 
 | One full-FT memory constant (`ACTIVATION_BYTES_PER_TOKEN_LAYER = 88e3`) | `lfm3_fast_train.py:772` | Replace it with a table keyed by (layer kind, device), filled from the measured `cuda_peak_by_phase_gb` of the LoRA core. |
 | `*_gb` labels mean GiB in some places and GB in others | telemetry | Report GiB everywhere and rename the labels. |
 
-## 4. Held evaluation on the G4
+## 4. Held evaluation (superseded: the held series runs on the DGX, BF16 weights, 4 samples; async-train.md §1)
 
 - **One series.** The G4 series becomes the held series. It starts by measuring the current reference policy once,
   and every later candidate pairs against it. Pop's series closes with its last result.
@@ -168,9 +176,9 @@ v2 §3 and §5 remain the specification, with the changes below.
   add sync machinery to shorten the shorter stage.
 - **SGLang adapter slots.** A merged 3.4 GB export loads from `/dev/shm` in seconds, against GRPO steps of minutes.
   Slots would also need a new serving feature on all four engines.
-- **Learner/actor overlap on the G4.** In expert iteration, collection needs the previous SFT's policy, so the stages
-  are sequential by dependency. The pipelined cycles (sft-vN+1 collecting while sft-vN evaluates) already overlap the
-  machines. On the GB10, GRPO measured no gain from overlap.
+- ~~Learner/actor overlap on the G4.~~ Reversed in async-train.md: with continuous collection from the newest policy
+  there is no stage dependency, and the G4's decode bandwidth is its strongest asset. The learner and an actor share
+  the G4 under MPS.
 - **L4 profiles.** The bandwidth is the GB10's (§1).
 
 **Cost telemetry.** Each cycle logs CU spent, wall time per stage and canonical chain tokens per CU, so the budget is

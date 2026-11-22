@@ -6714,3 +6714,19 @@ a long episode).
   shards by task), SGLang adapter slots (a merged reload takes seconds against minute-long GRPO steps), learner/actor
   overlap (stages sequential by on-policy dependency; pipelined cycles already overlap machines), L4 (GB10 bandwidth).
   This supersedes the 11:30 entry's "every §6 item required".
+
+## 2026-11-22 12:40 Async expert iteration (async-train.md v2) supersedes the cycle placement
+
+- The other agent's "Phase 2 async RL" draft (dc17fcf68) assumed async GRPO and a learner-only G4. Revised to our
+  method:
+  - Continuous collection from the newest published policy on every actor.
+  - Back-to-back LoRA SFT rounds on the G4 (~1 h each), with the mix built on the DGX while the previous round trains.
+  - FP32 factors (~0.5 GB at r=128) shipped to the DGX, merged there in FP32 and rounded to BF16 once, then every
+    actor is rebound (all routes, native reload).
+  - Speculative adoption, with held on the adaptive interval counted in rounds.
+  - The G4 runs an actor beside the learner under MPS, because decode bandwidth is its largest advantage over the
+    GB10.
+  - The held series is on the DGX: BF16 weights, 4 samples, always available.
+  - Collection actors use FP8 weights; there is no ratio in SFT, so no bias.
+- Not built: score centering, top-K capture, staleness windows (no importance-weighted gradient in SFT); the cloud
+  bucket (Tailscale plus the DGX store does the same); LoRA slots; the quantization gate.
