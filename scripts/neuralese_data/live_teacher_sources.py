@@ -1,6 +1,7 @@
 """Admission of observed live Natlang work; effects are verified, never called portable replays."""
 import hashlib
 import json
+import math
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -15,6 +16,22 @@ def open_goal_fingerprint(goal):
     """Hash the JSON input value recorded by the Natlang runtime."""
     encoded = json.dumps(goal, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     return len(encoded), hashlib.sha256(encoded).hexdigest()
+
+
+def same_json_value(left, right):
+    """Compare JSON values without Python's bool/number coercion."""
+    if type(left) is bool or type(right) is bool:
+        return type(left) is type(right) and left == right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return (not isinstance(left, float) or math.isfinite(left)) and (
+            not isinstance(right, float) or math.isfinite(right)) and left == right
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(same_json_value(left[key], right[key]) for key in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(same_json_value(a, b) for a, b in zip(left, right))
+    return left == right
 
 
 def verify_entry(interaction, root, *, partial=False):
@@ -39,8 +56,27 @@ def verify_entry(interaction, root, *, partial=False):
     if (root.get('definition', {}).get('name') != entry['callable'] or
             not partial and root.get('outcome') != 'done' or set(inputs) != set(arguments)):
         raise ValueError('open goal does not match the actual root invocation')
+    argument_json = entry.get('argumentJson')
+    if interaction.get('entry') is not None and (
+            not isinstance(argument_json, dict) or set(argument_json) != set(arguments)):
+        raise ValueError('application entry needs exact native argument JSON')
     for name, value in arguments.items():
-        size, digest = open_goal_fingerprint(value)
+        if argument_json is None:
+            size, digest = open_goal_fingerprint(value)  # Historical router's sole string goal.
+        else:
+            serialized = argument_json[name]
+            if not isinstance(serialized, str):
+                raise ValueError('application entry argument JSON must be exact text')
+            try:
+                def reject_constant(constant):
+                    raise ValueError(f'nonfinite JSON argument: {constant}')
+                captured = json.loads(serialized, parse_constant=reject_constant)
+                encoded = serialized.encode('utf-8')
+            except (ValueError, UnicodeError) as error:
+                raise ValueError('application entry argument JSON is invalid') from error
+            if not same_json_value(captured, value):
+                raise ValueError('application entry argument JSON differs from the declared input')
+            size, digest = len(encoded), hashlib.sha256(encoded).hexdigest()
         ref = inputs.get(name) or {}
         if ref.get('complete') is not True or ref.get('bytes') != size or ref.get('hash') != digest:
             raise ValueError('open goal application input differs from the actual root invocation')

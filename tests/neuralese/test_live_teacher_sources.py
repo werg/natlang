@@ -328,7 +328,9 @@ def test_application_entry_binds_native_function_and_all_typed_inputs(tmp_path, 
     path, spec, detail, verification = fixture(tmp_path)
     interaction = open_goal(detail, spec, verification)
     arguments = {'approval': {'revision': 'approved-2'}, 'draft': 'current draft'}
-    entry = {'program': 'skills/documents/reconcileDraft.nl', 'callable': 'reconcileDraft', 'arguments': arguments}
+    entry = {'program': 'skills/documents/reconcileDraft.nl', 'callable': 'reconcileDraft', 'arguments': arguments,
+             'argumentJson': {name: json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+                              for name, value in arguments.items()}}
     interaction.update(program=entry['program'], entry=entry)
     verification['interaction'] = copy.deepcopy(interaction)
     detail['record']['definition']['name'] = 'reconcileDraft'
@@ -514,3 +516,39 @@ def test_declared_entry_coverage_is_separate_from_learned_behavior(tmp_path):
     assert result['declared_return_types'] == {'ProposedRevision': 2}
     assert result['task_splits'] == {'train': 2, 'test': 1}
     assert result['unmapped_tasks'] == ['missing']
+
+
+@pytest.mark.parametrize('value,serialized', [
+    (1.0, '1'),
+    (1e-7, '1e-7'),
+    ({'name': 'demo', '10': 'ten', '2': 'two'}, '{"2":"two","10":"ten","name":"demo"}'),
+    ('\ud800', '"\\ud800"'),
+])
+def test_entry_hashes_exact_native_json_instead_of_python_reserialization(value, serialized):
+    encoded = serialized.encode('utf-8')
+    entry = {'program': 'skills/documents/acceptValue.nl', 'callable': 'acceptValue',
+             'arguments': {'value': value}, 'argumentJson': {'value': serialized}}
+    root = {'definition': {'name': 'acceptValue', 'source': 'acceptValue.nl'},
+            'program_root': 'skills/documents', 'outcome': 'done',
+            'inputs': {'value': {'complete': True, 'bytes': len(encoded),
+                                 'hash': hashlib.sha256(encoded).hexdigest()}}}
+    interaction = {'program': entry['program'], 'entry': entry, 'goal': 'Use the exact typed argument'}
+    live.verify_entry(interaction, root)
+    entry['arguments']['value'] = False
+    with pytest.raises(ValueError, match='argument JSON differs'):
+        live.verify_entry(interaction, root)
+
+
+def test_entry_rejects_boolean_number_alias_and_missing_exact_json():
+    entry = {'program': 'skills/documents/acceptValue.nl', 'callable': 'acceptValue',
+             'arguments': {'value': False}, 'argumentJson': {'value': '0'}}
+    root = {'definition': {'name': 'acceptValue', 'source': 'acceptValue.nl'},
+            'program_root': 'skills/documents', 'outcome': 'done',
+            'inputs': {'value': {'complete': True, 'bytes': 1,
+                                 'hash': hashlib.sha256(b'0').hexdigest()}}}
+    interaction = {'program': entry['program'], 'entry': entry}
+    with pytest.raises(ValueError, match='argument JSON differs'):
+        live.verify_entry(interaction, root)
+    del entry['argumentJson']
+    with pytest.raises(ValueError, match='exact native argument JSON'):
+        live.verify_entry(interaction, root)
