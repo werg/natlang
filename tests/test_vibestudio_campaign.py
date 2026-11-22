@@ -213,3 +213,51 @@ def test_receipt_epoch_correspondence_cannot_silently_drop_attempts(tmp_path):
     with pytest.raises(ValueError, match='original wave epoch'):
         vibestudio_campaign.publish_status(tmp_path, {}, {}, [{}], None, 2, {},
                                            attempt_epoch='current-release', receipt_epochs=[])
+
+
+def test_concurrent_exports_register_and_publish_a_cohort_once(monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    registering, release, second_started = Event(), Event(), Event()
+    writers, registrations = [], []
+
+    class Writer:
+        def __init__(self, path):
+            self.rows = 0
+            writers.append(path)
+
+        def write(self, row):
+            self.rows += 1
+
+        def close(self, **kwargs):
+            pass
+
+    def register(*args, **kwargs):
+        registrations.append(args)
+        registering.set()
+        assert release.wait(3)
+        return {'id': 'one-cohort'}
+
+    def export_again():
+        second_started.set()
+        vibestudio_campaign.export_trajectories(tmp_path, receipt, set(), set())
+
+    monkeypatch.setattr(vibestudio_campaign, 'ZstdWriter', Writer)
+    monkeypatch.setattr(vibestudio_campaign, 'verified_episode', lambda *args: {'trajectory_ir': {}})
+    monkeypatch.setattr(vibestudio_campaign.data_registry, 'record_dataset', register)
+    receipt = {'goal': {'status': 'verified', 'manifest': 'goal/manifest.json'}}
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(vibestudio_campaign.export_trajectories, tmp_path, receipt, set(), set())
+        try:
+            assert registering.wait(3)
+            second = pool.submit(export_again)
+            assert second_started.wait(3)
+            assert not second.done()
+        finally:
+            release.set()
+        first.result(timeout=3)
+        second.result(timeout=3)
+    assert len(writers) == len(registrations) == 1
+    assert vibestudio_campaign.read(tmp_path / 'exported.json') == {
+        'verified': 1, 'dataset': 'one-cohort'}

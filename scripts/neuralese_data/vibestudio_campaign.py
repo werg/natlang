@@ -199,6 +199,14 @@ def sync_index(args, paths):
 
 
 def export_trajectories(archive, receipt, held, training):
+    # Every direct exporter and archive drainer owns the same cohort lock through
+    # registration and publication, including the initial completed-marker check.
+    with (archive / '.trajectory-export.lock').open('a') as owner:
+        fcntl.flock(owner, fcntl.LOCK_EX)
+        return _export_trajectories(archive, receipt, held, training)
+
+
+def _export_trajectories(archive, receipt, held, training):
     final = archive / 'trajectory.native.jsonl.zst'
     marker = archive / 'exported.json'
     if marker.exists():
