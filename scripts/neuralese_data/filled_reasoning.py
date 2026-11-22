@@ -613,6 +613,41 @@ def partial_path(directory, key):
     return Path(directory) / (hashlib.sha1(key.encode()).hexdigest()[:24] + '.json')
 
 
+def claim(directory, key):
+    """Take ``key`` for this process (OUT/claims/, O_EXCL) so generators sharing OUT (the cycle's fill on the DGX actor
+    and one on Pop) draw disjoint episodes; a claim whose process is gone is taken over. False: another live process
+    holds it."""
+    path = Path(directory) / (hashlib.sha1(key.encode()).hexdigest()[:24] + '.claim')
+    mine = json.dumps({'pid': os.getpid(), 'host': os.uname().nodename, 'time': time.time()})
+    for _ in range(2):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        except FileExistsError:
+            try:
+                held = json.loads(path.read_text())
+            except (OSError, ValueError):
+                return False                       # being written by its taker
+            if held.get('host') == os.uname().nodename and not _alive(held.get('pid')):
+                path.unlink(missing_ok=True)
+                continue
+            return held.get('pid') == os.getpid() and held.get('host') == os.uname().nodename
+        with os.fdopen(fd, 'w') as handle:
+            handle.write(mine)
+        return True
+    return False
+
+
+def _alive(pid):
+    try:
+        return 'filled_reasoning' in Path(f'/proc/{int(pid)}/cmdline').read_bytes().decode(errors='replace')
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def release(directory, key):
+    (Path(directory) / (hashlib.sha1(key.encode()).hexdigest()[:24] + '.claim')).unlink(missing_ok=True)
+
+
 def load_partial(directory, key, settings_now):
     """{chain digest: finished step fills} of an episode's partial file, if it was drawn under the same settings."""
     if directory is None:
@@ -638,6 +673,15 @@ def fill_policies(record):
     shas = {(record.get(k) or {}).get('checkpoint_sha256') for k in ('policy_start', 'policy_end')}
     shas |= {f.get('policy') for c in record.get('chains', ()) for f in c.get('calls', ())}
     return {s for s in shas if s}
+
+
+def finished(out, key):
+    """Whether fills.jsonl has a record of ``key`` (a substring scan: records are large)."""
+    path, needle = Path(out) / 'fills.jsonl', f'"key": {json.dumps(key)}'.encode()
+    if not path.exists():
+        return False
+    with path.open('rb') as handle:
+        return any(needle in line[:400] for line in handle)
 
 
 def done_keys(out):
@@ -696,7 +740,25 @@ def generate(args):
     fills = (out / 'fills.jsonl').open('a')
     failures = collections.Counter()
 
+    claims = None if args.no_claims else out / 'claims'
+    if claims is not None:
+        claims.mkdir(exist_ok=True)
+    skipped = collections.Counter()
+
     def one(item):
+        if claims is not None and not claim(claims, item['key']):
+            skipped['claimed'] += 1
+            return
+        try:
+            if claims is not None and finished(out, item['key']):     # another generator finished it since
+                skipped['done elsewhere'] += 1
+                return
+            _one(item)
+        finally:
+            if claims is not None:
+                release(claims, item['key'])
+
+    def _one(item):
         try:
             record = filler.episode(item, renderer)
         except Exception as error:
@@ -715,7 +777,8 @@ def generate(args):
             partial_path(args.partial_dir, item['key']).unlink(missing_ok=True)
     with ThreadPoolExecutor(args.workers) as pool:
         list(pool.map(one, todo))
-    log.write(json.dumps({'event': 'end', 'failures': dict(failures), 'time': time.time()}) + '\n')
+    log.write(json.dumps({'event': 'end', 'failures': dict(failures), 'skipped': dict(skipped), 'time': time.time()})
+              + '\n')
     log.close()
     fills.close()
     record_fills(out, works, held)
@@ -1207,6 +1270,8 @@ def build_parser():
     g.add_argument('--prefer-rates', action='append', default=[],
                    help='task pass rates ({id: {successes, scored}}): episodes of failed tasks first, then unmeasured')
     g.add_argument('--max-failures', type=int, default=200)
+    g.add_argument('--no-claims', action='store_true',
+                   help='do not claim episodes in OUT/claims/ (generators sharing OUT would then draw the same ones)')
     g.add_argument('--no-partial', action='store_true',
                    help='do not keep finished steps of episodes in progress (OUT/partial/): a stop redraws them')
     s = sub.add_parser('status')

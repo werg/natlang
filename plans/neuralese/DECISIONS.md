@@ -6440,3 +6440,24 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - DGX `/` was at 27 GB free (floor 40): deleted grpo-v4/run2's and grpo-v5/run1's `adam-moments.offload` (13.8 GB each;
   both GRPO runs ended, their FP32 states are on /mnt/external) and the unused pins 0722eb609f51 and 817c43c567de with
   prebase-0722eb609f51: 62 GB free.
+
+## 2026-11-22 01:30 fewer held evals, Pop rollouts (owner: "skip some evals and keep training and instead do roll outs"; "regression mainly means debugging -- we should be progressing")
+
+- **One held series** (`expert_iteration --held-pin`, carried to the next cycle): held evals keep one harness, so a
+  cycle's start is the previous candidate's measurement (reuse) and a cycle costs Pop one candidate held, never a
+  start re-measure. sft-v8 runs with `--held-pin ops/ei/pin-b17d5fd8527d` (sft-v7's series ba9aa56f); training,
+  collection and data keep their own pins.
+- **Held every 2nd cycle** (`--held-every 2`, default; 1 = every cycle): an unmeasured cycle adopts its candidate
+  (verdict `unmeasured`) and the pipeline trains on. A measured cycle is judged against the *reference*, the last
+  held-measured policy its training descends from (verdict.json `reference`; pop-held measures it, normally by
+  reuse), and a rejection rolls back to it. A failure verdict carries `debug`: a regression is a bug hunt, not a
+  routine rollback. sft-v8 is unmeasured; sft-v9 is measured against sft-v8's reference (sft-v7's candidate if its
+  verdict adopts it, else sft-v6).
+- **Pop rollouts** (default on, `--no-pop-fill`): once the cycle's popbase is done and the collect actor is up, Pop
+  serves the collected policy (32 running, FP8 KV) and `filled_reasoning generate` draws fills for this cycle's build
+  through an ssh tunnel, beside the DGX fill on the collect actor; stopped at the data stage, before any held eval of
+  the cycle. On 11-21 Pop alone filled ~45 episodes/h (14:00-19:00, the DGX fill window closed for sft-v7's SFT), about
+  the DGX actor's fill rate, so it roughly doubles fill supply, the cycle's bottleneck.
+- `filled_reasoning generate` claims each episode (OUT/claims/, O_EXCL; a dead process's claim is taken over) and
+  skips one another generator finished, so generators sharing OUT draw disjoint episodes (`--no-claims` opts out).
+- Tests: 57 pass (test_filled_reasoning, test_expert_iteration).

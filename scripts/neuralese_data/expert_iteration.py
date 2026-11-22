@@ -354,11 +354,11 @@ def next_name(name):
 # flags of `cycle` that name this cycle (replaced in the next one's argv); every one takes a value
 OWN_FLAGS = ('--dir', '--name', '--start', '--start-sha', '--commit', '--pin', '--speculative-after', '--prefer-unseen',
              '--fallback-prefer-unseen', '--next-name', '--next-seed-work', '--fill-repo',
-             '--data-repo')
+             '--data-repo', '--since-held')
 
 
 def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous, prefer_unseen, fallback_prefer_unseen,
-                    extra_seed_work=()):
+                    extra_seed_work=(), since_held=0):
     """The next pipelined cycle's ``cycle`` arguments: this cycle's (``argv`` after ``cycle``) with its own flags
     replaced, speculative after ``previous``, the extra seed WORKs added."""
     out, skip = [], False
@@ -376,6 +376,8 @@ def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous
     out += ['--dir', str(directory), '--name', name, '--start', str(start), '--start-sha', start_sha, '--commit', commit,
             '--speculative-after', str(previous), *[x for b in prefer_unseen for x in ('--prefer-unseen', str(b))],
             *[x for b in fallback_prefer_unseen for x in ('--fallback-prefer-unseen', str(b))]]
+    if since_held:
+        out += ['--since-held', str(since_held)]
     return out
 
 
@@ -430,6 +432,11 @@ class Cycle:
                                             subprocess.check_output(['sha256sum', args.start], text=True).split()[0])
         self.env = {**os.environ, 'NATLANG_REPO': str(self.pin), 'HF_HUB_OFFLINE': '1', 'OMP_NUM_THREADS': '2',
                     'MKL_NUM_THREADS': '1', 'PYTHONPATH': f'{self.pin}/training/neuralese:{self.pin}'}
+        # held eval's harness (--held-pin, carried to the next cycle): one scoring series across cycles, so the start is
+        # the previous candidate's measurement and each cycle costs Pop one candidate held (DECISIONS 2026-11-22)
+        self.held_pin = Path(getattr(args, 'held_pin', None) or self.pin)
+        self.held_env = {**self.env, 'NATLANG_REPO': str(self.held_pin),
+                         'PYTHONPATH': f'{self.held_pin}/training/neuralese:{self.held_pin}'}
         self.collect_dir, self.held = self.dir / 'collect', self.dir / 'held'
         self.work = Path(args.sft_work)
         self.mix = self.dir / 'mix'
@@ -522,7 +529,7 @@ class Cycle:
         mode = ['base', str(out), str(self.a.held_samples)] if checkpoint == BASE_CKPT else \
             ['ckpt', str(out), str(self.a.held_samples), str(checkpoint)]
         out.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(self.pin), *mode],
+        subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(self.held_pin), *mode],
                        stdout=(out / 'driver.log').open('a'), stderr=subprocess.STDOUT)
         return out
 
@@ -535,7 +542,8 @@ class Cycle:
         policy = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
         try:
             key = subprocess.check_output([PY, '-c', 'from natlang_neuralese.rl.held_eval import series; '
-                                           "print(series()['key'])"], env=self.env, text=True, cwd=self.pin).strip()
+                                           "print(series()['key'])"], env=self.held_env, text=True,
+                                          cwd=self.held_pin).strip()
         except subprocess.CalledProcessError:
             return False
         mine = (out / 'result.json').resolve()
@@ -554,11 +562,14 @@ class Cycle:
         unit = f'{self.a.name}-popbase'
         if not self.active(unit):
             subprocess.run(['systemd-run', '--user', '--unit', unit, '--collect', '--setenv', f'PATH={os.environ["PATH"]}',
-                            *[f'--setenv={k}={self.env[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH')],
-                            *self.py('expert_iteration.py', 'pop-held', '--dir', self.dir, '--pin', self.pin,
-                                     '--start', self.a.start, '--held-samples', self.a.held_samples,
-                                     *(('--held-base',) if getattr(self.a, 'held_base', False) else ()),
-                                     *(('--after', self.a.speculative_after) if self.speculative else ()))], check=True)
+                            *[f'--setenv={k}={self.held_env[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH')],
+                            *(f'--setenv={k}={os.environ[k]}' for k in ('NATLANG_POP_HELD_BUDGET_GB',) if k in os.environ),
+                            # the driver's own code (held scheduling); the held pin's harness measures
+                            *map(str, (PY, Path(__file__).resolve(), 'pop-held', '--dir', self.dir, '--pin', self.held_pin,
+                                       '--start', self.a.start, '--held-samples', self.a.held_samples,
+                                       *(('--held-base',) if getattr(self.a, 'held_base', False) else ()),
+                                       *(('--after', self.a.speculative_after) if self.speculative else ())))],
+                           check=True)
         self.note(stage='popbase', started=unit)
 
     def select_stage(self):
@@ -621,6 +632,20 @@ class Cycle:
         if summary.get('stopped'):
             raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
         self.mark('collect', **{k: v for k, v in summary.items() if k != 'run'})
+
+    def measured(self):
+        """Whether this cycle's candidate gets a held eval: every ``--held-every``-th cycle (DECISIONS 2026-11-22
+        "held every"); the others are adopted unmeasured and Pop's hours go to rollouts."""
+        return getattr(self.a, 'since_held', 0) + 1 >= getattr(self.a, 'held_every', 1)
+
+    def reference(self):
+        """The last held-measured policy this cycle's training descends from: what a measured candidate is judged
+        against and what a rejected one rolls back to. A previous verdict without one names its next_start."""
+        if self.speculative:
+            v = self.previous_verdict()
+            if v:
+                return v.get('reference') or {'checkpoint': v['next_start']}
+        return {'checkpoint': str(self.train_policy()[0])}
 
     def previous_verdict(self):
         path = Path(self.a.speculative_after) / 'verdict.json'
@@ -706,6 +731,57 @@ class Cycle:
         self.note(stage='fill window', started=[actor_unit, fill_unit], policy=sha,
                   binding=(info.get('rl_policy_binding') or {}).get('checkpoint_sha256'))
 
+    # Pop rollouts: between its held evals Pop serves the collected policy and draws fills for this cycle's build
+    POP_FILL_PORT = 19631          # DGX end of the tunnel to Pop's SGLang (pop_rl_actor RL_PORT + 1000 on Pop)
+
+    def pop_fill_open(self):
+        if not self.a.fill or getattr(self.a, 'no_pop_fill', False) or self.done('data'):
+            return
+        threading.Thread(target=self._pop_fill, daemon=True).start()
+
+    def _pop_fill(self):
+        unit, tunnel = f'{self.a.name}-popfill', f'{self.a.name}-popfill-tunnel'
+        if self.active(unit):
+            return
+        while self.active(f'{self.a.name}-popbase') or not (self.collect_dir / 'actor.json').exists():
+            if self.done('data'):
+                return
+            time.sleep(60)
+        checkpoint, sha = self.collect_policy()
+        actor_py = [PY, str(self.held_pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
+        try:
+            subprocess.run([*actor_py, 'serve-checkpoint', '--checkpoint', str(checkpoint), '--policy-id', sha,
+                            '--commit', subprocess.check_output(['git', '-C', str(self.held_pin), 'rev-parse', 'HEAD'],
+                                                                text=True).strip(),
+                            '--step', '0', '--kv-cache-dtype', 'fp8_e4m3', '--max-running', str(self.a.pop_fill_running)],
+                           env=self.held_env, check=True, stdout=(self.dir / 'pop-fill-serve.log').open('a'),
+                           stderr=subprocess.STDOUT, timeout=3600)
+            state = json.loads(subprocess.check_output([*actor_py, 'status'], env=self.held_env, text=True))['state']
+        except Exception as error:
+            self.note(stage='pop fill', failed=repr(error)[:300])
+            return
+        if self.done('data'):
+            return
+        if not self.active(tunnel):
+            subprocess.run(['systemd-run', '--user', '--unit', tunnel, '--collect', '/usr/bin/ssh', '-N', '-o',
+                            'ExitOnForwardFailure=yes', '-o', 'ServerAliveInterval=30', '-L',
+                            f'{self.POP_FILL_PORT}:127.0.0.1:19531', 'pop-os'], check=True)
+            time.sleep(5)
+        collected = json.loads((self.collect_dir / 'actor.json').read_text())
+        actor = {'url': state['endpoint'], 'sglang': f'http://127.0.0.1:{self.POP_FILL_PORT}',
+                 'export': collected['export'], 'checkpoint_sha256': sha}
+        self.work_tokenizer()
+        self.ledger(unit, 6, 'low', self.fill_command(actor, pop=True), self.dir / 'pop-fill.log', detach=True,
+                    repo=self.fill_repo())
+        self.note(stage='pop fill', started=[unit, tunnel], policy=sha, endpoint=state['endpoint'])
+
+    def pop_fill_close(self):
+        for unit in (f'{self.a.name}-popfill', f'{self.a.name}-popfill-tunnel'):
+            if self.active(unit):
+                self.stop_unit(unit)
+                self.note(stage='pop fill', stopped=unit)
+        # the Pop server stays: the next held serve-checkpoint replaces it
+
     def fill_window_close(self):
         self.window_closed.set()
         for unit in (f'{self.a.name}-fillw', f'{self.a.name}-fillactor'):
@@ -733,7 +809,7 @@ class Cycle:
                     repo=self.fill_repo())
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
 
-    def fill_command(self, actor, window=False):
+    def fill_command(self, actor, window=False, pop=False):
         """filled_reasoning.py generate: the seed WORKs then the grpo-sd-teacher role's (first WORK wins a key),
         teacher episodes of the tasks the student fails first (the select stage's rates: failed, then unmeasured, then
         by rate; the frontier mix trains teacher trajectories there). On the collect actor a fixed share: the actor runs
@@ -744,7 +820,10 @@ class Cycle:
         from natlang_neuralese.common import data_registry
         works = list(dict.fromkeys([*map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
         rates = self.dir / 'tasks.rates.json'
-        if window:
+        if pop:
+            n = self.a.pop_fill_running
+            share = ['--max-running', n, '--max-inflight', n, '--min-inflight', n, '--workers', 3 * n // 2]
+        elif window:
             share = ['--max-running', self.a.fill_window_inflight, '--max-inflight', self.a.fill_window_inflight,
                      '--min-inflight', self.a.fill_window_inflight, '--workers', self.a.fill_window_workers]
         else:
@@ -919,6 +998,8 @@ class Cycle:
         self.mark('sft', checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
 
     def held_stage(self):
+        if not self.measured():
+            return self.mark('held', skipped=f'--held-every {self.a.held_every}')
         while self.active(f'{self.a.name}-popbase'):     # Pop serves one policy at a time
             time.sleep(300)
         candidate = self.pop_held('candidate', self.dir / 'sft' / 'checkpoint.pt')
@@ -928,13 +1009,22 @@ class Cycle:
 
     def compare(self, a, b, out):
         subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(a / 'result.json'),
-                        str(b / 'result.json'), '--out', str(out)], env=self.env, check=True,
+                        str(b / 'result.json'), '--out', str(out)], env=self.held_env, check=True,
                        stdout=subprocess.DEVNULL)
         return json.loads(out.read_text())
 
     def verdict_stage(self):
         """The declared criteria (DECISIONS): vs the start policy measured on this pin, and vs the base."""
         train_start = self.train_policy()[0]
+        candidate_ckpt = str(self.dir / 'sft' / 'checkpoint.pt')
+        if not self.measured():
+            result = {'verdict': 'unmeasured', 'adopt': True, 'vs_start': {}, 'next_start': candidate_ckpt,
+                      'reference': self.reference()}
+            (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
+            return self.mark('verdict', **result)
+        reference = self.reference()
+        if reference['checkpoint'] != str(train_start):       # held/start measured the reference (pop-held)
+            train_start = reference['checkpoint']
         base, start, candidate = self.held / 'base', self.held / ('base' if train_start == BASE_CKPT else 'start'), \
             self.held / 'candidate'
         vs_start = self.compare(start, candidate, self.dir / 'compare-vs-start.json')
@@ -954,7 +1044,10 @@ class Cycle:
         result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out},
                   'vs_base': vs_base and {'delta': vs_base['primary']['delta'], 'p': vs_base['primary']['permutation_p'],
                                           'series': base_series, 'from': str(base)},
-                  'next_start': str(self.dir / 'sft' / 'checkpoint.pt') if adopt else train_start}
+                  'next_start': candidate_ckpt if adopt else str(train_start),
+                  'reference': {'checkpoint': candidate_ckpt} if adopt else {'checkpoint': str(train_start)}}
+        if verdict == 'failure':      # a regression is a bug until shown otherwise: the supervisor opens the hunt
+            result['debug'] = f'regression vs {reference["checkpoint"]}: hunt it (AGENTS.md "degradation means bug")'
         (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
         if verdict == 'success' and (vs_base is None or vs_base['primary']['delta'] > 0):
             ckpt = self.dir / 'sft' / 'checkpoint.pt'
@@ -982,7 +1075,8 @@ class Cycle:
         argv = next_cycle_argv(sys.argv[sys.argv.index('cycle') + 1:], directory=self.dir.parent / name, name=name,
                                start=start, start_sha=(self.dir / 'sft' / 'sha256.txt').read_text().strip(),
                                commit=commit, previous=self.dir, prefer_unseen=[self.mix],
-                               fallback_prefer_unseen=self.train_policy()[2], extra_seed_work=self.a.next_seed_work)
+                               fallback_prefer_unseen=self.train_policy()[2], extra_seed_work=self.a.next_seed_work,
+                               since_held=0 if self.measured() else getattr(self.a, 'since_held', 0) + 1)
         (self.dir.parent / name).mkdir(parents=True, exist_ok=True)
         unit = f'{name}-drive-{int(time.time())}'
         subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', '2', '--priority', 'medium', '--wait', '36000',
@@ -999,6 +1093,7 @@ class Cycle:
                   ('teacher', self.teacher_stage), ('data', self.data_stage), ('build', self.build_stage),
                   ('sft', self.sft_stage), ('next', self.next_stage), ('held', self.held_stage),
                   ('verdict', self.verdict_stage)]
+        self.pop_fill_open()                   # waits for Pop (popbase) and the collect actor
         for name, stage in stages:
             if name == 'gate' and (not self.speculative or self.gate()):
                 continue
@@ -1010,6 +1105,7 @@ class Cycle:
                 self.fill_window_close()       # the SFT has the GPU to itself
             if name == 'data' and self.a.fill:
                 self.stop_unit(f'{self.a.name}-fill')
+                self.pop_fill_close()
             stage()
             if name == 'collect' and not self.done('collect') and not self.speculative:
                 raise SystemExit('collection did not finish: rerun the cycle to resume it')
@@ -1033,7 +1129,8 @@ def pop_held(args):
         verdict = Path(args.after) / 'verdict.json'
         while not verdict.exists():
             time.sleep(300)
-        start = json.loads(verdict.read_text())['next_start']
+        v = json.loads(verdict.read_text())
+        start = (v.get('reference') or {}).get('checkpoint') or v['next_start']    # the last measured policy
     if start != BASE_CKPT:
         c.pop_held('start', start)
     if start == BASE_CKPT or args.held_base:
@@ -1111,6 +1208,9 @@ def main():
     y.add_argument('--fill-window-inflight', type=int, default=128, help="the fill window actor's running requests")
     y.add_argument('--fill-window-workers', type=int, default=96, help='filled-reasoning episodes in the fill window')
     y.add_argument('--fill-actor-port', type=int, default=8570)
+    y.add_argument('--no-pop-fill', action='store_true',
+                   help='leave Pop idle between held evals (default: it serves the collected policy for fills)')
+    y.add_argument('--pop-fill-running', type=int, default=32, help="Pop fill server's running requests")
     y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
                    'tooling outside the held scoring series)')
     y.add_argument('--data-repo', help="checkout whose sft_sources.py builds the mix (default the pin; data preparation "
@@ -1127,6 +1227,11 @@ def main():
     y.add_argument('--next-seed-work', action='append', default=[], help='seed WORKs the next cycle adds')
     y.add_argument('--no-held-reuse', action='store_true',
                    help="measure base and start on Pop even when an earlier cycle measured them in this series")
+    y.add_argument('--held-every', type=int, default=2,
+                   help='held-eval every Nth cycle\'s candidate; the others are adopted unmeasured (1 = every cycle)')
+    y.add_argument('--since-held', type=int, default=0, help='unmeasured cycles before this one (set by the pipeline)')
+    y.add_argument('--held-pin', help="pin whose harness and scoring run the held evals (default this cycle's pin); "
+                   'carried to the next cycle, so the series stays fixed and the start reuses the previous candidate')
     y.add_argument('--held-base', action='store_true',
                    help='measure the base on this pin too (default: only the start; vs-base uses the latest base of '
                         'another series when this one has none)')

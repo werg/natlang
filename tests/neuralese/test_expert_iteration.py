@@ -385,3 +385,92 @@ def test_latest_base_takes_the_newest_complete_base_result_of_any_series(tmp_pat
         paths.append(path)
     assert ei.latest_base(paths, 2) == paths[1].parent
     assert ei.latest_base(paths, 4) is None
+
+
+def test_held_pin_measures_on_its_harness_and_is_carried_to_the_next_cycle(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: calls.append((argv, kw.get('env'))))
+    argv = ['--dir', str(tmp_path / 'sft-v8'), '--name', 'sft-v8', '--start', '/v7.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', '/pin-new', '--held-pin', '/pin-held']
+    cycle = ei.Cycle(_cycle_args(argv))
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
+    cycle.pop_held('candidate', tmp_path / 'c.pt')
+    assert calls[-1][0][2] == '/pin-held' and calls[-1][1] is None
+    assert cycle.held_env['NATLANG_REPO'] == '/pin-held' and cycle.env['NATLANG_REPO'] == '/pin-new'
+    out = ei.next_cycle_argv(argv, directory='/sft-v9', name='sft-v9', start='/v8.pt', start_sha='ccc', commit='d' * 40,
+                             previous='/sft-v8', prefer_unseen=[], fallback_prefer_unseen=[])
+    assert _cycle_args(out).held_pin == '/pin-held'
+
+
+def test_popbase_unit_runs_the_drivers_pop_held_on_the_held_pin(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: calls.append(argv))
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    argv = ['--dir', str(tmp_path / 'sft-v8'), '--name', 'sft-v8', '--start', '/v7.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', '/pin-new', '--held-pin', '/pin-held']
+    ei.Cycle(_cycle_args(argv)).popbase_stage()
+    unit = calls[-1]
+    assert all(isinstance(x, str) for x in unit) and '--setenv=NATLANG_REPO=/pin-held' in unit
+    assert unit[unit.index('pop-held') - 1] == str(Path(ei.__file__).resolve()) and '/pin-held' in unit
+
+
+def test_held_every_skips_held_on_unmeasured_cycles_and_adopts_their_candidate(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'success', 'adopt': True, 'vs_start': {}, 'next_start': '/v7.pt'})
+    cycle.a.held_every, cycle.a.since_held = 2, 0
+    assert not cycle.measured()
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda *a: pytest.fail('an unmeasured cycle must not use Pop'))
+    cycle.held_stage()
+    cycle.verdict_stage()
+    v = json.loads((cycle.dir / 'verdict.json').read_text())
+    assert v['verdict'] == 'unmeasured' and v['adopt'] and v['next_start'] == str(cycle.dir / 'sft' / 'checkpoint.pt')
+    assert v['reference'] == {'checkpoint': '/v7.pt'}           # the last measured policy (the previous next_start)
+    cycle.a.since_held = 1
+    assert cycle.measured()
+
+
+def test_a_measured_cycle_after_an_unmeasured_one_is_judged_against_and_rolls_back_to_the_reference(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'unmeasured', 'adopt': True, 'vs_start': {},
+                                          'next_start': '/v7.pt', 'reference': {'checkpoint': '/v6.pt'}})
+    cycle.a.held_every, cycle.a.since_held, cycle.a.fail_pts, cycle.a.success_pts = 2, 1, 3., 2.
+    cycle.a.held_samples = 2
+    monkeypatch.setattr(ei, 'latest_base', lambda results, samples: None)
+    compared = []
+
+    def compare(self, a, b, out):
+        compared.append((a.name, b.name))
+        return {'primary': {'delta': -0.06, 'permutation_p': 0.01}, 'ran_out_rate_delta': 0}
+    monkeypatch.setattr(ei.Cycle, 'compare', compare)
+    cycle.held.mkdir(parents=True)
+    cycle.verdict_stage()
+    v = json.loads((cycle.dir / 'verdict.json').read_text())
+    assert compared[0] == ('start', 'candidate')
+    assert v['verdict'] == 'failure' and v['next_start'] == '/v6.pt' and v['reference'] == {'checkpoint': '/v6.pt'}
+
+
+def test_next_cycle_counts_unmeasured_cycles():
+    argv = ['--dir', '/d', '--name', 'sft-v8', '--start', '/v7.pt', '--commit', 'c', '--since-held', '1']
+    out = ei.next_cycle_argv(argv, directory='/d9', name='sft-v9', start='/v8.pt', start_sha='s', commit='c9',
+                             previous='/d', prefer_unseen=[], fallback_prefer_unseen=[], since_held=0)
+    assert _cycle_args(out).since_held == 0 and _cycle_args(out).held_every == 2
+    out = ei.next_cycle_argv(argv, directory='/d9', name='sft-v9', start='/v8.pt', start_sha='s', commit='c9',
+                             previous='/d', prefer_unseen=[], fallback_prefer_unseen=[], since_held=2)
+    assert _cycle_args(out).since_held == 2
+
+
+def test_pop_fill_draws_at_pops_running_cap_and_opts_out(tmp_path, monkeypatch):
+    argv = ['--dir', str(tmp_path / 'sft-v8'), '--name', 'sft-v8', '--start', '/v7.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin'), '--fill', str(tmp_path / 'fill')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    monkeypatch.setattr(ei.data_registry if hasattr(ei, 'data_registry') else
+                        __import__('natlang_neuralese.common.data_registry', fromlist=['x']), 'role_paths', lambda r: [])
+    command = cycle.fill_command({'url': 'http://pop:18531', 'sglang': 'http://127.0.0.1:19631', 'export': '/e'}, pop=True)
+    i = command.index('--max-running')
+    assert command[i + 1] == '32' and command[command.index('--workers') + 1] == '48' and '--polite' not in command
+    started = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda **kw: started.append(kw) or type('T', (), {'start': lambda s: 0})())
+    cycle.pop_fill_open()
+    assert started
+    started.clear()
+    cycle = ei.Cycle(_cycle_args([*argv, '--no-pop-fill']))
+    cycle.pop_fill_open()
+    assert not started
