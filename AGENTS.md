@@ -242,7 +242,8 @@ DECISIONS.md entries are authoritative.
   Shared LoRA+rows core (`natlang_neuralese/train/lfm3_learner.py` + `train/lfm3_fast.py`): frozen BF16 base (with
   Blackwell FP8 frozen-base GEMMs, opt-out `--no-fp8-base`), FP32 LoRA factors on all 9 LFM3 projection families plus
   trainable Neuralese marker/override rows (SFT `r=128/alpha=128/lr=5e-5`; RL `r=32/alpha=32/lr=1e-4`), trainable-only
-  AdamW, `--warmup 2`, `--clip 1.0`, LR scaled by groups-with-spread / 12 (`lr_data_scale`). The KL reference runs the
+  AdamW, `--warmup 2`, `--clip 1.0`, LR and gradient (before the clip) scaled by groups-with-spread / 12
+  (`lr_data_scale`), each group counted by its loss units / 4096, at most 1 (`spread_data`). The KL reference runs the
   policy's own compiled graph via `learner.reference_view` (zero 3.4 GB file swap).
 - **Compute.** `natlang_neuralese/train/lfm3_fast.py`; layers beyond `--activation-gib 56` (DGX) / `80` (Colab G4)
   recompute (parameterized activation table, OOM retry plan, token-length buckets, compile-health tracker); shared

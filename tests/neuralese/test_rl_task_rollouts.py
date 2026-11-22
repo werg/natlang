@@ -748,7 +748,7 @@ def test_lowering_keeps_sampled_decisions_as_categorical_actions():
     assert [o.tolist() for o in rows[0]['options']] == [[5, 6], [5, 7, 8]]
     assert math.isclose(rows[0]['behavior_logq'], -math.log1p(math.exp(-2.0)), rel_tol=1e-9)
     import grpo
-    ids, lengths, positions, targets, owner, counts, spans, _ = grpo.decision_tensors([{'row': rows[0], 'advantage': 1.}], 'cpu')
+    ids, lengths, positions, targets, owner, counts, spans, _ = grpo.decision_tensors([[{'row': rows[0], 'advantage': 1.}]], 'cpu')
     assert ids.tolist() == [1, 2, 3, 5, 6, 1, 2, 3, 5, 7, 8] and lengths == [5, 6] and counts == [2] and spans == []
     assert positions.tolist() == [2, 3, 7, 8, 9] and targets.tolist() == [5, 6, 5, 7, 8] and owner.tolist() == [0, 0, 1, 1, 1]
     # a decision whose prompt imports native state: each option document carries the import at its own offset
@@ -757,7 +757,7 @@ def test_lowering_keeps_sampled_decisions_as_categorical_actions():
     assert decision_turns({'turns': [native]}, stats) == [] and stats['skip_decision_native_state_prompt'] == 1
     rows = decision_turns({'turns': [native]}, stats, _FakeStates({'nzs1_ab': [40, 41]}))
     assert rows[0]['prompt'].tolist() == [1, 40, 41, 3] and rows[0]['imports'] == [(1, 'nzs1_ab')]
-    *_, spans, _ = grpo.decision_tensors([{'row': rows[0], 'advantage': 1.}], 'cpu')
+    *_, spans, _ = grpo.decision_tensors([[{'row': rows[0], 'advantage': 1.}]], 'cpu')
     assert spans == [(1, 'nzs1_ab'), (7, 'nzs1_ab')]
 
 

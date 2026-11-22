@@ -102,6 +102,39 @@ def test_factor_merge_equals_the_learners_own_export_and_the_formula(tmp_path, t
     assert b['round_id'] == 'r1' and b['inference_source']['adapter_factors_sha256'] == manifest['adapter_factors_sha256']
 
 
+def test_vm_merge_reproduces_the_dgx_publication_bytes_or_leaves_nothing(tmp_path):
+    """A Colab learner's next start is the DGX's publication (``publish-round`` writes policy/checkpoint.pt); the VM
+    merges the same factors over its copy of the base (``pop_rl_actor._REMOTE_MERGE``) instead of receiving 3.4 GB.
+    torch.save names its archive after the file, so only a merge written as checkpoint.pt hashes to the DGX's sha
+    (the old rebind merge wrote CHECKPOINTS/<sha>.pt directly: other bytes under that name); a wrong expected sha
+    leaves no file."""
+    import subprocess
+    import pop_rl_actor
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.train.learner_state import export_adapter_factors, merge_factors_to_checkpoint
+    learner = _tiny_trained_learner()
+    base = tmp_path / 'base.pt'
+    torch.save(learner.state, base)
+    factors = tmp_path / 'factors'
+    export_adapter_factors(learner, factors, base_checkpoint_sha256=sha256_file_hex(base), learner_step=3, round_id='r1')
+    dgx = merge_factors_to_checkpoint(base, factors, tmp_path / 'r0001' / 'policy' / 'checkpoint.pt')
+    sha = dgx['checkpoint_sha256']
+    direct = merge_factors_to_checkpoint(base, factors, tmp_path / f'{sha}.pt')
+    assert direct['checkpoint_sha256'] != sha                      # the name is part of the bytes
+
+    def vm(expect):
+        target = tmp_path / 'vm' / f'{expect}.pt'
+        target.parent.mkdir(exist_ok=True)
+        out = subprocess.run([sys.executable, '-c', pop_rl_actor._REMOTE_MERGE, str(REPO), str(base), str(factors),
+                              str(tmp_path / 'vm' / '.merge'), str(target), expect], capture_output=True, text=True,
+                             check=True).stdout
+        return json.loads(out.strip().splitlines()[-1]), target
+    result, target = vm(sha)
+    assert result == {'ok': True, 'checkpoint_sha256': sha} and sha256_file_hex(target) == sha
+    result, target = vm('0' * 64)
+    assert result['ok'] is False and not target.exists() and not (tmp_path / 'vm' / '.merge').exists()
+
+
 def test_factor_merge_fails_closed_and_the_round_ledger_persists(tmp_path):
     from natlang_neuralese.common.hashing import sha256_file_hex
     from natlang_neuralese.train.learner_state import (export_adapter_factors, load_learner_state,

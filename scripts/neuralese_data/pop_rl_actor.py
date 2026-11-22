@@ -261,6 +261,101 @@ def pull_verified(remote_path, local_path, host, *, attempts=5):
     return sha
 
 
+def colab_checkout(host, cfg, commit):
+    """The VM's natlang checkout (bootstrap's clone) at ``commit``, verified: HEAD resolves to the commit and no tracked
+    file differs; ts-host is rebuilt when its tree differs from the one last built there (the front serves it)."""
+    repo = shlex.quote(cfg['repo'])
+    out = ssh_host(host, f'git -C {repo} fetch -q origin && git -C {repo} checkout -q -f {shlex.quote(commit)} && '
+                         f'git -C {repo} rev-parse HEAD {shlex.quote(commit + "^{commit}")} HEAD:ts-host && '
+                         f'git -C {repo} status --porcelain --untracked-files=no | head -5', timeout=600).split()
+    if len(out) != 3 or out[0] != out[1]:
+        raise RuntimeError(f'{host}: the checkout is not clean at {commit}: {" ".join(out)[:300]}')
+    marker = f'{cfg["root"]}/ts-host-built.tree'
+    if ssh_host(host, f'cat {shlex.quote(marker)} 2>/dev/null || true', check=False).strip() != out[2]:
+        ssh_host(host, f'. {shlex.quote(cfg["env"])} && cd {repo}/ts-host && npm ci --no-audit --no-fund -q && '
+                       f'npm run -s build:node && echo {out[2]} > {shlex.quote(marker)}', timeout=1800)
+        log(event='Colab ts-host rebuilt', host=host, commit=out[0], tree=out[2])
+    return out[0]
+
+
+# the VM-side merge of a published round policy (async-train §2.5): ``merge_factors_to_checkpoint`` into a file named
+# checkpoint.pt (torch.save names its archive after the file, so the bytes equal the DGX publication's only under
+# that name), checked against the DGX's sha256, then renamed to CHECKPOINTS/<sha>.pt; a mismatch leaves nothing
+_REMOTE_MERGE = (
+    'import json, os, shutil, sys\n'
+    'sys.path[:0] = [sys.argv[1] + "/training/neuralese", sys.argv[1]]\n'
+    'from natlang_neuralese.train.learner_state import merge_factors_to_checkpoint\n'
+    'base, factors, stage, target, expect = sys.argv[2:7]\n'
+    'shutil.rmtree(stage, ignore_errors=True)\n'
+    'os.makedirs(stage)\n'
+    'try:\n'
+    '    rec = merge_factors_to_checkpoint(base, factors, os.path.join(stage, "checkpoint.pt"))\n'
+    'except ValueError as error:\n'
+    '    shutil.rmtree(stage, ignore_errors=True)\n'
+    '    print(json.dumps({"ok": False, "error": str(error)[:300]}))\n'
+    '    sys.exit(0)\n'
+    'ok = rec["checkpoint_sha256"] == expect\n'
+    'if ok:\n'
+    '    os.replace(os.path.join(stage, "checkpoint.pt"), target)\n'
+    'shutil.rmtree(stage, ignore_errors=True)\n'
+    'print(json.dumps({"ok": ok, "checkpoint_sha256": rec["checkpoint_sha256"]}))\n')
+
+
+def remote_merge(host, cfg, *, base_sha, factors_dir, expect_sha):
+    """Merge a round's factors over its base checkpoint on ``host`` (both already there or the factors shipped,
+    ~0.5 GB instead of the 3.4 GB policy) into ``CHECKPOINTS/<expect_sha>.pt``; True when the result hashes to
+    ``expect_sha``. The factors stay on the VM under ROOT/factors/<sha> for the next merge."""
+    manifest = json.loads((Path(factors_dir) / 'policy_manifest.json').read_text())
+    if manifest.get('base_checkpoint_sha256') != base_sha:
+        raise ValueError(f'{factors_dir} was trained from {manifest.get("base_checkpoint_sha256")}, not {base_sha}')
+    remote_factors = f'{cfg["root"]}/factors/{manifest["adapter_factors_sha256"]}'
+    base = f'{cfg["checkpoints"]}/{base_sha}.pt'
+    if not ssh_host(host, f'test -f {shlex.quote(base)} && echo ok', check=False).strip():
+        return False
+    if not ssh_host(host, f'test -f {shlex.quote(remote_factors + "/policy_manifest.json")} && echo ok',
+                    check=False).strip():
+        staged = remote_factors + '.partial'
+        for name in ('adapter_factors_fp32.safetensors', 'policy_manifest.json'):
+            sync_to_remote(str(Path(factors_dir) / name), f'{staged}/{name}', host)
+        ssh_host(host, shlex.join(['mv', '-T', staged, remote_factors]))
+    started = time.time()
+    out = ssh_host(host, shlex.join([cfg['python'], '-c', _REMOTE_MERGE, cfg['repo'], base, remote_factors,
+                                     f'{cfg["checkpoints"]}/.merge-{expect_sha[:16]}',
+                                     f'{cfg["checkpoints"]}/{expect_sha}.pt', expect_sha]), timeout=3600)
+    result = json.loads(out.strip().splitlines()[-1])
+    log(event='Colab merged policy', host=host, expect=expect_sha, seconds=round(time.time() - started, 1), **result)
+    return bool(result.get('ok'))
+
+
+def ensure_remote_checkpoint(host, cfg, local_checkpoint, sha):
+    """``CHECKPOINTS/<sha>.pt`` on ``host``, hashing to ``sha``: kept when there; else merged on the VM when the DGX
+    checkpoint is an async round's publication (``published.json`` beside it names its base and factors, and the VM
+    holds the base: the previous round trained from it); else shipped. Returns how it got there."""
+    target = f'{cfg["checkpoints"]}/{sha}.pt'
+    ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints']]))
+    if ssh_host(host, shlex.join(['test', '-f', target]) + ' && echo ok', check=False).strip():
+        if remote_identity(host, target)[1] == sha:
+            return 'present'
+        ssh_host(host, shlex.join(['rm', '-f', target]))     # a file not hashing to its name (an old VM merge)
+    published = read_json(Path(local_checkpoint).with_name('published.json')) or {}
+    merge = published.get('merge') or {}
+    if (published.get('checkpoint_sha256') == sha and merge.get('base_checkpoint_sha256') and published.get('factors_dir')
+            and os.environ.get('NATLANG_COLAB_REMOTE_MERGE', '1') != '0'):
+        try:
+            if remote_merge(host, cfg, base_sha=merge['base_checkpoint_sha256'], factors_dir=published['factors_dir'],
+                            expect_sha=sha):
+                return 'merged'
+        except (OSError, ValueError, RuntimeError) as error:
+            log(event='Colab merge failed: shipping the checkpoint', host=host, error=repr(error)[:300])
+    started = time.time()
+    sync_to_remote(str(local_checkpoint), f'{target}.partial', host)
+    if remote_identity(host, f'{target}.partial')[1] != sha:
+        raise RuntimeError(f'the checkpoint copied to {host} does not hash to {sha}')
+    ssh_host(host, shlex.join(['mv', f'{target}.partial', target]))
+    log(event='Colab checkpoint shipped', host=host, sha=sha, seconds=round(time.time() - started, 1))
+    return 'shipped'
+
+
 def colab_state_path(host):
     safe = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in str(host))
     return ROOT / f'colab-actor-{safe}.json'
@@ -380,12 +475,15 @@ def prepare(checkpoint, expect_sha, wait=None):
 
 def copy_resumable(source, dest, attempts=None, stall_seconds=120):
     """rsync that fails a stalled stream after ``stall_seconds`` without data (--timeout) and resumes it (--partial):
-    a Wi-Fi stall on 2026-11-19 held a copy at 2.5 of 3.5 GB for 35 min. NATLANG_POP_COPY_ATTEMPTS=1 opts out."""
+    a Wi-Fi stall on 2026-11-19 held a copy at 2.5 of 3.5 GB for 35 min. NATLANG_POP_COPY_ATTEMPTS=1 opts out.
+    Compressed on the wire (``-z``: rsync >= 3.2 negotiates zstd): an SFT mix's chains.pkl shrinks ~12x, a BF16
+    checkpoint ~20%, and the Colab link runs at 2.4 MB/s up, 4.8 down (2026-11-22). NATLANG_COPY_COMPRESS=0 opts out."""
     attempts = attempts or int(os.environ.get('NATLANG_POP_COPY_ATTEMPTS', '5'))
+    compress = [] if os.environ.get('NATLANG_COPY_COMPRESS', '1') == '0' else ['-z']
     for attempt in range(attempts):
         try:
-            subprocess.run(['rsync', '-a', '--partial', f'--timeout={stall_seconds}', source, dest], check=True,
-                           timeout=7200)
+            subprocess.run(['rsync', '-a', *compress, '--partial', f'--timeout={stall_seconds}', source, dest],
+                           check=True, timeout=7200)
             return
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             if attempt == attempts - 1:
@@ -898,36 +996,31 @@ def _default_sglang_url(front_url):
 def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=None, factors_dir=None,
                                   base_checkpoint=None):
     """Stage a versioned HF export directory on ``host`` for in-place rebind.
-    When ``factors_dir`` is given (async-train §7.1), ships only the ~130 MB / ~0.5 GB FP32 factors and runs
-    ``merge_factors_to_checkpoint`` + ``export.native_hf.export`` on the remote host against its local base
-    checkpoint; otherwise syncs ``export_dir`` directly. Returns ``(remote_export_dir, weights_sha256)``."""
+    When ``factors_dir`` is given (async-train §7.1), ships only the ~130 MB / ~0.5 GB FP32 factors, merges them on
+    the remote host over its copy of their base (``remote_merge``: the result must hash to ``policy_id``, the DGX
+    publication's sha) and exports that; otherwise syncs ``export_dir`` directly. Returns ``(remote_export_dir, weights_sha256)``."""
     remote_export = f'{cfg["work_root"]}/sglang-hf-v{version}-{policy_id[:12]}'
     if factors_dir is not None:
-        factors_dir = Path(factors_dir)
-        manifest = json.loads((factors_dir / 'policy_manifest.json').read_text())
-        base_sha = manifest['base_checkpoint_sha256']
-        remote_factors = f'{cfg["work_root"]}/rebind-factors/{policy_id[:12]}-v{version}'
-        ssh_host(host, shlex.join(['mkdir', '-p', remote_factors, remote_export, cfg['checkpoints']]))
-        sync_to_remote(str(factors_dir / 'adapter_factors_fp32.safetensors'),
-                       f'{remote_factors}/adapter_factors_fp32.safetensors', host)
-        sync_to_remote(str(factors_dir / 'policy_manifest.json'),
-                       f'{remote_factors}/policy_manifest.json', host)
-        remote_base = base_checkpoint or f'{cfg["checkpoints"]}/{base_sha}.pt'
+        manifest = json.loads((Path(factors_dir) / 'policy_manifest.json').read_text())
         remote_merged = f'{cfg["checkpoints"]}/{policy_id}.pt'
-        merge_script = (
+        ssh_host(host, shlex.join(['mkdir', '-p', remote_export, cfg['checkpoints']]))
+        if base_checkpoint:
+            raise ValueError('the VM merges over CHECKPOINTS/<base sha>.pt (the round it trained from), not --base-checkpoint')
+        if not (ssh_host(host, f'test -f {shlex.quote(remote_merged)} && echo ok', check=False).strip()
+                and remote_identity(host, remote_merged)[1] == policy_id):
+            if not remote_merge(host, cfg, base_sha=manifest['base_checkpoint_sha256'], factors_dir=factors_dir,
+                                expect_sha=policy_id):
+                raise RuntimeError(f'{host}: the merge of {factors_dir} does not hash to the published {policy_id}')
+        export_script = (
             'import json, sys\n'
-            'from pathlib import Path\n'
             'sys.path[:0] = [sys.argv[1] + "/training/neuralese", sys.argv[1]]\n'
-            'from natlang_neuralese.train.learner_state import merge_factors_to_checkpoint\n'
             'from natlang_neuralese.export.native_hf import export\n'
-            'repo, base_ckpt, factors_dir, out_ckpt, base_dir, out_hf = sys.argv[2:8]\n'
-            'merge_factors_to_checkpoint(base_ckpt, factors_dir, out_ckpt)\n'
-            'res = export(out_ckpt, out_hf, base=base_dir)\n'
+            'ckpt, base_dir, out_hf = sys.argv[2:5]\n'
+            'res = export(ckpt, out_hf, base=base_dir)\n'
             'print(json.dumps({"export_dir": str(out_hf), "weights_sha256": res["weights_sha256"]}))\n'
         )
-        out = ssh_host(host, shlex.join([cfg['python'], '-c', merge_script, cfg['repo'], cfg['repo'],
-                                         remote_base, remote_factors, remote_merged, cfg['base'], remote_export]),
-                       timeout=1800)
+        out = ssh_host(host, shlex.join([cfg['python'], '-c', export_script, cfg['repo'], remote_merged, cfg['base'],
+                                         remote_export]), timeout=1800)
         info = json.loads(out.strip().splitlines()[-1])
         return info['export_dir'], info['weights_sha256']
     if not export_dir:
@@ -1028,25 +1121,25 @@ def serve_colab(args):
     started = time.time()
     endpoint = remote_endpoint(host, args.port, args.bind_host)
     ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_work]))
-    if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
-        sync_to_remote(args.checkpoint, f'{remote_ckpt}.partial', host)
-        if remote_identity(host, f'{remote_ckpt}.partial')[1] != sha:
-            raise RuntimeError(f'the checkpoint copied to {host} does not hash to {sha}')
-        ssh_host(host, shlex.join(['mv', f'{remote_ckpt}.partial', remote_ckpt]))
+    arrived = ensure_remote_checkpoint(host, cfg, args.checkpoint, sha)
     copied = time.time()
-    ssh_host(host, f'git -C {shlex.quote(cfg["repo"])} fetch -q origin && '
-                   f'git -C {shlex.quote(cfg["repo"])} checkout -q -f {shlex.quote(commit)}', timeout=300)
+    colab_checkout(host, cfg, commit)
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(claim['vram_gib']),
                 '--host-ram-gib', str(claim['host_ram_gib']), '--label', f'actor-{sha[:12]}', '--wait', '300',
                 '--workdir', cfg['repo'], '--', *serve_cmd]
     # setsid: the admission process leads its own group (stop_colab signals it); its PID is the launch's output
     pid = ssh_host(host, f'. {shlex.quote(cfg["env"])} && setsid nohup {shlex.join(admitted)} '
                          f'> {shlex.quote(remote_work + "/actor.log")} 2>&1 < /dev/null & echo $!', timeout=60).strip()
+    # the serve's own arguments too: run-sft stops an actor the learner does not fit beside and serves it again after
     result = {'endpoint': endpoint, 'host': host, 'profile': 'colab', 'policy_id': sha, 'work': remote_work,
               'beside_learner': beside_learner, 'gpu': layout['gpu_name'],
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'export_format': sglang_format,
               'pid': int(pid.splitlines()[-1]), 'claim': claim, 'copy_seconds': round(copied - started, 1),
-              'started': started}
+              'checkpoint_arrived': arrived, 'started': started,
+              'serve_args': {'checkpoint': str(args.checkpoint), 'policy_id': sha, 'commit': commit, 'port': args.port,
+                             'bind_host': args.bind_host, 'kv_cache_dtype': args.kv_cache_dtype,
+                             'weight_dtype': weight_dtype, 'beside_learner': beside_learner,
+                             'ready_seconds': args.ready_seconds, 'host': host}}
     write_json(state_file, result)
     deadline = time.monotonic() + args.ready_seconds
     while time.monotonic() < deadline:
@@ -1084,11 +1177,59 @@ def remap_sft_args(argv, mapping):
     return out
 
 
+def run_detached(host, cfg, remote_run, command, *, poll_seconds=30, away_seconds=1800):
+    """Run ``command`` on ``host`` detached from the SSH connection (``setsid nohup``: a dropped ``colab ssh`` link
+    used to kill the learner through its stdout pipe) and wait for its exit status; a learner of this run still alive
+    from an earlier call is waited for instead of a second one started. Output goes to REMOTE_RUN/learner.log.
+    Returns the exit status, or None when the host stayed unreachable ``away_seconds`` (the learner may still run)."""
+    pid_file, rc_file, log_file = (f'{remote_run}/learner.pid', f'{remote_run}/learner.rc', f'{remote_run}/learner.log')
+    q = shlex.quote
+    probe = (f'if [ -f {q(rc_file)} ]; then echo "rc $(cat {q(rc_file)})"; '
+             f'elif [ -f {q(pid_file)} ] && kill -0 "$(cat {q(pid_file)})" 2>/dev/null; then echo running; '
+             f'else echo none; fi')
+    state = ssh_host(host, probe, timeout=60).strip()
+    if state != 'running':
+        inner = f'. {q(cfg["env"])} && {shlex.join(command)}; echo $? > {q(rc_file)}.tmp && mv {q(rc_file)}.tmp {q(rc_file)}'
+        ssh_host(host, f'rm -f {q(rc_file)} && setsid nohup bash -c {q(inner)} >> {q(log_file)} 2>&1 < /dev/null & '
+                       f'echo $! > {q(pid_file)}', timeout=60)
+        log(event='Colab learner started', host=host, remote_run=remote_run)
+    else:
+        log(event='Colab learner already running: waiting for it', host=host, remote_run=remote_run)
+    last_seen = time.time()
+    while True:
+        time.sleep(poll_seconds)
+        try:
+            state = ssh_host(host, probe, timeout=60).strip()
+        except (RuntimeError, subprocess.TimeoutExpired) as error:
+            if time.time() - last_seen >= away_seconds:
+                log(event='Colab learner unreachable', host=host, seconds=round(time.time() - last_seen),
+                    error=repr(error)[:200])
+                return None
+            continue
+        last_seen = time.time()
+        if state.startswith('rc '):
+            return int(state.split()[1] or 1)
+        if state == 'none':          # neither running nor finished: killed with its whole group (preemption)
+            return 1
+
+
+def restore_colab_actor(record):
+    """Serve again the Colab actor ``run-sft`` stopped for a learner it did not fit beside (its recorded serve
+    arguments); a failure is logged, never raised (the round's factors are already home)."""
+    try:
+        serve_colab(argparse.Namespace(**record['serve_args']))
+    except Exception as error:
+        log(event='Colab actor restore failed', host=record.get('host'), error=repr(error)[:300])
+
+
 def run_remote_sft(args):
     """Run the DGX SFT recipe on a Colab G4 VM: exactly the ``exp0_sft`` arguments the DGX preflight
     (``ops/grpo-v4/launch-sft.sh`` with PREFLIGHT_ONLY=1: input identity, held exclusion; ``--launch-json``) recorded,
     with paths mapped to the VM's copies, plus ``--resume`` and the learner-state saves the DGX pulls every
-    ``--state-sync-minutes``. The finished checkpoint arrives verified (``pull_verified``) or not at all."""
+    ``--state-sync-minutes``. The finished checkpoint (or a round's factors) arrives verified (``pull_verified``) or
+    not at all. The VM checkout is verified at ``--commit``; the start checkpoint is merged on the VM from the round
+    it trained before when it can (``ensure_remote_checkpoint``); the learner runs detached from the SSH link; an
+    actor recorded on the session alone (not capped beside the learner) yields the GPU and is served again after."""
     import threading
     cfg = host_config('colab', host=args.host)
     host = cfg['host']
@@ -1099,25 +1240,25 @@ def run_remote_sft(args):
     local_work = Path(args.work).resolve()
     local_work.mkdir(parents=True, exist_ok=True)
     remote_run = f'{cfg["work_root"]}/sft-{args.run_name}'
+    timings = {}
+    t0 = time.time()
     ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_run, f'{remote_run}/learner-state']))
     if args.commit:
-        ssh_host(host, f'git -C {shlex.quote(cfg["repo"])} fetch -q origin && '
-                       f'git -C {shlex.quote(cfg["repo"])} checkout -q -f {shlex.quote(args.commit)}', timeout=300)
+        colab_checkout(host, cfg, args.commit)
     value = lambda flag: recipe[recipe.index(flag) + 1]
     mapping = {value('--base'): cfg['base'], value('--out-dir'): remote_run}
     chains_remote = f'{remote_run}/chains.pkl'
+    t = time.time()
     sync_to_remote(value('--chains'), chains_remote, host)
     if remote_identity(host, chains_remote)[1] != launch['chains_sha256']:
         raise RuntimeError(f'the chains copied to {host} do not hash to {launch["chains_sha256"]}')
+    timings['chains_seconds'] = round(time.time() - t, 1)
     mapping[value('--chains')] = chains_remote
     start_sha = launch['start_checkpoint_sha256']
-    remote_ckpt = f'{cfg["checkpoints"]}/{start_sha}.pt'
-    if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
-        sync_to_remote(value('--checkpoint'), f'{remote_ckpt}.partial', host)
-        if remote_identity(host, f'{remote_ckpt}.partial')[1] != start_sha:
-            raise RuntimeError(f'the start checkpoint copied to {host} does not hash to {start_sha}')
-        ssh_host(host, shlex.join(['mv', f'{remote_ckpt}.partial', remote_ckpt]))
-    mapping[value('--checkpoint')] = remote_ckpt
+    t = time.time()
+    timings['start_checkpoint'] = ensure_remote_checkpoint(host, cfg, value('--checkpoint'), start_sha)
+    timings['start_checkpoint_seconds'] = round(time.time() - t, 1)
+    mapping[value('--checkpoint')] = f'{cfg["checkpoints"]}/{start_sha}.pt'
     vals = [recipe[i + 1] for i, a in enumerate(recipe[:-1]) if a == '--val-chains']
     for idx, vpath in enumerate(vals):
         rv = f'{remote_run}/val-{idx}-{Path(vpath).name}'
@@ -1132,6 +1273,7 @@ def run_remote_sft(args):
     round_id = value('--round-id') if '--round-id' in recipe else None
     if '--export-factors-dir' in recipe:
         mapping[value('--export-factors-dir')] = f'{remote_run}/factors'
+    timings['prepare_seconds'] = round(time.time() - t0, 1)
     # no MPS start here: the daemon must be up before the first CUDA client, so the serve that puts an actor beside
     # the learner starts it (serve-checkpoint --beside-learner) and the learner joins it; a session with no actor
     # beside (or one started without MPS) runs the learner as a plain CUDA process
@@ -1140,12 +1282,20 @@ def run_remote_sft(args):
     learner = colab_learner_layout(host)
     vram_gib = args.vram_gib if args.vram_gib is not None else learner['vram_gib']
     host_ram_gib = args.host_ram_gib if args.host_ram_gib is not None else learner['host_ram_gib']
+    # an actor served alone holds the GPU the learner alone needs (the admission would wait out its timeout): it
+    # yields for the round and is served again afterwards (between rounds the session decodes, during one it trains)
+    yielded = None
+    actor = read_json(colab_state_path(host)) or {}
+    if not learner['beside_actor'] and actor.get('pid') is not None:
+        yielded = stop_colab(host) if actor.get('serve_args') else None
+        if yielded is None:
+            log(event='Colab actor without serve arguments: not stopped', host=host, policy=actor.get('policy_id'))
     sft_args = remap_sft_args(recipe, mapping)
     if '--activation-gb' in sft_args:
         sft_args[sft_args.index('--activation-gb') + 1] = str(learner['activation_gib'])
     else:
         sft_args += ['--activation-gb', str(learner['activation_gib'])]
-    log(event='Colab SFT layout', host=host, **learner)
+    log(event='Colab SFT layout', host=host, **learner, yielded_actor=bool(yielded), **timings)
     sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *sft_args,
                *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(vram_gib), '--host-ram-gib',
@@ -1157,11 +1307,14 @@ def run_remote_sft(args):
     def pull_state(attempts):
         sync_from_remote(f'{remote_run}/learner-state/', f'{local_state}/', host, attempts=attempts)
         sync_from_remote(f'{remote_run}/train.jsonl', str(local_work / 'train.jsonl'), host, attempts=1)
+        sync_from_remote(f'{remote_run}/learner.log', str(local_work / 'train.log'), host, attempts=1)
 
     def sync_loop():
         while not stop_sync.wait(sync_interval):
             try:
+                t = time.time()
                 pull_state(2)
+                log(event='Colab SFT state synced', host=host, seconds=round(time.time() - t, 1))
             except Exception as err:
                 log(event='Colab SFT state sync warning', host=host, error=repr(err)[:200])
 
@@ -1169,8 +1322,8 @@ def run_remote_sft(args):
     sync_thread.start()
     started, rc = time.time(), 1
     try:
-        rc = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', host,
-                             f'. {shlex.quote(cfg["env"])} && {shlex.join(admitted)}'], timeout=24 * 3600).returncode
+        rc = run_detached(host, cfg, remote_run, admitted)
+        rc = 1 if rc is None else rc
     finally:
         stop_sync.set()
         sync_thread.join(timeout=30)
@@ -1178,6 +1331,7 @@ def run_remote_sft(args):
             pull_state(3)
         except Exception as err:
             log(event='Colab SFT post-run pull warning', error=repr(err)[:200])
+    trained = time.time()
     sha = None
     factors_sha = None
     if rc == 0:
@@ -1197,6 +1351,10 @@ def run_remote_sft(args):
                 if local_factors.exists():
                     shutil.rmtree(local_factors)
                 os.replace(staged, local_factors)
+                # kept on the VM by sha: the next round's start is this round's publication, merged there from them
+                keep = f'{cfg["root"]}/factors/{factors_sha}'
+                ssh_host(host, f'mkdir -p {shlex.quote(cfg["root"] + "/factors")} && rm -rf {shlex.quote(keep)} && '
+                               f'cp -al {shlex.quote(remote_run + "/factors")} {shlex.quote(keep)}', check=False)
             except Exception as err:
                 rc = 1
                 pending = {'schema': 'natlang.pending-upload/1', 'host': host, 'run_name': args.run_name,
@@ -1215,8 +1373,13 @@ def run_remote_sft(args):
             except Exception as err:
                 rc = 1
                 log(event='Colab SFT checkpoint pull failed', host=host, error=repr(err)[:300])
+    timings.update(train_seconds=round(trained - started, 1), pull_seconds=round(time.time() - trained, 1))
+    if yielded:
+        t = time.time()
+        restore_colab_actor(yielded)
+        timings['actor_restore_seconds'] = round(time.time() - t, 1)
     log(event='Colab G4 SFT finished', host=host, returncode=rc, seconds=round(time.time() - started, 1),
-        checkpoint_sha256=sha, adapter_factors_sha256=factors_sha)
+        checkpoint_sha256=sha, adapter_factors_sha256=factors_sha, **timings)
     return rc
 
 
