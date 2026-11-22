@@ -6703,3 +6703,14 @@ a long episode).
   the G4 unchanged. Every item in the brief's §6 (no recomputation, Blackwell kernels and recompile audit, FP8 frozen-base
   GEMMs, DiLoCo multi-worker, RL publication with adapter slots on every engine, learner/actor overlap on the G4) is a
   required deliverable.
+
+## 2026-11-22 12:00 lfm3opti v3 decided on first principles (owner: no options, no deferrals)
+
+- Required: Colab G4 as a machine (remote-actor module shared with Pop, ExecutionProfile with DGX fallback after 30
+  min); G4 held series at 4 samples; `lora+rows` as the only parameterization (full path removed when the core lands);
+  native-route reload at rebind; resident activations; Blackwell kernels with length buckets; FP8 frozen-base GEMMs;
+  GRPO merged-export publication; collection and held eval sharded across all G4 sessions.
+- Dropped, with reasons in the brief §6: DiLoCo multi-worker (SFT ~1 h on one G4; collection is the larger stage and
+  shards by task), SGLang adapter slots (a merged reload takes seconds against minute-long GRPO steps), learner/actor
+  overlap (stages sequential by on-policy dependency; pipelined cycles already overlap machines), L4 (GB10 bandwidth).
+  This supersedes the 11:30 entry's "every §6 item required".
