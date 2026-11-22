@@ -227,7 +227,7 @@ def bench(args):
                     p.grad = None
                 del h, nll
         results[mode] = {'fwd_bwd_tokens_per_s': round(tokens / seconds), 'seconds': round(seconds, 2),
-                         'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 2), 'loss': losses}
+                         'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 2), 'loss': losses}
         print(json.dumps({'mode': mode, **results[mode]}), flush=True)
     if args.out:
         Path(args.out).write_text(json.dumps(results, indent=1) + '\n')

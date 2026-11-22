@@ -818,10 +818,13 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step, train
     if 'lm_head.weight' in original:
         backbone['lm_head.weight'] = backbone['model.embed_tokens.weight']
     out = {k: state[k] for k in ('schema', 'model_config', 'interface_state')}
-    out.update(backbone_state=backbone, step=int(state['step']), inference_only=True, optimizer_pruned=True,
-               optimizer_pruned_keys=['training'],
+    source_step = int(state['step'])
+    learner_step = int(step)
+    out.update(backbone_state=backbone, step=learner_step, learner_step=learner_step, source_step=source_step,
+               inference_only=True, optimizer_pruned=True, optimizer_pruned_keys=['training'],
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
-                                 'training_checkpoint_bytes': 0, 'step': int(state['step'])})
+                                 'training_checkpoint_bytes': 0, 'step': learner_step,
+                                 'learner_step': learner_step, 'source_step': source_step})
     # atomic; a target on the external disk is written to the NVMe and moved in the background (staged_write)
     from natlang_neuralese.train.checkpoint_offload import staged_write
     with staged_write(out_path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
@@ -1004,7 +1007,7 @@ def train(args):
                   'forward_tokens_per_s': round(forward_tokens / (time.time() - started)),
                   'step_seconds': round(time.time() - step_started, 1),
                   'phase_seconds': {k: round(v, 1) for k, v in phase.items()},
-                  'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
+                  'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
         if val_sets and ((step + 1) % args.val_every == 0 or step + 1 == len(steps)):
             model.eval()
             record.update({f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()})
@@ -1020,7 +1023,7 @@ def train(args):
                         # best checkpoint exists on disk whatever happens to the run (preemption, an early stop)
                         from natlang_neuralese.common.hashing import sha256_file_hex_cached
                         write_checkpoint(model, state, special, Path(args.out_dir) / 'checkpoint.pt',
-                                         sha256_file_hex_cached(Path(args.checkpoint)), total)
+                                         sha256_file_hex_cached(Path(args.checkpoint)), step + 1)
                         record['saved_best'] = {'step': step + 1, 'val_loss': current}
                 record['best_val'] = {'loss': best['loss'], 'step': best['step']}
         if args.hours and step + 1 == args.replan_step and step + 1 < len(steps):
@@ -1085,7 +1088,7 @@ def bench(args):
                 for p in params:
                     p.grad = None
         print(json.dumps({'impl': label, 'chain_tokens': [len(c['ids']) for c in chains], 'loss': [round(x, 5) for x in losses],
-                          'fwd_bwd_tokens_per_s': round(tokens / seconds), 'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}), flush=True)
+                          'fwd_bwd_tokens_per_s': round(tokens / seconds), 'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 1)}), flush=True)
         return losses, grads
 
     reference = None

@@ -43,7 +43,7 @@ SKIP_DIRS = {'actor', 'groups', 'held', 'rollouts', 'decisions', 'code', 'worker
 ALWAYS = ['reward_mean', 'kl_mean', 'grad_norm', 'grad_norm_vs_median', 'lr', 'lr_data_scale', 'spread_fraction', 'groups',
           'groups_with_spread', 'episodes', 'rho_mean', 'abs_log_rho_mean', 'ref_abs_dlogp_mean', 'ref_dlogp_max', 'mean_logp',
           'reasoning_tokens_per_call', 'reply_tokens_per_call', 'reasoning_vs_first_step', 'learner_tokens_per_s',
-          'actor_tokens_per_s_collect_phase', 'actor_tokens_per_s_learn_phase', 'cuda_peak_gb', 'bf16_changed_step_fraction',
+          'actor_tokens_per_s_collect_phase', 'actor_tokens_per_s_learn_phase', 'cuda_peak_gib', 'cuda_peak_gb', 'bf16_changed_step_fraction',
           'bf16_changed_vs_start_fraction', 'grad_moment_cosine']
 ALWAYS_PREFIX = ('behaviour.', 'grad_mass_share.', 'phase_s.', 'gain.')   # nested hunt gain object: always kept
 SKIP_PREFIX = ('meminfo', 'swap', 'learner_swap', 'staleness.', 'decision_diagnostics.', 'lowering.')
@@ -226,7 +226,7 @@ def select_metrics(rec, kind='grpo', cap=60):
 
 
 def is_step(rec):
-    return isinstance(rec, dict) and 'step' in rec and ('cuda_peak_gb' in rec or 'behaviour' in rec)
+    return isinstance(rec, dict) and 'step' in rec and ('cuda_peak_gib' in rec or 'cuda_peak_gb' in rec or 'behaviour' in rec)
 
 
 def discover_runs(ops):

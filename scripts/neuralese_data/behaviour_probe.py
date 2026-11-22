@@ -326,10 +326,10 @@ def measure_checkpoints(args):
         record = summary(now, start, probe)
         start = start or now
         line = {'checkpoint': checkpoint, 'summary': record, 'shifted': shifted(record), 'measure': now,
-                'seconds': round(time.time() - t, 1), 'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 2)}
+                'seconds': round(time.time() - t, 1), 'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 2)}
         with out.open('a') as handle:
             handle.write(json.dumps(line) + '\n')
-        print(json.dumps({k: line[k] for k in ('checkpoint', 'summary', 'shifted', 'seconds', 'cuda_peak_gb')}), flush=True)
+        print(json.dumps({k: line[k] for k in ('checkpoint', 'summary', 'shifted', 'seconds', 'cuda_peak_gib')}), flush=True)
         del model
         torch.cuda.empty_cache()
 

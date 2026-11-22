@@ -1307,8 +1307,17 @@ class WeightSync:
                 policy_id = policy or extra.get('checkpoint_sha256') or weights
                 try:
                     post(self.front_url + '/v1/neuralese/rebind-policy',
-                         {'policy_id': policy_id, 'weights_sha256': weights, 'version': version})
-                    timing['policy_id'] = policy_id
+                         {'policy_id': policy_id, 'weights_sha256': weights, 'version': version,
+                          'export_dir': str(self.weights_dir)})
+                    from natlang_neuralese.serve.sglang_actor import attest_all_routes
+                    with urllib.request.urlopen(self.front_url + '/v1/neuralese/info', timeout=30) as response:
+                        info = json.loads(response.read())
+                    routes_ok, mismatches = attest_all_routes(info, policy_id, weights)
+                    if not routes_ok:
+                        ok, answer = False, f'route attestation failed: {mismatches}'[:400]
+                    else:
+                        timing['policy_id'] = policy_id
+                        timing['routes_attested'] = True
                 except Exception as error:
                     ok, answer = False, f'rebind failed: {error!r}'[:400]
                 timing['rebind_s'] = round(time.time() - t, 2)
@@ -1434,7 +1443,7 @@ class MomentOffload:
                 for t in self.tensors:
                     t.untyped_storage().resize_(0)
                 torch.cuda.empty_cache()
-                self.last['cuda_reserved_after_put_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
+                self.last['cuda_reserved_after_put_gib'] = round(torch.cuda.memory_reserved() / 2**30, 1)
             except BaseException as error:      # freed only after a complete write: the tensors stay resident
                 self.error = error
         self.thread = threading.Thread(target=run, daemon=True)
@@ -1639,7 +1648,7 @@ def process_memory_gb():
 
 
 # ---- learner ---------------------------------------------------------------------------------------------------------
-def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained):
+def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained, learner_step=None):
     """``exp0_sft.write_checkpoint``'s pruned native checkpoint from a host snapshot, without holding the source backbone:
     the trained backbone (BF16), the source's native embedding rows at the interface ids, the source's interface."""
     import torch
@@ -1650,10 +1659,13 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
     if native_rows['tied_head']:
         backbone['lm_head.weight'] = embedding
     out = {k: state[k] for k in ('schema', 'model_config', 'interface_state')}
-    out.update(backbone_state=backbone, step=int(state['step']), inference_only=True, optimizer_pruned=True,
-               optimizer_pruned_keys=['training'],
+    source_step = int(state['step'])
+    recorded_step = source_step if learner_step is None else int(learner_step)
+    out.update(backbone_state=backbone, step=recorded_step, learner_step=recorded_step, source_step=source_step,
+               inference_only=True, optimizer_pruned=True, optimizer_pruned_keys=['training'],
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
-                                 'training_checkpoint_bytes': 0, 'step': int(state['step'])})
+                                 'training_checkpoint_bytes': 0, 'step': recorded_step,
+                                 'learner_step': recorded_step, 'source_step': source_step})
     from natlang_neuralese.train.checkpoint_offload import staged_write   # NVMe first, then moved (StateSaver)
     with staged_write(path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
         torch.save(out, target.path)
@@ -3682,7 +3694,7 @@ def train(args):
     import gc
     gc.collect()
     drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
-    log_line(log, {'event': 'host model loaded', 'meminfo_gb': meminfo(), 'load_s': round(time.time() - t0, 1)})
+    log_line(log, {'event': 'host model loaded', 'meminfo_gib': meminfo(), 'load_s': round(time.time() - t0, 1)})
     model.to('cuda')
     masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
     model.to(torch.bfloat16)
@@ -3942,9 +3954,9 @@ def train(args):
             log_line(log, {'event': 'behaviour probe start: end of turn from the reference weights',
                            'calls': len(end['end_logp']), 'end_logp': round(float(np.mean(end['end_logp'])), 4),
                            'seconds': round(time.time() - t, 1)})
-    log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gb': meminfo(),
-                   'cuda_allocated_gb': round(torch.cuda.memory_allocated() / 2**30, 1),
-                   'cuda_reserved_gb': round(torch.cuda.memory_reserved() / 2**30, 1)})
+    log_line(log, {'event': 'learner ready', 'init_s': round(time.time() - t0, 1), 'meminfo_gib': meminfo(),
+                   'cuda_allocated_gib': round(torch.cuda.memory_allocated() / 2**30, 1),
+                   'cuda_reserved_gib': round(torch.cuda.memory_reserved() / 2**30, 1)})
     if args.held_every_hours > 0 and not (work / 'held' / 'step-00000' / 'result.json').exists() \
             and not args.skip_base_held and not args.held_baseline and not args.held_remote:
         collector.paused.set()            # the start policy's held measurement goes first (held() resumes collection)
@@ -3998,7 +4010,8 @@ def train(args):
         directory = checkpoint_root / f'step-{step_number:05d}'
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / 'checkpoint.pt'
-        changed = write_pruned_checkpoint(state, native_rows, special, path, source_sha, sync.backbone())
+        changed = write_pruned_checkpoint(state, native_rows, special, path, source_sha, sync.backbone(),
+                                          learner_step=step_number)
         from natlang_neuralese.common.hashing import sha256_file_hex
         sha = sha256_file_hex(path)
         (directory / 'sha256.txt').write_text(sha + '\n')
@@ -4532,7 +4545,7 @@ def train(args):
                   'reward_mean': round(sum(rewards) / max(1, len(rewards)), 4), 'sequences': len(chains),
                   'loss_tokens': loss_tokens, 'decisions': len(decisions), 'lowering': dict(stats),
                   'loss_norm': args.loss_norm, 'decision_weight': args.decision_weight, 'episodes_trained': episodes_trained,
-                  'rollouts_archive_free_gb': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
+                  'rollouts_archive_free_gib': round(shutil.disk_usage(rollouts_archive).free / 2**30, 1)
                   if rollouts_archive is not None and rollouts_archive.exists() else None,
                   'actor_version': versions_live['actor'], 'imported_state_mb': round(imported_state_mb, 1),
                   'neuralese_passthrough': not args.no_neuralese_passthrough,
@@ -4570,8 +4583,8 @@ def train(args):
         def note_peak(name, tokens, chains_in_batch):
             peak = torch.cuda.max_memory_allocated() / 2**30      # monotone within a phase (phase_peak resets it)
             events = peak_events.setdefault(name, [])
-            if len(events) < 16 and (not events or peak >= events[-1]['allocated_gb'] + 1):
-                events.append({'allocated_gb': round(peak, 1), 'batch_tokens': int(tokens), 'chains': chains_in_batch})
+            if len(events) < 16 and (not events or peak >= events[-1]['allocated_gib'] + 1):
+                events.append({'allocated_gib': round(peak, 1), 'batch_tokens': int(tokens), 'chains': chains_in_batch})
 
         def phase_peak(name):
             cuda_peaks[name] = {'allocated': round(torch.cuda.max_memory_allocated() / 2**30, 1),
@@ -4587,7 +4600,7 @@ def train(args):
             # queues (case_seconds counts the wait) and continue after the step's weight update (WeightSync.publish)
             free0 = torch.cuda.mem_get_info()[0]
             phase['actor_release'] = sync.release(release_tags)
-            record['actor_release_freed_gb'] = round((torch.cuda.mem_get_info()[0] - free0) / 2**30, 1)
+            record['actor_release_freed_gib'] = round((torch.cuda.mem_get_info()[0] - free0) / 2**30, 1)
         swap0, mem0 = vmstat(), meminfo()
         progress_mark = time.time()
         if phase_mark['tokens'] is not None and learn_tokens0 is not None:
@@ -4836,7 +4849,7 @@ def train(args):
             if time.time() - progress_mark > 300:
                 progress_mark = time.time()
                 log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
-                               'policy_s': round(time.time() - policy_started), 'meminfo_gb': meminfo(),
+                               'policy_s': round(time.time() - policy_started), 'meminfo_gib': meminfo(),
                                'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
         record['prefix_tree'] = run_tree(train_leaves)
         torch.cuda.synchronize()
@@ -4952,7 +4965,7 @@ def train(args):
         cache_release['collect'] = free_cuda_cache(not args.no_learner_gc)
         if args.no_learner_gc:
             release_host_memory()
-        record['cuda_reserved_collect_gb'] = round(torch.cuda.memory_reserved() / 2**30, 1)
+        record['cuda_reserved_collect_gib'] = round(torch.cuda.memory_reserved() / 2**30, 1)
         record['cuda_cache_release'] = cache_release
         torch.cuda.reset_peak_memory_stats()   # the behaviour probe's peak is its own, not the optimizer's carried reserve
         elements = sum(p.numel() for p in live.values())
@@ -5058,8 +5071,8 @@ def train(args):
             actor_tokens_per_s_collect_phase=round(phase_totals['collect_tokens'] / phase_totals['collect_s']) if phase_totals['collect_s'] else None,
             learner_phase_slots=args.learner_phase_slots,
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
-            previous_state_save=saver.last, cuda_peak_gb=max([v['allocated'] for v in cuda_peaks.values()], default=None),
-            cuda_peak_by_phase_gb=cuda_peaks, cuda_peak_events=peak_events, host_pinned_gb=host_pinned_gb(),
+            previous_state_save=saver.last, cuda_peak_gib=max([v['allocated'] for v in cuda_peaks.values()], default=None),
+            cuda_peak_by_phase_gib=cuda_peaks, cuda_peak_events=peak_events, host_pinned_gib=host_pinned_gb(),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         record.update(grad_spike(work, grad_norm))
         if record.get('grad_spike'):

@@ -156,13 +156,89 @@ class SglangEngine(Engine):
             model.eval()
             for parameter in model.parameters():
                 parameter.requires_grad_(False)
-            identity = native_identity(model, config, checkpoint_sha256=self.native_identity['checkpoint_sha256'])
-            if identity != self.native_identity:
-                raise RuntimeError('lazily reloaded native model differs from the served native identity')
+            rebind = self.__dict__.get('_native_rebind_source')
+            if rebind is not None:
+                self._apply_export_weights_to_native(
+                    model, rebind['path'], rebind['policy_id'], rebind['weights_sha256'], rebind['version'])
+            else:
+                identity = native_identity(model, config, checkpoint_sha256=self.native_identity['checkpoint_sha256'])
+                if identity != self.native_identity:
+                    raise RuntimeError('lazily reloaded native model differs from the served native identity')
             self.__dict__['_native_backbone'] = model.port
             self.__dict__['_native_model'] = model
             self.__dict__['_native_training_state'] = _state.get('training') or _state.get('shared_training') or {}
             self.native_reloads = getattr(self, 'native_reloads', 0) + 1
+
+    def _apply_export_weights_to_native(self, model, weights_path, policy_id, weights_sha256, version):
+        """Reload ``model``'s backbone and sparse interface rows from an HF safetensors export or pruned native
+        checkpoint so the native fallback route serves the exact same weights as SGLang after an in-place rebind."""
+        import torch
+        from safetensors import safe_open
+        path = str(weights_path)
+        if os.path.isdir(path):
+            path = os.path.join(path, 'model.safetensors')
+        if not os.path.isfile(path):
+            raise ValueError(f'rebind native weights path does not exist: {path}')
+        hf = model.port.hf
+        hf_params = dict(hf.named_parameters())
+        with torch.inference_mode(False), torch.no_grad():
+            if path.endswith('.safetensors'):
+                with safe_open(path, framework='pt', device='cpu') as handle:
+                    keys = set(handle.keys())
+                    for name, param in hf_params.items():
+                        if name == 'lm_head.weight' and name not in keys and 'model.embed_tokens.weight' in keys:
+                            continue
+                        if name in keys:
+                            src = handle.get_tensor(name)
+                            param.copy_(src.to(device=param.device, dtype=param.dtype))
+                    embed_key = 'model.embed_tokens.weight'
+                    if embed_key in keys:
+                        merged_embed = handle.get_tensor(embed_key)
+                        if hasattr(model, 'marker_ids') and hasattr(model, 'input_rows') and model.input_rows is not None:
+                            idx = torch.tensor(list(model.marker_ids), dtype=torch.long)
+                            model.input_rows.copy_(merged_embed[idx].to(device=model.input_rows.device, dtype=model.input_rows.dtype))
+                            if not getattr(model, 'tied', True) and getattr(model, 'output_rows', None) is not None:
+                                head_src = handle.get_tensor('lm_head.weight') if 'lm_head.weight' in keys else merged_embed
+                                model.output_rows.copy_(head_src[idx].to(device=model.output_rows.device, dtype=model.output_rows.dtype))
+                        if getattr(model, 'token_override_ids', None) and getattr(model, 'extra_input_rows', None) is not None:
+                            idx = torch.tensor(list(model.token_override_ids), dtype=torch.long)
+                            model.extra_input_rows.copy_(merged_embed[idx].to(device=model.extra_input_rows.device, dtype=model.extra_input_rows.dtype))
+                            if not getattr(model, 'tied', True) and getattr(model, 'extra_output_rows', None) is not None:
+                                head_src = handle.get_tensor('lm_head.weight') if 'lm_head.weight' in keys else merged_embed
+                                model.extra_output_rows.copy_(head_src[idx].to(device=model.extra_output_rows.device, dtype=model.extra_output_rows.dtype))
+            else:
+                from ..train.checkpoint_policy import CheckpointPolicy
+                state = CheckpointPolicy.load(path)
+                backbone = state['backbone_state']
+                for name, param in hf_params.items():
+                    if name in backbone:
+                        param.copy_(backbone[name].to(device=param.device, dtype=param.dtype))
+                interface = state.get('interface_state') or {}
+                for attr in ('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows'):
+                    if attr in interface and getattr(model, attr, None) is not None:
+                        target = getattr(model, attr)
+                        target.copy_(interface[attr].to(device=target.device, dtype=target.dtype))
+        embed_weight = model.port.embedding_weight
+        if hasattr(model, 'adapter') and getattr(self, 'model_config', None):
+            from ..model.native_model import native_identity
+            recomputed = native_identity(model, self.model_config, checkpoint_sha256=policy_id)
+            embed_sha = recomputed['embedding_weight_sha256']
+        else:
+            embed_sha = hashlib.sha256(
+                embed_weight.detach().contiguous().cpu().view(torch.uint8).numpy().tobytes()).hexdigest()
+        self.checkpoint_sha256 = policy_id
+        self.embedding_weight_sha256 = embed_sha
+        if hasattr(self, 'native_identity') and isinstance(self.native_identity, dict):
+            self.native_identity = {**self.native_identity, 'checkpoint_sha256': policy_id,
+                                    'embedding_weight_sha256': embed_sha}
+        self._native_policy_sha256 = policy_id
+        self._native_weights_sha256 = weights_sha256
+        self._native_policy_version = version
+        if getattr(self, 'native_adapter_cache', None) is not None:
+            self.native_adapter_cache.entries.clear()
+            self.native_adapter_cache.bytes = 0
+        if getattr(self, 'prefix_cache', None) is not None and hasattr(self.prefix_cache, 'clear'):
+            self.prefix_cache.clear()
 
     def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
@@ -233,26 +309,87 @@ class SglangEngine(Engine):
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self
 
-    def rebind_in_place(self, policy_id, weights_sha256, version=None):
+    def rebind_in_place(self, policy_id, weights_sha256, version=None, *, export_dir=None, weights_path=None,
+                        checkpoint_path=None):
         """Attest the policy a trainer loaded into the SGLang server in place (``update_weights_from_disk``; grpo.py): the
-        policy id, the export weights it serves and the update's version. The native engine (adapters, text writes) and
-        native-state identities keep the start checkpoint; the binding says so."""
+        policy id, the export weights it serves and the update's version. By default (opt-out:
+        ``NATLANG_REBIND_NATIVE_RELOAD=0``) reloads the native fallback engine from the same export/checkpoint so all
+        four serving routes (generation, decision, capture, native_fallback) serve the updated policy."""
         import re
         if not all(re.fullmatch(r'[0-9a-f]{64}', str(value)) for value in (policy_id, weights_sha256)):
             raise ValueError('policy_id and weights_sha256 must be SHA-256 digests')
+        reload_enabled = os.environ.get('NATLANG_REBIND_NATIVE_RELOAD', '1') != '0'
+        source = weights_path or (os.path.join(export_dir, 'model.safetensors') if export_dir else None) or checkpoint_path
+        if reload_enabled and source is not None and not os.path.exists(source):
+            raise ValueError(f'rebind export/weights path does not exist: {source}')
         with self._sglang_lock:
-            self.sglang_actor_export = {**self.sglang_actor_export, 'sha256': weights_sha256}
             binding = self.rl_policy_binding
-            binding.setdefault('start_checkpoint_sha256', binding.get('checkpoint_sha256'))
+            start_sha = binding.setdefault('start_checkpoint_sha256', binding.get('checkpoint_sha256'))
+            if getattr(self, '_native_policy_sha256', None) is None:
+                self._native_policy_sha256 = getattr(self, 'checkpoint_sha256', None) or start_sha
+                self._native_weights_sha256 = (getattr(self, 'sglang_actor_export', None) or {}).get('sha256')
+                self._native_policy_version = 0
+            self.sglang_actor_export = {**self.sglang_actor_export, 'sha256': weights_sha256}
             binding['checkpoint_sha256'] = policy_id
             binding['serving_engine']['hf_export_weights_sha256'] = weights_sha256
             if 'actor_export' in binding:
                 binding['actor_export'] = dict(self.sglang_actor_export)
+            if reload_enabled and source is not None:
+                rebind_record = {'path': str(source), 'policy_id': policy_id, 'weights_sha256': weights_sha256,
+                                 'version': version}
+                self.__dict__['_native_rebind_source'] = rebind_record
+                resident = self.__dict__.get('_native_model')
+                if resident is not None:
+                    lock = getattr(self, 'native_execution_lock', None)
+                    if lock is not None:
+                        with lock:
+                            self._apply_export_weights_to_native(resident, source, policy_id, weights_sha256, version)
+                    else:
+                        self._apply_export_weights_to_native(resident, source, policy_id, weights_sha256, version)
+                else:
+                    # Lazy reload: _ensure_native will apply _native_rebind_source on first native request.
+                    self.checkpoint_sha256 = policy_id
+                    if hasattr(self, 'native_identity') and isinstance(self.native_identity, dict):
+                        self.native_identity = {**self.native_identity, 'checkpoint_sha256': policy_id}
+                    self._native_policy_sha256 = policy_id
+                    self._native_weights_sha256 = weights_sha256
+                    self._native_policy_version = version
+                    if getattr(self, 'native_adapter_cache', None) is not None:
+                        self.native_adapter_cache.entries.clear()
+                        self.native_adapter_cache.bytes = 0
+                    if getattr(self, 'prefix_cache', None) is not None and hasattr(self.prefix_cache, 'clear'):
+                        self.prefix_cache.clear()
+                native_status = 'reloaded'
+            elif not reload_enabled:
+                native_status = 'start checkpoint (opted out via NATLANG_REBIND_NATIVE_RELOAD=0)'
+            else:
+                native_status = 'start checkpoint (not updated in place)'
             binding['in_place_update'] = {'version': version, 'policy_id': policy_id, 'weights_sha256': weights_sha256,
-                                          'native_engine': 'start checkpoint (not updated in place)'}
+                                          'native_engine': native_status}
             # New weights: the radix cache holds none of the old policy's openings (update_weights_from_disk flushes it).
             self.__dict__.pop('_sglang_openings', None)
-        return dict(binding['in_place_update'])
+        return {**binding['in_place_update'], 'routes': self.route_attestation()}
+
+    def route_attestation(self):
+        """Policy and weight digest served by each of the four actor routes (generation, decision, capture,
+        native_fallback), exposed in ``/v1/neuralese/info`` so GRPO verifies zero split-brain after every sync."""
+        binding = getattr(self, 'rl_policy_binding', None) or {}
+        update = binding.get('in_place_update')
+        sglang_policy = (update or {}).get('policy_id') or binding.get('checkpoint_sha256') or getattr(self, 'checkpoint_sha256', None)
+        sglang_weights = (update or {}).get('weights_sha256') or (getattr(self, 'sglang_actor_export', None) or {}).get('sha256')
+        version = (update or {}).get('version', 0)
+        native_policy = getattr(self, '_native_policy_sha256', None) or getattr(self, 'checkpoint_sha256', None) or binding.get('start_checkpoint_sha256')
+        native_weights = getattr(self, '_native_weights_sha256', None)
+        if native_weights is None and native_policy == sglang_policy:
+            native_weights = sglang_weights
+        native_version = getattr(self, '_native_policy_version', 0 if update is None else None)
+        sglang_route = {'policy_sha256': sglang_policy, 'weights_sha256': sglang_weights, 'version': version}
+        native_route = {'policy_sha256': native_policy, 'weights_sha256': native_weights, 'version': native_version,
+                        'resident': self.__dict__.get('_native_model') is not None,
+                        'synchronized': native_policy == sglang_policy and (
+                            sglang_weights is None or native_weights == sglang_weights)}
+        return {'generation': dict(sglang_route), 'decision': dict(sglang_route),
+                'capture': dict(sglang_route), 'native_fallback': native_route}
 
     def _served_policy(self):
         """The in-place update this sampler serves (``rebind_in_place``), else None (the start checkpoint)."""
@@ -1314,3 +1451,25 @@ class SglangEngine(Engine):
             raise RequestError('sglang-actor-backend', f'SGLang HTTP {error.code}: {error.read()[:400]!r}') from error
         finally:
             self._sglang_count_prompt(meta)  # also when the consumer stops early (a guided rewind)
+
+
+def attest_all_routes(info, expected_policy_id, expected_weights_sha256=None):
+    """Verify every serving route reported by ``/v1/neuralese/info`` attests ``expected_policy_id`` (and
+    ``expected_weights_sha256`` when given). Returns ``(ok, mismatches)``."""
+    routes = (info or {}).get('routes')
+    if not isinstance(routes, dict):
+        return False, {'routes': 'missing routes attestation in /v1/neuralese/info'}
+    required = ('generation', 'decision', 'capture', 'native_fallback')
+    mismatches = {}
+    for name in required:
+        entry = routes.get(name)
+        if not isinstance(entry, dict):
+            mismatches[name] = 'missing'
+            continue
+        if entry.get('policy_sha256') != expected_policy_id:
+            mismatches[name] = {'expected_policy': expected_policy_id, 'actual_policy': entry.get('policy_sha256')}
+        elif expected_weights_sha256 is not None and entry.get('weights_sha256') != expected_weights_sha256:
+            mismatches[name] = {'expected_weights': expected_weights_sha256, 'actual_weights': entry.get('weights_sha256')}
+        elif name == 'native_fallback' and entry.get('synchronized') is False:
+            mismatches[name] = {'synchronized': False}
+    return not mismatches, mismatches

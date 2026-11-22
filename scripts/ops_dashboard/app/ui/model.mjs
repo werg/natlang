@@ -141,5 +141,6 @@ export const PRESETS = [
   ['End of turn after a short answer vs base', 'behaviour.end_logp_change', 'Behaviour probe v2: log p(<|im_end|>) where the start policy ended a decision answer, now minus start; below -1 flags behaviour_shift (a second </think> instead).'],
   ['Learner tokens per second', 'learner_tokens_per_s', 'Learner throughput.'],
   ['Actor tokens per second', 'actor_tokens_per_s_collect_phase', 'Actor generation rate (collect phase).'],
-  ['Learner CUDA peak', 'cuda_peak_gb', 'Peak GPU memory of the step (GB, unified memory).'],
+  ['Learner CUDA peak', 'cuda_peak_gib', 'Peak GPU memory of the step (GiB).'],
+  ['Learner CUDA peak (legacy)', 'cuda_peak_gb', 'Peak GPU memory of the step (GiB, legacy label).'],
 ];

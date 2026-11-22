@@ -164,6 +164,12 @@ def make_handler(engine: Engine):
             if self.path == "/v1/neuralese/info":
                 from ..data.prompt_rendering import prompt_rendering_identity
                 prompt_identity = prompt_rendering_identity(engine.prompt_rendering)
+                if hasattr(engine, "route_attestation"):
+                    routes = engine.route_attestation()
+                else:
+                    route_entry = {"policy_sha256": engine.checkpoint_sha256, "weights_sha256": None, "version": 0}
+                    routes = {name: dict(route_entry) for name in ("generation", "decision", "capture")}
+                    routes["native_fallback"] = {**route_entry, "resident": True, "synchronized": True}
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width,
                                         "dtype": getattr(engine, "native_dtype", None) or str(engine.backbone.embedding_weight.dtype).replace("torch.", ""),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
@@ -179,6 +185,7 @@ def make_handler(engine: Engine):
                                                               "embedding_weight_sha256": engine.embedding_weight_sha256,
                                                               "role_marker_ids": list(engine.role_tokens.ids)},
                                         "server": "reference",
+                                        "routes": routes,
                                         **({"rl_policy_binding": engine.rl_policy_binding}
                                            if getattr(engine, "rl_policy_binding", None) else {}),
                                         "prompt_rendering": engine.prompt_rendering,
@@ -320,8 +327,10 @@ def make_handler(engine: Engine):
                     if not hasattr(engine, "rebind_in_place"):
                         return self._error(400, "unsupported", "only the SGLang actor takes in-place policy updates")
                     body = self._object()
-                    return self._json(200, engine.rebind_in_place(body.get("policy_id"), body.get("weights_sha256"),
-                                                                  body.get("version")))
+                    return self._json(200, engine.rebind_in_place(
+                        body.get("policy_id"), body.get("weights_sha256"), body.get("version"),
+                        export_dir=body.get("export_dir"), weights_path=body.get("weights_path"),
+                        checkpoint_path=body.get("checkpoint_path")))
                 if self.path == "/v1/neuralese/collect":
                     referenced = self._object().get("referenced")
                     if referenced is None:
