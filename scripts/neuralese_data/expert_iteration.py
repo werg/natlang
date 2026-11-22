@@ -72,11 +72,13 @@ FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill p
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
 COLLECTOR_SLOT_GB = 0.3
-# Collection defaults (async-train §3 FP8 collection weights, §8 JOLT+ guided attempts): BF16 weights and no guided
-# attempts until the FP8 SGLang weight path and JOLT+ custody work in production; the strand that lands them flips
-# these two values (every collection path, cycle and async driver, reads them).
-COLLECT_WEIGHT_DTYPE = 'bfloat16'
-TEACHER_ATTEMPTS = 0
+# Collection defaults (async-train §3 FP8 collection weights, §8 JOLT+ guided attempts; every collection path, cycle
+# and async driver, reads them). FP8: fork ec27f0809a runs online FP8 weights in LFM3's natlang projections and reloads
+# them in place; an actor on an older fork checkout or a GPU below sm_89 serves BF16 and logs
+# sglang_weight_dtype_fallback (serve_native_checkpoint.serving_weight_dtype). JOLT+: custody resolves the held
+# packets' data_nvme: paths (fb75ccb78); guided attempts are leak-filtered and guidance-stripped before any pool.
+COLLECT_WEIGHT_DTYPE = 'fp8'
+TEACHER_ATTEMPTS = 2
 # DGX held series (async-train §1): a held measurement's claim file here makes every DGX collection shrink to
 # HELD_PRIORITY_SHARE of its slots while it runs (held episodes take priority over collection)
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'

@@ -643,24 +643,24 @@ def test_a_neutral_rejection_rolls_back_and_keeps_going(tmp_path):
 def test_dry_run_prints_one_rounds_commands(tmp_path, monkeypatch, capsys):
     ei, d = _driver(tmp_path, monkeypatch, argv=['--dry-run'])
     plan = d.plan()
-    assert plan['collect'][plan['collect'].index('--collect-weight-dtype') + 1] == 'bfloat16'
+    assert plan['collect'][plan['collect'].index('--collect-weight-dtype') + 1] == ei.COLLECT_WEIGHT_DTYPE == 'fp8'
     assert plan['publish'][2] == 'publish-round' and plan['grpo'][2] == 'train'
     assert '--held-every-hours' in plan['grpo'] and plan['held']['every'] == 2
     assert json.loads(capsys.readouterr().out)['phase'] == 'sft'
 
 
-def test_collection_defaults_bf16_weights_and_no_guided_attempts_until_flipped(tmp_path, monkeypatch):
-    """Until FP8 collection weights and JOLT+ custody work in production, every collection path (the cycle's collect
-    command, ``collect``'s and ``async-drive``'s parsers) serves BF16 weights and runs no guided attempts."""
+def test_collection_defaults_fp8_weights_and_two_guided_attempts(tmp_path, monkeypatch):
+    """Every collection path (the cycle's collect command, ``collect``'s and ``async-drive``'s parsers) serves FP8
+    weights (BF16 where the fork or GPU has no FP8 path) and runs two JOLT+ guided attempts (async-train §3, §8)."""
     import expert_iteration as ei
-    assert ei.COLLECT_WEIGHT_DTYPE == 'bfloat16' and ei.TEACHER_ATTEMPTS == 0
+    assert ei.COLLECT_WEIGHT_DTYPE == 'fp8' and ei.TEACHER_ATTEMPTS == 2
     c = ei.Cycle.__new__(ei.Cycle)
     c.a = SimpleNamespace(kv_gb=12, slots=8, fill=None, k=4, collect_hours=1., no_neuralese_variants=True,
                           neuralese_variants=None)
     c.pin, c.collect_dir, c.dir = tmp_path, tmp_path / 'collect', tmp_path
     argv = c.collect_command('u', 'ckpt', 'sha', 8)
-    assert argv[argv.index('--collect-weight-dtype') + 1] == 'bfloat16'
-    assert argv[argv.index('--teacher-attempts') + 1] == '0'
+    assert argv[argv.index('--collect-weight-dtype') + 1] == 'fp8'
+    assert argv[argv.index('--teacher-attempts') + 1] == '2'
 
 
 def test_a_round_is_marked_trained_only_after_its_export_committed():

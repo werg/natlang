@@ -7063,3 +7063,55 @@ actor (59 + 34 GiB) could not be admitted, and FP8 weights would have been reque
   unchanged).
 - The profile is `colab` (hardware-neutral; `colab_g4` still resolves), the actor export format `sglang-colab-...`
   (held_eval places both prefixes on host `colab`).
+
+## 2026-11-22 18:30 Async-train data/GRPO/serving review fixes: FP8 collection weights, JOLT+ custody, GRPO exchange and extra actors, sft_sources student tier
+
+Two independent reviews of 222af966e..7c9038cf5 found six defects in the data, GRPO and serving side; all are fixed as
+the default with tests that fail on each (mutants checked).
+
+- **FP8 collection weights could not run on our fork.** The natlang export sets `config.natlang_producer`, so every
+  LFM3 projection goes through `natlang_native_projection` / `natlang_source_ffn_projection`, which refused any
+  quantized layer. Fork ec27f0809a (branch natlang, pushed; pin bumped in `training/neuralese/sglang-fork.json`):
+  online-FP8 layers run their FP8 GEMM there, and `update_weights_from_disk` requantizes in place into the existing
+  FP8 weight/scale storage (CUDA graphs keep valid buffers; per-channel scales, so shard-wise staging is exact). Marker
+  `NATLANG_FP8_WEIGHTS`; `serve_native_checkpoint.serving_weight_dtype` serves BF16 with a `sglang_weight_dtype_fallback`
+  event on a fork without it or a GPU below sm_89 (the Colab A100, sm_80: no FP8 GEMM; Marlin weight-only FP8 exists
+  there but is unmeasured, so BF16). Checked on the DGX (sm_121), sft-v9's collection policy (sft-v8 checkpoint
+  66422fcf, its existing export), fork worktree via PYTHONPATH, through the ledger beside the live collection:
+  - fork test: requantization bitwise equal to a fresh quantization, storage pointers unchanged, GEMM within 10% of FP32;
+  - live reload sft-v8 -> sft-v7 -> sft-v8 export: batch-1 prefill log-probabilities after the round trip bitwise equal
+    to the fresh load (512 tokens; a repeat is deterministic; the other policy differs by 0.26 nats mean);
+  - log-probability agreement, FP8-sampled tokens (32 real collection prompts of 5-16k tokens, 256 tokens each) scored by
+    both engines' prefill: mean |d| 0.053, median 0.001, p90 0.16, p99 0.54, mean d +0.0017 (8,160 tokens). For SFT
+    (no ratio) this does not bias training; held and GRPO actors stay BF16 (the actor law carries `-w-fp8`);
+  - decode throughput at equal settings (32 running, FP8 KV, both servers up and measured alternately because the GB10
+    is shared with the live collection): FP8 848 vs BF16 642 tok/s median (paired ratios 2.21, 1.39, 1.31, 1.28;
+    the first round's 2.2 is contention noise). Prefill 21.8 vs 23.9 s for 32 prompts.
+  `expert_iteration.COLLECT_WEIGHT_DTYPE = 'fp8'`. **The DGX fork checkout (`/home/werg/sglang-natlang`, an editable
+  install that live actors import) stays at dbc51ddb72 until a boundary with no live actor**; until then FP8 requests
+  serve BF16 with the fallback event. Moving it (`git -C /home/werg/sglang-natlang pull`, python only, no reinstall)
+  changes the attested fork commit, so the held series re-measures its base there; BF16 serving code is unchanged.
+- **JOLT+ custody crashed every default GRPO run** (`teacher_attempts > 0`): `custody._source_path` joined the held-v2/v3
+  registry entries' `data_nvme:` paths (since 11-20) to the checkout. Fixed in fb75ccb78 for custody and the seven
+  readers that joined `repo / entry['path']` (one helper, `corpus_registry.entry_root`). On real sft-v9 groups with
+  failed students, `jolt.teacher_entries` under the real `ProtectedWorlds` now builds guided entries (7 of 17 groups;
+  10 had no usable facts). `expert_iteration.TEACHER_ATTEMPTS = 2`: the next production collection is its first real
+  run; watch `teacher attempts` / `no teacher attempts` events and the extract's `teacher_attempt_guidance_leak`.
+- **GRPO compact group exchange** (schema /2): ships `load_group`'s lowered learner inputs plus the stored Neuralese
+  states they import; /1 shipped 0 sampled ids. Byte-identical round trip on five real grpo-v5 run1 groups.
+- **`--extra-actor URL[=SLOTS][@HOST]`** actors get every published version after the primary (local reload or
+  `pop_rl_actor.rebind_actor`, all routes attested); episodes carry the version their own actor served; a lagging actor
+  idles past `--max-staleness`. `rho_by_staleness` covers students' own episodes only.
+- **`--reasoning-rl-weight`** scales ReasoningRL, whose default objective (twin-fkl, 11-20) is exactly the privileged
+  twin's forward KL that §8 keeps off: the 0 default stays and its help/docstring now say so.
+- **sft_sources student tier:** own and jolt-guided successes share one per-task, family and wrapper cap (own first);
+  a frontier task whose only student data is guided keeps its teacher episodes and filled units until its guided
+  successes actually enter the own share (step 5), else they train; jolt-guided replays get the actor's 131072 context;
+  extract's pass rates count student samples only; per-call policies now read `sampling.policy` (they were always
+  empty, so the adjacent-policy tier saw only the episode policy). `--guided train` admits 12 guided episodes from the
+  real pool (`/home/werg/data/ei-sources`: 6 grpo-v4/run1, which the builds' `--exclude-run` drops, and 6 grpo-v4/run2):
+  their extraction dropped 5 and 7 leaked ones (`teacher_attempt_guidance_leak`) and none is in the held-v3 exclusion.
+- **Not checked:** FP8 on Pop (sm_89) and Colab hardware; FP8 with native adapters slots in use, Neuralese capture/import
+  requests and n-gram speculation on an FP8 actor (code paths act on embeddings, K/V and conv inputs only, unexercised
+  live); the extra-actor publication against a real remote actor; a GRPO learner consuming packed groups (no remote
+  learner flow exists yet: the exchange is lossless but unused).
