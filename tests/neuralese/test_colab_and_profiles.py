@@ -307,6 +307,9 @@ def remote(tmp_path, monkeypatch):
     monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path / 'dgx-root')
     monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', sync_to)
     monkeypatch.setattr(pop_rl_actor, 'sync_from_remote', sync_from)
+    from natlang_neuralese.common import data_registry
+    state['consumed'] = []
+    monkeypatch.setattr(data_registry, 'consume', lambda items, **kw: state['consumed'].append((list(items), kw)))
     state['to_local'] = to_local
     return state
 
@@ -369,7 +372,10 @@ def test_run_remote_sft_runs_the_dgx_recipe_and_pulls_only_a_verified_checkpoint
     assert pop_rl_actor.run_remote_sft(args) == 0 and (work / 'checkpoint.pt').read_bytes() == b'trained' * 100
     assert checkouts == ['c' * 40] * 2
     sft = ran[-1][ran[-1].index('--') + 1:]
-    assert sft[1].endswith('scripts/neuralese_data/exp0_sft.py') and sft[2] == 'train'
+    assert sft[:2] == ['/usr/bin/env', 'NATLANG_ALLOW_UNREGISTERED_DATA=1']   # the reads are recorded on the DGX
+    assert sft[3].endswith('scripts/neuralese_data/exp0_sft.py') and sft[4] == 'train'
+    (consumed,) = {tuple(c[0]) for c in remote['consumed']}
+    assert consumed == (str(tmp_path / 'mix/chains.pkl'), str(tmp_path / 'mix/val-own.pkl'))
     assert sft[sft.index('--epochs') + 1] == '1' and sft[sft.index('--val-every') + 1] == '20'
     assert sft[sft.index('--base') + 1] == '/content/natlang-work/base-lfm3'
     assert sft[sft.index('--out-dir') + 1] == '/content/natlang-work/runs/sft-sft-v10'
@@ -728,6 +734,15 @@ def test_run_detached_survives_the_link_and_never_starts_a_second_learner(monkey
     sent, ssh = fake(['running', 'none'])
     monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
     assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py']) == 1
+    sent, ssh = fake(['rc 0'])                       # finished before a crash of the caller: not trained again
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py']) == 0 and len(sent) == 1
+    sent, ssh = fake(['rc 1', 'rc 0'])               # a failed one is retried
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py']) == 0
+    (launch,) = [c for c in sent if 'setsid nohup' in c]
+    # the launch is its own statement: `rm && setsid ... &` backgrounded a subshell that held the SSH channel open
+    assert ' && setsid' not in launch and launch.startswith('rm -f /r/learner.rc; setsid nohup ')
 
 
 def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remote, monkeypatch):
