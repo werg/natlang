@@ -125,11 +125,22 @@ interface Iteration<T> {
   withLimit(limit: { maxSteps?: number; deadlineMs?: number }): Iteration<T>;
 }
 
+/** An immutable, content-addressed folder context to which a natural-language function can be rebound with \`fn.in(context)\`. */
+interface Context {
+  readonly id: string;
+  readonly items: Readonly<Record<string, unknown>>;
+  with(entries: Record<string, unknown>): Context;
+  without(...names: string[]): Context;
+  merge(other: Context): Context;
+}
+
 /** Methods every compiled natlang callable provides. */
 interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
   /** The same function on another of the runtime's models (the name \`model:\` frontmatter takes); a new function. */
   on(options: { model: string }): NatlangFunction<A, R>;
+  /** The same function bound to another context, structurally checked against its context interface; a new function. */
+  in(context: Context): NatlangFunction<A, R>;
 }
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
@@ -141,15 +152,20 @@ type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R extends C
 type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFunction<A, R> & {
   with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
   on(options: { model: string }): InlineNatlangFunction<A, R>;
+  in(context: Context): InlineNatlangFunction<A, R>;
 };
 
 /** An nl function without a type argument; the compiler infers its signature from its uses. */
 type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
   on(options: { model: string }): NatlangUntypedFunction;
+  in(context: Context): NatlangUntypedFunction;
 };
 type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? InlineNatlangFunction<A, Awaited<R>> : InlineNatlangFunction<any[], F>;
+
+/** A directory reducer: either a \`kind: directory-reducer\` natural-language function or a TypeScript function \`(folder, ...args)\`. */
+type FolderReducer<A extends unknown[], R> = NatlangFunction<[Folder, ...A], R> | ((folder: Folder, ...args: A) => R | Promise<R>);
 
 /** A folder handle with directory-reducer authority. */
 interface FolderSnapshot extends Folder { readonly digest: string; branch(): Folder; }
@@ -175,13 +191,13 @@ interface Folder {
   folders(pattern?: string): Promise<Folder[]>;
   diff(): Promise<unknown>;
   remove(): Promise<void>;
-  moveTo(destination: string): Promise<void>;
+  moveTo(destination: string | Folder | FileHandle): Promise<void>;
   snapshot(): FolderSnapshot; at(sourceId:string):FolderSnapshot;
-  propose<A extends unknown[], R>(reducer: NatlangFunction<[Folder, ...A], R>, ...inputs: A): Promise<FolderProposal<R>>;
+  propose<A extends unknown[], R>(reducer: FolderReducer<A, R>, ...inputs: A): Promise<FolderProposal<R>>;
   accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot>;
   select(snapshot: FolderSnapshot): Promise<void>;
-  iterateOn<S, A extends unknown[]>(reducer: NatlangFunction<[Folder, S, ...A], S>, initial: S, ...inputs: A): FolderIteration<S>;
-  apply<A extends unknown[], R>(reducer: NatlangFunction<[Folder, ...A], R>, ...inputs: A): Promise<R>;
+  iterateOn<S, A extends unknown[]>(reducer: FolderReducer<[S, ...A], S>, initial: S, ...inputs: A): FolderIteration<S>;
+  apply<A extends unknown[], R>(reducer: FolderReducer<A, R>, ...inputs: A): Promise<R>;
 }
 interface FileHandle {
   readonly path: string;
@@ -193,7 +209,7 @@ interface FileHandle {
   writeJson(value: unknown): Promise<void>;
   editText(find: string, replaceWith: string, fuzzy?: boolean): Promise<unknown>;
   remove(): Promise<void>;
-  moveTo(destination: string): Promise<void>;
+  moveTo(destination: string | Folder | FileHandle): Promise<void>;
 }
 type Blob = string;
 

@@ -236,7 +236,7 @@ export class FolderHandle extends EntryHandle {
   async *walk(patternText?: string): AsyncIterable<EntryHandle> { const glob = this.scopedPattern(patternText); const entries = [...this.folder.listFiles(this.path, glob), ...this.folder.listFolders(this.path, glob)].sort((left, right) => left.path.localeCompare(right.path)); for (const entry of entries) yield this.folder.entry(entry.path); }
   snapshot(): FolderSnapshot { return this.folder.snapshot(this.path); }
   at(sourceId:string):FolderSnapshot{return this.folder.at(sourceId,this.path);}
-  propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<FolderProposal<R>>;
+  propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => R | Promise<R>, ...args: A): Promise<FolderProposal<R>>;
   propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>>;
   propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>> { return this.folder.proposeAt<R>(this.path, reducer, args); }
   accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot> { return this.folder.acceptAt(this.path, proposal); }
@@ -247,7 +247,7 @@ export class FolderHandle extends EntryHandle {
     return this.folder.beginTransaction(blocking, this.path);
   }
   /** Run a directory reducer on this folder and install its committed changes; resolves to its typed result. */
-  apply<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<R>;
+  apply<A extends unknown[], R>(reducer: (folder: any, ...args: A) => R | Promise<R>, ...args: A): Promise<R>;
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown>;
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown> { return applyReducer(this, reducer, args); }
 }
@@ -388,10 +388,10 @@ export class Folder {
     return new FileHandle(this, clean);
   }
   /** Run a directory reducer on the whole folder and install its committed changes. */
-  apply<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<R>;
+  apply<A extends unknown[], R>(reducer: (folder: any, ...args: A) => R | Promise<R>, ...args: A): Promise<R>;
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown>;
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown> { return applyReducer(this.root(), reducer, args); }
-  propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<FolderProposal<R>>;
+  propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => R | Promise<R>, ...args: A): Promise<FolderProposal<R>>;
   propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>>;
   propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>> { return this.proposeAt<R>('', reducer, args); }
   accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot> { return this.acceptAt('', proposal); }

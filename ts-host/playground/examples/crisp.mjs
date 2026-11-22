@@ -70,7 +70,8 @@ return { count: values.length, sum, mean: values.length ? sum / values.length : 
     concepts: ['windows', 'arrays'], root: 'series/rolling.ts',
     args: { values: 'number[]', width: 'number' }, returns: 'number[]',
     code: `const out = [];
-for (let i = 0; i + width <= values.length; i++) {
+const last = values.length - width;
+for (let i = 0; i <= last; i++) {
   out.push(values.slice(i, i + width).reduce((a, b) => a + b, 0) / width);
 }
 return out;`,
@@ -111,7 +112,7 @@ return [];`,
     files: { 'algorithms/types.ts': 'type Task = { id: string, needs: string[] };\n' },
     code: `const pending = new Map(tasks.map(task => [task.id, task.needs]));
 const order: string[] = [];
-while (pending.size) {
+for (let round = 0; round < tasks.length && pending.size; round++) {
   const ready = [...pending].filter(([, needs]) => needs.every(id => order.includes(id))).map(([id]) => id).sort();
   if (!ready.length) throw new Error('dependency cycle or missing task');
   for (const id of ready) { order.push(id); pending.delete(id); }

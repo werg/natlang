@@ -164,11 +164,42 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
       return parts.map(part => part.includes('=>') ? `(${part})` : part).join(' | ');
     }
     if (candidate.isIntersection()) {
-      // `Untrusted<T>` is `T & brand`: the one intersection with a portable meaning.
-      const isBrand = (part: ts.Type) => part.getProperties().length === 1 && part.getProperties()[0]!.name === '__natlangUntrusted';
-      const rest = candidate.types.filter(part => !isBrand(part));
-      if (rest.length === 1 && rest.length < candidate.types.length) return `Untrusted<${convert(rest[0]!, depth + 1)}>`;
-      throw new TargetError('intersection types are not supported as portable targets');
+      // Unwrap `Untrusted<T>` (`__natlangUntrusted`) and `Is<T, P>` (`__natlangRefinement`) brand intersections,
+      // and support record/object intersections (`A & { extra: string }`) matching `native/types.ts`.
+      let untrusted = false;
+      const predicates: string[] = [];
+      const rest: ts.Type[] = [];
+      const extractRefinements = (part: ts.Type): boolean => {
+        const properties = part.getProperties();
+        if (properties.length !== 1 || properties[0]!.name !== '__natlangRefinement') return false;
+        const prop = properties[0]!;
+        const declaration = prop.valueDeclaration ?? prop.declarations?.[0];
+        const mapType = declaration ? checker.getTypeOfSymbolAtLocation(prop, declaration) : checker.getTypeOfSymbol(prop);
+        const names = mapType.getProperties().map(item => item.name).filter(Boolean);
+        if (!names.length) return false;
+        for (const predicate of names) if (!predicates.includes(predicate)) predicates.push(predicate);
+        return true;
+      };
+      for (const part of candidate.types) {
+        const props = part.getProperties();
+        if (props.length === 1 && props[0]!.name === '__natlangUntrusted') { untrusted = true; continue; }
+        if (extractRefinements(part)) continue;
+        rest.push(part);
+      }
+      if (!rest.length) throw new TargetError('intersection types are not supported as portable targets');
+      let inner: string;
+      if (rest.length === 1) {
+        inner = convert(rest[0]!, depth + 1);
+      } else {
+        const isRecordMember = (part: ts.Type): boolean =>
+          !!(part.flags & ts.TypeFlags.Object) && !checker.isArrayType(part) && !checker.isTupleType(part) &&
+          !part.isUnion() && !hostOf(part) && !neuraleseParts(checker, part);
+        if (!rest.every(isRecordMember))
+          throw new TargetError('intersection types are not supported as portable targets');
+        inner = rest.map(part => convert(part, depth + 1)).join(' & ');
+      }
+      for (const predicate of predicates) inner = `Is<${inner}, ${JSON.stringify(predicate)}>`;
+      return untrusted ? `Untrusted<${inner}>` : inner;
     }
     if (checker.isArrayType(candidate) || checker.isTupleType(candidate)) {
       const elements = checker.isArrayType(candidate) ? [checker.getTypeArguments(candidate as ts.TypeReference)[0]!] :

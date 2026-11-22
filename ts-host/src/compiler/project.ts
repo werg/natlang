@@ -552,8 +552,11 @@ export function compileProject(options: BuildOptions): BuildResult {
   for (const record of namedRecords.values()) { collectSlots({ [record.name]: record }); }
   for (const records of contextRecords.values()) collectSlots(records);
   for (const plan of [...plans.values()].flat()) {
-    refinedSlots.push(...refinedSlotsOf(plan.sourceSpan.file, plan.definitionId, Object.fromEntries(plan.parameters.map(parameter => [parameter.name, parameter.type.text])),
-      plan.returns.text, {}));
+    const planAliases: Record<string, string> = { ...plan.returns.aliases };
+    for (const parameter of plan.parameters) Object.assign(planAliases, parameter.type.aliases);
+    refinedSlots.push(...refinedSlotsOf(plan.sourceSpan.file, plan.definitionId,
+      Object.fromEntries(plan.parameters.map(parameter => [parameter.name, parameter.type.natlang ?? parameter.type.text])),
+      plan.returns.natlang ?? plan.returns.text, planAliases));
   }
   // Validate authored static imports in both check and emit modes. A stale declaration can make
   // TypeScript accept an import without its source. Keep rewrite targets only for actual JS emit.

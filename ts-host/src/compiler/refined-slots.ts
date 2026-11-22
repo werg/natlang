@@ -25,7 +25,7 @@ export function refinedPredicates(type: Type, env: TypeEnv, path: string, seen =
       case 'list': return walk(current.element, `${at}[]`, depth + 1);
       case 'dict': return walk(current.element, `${at}{}`, depth + 1);
       case 'record': for (const field of current.fields) walk(field.type, `${at}.${field.name}`, depth + 1); return;
-      case 'union': for (const member of current.members) walk(member, at, depth + 1); return;
+      case 'union': case 'intersection': for (const member of current.members) walk(member, at, depth + 1); return;
       default: return;
     }
   };

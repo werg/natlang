@@ -3,6 +3,7 @@
  * `compiler/intrinsics.ts`, which supplies the same types to eval programs.
  */
 import { Iteration, iterateOn as iterate, type IterationEvent, type IterationTrajectory, type ProgressVerdict } from './iterate.js';
+import type { Context } from './contexts.js';
 import { inline, uncompiled } from './lowered.js';
 import { resolveFrame } from './runtime.js';
 import { traceFor } from '../native/graph.js';
@@ -32,6 +33,8 @@ export interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
   /** The same function on another of the runtime's models (the name `model:` frontmatter takes); a new function. */
   on(options: { model: string }): NatlangFunction<A, R>;
+  /** The same function bound to another context, structurally checked against its context interface; a new function. */
+  in(context: Context): NatlangFunction<A, R>;
 }
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
 export type NatlangFunction<A extends unknown[] = any[], R = any> = ((...args: A) => Promise<R>) & NatlangCallableMethods<A, R>;
@@ -45,6 +48,7 @@ export type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R ex
 export type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
   on(options: { model: string }): NatlangUntypedFunction;
+  in(context: Context): NatlangUntypedFunction;
 };
 export type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? NatlangFunction<A, Awaited<R>> : NatlangFunction<any[], F>;
