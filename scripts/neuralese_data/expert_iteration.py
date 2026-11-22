@@ -1953,7 +1953,7 @@ class PhaseController:
 
     @classmethod
     def initialize(cls, state_path, *, start_checkpoint, start_sha, held_every=2, held_every_max=8,
-                   initial_phase='sft', prefer_unseen=()):
+                   initial_phase='sft', prefer_unseen=(), reference_checkpoint=None, reference_sha=None):
         path = Path(state_path)
         if path.is_file():
             return cls(path)
@@ -1963,7 +1963,9 @@ class PhaseController:
             'consecutive_neutral': 0, 'since_held': 0,
             'base_held_every': max(1, int(held_every)), 'held_every': max(1, int(held_every)),
             'held_every_max': max(1, int(held_every_max)),
-            'reference_policy': {'checkpoint': str(start_checkpoint), 'sha256': str(start_sha)},
+            # an unmeasured start (speculative cycles) is judged against the last held-adopted policy, not itself
+            'reference_policy': ({'checkpoint': str(reference_checkpoint), 'sha256': str(reference_sha)}
+                                 if reference_checkpoint else {'checkpoint': str(start_checkpoint), 'sha256': str(start_sha)}),
             'lineage': [start], 'version_counter': 0, 'trained_rounds': [],
             'prefer_unseen': [str(p) for p in prefer_unseen], 'measuring': None, 'applied_verdicts': [],
             'history': [],
@@ -2144,7 +2146,8 @@ class AsyncRoundDriver:
         self.controller = PhaseController.initialize(
             self.root / 'phase-state.json', start_checkpoint=args.start, start_sha=start_sha,
             held_every=args.held_every, held_every_max=args.held_every_max, initial_phase=args.initial_phase,
-            prefer_unseen=args.prefer_unseen)
+            prefer_unseen=args.prefer_unseen, reference_checkpoint=args.reference,
+            reference_sha=args.reference and (args.reference_sha or sha256_file_hex_cached(Path(args.reference))))
         self.c = Cycle(self.cycle_args())
         self.lock = threading.RLock()
         self.verdicts = []              # verdict records the held thread produced, applied by the main loop
@@ -2910,6 +2913,9 @@ def main():
     ad.add_argument('--name', default='async-ei', help='unit prefix')
     ad.add_argument('--start', required=True, help='initial policy (native checkpoint)')
     ad.add_argument('--start-sha')
+    ad.add_argument('--reference', help='the last held-adopted policy when --start is unmeasured (default: --start): '
+                    'held verdicts compare against it and a rollback returns to it')
+    ad.add_argument('--reference-sha')
     ad.add_argument('--commit', required=True, help='the pinned commit every round runs (collection, data, SFT, held)')
     ad.add_argument('--pin', help='its pin (default OPS/ei/pin-<commit12>, created when missing)')
     ad.add_argument('--held-pin', help='pin of the held series (default --pin)')

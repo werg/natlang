@@ -427,6 +427,22 @@ def test_rollback_returns_to_the_reference_and_previous_is_never_the_rejected_po
     assert ctrl.state['reference_policy']['sha256'] == _policy(2)[1]
 
 
+def test_an_unmeasured_start_is_judged_against_the_given_reference_and_rolls_back_to_it(tmp_path):
+    """--reference: a start from speculative cycles (sft-v9 on sft-v7's verdict) measures against the last adopted
+    policy, and a neutral rollback returns to that policy, not to the unmeasured start."""
+    import expert_iteration as ei
+    ref = ('/ckpt/ref.pt', 'f' * 64)
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1, reference_checkpoint=ref[0], reference_sha=ref[1])
+    ctrl.record_round_published('r1', *_policy(1), base_sha256=ctrl.current['sha256'])
+    assert ctrl.held_due()
+    assert ctrl.start_measurement()['reference'] == {'checkpoint': ref[0], 'sha256': ref[1]}
+    ev = ctrl.record_verdict({'verdict': 'neutral', 'adopt': False, 'checkpoint': _policy(1)[0],
+                              'sha256': _policy(1)[1]})
+    assert ev['action'] == 'rollback'
+    assert ctrl.current['sha256'] == ref[1] and not ctrl.in_lineage('0' * 64)
+
+
 def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path):
     import expert_iteration as ei
     ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
