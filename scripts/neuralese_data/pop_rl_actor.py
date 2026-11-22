@@ -1177,20 +1177,36 @@ def remap_sft_args(argv, mapping):
     return out
 
 
+def _learner_probe(remote_run):
+    q = shlex.quote
+    pid_file, rc_file = f'{remote_run}/learner.pid', f'{remote_run}/learner.rc'
+    return (f'if [ -f {q(rc_file)} ]; then echo "rc $(cat {q(rc_file)})"; '
+            f'elif [ -f {q(pid_file)} ] && kill -0 "$(cat {q(pid_file)})" 2>/dev/null; then echo running; '
+            f'else echo none; fi')
+
+
+def remote_learner_state(host, remote_run):
+    """'running', 'rc N' (finished with status N) or 'none' for the detached learner of ``remote_run``."""
+    return ssh_host(host, _learner_probe(remote_run), timeout=60).strip()
+
+
 def run_detached(host, cfg, remote_run, command, *, poll_seconds=30, away_seconds=1800):
     """Run ``command`` on ``host`` detached from the SSH connection (``setsid nohup``: a dropped ``colab ssh`` link
     used to kill the learner through its stdout pipe) and wait for its exit status; a learner of this run still alive
-    from an earlier call is waited for instead of a second one started. Output goes to REMOTE_RUN/learner.log.
-    Returns the exit status, or None when the host stayed unreachable ``away_seconds`` (the learner may still run)."""
+    from an earlier call is waited for instead of a second one started, and one that already finished with status 0
+    is not run again. Output goes to REMOTE_RUN/learner.log. Returns the exit status, or None when the host stayed
+    unreachable ``away_seconds`` (the learner may still run)."""
     pid_file, rc_file, log_file = (f'{remote_run}/learner.pid', f'{remote_run}/learner.rc', f'{remote_run}/learner.log')
     q = shlex.quote
-    probe = (f'if [ -f {q(rc_file)} ]; then echo "rc $(cat {q(rc_file)})"; '
-             f'elif [ -f {q(pid_file)} ] && kill -0 "$(cat {q(pid_file)})" 2>/dev/null; then echo running; '
-             f'else echo none; fi')
-    state = ssh_host(host, probe, timeout=60).strip()
+    state = remote_learner_state(host, remote_run)
+    if state == 'rc 0':
+        log(event='Colab learner already finished', host=host, remote_run=remote_run)
+        return 0
     if state != 'running':
         inner = f'. {q(cfg["env"])} && {shlex.join(command)}; echo $? > {q(rc_file)}.tmp && mv {q(rc_file)}.tmp {q(rc_file)}'
-        ssh_host(host, f'rm -f {q(rc_file)} && setsid nohup bash -c {q(inner)} >> {q(log_file)} 2>&1 < /dev/null & '
+        # separate statements: `a && setsid ... &` would background the whole list in a subshell that holds the
+        # SSH channel open until the learner ends (and `$!` would name that subshell)
+        ssh_host(host, f'rm -f {q(rc_file)}; setsid nohup bash -c {q(inner)} >> {q(log_file)} 2>&1 < /dev/null & '
                        f'echo $! > {q(pid_file)}', timeout=60)
         log(event='Colab learner started', host=host, remote_run=remote_run)
     else:
@@ -1199,7 +1215,7 @@ def run_detached(host, cfg, remote_run, command, *, poll_seconds=30, away_second
     while True:
         time.sleep(poll_seconds)
         try:
-            state = ssh_host(host, probe, timeout=60).strip()
+            state = remote_learner_state(host, remote_run)
         except (RuntimeError, subprocess.TimeoutExpired) as error:
             if time.time() - last_seen >= away_seconds:
                 log(event='Colab learner unreachable', host=host, seconds=round(time.time() - last_seen),
@@ -1265,7 +1281,9 @@ def run_remote_sft(args):
         sync_to_remote(vpath, rv, host)
         mapping[vpath] = rv
     local_state = local_work / 'learner-state'
-    if (local_state / 'learner_manifest.json').exists():     # exact resume across a preemption (DGX holds the state)
+    # exact resume across a preemption (the DGX holds the state); never into a learner of this run still running
+    # (its own state is newer than the DGX's last pull)
+    if (local_state / 'learner_manifest.json').exists() and remote_learner_state(host, remote_run) == 'none':
         sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
     # an async round's recipe exports its factors (--export-factors-dir, --round-id: one argv for the G4 and the DGX
     # learner, expert_iteration.round_sft_env); the factors land beside the run on the VM and are pulled back
@@ -1296,7 +1314,13 @@ def run_remote_sft(args):
     else:
         sft_args += ['--activation-gb', str(learner['activation_gib'])]
     log(event='Colab SFT layout', host=host, **learner, yielded_actor=bool(yielded), **timings)
-    sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *sft_args,
+    # the data registry lives on the DGX: the run's reads are recorded there (refused when unregistered, as exp0_sft
+    # refuses on the DGX), and the VM learner reads its sha-verified copies without a registry of its own
+    from natlang_neuralese.common import data_registry
+    data_registry.consume([value('--chains'), *vals], run=data_registry.run_name('sft', local_work),
+                          how=f'SFT training chains (Colab learner on {host}: sha-verified VM copies)')
+    sft_cmd = ['/usr/bin/env', f'{data_registry.ALLOW_ENV}=1', cfg['python'],
+               f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *sft_args,
                *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(vram_gib), '--host-ram-gib',
                 str(host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
@@ -1306,8 +1330,11 @@ def run_remote_sft(args):
 
     def pull_state(attempts):
         sync_from_remote(f'{remote_run}/learner-state/', f'{local_state}/', host, attempts=attempts)
-        sync_from_remote(f'{remote_run}/train.jsonl', str(local_work / 'train.jsonl'), host, attempts=1)
-        sync_from_remote(f'{remote_run}/learner.log', str(local_work / 'train.log'), host, attempts=1)
+        for name, local_name in (('train.jsonl', 'train.jsonl'), ('learner.log', 'train.log')):
+            try:      # the logs follow the state; one not written yet (a learner that failed at start) is no error
+                sync_from_remote(f'{remote_run}/{name}', str(local_work / local_name), host, attempts=1)
+            except subprocess.CalledProcessError:
+                pass
 
     def sync_loop():
         while not stop_sync.wait(sync_interval):
