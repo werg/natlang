@@ -15,10 +15,9 @@ in flight at once**, so expert iteration turns over 4-6 times a day instead of a
    Decode is memory-bandwidth bound (`ACTOR_THROUGHPUT_20261112.md`). The G4 has ~1.6-1.8 TB/s against the GB10's
    273 GB/s, so a G4 SGLang actor should collect and evaluate several times faster, and that is the largest single
    lever on wall time. v2 left rollouts as a "revisit trigger". Here they are the first deliverable.
-2. **No recipe gate in front of the speed.** Our current full-parameter recipe (FP32 masters and moments, ~27 GB of
-   state) fits a 96 GB G4 with room for every activation, so it runs there **unchanged on day one**. LoRA is built in
-   parallel and judged against it. It earns its place where it is structurally better (RL, preemptible workers,
-   multi-worker averaging, cheap references and publication), not as a precondition for using the G4.
+2. **LoRA is the default parameterization for SFT and RL (owner 2026-11-22), with no comparison eval.** Until the
+   learner core lands, the existing full-parameter SFT runs on the G4 unchanged so the speed is not held back. Once the
+   core lands, every cycle trains LoRA. `full` stays a supported setting, not a default.
 3. **Fixes ship now.** The audit found real defects: the native-route split-brain after an in-place rebind, and the
    learner-step provenance. Under AGENTS.md ("A finding is not done until it is acted on") they go to main this week,
    with tests and opt-outs, independent of any Colab or LoRA milestone.
@@ -26,8 +25,9 @@ in flight at once**, so expert iteration turns over 4-6 times a day instead of a
    on by default and is read through its telemetry; the next held eval judges it ("No pre-launch smoke gates a
    feature"; "Training never waits"). v2's correctness checks stay as **tests that ship with the code**, not as phase
    gates.
-5. **The non-goals list becomes a lever list.** FP8 base GEMMs on Blackwell, Blackwell attention kernels, multi-worker
-   training and SGLang adapter slots are in scope. They are ordered by expected gain and built once the core runs on G4.
+5. **v2's non-goals are required work.** FP8 base GEMMs on Blackwell, Blackwell attention and conv kernels, a
+   recompile audit, multi-worker training, RL publication with SGLang adapter slots, and learner/actor overlap on the
+   G4 are all deliverables (§6). The order in §6 is only a build sequence.
 6. **Integrated everywhere.** One remote-machine mechanism serves Pop and Colab alike. One learner core serves SFT,
    GRPO, probes and the soft-operator fits. One export reaches all four engines. §7 is the inventory.
 
@@ -38,7 +38,7 @@ in flight at once**, so expert iteration turns over 4-6 times a day instead of a
 | Machine | Strength | Default work |
 |---|---|---|
 | **Colab G4** (96 GB GDDR7, Blackwell, discrete) | ~6x the GB10's memory bandwidth; several times its BF16 throughput (measure); preemptible, session-limited | the cycle's critical path: collection actor, SFT, held eval (new engine series, §4) |
-| **DGX GB10** (128 GB unified) | always on, large memory, all the data on NVMe | the second lineage or arm, teacher and fill, build, GRPO polish, Neuralese and operator work, every diagnostic; it takes over the critical path whenever Colab is away |
+| **DGX GB10** (128 GB unified) | always on, large memory, all the data on NVMe | a second lineage, teacher and fill, build, GRPO polish, Neuralese and operator work, every diagnostic; it takes over the critical path whenever Colab is away |
 | **Pop** (RTX 4060 8 GB) | cheap, always on when reachable | forward-only probes, a second held engine for A/A checks, Pop fill |
 | **More Colab** (L4s, more G4 sessions) | parallel capacity paid in CU | more arms, collection shards, multi-worker SFT (§6.3) |
 
@@ -79,7 +79,7 @@ None of this waits for LoRA or the learner refactor.
    - The driver re-places a stage whose host vanished.
 
 **Expected result of phase 0.** Cycle wall time drops from ~15 h to ~4-5 h, and the DGX becomes free for a second
-cycle lineage or arm.
+cycle lineage.
 
 ## 3. Fixes that ship this week regardless of Colab
 
@@ -111,10 +111,11 @@ v2 §3 and §5 are sound, and they remain the specification. In brief:
   `scripts/neuralese_data/lfm3_fast_train.py`, and `train/learner_state.py`), shared by `exp0_sft.py`, `grpo.py`, the
   probes (`behaviour_probe.py`, `sanity_logprob_paths.py`, `operator_ablation.py`, `passthrough_check.py`) and the
   operator soft-state fits (`operator_soft_states`, which today run their own path).
-- **Parameterization is a run setting:**
-  - `full`: today's recipe, kept first-class;
-  - `lora`: frozen BF16 base, FP32 factors and FP32 AdamW;
-  - `lora+rows`: also trains the Neuralese marker and override rows, and optionally norms.
+- **Parameterization is a run setting; `lora+rows` is the default:**
+  - `lora+rows` (**default**): frozen BF16 base, FP32 factors and FP32 AdamW, plus trainable Neuralese marker and
+    override rows (the embedding/head rows the Neuralese data teaches);
+  - `lora`: adapters only;
+  - `full`: today's recipe, kept working as a setting.
 - **Factored projection contract** (v2 §3.3, unchanged):
   - the FP32 low-rank branch runs outside autocast;
   - unscaled leaves, with the scale applied once;
@@ -138,16 +139,14 @@ v2 §3 and §5 are sound, and they remain the specification. In brief:
 | RL rank | r = 32 | RL carries a few bits per episode; *LoRA Without Regret* shows rank 1-32 matching full FT for policy gradient. |
 | LoRA LR | **10x the full-FT LR**: SFT 5e-5 (full 5e-6), RL 1e-4 (full 1e-5) | The 10x rule from the same paper. v2's 1e-4 for SFT was 20x. |
 | Head, embeddings, norms | Frozen; marker and override rows trainable in `lora+rows` | Neuralese markers must keep learning. |
-| FP32 vs BF16 adapter GEMMs | FP32 first. BF16 adapters plus an FP8 base on G4 come as a lever (§6.1). | Correctness first, then speed, with telemetry. |
+| Adapter arithmetic | Factors stored in FP32; the adapter branch computed in BF16 (or TF32) on tensor cores, checked against the FP32 oracle in tests | Strict-FP32 adapter GEMMs at r=128 would cost most of the saving. |
 
-**How LoRA earns its place.**
-- From the first cycle the core runs on G4, the same collection and mix train **two arms**: full on one machine and
-  LoRA on the other. Held eval on G4 picks the arm the next cycle starts from.
-- This is the bundled engineering comparison the extra compute makes free, not an attribution study.
-- If LoRA matches full, it becomes the default where its structure pays: RL, multi-worker training and preemptible
-  sessions. Full stays wherever it wins.
+**Lineage.** Each cycle merges its factors into the base in FP32 and rounds to BF16 once (the start policy of the
+next cycle), then starts fresh factors with B = 0. Adapter capacity then has to hold one cycle's data, not the
+lineage's. The cycle's held eval, on its usual adaptive schedule, judges it like any other candidate; no separate
+LoRA-vs-full comparison is run.
 
-## 6. Speed levers on Blackwell, in order of expected gain (build after phase 0, each default-on once it lands)
+## 6. Required speed work (all deliverables; listed in build order; each default-on with an opt-out once it lands)
 
 1. **No recomputation, larger packs.** At 96 GB the full-FT SFT keeps every activation, and LoRA frees ~27 GB more for
    longer packs and larger prefix trees. The effective batch stays the same (32k weighted target units per step).
@@ -174,9 +173,9 @@ v2 §3 and §5 are sound, and they remain the specification. In brief:
      §3 as part of it.
    - Then SGLang adapter slots (v2 §7.2, packed ranks 3r for fused qkv and 2r for fused w1/w3, derived automatically)
      so a GRPO step's weight sync becomes a small factor file instead of a full reload.
-6. **Concurrent learner and actor on G4.** Unlike the GB10, a discrete card with this much memory may overlap
-   collection and training usefully. Measure the overlap and default it on if it pays. Don't carry the GB10's
-   `--learner-phase-slots 0` across blindly.
+6. **Concurrent learner and actor on G4.** Build the overlap (actor serving while the learner steps, staleness caps and
+   provenance kept) and turn it on for the G4 profile. Its telemetry (collection rate and step time with and without
+   overlap) decides whether it stays on. Don't carry the GB10's `--learner-phase-slots 0` across blindly.
 
 **Economics.**
 - Log CU/h, cold-start-to-done CU, and canonical chain tokens per CU for each profile (v2 §6.4's formula).
@@ -203,9 +202,10 @@ v2 §3 and §5 are sound, and they remain the specification. In brief:
 - **Strand 2 (fixes, §3):** the native-route split-brain, learner-step provenance, trainable-only optimizer state, and
   the memory calibration table.
 - **Strand 3 (learner core, §5):** extract the core, add adapter bundles through all four fast paths and the MLPs, add
-  the FP32 oracle tests, then SFT LoRA, then the two-arm cycle.
-- **Strand 4 (levers, §6):** kernels and recompile audit on G4, FP8 base GEMMs, DiLoCo multi-worker, RL publication
-  and adapter slots, and the concurrency measurement.
+  the FP32 oracle tests, then switch SFT and GRPO to `lora+rows` as the default.
+- **Strand 4 (all of §6, required):** no recomputation and larger packs, Blackwell kernels and the recompile audit, FP8
+  base GEMMs, DiLoCo multi-worker training, RL publication with adapter slots on every engine, and learner/actor
+  overlap on the G4.
 
 The strands run concurrently; each ships in small commits with targeted tests, and each enters running work at the next
 cycle or resume. Results, including negative ones, go to DECISIONS.md with the measured numbers.
@@ -214,8 +214,8 @@ cycle or resume. Results, including negative ones, go to DECISIONS.md with the m
 
 - **The G4 SFT is not ≥3x the GB10's tok/s:** profile the input pipeline, kernels and recompiles first. If it is still
   slow, put Colab's CU into collection and held eval, where bandwidth is certain to pay.
-- **The LoRA arm loses to full at r=128:** check exposure, LR and masks first, then try `lora+rows` and r=256. Keep full
-  for SFT and LoRA for RL.
+- **A LoRA cycle's held eval regresses:** treat it as a bug first (AGENTS.md "Degradation means bug": exposure, LR,
+  masks, merge scaling, frozen rows). Raise the rank to 256 only after those are ruled out.
 - **Collection is bound by collectors, not the engine:** move the collectors next to the actor (on Colab) or add
   collector processes.
 - **Tunnel throughput binds:** stage the mixes and checkpoints through Drive/GCS, and keep the DGX as the archive.

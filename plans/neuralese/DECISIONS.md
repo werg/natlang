@@ -6693,3 +6693,13 @@ a long episode).
   80 GB ledger budget, the fill window closed. More saved activations is the standard memory-for-speed trade, so
   expert_iteration's SFT now runs `--sft-activation-gb 40` with `--sft-budget 100` (peak expected <= ~77 GB; read the
   first steps' `cuda_peak_gb`). sft-v8 keeps its settings (3.3 h left; not worth a resume).
+
+## 2026-11-22 11:30 LoRA is the default parameterization (owner); every learner speed item is required work
+
+- Owner: no LoRA-vs-full comparison eval; the plan (`plans/neuralese/lfm3opti.md` v3) makes `lora+rows` the default for
+  SFT and GRPO once the learner core lands (r=128 SFT, r=32 RL, all 9 projection families, 10x the full-FT LR, FP32
+  factors with BF16/TF32 adapter compute, Neuralese marker/override rows trainable; each cycle merges in FP32, rounds to
+  BF16 once and restarts factors). `full` stays a working setting. Until the core lands the existing full SFT runs on
+  the G4 unchanged. Every item in the brief's §6 (no recomputation, Blackwell kernels and recompile audit, FP8 frozen-base
+  GEMMs, DiLoCo multi-worker, RL publication with adapter slots on every engine, learner/actor overlap on the G4) is a
+  required deliverable.
