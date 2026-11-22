@@ -6807,3 +6807,25 @@ Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc
   requirements over Colab's torch, the repository on PYTHONPATH via `natlang-env.sh`; `pip install -e
   training/neuralese` failed); the SGLang fork at `sglang-fork.json`'s commit in its own venv (was upstream
   `sglang[all]`); Node 24 when the image's is < 22.13; the MPS daemon.
+
+## 2026-11-22 15:40 Held evaluation never delays training (follow-up to the DGX held series)
+
+- **The gate no longer waits for the previous verdict** (it did, unbounded, and that verdict waits on the previous
+  candidate's held eval). A verdict not in when the collection ends adopts the candidate as collected
+  (`gate.done` `verdict_pending`, `--gate-wait-hours`, default 0), as an unmeasured cycle is. The verdict is read at
+  this cycle's held stage, after the next cycle has launched: it sets the reference and the rollback target, and a
+  rejection makes this cycle's candidate measured (`held_schedule` -> (0, 1)). Nothing else before the SFT waits on a
+  held unit (checked: select, collect, frontier, teacher, data, build, sft; the background start measurement is never
+  joined before the held stage).
+- **The SFT preempts a held measurement.** Held units are medium and resumable; the SFT and collections are high. A
+  preempted unit is requeued by the ledger and `dgx_held` joins it until it finishes (`ledger_queued`); the
+  measurement resumes its episodes from run.json.
+- **The held unit fits beside a collection: 32 GB** (121 GB - 74 GB collection - 15 GB headroom). A second, small actor
+  with the pinned engine's serve args (attested arithmetic unchanged, overlap off) and a 3 GB FP8 KV pool (~450k
+  tokens), 16 running, 16 collector slots: 3 + 24 + 16 x 0.3. KV size is not attested and every DGX-series result uses
+  the same running cap, so the series is one engine. The collection actor cannot measure: it runs the overlap scheduler
+  and 160 running, and `held_eval measure` refuses `overlap_schedule` against the pin. While a held unit runs the
+  collection keeps 75% of its slots.
+- **Timing (estimated, not measured):** 1024 episodes at 16 parallel, time-sliced with the collection engine, about
+  8-10 h per measurement (Pop ran 512 at 20 slots in ~3.4 h on similar memory bandwidth). A verdict therefore lands
+  about one cycle late; with `--held-every 2` that is within the schedule, and the gate no longer waits for it.

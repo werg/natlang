@@ -593,6 +593,7 @@ def test_a_dgx_cycle_measures_on_the_dgx_through_the_ledger_and_re_measures_a_po
     monkeypatch.setattr(ei.Cycle, 'reference', lambda self: {'checkpoint': '/v9.pt'})
     monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
     monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: False)
     monkeypatch.setattr(ei, 'pop_reachable', lambda: pytest.fail('a DGX cycle never waits for Pop'))
     monkeypatch.setattr(ei.Cycle, 'pop_held', lambda *a: pytest.fail('a DGX cycle never measures on Pop'))
     import natlang_neuralese.common.hashing as hashing
@@ -608,7 +609,7 @@ def test_a_dgx_cycle_measures_on_the_dgx_through_the_ledger_and_re_measures_a_po
     assert names == ['sft-v10-held-candidate', 'sft-v10-held-start']       # the Pop start is re-measured here
     unit, budget, priority, command, repo = units[0]
     assert command[1] == str(Path(ei.__file__).resolve()) and command[2] == 'dgx-held' and repo == cycle.held_pin
-    assert command[command.index('--samples') + 1] == '4' and budget == ei.HELD_ACTOR_GB + round(64 * 0.3) + 2
+    assert command[command.index('--samples') + 1] == '4' and budget == ei.held_budget_gb() == 32   # fits beside a collection
     assert [p.name for p in cycle.held.iterdir() if p.name.startswith('start-pop-')]   # kept aside, not paired
     assert json.loads(pop_start.read_text())['series']['engine_host'] == 'dgx'      # held/start is the DGX one now
     assert json.loads((cycle.dir / 'stages' / 'held.done').read_text())['profile'] == 'dgx'
@@ -698,13 +699,17 @@ def test_dgx_held_serves_the_pinned_engine_claims_priority_and_measures_on_the_t
     subprocess_result = lambda rc: sp.CompletedProcess([], rc)
     monkeypatch.setattr(ei.subprocess, 'run', run)
     monkeypatch.setattr(ei.signal, 'signal', lambda *a: None)
-    args = argparse.Namespace(out=str(out), checkpoint='/c.pt', policy_id='h' * 64, samples=4, slots=64,
+    args = argparse.Namespace(out=str(out), checkpoint='/c.pt', policy_id='h' * 64, samples=4, slots=16, kv_gb=3,
+                              max_running=16,
                               held_pin=str(pin), manifest=str(manifest), label='sft-v10-candidate',
                               unit='sft-v10-held-candidate')
     assert ei.dgx_held(args) == 0
     serve, env = launched[0]
     assert serve[1] == str(pin / 'scripts/neuralese_data/serve_native_checkpoint.py') and env['NATLANG_REPO'] == str(pin)
     assert serve[serve.index('--sglang-projection') + 1] == 'vendor' and '--sglang-overlap-schedule' not in serve
+    # the pinned args first, the beside-collection size after them (argparse: the last value wins)
+    assert serve[len(serve) - 1 - serve[::-1].index('--sglang-kv-gb') + 1] == '3'
+    assert serve[len(serve) - 1 - serve[::-1].index('--sglang-max-running') + 1] == '16'
     measure, env = launched[1]
     assert measure[1:4] == ['-m', 'natlang_neuralese.rl.held_eval', 'measure'] and '--allow-other-engine' not in measure
     assert measure[measure.index('--samples') + 1] == '4' and measure[measure.index('--top-p') + 1] == '0.95'
@@ -723,3 +728,44 @@ def test_pop_held_subcommand_measures_on_the_profile_it_is_given(tmp_path, monke
     ei.pop_held(argparse.Namespace(held_profile='dgx', **args))
     ei.pop_held(argparse.Namespace(held_profile='pop', **args))
     assert measured == [('dgx', 'start'), ('pop', 'start')]
+
+
+def test_the_gate_never_waits_for_a_held_eval_and_a_late_rejection_is_judged_at_the_held_stage(tmp_path, monkeypatch):
+    """Training never waits: the DGX held of the previous candidate may still run when this cycle's collection ends."""
+    cycle = _speculative_cycle(tmp_path, None)
+    cycle.a.held_every, cycle.a.held_every_max, cycle.a.since_held = 2, 8, 0
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: pytest.fail('the gate waited'))
+    cycle.gate_stage()
+    assert cycle.gate()['verdict_pending'] and cycle.train_policy() == ('/v7.pt', 'cand', ['/v7/mix'])
+    assert cycle.collect_policy() == ('/v7.pt', 'cand')
+    prev = Path(cycle.a.speculative_after)
+    (prev / 'verdict.json').write_text(json.dumps({'verdict': 'neutral', 'adopt': False, 'vs_start': {},
+                                                   'next_start': '/v6.pt', 'reference': {'checkpoint': '/v6.pt'},
+                                                   'since_held': 0, 'held_every': 2}))
+    assert cycle.held_schedule() == (0, 1) and cycle.measured()           # the rejected lineage is judged now
+    assert cycle.reference() == {'checkpoint': '/v6.pt'}                    # against, and back to, the measured start
+
+
+def test_a_preempted_held_unit_is_joined_until_it_resumes_and_finishes(tmp_path, monkeypatch):
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
+    import natlang_neuralese.common.hashing as hashing
+    monkeypatch.setattr(hashing, 'sha256_file_hex_cached', lambda path: 'h' * 64)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    launches, queue = [], iter([True, True, False])          # preempted: requeued twice, then relaunched by the ledger
+
+    def ledger(self, unit, budget, priority, command, log, **kw):
+        launches.append((unit, priority))
+    monkeypatch.setattr(ei.Cycle, 'ledger', ledger)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+
+    def queued(unit):
+        state = next(queue, False)
+        if state is False and not (cycle.held / 'candidate' / 'result.json').exists():
+            _held_result(cycle.held / 'candidate', host='dgx', policy='h' * 64)
+        return state
+    monkeypatch.setattr(ei, 'ledger_queued', queued)
+    cycle.dgx_held('candidate', tmp_path / 'c.pt')
+    assert launches == [('sft-v10-held-candidate', 'medium')]       # joined, not launched twice; below training's high

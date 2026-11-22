@@ -485,7 +485,7 @@ def test_sharded_slots_abandon_a_dead_endpoints_episodes_and_requeue_the_task(tm
 
 
 def test_held_priority_claims_shrink_a_collection_and_expire(tmp_path):
-    assert ei.priority_slots(128, []) == 128 and ei.priority_slots(128, [{}]) == 32 and ei.priority_slots(2, [{}], 0.1) == 1
+    assert ei.priority_slots(128, []) == 128 and ei.priority_slots(128, [{}]) == 96 and ei.priority_slots(2, [{}], 0.1) == 1
     claim = tmp_path / 'sft-v10-held-candidate.json'
     claim.write_text(json.dumps({'pid': os.getpid()}))
     assert len(ei.held_priority_claims(tmp_path)) == 1
@@ -494,7 +494,7 @@ def test_held_priority_claims_shrink_a_collection_and_expire(tmp_path):
     collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
     collector.setup(['t1'], time.time() + 3600, endpoints=[('http://a', 64), ('http://b', 64)], priority_dir=tmp_path)
     collector._priority()
-    assert collector.active_slots == 32
+    assert collector.active_slots == 96
     claim.unlink()
     collector.priority_read = 0
     collector._priority()

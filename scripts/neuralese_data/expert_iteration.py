@@ -74,10 +74,18 @@ COLLECTOR_SLOT_GB = 0.3
 # DGX held series (async-train §1): a held measurement's claim file here makes every DGX collection shrink to
 # HELD_PRIORITY_SHARE of its slots while it runs (held episodes take priority over collection)
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
-HELD_PRIORITY_SHARE = 0.25
+HELD_PRIORITY_SHARE = 0.75    # the collection yields a quarter of its slots (~ the held actor's running cap)
 HELD_PRIORITY_STALE = 300     # seconds without a heartbeat after which a claim is ignored
-HELD_SLOTS = 64               # collector slots of a DGX held measurement (the pinned engine runs 128)
-HELD_ACTOR_GB = 40            # held_eval.ACTOR_BUDGET_GB: the pinned engine's --sglang-kv-gb 16 + 24
+# The DGX held actor is sized to fit beside a collection (121 GB ledger - 74 GB collection - 15 GB diagnostic headroom
+# = 32 GB): the pinned engine (engine.json serve_args: its attested arithmetic, overlap off) with a 3 GB FP8 KV pool
+# (~450k tokens with the hybrid SWA layout, 16 x 28k) and 16 running; ledger budget = KV + 24 (actor rule) + 16 client
+# slots x 0.3. KV size is not attested and the running cap is the same for every DGX-series result, so the series
+# stays one engine. The collection actor cannot measure: it runs the overlap scheduler and 160 running, and the held
+# pin refuses overlap_schedule (held_eval measure without --allow-other-engine).
+HELD_KV_GB = 3
+HELD_MAX_RUNNING = 16
+HELD_SLOTS = 16
+HELD_ACTOR_GB = HELD_KV_GB + 24
 
 
 def log(record):
@@ -192,6 +200,20 @@ def held_priority_claims(directory, now=None, alive=None):
 def priority_slots(slots, claims, share=HELD_PRIORITY_SHARE):
     """A collection's active slots: all of them, or ``share`` of them (at least 1) while a held measurement runs."""
     return slots if not claims or share >= 1 else max(1, int(round(slots * share)))
+
+
+def held_budget_gb(slots=HELD_SLOTS):
+    """Ledger GB of one DGX held measurement unit: the held actor and its collector slots."""
+    return round(HELD_ACTOR_GB + slots * COLLECTOR_SLOT_GB)
+
+
+def ledger_queued(unit):
+    """Whether the memory ledger holds ``unit`` waiting or requeued (a preempted resumable unit before its relaunch)."""
+    try:
+        status = json.loads(subprocess.run([*LEDGER, 'status'], capture_output=True, text=True, timeout=60).stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+    return any(w.get('unit', '').removesuffix('.service') == unit for w in status.get('waiting') or ())
 
 
 def _pid_alive(pid):
@@ -845,16 +867,20 @@ class Cycle:
         sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
         out.mkdir(parents=True, exist_ok=True)
         unit = f'{self.a.name}-held-{name}'
-        budget = HELD_ACTOR_GB + round(self.a.held_slots * COLLECTOR_SLOT_GB) + 2
+        budget = held_budget_gb(self.a.held_slots)
         command = [PY, str(Path(__file__).resolve()), 'dgx-held', '--out', out, '--checkpoint', checkpoint,
                    '--policy-id', sha, '--samples', self.a.held_samples, '--slots', self.a.held_slots,
                    '--held-pin', self.held_pin, '--label', f'{self.a.name}-{name}', '--unit', unit]
         started = time.time()
-        for attempt in range(20):
+        # medium and resumable: training (the SFT, a collection: high) preempts it, the ledger requeues it and the
+        # measurement resumes its episodes (held_eval measure keeps run.json); nothing that trains waits for it
+        for attempt in range(50):
             self.ledger(unit, budget, 'medium', list(map(str, command)), out / 'driver.log', repo=self.held_pin)
+            while ledger_queued(unit) or self.active(unit):     # preempted: the ledger relaunches it when room returns
+                time.sleep(60)
             if self.held_result_ok(out):
                 break
-            time.sleep(180)         # a preempted unit is requeued by the ledger: join it, else relaunch
+            time.sleep(60)
         self.record_cost(f'held:{name}', 'dgx', time.time() - started)
         return out
 
@@ -1039,6 +1065,8 @@ class Cycle:
         Without a previous verdict that records them, ``--since-held`` and ``--held-every``."""
         base, top = getattr(self.a, 'held_every', 1), max(getattr(self.a, 'held_every_max', 1), 1)
         v = self.previous_verdict() if self.speculative else None
+        if v and not v.get('adopt') and (self.gate() or {}).get('verdict_pending'):
+            return 0, 1       # trained from a candidate the late verdict rejected: this candidate is judged now
         if not v or 'held_every' not in v:
             return getattr(self.a, 'since_held', 0), base
         if v['verdict'] == 'unmeasured':
@@ -1072,12 +1100,22 @@ class Cycle:
             rejected_collection_mode(v['verdict'], self.a.rejected_collection) == 'recollect'
 
     def gate_stage(self):
-        """A speculative cycle (started from the previous cycle's candidate while Pop judged it) learns the verdict:
+        """A speculative cycle (started from the previous cycle's candidate while its held eval runs) learns the verdict:
         adopted, it trains the candidate as collected; rejected, it trains the previous start (``rejected_collection_mode``
-        decides whether the collection is kept or redone)."""
-        while not self.previous_verdict():
-            time.sleep(300)
+        decides whether the collection is kept or redone). Training never waits for a held eval: a verdict not in after
+        ``--gate-wait-hours`` (default 0) adopts the candidate as collected, as an unmeasured cycle is; the verdict,
+        when it comes, is read at this cycle's held stage (its reference and rollback target, and a rejection makes this
+        cycle's candidate measured)."""
+        deadline = time.time() + 3600 * getattr(self.a, 'gate_wait_hours', 0.)
+        while not self.previous_verdict() and time.time() < deadline:
+            time.sleep(min(300, max(1, deadline - time.time())))
         v = self.previous_verdict()
+        if v is None:
+            info = {'start': self.a.start, 'start_sha': self.start_sha, 'prefer_unseen': list(self.a.prefer_unseen),
+                    'collection': 'adopted', 'verdict_pending': True, 'previous_verdict': None}
+            (self.dir / 'stages' / 'gate.done').write_text(json.dumps({'time': time.time(), **info}) + '\n')
+            self.note(stage='gate', done=True, **info)
+            return
         if v['adopt']:
             info = {'start': self.a.start, 'start_sha': self.start_sha, 'prefer_unseen': list(self.a.prefer_unseen),
                     'collection': 'adopted'}
@@ -1470,6 +1508,10 @@ class Cycle:
         self.mark('sft', profile='dgx', checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
 
     def held_stage(self):
+        # after the next cycle's launch (nothing trains behind this): a gate that adopted before the previous verdict
+        # needs it now, for the schedule, the reference and the rollback target
+        while self.speculative and (self.gate() or {}).get('verdict_pending') and not self.previous_verdict():
+            time.sleep(300)
         if not self.measured():
             return self.mark('held', skipped=f'--held-every {self.a.held_every}')
         while self.active(self.base_unit()):     # one held measurement at a time (Pop serves one policy; the DGX one
@@ -1671,6 +1713,8 @@ def dgx_held(args):
     serve = [PY, str(pin / 'scripts/neuralese_data/serve_native_checkpoint.py'), '--store-dir', str(store),
              '--checkpoint', str(args.checkpoint), '--checkpoint-sha256', args.policy_id, '--base', str(BASE_SNAPSHOT),
              '--port', str(port), '--prompt-rendering', 'full', *pinned_engine(manifest)['serve_args'],
+             # sized to fit beside a collection (HELD_KV_GB); later flags win over the pin's 16 GB / 128
+             '--sglang-kv-gb', str(args.kv_gb), '--sglang-max-running', str(args.max_running),
              '--hf-export-dir', str(store / 'sglang-hf')]
     url = f'http://127.0.0.1:{port}'
     actor = None
@@ -1841,6 +1885,9 @@ def main():
                         '4 samples, held episodes before collection) or pop (legacy, 2 samples)')
     y.add_argument('--held-series-host', help="the host of --held-pin's series (set by the pipeline; absent: pop)")
     y.add_argument('--held-slots', type=int, default=HELD_SLOTS, help='collector slots of a DGX held measurement')
+    y.add_argument('--gate-wait-hours', type=float, default=0.,
+                   help='how long the gate waits for the previous verdict before adopting the candidate as collected '
+                        '(0: never; training does not wait for a held eval)')
     y.add_argument('--colab-hosts', default=None,
                    help='comma-separated Colab G4 SSH host aliases (overrides NATLANG_COLAB_HOSTS)')
     y.add_argument('--fallback-wait-minutes', type=float, default=30.0,
@@ -1868,6 +1915,8 @@ def main():
     d.add_argument('--policy-id', required=True)
     d.add_argument('--samples', type=int, default=4)
     d.add_argument('--slots', type=int, default=HELD_SLOTS)
+    d.add_argument('--kv-gb', type=float, default=HELD_KV_GB)
+    d.add_argument('--max-running', type=int, default=HELD_MAX_RUNNING)
     d.add_argument('--held-pin', required=True)
     d.add_argument('--manifest', help='default: grpo.default_held() (held-v3)')
     d.add_argument('--label', required=True)
