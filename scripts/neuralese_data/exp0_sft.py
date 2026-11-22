@@ -45,7 +45,7 @@ from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import lfm3_fast_train
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
 # One implementation for every learner (grpo, exp0_sft, program tune).
 from natlang_neuralese.train.reply_format import SECOND_CLOSE_STOPS, second_close_mask
 

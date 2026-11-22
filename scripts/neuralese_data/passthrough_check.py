@@ -78,7 +78,7 @@ def rel(a, b):
 def capture(args):
     import torch
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     from lower_rollout_turns import NativeStates, episode_turns, write_sources
     from natlang_neuralese.serve.store import read_native_state_file
     store = NativeStates(args.store)
@@ -173,7 +173,7 @@ def capture(args):
 def bench(args):
     import torch
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     import zstandard
     from lower_rollout_turns import episode_turns
     chains = []

@@ -141,7 +141,7 @@ def measure_end(model, probe, pack_tokens=END_PACK_TOKENS):
     """Per end call of ``probe``: {'end_logp': [...], 'reclose_logp': [...]}, the log-probabilities of ``<|im_end|>``
     and of ``</think>`` at the reply's last position (where the start policy ended its turn)."""
     import torch
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     weight = model.get_output_embeddings().weight
     out = {'end_logp': [], 'reclose_logp': []}
     batches, batch, size = [], [], 0
@@ -170,7 +170,7 @@ def measure(model, probe, pack_tokens=16000, chunk=1024):
     """Per-call means over the reasoning tokens of ``probe`` (``build``'s JSON) under ``model`` (prepared for
     ``lfm3_fast_train``): {'sampled_logp': [...], 'entropy': [...], 'close_per_1k': [...], 'close_logp': [...]}."""
     import torch
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     weight = model.get_output_embeddings().weight
     close = probe['close_id']
     out = {'sampled_logp': [], 'entropy': [], 'close_per_1k': [], 'close_logp': []}
@@ -301,7 +301,7 @@ def extend(args):
 def load_probe_model(checkpoint):
     import torch
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     from grpo import BASE
     model, _, _ = exp0_sft.load_model(checkpoint, BASE, device='cpu', dtype=torch.bfloat16)
     model.to('cuda').eval()

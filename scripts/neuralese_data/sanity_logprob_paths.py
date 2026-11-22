@@ -46,7 +46,7 @@ def save(out, chains, values):
 def trainer(args):
     import torch
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     from natlang_neuralese.common.cuda_context import ensure_context
     ensure_context('cuda')   # GB10: context creation can fail under host-memory fragmentation; retried
     chains = sample_chains(args)

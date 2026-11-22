@@ -3615,7 +3615,7 @@ def train(args):
     import torch
     import behaviour_probe
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)

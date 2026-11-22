@@ -29,7 +29,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import exp0_sft  # noqa: E402
-import lfm3_fast_train  # noqa: E402
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train  # noqa: E402
 
 ARMS = ('actual', 'standalone', 'shuffled', 'text-cut')
 

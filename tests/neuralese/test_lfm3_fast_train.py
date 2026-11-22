@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
-import lfm3_fast_train  # noqa: E402
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train  # noqa: E402
 from test_lfm3_port import tiny_lfm3_hf  # noqa: E402
 
 

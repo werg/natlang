@@ -84,3 +84,94 @@ def module_map(names, family=None, classes=None):
         if found[0] in selected:
             kinds[name], targets[name] = found
     return targets, kinds
+
+
+# Canonical 9 projection families for global LFM3 LoRA training (lfm3opti.md §5).
+# Attention gate_proj (output width 16) is excluded by default and requires explicit gate_rank <= 16 if enabled.
+LFM3_LORA_FAMILIES: tuple[str, ...] = (
+    'self_attn.q_proj',
+    'self_attn.k_proj',
+    'self_attn.v_proj',
+    'self_attn.o_proj',
+    'conv.in_proj',
+    'conv.out_proj',
+    'feed_forward.w1',
+    'feed_forward.w2',
+    'feed_forward.w3',
+)
+LFM3_ATTN_GATE_FAMILY = 'self_attn.gate_proj'
+_LFM3_ALL_FAMILIES = frozenset((*LFM3_LORA_FAMILIES, LFM3_ATTN_GATE_FAMILY))
+
+
+def resolve_lfm3_lora_targets(model, families=LFM3_LORA_FAMILIES, *, gate_rank: int | None = None):
+    """Resolve every targeted linear projection on an HF ``Lfm3ForCausalLM`` instance.
+
+    Fails fast if any requested family is unknown or matches zero layers on ``model``, or if ``gate_rank`` exceeds the
+    gate projection's width (16 on LFM3-1.7B). Returns an ordered list of
+    ``(param_name, layer_idx, layer_kind, short_name, shape)``.
+    """
+    requested = tuple(families)
+    unknown = set(requested) - _LFM3_ALL_FAMILIES
+    if unknown:
+        raise TuneMathError(f'unknown LFM3 LoRA target families: {sorted(unknown)}')
+    if gate_rank is not None:
+        if type(gate_rank) is not int or gate_rank < 1:
+            raise TuneMathError(f'gate_rank must be a positive int, got {gate_rank!r}')
+        if LFM3_ATTN_GATE_FAMILY not in requested:
+            requested = (*requested, LFM3_ATTN_GATE_FAMILY)
+    wanted = set(requested)
+    matched_families = set()
+    resolved = []
+    layers = model.model.layers
+    for layer_idx, layer in enumerate(layers):
+        layer_kind = 'attn' if layer.is_attention_layer else 'conv'
+        candidates = (
+            (('self_attn.q_proj', 'q_proj', layer.self_attn.q_proj),
+             ('self_attn.k_proj', 'k_proj', layer.self_attn.k_proj),
+             ('self_attn.v_proj', 'v_proj', layer.self_attn.v_proj),
+             ('self_attn.o_proj', 'o_proj', layer.self_attn.o_proj),
+             ('self_attn.gate_proj', 'gate_proj', layer.self_attn.gate_proj))
+            if layer.is_attention_layer else
+            (('conv.in_proj', 'in_proj', layer.conv.in_proj),
+             ('conv.out_proj', 'out_proj', layer.conv.out_proj))
+        ) + (
+            ('feed_forward.w1', 'w1', layer.feed_forward.w1),
+            ('feed_forward.w2', 'w2', layer.feed_forward.w2),
+            ('feed_forward.w3', 'w3', layer.feed_forward.w3),
+        )
+        for family, short_name, module in candidates:
+            if family not in wanted:
+                continue
+            shape = tuple(module.weight.shape)
+            if family == LFM3_ATTN_GATE_FAMILY and gate_rank is not None and gate_rank > min(shape):
+                raise TuneMathError(f'gate_rank {gate_rank} exceeds {family} shape {shape} at layer {layer_idx}')
+            param_name = f'model.layers.{layer_idx}.{family}.weight'
+            resolved.append((param_name, layer_idx, layer_kind, short_name, shape))
+            matched_families.add(family)
+    missing = [f for f in requested if f not in matched_families]
+    if missing:
+        raise TuneMathError(f'LFM3 LoRA target families matched no layers: {missing}')
+    return resolved
+
+
+def packed_adapter_ranks(rank: int, families=LFM3_LORA_FAMILIES, *, gate_rank: int | None = None) -> dict[str, int]:
+    """Packed serving rank per SGLang fused LFM3 module (qkv_proj = 3r, gate_up_proj = 2r, others = r)."""
+    wanted = set(families)
+    qkv = sum(rank for name in ('self_attn.q_proj', 'self_attn.k_proj', 'self_attn.v_proj') if name in wanted)
+    gate_up = sum(rank for name in ('feed_forward.w1', 'feed_forward.w3') if name in wanted)
+    ranks = {}
+    if qkv:
+        ranks['qkv_proj'] = qkv
+    if 'self_attn.o_proj' in wanted:
+        ranks['o_proj'] = rank
+    if gate_rank is not None or LFM3_ATTN_GATE_FAMILY in wanted:
+        ranks['gate_proj'] = gate_rank or rank
+    if 'conv.in_proj' in wanted:
+        ranks['in_proj'] = rank
+    if 'conv.out_proj' in wanted:
+        ranks['out_proj'] = rank
+    if gate_up:
+        ranks['gate_up_proj'] = gate_up
+    if 'feed_forward.w2' in wanted:
+        ranks['w2'] = rank
+    return ranks

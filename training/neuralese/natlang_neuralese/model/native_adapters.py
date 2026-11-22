@@ -293,6 +293,135 @@ def factored_factors(resolved):
         return None
 
 
+_FP8_E4M3_MAX = 448.0
+
+
+def fp8_base_supported(device=None) -> bool:
+    """Whether Blackwell FP8 frozen-base GEMMs are enabled and supported on ``device``.
+
+    Enabled by default on Blackwell (compute capability >= 12.0: G4 sm_120 and GB10 sm_121).
+    ``NATLANG_FP8_BASE=0`` opts out.
+    """
+    import os
+    if os.environ.get('NATLANG_FP8_BASE', '1') == '0':
+        return False
+    if not torch.cuda.is_available() or not hasattr(torch, '_scaled_mm'):
+        return False
+    try:
+        dev = torch.device(device) if device is not None else torch.device('cuda', torch.cuda.current_device())
+        if dev.type != 'cuda':
+            return False
+        major, _minor = torch.cuda.get_device_capability(dev)
+        return major >= 12
+    except Exception:
+        return False
+
+
+def _quantize_fp8_e4m3(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-tensor dynamic FP8 E4M3 quantization for Blackwell ``torch._scaled_mm``."""
+    scale = (x.abs().amax().float().clamp(min=1e-12) / _FP8_E4M3_MAX).reshape(1)
+    q = (x.float() / scale).clamp(-_FP8_E4M3_MAX, _FP8_E4M3_MAX).to(torch.float8_e4m3fn)
+    return q, scale
+
+
+def _scaled_mm_padded(a_2d: torch.Tensor, b_col_major: torch.Tensor, scale_a: torch.Tensor,
+                      scale_b: torch.Tensor, out_dtype: torch.dtype) -> torch.Tensor:
+    """``torch._scaled_mm`` with automatic row padding to a multiple of 16 for arbitrary token lengths."""
+    rows = a_2d.shape[0]
+    pad = (-rows) % 16
+    if pad:
+        a_in = torch.nn.functional.pad(a_2d, (0, 0, 0, pad))
+        return torch._scaled_mm(a_in, b_col_major, scale_a=scale_a, scale_b=scale_b, out_dtype=out_dtype)[:rows]
+    return torch._scaled_mm(a_2d, b_col_major, scale_a=scale_a, scale_b=scale_b, out_dtype=out_dtype)
+
+
+class _FP8FrozenBaseLinear(torch.autograd.Function):
+    """Frozen-base linear projection using FP8 E4M3 tensor cores for forward (W0 x) and input-gradient (dY W0).
+
+    The base weight W0 is frozen (no weight gradient); adapters, trainable rows, loss and optimizer stay in BF16/FP32.
+    """
+
+    @staticmethod
+    def forward(ctx, x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None):
+        orig_shape = x.shape[:-1]
+        in_features = x.shape[-1]
+        out_features = weight.shape[0]
+        x2d = x.reshape(-1, in_features).contiguous()
+        xq, xs = _quantize_fp8_e4m3(x2d)
+        wq, ws = _quantize_fp8_e4m3(weight.contiguous())
+        out = _scaled_mm_padded(xq, wq.t(), xs, ws, x.dtype)
+        if bias is not None:
+            out = out + bias.to(out.dtype)
+        ctx.save_for_backward(weight)
+        ctx.orig_shape = orig_shape
+        ctx.in_features = in_features
+        ctx.out_features = out_features
+        ctx.x_dtype = x.dtype
+        return out.reshape(*orig_shape, out_features)
+
+    @staticmethod
+    def backward(ctx, grad_out: torch.Tensor):
+        (weight,) = ctx.saved_tensors
+        need_x, need_w, need_b = ctx.needs_input_grad
+        dx = dw = db = None
+        g2d = grad_out.reshape(-1, ctx.out_features).contiguous()
+        if need_x:
+            gq, gs = _quantize_fp8_e4m3(g2d)
+            # weight is (N, K); we need g2d (M, N) @ weight (N, K) -> b_col_major must be (N, K) column-major,
+            # which is weight.t().contiguous().t() where weight.t().contiguous() is (K, N) row-major.
+            wt_q, ws = _quantize_fp8_e4m3(weight.t().contiguous())
+            dx = _scaled_mm_padded(gq, wt_q.t(), gs, ws, ctx.x_dtype).reshape(*ctx.orig_shape, ctx.in_features)
+        if need_w:
+            raise RuntimeError('_FP8FrozenBaseLinear requires frozen base weight (weight.requires_grad must be False)')
+        if need_b:
+            db = g2d.float().sum(dim=0).to(grad_out.dtype)
+        return dx, dw, db
+
+
+def fp8_frozen_linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
+    """Apply frozen base linear projection in FP8 E4M3 on Blackwell tensor cores when eligible, else ``F.linear``."""
+    if (x.is_cuda and weight.is_cuda and x.dtype in (torch.bfloat16, torch.float16)
+            and weight.dtype == x.dtype and not weight.requires_grad
+            and weight.shape[0] % 16 == 0 and weight.shape[1] % 16 == 0
+            and fp8_base_supported(x.device)):
+        return _FP8FrozenBaseLinear.apply(x, weight, bias)
+    return torch.nn.functional.linear(x, weight, bias)
+
+
+def factored_linear(x: torch.Tensor, base_w: torch.Tensor, lora_a: torch.Tensor | None = None,
+                    lora_b: torch.Tensor | None = None, scale: float = 1.0, bias: torch.Tensor | None = None,
+                    *, fp8_base: bool = False, adapter_dtype: torch.dtype | None = None) -> torch.Tensor:
+    """Pure factored linear projection ``y = W0 x + s * B (A x)`` with canonical unscaled FP32 leaves ``A, B``.
+
+    - ``scale`` (``alpha / rank``) is applied once as a Python float; leaves remain unscaled so multi-backward prefix
+      trees never cache derived non-leaf tensors.
+    - By default the low-rank branch runs in the input's tensor-core dtype (BF16 on CUDA) with FP32 residual
+      accumulation into the output, rounded once. Set ``adapter_dtype=torch.float32`` (or ``NATLANG_LORA_FP32_BRANCH=1``)
+      for the strict FP32 low-rank reference branch inside ``autocast(enabled=False)``.
+    - Base GEMMs optionally run in FP8 E4M3 (``fp8_base=True``) when the base weight is frozen on Blackwell.
+    """
+    import os
+    out = fp8_frozen_linear(x, base_w, bias) if fp8_base else torch.nn.functional.linear(x, base_w, bias)
+    if lora_a is None or lora_b is None:
+        return out
+    branch_dtype = adapter_dtype
+    if branch_dtype is None:
+        if x.dtype == torch.float32 or os.environ.get('NATLANG_LORA_FP32_BRANCH') == '1':
+            branch_dtype = torch.float32
+        else:
+            branch_dtype = x.dtype
+    if branch_dtype == torch.float32:
+        with torch.amp.autocast(device_type=x.device.type, enabled=False):
+            low = torch.nn.functional.linear(
+                torch.nn.functional.linear(x.float(), lora_a.float()),
+                lora_b.float(),
+            )
+            return (out.float() + float(scale) * low).to(out.dtype)
+    h_low = torch.nn.functional.linear(x.to(branch_dtype), lora_a.to(branch_dtype))
+    delta = torch.nn.functional.linear(h_low, lora_b.to(branch_dtype))
+    return (out.float() + float(scale) * delta.float()).to(out.dtype)
+
+
 class FactoredLoRALinear(nn.Module):
     """A target Linear plus its low-rank delta: the base projection keeps its own native arithmetic
     (``shared_state._linear``), the delta ``(x A^T) B^T`` runs in FP32 and the sum is rounded once to the output dtype."""
@@ -310,9 +439,12 @@ class FactoredLoRALinear(nn.Module):
     def forward(self, x):
         from .shared_state import _linear
         out = _linear(self.original, x)
-        low = torch.nn.functional.linear(torch.nn.functional.linear(x.to(self.factor_a.dtype), self.factor_a),
-                                         self.factor_b.to(x.device))
-        return (out.float() + low).to(out.dtype)
+        with torch.amp.autocast(device_type=x.device.type, enabled=False):
+            low = torch.nn.functional.linear(
+                torch.nn.functional.linear(x.to(self.factor_a.dtype), self.factor_a),
+                self.factor_b.to(x.device),
+            )
+            return (out.float() + low.float()).to(out.dtype)
 
 
 from contextlib import contextmanager

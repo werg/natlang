@@ -407,7 +407,7 @@ def test_think_mask_and_moment_cosine():
 
 
 def test_prefix_tree_over_a_subset_maps_back_to_the_steps_chains():
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     system = np.arange(10)
     chains = [np.concatenate([system, [50 + i] * 4]) for i in range(3)] + [np.arange(30, 40)]
     keep = [0, 2, 3]                      # chain 1 reads imported state: it stays whole
