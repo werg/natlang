@@ -7344,3 +7344,59 @@ judge learned capability with the paired held evaluation already used by trainin
 ### 2026-11-23: Retry teacher goals against the repaired release
 
 The Vibestudio campaign previously applied its two-attempt limit across every historical harness release. Repaired outcomes therefore left failed goals permanently exhausted. Attempt accounting now defaults to the validated release-manifest SHA as its epoch, retaining cumulative telemetry and every historical verified success. New wave plans and execution subsets carry immutable release/catalog/driver/Host provenance; old receipts and plans remain untouched, and unfinished historical captures can be archived without running their old jobs under a different release. `--attempt-epoch` provides an explicit accounting override. This changes campaign bookkeeping, not semantic outcome requirements or the existing task selection policy. Targeted tests use mocked collection; no new generation was launched. Mechanism inventory: `VIBESTUDIO_ATTEMPT_EPOCHS.md`.
+
+## 2026-11-23: semantic-FP campaign v2 (`plans/semantic-fp/`)
+
+The owner endorsed nine review points for the 2026-11-22 campaign plans: "become unreasonably ambitious and radical, and
+instill this on consumers of this system". The plans are rewritten around them. v1's audit evidence is kept; facts
+re-verified against main 0f87d11a4 are corrected in place.
+
+- **Waves, not weeks.** Dependency-ordered waves A-D sized in agent-days, every item executable from its text. The first
+  dispatchable batch is `09_FIRST_BATCH.md` (16 briefs, ordered by expected value).
+- **Migrate or delete the legacy corpora instead of quarantining them** (WS7). The 100 design briefs and 11 Astra/Sol
+  apps carry 800 exact cases and fixture verifiers in `training/semantic_applications/`. A natlang migrator (extending
+  `applications/migration`) rewrites each against those cases. Verified pairs become refactor tasks, idiomatic-program
+  tasks and teacher demonstrations. 20 briefs and 2 apps are reserved for held-v4.
+- **The campaign's deciding tools are natlang programs** on LFM3 (Tier 0 flagships): idiom review (crisp floor in
+  `natlang check`, natlang reviewer in `--idiom`), migrator, task author and qualification, and the `escalate` policy
+  (pluggable, crisp default).
+- **Prompt.** v1's "~400-token kernel" is withdrawn. The prompt is judged on teaching and on cost after prefix caching
+  (owner): the system message and tool block stay a byte-stable prefix, pinned by a new test. A sentence-level pass
+  removes task-specific scar tissue (teaching through errors), wrong forms, the anti-delegation paragraph (the runtime
+  already refuses the same question) and the copyable refund example, and it adds `decide`. Modules are gated only
+  where that teaches better or saves after caching. R0 first checks a suspected prefix break:
+  `edit_code`/`diff_code` are added to the tool block conditionally, against the 2026-11-12 constant-opening decision.
+  It also checks whether SFT renders own successes under the recorded or the current system prompt.
+- **Training through expert iteration** (WS5): oracles built on `trusted_exact_verifier`, the existing option-normalized
+  decision objective wired into `exp0_sft` (today only the native-graph path uses it), construct families allocated
+  by the frontier, teacher demonstrations via `teacher_gen.py`. Memetic tasks enter EI collection, which forces share
+  0 today. **held-v4 first:** code for a second held role (`default_held()` admits exactly one `held-eval` entry),
+  reservations now, a 256-task set in Wave A, held-v3 alongside as the gate until held-v4 has two measured rounds.
+- **Neuralese, memetic, self-improvement** (new WS8): operators as `.nl` functions, soft-state carry through
+  `@natlang/std`, `natlang improve DIR` built from a program's own runs (the command exists but needs a hand-written
+  CASE.json), `grad` conformance (five cases pending), an `improve-program` training family.
+- **`edit_code` stays on where a call owns code**, against v1's opt-in. Malleability is the thesis. Verifiers become
+  protected items, and good run-scoped edits become proposals adopted through a Folder transaction (`natlang improve
+  adopt-call`). Fact: edit_code was never on for every call; opt-outs (`codeEdits: 'deny'`, `withhold:`) exist.
+- **Exit criteria raised.** Compiled LFM3 beats an unstructured `gpt-6-luna` loop on quality on ≥ 3 flagships at
+  ≤ 1/20 cost. Crisp-share targets per flagship. held-v4 +10 pts over base. Self-improvement +5 pts on ≥ 3 flagships.
+  The front-door blind authoring check passes ≥ 4 of 5.
+- **Front door now** (WS4): exact `natlang init` files and generated AGENTS.md, authoring-skill sections and README
+  opening, shipped in Wave A. No wrong forms shown anywhere; v1's anti-pattern gallery is dropped. The skill and init
+  guide had taught "number the steps" of algorithms without the policy/mechanism line, which is part of why the
+  prose style spread.
+- Correction recorded: the "owner conservative prompt-shortening rule" (2026-11-13) cited in an earlier brief is not an
+  owner position and was never a DECISIONS entry. The plans do not rely on it.
+
+## 2026-11-23 01:10 Held results reuse and pair across series (owner)
+
+Owner 2026-11-22: "I don't care that much if held results are comparable." Eval hours count more than same-series
+pairing.
+- **Reuse:** `reusable_held(..., any_series=True)`, the default in cycles, `pop-held` and `async-drive`. When no
+  result exists in the same series, host and samples per task, any complete result of the policy at >= 2 samples per
+  task is reused; an exact match is preferred. `--strict-held-reuse` restores the old rule.
+- **Pairing:** `held_eval.compare` now pairs results from two engine hosts (Pop and DGX) with a recorded warning;
+  `strict_series` refuses them as before. Different engine settings (engine kind, weight dtype, KV dtype, speculative
+  decoding) are still refused.
+- **Effect now:** aei1's first verdict pairs round 1 against sft-v7's existing Pop result. Without this, the reference
+  needed 8-10 h of DGX held.

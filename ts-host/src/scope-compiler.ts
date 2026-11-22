@@ -768,18 +768,33 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
   }
   const savedHelpers: PersistentScopeHelper[] = [];
   const transientHelpers: { name: string; reason: string }[] = [];
-  for (const { statement, helper } of helperCandidates) {
-    // A helper that calls itself refers to its own binding, which persists with it.
+  // A helper that calls itself refers to its own binding, which persists with it.
+  // A parse error can leave an identifier without text; it is reported as syntax, not as an unavailable name.
+  const freeOf = new Map(helperCandidates.map(({ helper }) => {
     const found = persistentHelperFreeNames(helper.fn, helperChecker!, file);
-    // A parse error can leave an identifier without text; it is reported as syntax, not as an unavailable name.
-    const free = { ...found, names: found.names.filter(name => name && name !== helper.name) };
+    return [helper.name, { ...found, names: found.names.filter(name => name && name !== helper.name) }] as const;
+  }));
+  // Helpers of this eval persist together: a helper that calls another helper declared here persists with it, unless
+  // that one stays in this eval (it uses a dynamic import, a fetch result, or such a helper in turn).
+  const persisting = new Set(helperCandidates.map(({ helper }) => helper.name));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const name of [...persisting]) if (freeOf.get(name)!.names.some(free => transientNames.has(free) && !persisting.has(free))) {
+      persisting.delete(name);
+      changed = true;
+    }
+  }
+  for (const { statement, helper } of helperCandidates) {
+    const free = freeOf.get(helper.name)!;
     const spanOfDeclaration = span(statement);
     const hidden = free.names.filter(name => !knownHelperNames.has(name) && !bindings.some(binding => binding.name === name));
-    const ephemeral = free.names.filter(name => transientNames.has(name));
+    const ephemeral = free.names.filter(name => transientNames.has(name) && !persisting.has(name));
     const missingTypes = persistentHelperTypeNames(statement).filter(name => !persistentTypeNames.has(name));
     if (ephemeral.length) {
-      const details = [ephemeral.length ? `it refers to eval-local function${ephemeral.length > 1 ? 's' : ''} ${ephemeral.join(', ')}` : '']
-        .filter(Boolean).join(' and ');
+      const functions = ephemeral.filter(name => freeOf.has(name)), values = ephemeral.filter(name => !freeOf.has(name));
+      const details = [functions.length ? `eval-local function${functions.length > 1 ? 's' : ''} ${functions.join(', ')}` : '',
+        values.length ? `eval-local value${values.length > 1 ? 's' : ''} ${values.join(', ')}` : '']
+        .filter(Boolean).join(' and ').replace(/^/, 'it refers to ');
       transientHelpers.push({ name: helper.name, reason: details });
       continue;
     }

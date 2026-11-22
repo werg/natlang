@@ -133,7 +133,10 @@ checks; otherwise the error names the field to fix or asks for the value written
 `repeated-failed-action`, `no-action`, `budget-exhausted`, `refinement`, `refused`, `incomplete`, `cancelled`, or
 `error` when something other than the model's work ended it, which is then the error's `cause`).
 `fn.on({ model: NAME })` is the same function on another of the runtime's models (what `model:` names), for one retry
-on a stronger model without editing the source. Service calls and live-object writes are not rolled back; a
+on a stronger model without editing the source. `fn.in(context)` is the same function bound to another `Context`
+(runtime package): a context that lacks an item the function's instructions name, or holds it with another signature,
+is refused with `context-interface-mismatch`, which names the item; add it to the context or keep the function's own.
+An inline `nl` rebound with `.in` keeps that context through `.with(...)`. Service calls and live-object writes are not rolled back; a
 captured `let` is written back only after a successful eval. Every call is recorded in the machine's call store
 (`natlang traces`); keep sensitive values out with `"recording": { "exclude": [...] }` in `natlang.json`.
 

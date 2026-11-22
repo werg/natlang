@@ -471,9 +471,12 @@ export function rebind(fn: NatlangCallable, context: Context): NatlangCallable {
   const captures = { ...ownCaptures, ...dataCells(context, new Set(Object.keys(ownCaptures))) };
   const render = meta.instructions;
   const skillFiles = skillFilesOf(context.data);
+  // An inline value's `.with(captures)` keeps this context: the fresh instance is rebound to it too (as `on` keeps the model).
+  const rebindInline = meta.rebindInline;
   const rebound = makeCallable({ ...meta, definition, captures, invoke: (args, frame, at) => invokeDefinition(frame, definition, args,
     { ...(meta.options ?? {}), captures, ...(skillFiles ? { skillFiles } : {}), ...(render !== undefined ? { instructions: typeof render === 'function' ? render(frame) : render } : {}),
-      ...(at ? { at } : {}) }) });
+      ...(at ? { at } : {}) }),
+    ...(rebindInline ? { rebindInline: (...args: Parameters<typeof rebindInline>) => rebind(rebindInline(...args), context) } : {}) });
   attachChildren(rebound, context.items, meta.bound);
   if (soft) SOFT.set(rebound, soft);
   CONTEXT_DATA.set(rebound, context.data as Record<string, unknown>);

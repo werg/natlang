@@ -3,6 +3,28 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — the system prompt says eval helpers carry forward, and a helper that calls another one now does
+
+Commit a5d27251b (semantic-FP Wave 0) changed one sentence of `APPROACH_PROMPT` (`native/prompt.ts`, "Getting at
+data"). It used to say that ordinary function declarations and function-valued locals are scoped to the eval that
+creates them. That was false: since a01f5392f (2026-10-08) `scope-compiler.ts` saves top-level function declarations and
+function-valued `const`s as source and recompiles them in later evals. The new sentence: "Top-level helper functions and
+supported local values carry forward to later evals; closures over ephemeral or non-portable state stay scoped to the
+eval that creates them." The commit did not regenerate `ts-host/test/fixtures/builtin-prompts.json` or
+`training/prompt-pieces/pieces.json`, so `builtin-programs.test.mjs` and `prompt-pieces-export.test.mjs` failed, and the
+Python renderer (`prompt_rendering.py`, program-header mode) would have kept the new piece in training rows while
+ts-host drops it. Both are regenerated now (`pieces.json` with `--history`, so the old sentence stays matchable in
+recorded corpora).
+
+A review of the claim (run, not read) found one case where it was still false: a helper that called another helper
+declared in the same eval (`const step = ...; function revise(n) { return step(n); }`) stayed in that eval, so a later
+`revise(...)` failed with `revise is not defined` while `step` persisted. Helpers of one eval now persist together. A
+helper stays in its eval only when it depends on a value that cannot persist (a dynamic import or a `fetch` result) or
+on a helper that does; the notice then names it as an eval-local value or function. Tests:
+`ts-host/test/semantic-fp-fixes.test.mjs`, `test/persistent-scope-helpers.test.mjs`. All engines share this: the prompt
+and the eval scope compiler are ts-host runtime code, and the Python renderer reads the regenerated pieces table.
+The prompt change is model-facing; held results pair only within one scoring series.
+
 ### 2026-11-22 — a Neuralese block from an earlier policy version of the same run splices exactly again
 
 Commit 07efc838c made the SGLang actor front change its native identity (checkpoint id and embedding digest) at every

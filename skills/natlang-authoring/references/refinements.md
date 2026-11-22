@@ -18,6 +18,8 @@ Answer the complaint.
 
 The instruction states the task. The type states the property, and the checker enforces it.
 
+An inline `nl` takes the same types as its target, in application code and in eval: `await nl<Reply>`Answer the complaint.`(complaint)`, `nl<Untrusted<Reply>>`, or `nl<Base & { reply: Reply }>` (object types joined with `&`). The checks and the fix sent to the executing model are those of a `.nl` return. An intersection of anything but object types is not a portable target: write one object type. `Is<T, P>` needs a string literal as `P` (`refinement-predicate-invalid`); put the predicate text in the type, not in a `string` variable.
+
 ## When to use it
 
 - The property is visible in the value: tone, length, format, "copied verbatim from the source", "names exactly the files listed". Put it on the return type of the function that produces the value, or on the parameter of the function that must not receive anything else.

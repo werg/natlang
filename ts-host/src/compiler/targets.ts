@@ -105,6 +105,44 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
     return;
   };
 
+  const INTERSECTION_RULE = 'an intersection is portable only as object types joined with & (Base & { extra: string }), ' +
+    'or inside Is<T, P> or Untrusted<T>';
+  /** The parts of an intersection that are not natlang brands, and the brands: \`Is<T, P>\` predicates and \`Untrusted<T>\`. */
+  const splitBrands = (candidate: ts.IntersectionType): { rest: ts.Type[]; predicates: string[]; untrusted: boolean } => {
+    let untrusted = false;
+    const predicates: string[] = [], rest: ts.Type[] = [];
+    for (const part of candidate.types) {
+      const properties = part.getProperties();
+      const only = properties.length === 1 ? properties[0]! : undefined;
+      if (only?.name === '__natlangUntrusted') { untrusted = true; continue; }
+      if (only?.name !== '__natlangRefinement') { rest.push(part); continue; }
+      const declaration = only.valueDeclaration ?? only.declarations?.[0];
+      const map = declaration ? checker.getTypeOfSymbolAtLocation(only, declaration) : checker.getTypeOfSymbol(only);
+      const names = map.getProperties().map(item => item.name);
+      // Is<T, string> (or any P that is not string literals) names no predicate: the frontmatter parser's error.
+      if (!names.length || names.some(name => !name.trim())) throw new TargetError('refinement-predicate-invalid: Is<T, P> takes a ' +
+        'nonempty string literal as P, for example Is<string, "one line of at most 60 characters">');
+      for (const predicate of names) if (!predicates.includes(predicate)) predicates.push(predicate);
+    }
+    return { rest, predicates, untrusted };
+  };
+  const wrapBrands = (inner: string, predicates: readonly string[], untrusted: boolean): string => {
+    for (const predicate of predicates) inner = `Is<${inner}, ${JSON.stringify(predicate)}>`;
+    return untrusted ? `Untrusted<${inner}>` : inner;
+  };
+  const unionText = (members: readonly ts.Type[], depth: number): string => {
+    const hasTrue = members.some(t => t.flags & ts.TypeFlags.BooleanLiteral && checker.typeToString(t) === 'true');
+    const hasFalse = members.some(t => t.flags & ts.TypeFlags.BooleanLiteral && checker.typeToString(t) === 'false');
+    const parts: string[] = [];
+    if (hasTrue && hasFalse) parts.push('boolean');
+    for (const member of members) {
+      if (member.flags & ts.TypeFlags.BooleanLiteral && hasTrue && hasFalse) continue;
+      const converted = convert(member, depth + 1);
+      if (!parts.includes(converted)) parts.push(converted);
+    }
+    return parts.map(part => part.includes('=>') ? `(${part})` : part).join(' | ');
+  };
+
   const convert = (candidate: ts.Type, depth: number): string => {
     if (depth > 24) throw new TargetError('the type is nested too deeply to check');
     const flags = candidate.flags;
@@ -151,42 +189,20 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
     if (flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) return 'null';
     if (flags & ts.TypeFlags.EnumLiteral && candidate.isUnion()) return candidate.types.map(t => convert(t, depth + 1)).join(' | ');
     if (candidate.isUnion()) {
-      const members = candidate.types;
-      const hasTrue = members.some(t => t.flags & ts.TypeFlags.BooleanLiteral && checker.typeToString(t) === 'true');
-      const hasFalse = members.some(t => t.flags & ts.TypeFlags.BooleanLiteral && checker.typeToString(t) === 'false');
-      const parts: string[] = [];
-      if (hasTrue && hasFalse) parts.push('boolean');
-      for (const member of members) {
-        if (member.flags & ts.TypeFlags.BooleanLiteral && hasTrue && hasFalse) continue;
-        const converted = convert(member, depth + 1);
-        if (!parts.includes(converted)) parts.push(converted);
-      }
-      return parts.map(part => part.includes('=>') ? `(${part})` : part).join(' | ');
+      // TypeScript distributes a brand over a union (\`Is<"a" | "b", P>\` is \`("a" & brand) | ("b" & brand)\`, and
+      // \`Is<boolean, P>\` brands \`true\` and \`false\` apart): one brand on every member is the brand of the union.
+      const split = candidate.types.map(member => member.isIntersection() ? splitBrands(member) : undefined);
+      const first = split[0];
+      const key = (item: typeof first) => item && JSON.stringify([[...item.predicates].sort(), item.untrusted]);
+      if (first && (first.predicates.length || first.untrusted) && split.every(item => item && item.rest.length === 1 && key(item) === key(first)))
+        return wrapBrands(unionText(split.map(item => item!.rest[0]!), depth), first.predicates, first.untrusted);
+      return unionText(candidate.types, depth);
     }
     if (candidate.isIntersection()) {
-      // Unwrap `Untrusted<T>` (`__natlangUntrusted`) and `Is<T, P>` (`__natlangRefinement`) brand intersections,
-      // and support record/object intersections (`A & { extra: string }`) matching `native/types.ts`.
-      let untrusted = false;
-      const predicates: string[] = [];
-      const rest: ts.Type[] = [];
-      const extractRefinements = (part: ts.Type): boolean => {
-        const properties = part.getProperties();
-        if (properties.length !== 1 || properties[0]!.name !== '__natlangRefinement') return false;
-        const prop = properties[0]!;
-        const declaration = prop.valueDeclaration ?? prop.declarations?.[0];
-        const mapType = declaration ? checker.getTypeOfSymbolAtLocation(prop, declaration) : checker.getTypeOfSymbol(prop);
-        const names = mapType.getProperties().map(item => item.name).filter(Boolean);
-        if (!names.length) return false;
-        for (const predicate of names) if (!predicates.includes(predicate)) predicates.push(predicate);
-        return true;
-      };
-      for (const part of candidate.types) {
-        const props = part.getProperties();
-        if (props.length === 1 && props[0]!.name === '__natlangUntrusted') { untrusted = true; continue; }
-        if (extractRefinements(part)) continue;
-        rest.push(part);
-      }
-      if (!rest.length) throw new TargetError('intersection types are not supported as portable targets');
+      // Unwrap \`Untrusted<T>\` (\`__natlangUntrusted\`) and \`Is<T, P>\` (\`__natlangRefinement\`) brand intersections,
+      // and support record/object intersections (\`A & { extra: string }\`) matching \`native/types.ts\`.
+      const { rest, predicates, untrusted } = splitBrands(candidate);
+      if (!rest.length) throw new TargetError(INTERSECTION_RULE);
       let inner: string;
       if (rest.length === 1) {
         inner = convert(rest[0]!, depth + 1);
@@ -194,12 +210,10 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
         const isRecordMember = (part: ts.Type): boolean =>
           !!(part.flags & ts.TypeFlags.Object) && !checker.isArrayType(part) && !checker.isTupleType(part) &&
           !part.isUnion() && !hostOf(part) && !neuraleseParts(checker, part);
-        if (!rest.every(isRecordMember))
-          throw new TargetError('intersection types are not supported as portable targets');
+        if (!rest.every(isRecordMember)) throw new TargetError(INTERSECTION_RULE);
         inner = rest.map(part => convert(part, depth + 1)).join(' & ');
       }
-      for (const predicate of predicates) inner = `Is<${inner}, ${JSON.stringify(predicate)}>`;
-      return untrusted ? `Untrusted<${inner}>` : inner;
+      return wrapBrands(inner, predicates, untrusted);
     }
     if (checker.isArrayType(candidate) || checker.isTupleType(candidate)) {
       const elements = checker.isArrayType(candidate) ? [checker.getTypeArguments(candidate as ts.TypeReference)[0]!] :

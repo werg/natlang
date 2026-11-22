@@ -163,7 +163,8 @@ or explicit capture list refer to, with their types) are its context interface.
 
 **Rebinding.** `foo.in(context)` returns `foo` bound to another context with the
 same signature. The new context is checked structurally against `foo`'s context
-interface (`context-interface-mismatch`). Rebinding selects skills, evaluates
+interface (`context-interface-mismatch`). An inline `nl` value rebound this way
+keeps its new context when `.with(...)` instantiates it again. Rebinding selects skills, evaluates
 candidate values of items, supplies fixtures to tests, and promotes revisions.
 
 **Executable nodes come from files.** `.nl` functions and TypeScript functions are

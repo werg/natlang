@@ -658,18 +658,29 @@ def result_host(result):
     return engine_host_of(result) or 'pop'
 
 
-def reusable_held(results, policy, samples, series_key, host='pop'):
+def reusable_held(results, policy, samples, series_key, host='pop', *, any_series=False):
     """The first complete held result of ``policy`` at ``samples`` per task in one scoring series measured on ``host``
     (a measurement an earlier cycle made on the same series: pairing rules unchanged, the eval spared 3 h). The host
-    is checked apart from the key: a pin that predates host keys gives Pop and DGX results one key."""
+    is checked apart from the key: a pin that predates host keys gives Pop and DGX results one key. ``any_series``
+    (owner 2026-11-22: held comparability across series matters less than eval hours): without such a result, any
+    complete result of the policy at >= 2 samples per task, in any series and on any host; ``compare`` still refuses
+    pairs of different engine settings and records the series difference as a warning."""
+    loaded = []
     for path in results:
         try:
             r = json.loads(Path(path).read_text())
         except (OSError, json.JSONDecodeError):
             continue
-        if (r.get('complete') and r.get('policy_id') == policy and r.get('samples_per_task') == samples
-                and (r.get('series') or {}).get('key') == series_key and result_host(r) == host):
+        if not (r.get('complete') and r.get('policy_id') == policy):
+            continue
+        if (r.get('samples_per_task') == samples and (r.get('series') or {}).get('key') == series_key
+                and result_host(r) == host):
             return Path(path)
+        loaded.append((Path(path), r))
+    if any_series:
+        for path, r in loaded:
+            if int(r.get('samples_per_task') or 0) >= 2:
+                return path
     return None
 
 
@@ -1053,7 +1064,8 @@ class Cycle:
             return False
         mine = (out / 'result.json').resolve()
         found = reusable_held([p for p in sorted(OPS.glob('ei/*/held/*/result.json')) if p.resolve() != mine],
-                              policy, self.a.held_samples, key, host=self.held_host)
+                              policy, self.a.held_samples, key, host=self.held_host,
+                              any_series=not getattr(self.a, 'strict_held_reuse', False))
         if not found:
             return False
         out.mkdir(parents=True, exist_ok=True)
@@ -1818,6 +1830,7 @@ def pop_held(args):
     of the same host gives (DECISIONS 2026-11-22 "held base"), and re-measuring it on every pin cost 3.3 h."""
     a = argparse.Namespace(dir=args.dir, pin=args.pin, start=args.start, start_sha=BASE_SHA, commit='x' * 40,
                            held_samples=args.held_samples, sft_work='/dev/null', no_held_reuse=args.no_held_reuse,
+                           strict_held_reuse=getattr(args, "strict_held_reuse", False),
                            held_profile=args.held_profile, held_slots=args.held_slots,
                            name=args.name or Path(args.dir).name)
     c = Cycle(a)
@@ -2205,7 +2218,7 @@ class AsyncRoundDriver:
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts, held_profile='dgx',
             held_pin=a.held_pin, held_series_host='dgx', held_samples=a.held_samples, held_slots=a.held_slots,
-            no_held_reuse=False, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
+            no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
             collect_profile='dgx', sft_profile='dgx', select_args=a.select_args, prefer_unseen=[],
             fill_repo=None, data_repo=None, success_pts=a.success_pts, fail_pts=a.fail_pts)
 
@@ -2884,6 +2897,7 @@ def main():
     y.add_argument('--next-seed-work', action='append', default=[], help='seed WORKs the next cycle adds')
     y.add_argument('--no-held-reuse', action='store_true',
                    help="measure base and start on Pop even when an earlier cycle measured them in this series")
+    y.add_argument('--strict-held-reuse', action='store_true', help='reuse a held result only from the same scoring series, host and samples per task (default: any series)')
     y.add_argument('--held-every', type=int, default=2,
                    help='held-eval every Nth cycle\'s candidate; the others are adopted unmeasured (1 = every cycle)')
     y.add_argument('--held-every-max', type=int, default=8,
@@ -2946,6 +2960,7 @@ def main():
     h.add_argument('--held-samples', type=int, default=2)
     h.add_argument('--after', help='previous cycle DIR: wait for its verdict; its next_start is the start')
     h.add_argument('--no-held-reuse', action='store_true')
+    h.add_argument('--strict-held-reuse', action='store_true')
     h.add_argument('--held-base', action='store_true')
     h.add_argument('--held-profile', choices=('pop', 'dgx'), default='pop')
     h.add_argument('--held-slots', type=int, default=HELD_SLOTS)
@@ -2971,6 +2986,7 @@ def main():
     ad.add_argument('--reference', help='the last held-adopted policy when --start is unmeasured (default: --start): '
                     'held verdicts compare against it and a rollback returns to it')
     ad.add_argument('--reference-sha')
+    ad.add_argument('--strict-held-reuse', action='store_true', help='reuse a held result only from the same scoring series, host and samples per task (default: any series)')
     ad.add_argument('--commit', required=True, help='the pinned commit every round runs (collection, data, SFT, held)')
     ad.add_argument('--pin', help='its pin (default OPS/ei/pin-<commit12>, created when missing)')
     ad.add_argument('--held-pin', help='pin of the held series (default --pin)')
