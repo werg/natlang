@@ -274,9 +274,11 @@ DECISIONS.md entries are authoritative.
 
 - **DGX (GB10, 128 GB unified memory)** is the durable coordinator and data store: it collects, trains (cycles; an
   async round when no Colab session answers, resuming the session's synced `learner-state/` and recording the takeover
-  in `round.json`), merges and publishes, and runs the held series (`dgx-held`). **Colab** sessions (profile
-  `colab_g4`; the hardware varies by session: the current one is an A100-SXM4-80GB, `scripts/colab/bootstrap.py` at
-  `/content/natlang-work`, `scripts/colab/admission.py` claims VRAM and host RAM) run LoRA SFT (`pop_rl_actor run-sft`:
+  in `round.json`), merges and publishes, and runs the held series (`dgx-held`). **Colab** sessions (profile `colab`,
+  old name `colab_g4`; the hardware varies by session: the current one is an A100-SXM4-80GB with 167 GB host RAM and
+  no FP8, `scripts/colab/bootstrap.py` at `/content/natlang-work`, `scripts/colab/admission.py` claims VRAM and host
+  RAM; learner and actor claims come from the session's `colab-ready.json` hardware, `execution_profile.colab_layout`)
+  run LoRA SFT (`pop_rl_actor run-sft`:
   the DGX recipe from `launch.json`, learner state pulled every 15 min, an async round's FP32 factors pulled back
   blob-first) and SGLang actors for collection and fills. A session is reached as `ssh colab-g4` (OpenSSH
   ProxyCommand `colab --auth=adc ssh --proxy-mode`; no Tailscale) and admits **one** SSH connection: every command,

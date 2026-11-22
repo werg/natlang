@@ -7044,3 +7044,22 @@ and continues).
   the late verdict is a failure and stops the next cycle it launched (driver, collection, fill, SFT units).
   `bug-hunt.json` and `stages/halted.done` record it; `--resume-after-hunt` (never carried to a next cycle) restores
   the old rejection (train the previous start, recollect).
+
+## 2026-11-22 18:00 Colab sizing from the session's hardware; profile `colab`
+
+The Colab learner and actor claims were G4 constants (96 GB): on the live A100-SXM4-80GB a learner beside a capped
+actor (59 + 34 GiB) could not be admitted, and FP8 weights would have been requested on sm_80, which has no FP8 GEMMs.
+- `execution_profile.colab_layout(hardware)` sizes the four layouts from `colab-ready.json` `hardware` (VRAM, host RAM,
+  GPU name, compute capability; bootstrap now probes `compute_cap`, and `pop_rl_actor.colab_hardware` asks nvidia-smi
+  when an older ready file lacks it) by the measured memory model: learner CUDA peak 5.2 GiB + 1.2 x
+  `--activation-gb` (127 KB/token/layer saved activations, 24 layers), 2 GiB allocator slack, 1 GiB admission reserve;
+  an actor is 10 GiB + its KV, beside the learner its KV is a quarter of the usable GPU.
+  - A100 80 GB (78 usable): learner alone 77 GiB (activation 58, ~20k resident tokens); beside an actor 47 GiB
+    (activation 33, ~11k tokens) + actor 30 GiB (KV 20, 53 running); actor alone 70 GiB (mem fraction 0.88). FP8 off.
+  - G4 96 GB: the earlier measured layout (actor 34 GiB / KV 24 / 64 running, learner 59 GiB, actor alone 84); FP8 on.
+- `serve-checkpoint` sizes the actor from the session and serves BF16 when an FP8 request meets a GPU without FP8;
+  `run-sft` claims the learner box (beside the actor when the session's recorded actor was served beside the learner,
+  else alone) and sets the recipe's `--activation-gb` to it (memory only: the step list, and so a DGX takeover, is
+  unchanged).
+- The profile is `colab` (hardware-neutral; `colab_g4` still resolves), the actor export format `sglang-colab-...`
+  (held_eval places both prefixes on host `colab`).

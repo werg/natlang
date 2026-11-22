@@ -155,6 +155,7 @@ def probe_host_hardware() -> dict:
         'vram_total_gib': None,
         'vram_free_gib': None,
         'driver_version': None,
+        'compute_cap': None,
         'host_ram_total_gib': None,
         'host_ram_avail_gib': None,
     }
@@ -165,16 +166,18 @@ def probe_host_hardware() -> dict:
         pass
     try:
         out = subprocess.check_output(
-            ['nvidia-smi', '--query-gpu=name,memory.total,memory.free,driver_version', '--format=csv,noheader,nounits'],
+            ['nvidia-smi', '--query-gpu=name,memory.total,memory.free,driver_version,compute_cap',
+             '--format=csv,noheader,nounits'],
             text=True, stderr=subprocess.DEVNULL, timeout=15,
         ).strip()
         if out:
-            name, tot, free, drv = [x.strip() for x in out.splitlines()[0].split(',')]
+            name, tot, free, drv, cap = [x.strip() for x in out.splitlines()[0].split(',')]
             info.update(
                 gpu_name=name,
                 vram_total_gib=round(float(tot) / 1024.0, 2),
                 vram_free_gib=round(float(free) / 1024.0, 2),
                 driver_version=drv,
+                compute_cap=cap,     # sizes the session's engines (execution_profile.colab_layout: FP8 needs >= 8.9)
             )
     except Exception:
         pass

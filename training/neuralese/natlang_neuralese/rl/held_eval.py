@@ -834,8 +834,8 @@ PAIRING_ENGINE_FIELDS = ('engine', 'dtype', 'kv_cache_dtype', 'speculative')
 # The machine behind an attested actor export format (serve_native_checkpoint --actor-export-format; the DGX serves the
 # default ``sglang-hf-...`` export). A result without ``series.engine_host`` (every result before the DGX series) is
 # placed by its engine.
-EXPORT_FORMAT_HOSTS = (('sglang-pop-', 'pop'), ('native-pop-', 'pop'), ('sglang-colab-g4-', 'colab_g4'),
-                       ('sglang-hf-', 'dgx'))
+EXPORT_FORMAT_HOSTS = (('sglang-pop-', 'pop'), ('native-pop-', 'pop'), ('sglang-colab-g4-', 'colab'),
+                       ('sglang-colab-', 'colab'), ('sglang-hf-', 'dgx'))
 
 
 def engine_host_of(result):

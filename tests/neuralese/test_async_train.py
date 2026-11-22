@@ -226,10 +226,12 @@ def test_sglang_actor_fp8_weight_dtype_binding_differs_from_bf16(monkeypatch):
 def test_pop_rl_actor_fp8_colab_command_mps_and_rebind(tmp_path, monkeypatch):
     import pop_rl_actor
 
+    from natlang_neuralese.common.execution_profile import G4_HARDWARE, colab_layout
+    layout = colab_layout(G4_HARDWARE)
     cfg = pop_rl_actor.host_config('colab_g4', host='g4-a')
     cmd_fp8, claim, sglang_fp8, fmt_fp8 = pop_rl_actor.colab_serve_command(
         cfg, checkpoint='/content/ckpt.pt', sha='a' * 64, port=18531, work='/content/work',
-        beside_learner=True, kv_cache_dtype='fp8_e4m3', weight_dtype='fp8',
+        beside_learner=True, kv_cache_dtype='fp8_e4m3', weight_dtype='fp8', layout=layout,
     )
     assert '--sglang-weight-dtype' in cmd_fp8 and 'fp8' in cmd_fp8
     assert '--sglang-kv-gb' in cmd_fp8
@@ -240,7 +242,7 @@ def test_pop_rl_actor_fp8_colab_command_mps_and_rebind(tmp_path, monkeypatch):
     # BF16 keeps original format without -w-fp8
     cmd_bf16, _, sglang_bf16, fmt_bf16 = pop_rl_actor.colab_serve_command(
         cfg, checkpoint='/content/ckpt.pt', sha='a' * 64, port=18531, work='/content/work',
-        beside_learner=False, kv_cache_dtype='fp8_e4m3', weight_dtype='bfloat16',
+        beside_learner=False, kv_cache_dtype='fp8_e4m3', weight_dtype='bfloat16', layout=layout,
     )
     assert '--sglang-weight-dtype' not in cmd_bf16
     assert not fmt_bf16.endswith('-w-fp8')

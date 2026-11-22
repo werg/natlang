@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'scripts/neuralese_data'), str(REPO / 'training/neuralese'), str(REPO), str(REPO / 'scripts/colab')]
 
 from natlang_neuralese.common.execution_profile import (  # noqa: E402
+    G4_HARDWARE, colab_layout,
     CostTelemetry,
     resolve_profile,
     select_stage_profile,
@@ -48,6 +49,7 @@ def _cycle(tmp_path, *extra):
 # ---- profiles and fallback ---------------------------------------------------------------------------------------------
 def test_profiles_put_the_held_series_on_the_dgx_and_reject_l4():
     dgx, g4, pop = resolve_profile('dgx'), resolve_profile('colab_g4', hosts='g4-a,g4-b'), resolve_profile('pop')
+    assert g4.name == 'colab' and resolve_profile('colab', hosts='g4-a') .hosts == ('g4-a',)   # the old name resolves
     assert dgx.held_series_host == 'dgx' and dgx.held_samples == 4 and not dgx.is_discrete_gpu
     assert g4.held_series_host is None and g4.hosts == ('g4-a', 'g4-b') and g4.fallback_profile == 'dgx'
     assert pop.held_series_host is None and pop.held_samples == 2 and pop.sglang_max_running == 20
@@ -141,21 +143,69 @@ def test_admission_without_claims_needs_the_probed_free_memory():
     assert not ok and info['reasons'][0].startswith('host_ram')
 
 
-def test_g4_actor_beside_the_learner_and_the_sft_claim_fit_one_gpu():
-    cfg = pop_rl_actor.host_config('colab_g4', host='g4-1')
-    serve, claim, sglang, fmt = pop_rl_actor.colab_serve_command(cfg, checkpoint='/c.pt', sha='a' * 64, port=18531,
-                                                                  work='/w', beside_learner=True,
-                                                                  kv_cache_dtype='fp8_e4m3')
-    assert serve[serve.index('--sglang-kv-gb') + 1] == '24' and serve[serve.index('--sglang-max-running') + 1] == '64'
-    assert '--sglang-mem-fraction' not in serve and serve[serve.index('--sglang-python') + 1] == cfg['sglang_python']
-    sft_claim = pop_rl_actor.G4_VRAM_GIB - pop_rl_actor.G4_ACTOR_BESIDE_LEARNER['vram_gib'] - 1.0   # run-sft default
-    ok, _ = colab_admission.decide(sft_claim, 40.0, {'actor': {'vram_gib': claim['vram_gib'], 'host_ram_gib': 24.0}},
-                                   total_vram=94.0, total_host=160.0, free_vram=50.0, free_host=100.0)
+A100 = {'gpu_name': 'NVIDIA A100-SXM4-80GB', 'vram_total_gib': 80.0, 'host_ram_total_gib': 167.05}   # live session
+
+
+@pytest.mark.parametrize('hardware', [A100, {**A100, 'compute_cap': '8.0'}, G4_HARDWARE],
+                         ids=['a100-name', 'a100-cap', 'g4'])
+def test_colab_layouts_fit_the_sessions_gpu_by_the_measured_memory_model(hardware):
+    """Sizes come from the attested hardware: learner alone and learner + capped actor fit the GPU with the measured
+    model (5.2 GiB + 1.2 x activation, 127 KB/token/layer), the admission accepts both, and FP8 weights only where the
+    GPU has FP8 GEMMs (the sm_80 A100 serves BF16). The G4 keeps its measured 24 GB / 64 running / 34 + 59 GiB."""
+    lay = colab_layout(hardware)
+    total, usable = hardware['vram_total_gib'], hardware['vram_total_gib'] - 2.0
+    for learner in (lay['learner_alone'], lay['learner_beside_actor']):
+        assert learner['peak_gib'] + 2.0 <= learner['vram_gib'] and learner['activation_gib'] > 0
+        assert learner['resident_tokens'] == int(learner['activation_gib'] * 2**30 // (127 * 1024 * 24))
+    assert lay['learner_alone']['vram_gib'] + 1.0 <= usable
+    assert lay['learner_beside_actor']['vram_gib'] + lay['actor_beside_learner']['vram_gib'] + 1.0 <= usable
+    ok, _ = colab_admission.decide(lay['learner_beside_actor']['vram_gib'], lay['learner_beside_actor']['host_ram_gib'],
+                                   {'actor': {'vram_gib': lay['actor_beside_learner']['vram_gib'], 'host_ram_gib': 24.0}},
+                                   total_vram=usable, total_host=hardware['host_ram_total_gib'] - 7,
+                                   free_vram=usable - lay['actor_beside_learner']['vram_gib'], free_host=100.0)
     assert ok
-    alone = pop_rl_actor.colab_serve_command(cfg, checkpoint='/c.pt', sha='a' * 64, port=18531, work='/w',
-                                             beside_learner=False, kv_cache_dtype='fp8_e4m3')
+    ok, _ = colab_admission.decide(lay['learner_alone']['vram_gib'], 40.0, {}, total_vram=usable,
+                                   total_host=hardware['host_ram_total_gib'] - 7, free_vram=usable, free_host=100.0)
+    assert ok
+    cfg = pop_rl_actor.host_config('colab', host='s')
+    serve, claim, sglang, fmt = pop_rl_actor.colab_serve_command(cfg, checkpoint='/c.pt', sha='a' * 64, port=8570,
+                                                                  work='/w', beside_learner=True, layout=lay,
+                                                                  kv_cache_dtype='fp8_e4m3', weight_dtype='fp8')
+    assert serve[serve.index('--sglang-kv-gb') + 1] == str(lay['actor_beside_learner']['kv_gb'])
+    assert claim['vram_gib'] == lay['actor_beside_learner']['vram_gib'] and '--sglang-mem-fraction' not in serve
+    assert ('--sglang-weight-dtype' in serve) == lay['fp8'] and fmt.endswith('-w-fp8') == lay['fp8']
+    alone = pop_rl_actor.colab_serve_command(cfg, checkpoint='/c.pt', sha='a' * 64, port=8570, work='/w',
+                                             beside_learner=False, kv_cache_dtype='fp8_e4m3', layout=lay)
     assert alone[0][alone[0].index('--sglang-max-running') + 1] == '128' and '--sglang-mem-fraction' in alone[0]
-    assert fmt == 'sglang-colab-g4-bf16-vendor-projection-kv-fp8_e4m3'
+    assert fmt.startswith('sglang-colab-bf16-vendor-projection-kv-fp8_e4m3')
+    if total == 80.0:
+        assert not lay['fp8'] and lay['compute_capability'] == '8.0'
+        assert (lay['learner_alone']['activation_gib'], lay['learner_beside_actor']['activation_gib']) == (58, 33)
+        assert lay['actor_beside_learner']['kv_gb'] == 20 and lay['actor_beside_learner']['vram_gib'] == 30.0
+    else:
+        assert lay['fp8'] and lay['actor_beside_learner'] == {'kv_gb': 24, 'max_running': 64, 'vram_gib': 34.0,
+                                                               'host_ram_gib': 24.0}
+        assert lay['learner_beside_actor']['vram_gib'] == 59.0 and lay['actor_alone']['vram_gib'] == 84.0
+
+
+def test_run_sft_sizes_the_learner_from_the_session_and_whether_an_actor_runs_beside(tmp_path, monkeypatch):
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: dict(A100))
+    alone = pop_rl_actor.colab_learner_layout('s')
+    assert not alone['beside_actor'] and alone['vram_gib'] == 77.0 and alone['activation_gib'] == 58
+    pop_rl_actor.colab_state_path('s').write_text(json.dumps({'pid': 7, 'beside_learner': True}))
+    beside = pop_rl_actor.colab_learner_layout('s')
+    assert beside['beside_actor'] and beside['vram_gib'] == 47.0 and beside['activation_gib'] == 33
+
+
+def test_colab_hardware_reads_the_ready_file_and_asks_nvidia_smi_for_a_missing_compute_capability(monkeypatch):
+    def ssh(host, command, **kw):
+        if command.startswith('cat'):
+            return json.dumps({'hardware': dict(A100)})
+        assert 'compute_cap' in command
+        return '8.0\n'
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.colab_hardware('s')['compute_cap'] == '8.0'
 
 
 # ---- bootstrap -----------------------------------------------------------------------------------------------------------
@@ -253,6 +303,8 @@ def remote(tmp_path, monkeypatch):
             Path(local).write_bytes(data[:len(data) // 2] if state['truncate'] else data)
 
     monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: dict(A100))
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path / 'dgx-root')
     monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', sync_to)
     monkeypatch.setattr(pop_rl_actor, 'sync_from_remote', sync_from)
     state['to_local'] = to_local
@@ -351,7 +403,7 @@ def test_cycle_sft_with_a_colab_profile_preflights_on_the_dgx_and_falls_back_wit
         cycle.sft_stage()
     preflight, colab, dgx = calls[0], calls[1], calls[2]
     assert preflight[0][-2].endswith('launch-sft.sh') and preflight[1]['PREFLIGHT_ONLY'] == '1'
-    assert preflight[1]['ACT'] == '44.0' and '--val-every 20' in preflight[1]['EXTRA']
+    assert preflight[1]['ACT'] == str(resolve_profile('colab').activation_gib) and '--val-every 20' in preflight[1]['EXTRA']
     assert colab[0][colab[0].index('--launch-json') + 1] == str(cycle.dir / 'sft' / 'launch.json')
     assert dgx[0][-2].endswith('launch-sft.sh') and 'PREFLIGHT_ONLY' not in dgx[1]
     assert dgx[1]['ACT'] == str(cycle.a.sft_activation_gb) and dgx[1]['CHAINS_SHA256'] == 'abc'
@@ -392,7 +444,7 @@ def test_cycle_collect_on_colab_runs_the_same_command_with_variants_and_stops_it
     assert sorted(c[c.index('--host') + 1] for c in stops) == ['g4-1', 'g4-2']
     cost = json.loads((cycle.dir / 'cycle-cost.json').read_text())
     assert {s['host'] for s in cost['sessions']} == {'g4-1', 'g4-2'} and not cost['open_sessions']
-    assert cycle.done('collect') and json.loads((cycle.dir / 'stages/collect.done').read_text())['profile'] == 'colab_g4'
+    assert cycle.done('collect') and json.loads((cycle.dir / 'stages/collect.done').read_text())['profile'] == 'colab'
 
 
 def test_cycle_collect_on_colab_stops_for_a_recollection_and_still_stops_its_actor(tmp_path, monkeypatch):
@@ -511,13 +563,13 @@ def test_pop_rl_actor_profiles_keep_pop_settings():
     assert assigned.count(None) == 8
 
 
-def test_stop_colab_g4_kills_the_recorded_process_group_not_a_pattern(tmp_path, monkeypatch):
+def test_stop_colab_kills_the_recorded_process_group_not_a_pattern(tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
     monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda host, command, **kw: sent.append(command) or '')
     monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
     pop_rl_actor.colab_state_path('g4-1').write_text(json.dumps({'pid': 4242, 'policy_id': 'p'}))
-    pop_rl_actor.stop_colab_g4('g4-1')
+    pop_rl_actor.stop_colab('g4-1')
     assert sent and 'kill -TERM -- -4242' in sent[0] and 'pkill' not in sent[0]
     assert not pop_rl_actor.colab_state_path('g4-1').exists()
 

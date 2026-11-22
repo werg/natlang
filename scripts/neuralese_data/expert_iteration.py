@@ -21,7 +21,7 @@ distribution (DECISIONS 2026-11-20 "expert iteration"; owner-approved). A cycle:
             The held series (``--held-profile``, async-train §1) is the DGX's by default: the pinned held engine (SGLang,
             vendor projection, FP8 KV, BF16 weights) in a ledger unit, 4 samples per task, every DGX collection yielding
             slots while it runs; ``pop`` keeps the legacy Pop series. Results of two hosts never pair.
-            Collection and SFT may run on Colab G4 sessions (``--collect-profile``/``--sft-profile colab_g4``; DGX
+            Collection and SFT may run on Colab G4 sessions (``--collect-profile``/``--sft-profile colab``; DGX
             fallback after ``--fallback-wait-minutes``), charged in DIR/cycle-cost.json from each session's start to stop.
             Pipelined (DECISIONS 2026-11-21 "pipelined cycles"; ``--no-pipeline`` opts out): when the SFT checkpoint
             exists the driver launches the next cycle from it (``--speculative-after`` this cycle), which selects and
@@ -851,7 +851,7 @@ class Cycle:
         import pop_rl_actor
         if isinstance(preferred, str):
             preferred = resolve_profile(preferred, hosts=self.colab_hosts)
-        hosts = (self.colab_hosts if preferred.name == 'colab_g4' else
+        hosts = (self.colab_hosts if preferred.name == 'colab' else
                  [pop_rl_actor.POP] if preferred.name == 'pop' and pop_rl_actor.POP else ())
         active, hosts, reason = select_stage_profile(preferred, reachable_fn=pop_rl_actor.host_reachable, hosts=hosts)
         if reason:
@@ -1095,7 +1095,7 @@ class Cycle:
 
     def serve_colab(self, hosts, start, sha, profile):
         """Serve the collected policy on each reachable Colab G4 session (``pop_rl_actor serve-checkpoint
-        --host-profile colab_g4``); [(host, 'URL=SLOTS')] of those that attest it, each charged from its start."""
+        --host-profile colab``); [(host, 'URL=SLOTS')] of those that attest it, each charged from its start."""
         served = []
         collect_w_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
         actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
@@ -1103,7 +1103,7 @@ class Cycle:
             self.session(host, profile, True)
             try:
                 raw = subprocess.check_output(
-                    [*actor_py, 'serve-checkpoint', '--host-profile', 'colab_g4', '--host', host,
+                    [*actor_py, 'serve-checkpoint', '--host-profile', 'colab', '--host', host,
                      '--checkpoint', str(start), '--policy-id', sha, '--commit', self.a.commit,
                      '--kv-cache-dtype', 'fp8_e4m3', '--weight-dtype', collect_w_dtype],
                     env=self.env, text=True, timeout=3600)
@@ -1117,9 +1117,9 @@ class Cycle:
     def stop_colab(self, host):
         """Stop this cycle's actor on a Colab session and end its charge."""
         actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
-        subprocess.run([*actor_py, 'stop', '--host-profile', 'colab_g4', '--host', host], env=self.env,
+        subprocess.run([*actor_py, 'stop', '--host-profile', 'colab', '--host', host], env=self.env,
                        stdout=(self.dir / 'colab-stop.log').open('a'), stderr=subprocess.STDOUT, timeout=600)
-        self.session(host, 'colab_g4', False)
+        self.session(host, 'colab', False)
 
     def collect_stage(self):
         start, sha = self.collect_policy()
@@ -1128,8 +1128,8 @@ class Cycle:
         unit = f'{self.a.name}-{"recollect" if recollect else "collect"}'
         started = time.time()
         profile, hosts = self.choose_profile(self.collect_profile, 'collect')
-        served = self.serve_colab(hosts, start, sha, profile) if profile.name == 'colab_g4' else []
-        if profile.name == 'colab_g4' and not served:
+        served = self.serve_colab(hosts, start, sha, profile) if profile.name == 'colab' else []
+        if profile.name == 'colab' and not served:
             self.note(stage='collect', profile_fallback='no Colab G4 endpoint came up; falling back to dgx')
         try:
             if served:
@@ -1158,7 +1158,7 @@ class Cycle:
         if self.a.fill and not served:
             self.stop_unit(f'{self.a.name}-fill')   # its actor is gone: the fill window takes over
         summary = json.loads((self.collect_dir / 'collect.json').read_text())
-        name = 'colab_g4' if served else 'dgx'
+        name = 'colab' if served else 'dgx'
         self.record_cost('collect', name, time.time() - started, sessions=max(1, len(served)),
                          session_host=','.join(h for h, _ in served) or None)
         if summary.get('stopped'):
@@ -1570,13 +1570,13 @@ class Cycle:
                 canonical_tokens = int(json.loads((self.mix / 'build.json').read_text()).get('forward_tokens') or 0)
             except Exception:
                 pass
-        if profile.name == 'colab_g4' and not (run / 'checkpoint.pt').exists() and not self.active(unit):
+        if profile.name == 'colab' and not (run / 'checkpoint.pt').exists() and not self.active(unit):
             if self.colab_sft(run, unit, start, start_sha, hosts[0], profile):
                 sha = subprocess.check_output(['sha256sum', str(run / 'checkpoint.pt')], text=True).split()[0]
                 (run / 'sha256.txt').write_text(sha + '\n')
                 self.record_cost('sft', profile, time.time() - started, canonical_chain_tokens=canonical_tokens,
                                  note=f'host={hosts[0]}', session_host=hosts[0])
-                self.mark('sft', profile='colab_g4', host=hosts[0], checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
+                self.mark('sft', profile='colab', host=hosts[0], checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
                 return
             self.note(stage='sft', profile_fallback='Colab G4 SFT failed; resuming on dgx from the synced learner state')
             started = time.time()
@@ -1859,7 +1859,7 @@ PHASE_STATE_SCHEMA = 'natlang.async-phase-state/2'
 
 
 def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_policy_sha, chains_path, episode_ids,
-                         prefer_unseen=(), profile='colab_g4', profile_changes=(), extra=None):
+                         prefer_unseen=(), profile='colab', profile_changes=(), extra=None):
     """Commit one async round's mix in strict blob-first order (async-train §4): ``chains.pkl`` + ``chains.sha256``
     are flushed and verified before ``round.json`` is atomically renamed into place (so a consumer never sees a
     partial round)."""
@@ -2422,10 +2422,10 @@ class AsyncRoundDriver:
         if self.a.sft_profile == 'colab':
             from natlang_neuralese.common.execution_profile import resolve_profile
             import pop_rl_actor
-            profile = resolve_profile('colab_g4', hosts=self.colab_hosts)
+            profile = resolve_profile('colab', hosts=self.colab_hosts)
             away_since, failures = None, 0
             while not (factors / 'policy_manifest.json').exists():
-                up = pop_rl_actor.reachable_hosts('colab_g4', self.colab_hosts) if self.colab_hosts else []
+                up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
                 if up and failures >= 3:       # the session answers but the learner keeps failing there
                     record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
                                           reason='the Colab learner failed 3 times')
@@ -2505,7 +2505,7 @@ class AsyncRoundDriver:
         for target in self.a.rebind_actor:
             host, _, front = target.rpartition('@')
             pop_rl_actor.rebind_actor(front_url=front, policy_id=published['checkpoint_sha256'], version=version,
-                                      factors_dir=factors, host=host or None, host_profile='colab_g4',
+                                      factors_dir=factors, host=host or None, host_profile='colab',
                                       export_dir=None if host else published['sglang_export']['dir'])
 
     # -- held ---------------------------------------------------------------------------------------------------------
@@ -2852,10 +2852,12 @@ def main():
                    help='exp0_sft --activation-gib on DGX (56 GiB LoRA: ~19.6k-token packs unrecomputed at the measured 127 '
                         'KB/token/layer; G4 via ExecutionProfile)')
     y.add_argument('--sft-extra', default='')
-    y.add_argument('--collect-profile', choices=('dgx', 'colab_g4'), default='dgx',
-                   help='execution profile for collection (colab_g4 shards across up G4 sessions; 30-min DGX fallback)')
-    y.add_argument('--sft-profile', choices=('dgx', 'colab_g4'), default='dgx',
-                   help='execution profile for SFT (colab_g4 runs remotely with 15-min state sync; 30-min DGX fallback)')
+    y.add_argument('--collect-profile', choices=('dgx', 'colab', 'colab_g4'), default='dgx',
+                   help='execution profile for collection (colab, old name colab_g4: shards across the up Colab '
+                        'sessions; 30-min DGX fallback)')
+    y.add_argument('--sft-profile', choices=('dgx', 'colab', 'colab_g4'), default='dgx',
+                   help='execution profile for SFT (colab, old name colab_g4: remote with 15-min state sync; 30-min '
+                        'DGX fallback)')
     y.add_argument('--held-profile', choices=('dgx', 'pop'), default='dgx',
                    help='the held series (async-train §1): dgx (default: the pinned held engine on the DGX, BF16 weights, '
                         '4 samples, held episodes before collection) or pop (legacy, 2 samples)')

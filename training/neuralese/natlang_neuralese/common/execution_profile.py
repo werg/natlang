@@ -5,8 +5,9 @@ Three profiles are supported:
 - ``dgx``: local DGX GB10 unified-memory machine (128 GiB combined, managed via memory_ledger.py). It runs the held
   series (async-train §1: SGLang, vendor projection, FP8 KV, BF16 weights, 4 samples per task, attested by the held
   manifest's engine.json), so the series never depends on a Colab session or on Pop.
-- ``colab_g4``: Colab G4 VM with discrete RTX PRO 6000 Blackwell (96 GB VRAM, ~1.8 TB/s, ~13 CU/h): learner and
-  collection actors. It has no held series (async-train §1 supersedes lfm3opti §4's G4 series).
+- ``colab`` (old name ``colab_g4`` accepted): a Colab session with a discrete GPU whose hardware varies by session (a
+  G4's RTX PRO 6000 Blackwell 96 GB, an A100-SXM4-80GB, ...): learner and collection actors, sized from the session's
+  attested hardware (``colab_layout``). It has no held series (async-train §1 supersedes lfm3opti §4's G4 series).
 - ``pop``: Pop laptop with discrete RTX 4060 (8 GB VRAM, 15 GiB host RAM): the legacy held series (2 samples).
 
 Colab L4 (~300 GB/s bandwidth, same as GB10) is explicitly excluded per lfm3opti.md §1.
@@ -22,7 +23,7 @@ import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Sequence
 
 from .jsonio import write_json_durable
 
@@ -30,11 +31,73 @@ EXCLUDED_PROFILES = frozenset({'l4', 'colab_l4', 'colab-l4'})
 DEFAULT_FALLBACK_WAIT_MINUTES = 30.0
 DEFAULT_COLAB_STATE_SYNC_MINUTES = 15.0
 DEFAULT_G4_CU_PER_HOUR = 13.0
-# A G4 actor that shares the GPU with the SFT learner under MPS (async-train §1): KV capped at 24 GB, 64 running; its
-# admission claim (weights 3.4 GB, KV, CUDA graphs and allocator slack). The learner claims the rest of the VRAM.
-G4_ACTOR_BESIDE_LEARNER = {'kv_gb': 24, 'max_running': 64, 'vram_gib': 34.0, 'host_ram_gib': 24.0}
-G4_ACTOR_ALONE = {'kv_gb': None, 'max_running': 128, 'vram_gib': 84.0, 'host_ram_gib': 24.0}
-G4_VRAM_GIB = 94.0           # what nvidia-smi reports usable on the 96 GB card, before the admission reserve
+PROFILE_ALIASES = {'colab_g4': 'colab'}     # the profile's old, hardware-specific name
+
+# The LoRA learner's measured memory model (DECISIONS 2026-11-22 "LoRA core fixes", GB10 and compiled LoRA r=128):
+# CUDA peak ~= LEARNER_FIXED_GIB (BF16 base, FP32 factors and AdamW, workspace) + LEARNER_ACTIVATION_FACTOR x
+# --activation-gb; saved activations cost ACTIVATION_BYTES_PER_TOKEN_LAYER per token and layer (24 layers).
+LEARNER_FIXED_GIB = 5.2
+LEARNER_ACTIVATION_FACTOR = 1.2
+ACTIVATION_BYTES_PER_TOKEN_LAYER = 127 * 1024
+LFM3_LAYERS = 24
+ALLOCATOR_SLACK_GIB = 2.0       # fragmentation and the CUDA context beside the modelled peak
+ADMISSION_RESERVE_GIB = 1.0     # what scripts/colab/admission.py keeps free
+VRAM_UNREPORTED_GIB = 2.0       # nvidia-smi total less what a process can allocate (96 -> 94 on the G4)
+# An SGLang actor: BF16 weights 3.4 GB + CUDA graphs and allocator slack ~6.6 GB besides its KV pool. Beside the
+# learner (MPS) its KV takes a quarter of the GPU and its running cap scales with the KV (64 at the G4's 24 GB).
+ACTOR_FIXED_GIB = 10.0
+ACTOR_BESIDE_KV_SHARE = 0.25
+ACTOR_MEM_FRACTION = 0.88       # alone: SGLang's static memory fraction
+FP8_MIN_COMPUTE_CAPABILITY = (8, 9)    # SGLang FP8 weight GEMMs: Ada / Hopper / Blackwell, not Ampere (sm_80)
+# compute capability by GPU name when a session's ready file predates its probe (bootstrap probes compute_cap now)
+COMPUTE_CAPABILITY_BY_NAME = (('A100', '8.0'), ('A10', '8.6'), ('L4', '8.9'), ('L40', '8.9'), ('H100', '9.0'),
+                              ('H200', '9.0'), ('B200', '10.0'), ('RTX PRO 6000', '12.0'))
+
+
+def compute_capability(hardware: dict) -> tuple[int, int] | None:
+    """(major, minor) from a hardware record's ``compute_cap`` (nvidia-smi), else from its GPU name."""
+    raw = hardware.get('compute_cap')
+    if not raw:
+        name = str(hardware.get('gpu_name') or '')
+        raw = next((cap for key, cap in COMPUTE_CAPABILITY_BY_NAME if key in name), None)
+    if not raw:
+        return None
+    major, _, minor = str(raw).partition('.')
+    return int(major), int(minor or 0)
+
+
+def colab_layout(hardware: dict) -> dict:
+    """Admission claims and engine sizes of a Colab session from its attested hardware (``colab-ready.json``
+    ``hardware``: ``vram_total_gib``, ``host_ram_total_gib``, ``gpu_name``, ``compute_cap``), by the measured memory
+    model above, for the four layouts: the learner alone, the learner beside a capped actor (MPS), that actor, and an
+    actor alone. Every claim fits the GPU: learner + actor + reserve <= usable VRAM. ``fp8``: whether FP8 weights
+    serve here (an sm_80 A100 has no FP8 GEMMs: an FP8 request picks BF16)."""
+    total = float(hardware['vram_total_gib'])
+    host = float(hardware.get('host_ram_total_gib') or 0.) or 64.0
+    usable = total - VRAM_UNREPORTED_GIB
+    cap = compute_capability(hardware)
+
+    def learner(claim):
+        activation = int((claim - LEARNER_FIXED_GIB - ALLOCATOR_SLACK_GIB) / LEARNER_ACTIVATION_FACTOR)
+        return {'vram_gib': round(claim, 1), 'host_ram_gib': round(min(40.0, 0.4 * host), 1),
+                'activation_gib': activation,
+                'peak_gib': round(LEARNER_FIXED_GIB + LEARNER_ACTIVATION_FACTOR * activation, 1),
+                'resident_tokens': int(activation * 2**30 // (ACTIVATION_BYTES_PER_TOKEN_LAYER * LFM3_LAYERS))}
+    kv = round(ACTOR_BESIDE_KV_SHARE * usable)
+    beside = {'kv_gb': kv, 'max_running': max(8, min(64, int(64 * kv / 24))), 'vram_gib': float(kv + ACTOR_FIXED_GIB),
+              'host_ram_gib': round(min(24.0, 0.2 * host), 1)}
+    alone = {'kv_gb': None, 'max_running': 128, 'vram_gib': float(round(ACTOR_MEM_FRACTION * usable + 1.0)),
+             'host_ram_gib': round(min(24.0, 0.2 * host), 1), 'mem_fraction': ACTOR_MEM_FRACTION}
+    return {'gpu_name': hardware.get('gpu_name'), 'vram_total_gib': total, 'usable_gib': usable,
+            'compute_capability': '.'.join(map(str, cap)) if cap else None,
+            'fp8': bool(cap and cap >= FP8_MIN_COMPUTE_CAPABILITY),
+            'learner_alone': learner(usable - ADMISSION_RESERVE_GIB),
+            'learner_beside_actor': learner(usable - beside['vram_gib'] - ADMISSION_RESERVE_GIB),
+            'actor_beside_learner': beside, 'actor_alone': alone}
+
+
+G4_HARDWARE = {'gpu_name': 'NVIDIA RTX PRO 6000 Blackwell Server Edition', 'vram_total_gib': 96.0,
+               'host_ram_total_gib': 176.0, 'compute_cap': '12.0'}
 
 
 @dataclass(frozen=True)
@@ -87,19 +150,18 @@ BUILTIN_PROFILES: dict[str, ExecutionProfile] = {
         state_sync_minutes=0.0,
         held_series_host='dgx',
     ),
-    'colab_g4': ExecutionProfile(
-        name='colab_g4',
+    'colab': ExecutionProfile(
+        name='colab',
         is_discrete_gpu=True,
         vram_budget_gib=92.0,
         host_ram_budget_gib=150.0,
         combined_budget_gib=None,
-        # the learner's share beside a capped MPS actor (G4_ACTOR_BESIDE_LEARNER): 94 - 34 - 1 reserve = 59 GiB, of
-        # which activations take 44 and the rest weights, LoRA state and allocator slack
-        activation_gib=44.0,
+        # a session's own sizes come from its hardware (colab_layout); this default is a G4's learner beside an actor
+        activation_gib=float(colab_layout(G4_HARDWARE)['learner_beside_actor']['activation_gib']),
         sglang_kv_cache_dtype='fp8_e4m3',
         sglang_max_running=128,
         sglang_mem_fraction=0.88,
-        sglang_export_format='sglang-colab-g4-bf16-vendor-projection-kv-fp8_e4m3',
+        sglang_export_format='sglang-colab-bf16-vendor-projection-kv-fp8_e4m3',
         collect_slots=128,
         held_samples=0,               # no G4 held series (async-train §1): held runs on the DGX
         cu_per_hour=DEFAULT_G4_CU_PER_HOUR,
@@ -166,12 +228,13 @@ def resolve_profile(
     if key in EXCLUDED_PROFILES:
         raise ValueError(
             f'ExecutionProfile {name!r} is excluded (lfm3opti.md §1: L4 bandwidth ~300 GB/s matches GB10 '
-            'and buys no speed). Supported profiles: dgx, colab_g4, pop.'
+            'and buys no speed). Supported profiles: dgx, colab, pop.'
         )
+    key = PROFILE_ALIASES.get(key, key)
     if key not in BUILTIN_PROFILES:
         raise ValueError(f'Unknown ExecutionProfile {name!r}; expected one of {sorted(BUILTIN_PROFILES)}')
     base = BUILTIN_PROFILES[key]
-    resolved_hosts = parse_colab_hosts(hosts, config_path) if key == 'colab_g4' else (
+    resolved_hosts = parse_colab_hosts(hosts, config_path) if key == 'colab' else (
         tuple(hosts) if isinstance(hosts, (list, tuple)) else ((hosts,) if isinstance(hosts, str) and hosts else base.hosts)
     )
     return ExecutionProfile(
@@ -269,7 +332,7 @@ class CostTelemetry:
         for entry in self.sessions:
             if entry.host == host and entry.stopped is None:
                 return entry
-        name = profile.name if isinstance(profile, ExecutionProfile) else str(profile)
+        name = profile.name if isinstance(profile, ExecutionProfile) else PROFILE_ALIASES.get(str(profile), str(profile))
         rate = float(cu_per_hour) if cu_per_hour is not None else (
             profile.cu_per_hour if isinstance(profile, ExecutionProfile)
             else BUILTIN_PROFILES.get(name, BUILTIN_PROFILES['dgx']).cu_per_hour)
@@ -297,7 +360,8 @@ class CostTelemetry:
         note: str = '',
         session_host: str | None = None,
     ) -> StageCostEntry:
-        prof_name = profile.name if isinstance(profile, ExecutionProfile) else str(profile)
+        prof_name = profile.name if isinstance(profile, ExecutionProfile) else PROFILE_ALIASES.get(str(profile),
+                                                                                                   str(profile))
         rate = (
             float(cu_per_hour)
             if cu_per_hour is not None
@@ -381,9 +445,10 @@ __all__ = [
     'DEFAULT_G4_CU_PER_HOUR',
     'EXCLUDED_PROFILES',
     'ExecutionProfile',
-    'G4_ACTOR_ALONE',
-    'G4_ACTOR_BESIDE_LEARNER',
-    'G4_VRAM_GIB',
+    'G4_HARDWARE',
+    'PROFILE_ALIASES',
+    'colab_layout',
+    'compute_capability',
     'SessionCostEntry',
     'StageCostEntry',
     'parse_colab_hosts',

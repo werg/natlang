@@ -95,11 +95,16 @@ POP_MAX_RUNNING = 20
 POP_MEM_FRACTION = 0.77
 
 
-from natlang_neuralese.common.execution_profile import (  # noqa: E402
-    G4_ACTOR_ALONE, G4_ACTOR_BESIDE_LEARNER, G4_VRAM_GIB)
+from natlang_neuralese.common.execution_profile import PROFILE_ALIASES, colab_layout  # noqa: E402
+
+
+def profile_key(profile):
+    """A host profile's name: ``pop`` or ``colab`` (``colab_g4``, the old name, is accepted)."""
+    key = str(profile).lower().replace('-', '_')
+    return PROFILE_ALIASES.get(key, key)
 
 COLAB_ROOT = os.environ.get('NATLANG_COLAB_ROOT', '/content/natlang-work')
-COLAB_SGLANG_EXPORT_FORMAT = 'sglang-colab-g4-bf16-vendor-projection'
+COLAB_SGLANG_EXPORT_FORMAT = 'sglang-colab-bf16-vendor-projection'
 COLAB_MAX_RUNNING = 128
 COLAB_MEM_FRACTION = 0.88
 
@@ -113,7 +118,7 @@ def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING, p
     fp8 = kv_cache_dtype != 'auto'
     w_suffix = '-w-fp8' if weight_dtype == 'fp8' else ''
     w_extra = {'weight_dtype': 'fp8'} if weight_dtype == 'fp8' else {}
-    if str(profile).lower().replace('-', '_') == 'colab_g4':
+    if profile_key(profile) == 'colab':
         cap = max_running if max_running is not None else COLAB_MAX_RUNNING
         settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': cap, 'mem_fraction': COLAB_MEM_FRACTION,
                     'max_total_tokens': 2097152 if fp8 else 1048576, **w_extra}
@@ -164,9 +169,9 @@ def host_reachable(host, timeout=20):
 
 
 def reachable_hosts(profile='pop', hosts=None):
-    """Return reachable SSH hosts for ``profile`` ('pop' or 'colab_g4')."""
-    key = str(profile).lower().replace('-', '_')
-    candidates = list(hosts) if hosts else (colab_hosts() if key == 'colab_g4' else ([POP] if POP else []))
+    """Return reachable SSH hosts for ``profile`` ('pop' or 'colab')."""
+    key = profile_key(profile)
+    candidates = list(hosts) if hosts else (colab_hosts() if key == 'colab' else ([POP] if POP else []))
     return [h for h in candidates if host_reachable(h)]
 
 
@@ -262,12 +267,12 @@ def colab_state_path(host):
 
 
 def host_config(profile='pop', *, host=None):
-    """Unified remote-host layout for ``pop`` and ``colab_g4``."""
-    key = str(profile).lower().replace('-', '_')
-    if key == 'colab_g4':
+    """Unified remote-host layout for ``pop`` and ``colab``."""
+    key = profile_key(profile)
+    if key == 'colab':
         chosen = host or (colab_hosts()[0] if colab_hosts() else None)
         return {
-            'profile': 'colab_g4',
+            'profile': 'colab',
             'host': chosen,
             'root': COLAB_ROOT,
             'repo': f'{COLAB_ROOT}/natlang',
@@ -282,8 +287,6 @@ def host_config(profile='pop', *, host=None):
             # the fork's venv (scripts/colab/bootstrap.py installs training/neuralese/sglang-fork.json's commit there)
             'sglang_python': f'{COLAB_ROOT}/sglang-natlang-venv/bin/python',
             'env': f'{COLAB_ROOT}/natlang-env.sh',
-            'vram_gib': G4_ACTOR_ALONE['vram_gib'],
-            'host_ram_gib': G4_ACTOR_ALONE['host_ram_gib'],
         }
     return {
         'profile': 'pop',
@@ -804,7 +807,7 @@ def prune_pop_newest(pattern, keep, protect=()):
     return old
 
 
-def stop_colab_g4(host):
+def stop_colab(host):
     """Stop the natlang SGLang actor this DGX started on a Colab G4 VM: its admission process group, by the PID the
     launch recorded (never by pattern: a ``pkill -f`` over ssh matches the remote shell running it)."""
     state_file = colab_state_path(host)
@@ -818,13 +821,32 @@ def stop_colab_g4(host):
     return state
 
 
+def colab_hardware(host):
+    """The session's attested hardware: ``colab-ready.json`` ``hardware`` (bootstrap's probe: GPU name, VRAM, host
+    RAM, compute capability), the compute capability asked of nvidia-smi when the ready file predates that field."""
+    cfg = host_config('colab', host=host)
+    ready = json.loads(ssh_host(host, shlex.join(['cat', f'{cfg["root"]}/colab-ready.json']), timeout=60))
+    hardware = dict(ready.get('hardware') or {})
+    if not hardware.get('vram_total_gib'):
+        raise RuntimeError(f'{host}: colab-ready.json records no GPU (bootstrap the session first)')
+    if not hardware.get('compute_cap'):
+        cap = ssh_host(host, 'nvidia-smi --query-gpu=compute_cap --format=csv,noheader', check=False, timeout=60).strip()
+        hardware['compute_cap'] = cap.splitlines()[0].strip() if cap else None
+    return hardware
+
+
 def colab_serve_command(cfg, *, checkpoint, sha, port, work, beside_learner, kv_cache_dtype,
-                        weight_dtype='bfloat16'):
-    """(serve argv, admission claim) of a Colab G4 SGLang actor: alone it takes the GPU (mem fraction 0.88, 128
-    running); beside the SFT learner under MPS (async-train §1) it is capped at 24 GB KV and 64 running and claims only
-    that share, so the learner's admission still fits."""
-    sizing = G4_ACTOR_BESIDE_LEARNER if beside_learner else G4_ACTOR_ALONE
-    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab_g4',
+                        weight_dtype='bfloat16', layout):
+    """(serve argv, admission claim, sglang settings, export format) of a Colab SGLang actor sized from the session's
+    hardware (``colab_layout``): alone it takes the GPU (mem fraction 0.88, 128 running); beside the SFT learner under
+    MPS (async-train §1) its KV is capped at a quarter of the GPU and it claims only that share, so the learner's
+    admission still fits. FP8 weights on a GPU without FP8 GEMMs (sm_80) serve BF16."""
+    sizing = layout['actor_beside_learner'] if beside_learner else layout['actor_alone']
+    if weight_dtype == 'fp8' and not layout['fp8']:
+        log(event='Colab FP8 weights unsupported: BF16', gpu=layout['gpu_name'],
+            compute_capability=layout['compute_capability'])
+        weight_dtype = 'bfloat16'
+    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab',
                                        weight_dtype=weight_dtype)
     memory = (['--sglang-kv-gb', str(sizing['kv_gb'])] if sizing['kv_gb'] else
               ['--sglang-mem-fraction', str(sglang['mem_fraction'])])
@@ -926,7 +948,7 @@ def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=N
 
 
 def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha256=None, tensor_identity=None,
-                 export_dir=None, factors_dir=None, base_checkpoint=None, host=None, host_profile='colab_g4',
+                 export_dir=None, factors_dir=None, base_checkpoint=None, host=None, host_profile='colab',
                  timeout=600):
     """In-place weight update + 4-route measured attestation of a standing SGLang actor (DGX local or remote G4/Pop).
     Pause (retract) -> ``update_weights_from_disk`` -> ``/v1/neuralese/rebind-policy`` -> ``attest_all_routes`` ->
@@ -977,10 +999,10 @@ def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha2
     return result
 
 
-def serve_colab_g4(args):
+def serve_colab(args):
     """Serve a merged BF16 checkpoint on a Colab G4 VM under scripts/colab/admission.py (a VRAM/host-RAM claim that
     lasts while the actor runs) and wait until it attests the checkpoint."""
-    cfg = host_config('colab_g4', host=getattr(args, 'host', None))
+    cfg = host_config('colab', host=getattr(args, 'host', None))
     host = cfg['host']
     if not host:
         raise RuntimeError('set --host, NATLANG_COLAB_HOSTS, or "colab_hosts" in ' + str(ROOT / 'config.json'))
@@ -989,9 +1011,10 @@ def serve_colab_g4(args):
     weight_dtype = getattr(args, 'weight_dtype', 'bfloat16')
     remote_ckpt = f'{cfg["checkpoints"]}/{sha}.pt'
     remote_work = f'{cfg["work_root"]}/actor-{sha[:12]}'
+    layout = colab_layout(colab_hardware(host))
     serve_cmd, claim, sglang, sglang_format = colab_serve_command(
         cfg, checkpoint=remote_ckpt, sha=sha, port=args.port, work=remote_work,
-        beside_learner=beside_learner, kv_cache_dtype=args.kv_cache_dtype, weight_dtype=weight_dtype)
+        beside_learner=beside_learner, kv_cache_dtype=args.kv_cache_dtype, weight_dtype=weight_dtype, layout=layout)
     state_file = colab_state_path(host)
     previous = read_json(state_file)
     if (previous and previous.get('policy_id') == sha and previous.get('code') == commit
@@ -999,7 +1022,7 @@ def serve_colab_g4(args):
         log(event='Colab G4 actor already serves the checkpoint', host=host, endpoint=previous['endpoint'])
         return previous
     if previous:
-        stop_colab_g4(host)
+        stop_colab(host)
     if beside_learner:
         ensure_colab_mps(host)
     started = time.time()
@@ -1016,10 +1039,11 @@ def serve_colab_g4(args):
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(claim['vram_gib']),
                 '--host-ram-gib', str(claim['host_ram_gib']), '--label', f'actor-{sha[:12]}', '--wait', '300',
                 '--workdir', cfg['repo'], '--', *serve_cmd]
-    # setsid: the admission process leads its own group (stop_colab_g4 signals it); its PID is the launch's output
+    # setsid: the admission process leads its own group (stop_colab signals it); its PID is the launch's output
     pid = ssh_host(host, f'. {shlex.quote(cfg["env"])} && setsid nohup {shlex.join(admitted)} '
                          f'> {shlex.quote(remote_work + "/actor.log")} 2>&1 < /dev/null & echo $!', timeout=60).strip()
-    result = {'endpoint': endpoint, 'host': host, 'profile': 'colab_g4', 'policy_id': sha, 'work': remote_work,
+    result = {'endpoint': endpoint, 'host': host, 'profile': 'colab', 'policy_id': sha, 'work': remote_work,
+              'beside_learner': beside_learner, 'gpu': layout['gpu_name'],
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'export_format': sglang_format,
               'pid': int(pid.splitlines()[-1]), 'claim': claim, 'copy_seconds': round(copied - started, 1),
               'started': started}
@@ -1032,8 +1056,18 @@ def serve_colab_g4(args):
             log(event='Colab G4 actor ready', **result)
             return result
         time.sleep(5)
-    stop_colab_g4(host)
+    stop_colab(host)
     raise RuntimeError(f'Colab G4 actor on {host} did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
+
+
+def colab_learner_layout(host):
+    """The SFT learner's claims on ``host`` (``colab_layout``): beside the capped actor when this DGX's record of
+    the session's actor says it was served beside the learner, else alone."""
+    layout = colab_layout(colab_hardware(host))
+    actor = read_json(colab_state_path(host)) or {}
+    beside = bool(actor.get('beside_learner')) and actor.get('pid') is not None
+    return {**layout['learner_beside_actor' if beside else 'learner_alone'], 'beside_actor': beside,
+            'gpu': layout['gpu_name']}
 
 
 def remap_sft_args(argv, mapping):
@@ -1056,7 +1090,7 @@ def run_remote_sft(args):
     with paths mapped to the VM's copies, plus ``--resume`` and the learner-state saves the DGX pulls every
     ``--state-sync-minutes``. The finished checkpoint arrives verified (``pull_verified``) or not at all."""
     import threading
-    cfg = host_config('colab_g4', host=args.host)
+    cfg = host_config('colab', host=args.host)
     host = cfg['host']
     if not host:
         raise RuntimeError('run-sft requires --host or NATLANG_COLAB_HOSTS')
@@ -1101,10 +1135,21 @@ def run_remote_sft(args):
     # no MPS start here: the daemon must be up before the first CUDA client, so the serve that puts an actor beside
     # the learner starts it (serve-checkpoint --beside-learner) and the learner joins it; a session with no actor
     # beside (or one started without MPS) runs the learner as a plain CUDA process
-    sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *remap_sft_args(recipe, mapping),
+    # the learner's box on this session's hardware: alone, or beside the capped MPS actor its serve started; the
+    # activation budget follows (it changes memory, not the step list, so a DGX takeover resumes the same steps)
+    learner = colab_learner_layout(host)
+    vram_gib = args.vram_gib if args.vram_gib is not None else learner['vram_gib']
+    host_ram_gib = args.host_ram_gib if args.host_ram_gib is not None else learner['host_ram_gib']
+    sft_args = remap_sft_args(recipe, mapping)
+    if '--activation-gb' in sft_args:
+        sft_args[sft_args.index('--activation-gb') + 1] = str(learner['activation_gib'])
+    else:
+        sft_args += ['--activation-gb', str(learner['activation_gib'])]
+    log(event='Colab SFT layout', host=host, **learner)
+    sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *sft_args,
                *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
-    admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(args.vram_gib), '--host-ram-gib',
-                str(args.host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
+    admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(vram_gib), '--host-ram-gib',
+                str(host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
                 '--', *sft_cmd]
     stop_sync = threading.Event()
     sync_interval = max(60.0, float(args.state_sync_minutes) * 60.0)
@@ -1177,8 +1222,8 @@ def run_remote_sft(args):
 
 def serve_checkpoint(args):
     """Serve a pruned native checkpoint on Pop or Colab G4 and wait until it attests."""
-    if str(getattr(args, 'host_profile', 'pop')).lower().replace('-', '_') == 'colab_g4':
-        return serve_colab_g4(args)
+    if profile_key(getattr(args, 'host_profile', 'pop')) == 'colab':
+        return serve_colab(args)
     sha, commit = args.policy_id, args.commit
     sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
     release, adapters, rank = adapter_release(args)   # a program fit served by default (TUNING_RESTORE_20261117.md)
@@ -1240,7 +1285,7 @@ def serve_checkpoint(args):
 
 def serving_endpoint(policy, export_format, *, profile='pop', host=None):
     """Remote actor endpoint when it serves checkpoint ``policy`` in ``export_format``, else None."""
-    state = read_json(colab_state_path(host) if str(profile).lower().replace('-', '_') == 'colab_g4' and host else STATE) or {}
+    state = read_json(colab_state_path(host) if profile_key(profile) == 'colab' and host else STATE) or {}
     try:
         with urllib.request.urlopen(state['endpoint'] + '/v1/neuralese/info', timeout=10) as response:
             binding = json.loads(response.read()).get('rl_policy_binding') or {}
@@ -1297,10 +1342,10 @@ def held_eval_job(args):
 
 
 def stop(args=None):
-    if args is not None and str(getattr(args, 'host_profile', 'pop')).lower().replace('-', '_') == 'colab_g4':
+    if args is not None and profile_key(getattr(args, 'host_profile', 'pop')) == 'colab':
         targets = [args.host] if getattr(args, 'host', None) else colab_hosts()
         for h in targets:
-            stop_colab_g4(h)
+            stop_colab(h)
         return
     state = read_json(STATE)
     if state:
@@ -1328,7 +1373,7 @@ def main(argv=None):
     s.add_argument('--adapter-release')
     c = commands.add_parser('serve-checkpoint', help='serve a pruned native checkpoint on Pop or Colab G4')
     for sub in (s, c):
-        sub.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='pop')
+        sub.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='pop')
         sub.add_argument('--host', help='explicit SSH host alias (default: Pop or first Colab G4 host)')
         sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE)
         sub.add_argument('--weight-dtype', choices=('bfloat16', 'fp8'), default='bfloat16',
@@ -1336,7 +1381,8 @@ def main(argv=None):
         sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='Pop running cap (a Colab actor '
                          'runs 128 alone, 64 with --beside-learner)')
         sub.add_argument('--beside-learner', action='store_true',
-                         help='Colab G4: cap the actor (24 GB KV, 64 running) to share the GPU with the SFT learner')
+                         help='Colab: cap the actor (KV a quarter of the GPU, its running cap scaled; colab_layout) to share '
+                         'the GPU with the SFT learner under MPS')
     c.add_argument('--checkpoint', required=True)
     c.add_argument('--policy-id', required=True)
     c.add_argument('--commit', required=True)
@@ -1356,7 +1402,7 @@ def main(argv=None):
     rb.add_argument('--factors-dir', help='FP32 adapter factors dir to ship and merge locally on --host')
     rb.add_argument('--base-checkpoint', help='base checkpoint path on --host when using --factors-dir')
     rb.add_argument('--host', help='remote SSH host alias (omit for local DGX actor)')
-    rb.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='colab_g4')
+    rb.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='colab')
     rb.add_argument('--timeout', type=int, default=600)
     f = commands.add_parser('prefetch')
     f.add_argument('--checkpoint', required=True)
@@ -1372,17 +1418,17 @@ def main(argv=None):
                     help="the DGX preflight's launch.json (launch-sft.sh PREFLIGHT_ONLY=1): its exp0_sft_args run")
     rs.add_argument('--commit')
     rs.add_argument('--state-sync-minutes', type=float, default=15.0)
-    rs.add_argument('--vram-gib', type=float, default=G4_VRAM_GIB - G4_ACTOR_BESIDE_LEARNER['vram_gib'] - 1.0,
-                    help='admission claim (default: the GPU less a capped actor beside it)')
-    rs.add_argument('--host-ram-gib', type=float, default=40.0)
+    rs.add_argument('--vram-gib', type=float, help='admission claim (default: from the session hardware, the learner '
+                    'alone or beside the capped actor the session runs)')
+    rs.add_argument('--host-ram-gib', type=float, help='admission claim (default: from the session hardware)')
     rc = commands.add_parser('reachable', help='list reachable remote hosts for a profile')
-    rc.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='colab_g4')
+    rc.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='colab')
     rc.add_argument('--hosts', help='comma-separated SSH host aliases')
     st_cmd = commands.add_parser('stop')
-    st_cmd.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='pop')
+    st_cmd.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='pop')
     st_cmd.add_argument('--host')
     status_cmd = commands.add_parser('status')
-    status_cmd.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='pop')
+    status_cmd.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='pop')
     status_cmd.add_argument('--host')
     p = commands.add_parser('prepare-view', help=argparse.SUPPRESS)
     for flag in ('--checkpoint', '--out', '--receipt'):
@@ -1390,14 +1436,14 @@ def main(argv=None):
     p.add_argument('--expect-sha256')
     args = parser.parse_args(argv)
     if args.action == 'reachable':
-        hosts = colab_hosts(args.hosts) if args.host_profile == 'colab_g4' else ([POP] if POP else [])
+        hosts = colab_hosts(args.hosts) if profile_key(args.host_profile) == 'colab' else ([POP] if POP else [])
         up = reachable_hosts(args.host_profile, hosts)
         print(json.dumps({'profile': args.host_profile, 'configured': hosts, 'reachable': up}))
         return 0
     if args.action == 'status':
-        if args.host_profile == 'colab_g4':
+        if profile_key(args.host_profile) == 'colab':
             hosts = [args.host] if args.host else colab_hosts()
-            print(json.dumps({'profile': 'colab_g4', 'states': {h: read_json(colab_state_path(h)) for h in hosts}}))
+            print(json.dumps({'profile': 'colab', 'states': {h: read_json(colab_state_path(h)) for h in hosts}}))
         else:
             print(json.dumps({'state': read_json(STATE)}))
         return 0
