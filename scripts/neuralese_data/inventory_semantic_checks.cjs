@@ -97,7 +97,11 @@ for (const root of roots)
                 expr,
               ),
               route:
-                /isDeepStrictEqual\((events|effects|journal|hops|operations)|(?:attempts|effects|journal|writes|events|receipts)\.length\s*===|attempts\[[0-9]/.test(
+                /isDeepStrictEqual\(\s*(events|effects|journal|hops|operations)|(?:attempts|effects|journal|writes|events|receipts)\.length\s*===|attempts\[[0-9]/.test(
+                  expr,
+                ),
+              proseEquality:
+                /(?:reason|summary|detail)\??\.[^;]*===|(?:reason|summary|detail)\s*===|isDeepStrictEqual\([^)]*\.(?:reason|summary|detail)/s.test(
                   expr,
                 ),
               protected: /protected|preserv|committed|mainEventId|seed/i.test(
