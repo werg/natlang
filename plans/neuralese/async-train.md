@@ -130,8 +130,9 @@ A round turns a pool snapshot into a published policy.
 
 ## 6. Not built, and why
 
-- **Score centering, RSC and top-K logprob capture** (the draft's Pillar 3). They correct a biased importance-weighted
-  policy gradient. Expert iteration's SFT has none, and GRPO polish runs on-policy with TIS.
+- **Score centering, RSC and top-K logprob capture** (the draft's Pillar 3). Expert iteration's SFT has no
+  importance-weighted gradient to correct. For GRPO, §7 removes the mismatch at its source (BF16 actors, a staleness
+  bound of 2 with TIS) instead of shipping top-K payloads (§7.3).
 - **Staleness windows Δv and their sweep.** No ratio means no bias to bound. The own-success tier (current or previous
   policy) keeps the targets in the student's distribution.
 - **Cloud bucket transport.** Tailscale plus the DGX as the store gives the same atomic, preemption-proof properties
@@ -140,3 +141,72 @@ A round turns a pool snapshot into a published policy.
 - **SGLang LoRA slots.** A round publishes once an hour. A local merge and in-place reload take seconds.
 - **The 200-prompt quantization gate and the FP8-vs-BF16 RL comparison.** FP8 weights on collection actors cannot bias
   SFT. The held series stays BF16, so measurement is untouched.
+
+## 7. GRPO in the same topology (the polish phase)
+
+GRPO stays the method's polish phase (AGENTS.md: "GRPO is the polish phase once SFT gains flatten"). It runs on the
+same machines and the same exchange, with these settings decided now.
+
+### 7.1 Placement and flow
+
+- **Learner on the G4.** LoRA r=32 (lfm3opti §5), LR 1e-4 (10x the full-FT 1e-5), `natlang_grpo_v1` (the existing
+  objective, unchanged).
+- **Actors.** The DGX actor at the full cap, plus the G4 actor under MPS beside the learner and any further G4
+  sessions.
+- **Collectors and scorers on the DGX**, as in expert iteration.
+- **Continuous sampling.** Episodes run continuously across all actors (`--slots` work-stealing as today). A scored
+  group ships to the G4 as its token ids, sampled log-probs and decision options (~8 bytes per completion token).
+- **Per-step factor shipping.** Each optimizer step ships its factors to the DGX: r=32 is ~130 MB FP32, against
+  minute-long steps.
+- **Merge and rebind.** The DGX merges in FP32 and rebinds its actor at call boundaries, with all routes and a
+  native-engine reload. The G4 actor merges locally from the same factors and attests the same sha.
+- **Reference.** The run's start policy is the merged base with B = 0. The reference pass is therefore the bare base
+  (adapters off): no reference-weights file and no swap.
+- **Recovery.** The learner state (factors, AdamW, RNG, the consumed-group ledger) saves to the DGX every step.
+  A resumed learner skips every group already in the ledger.
+
+### 7.2 Off-policy control
+
+- **Staleness.** At most 2 policy versions, the existing `--max-staleness 2`. Older groups are dropped and counted.
+- **TIS.** As today: `min(rho, 2)` with the tail floor at `--tail-logp-floor -7`, using the sampled log-probs every
+  episode already records.
+- **Actor precision.** GRPO actors use **BF16 weights** with the attested FP8 KV, the engine GRPO and the held series
+  already use. With staleness ≤2 and matched weights, the ratios stay near 1 and TIS covers the residue, as it does on
+  the DGX today.
+- **Telemetry.** The ratio statistics and `kl_mean` sentinels already cover this. `rho` per staleness bucket is added
+  to `train.jsonl`, so a drift in the stalest groups shows in the step that has it.
+
+### 7.3 Why not score centering with FP8 actors
+
+- **The trade.** Score centering would let GRPO actors use FP8 weights (~18% fewer decode reads, §3) and tolerate
+  more staleness. It needs the sampler's top-K distribution for every generated token, shipped to the learner.
+- **The cost.** GRPO episodes run ~12k completion tokens, and a step trains 24-48 groups of 8. At K=64 (int32 ids plus
+  FP16 log-probs), that is ~1.8 GB per step, ~1 GB compressed.
+- **The verdict.** Over a Tailscale path that may be relayed, that costs more wall time per step than FP8 decode
+  saves, and the larger staleness buys nothing that more actors don't. Matching weights removes the bias for free.
+- **Expert iteration is unaffected.** It keeps FP8 collection actors (§3), because SFT has no ratio.
+
+### 7.4 Switching between phases
+
+- **Same pool.** Expert iteration rounds and GRPO run on one pool and one held series.
+- **Entering GRPO.** It starts from the newest held-adopted policy. The driver switches the learner from SFT rounds to
+  GRPO when two consecutive measured rounds come out neutral (the "SFT gains flatten" condition).
+- **Back to SFT.** It returns to SFT rounds whenever GRPO's own held evals turn neutral twice. GRPO's successes stay
+  in the pool as own successes for the next SFT round.
+
+## 8. JOLT+ guided episodes: on, as a pool source in both phases
+
+- **What it is.** JOLT+ guided episodes let the student solve frontier tasks under teacher guidance (`rl/jolt.py`).
+  The resulting trajectories are the student's own sampled actions on tasks it cannot solve alone. That is exactly
+  the never-solved tier expert iteration wants filled: sft-v8's frontier had 45 never-solved and 124 sometimes-solved
+  tasks.
+- **Decision.** JOLT+ guided collection runs **on by default** for the frontier's never-solved and lowest-rate tiers,
+  on every actor, in both phases:
+  - The guidance is removed from the trained context, so the student learns to act without it.
+  - The leak filter (`rl/jolt.py guidance_leak`, `grpo.teacher_guidance_leak`; DECISIONS audit of grpo-v4-run1: 6 of 11 guided successes had the
+    answer in the guidance) drops leaked episodes before they reach the pool.
+  - Guided successes enter the pool tier between own successes and teacher trajectories.
+- **The privileged twin's KL term stays off.** The guided successes already deliver the signal as SFT targets and as
+  GRPO groups, and adding the twin would count it twice. `grpo.py` already runs without it ("no privileged twin").
+- **Code.** `expert_iteration.py` and `grpo.py` collection select JOLT+ guidance by frontier tier. `sft_sources build`
+  admits the `jolt-guided` source.

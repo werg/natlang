@@ -6730,3 +6730,21 @@ a long episode).
   - Collection actors use FP8 weights; there is no ratio in SFT, so no bias.
 - Not built: score centering, top-K capture, staleness windows (no importance-weighted gradient in SFT); the cloud
   bucket (Tailscale plus the DGX store does the same); LoRA slots; the quantization gate.
+
+## 2026-11-22 13:10 GRPO and JOLT+ in the async topology (async-train.md §7-8)
+
+- GRPO stays the polish phase in the same topology:
+  - G4 LoRA learner, r=32 at LR 1e-4, `natlang_grpo_v1`, with the reference as the bare merged base;
+  - continuous sampling on the DGX and G4 actors;
+  - per-step factor shipping (~130 MB);
+  - staleness ≤2 with TIS as today;
+  - **BF16-weight actors**.
+- Score centering with FP8 actors is not built. Its per-token top-K payload (~1.8 GB per step at K=64) over Tailscale
+  costs more than FP8 decode saves, and matched weights remove the bias for free.
+- Phase switching: two consecutive neutral measured SFT rounds start GRPO; two neutral GRPO evals return to SFT
+  rounds.
+- JOLT+ guided episodes run on by default on the frontier's never-solved and lowest-rate tiers:
+  - guidance stripped from the trained context;
+  - leak-filtered;
+  - a pool tier between own successes and teacher trajectories.
+  The privileged-twin KL term stays off, because it would count the same signal twice.
