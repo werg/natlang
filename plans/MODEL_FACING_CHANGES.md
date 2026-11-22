@@ -3,6 +3,23 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-22 — a Neuralese block from an earlier policy version of the same run splices exactly again
+
+Commit 07efc838c made the SGLang actor front change its native identity (checkpoint id and embedding digest) at every
+in-place policy update. Exact splicing (`_sglang_exact`, `Engine._native_exact`) compares a block's recorded identity
+with the consumer's. So a consumer in a GRPO episode stopped reading a state its producer had written under an earlier
+version of the run. The front re-encoded the state from its text instead. On first principles, the consumer must
+consume the state that was actually produced in the episode.
+
+Exact splicing now keys on the lineage: the start checkpoint's architecture, tokenizer and base identity. That
+identity no longer changes on a rebind. Each block's producing policy is recorded as provenance: the producing
+turn's RL capture names its in-place update beside the block it stored, and the front keeps `producer_policy(id)`
+(policy id, version, engine). Import receipts stay identical to the native engine's. Blocks of
+another checkpoint or lineage are still re-encoded from their text, as before. All engines share one rule. The
+managed llama-server, in-page wllama and the Python native engine each serve one checkpoint, so their identity was
+always the lineage's. The SGLang front was the only engine that changed identity in place.
+No opt-out: the prior behaviour was a regression introduced the same day.
+
 ### 2026-11-21 — show entry signatures first for large callable scopes
 
 The System Vibestudio open-goal program rendered 104,742 LFM3 tokens before

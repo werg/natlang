@@ -10,7 +10,8 @@ One process runs the whole loop; nothing else (no controller, custody or transit
 * overlap: collection never stops. The learner trains on the groups that finished since its last step (at least
   ``--min-groups``, at most ``--max-groups``); unfinished groups keep running and join a later step, so nothing waits on
   stragglers. A group sampled more than ``--max-staleness`` policy versions ago is dropped and counted.
-* learner (the Experiment 0 model path, ``exp0_sft`` / ``lfm3_fast_train``): FP32 master weights, AdamW, BF16 compute. Every
+* learner (``natlang_neuralese.train.lfm3_learner``, lfm3opti.md §5): ``lora+rows`` at r=32 on a frozen BF16 base, FP32
+  factors, rows and AdamW state, BF16 compute (``lfm3_fast``). Every
   model call is (exact actor prompt ids, sampled ids) (``lower_rollout_turns.episode_turns``; calls of one invocation chain
   into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is a differentiable
   pass-through: computed in the consumer's own forward from the producer document the episode recorded (the text write's
@@ -19,30 +20,30 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   actor's stored state, ``lfm3_fast_train.import_tensors``). The producer's own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k2(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
   sampling against the actor's own sampling logprobs), ``A`` the group-normalized episode reward on every call of the
-  episode, the reference the start policy. Each trained episode weighs the same: its terms are averaged over its units
+  episode, the reference the start policy (B = 0: the base with its start rows, ``reference_snapshot``). Each trained episode weighs the same: its terms are averaged over its units
   (sampled tokens; a sampled decision counts as one average call of its episode), then over the step's episodes
   (``--loss-norm token``: one sum over all tokens). A tail token the actor sampled below ``--tail-logp-floor`` gets no
   policy term in an episode with a positive advantage. Sampling is top-p (``--top-p``, ``common.sampling.RL_TOP_P``): the
   policy term's ``logp`` is the sampled token's log-probability under the learner's own nucleus
   (``lfm3_fast_train.linear_nll_nucleus``; the sampled token always in the set), while ``rho`` and the KL term use the
   untruncated log-probabilities (the actor records the untruncated one; DECISIONS 2026-11-13 for the reasoning).
-* weight sync: after each step the BF16 weights are copied once into the actor's HF safetensors on tmpfs, memory-mapped
-  and page-locked (``WeightSync``; same layout as ``export/native_hf``; frozen rows and producer table kept), loaded in place
-  (SGLang ``pause_generation`` retract -> ``update_weights_from_disk`` -> ``continue_generation``), in a background thread.
+* weight sync (``WeightSync``): after each step the policy is snapshotted (GPU clones of factors and rows), merged in
+  FP32 and rounded once to BF16 into one of two page-locked tmpfs safetensors files in the actor export's layout, loaded
+  in place (SGLang ``pause_generation`` retract -> ``update_weights_from_disk``), bound on every actor route (the front
+  reloads its native engine) and attested from measurements (SGLang's own ``/model_info`` and the file's digest, the
+  native model's tensor identity, a sentinel sequence's log-probabilities against the learner's), in a background
+  thread. A failure serves the last good version again and retries once; a second failure stops the run.
   Episodes keep running across a sync; each token's actor logprob is from the weights that sampled it.
-* checkpoints: a pruned native checkpoint (``exp0_sft.write_checkpoint``, servable by ``serve_native_checkpoint``) every
-  ``--save-every`` steps and the FP32 training state (masters + AdamW moments) every ``--state-every`` steps, both written
-  from host memory in background threads (training never waits on I/O). Keeps the last two native checkpoints plus
-  every held-evaluated one, and the last training state.
-* memory (the unit's budget covers GPU and host alike on the GB10): the KL reference is a file loaded into the policy's
-  own parameters for the reference pass (``ReferenceWeights``), the FP32 gradients exist only from the policy pass to the
-  optimizer step, imported states are read per sequence, and ``train.jsonl`` logs each learner phase's CUDA peak and
-  this process's host memory (``cuda_peak_by_phase_gb``). The two phases trade the GB10's unified memory
-  (``--actor-release``, default on): at the start of each learner phase the actor is paused (retract) and SGLang
+* checkpoints: a pruned native checkpoint (servable by ``serve_native_checkpoint``) every ``--save-every`` steps, written
+  from the bytes the actor is about to serve, and the learner state (``train.learner_state``: factors, rows, AdamW, RNG,
+  consumed-group ledger, base digest) every ``--state-every`` steps. Keeps the last two native checkpoints plus every
+  held-evaluated one, and the last learner state.
+* memory (the unit's budget covers GPU and host alike on the GB10): the frozen base, ~0.5 GB of trainable state, two
+  ~3.4 GB tmpfs weight files and the actor; imported states are read per sequence, and ``train.jsonl`` logs each learner
+  phase's CUDA peak and this process's host memory (``cuda_peak_by_phase_gib``). The two phases trade the GB10's unified
+  memory (``--actor-release``, default on): at the start of each learner phase the actor is paused (retract) and SGLang
   releases its KV cache, weights and CUDA graphs (``WeightSync.release``, the actor runs with ``--sglang-memory-saver``);
-  the step's publish resumes them and reloads the weights before generation continues. The learner empties PyTorch's
-  cache after the reference pass, before the AdamW moments are read back and after the optimizer step, and its moments
-  live on disk between steps (``MomentOffload``), so the collect phase holds only its weights and masters.
+  the step's publish resumes them and reloads the weights before generation continues.
 * held evaluation: the start policy first, then every ``--held-every-hours`` the newest native checkpoint is measured on
   the held set (``python -m natlang_neuralese.rl.held_eval measure`` on the training actor, collection paused) and
   compared with the start policy (``held_eval compare`` -> ``held/step-N/compare-vs-step0.json``). With ``--held-remote pop``
@@ -1059,20 +1060,6 @@ def prune_group(collector, group, keep, archive=None, stats=None):
 
 
 # ---- host I/O --------------------------------------------------------------------------------------------------------
-def safetensors_header(layout, metadata=None):
-    """layout: [(name, dtype_str, shape, nbytes)] -> (header bytes, offsets)."""
-    header, offset, offsets = {}, 0, []
-    for name, dtype, shape, nbytes in layout:
-        header[name] = {'dtype': dtype, 'shape': list(shape), 'data_offsets': [offset, offset + nbytes]}
-        offsets.append(offset)
-        offset += nbytes
-    if metadata:
-        header['__metadata__'] = {k: str(v) for k, v in metadata.items()}
-    raw = json.dumps(header, separators=(',', ':')).encode()
-    raw += b' ' * (-len(raw) % 8)
-    return struct.pack('<Q', len(raw)) + raw, offsets, offset
-
-
 EMBEDDING = 'model.embed_tokens.weight'
 PRODUCER_TABLE = 'model.natlang_producer_embed'     # export.native_hf: the producing input embedding of every token
 
@@ -1083,172 +1070,255 @@ def producer_adapter_keys(interface_state):
     return sorted(k for k in interface_state if k.startswith('adapter.'))
 
 
+SENTINEL_TEXT = ('The committee reviewed the proposal on Tuesday and asked for a revised budget. '
+                 'def mean(values):\n    return sum(values) / len(values)\n'
+                 'Water boils at 100 degrees Celsius at sea level, and lower at altitude.')
+# Learner vs actor log-probabilities of the sentinel (mean and largest |difference| over its tokens): the merged BF16
+# export served with FP8 KV against the learner's unmerged BF16 forward. Wrong or torn weights put both far above.
+SENTINEL_TOLERANCE = (0.1, 1.5)
+
+
+def interface_with_rows(interface, token_ids, rows, marker_ids, override_ids):
+    """``interface_state`` with the trained Neuralese rows (``rows`` [K, D] at ``token_ids``) in place of the marker and
+    override rows (``learner_state.merged_backbone_and_interface``'s rule; a tied checkpoint's ``*output_rows`` stay
+    None)."""
+    import torch
+    out = dict(interface)
+    position = {int(t): i for i, t in enumerate(token_ids.tolist())}
+    for ids, field, out_field in ((marker_ids, 'input_rows', 'output_rows'),
+                                  (override_ids, 'extra_input_rows', 'extra_output_rows')):
+        if not ids or out.get(field) is None:
+            continue
+        updated = rows.index_select(0, torch.tensor([position[int(i)] for i in ids], dtype=torch.long,
+                                                    device=rows.device)).detach().cpu()
+        out[field] = updated.to(out[field].dtype)
+        if out.get(out_field) is not None:
+            out[out_field] = updated.to(out[out_field].dtype)
+    return out
+
+
 class WeightSync:
-    """Actor weight publisher.
+    """Publication of the learner's policy to its actor (lfm3opti.md §6 item 4, v2 §7.1).
 
-    Preferred mode (``WeightSync.for_learner``, v2 §7.1): 7-step atomic merged-export publication state machine
-    without mutating the live LoRA training model:
-      1. SNAPSHOT: freeze step-k trainable factors on CPU + compute effective_policy_sha256.
-      2. EXPORT: materialize immutable merged BF16 safetensors into staging dir, verify checksums & count, atomic rename.
-      3. PAUSE: pause rollout generation (/pause_generation retract).
-      4. REFIT & INVALIDATE: /update_weights_from_disk on the immutable version dir with flush_cache=True.
-      5. BIND ALL ROUTES: /v1/neuralese/rebind-policy with export_dir so all 4 routes (incl. native fallback) reload.
-      6. ATTEST & RESUME: GET /v1/neuralese/info + attest_all_routes (+ optional sentinel check) -> /continue_generation.
-      7. ROLLBACK: on any failure in steps 2-6, restore last verified version k-1 across all routes before returning.
+    Host memory: two page-locked, memory-mapped safetensors files on tmpfs in the actor export's layout (``slot-a``,
+    ``slot-b``, prefaulted once): the current version and the staging one. Fixed tensors (norms, conv kernels, every
+    frozen projection) are written once; a publication writes only the merged projections and the embedding (producer
+    table) into the staging slot, GPU -> pinned mapping, so no fresh pageable memory is touched per step.
 
-    Legacy constructor ``WeightSync(model, export_dir, ...)`` is retained for CPU unit tests of mapped host buffers."""
+    Each version:
+      1. ``snapshot`` (main thread, after the optimizer step): GPU clones of the trainable factors and rows (and the
+         learner's log-probabilities of a fixed sentinel sequence), so the next step's optimizer never tears the export.
+      2. merge (publish thread): ``bf16(fp32(W0) + s * B @ A)`` from the snapshot into the staging slot; its file digest
+         and ``export_tensors_identity``; the native checkpoint (``also``) is written from the same bytes.
+      3. pause (retract) -> ``update_weights_from_disk`` of the staging slot -> ``rebind-policy`` (the front measures
+         SGLang's ``/model_info`` and the file, and reloads its native route) -> ``attest_all_routes`` on the measured
+         routes -> continue -> sentinel: SGLang's (and a resident native engine's) log-probabilities against the
+         learner's.
+      4. a failure restores the last good version (the current slot, at first the start export) on every route,
+         retries the publication once, and otherwise reports the version failed (the trainer stops on it).
 
-    def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None, producer_from_embedding=True):
+    ``stage_native`` puts another native checkpoint into the staging slot (held measurements of other policies);
+    ``publish_start`` serves the start export itself."""
+
+    SLOTS = ('slot-a', 'slot-b')
+
+    def __init__(self, learner, export_dir, sglang_url, weights_dir, *, front_url=None, producer_from_embedding=True,
+                 base_sha256=None, start_policy=None, interface_ids=((), ()), tied=True, sentinel_ids=None,
+                 sentinel_tolerance=SENTINEL_TOLERANCE):
         import mmap
         import torch
-        from safetensors import safe_open
-        self.export_dir, self.sglang_url = Path(export_dir), sglang_url
-        self.weights_dir = Path(weights_dir)
-        self.front_url = front_url
-        self.producer_from_embedding = producer_from_embedding
-        self.learner = None
-        self.sentinel_fn = None
-        self.pending_snapshot = None
-        self.last_good = None
+        self.learner, self.export_dir, self.sglang_url = learner, Path(export_dir), sglang_url
+        self.weights_dir, self.front_url = Path(weights_dir), front_url
+        self.producer_from_embedding, self.base_sha256 = producer_from_embedding, base_sha256
+        self.marker_ids, self.override_ids = (tuple(int(i) for i in ids) for ids in interface_ids)
+        self.tied, self.sentinel_ids = tied, list(sentinel_ids or ())
+        self.sentinel_tolerance = sentinel_tolerance
+        self.thread, self.last, self.released, self.pending, self.publishing = None, {}, None, None, None
+        params = dict(learner.model.named_parameters())
+        export = self.export_dir / 'model.safetensors'
+        with export.open('rb') as handle:
+            size = struct.unpack('<Q', handle.read(8))[0]
+            header = json.loads(handle.read(size))
+        self.header_bytes = 8 + size
+        layout = {name: info for name, info in header.items() if name != '__metadata__'}
+        self.kinds = {}
+        for name, info in layout.items():
+            if info['dtype'] != 'BF16':
+                raise ValueError(f'export tensor {name} is {info["dtype"]}, expected BF16')
+            if name in learner.target_map:
+                kind = 'lora'
+            elif name == EMBEDDING or (name == PRODUCER_TABLE and producer_from_embedding):
+                kind = 'embedding'
+            elif name in params:
+                kind = 'frozen'
+            else:
+                kind = 'export'
+            if kind != 'export':
+                source = params[EMBEDDING if kind == 'embedding' else name]
+                if tuple(source.shape) != tuple(info['shape']):
+                    raise ValueError(f'export/learner shape mismatch {name}: {info["shape"]} vs {tuple(source.shape)}')
+            self.kinds[name] = kind
+        missing = set(params) - set(layout) - {'lm_head.weight'}
+        if missing:
+            raise ValueError(f'learner parameters absent from the export: {sorted(missing)[:5]}')
         self.weights_dir.mkdir(parents=True, exist_ok=True)
-        for path in self.export_dir.iterdir():
-            if path.is_file() and path.name != 'model.safetensors':
-                shutil.copyfile(path, self.weights_dir / path.name)
-        params = dict(model.named_parameters())
-        layout, sources = [], []
-        path = self.weights_dir / 'model.safetensors'
-        partial = path.with_name(path.name + '.partial')
-        with safe_open(str(self.export_dir / 'model.safetensors'), 'pt') as handle:
-            names = list(handle.keys())
-            for name in names:
-                info = handle.get_slice(name)
-                shape = tuple(info.get_shape())
-                if info.get_dtype() != 'BF16':
-                    raise ValueError(f'export tensor {name} is {info.get_dtype()}, expected bf16')
-                if name in params:
-                    if tuple(params[name].shape) != shape:
-                        raise ValueError(f'export/learner shape mismatch {name}')
-                    sources.append(name)
-                elif name == PRODUCER_TABLE and producer_from_embedding:
-                    if tuple(params[EMBEDDING].shape) != shape:
-                        raise ValueError(f'producer table {shape} differs from the embedding {tuple(params[EMBEDDING].shape)}')
-                    sources.append(EMBEDDING)
-                else:
-                    sources.append(None)    # the producer table and anything else the learner does not train
-                layout.append((name, 'BF16', shape, math.prod(shape) * 2))
-            missing = set(params) - {name for name in sources if name} - {'lm_head.weight'}
-            if missing:
-                raise ValueError(f'learner parameters absent from the export: {sorted(missing)[:5]}')
-            self.header, offsets, total = safetensors_header(layout, {'format': 'pt'})
-            zeros = bytes(64 << 20)
-            with partial.open('wb') as out:
-                out.write(self.header)
-                for (name, _, _, nbytes), source in zip(layout, sources):
-                    if source is None:
-                        out.write(memoryview(handle.get_tensor(name).contiguous().reshape(-1).view(torch.uint8).numpy()))
-                    else:
-                        for start in range(0, nbytes, len(zeros)):
-                            out.write(zeros[:min(len(zeros), nbytes - start)])
-        os.replace(partial, path)
-        self.file = path.open('r+b')
-        self.map = mmap.mmap(self.file.fileno(), 0)
-        base = len(self.header)
-        whole = torch.frombuffer(self.map, dtype=torch.uint8)
-        self.pinned = False
-        if torch.cuda.is_available():
-            try:
-                self.pinned = int(torch.cuda.cudart().cudaHostRegister(whole.data_ptr(), whole.numel(), 0).value) == 0
-            except Exception:
-                pass
-        self.buffer = torch.frombuffer(self.map, dtype=torch.uint8, count=total, offset=base)
-        self.views = {name: torch.frombuffer(self.map, dtype=torch.bfloat16, count=nbytes // 2, offset=base + offset).view(shape)
-                      for (name, _, shape, nbytes), offset, source in zip(layout, offsets, sources) if source is not None}
-        self.sources = {name: source for (name, *_), source in zip(layout, sources) if source is not None}
-        self.params = params
-        self.thread = None
-        self.last = {}
-        self.released = None
+        self.slots = []
+        for slot in self.SLOTS:
+            directory = self.weights_dir / slot
+            directory.mkdir(exist_ok=True)
+            for path in self.export_dir.iterdir():
+                if path.is_file() and path.name != 'model.safetensors':
+                    shutil.copyfile(path, directory / path.name)
+            target = directory / 'model.safetensors'
+            partial = target.with_name(target.name + '.partial')
+            shutil.copyfile(export, partial)      # every page written once here (prefaulted tmpfs)
+            os.replace(partial, target)
+            handle = target.open('r+b')
+            mapping = mmap.mmap(handle.fileno(), 0)
+            whole = torch.frombuffer(mapping, dtype=torch.uint8)
+            pinned = False
+            if torch.cuda.is_available():
+                try:
+                    pinned = int(torch.cuda.cudart().cudaHostRegister(whole.data_ptr(), whole.numel(), 0).value) == 0
+                except Exception:
+                    pass
+            views = {name: torch.frombuffer(mapping, dtype=torch.bfloat16, count=math.prod(info['shape']),
+                                            offset=self.header_bytes + info['data_offsets'][0]).view(info['shape'])
+                     for name, info in layout.items()}
+            self.slots.append({'dir': directory, 'file': handle, 'map': mapping, 'pinned': pinned, 'views': views,
+                               'whole': whole})
+            if len(self.slots) == 1:   # still a byte copy of the start export: its digests, read from the mapping
+                self.start_digests = self._identity(self.slots[0])
+            with torch.no_grad():      # the learner's frozen tensors, once (the start export holds the same values)
+                for name, kind in self.kinds.items():
+                    if kind == 'frozen':
+                        views[name].copy_(params[name].detach())
+        self.staging = 0
+        self.policy_cache = {}
+        start = start_policy or {}
+        self.last_good = {'version': start.get('version', 0), 'dir': str(self.export_dir),
+                          'policy_id': start.get('policy_id'), 'slot': None, **self.start_digests}
 
-    @classmethod
-    def for_learner(cls, learner, export_dir, sglang_url, weights_dir, front_url=None,
-                    producer_from_embedding=True, sentinel_fn=None):
-        """Create an atomic merged-export WeightSync for a shared ``Lfm3Learner``."""
-        sync = object.__new__(cls)
-        sync.learner = learner
-        sync.export_dir = Path(export_dir)
-        sync.sglang_url = sglang_url
-        sync.weights_dir = Path(weights_dir)
-        sync.front_url = front_url
-        sync.producer_from_embedding = producer_from_embedding
-        sync.sentinel_fn = sentinel_fn
-        sync.weights_dir.mkdir(parents=True, exist_ok=True)
-        sync.file = sync.map = sync.buffer = sync.views = sync.sources = sync.params = None
-        sync.pinned = False
-        sync.thread = None
-        sync.last = {}
-        sync.released = None
-        sync.pending_snapshot = None
-        sync.last_good = {'version': 0, 'dir': str(sync.export_dir), 'policy_id': None, 'weights_sha256': None}
-        return sync
-
+    # ---- snapshot and merge ----------------------------------------------------------------------------------------
     def snapshot(self):
+        """Freeze the step's policy (main thread, between optimizer steps): GPU clones of every trainable factor and
+        row, and the learner's sentinel log-probabilities. The publish thread reads only these."""
         import torch
         self.wait()
-        if self.learner is not None:
-            # Step 1 (SNAPSHOT): freeze committed factors on host without mutating the live model.
-            frozen_leaves = {name: t.detach().cpu().clone() for name, t in self.learner.named_trainable_tensors().items()}
-            effective_sha = self.learner.effective_policy_sha256()
-            self.pending_snapshot = {'leaves': frozen_leaves, 'effective_policy_sha256': effective_sha}
-            return effective_sha
-        for name, view in self.views.items():
-            view.copy_(self.params[self.sources[name]].detach(), non_blocking=self.pinned)
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        return None
+        with torch.no_grad():
+            leaves = {name: t.detach().clone() for name, t in self.learner.named_trainable_tensors().items()}
+        self.pending = {'leaves': leaves, 'sentinel': self.learner_sentinel() if self.sentinel_ids else None,
+                        'kind': 'learner'}
 
+    def learner_sentinel(self):
+        import torch
+        from natlang_neuralese.train import lfm3_fast
+        ids = torch.tensor(self.sentinel_ids, dtype=torch.long, device=self.learner.device)
+        with torch.no_grad():
+            logp = lfm3_fast.token_logprobs(self.learner.model, ids, torch.arange(len(ids) - 1, device=ids.device),
+                                            ids[1:])
+        return logp.float().cpu().tolist()
+
+    def policy_id(self, leaves):
+        """``Lfm3Learner.effective_policy_sha256`` of the snapshot (bound to the base), the id meta.json records."""
+        from types import SimpleNamespace
+        from natlang_neuralese.train.lfm3_learner import Lfm3Learner
+        view = SimpleNamespace(spec=self.learner.spec, base_weights_sha256=self.base_sha256,
+                               named_trainable_tensors=lambda: leaves)
+        return Lfm3Learner.effective_policy_sha256(view, self.base_sha256)
+
+    def _merge(self, slot, leaves):
+        import torch
+        params = dict(self.learner.model.named_parameters())
+        rows = self.learner.trainable_rows
+        with torch.no_grad():
+            embedding = params[EMBEDDING].detach().clone()
+            if rows is not None:
+                embedding[rows.token_ids] = leaves['trainable_rows.rows'].to(embedding.dtype)
+            for name, kind in self.kinds.items():
+                view = slot['views'][name]
+                if kind == 'embedding':
+                    view.copy_(embedding, non_blocking=slot['pinned'])
+                elif kind == 'lora':
+                    layer, _, short = self.learner.target_map[name]
+                    scale = float(getattr(self.learner.bundles[layer], short).scale)
+                    merged = (params[name].detach().float()
+                              + scale * (leaves[f'lora_B.{name}'].float() @ leaves[f'lora_A.{name}'].float()))
+                    view.copy_(merged.to(torch.bfloat16), non_blocking=slot['pinned'])
+                    del merged
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+    def stage_native(self, path):
+        """Put another native checkpoint (its interface rows merged into the embedding, as the actor's export merges
+        them) into the staging slot; the next ``publish`` serves it."""
+        import torch
+        from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+        self.wait()
+        state = CheckpointPolicy.load(Path(path))
+        backbone, interface, config = state['backbone_state'], state['interface_state'], state['model_config']
+        embedding = backbone[EMBEDDING].clone()
+        rows = [(config['marker_ids'], interface['input_rows'])]
+        if config.get('token_override_ids'):
+            rows.append((config['token_override_ids'], interface['extra_input_rows']))
+        for ids, values in rows:
+            embedding[torch.tensor(list(ids))] = values.to(embedding.dtype)
+        slot = self.slots[self.staging]
+        for name, kind in self.kinds.items():
+            if kind == 'embedding':
+                source = embedding
+            elif kind == 'export':
+                continue
+            else:
+                source = backbone[name]
+            slot['views'][name].copy_(source.to(torch.bfloat16))
+        if any(kind == 'frozen' for kind in self.kinds.values()):
+            # the staging slot's frozen tensors now hold this checkpoint's: the learner's are written back on the
+            # learner's next publication into this slot
+            slot['foreign'] = True
+        self.pending = {'kind': 'native', 'path': str(path)}
+        del state
+
+    def backbone(self):
+        """{name: host BF16 view} of the version being published (valid inside ``publish``'s ``also``)."""
+        slot = self.slots[self.staging]
+        return {name: view for name, view in slot['views'].items() if name != PRODUCER_TABLE}
+
+    def interface(self, interface):
+        """``interface_state`` of the version being published (its trained rows)."""
+        leaves = (self.pending or {}).get('leaves')
+        rows = self.learner.trainable_rows
+        if not leaves or rows is None:
+            return interface
+        return interface_with_rows(interface, rows.token_ids, leaves['trainable_rows.rows'], self.marker_ids,
+                                   self.override_ids)
+
+    def _identity(self, slot):
+        from natlang_neuralese.serve.sglang_actor import export_tensors_identity
+        return {'weights_sha256': hashlib.sha256(memoryview(slot['map'])).hexdigest(),
+                'tensor_identity': export_tensors_identity(slot['views'], self.marker_ids, self.override_ids,
+                                                           self.tied)}
+
+    # ---- actor control ---------------------------------------------------------------------------------------------
     def wait(self):
         if self.thread is not None:
             self.thread.join()
             self.thread = None
 
     def close(self):
-        """Unregister the page-locked mapping and drop views; the directory stays."""
+        """Unregister the page-locked mappings (a registration outliving its mapping makes a later cudaHostRegister of
+        the reused address range fail); the files stay."""
         import torch
         self.wait()
-        if self.pinned and self.map is not None:
-            torch.cuda.cudart().cudaHostUnregister(torch.frombuffer(self.map, dtype=torch.uint8).data_ptr())
-            self.pinned = False
-        self.views = self.buffer = None
-
-    def load_native(self, path, special):
-        """Put another native checkpoint's backbone in the pinned buffer (legacy path)."""
-        import torch
-        from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-        self.wait()
-        if self.learner is not None:
-            raise RuntimeError('load_native is unsupported in LoRA merged-export WeightSync; export the target checkpoint directly')
-        state = CheckpointPolicy.load(Path(path))
-        backbone = state['backbone_state']
-        embedding = backbone['model.embed_tokens.weight'].clone()
-        interface, config = state['interface_state'], state['model_config']
-        rows = [(config['marker_ids'], interface['input_rows'])]
-        if config.get('token_override_ids'):
-            rows.append((config['token_override_ids'], interface['extra_input_rows']))
-        for ids, values in rows:
-            embedding[torch.tensor(list(ids))] = values.to(embedding.dtype)
-        merged = self.views[EMBEDDING][torch.tensor(special)]
-        if not torch.equal(embedding[torch.tensor(special)].to(merged.dtype), merged):
-            raise ValueError(f'{path} has other interface rows than the served policy')
-        for name, view in self.views.items():
-            source = embedding if self.sources[name] == EMBEDDING else backbone[name]
-            view.copy_(source.to(view.dtype))
-        del state
-
-    def backbone(self):
-        return {name: view for name, view in self.views.items() if self.sources[name] == name}
+        for slot in self.slots:
+            if slot['pinned']:
+                torch.cuda.cudart().cudaHostUnregister(slot['whole'].data_ptr())
+                slot['pinned'] = False
+            slot['views'] = slot['whole'] = None
 
     def release(self, tags):
-        """Hand the actor's GPU memory back for the learner phase."""
+        """Hand the actor's GPU memory back for the learner phase (``--actor-release``): retract, then SGLang
+        ``release_memory_occupation`` of ``tags``; the next ``publish``/``restore`` resumes it. Returns the seconds."""
         started = time.time()
         self.wait()
         if self.sglang_url is None or not tags:
@@ -1267,476 +1337,169 @@ class WeightSync:
             post(self.sglang_url + '/resume_memory_occupation', {'tags': self.released})
             self.released = None
 
-    def _active_weights_dir(self):
-        if getattr(self, 'last_good', None) and self.last_good.get('dir'):
-            return Path(self.last_good['dir'])
-        return self.weights_dir
-
-    def restore(self, version):
-        """Undo ``release`` without new weights (a skipped update)."""
+    def restore(self, version=None):
+        """Undo ``release`` without new weights (a skipped update): resume, reload the last good version, continue."""
         self.wait()
         if self.sglang_url is None or not self.released:
             return
         self._resume()
         answer = post(self.sglang_url + '/update_weights_from_disk',
-                      {'model_path': str(self._active_weights_dir()), 'flush_cache': True, 'weight_version': str(version)})
+                      {'model_path': self.last_good['dir'], 'flush_cache': True,
+                       'weight_version': str(self.last_good['version'])})
         post(self.sglang_url + '/continue_generation', {})
         if not json.loads(answer).get('success', False):
             raise RuntimeError(f'actor weight reload after release failed: {answer[:400]}')
 
-    def _rollback(self, timing):
-        """Step 7 (ROLLBACK): restore last verified complete version k-1 across all routes and resume generation."""
-        prev = getattr(self, 'last_good', None)
-        if not prev or not prev.get('dir') or not Path(prev['dir']).exists():
-            if self.sglang_url is not None:
-                try:
-                    post(self.sglang_url + '/continue_generation', {})
-                except Exception:
-                    pass
-            return False
-        rolled = True
-        try:
-            if self.sglang_url is not None:
-                answer = post(self.sglang_url + '/update_weights_from_disk',
-                              {'model_path': str(prev['dir']), 'flush_cache': True,
-                               'weight_version': str(prev['version'])})
-                rolled = bool(json.loads(answer).get('success', False))
-            if rolled and self.front_url is not None and prev.get('policy_id') and prev.get('weights_sha256'):
-                post(self.front_url + '/v1/neuralese/rebind-policy',
-                     {'policy_id': prev['policy_id'], 'weights_sha256': prev['weights_sha256'],
-                      'version': prev['version'], 'export_dir': str(prev['dir'])})
-        except Exception as err:
-            timing['rollback_error'] = repr(err)[:300]
-            rolled = False
-        finally:
-            if self.sglang_url is not None:
-                try:
-                    post(self.sglang_url + '/continue_generation', {})
-                except Exception:
-                    pass
-        timing['rolled_back_to'] = prev['version'] if rolled else None
-        return rolled
+    def _info(self):
+        with urllib.request.urlopen(self.front_url + '/v1/neuralese/info', timeout=60) as response:
+            return json.loads(response.read())
 
-    def _prune_version_dirs(self, keep_dirs):
-        keep = {str(Path(d).resolve()) for d in keep_dirs if d}
-        for child in sorted(self.weights_dir.glob('v-*')):
-            if child.is_dir() and str(child.resolve()) not in keep:
-                shutil.rmtree(child, ignore_errors=True)
+    def _bind(self, target, timing):
+        """Serve ``target`` ({dir, version, policy_id, weights_sha256, tensor_identity}) on every route and check the
+        measured attestation. Leaves SGLang generating."""
+        from natlang_neuralese.serve.sglang_actor import attest_all_routes
+        t = time.time()
+        post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
+        try:
+            raw = post(self.sglang_url + '/update_weights_from_disk',
+                       {'model_path': str(target['dir']), 'flush_cache': True, 'weight_version': str(target['version'])})
+            if not json.loads(raw).get('success', False):
+                raise RuntimeError(f'update_weights_from_disk failed: {raw[:300]}')
+            timing['actor_update_s'] = round(time.time() - t, 2)
+            if self.front_url is not None:
+                t = time.time()
+                post(self.front_url + '/v1/neuralese/rebind-policy',
+                     {'policy_id': target['policy_id'], 'weights_sha256': target['weights_sha256'],
+                      'tensor_identity': target['tensor_identity'], 'version': target['version'],
+                      'export_dir': str(target['dir'])})
+                ok, mismatches = attest_all_routes(self._info(), {
+                    'policy_id': target['policy_id'], 'version': target['version'], 'model_path': str(target['dir']),
+                    'weights_sha256': target['weights_sha256'], 'tensor_identity': target['tensor_identity']})
+                if not ok:
+                    raise RuntimeError(f'route attestation failed: {json.dumps(mismatches)[:600]}')
+                timing['rebind_s'] = round(time.time() - t, 2)
+                timing['routes_attested'] = True
+        finally:
+            post(self.sglang_url + '/continue_generation', {})
+
+    def _sentinel(self, learner_logp, timing):
+        """SGLang's (and a resident native engine's) sentinel log-probabilities against the learner's and each other."""
+        if self.front_url is None or not self.sentinel_ids:
+            return
+        answer = json.loads(post(self.front_url + '/v1/neuralese/sentinel', {'token_ids': self.sentinel_ids}))
+        scored = {'sglang': answer.get('sglang'), 'native': answer.get('native'), 'learner': learner_logp}
+        pairs = [(a, b) for a, b in (('sglang', 'learner'), ('native', 'learner'), ('sglang', 'native'))
+                 if scored[a] is not None and scored[b] is not None]
+        report, failed = {}, []
+        for a, b in pairs:
+            d = np.abs(np.asarray(scored[a], np.float64) - np.asarray(scored[b], np.float64))
+            if len(d) != len(self.sentinel_ids) - 1:
+                failed.append(f'{a}/{b}: {len(d)} log-probabilities for {len(self.sentinel_ids) - 1} tokens')
+                continue
+            report[f'{a}_vs_{b}'] = {'mean': round(float(d.mean()), 5), 'max': round(float(d.max()), 5)}
+            if d.mean() > self.sentinel_tolerance[0] or d.max() > self.sentinel_tolerance[1]:
+                failed.append(f'{a}/{b} {report[f"{a}_vs_{b}"]}')
+        timing['sentinel'] = report
+        if failed:
+            raise RuntimeError(f'sentinel log-probabilities disagree beyond {self.sentinel_tolerance}: {failed}')
+
+    def _rollback(self, timing):
+        """Serve the last good version again on every route (generation continues either way)."""
+        try:
+            self._bind(self.last_good, {})
+            timing['rolled_back_to'] = self.last_good['version']
+            return True
+        except Exception as error:
+            timing['rollback_error'] = repr(error)[:400]
+            timing['rolled_back_to'] = None
+            return False
+
+    def publish_start(self, version, on_done, policy):
+        """Serve the start export itself (``policy`` its checkpoint digest), e.g. after measuring other policies."""
+        self.pending = {'kind': 'start', 'policy_id': policy}
+        self.publish(version, on_done)
 
     def publish(self, version, on_done, also=None, policy=None):
+        """Publish the pending snapshot (or staged checkpoint) as ``version`` in a background thread; ``on_done(version,
+        ok)``. ``also()`` writes the native checkpoint from the same bytes before the actor is updated."""
+        pending = self.pending or {'kind': 'none'}
+
         def run():
-            try:
-                if getattr(self, 'learner', None) is not None:
-                    body_atomic()
-                else:
-                    body_legacy()
-            except Exception as error:
-                self.last = {'version': version, 'ok': False, 'answer': f'publish failed: {error!r}'[:400]}
-                on_done(version, False)
-
-        def body_atomic():
-            from natlang_neuralese.train.learner_state import export_merged_hf_safetensors
-            from natlang_neuralese.serve.sglang_actor import attest_all_routes
-            timing = {'state_machine': 'v2_7step'}
-            snap = self.pending_snapshot or {'effective_policy_sha256': self.learner.effective_policy_sha256()}
-            # Step 2 (EXPORT): immutable merged BF16 safetensors into staging dir -> atomic rename.
-            t_exp = time.time()
-            version_dir = self.weights_dir / f'v-{version:05d}'
-            try:
-                exported = export_merged_hf_safetensors(
-                    self.learner, self.export_dir, version_dir,
-                    producer_from_embedding=self.producer_from_embedding,
-                )
-            except Exception as err:
-                timing['export_s'] = round(time.time() - t_exp, 2)
-                self._rollback(timing)
-                self.last = {'version': version, 'ok': False, 'answer': f'export failed: {err!r}'[:400], **timing}
-                on_done(version, False)
-                return
-            timing['export_s'] = round(time.time() - t_exp, 2)
-            timing['export_tensors'] = exported['tensor_count']
-            weights = exported['weights_sha256']
-            extra = {}
-            if also is not None:
-                t_ck = time.time()
-                try:
-                    extra = also() or {}
-                except Exception as error:
-                    extra = {'checkpoint_error': repr(error)[:400]}
-                timing.update(extra)
-                timing['checkpoint_s'] = round(time.time() - t_ck, 2)
-            policy_id = policy or extra.get('checkpoint_sha256') or snap['effective_policy_sha256'] or weights
-            ok, answer = True, None
-            if self.sglang_url is None:
-                answer = 'no actor sync'
-            else:
-                t_refit = time.time()
-                paused = False
-                try:
-                    resumed = self.released is not None
-                    self._resume()
-                    if resumed:
-                        timing['actor_resume_s'] = round(time.time() - t_refit, 2)
-                    # Step 3 (PAUSE)
-                    post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
-                    paused = True
-                    # Step 4 (REFIT & INVALIDATE)
-                    raw = post(self.sglang_url + '/update_weights_from_disk',
-                               {'model_path': str(version_dir), 'flush_cache': True, 'weight_version': str(version)})
-                    if not json.loads(raw).get('success', False):
-                        raise RuntimeError(f'update_weights_from_disk failed: {raw[:300]}')
-                    timing['actor_update_s'] = round(time.time() - t_refit, 2)
-                    # Step 5 (BIND ALL ROUTES) & Step 6 (ATTEST & RESUME)
-                    if self.front_url is not None:
-                        t_rb = time.time()
-                        post(self.front_url + '/v1/neuralese/rebind-policy',
-                             {'policy_id': policy_id, 'weights_sha256': weights, 'version': version,
-                              'export_dir': str(version_dir)})
-                        with urllib.request.urlopen(self.front_url + '/v1/neuralese/info', timeout=30) as response:
-                            info = json.loads(response.read())
-                        routes_ok, mismatches = attest_all_routes(info, policy_id, weights)
-                        if not routes_ok:
-                            raise RuntimeError(f'route attestation failed: {mismatches}')
-                        timing['rebind_s'] = round(time.time() - t_rb, 2)
-                        timing['routes_attested'] = True
-                    # Resume generation before optional sentinel probe (which queries the live engine).
-                    post(self.sglang_url + '/continue_generation', {})
-                    paused = False
-                    if self.sentinel_fn is not None:
-                        sentinel_ok, sentinel_detail = self.sentinel_fn(version_dir, policy_id)
-                        timing['sentinel'] = sentinel_detail
-                        if not sentinel_ok:
-                            raise RuntimeError(f'sentinel logprob check failed: {sentinel_detail}')
-                except Exception as error:
-                    ok, answer = False, repr(error)[:400]
-                    if not paused and self.sglang_url is not None:
-                        try:
-                            post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
-                        except Exception:
-                            pass
-                    self._rollback(timing)
-            if ok:
-                prev_dir = self.last_good['dir'] if self.last_good else None
-                self.last_good = {'version': version, 'dir': str(version_dir),
-                                  'policy_id': policy_id, 'weights_sha256': weights}
-                timing['policy_id'] = policy_id
-                timing['weights_sha256'] = weights
-                self._prune_version_dirs([version_dir, prev_dir])
-            self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
-            on_done(version, ok)
-
-        def body_legacy():
             timing = {}
+            try:
+                ok, answer = body(timing)
+            except Exception as error:
+                ok, answer = False, f'publish failed: {error!r}'[:600]
+            self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
+            on_done(version, ok)
+
+        def body(timing):
             t = time.time()
-            if self.sglang_url is None:
-                answer, ok = 'no actor sync', True
+            if pending['kind'] == 'start':
+                target = {'dir': str(self.export_dir), 'slot': None, 'version': version,
+                          'policy_id': policy or pending['policy_id'], **self.start_digests}
             else:
-                try:
-                    resumed = self.released is not None
-                    self._resume()
-                    if resumed:
-                        timing['actor_resume_s'] = round(time.time() - t, 2)
-                    post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
-                    answer = post(self.sglang_url + '/update_weights_from_disk',
-                                  {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
-                    post(self.sglang_url + '/continue_generation', {})
-                    ok = json.loads(answer).get('success', False)
-                except Exception as error:
-                    answer, ok = repr(error)[:400], False
-                    try:
-                        post(self.sglang_url + '/continue_generation', {})
-                    except Exception:
-                        pass
-            timing['actor_update_s'] = round(time.time() - t, 2)
-            extra = {}
+                slot = self.slots[self.staging]
+                if pending['kind'] == 'learner':
+                    if slot.pop('foreign', False):
+                        import torch
+                        params = dict(self.learner.model.named_parameters())
+                        with torch.no_grad():
+                            for name, kind in self.kinds.items():
+                                if kind == 'frozen':
+                                    slot['views'][name].copy_(params[name].detach())
+                    self._merge(slot, pending['leaves'])
+                    policy_id = policy or self.policy_id(pending['leaves'])
+                elif pending['kind'] == 'native':
+                    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+                    policy_id = policy or sha256_file_hex_cached(Path(pending['path']))
+                else:
+                    raise RuntimeError('publish without a snapshot or staged checkpoint')
+                timing['merge_s'] = round(time.time() - t, 2)
+                t = time.time()
+                target = {'dir': str(slot['dir']), 'slot': self.staging, 'version': version, 'policy_id': policy_id,
+                          **self._identity(slot)}
+                timing['digest_s'] = round(time.time() - t, 2)
+            self.publishing = target
             if also is not None:
                 t = time.time()
                 try:
-                    extra = also() or {}
-                except Exception as error:
-                    extra = {'checkpoint_error': repr(error)[:400]}
-                timing.update(extra)
+                    timing.update(also() or {})
+                except Exception as error:     # the actor is still updated; the write's failure is reported
+                    timing['checkpoint_error'] = repr(error)[:400]
                 timing['checkpoint_s'] = round(time.time() - t, 2)
-            if ok and self.front_url is not None:
+            timing.update(policy_id=target['policy_id'], weights_sha256=target['weights_sha256'],
+                          tensor_identity=target['tensor_identity'])
+            if self.sglang_url is None:
+                self._adopt(target)
+                return True, 'no actor sync'
+            if self.released is not None:
                 t = time.time()
-                weights = hashlib.sha256(memoryview(self.buffer.numpy())).hexdigest()
-                policy_id = policy or extra.get('checkpoint_sha256') or weights
+                self._resume()
+                timing['actor_resume_s'] = round(time.time() - t, 2)
+            failures = []
+            for attempt in (1, 2):
                 try:
-                    post(self.front_url + '/v1/neuralese/rebind-policy',
-                         {'policy_id': policy_id, 'weights_sha256': weights, 'version': version,
-                          'export_dir': str(self.weights_dir)})
-                    from natlang_neuralese.serve.sglang_actor import attest_all_routes
-                    with urllib.request.urlopen(self.front_url + '/v1/neuralese/info', timeout=30) as response:
-                        info = json.loads(response.read())
-                    routes_ok, mismatches = attest_all_routes(info, policy_id, weights)
-                    if not routes_ok:
-                        ok, answer = False, f'route attestation failed: {mismatches}'[:400]
-                    else:
-                        timing['policy_id'] = policy_id
-                        timing['routes_attested'] = True
+                    self._bind(target, timing)
+                    self._sentinel(pending.get('sentinel') if pending['kind'] == 'learner' else None, timing)
+                    self._adopt(target)
+                    timing['attempts'] = attempt
+                    return True, None
                 except Exception as error:
-                    ok, answer = False, f'rebind failed: {error!r}'[:400]
-                timing['rebind_s'] = round(time.time() - t, 2)
-            self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
-            on_done(version, ok)
+                    failures.append(repr(error)[:600])
+                    self._rollback(timing)
+            timing['attempts'] = 2
+            return False, f'publication of version {version} failed twice (actor restored to version ' \
+                          f'{timing.get("rolled_back_to")}): {failures}'
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
 
-
-CACHE_DROP_BYTES = 512 << 20
-
-
-def stream_tensors_to_file(handle, tensors, staging, stream):
-    """Write CUDA ``tensors``' bytes in order to the open binary ``handle``: GPU -> pinned ``staging`` -> file on ``stream``.
-    Every ``CACHE_DROP_BYTES`` the written range is flushed and its page cache dropped: the cache is charged to the
-    unit's cgroup, and on the GB10 a CUDA allocation does not reclaim it, so a 13-21 GB write left as many GB of
-    cache beside the run (``StateSaver``, ``MomentOffload``)."""
-    import torch
-    chunk, written, dropped = staging.numel(), 0, 0
-    fd = handle.fileno()
-    with torch.cuda.stream(stream):
-        for t in tensors:
-            flat = t.detach().reshape(-1).view(torch.uint8)
-            for start in range(0, flat.numel(), chunk):
-                piece = flat[start:start + chunk]
-                staging[:piece.numel()].copy_(piece, non_blocking=True)
-                stream.synchronize()
-                handle.write(memoryview(staging[:piece.numel()].numpy()))
-                written += piece.numel()
-                if written - dropped >= CACHE_DROP_BYTES:
-                    handle.flush()
-                    os.fdatasync(fd)
-                    os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-                    dropped = written
-    handle.flush()
-    os.fdatasync(fd)
-    os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-
-
-class StateSaver:
-    """FP32 masters and AdamW moments streamed GPU -> pinned staging -> file in a background thread. The caller waits
-    (``wait``) before the next optimizer step changes them. A target on the external disk is written to the NVMe and
-    moved in the background (checkpoint_offload.staged_write: the HDD write took 330-350 s for 21 GB, and a stop in that
-    window lost the step); the write is logged for the memory ledger's stop grace."""
-
-    def __init__(self, staging_mb=64):     # the file write, not the copy, bounds the save: 512 MB staging bought nothing
-        import torch
-        self.staging = torch.empty(staging_mb << 20, dtype=torch.uint8, pin_memory=True)
-        self.stream = torch.cuda.Stream()
-        self.thread = None
-        self.last = None
-
-    def wait(self):
-        if self.thread is not None:
-            self.thread.join()
-            self.thread = None
-
-    def save(self, path, tensors, metadata):
-        import torch
-        self.wait()
-        torch.cuda.synchronize()
-        names = list(tensors)
-        layout = [(name, 'F32', tuple(tensors[name].shape), tensors[name].numel() * 4) for name in names]
-        header, _, _ = safetensors_header(layout, metadata)
-        from natlang_neuralese.train.checkpoint_offload import staged_write
-
-        def run():
-            started = time.time()
-            with staged_write(path, expected_bytes=len(header) + sum(item[3] for item in layout)) as target:
-                with target.path.open('wb') as handle:
-                    handle.write(header)
-                    stream_tensors_to_file(handle, [tensors[name] for name in names], self.staging, self.stream)
-            self.last = {'path': str(path), 'seconds': round(time.time() - started, 1), **target.record()}
-        self.thread = threading.Thread(target=run, daemon=True)
-        self.thread.start()
-
-
-class MomentOffload:
-    """AdamW's moments (exp_avg, exp_avg_sq: 13.6 GB FP32 for LFM3-1.7B) on disk between optimizer steps. They are read
-    only by ``optimizer.step`` (and ``moment_cosine`` just before it), yet stayed resident through collection and the
-    learner's reference and policy passes, where they were 13.6 of the unit's peak (grpo-v3-run1: learner policy phase
-    48 GB reserved). ``put`` streams them GPU -> pinned staging -> file in a background thread (after an in-flight state
-    save, which reads them) and then frees their storage; ``get`` reallocates and reads them back, bit for bit, before
-    the next step. The tensors keep their identity (only the storage is resized), so the optimizer and the state saver
-    see the same objects. Page cache of the file is dropped after each write and read."""
-
-    def __init__(self, path, staging_mb=64):
-        import torch
-        self.path = Path(path)
-        self.staging = torch.empty(staging_mb << 20, dtype=torch.uint8, pin_memory=True)
-        self.stream = torch.cuda.Stream()
-        self.thread, self.tensors, self.out, self.error, self.last = None, [], False, None, {}
-
-    def wait(self):
-        """The write in flight finished. A failed write leaves the moments resident (``out`` stays False; the error is in
-        ``last``): the step continues exactly as without offload."""
-        if self.thread is not None:
-            self.thread.join()
-            self.thread = None
-        if self.error is not None:
-            self.last = {'put_error': repr(self.error)[:300]}
-            self.error = None
-
-    def put(self, tensors, after=None):
-        """Write ``tensors`` (CUDA, contiguous) to the file and free them, in the background; ``after``: a thread-backed
-        saver whose ``wait`` must return first (it reads the same tensors)."""
-        import torch
-        self.wait()
-        torch.cuda.synchronize()
-        self.tensors = list(tensors)
-
-        def run():
-            try:
-                started = time.time()
-                if after is not None:
-                    after.wait()
-                waited = time.time() - started   # the state save in flight (reported apart: put_s alone is the write)
-                self.path.parent.mkdir(parents=True, exist_ok=True)
-                with self.path.open('wb') as handle:
-                    stream_tensors_to_file(handle, self.tensors, self.staging, self.stream)
-                self.out = True                 # the file is complete: from here on ``get`` restores from it
-                self.last = {'put_s': round(time.time() - started - waited, 1), 'put_wait_s': round(waited, 1)}
-                for t in self.tensors:
-                    t.untyped_storage().resize_(0)
-                torch.cuda.empty_cache()
-                self.last['cuda_reserved_after_put_gib'] = round(torch.cuda.memory_reserved() / 2**30, 1)
-            except BaseException as error:      # freed only after a complete write: the tensors stay resident
-                self.error = error
-        self.thread = threading.Thread(target=run, daemon=True)
-        self.thread.start()
-
-    def get(self):
-        """The moments back in place (a no-op when they are resident). Returns the seconds it took."""
-        import torch
-        started = time.time()
-        self.wait()                         # a write still in flight (steps shorter than the write) is waited for here
-        if not self.out:
-            return time.time() - started
-        self.last['get_wait_s'] = round(time.time() - started, 1)
-        chunk = self.staging.numel()
-        with self.path.open('rb', buffering=0) as handle, torch.cuda.stream(self.stream):
-            for t in self.tensors:
-                nbytes = t.numel() * t.element_size()
-                t.untyped_storage().resize_(nbytes)
-                flat = t.detach().reshape(-1).view(torch.uint8)
-                for start in range(0, nbytes, chunk):
-                    n = min(chunk, nbytes - start)
-                    view = memoryview(self.staging[:n].numpy())
-                    got = 0
-                    while got < n:
-                        read = handle.readinto(view[got:])
-                        if not read:
-                            raise RuntimeError(f'{self.path}: short read')
-                        got += read
-                    flat[start:start + n].copy_(self.staging[:n], non_blocking=True)
-                    self.stream.synchronize()
-                    if (start // chunk) % max(1, CACHE_DROP_BYTES // chunk) == 0:
-                        os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-        torch.cuda.current_stream().wait_stream(self.stream)
-        drop_cache([self.path])
-        self.out = False
-        self.last['get_s'] = round(time.time() - started, 1)
-        return time.time() - started
-
-
-def moment_tensors(optimizer, masters, live):
-    """AdamW's moments in the order MomentOffload writes them."""
-    return [optimizer.state[masters[name]][key] for name in live for key in ('exp_avg', 'exp_avg_sq')]
-
-
-def offload_loaded_moments(offload, optimizer, masters, live):
-    """Put moments that are resident on the GPU out to the offload file (True), unless there are none yet (a fresh run
-    before its first optimizer step). A resume loads them with the training state; left resident they stayed through the
-    whole first step, collection and learner phase (+13.6 GB; grpo-v4-run2 step 23, the first after a resume: 67 GB
-    allocated against 54 in the steps after it, MemFree 3 GB, 0.8M swapped pages, the policy pass 1121 s against 820 s).
-    ``offload.get`` restores them bit for bit before the optimizer step."""
-    if not all('exp_avg' in optimizer.state.get(masters[name], {}) for name in live):
-        return False
-    offload.put(moment_tensors(optimizer, masters, live))
-    return True
-
-
-class ReferenceWeights:
-    """The KL reference (the start policy's BF16 parameters) as a safetensors file instead of a second model resident on
-    the GPU (3.5 GB through every phase, grpo-v2-run2 2026-11-15). The reference pass loads it into the policy's own
-    parameters (``load_into``: the same module, kernels and training graph as the policy), and ``restore`` puts the
-    policy back from its FP32 masters, which is exact: the policy's BF16 parameters are always their masters rounded
-    (init, resume and every optimizer step set them so). Page cache of each read is dropped (``drop_cache``)."""
-
-    def __init__(self, path, params, metadata):
-        """Write ``params`` ({name: BF16 tensor}, the start policy) to ``path``, unless the file there already holds them
-        for the same ``metadata`` (a resume of the same run and start checkpoint)."""
-        import torch
-        from safetensors import safe_open
-        self.path = Path(path)
-        metadata = {k: str(v) for k, v in metadata.items()}
-        layout = [(name, 'BF16', tuple(p.shape), p.numel() * 2) for name, p in params.items()]
-        if self.path.exists():
-            try:
-                with safe_open(str(self.path), 'pt') as handle:
-                    same = handle.metadata() == {**metadata, 'format': 'pt'} and sorted(handle.keys()) == sorted(params) \
-                        and all(tuple(handle.get_slice(n).get_shape()) == tuple(p.shape) for n, p in params.items())
-            except Exception:
-                same = False
-            if same:
-                return
-        if any(p.dtype != torch.bfloat16 for p in params.values()):
-            raise ValueError('the reference parameters must be BF16')
-        header, _, _ = safetensors_header(layout, {**metadata, 'format': 'pt'})
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        partial = self.path.with_name(self.path.name + '.partial')
-        with partial.open('wb') as handle:
-            handle.write(header)
-            for p in params.values():
-                handle.write(memoryview(p.detach().reshape(-1).view(torch.uint8).cpu().numpy()))
-        os.replace(partial, self.path)
-        drop_cache([self.path])
-
-    def tensors(self):
-        """(name, host BF16 tensor) of the reference, one at a time, each read into its own buffer.
-
-        Not ``safe_open(...).get_tensor``: those tensors are views of one private (copy-on-write) mapping of the whole
-        file, which the GPU copy turns into 3.4 GB of anonymous memory, and any one of them kept alive keeps all of it.
-        The optimizer phase's loop variable did, so the learner held the whole reference between steps (grpo-v3-run1:
-        learner RSS +3.4 GB from the first optimizer phase on, its ``reference-bf16.safetensors`` mapping fully anon in
-        smaps, 2026-11-16). Now only the tensor in hand is resident."""
-        import torch
-        try:
-            with open(self.path, 'rb', buffering=0) as handle:
-                size = struct.unpack('<Q', handle.read(8))[0]
-                header = json.loads(handle.read(size))
-                base = 8 + size
-                for name, info in header.items():
-                    if name == '__metadata__':
-                        continue
-                    if info['dtype'] != 'BF16':
-                        raise ValueError(f'reference tensor {name} is {info["dtype"]}, expected BF16')
-                    start, end = info['data_offsets']
-                    data = torch.empty(end - start, dtype=torch.uint8)
-                    view = memoryview(data.numpy())
-                    handle.seek(base + start)
-                    read = 0
-                    while read < len(view):
-                        count = handle.readinto(view[read:])
-                        if not count:
-                            raise ValueError(f'{self.path} ends inside tensor {name}')
-                        read += count
-                    yield name, data.view(torch.bfloat16).view(info['shape'])
-        finally:
-            drop_cache([self.path])
-
-    def load_into(self, params):
-        import torch
-        with torch.no_grad():
-            for name, tensor in self.tensors():
-                params[name].copy_(tensor)
-
-    @staticmethod
-    def restore(params, masters):
-        import torch
-        with torch.no_grad():
-            for name, p in params.items():
-                p.copy_(masters[name])
+    def _adopt(self, target):
+        """``target`` is served: it becomes the last good version and the other slot becomes staging."""
+        self.last_good = dict(target)
+        if target.get('slot') is not None:
+            self.staging = 1 - target['slot']
+        self.pending = None
 
 
 def release_host_memory():
@@ -1804,7 +1567,7 @@ def process_memory_gb():
 
 
 # ---- learner ---------------------------------------------------------------------------------------------------------
-def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained, learner_step=None):
+def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained, learner_step=None, extra=None):
     """``exp0_sft.write_checkpoint``'s pruned native checkpoint from a host snapshot, without holding the source backbone:
     the trained backbone (BF16), the source's native embedding rows at the interface ids, the source's interface."""
     import torch
@@ -1822,6 +1585,7 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
                                  'training_checkpoint_bytes': 0, 'step': recorded_step,
                                  'learner_step': recorded_step, 'source_step': source_step})
+    out.update(extra or {})
     from natlang_neuralese.train.checkpoint_offload import staged_write   # NVMe first, then moved (StateSaver)
     with staged_write(path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
         torch.save(out, target.path)
@@ -3239,17 +3003,39 @@ def kl_stats(sums, d):
     sums['ref_dlogp_max'] = max(sums['ref_dlogp_max'], d.abs().max().item() if d.numel() else 0.)
 
 
-def close_probability(h, positions, weight, targets, target_logp, close_id, chunk=4096):
+def head_rows(weight, ids, trainable=None):
+    """FP32 rows of the effective tied head at ``ids``: the frozen head, with the learner's trainable Neuralese rows
+    (``trainable``: ``(token_ids, rows)``) in place at their ids (differentiable in the rows), as ``lfm3_fast.linear_nll``
+    computes the logits the loss uses."""
+    import torch
+    out = weight[ids].float()
+    if trainable is None:
+        return out
+    token_ids, rows = trainable
+    match = ids.unsqueeze(-1) == token_ids.to(ids.device)
+    if not bool(match.any()):
+        return out
+    which = match.to(torch.int64).argmax(-1)
+    return torch.where(match.any(-1).unsqueeze(-1), rows.float()[which], out)
+
+
+def head_override(trainable_rows):
+    """``head_rows``' ``trainable`` argument of an ``Lfm3Learner``'s rows (None without trainable rows)."""
+    return None if trainable_rows is None else (trainable_rows.token_ids, trainable_rows.rows)
+
+
+def close_probability(h, positions, weight, targets, target_logp, close_id, chunk=4096, trainable=None):
     """p(``</think>``) at each target row (no grad): exp(z_close - z_target + log p(target)), i.e. the softmax's own
     normalizer recovered from the target's logit and the log-probability the loss already computed (two dot products a
-    row, no second softmax over the vocabulary). ``h[positions]`` are the hidden rows that predict ``targets``."""
+    row, no second softmax over the vocabulary). ``h[positions]`` are the hidden rows that predict ``targets``; the head
+    is the effective one (``head_rows``: trained Neuralese rows in place)."""
     import torch
     with torch.no_grad():
-        w_close = weight[close_id].float()
+        w_close = head_rows(weight, torch.tensor([close_id], device=weight.device), trainable)[0]
         out = []
         for a in range(0, positions.shape[0], chunk):
             rows = h[positions[a:a + chunk]].float()
-            z_y = (rows * weight[targets[a:a + chunk]].float()).sum(-1)
+            z_y = (rows * head_rows(weight, targets[a:a + chunk], trainable)).sum(-1)
             out.append((rows @ w_close - z_y + target_logp[a:a + chunk].detach().float()).exp().clamp(max=1.))
         return torch.cat(out) if out else torch.zeros(0, device=h.device)
 
@@ -3267,12 +3053,13 @@ def close_push(coefficient, targets, p_close, close_id, mask):
         return float((coefficient.float() * delta)[mask].sum())
 
 
-def _twin_fkl_chunk(rows, weight, ids, teacher_logp, valid, targets, target_logp):
+def _twin_fkl_chunk(rows, weight, ids, teacher_logp, valid, targets, target_logp, row_ids=None, row_values=None):
     """Forward KL of one chunk (see ``twin_forward_kl``); ``rows`` the hidden rows predicting ``targets``."""
     import torch
+    trainable = None if row_ids is None else (row_ids, row_values)
     rows = rows.float()
-    z_y = (rows * weight[targets].float()).sum(-1)
-    z = torch.einsum('nd,nkd->nk', rows, weight[ids].float())
+    z_y = (rows * head_rows(weight, targets, trainable)).sum(-1)
+    z = torch.einsum('nd,nkd->nk', rows, head_rows(weight, ids, trainable))
     log_student = z - (z_y - target_logp.float())[:, None]           # log p_S(v) = z_v - log Z, log Z = z_y - log p_S(y)
     p_teacher = teacher_logp.float().exp() * valid
     p_student = log_student.clamp(max=0.).exp() * valid
@@ -3284,7 +3071,7 @@ def _twin_fkl_chunk(rows, weight, ids, teacher_logp, valid, targets, target_logp
     return inner.sum(-1) + tail
 
 
-def twin_forward_kl(h, positions, weight, targets, target_logp, ids, teacher_logp, chunk=1024):
+def twin_forward_kl(h, positions, weight, targets, target_logp, ids, teacher_logp, chunk=1024, trainable=None):
     """Token-level forward KL(twin || policy) at each target row (reasoning RL's myopic objective, Strauss, Fowl & Razin
     arXiv 2611.23397 eq. 3 with D = FKL): the teacher is the policy's privileged twin, given as its top-k ids and
     log-probabilities (``ids``/``teacher_logp`` (n, k), ``-inf`` pads). The KL is exact on the partition {the k ids, the
@@ -3300,7 +3087,8 @@ def twin_forward_kl(h, positions, weight, targets, target_logp, ids, teacher_log
     out = []
     for a in range(0, positions.shape[0], chunk):
         part = slice(a, a + chunk)
-        args = (h[positions[part]], weight, ids[part].long(), safe[part], valid[part], targets[part], target_logp[part])
+        args = (h[positions[part]], weight, ids[part].long(), safe[part], valid[part], targets[part], target_logp[part],
+                *(trainable or (None, None)))
         out.append(checkpoint(_twin_fkl_chunk, *args, use_reentrant=False) if torch.is_grad_enabled()
                    else _twin_fkl_chunk(*args))
     return torch.cat(out) if out else torch.zeros(0, device=h.device)
@@ -3751,6 +3539,56 @@ def load_variants(args, tasks, work):
     return variants
 
 
+def reference_snapshot(learner, bundles=None, rows=None):
+    """The KL reference as leaves of the policy's own structure: a clone of every factor (B = 0 at a fresh start: the
+    start policy) and of the trainable rows, each requiring grad so the reference pass compiles the policy's training
+    graph (they are never stepped). ``bundles``/``rows``: a resumed reference (``load_learner_state``); a reference
+    saved as "bare base" (``()``) gets zero B factors in the live structure."""
+    import torch
+    from natlang_neuralese.train.lfm3_learner import LayerAdapterBundle, LinearFactorLeaf, TrainableRows
+
+    def leaf(source, zero_b=False):
+        b = torch.zeros_like(source.b) if zero_b else source.b
+        return LinearFactorLeaf(a=source.a.detach().clone().requires_grad_(True),
+                                b=b.detach().clone().requires_grad_(True), scale=float(source.scale))
+    own = bundles if bundles else learner.bundles
+    zero_b = not bundles and bundles is not None    # a resumed bare-base reference
+    out = tuple(LayerAdapterBundle(layer_idx=bundle.layer_idx, layer_kind=bundle.layer_kind,
+                                   **{name: leaf(value, zero_b) for name, value in bundle.iter_leaves()})
+                for bundle in own)
+    source = rows if rows is not None else learner.trainable_rows
+    out_rows = None if source is None else TrainableRows(
+        token_ids=source.token_ids.clone(), rows=source.rows.detach().clone().requires_grad_(True),
+        marker_ids=source.marker_ids, override_ids=source.override_ids)
+    return out, out_rows
+
+
+def reference_tensors(bundles, rows):
+    tensors = [t for bundle in bundles or () for _, value in bundle.iter_leaves() for t in (value.a, value.b)]
+    return tensors + ([rows.rows] if rows is not None else [])
+
+
+def refuse_legacy_resume(resume_dir, state_root, source_sha):
+    """A resume must restore this run's own LoRA learner state on the same base: refuse a state saved against another
+    ``--checkpoint`` (its factors would attach to the wrong base) and a run that holds only the full-FT
+    ``training-state.safetensors`` (it would silently start again at step 0)."""
+    manifest_path = Path(resume_dir) / 'learner_manifest.json'
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get('base_weights_sha256') != source_sha:
+            raise SystemExit(f'{resume_dir} was trained on base {manifest.get("base_weights_sha256") or "(unrecorded)"}, '
+                             f'not on --checkpoint {source_sha}: resume with the checkpoint it was trained on.')
+        return
+    legacy = [path for path in (Path(state_root) / 'training-state.safetensors', Path(resume_dir))
+              if path.is_file() and path.suffix == '.safetensors']
+    if legacy:
+        raise SystemExit(f'{legacy[0]} is a full-FT training state, which the LoRA learner cannot resume: start a new '
+                         'run from a merged checkpoint (--checkpoint) without --resume.')
+    if Path(resume_dir).exists() and any(Path(resume_dir).iterdir()):
+        raise SystemExit(f'{resume_dir} holds no learner_manifest.json: pass --resume-state with a learner-state '
+                         'directory, or drop --resume to start fresh.')
+
+
 def actor_command(args, work, source_sha):
     """(command, url) of the run's SGLang actor: ``serve_native_checkpoint.py`` with the pinned held engine's serve args
     (``engine.json`` beside the held manifest), its store under WORK/actor. Used by ``train`` and by
@@ -3837,43 +3675,18 @@ def train(args):
     elif not args.actor:
         actor_thread = threading.Thread(target=launch_actor, daemon=True)
         actor_thread.start()
-    # Shared LoRA+rows learner core (lfm3opti.md §5): frozen BF16 base + FP32 LoRA factors + trainable sparse rows.
+    # Shared LoRA+rows learner core (lfm3opti.md §5): frozen BF16 base + FP32 LoRA factors + trainable sparse rows. The
+    # base is the start checkpoint: its digest binds every policy id (effective_policy_sha256) and the learner state.
     from natlang_neuralese.train.lfm3_learner import (
         AdapterSpec, Lfm3Learner, OOMRetryPlan, run_step_with_oom_retry,
     )
-    from natlang_neuralese.train.learner_state import (
-        export_merged_checkpoint, load_learner_state, save_learner_state,
-    )
+    from natlang_neuralese.train.learner_state import load_learner_state, save_learner_state
     spec = AdapterSpec.for_rl(
         rank=args.lora_rank,
         alpha=args.lora_alpha,
         trainable_rows=not args.no_trainable_rows,
         gate_rank=args.gate_rank,
     )
-    learner = Lfm3Learner.from_checkpoint(
-        args.checkpoint, args.base, spec, device='cuda',
-        fp8_base=not args.no_fp8_base, compile_layers=not args.no_compile,
-    )
-    model = learner.model
-    state = learner.checkpoint_state
-    special = learner.special_ids
-    native_rows = learner.native_rows
-    drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
-    log_line(log, {'event': 'learner model loaded', 'meminfo_gib': meminfo(), 'load_s': round(time.time() - t0, 1),
-                   'adapter_spec': spec.to_dict(), 'fp8_base': learner.fp8_base,
-                   'trainable_params': sum(p.numel() for p in learner.trainable_parameters())})
-    forward = lfm3_fast_train.hidden
-    pack_tokens = args.pack_tokens if args.pack_tokens > 0 else exp0_sft.resident_tokens(model, args.activation_gb, parameterization='lora')
-    oom_plan = OOMRetryPlan(pack_tokens=pack_tokens, activation_gib=args.activation_gb)
-    compile_health = lfm3_fast_train.CompileHealthTracker()
-
-    ref_bundles, ref_rows = (learner.snapshot_reference() if args.kl_beta > 0 else (None, None))
-    reference_active = args.kl_beta > 0
-    parameters = learner.trainable_parameters()
-    optimizer = learner.build_optimizer(lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99), eps=1e-8)
-
-    step, cursor, first_group = 0, 0, 0
-    consumed_groups = set()
     state_dir = Path(args.state_dir) / 'learner-state'
     branch_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')
     resume_dir = Path(args.resume_state) if args.resume_state else state_dir
@@ -3881,19 +3694,59 @@ def train(args):
         candidates = sorted(p for p in branch_root.glob('state-step-*') if (p / 'learner_manifest.json').exists())
         if candidates:
             resume_dir = candidates[-1]
+    if args.resume:
+        refuse_legacy_resume(resume_dir, Path(args.state_dir), source_sha)
+    learner = Lfm3Learner.from_checkpoint(
+        args.checkpoint, args.base, spec, device='cuda', base_weights_sha256=source_sha,
+        fp8_base=True if args.fp8_base else None, compile_layers=not args.no_compile,
+    )
+    model = learner.model
+    special = learner.special_ids
+    native_rows = learner.native_rows
+    # only what a pruned checkpoint needs stays on the host (the source backbone is 3.4 GB)
+    state = {k: learner.checkpoint_state[k] for k in ('schema', 'model_config', 'interface_state', 'step')}
+    learner.state = state
+    import gc
+    gc.collect()
+    drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
+    log_line(log, {'event': 'learner model loaded', 'meminfo_gib': meminfo(), 'load_s': round(time.time() - t0, 1),
+                   'adapter_spec': spec.to_dict(), 'fp8_base': learner.fp8_base,
+                   'trainable_params': sum(p.numel() for p in learner.trainable_parameters())})
+    forward = lfm3_fast_train.hidden
+    pack_tokens = args.pack_tokens if args.pack_tokens > 0 else lfm3_fast_train.resident_tokens(
+        model, args.activation_gb, parameterization='lora')
+    oom_plan = OOMRetryPlan(pack_tokens=pack_tokens, activation_gib=args.activation_gb)
+    compile_health = lfm3_fast_train.CompileHealthTracker()
+
+    # The KL reference is the run's start policy: B = 0 (the bare base) with the start rows at a fresh start
+    # (async-train §7.1), a frozen snapshot of it carried in the learner state across resumes.
+    reference_active = args.kl_beta > 0
+    ref_bundles, ref_rows = reference_snapshot(learner) if reference_active else (None, None)
+    parameters = learner.trainable_parameters()
+    optimizer = learner.build_optimizer(lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99), eps=1e-8)
+
+    step, cursor, first_group = 0, 0, 0
+    consumed_groups = set()
     if args.resume and (resume_dir / 'learner_manifest.json').exists():
-        resumed = load_learner_state(resume_dir, learner, optimizer=optimizer, restore_rng=True)
+        resumed = load_learner_state(resume_dir, learner, optimizer=optimizer, restore_rng=True,
+                                     verify_base_sha=source_sha)
         manifest = resumed['manifest']
         step = int(manifest.get('learner_step', 0))
         ledger = manifest.get('rl_rollout_ledger') or {}
         cursor = int(ledger.get('cursor', 0))
         first_group = int(ledger.get('next_group', 0))
         consumed_groups = set(int(g) for g in (ledger.get('consumed_groups') or ()))
-        if resumed.get('ref_bundles') is not None:
-            ref_bundles, ref_rows = resumed['ref_bundles'], resumed.get('ref_rows')
+        if reference_active:
+            if not manifest.get('has_ref_factors'):
+                raise SystemExit(f'{resume_dir} holds no KL reference (saved without --kl-beta): resume with --kl-beta 0 '
+                                 'or start a new run.')
+            ref_bundles, ref_rows = reference_snapshot(learner, resumed['ref_bundles'], resumed['ref_rows'])
+        if (resumed.get('trainer_state') or {}).get('oom_plan'):
+            oom_plan = OOMRetryPlan.from_dict(resumed['trainer_state']['oom_plan'])
         release_host_memory()
         log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group,
-                       'consumed_groups': len(consumed_groups), 'state': str(resume_dir)})
+                       'consumed_groups': len(consumed_groups), 'state': str(resume_dir),
+                       'base_weights_sha256': manifest.get('base_weights_sha256')})
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     first_group = max([first_group, *(i + 1 for i in existing)])
 
@@ -3921,9 +3774,18 @@ def train(args):
                          'the producer table is not the embedding (use --frozen-producer-table)')
     release_tags = [t for t in args.actor_release_tags.split(',') if t] if (
         args.actor_release and actor_thread is not None and not args.no_actor_sync) else []
-    sync = WeightSync.for_learner(learner, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
-                                  front_url=None if args.no_actor_sync else args.actor,
-                                  producer_from_embedding=not args.frozen_producer_table)
+    sentinel_ids = None
+    if not args.no_publication_sentinel:
+        from tokenizers import Tokenizer
+        sentinel_ids = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json')).encode(
+            SENTINEL_TEXT, add_special_tokens=False).ids
+    config = state['model_config']
+    sync = WeightSync(learner, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
+                      front_url=None if args.no_actor_sync else args.actor,
+                      producer_from_embedding=not args.frozen_producer_table, base_sha256=source_sha,
+                      start_policy={'policy_id': source_sha, 'version': 0},
+                      interface_ids=(config['marker_ids'], config.get('token_override_ids') or ()),
+                      tied=native_rows['tied_head'], sentinel_ids=sentinel_ids)
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     last_state_save_info = None
@@ -4113,20 +3975,23 @@ def train(args):
                        **{k: v for k, v in vars(args).items() if k.startswith('reasoning_rl_')}})
 
     def write_native(step_number):
+        """The step's pruned native checkpoint, from the bytes the actor is about to serve (the staging slot) and the
+        snapshot's trained rows: what Pop's held evaluations and the probes load is exactly the published policy."""
         directory = checkpoint_root / f'step-{step_number:05d}'
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / 'checkpoint.pt'
-        exported = export_merged_checkpoint(
-            learner, state, path, source_sha256=source_sha, learner_step=step_number,
-            special_ids=special, base_embedding_rows=native_rows['embedding_rows'],
-            tied_head=native_rows['tied_head'],
-        )
-        sha = exported['checkpoint_sha256']
+        policy_id = sync.publishing['policy_id']
+        provenance = {'parameterization': 'lora+rows', 'adapter_spec': spec.to_dict(), 'effective_policy_sha256': policy_id,
+                      'base_weights_sha256': source_sha}
+        write_pruned_checkpoint({**state, 'interface_state': sync.interface(state['interface_state'])}, native_rows,
+                                special, path, source_sha, sync.backbone(), learner_step=step_number, extra=provenance)
+        from natlang_neuralese.common.hashing import sha256_file_hex
+        sha = sha256_file_hex(path)
         (directory / 'sha256.txt').write_text(sha + '\n')
         (directory / 'meta.json').write_text(json.dumps({
             'step': step_number, 'learner_step': step_number, 'source_step': int(state['step']),
-            'sha256': sha, 'effective_policy_sha256': exported['effective_policy_sha256'],
-            'source_sha256': source_sha, 'code': run['code'],
+            'sha256': sha, 'effective_policy_sha256': policy_id, 'actor_weights_sha256': sync.publishing['weights_sha256'],
+            'tensor_identity': sync.publishing['tensor_identity'], 'source_sha256': source_sha, 'code': run['code'],
         }) + '\n')
         checkpoints.append(directory)
         for old in checkpoints[:-2]:
@@ -4187,8 +4052,7 @@ def train(args):
             # weights and measures the current step at once: that result anchors the step's series beside the new step 0.
             collector.paused.set()
             try:
-                sync.load_native(args.checkpoint, special)
-                sync.publish(0, lambda *_: None, policy=source_sha)
+                sync.publish_start(0, lambda *_: None, source_sha)
                 sync.wait()
                 if not sync.last.get('ok'):
                     raise RuntimeError(f'loading the start policy into the actor failed: {sync.last}')
@@ -4211,7 +4075,7 @@ def train(args):
                 name = f'extra-{sha[:12]}'
                 if (work / 'held' / name / 'result.json').exists():
                     continue
-                sync.load_native(path, special)
+                sync.stage_native(path)
                 sync.publish(0, on_published, policy=sha)
                 sync.wait()
                 if not sync.last.get('ok'):
@@ -4220,8 +4084,7 @@ def train(args):
                 (work / 'held' / f'{name}.source').write_text(path + '\n')
                 held(0, args.held_samples_extra, name=name, policy=sha, resume_collection=False)
         finally:
-            sync.snapshot()                   # the learner's own (start) weights back on the actor
-            sync.publish(0, on_published, policy=source_sha)
+            sync.publish_start(0, on_published, source_sha)   # the learner's own (start) weights back on the actor
             sync.wait()
             collector.paused.clear()
         if not sync.last.get('ok'):
@@ -4269,8 +4132,12 @@ def train(args):
                         (record.get('sampling') or LEGACY_SAMPLING) == sampling_law_of(args.top_p)
             return True
 
+        if args.held_remote_inline and remote_profile != 'pop':
+            raise SystemExit('--held-remote-inline serves one Pop actor; Colab G4 evaluations run detached '
+                             '(pop_rl_actor.py held-eval shards them over the sessions)')
+
         def pop_endpoint(policy):
-            return serving_endpoint(policy, pop_format)
+            return serving_endpoint(policy, pop_format, profile=remote_profile)
 
         def priors(out):
             return held_priors(base_out, held_root, out)
@@ -4312,7 +4179,8 @@ def train(args):
             compare = ([str(base_out / 'result.json'), str(out / 'result.json'), '--out',
                         str(out / 'compare-vs-step0.json'), *strict_series]
                        if step_number and held_complete(base_out) else None)
-            spec = {'unit': unit, 'policy': policy, 'format': pop_format, 'serve': [str(x) for x in serve], 'measure': measure,
+            spec = {'unit': unit, 'policy': policy, 'format': pop_format, 'host_profile': remote_profile,
+                    'serve': [str(x) for x in serve], 'measure': measure,
                     'slots': args.held_remote_slots, 'compare': compare, 'log': str(work / 'held-pop.log'),
                     'done': str(out / 'pop-eval-done.json')}
             (out / 'pop-eval-spec.json').write_text(json.dumps(spec, indent=1) + '\n')
@@ -4334,7 +4202,7 @@ def train(args):
                 summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'ran_out_rate', 'complete')}
             if (out / 'compare-vs-step0.json').exists():
                 summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
-            log_line(log, {'event': 'held eval', 'remote': 'pop', 'step': step_number, 'policy': policy,
+            log_line(log, {'event': 'held eval', 'remote': remote_profile, 'step': step_number, 'policy': policy,
                            'returncode': outcome.get('returncode'), 'seconds': round(time.time() - started),
                            'serve_seconds': outcome.get('serve_seconds'), 'detached': True, **summary})
             if not outcome.get('served', True):
@@ -4379,7 +4247,7 @@ def train(args):
                 summary = {k: result.get(k) for k in ('ran', 'scored', 'successes', 'loop_rate', 'ran_out_rate', 'complete')}
             if (out / 'compare-vs-step0.json').exists():
                 summary['compare'] = json.loads((out / 'compare-vs-step0.json').read_text())
-            log_line(log, {'event': 'held eval', 'remote': 'pop', 'step': step_number, 'policy': policy, 'returncode': code,
+            log_line(log, {'event': 'held eval', 'remote': remote_profile, 'step': step_number, 'policy': policy, 'returncode': code,
                            'seconds': round(time.time() - started), 'serve_seconds': round(serving), **summary})
 
         def measured_steps():
@@ -4408,7 +4276,7 @@ def train(args):
                 if code == 0:
                     prefetched.add(sha)
         measuring = threading.Event()   # an inline evaluation is running (detached ones: inflight())
-        if args.pop_prefetch:
+        if args.pop_prefetch and remote_profile == 'pop':   # copies to Pop's disk
             threading.Thread(target=prefetch_loop, daemon=True).start()
         while not stop.is_set():
             try:
@@ -4418,13 +4286,13 @@ def train(args):
                     if record.get('step'):
                         held_steps.add(record['step'])
                         last_start, last_step = record['started'], max(last_step, record['step'])
-                    log_line(log, {'event': 'held eval adopted', 'remote': 'pop', 'step': record.get('step'),
+                    log_line(log, {'event': 'held eval adopted', 'remote': remote_profile, 'step': record.get('step'),
                                    'unit': record['unit']})
                     outcome = wait_detached(out, record)
                     if outcome is not None:
                         report(record.get('step') or 0, out, record['policy'], outcome, record['started'])
                     continue
-                if not args.held_remote_inline and other_pop_evaluation():
+                if not args.held_remote_inline and remote_profile == 'pop' and other_pop_evaluation():
                     stop.wait(300)   # another run's evaluation holds Pop
                     continue
                 if args.held_base and not held_complete(base_out):
@@ -4435,9 +4303,9 @@ def train(args):
                 if args.held_base and not base_engine_matches():
                     raise RuntimeError(f'--held-base {base_out} was measured on another engine or sampling law than {pop_format}')
                 if not base_engine_matches():
-                    aside = held_root / f'step-00000-pop-{time.strftime("%Y%m%d%H%M")}-other-engine'
+                    aside = held_root / f'step-00000-{remote_profile}-{time.strftime("%Y%m%d%H%M")}-other-engine'
                     base_out.rename(aside)
-                    log_line(log, {'event': 'held eval', 'remote': 'pop', 'moved_start_policy_result': str(aside),
+                    log_line(log, {'event': 'held eval', 'remote': remote_profile, 'moved_start_policy_result': str(aside),
                                    'reason': f'measured on another Pop engine than {pop_format}'})
                 if not held_complete(base_out):
                     evaluate(0, base_out, source_sha, ['start', '--checkpoint', args.checkpoint, '--policy-id', source_sha,
@@ -4475,7 +4343,7 @@ def train(args):
                                 (work / 'held-steps.json').write_text(json.dumps(sorted(held_steps)) + '\n')
                             raise
             except Exception as error:   # Pop or the network failed: the run trains on, the evaluation retries later
-                log_line(log, {'event': 'held eval failed', 'remote': 'pop', 'error': repr(error)[:500]})
+                log_line(log, {'event': 'held eval failed', 'remote': remote_profile, 'error': repr(error)[:500]})
                 stop.wait(540)
             stop.wait(60)
     if args.held_remote:
@@ -4774,7 +4642,6 @@ def train(args):
                 backward, mode=tree_mode if share_prefix_tokens > 0 else 'levels',
                 batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb,
                 adapters=adapters, trainable_rows=trainable_rows, fp8_base=learner.fp8_base,
-                parameterization='lora',
             )
 
         refs = {}
@@ -4802,24 +4669,29 @@ def train(args):
         ref_scores_of = []
         ref_tokens_of = []
         if reference_active:
-            # Reference pass via learner.reference_view: zero 3.4 GB file swap, exact same compiled graph.
+            # The reference pass runs exactly the policy's training graph: grad mode, leaves that require grad (the
+            # reference's own, never stepped; its outputs detached and never backpropagated), the same checkpointing.
+            # A no-grad pass compiles other kernels, whose BF16 rounding alone put KL at 5e-4 (|dlogp| ~0.03) with
+            # identical weights (smoke 2026-11-12); the bare-base path is another graph too.
             t = time.time()
-            with learner.reference_view(ref_bundles, ref_rows) as (ref_ad, ref_r):
-                def reference_leaves(items, run):
-                    ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
-                    logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets,
-                                               trainable_rows=ref_r).detach()
-                    for (index, _), part in zip(items, logp.split(counts)):
-                        refs[index] = part
-                    note_peak('reference', len(ids), len(items))
-                with torch.no_grad():
-                    run_tree(reference_leaves, backward=False, adapters=ref_ad, trainable_rows=ref_r)
-                    for batch in batches:
-                        ids, _, scores_of = decision_inputs(batch)
-                        exp0_sft.set_checkpointing(model, len(ids), oom_plan.activation_gib, parameterization='lora')
-                        ref_scores, ref_tokens, _ = scores_of(model, tokens=True, adapters=ref_ad, trainable_rows=ref_r)
-                        ref_scores_of.append(ref_scores.detach())
-                        ref_tokens_of.append(ref_tokens.detach())
+
+            def reference_leaves(items, run):
+                ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
+                logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets,
+                                           trainable_rows=ref_rows).detach()
+                for (index, _), part in zip(items, logp.split(counts)):
+                    refs[index] = part
+                note_peak('reference', len(ids), len(items))
+            with torch.enable_grad():
+                run_tree(reference_leaves, backward=False, adapters=ref_bundles, trainable_rows=ref_rows)
+                for batch in batches:
+                    ids, _, scores_of = decision_inputs(batch)
+                    exp0_sft.set_checkpointing(model, len(ids), oom_plan.activation_gib, parameterization='lora')
+                    ref_scores, ref_tokens, _ = scores_of(model, tokens=True, adapters=ref_bundles, trainable_rows=ref_rows)
+                    ref_scores_of.append(ref_scores.detach())
+                    ref_tokens_of.append(ref_tokens.detach())
+            for leaf in reference_tensors(ref_bundles, ref_rows):
+                leaf.grad = None
             torch.cuda.synchronize()
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
             phase_peak('reference')
@@ -4854,7 +4726,8 @@ def train(args):
                 else:
                     logp_rows = policy_rows = -exp0_sft.token_nll(
                         model, h, positions, targets, trainable_rows=learner.trainable_rows)
-                p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close)
+                p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close,
+                                                  trainable=head_override(learner.trainable_rows))
                                 if args.close_push and think_close is not None else None)
                 loss = 0.
                 for k, ((index, _), logp, policy_logp) in enumerate(zip(items, logp_rows.split(counts), policy_rows.split(counts))):
@@ -4901,7 +4774,7 @@ def train(args):
                         on = t_scale > 0
                         chain_positions, chain_targets = positions.split(counts)[k], targets.split(counts)[k]
                         fkl = twin_forward_kl(h, chain_positions[on], model.lm_head.weight, chain_targets[on], logp[on],
-                                              t_ids[on], t_logp[on])
+                                              t_ids[on], t_logp[on], trainable=head_override(learner.trainable_rows))
                         loss = loss + (t_scale[on] * fkl).sum() * token_scale
                         with torch.no_grad():
                             sums['twin_fkl'] += fkl.detach().sum().item()
@@ -5077,12 +4950,14 @@ def train(args):
             phase_totals['learn_s'] += learn_ended - learn_started
             phase_totals['learn_tokens'] += learn_tokens1 - learn_tokens0
         phase_mark.update(time=learn_ended, tokens=learn_tokens1)
-        # 7-step atomic merged-export publication (background)
+        # publication of this step's policy (WeightSync: snapshot now, merge/bind/attest in the background)
         t = time.time()
-        sync.snapshot()
+        sync.snapshot()                   # waits for the previous publication
         phase['snapshot'] = time.time() - t
         if sync.last and not sync.last.get('ok'):
-            raise RuntimeError(f'actor weight update failed: {sync.last}')
+            # the publish thread already retried once and served the last good version again on every route
+            raise RuntimeError(f"publishing version {sync.last.get('version')} to the actor failed twice; the actor serves "
+                               f"version {sync.last.get('rolled_back_to')} again: {sync.last.get('answer')}")
         held_due = args.held_every_hours > 0 and not args.held_remote and time.time() - last_held > args.held_every_hours * 3600
         save_native = (step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
                        or step <= args.keep_checkpoints_until)
@@ -5096,7 +4971,8 @@ def train(args):
             target_state_dir = branch or state_dir
             save_learner_state(
                 target_state_dir, learner, optimizer=optimizer, learner_step=step,
-                source_checkpoint_id=source_sha, objective_version='natlang_grpo_v1',
+                source_checkpoint_id=str(args.checkpoint), base_weights_sha256=source_sha,
+                objective_version='natlang_grpo_v1', trainer_state={'oom_plan': oom_plan.to_dict()},
                 optimizer_config={'name': 'adamw', 'lr': args.lr, 'weight_decay': args.weight_decay,
                                   'betas': [0.9, 0.99], 'warmup': args.warmup},
                 batch_cursor={'step': step, 'cursor': collector.cursor, 'next_group': collector.next_group},
@@ -5219,10 +5095,6 @@ def build_parser():
     t.add_argument('--min-groups', type=int, default=24,
                    help='groups per step at least (run2 at 12: about 75 episodes with a nonzero advantage per step, '
                         'consecutive updates did not add up; DECISIONS 2026-11-13)')
-    t.add_argument('--keep-moments-resident', action='store_true',
-                   help='keep the AdamW moments in memory between steps (default: written to WORK/'
-                        'adam-moments.offload, NVMe, after each step and read back bit for bit before the next optimizer step: '
-                        '-13.6 GB at the learner peak; MomentOffload)')
     t.add_argument('--actor-release', action=argparse.BooleanOptionalAction, default=True,
                    help='release the actor\'s GPU memory (SGLang release_memory_occupation of --actor-release-tags) for '
                         'each learner phase and resume it with the step\'s weight update: the GB10\'s unified memory goes '
@@ -5468,7 +5340,9 @@ def build_parser():
     t.add_argument('--lora-alpha', type=float, default=None, help='LoRA alpha (default: equal to --lora-rank)')
     t.add_argument('--gate-rank', type=int, default=None, help='optional attention gate_proj rank (<= 16; default frozen)')
     t.add_argument('--no-trainable-rows', action='store_true', help='freeze Neuralese marker/override embedding rows')
-    t.add_argument('--no-fp8-base', action='store_true', help='disable Blackwell FP8 frozen-base GEMMs')
+    t.add_argument('--no-publication-sentinel', action='store_true',
+                   help='skip the sentinel log-probability check after each actor update (WeightSync._sentinel)')
+    t.add_argument('--fp8-base', action='store_true', help='FP8 frozen-base GEMMs (Blackwell; off by default: lfm3_learner, NATLANG_FP8_BASE=1 also opts in)')
     t.add_argument('--no-compile', action='store_true', help='disable torch.compile on fast layers')
     t.add_argument('--warmup', type=int, default=2)
     t.add_argument('--lr-reference-spread', type=int, default=12,
@@ -5517,18 +5391,20 @@ def build_parser():
                         'advantages, roles, row weights, actor logp, per-token loss factor; tens of MB a step) for offline '
                         'per-term diagnostics; 0: off')
     t.add_argument('--branch-states', type=int, default=0,
-                   help='keep the FP32 training state of each of the last N steps in CHECKPOINT_DIR/state-step-N.safetensors '
-                        '(about 21 GB each), so a control can --resume-state from any of them; 0: off')
-    t.add_argument('--resume-state', help='with --resume: start from this training state file (e.g. a --branch-states '
-                   'file of another run) instead of STATE_DIR/training-state.safetensors')
+                   help='keep the learner state (LoRA factors, rows, AdamW, RNG, ledger; ~0.5 GB at r=32) of each of the '
+                        'last N steps in CHECKPOINT_DIR/state-step-N/, so a control can --resume-state from any of them; 0: off')
+    t.add_argument('--resume-state', help='with --resume: start from this learner-state directory (learner_manifest.json; '
+                   'e.g. a --branch-states directory of another run) instead of STATE_DIR/learner-state')
     t.add_argument('--keep-checkpoints-until', type=int, default=0,
                    help='save a native checkpoint after every step up to this step and never prune those (probes, '
                         'grafting, held evals of early steps); 0: off')
-    t.add_argument('--activation-gb', '--activation-gib', dest='activation_gb', type=float, default=56.,
-                   help='saved activations (GiB) per sequence; layers beyond are recomputed (G4: 80, GB10 LoRA: 56)')
+    t.add_argument('--activation-gb', '--activation-gib', dest='activation_gb', type=float, default=22.,
+                   help='saved activations (GiB) per packed batch; layers beyond are recomputed. 22 on the GB10 beside the actor: '
+                        'full-FT 12 plus its freed masters and grads minus the second tmpfs weight file (DECISIONS 2026-11-22)')
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)
-    t.add_argument('--state-every', type=int, default=4)
+    t.add_argument('--state-every', type=int, default=1,
+                   help='save the learner state (factors, rows, AdamW, RNG, consumed-group ledger) every N steps')
     t.add_argument('--state-dir', default=resolve_str('data_hdd', 'natlang-grpo-v1'))
     t.add_argument('--checkpoint-dir', help='pruned native checkpoints (default STATE_DIR/checkpoints). Native checkpoints '
                    'and FP32 states aimed at the external disk are written to the NVMe and moved in the background '

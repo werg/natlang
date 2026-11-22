@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
@@ -591,90 +592,155 @@ def test_fp8_frozen_base_is_opt_in_rowwise_packing_invariant_and_compiles():
                for _, leaf in learner.bundles[0].iter_leaves())
 
 
-def test_weight_sync_7step_atomic_publication_and_rollback(tmp_path, monkeypatch):
-    """v2 §7.1: 7-step atomic merged-export publication state machine attests all 4 routes and rolls back to k-1."""
+def _publication_rig(tmp_path, monkeypatch):
+    """grpo.WeightSync against a real SglangEngine front (test_lfm3_defects.fake_front: it measures SGLang's
+    /model_info, the weights file and its reloaded native model itself) and a fake SGLang that serves sentinel
+    log-probabilities from whatever directory it actually holds, so every attestation can disagree."""
     import json
-    import sys
-    from safetensors.torch import save_file
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
+    from safetensors.torch import load_file, save_file
     import grpo
+    from test_lfm3_defects import FakeSglang, fake_front, fake_native
 
-    learner = _make_learner(rank=4, alpha=8.0, trainable_rows=True)
-    export_dir = tmp_path / 'init-export'
-    export_dir.mkdir()
-    init_tensors = {k: v.detach().to(torch.bfloat16).cpu() for k, v in learner.model.named_parameters() if k != 'lm_head.weight'}
-    save_file(init_tensors, str(export_dir / 'model.safetensors'), metadata={'format': 'pt'})
-    (export_dir / 'config.json').write_text('{}')
+    learner = _make_learner(rank=4, alpha=8.0, seed=3, trainable_rows=True, dtype=torch.bfloat16)
+    export = tmp_path / 'start-export'
+    export.mkdir()
+    tensors = {k: v.detach().clone() for k, v in learner.model.named_parameters() if k != 'lm_head.weight'}
+    tensors[grpo.PRODUCER_TABLE] = tensors[grpo.EMBEDDING].clone()
+    save_file(tensors, str(export / 'model.safetensors'), metadata={'format': 'pt'})
+    (export / 'config.json').write_text('{}')
+    reference = copy.deepcopy(tiny_lfm3_hf(window=4)).float()
 
-    calls = []
-    fail_rebind = {'on': False}
-    info_state = {'policy_id': None, 'weights_sha256': None}
+    def hf_logprobs(hf, ids):
+        tokens = torch.tensor([ids])
+        with torch.no_grad():
+            logits = hf(input_ids=tokens, use_cache=False).logits[0, :-1].float()
+        return torch.log_softmax(logits, -1).gather(-1, tokens[0, 1:, None])[:, 0].tolist()
 
-    def fake_post(url, body=None, timeout=600):
-        endpoint = url.rsplit('/', 1)[1]
-        calls.append((endpoint, body))
-        if endpoint == 'rebind-policy':
-            if fail_rebind['on'] and body.get('version') == 2:
-                raise RuntimeError('simulated rebind failure')
-            info_state['policy_id'] = body['policy_id']
-            info_state['weights_sha256'] = body['weights_sha256']
-            return json.dumps({'ok': True})
-        return json.dumps({'success': True})
+    def served_logprobs(model_path, ids):
+        state = {k: v.float() for k, v in load_file(str(Path(model_path) / 'model.safetensors')).items()
+                 if k != grpo.PRODUCER_TABLE}
+        reference.load_state_dict(state, strict=False)
+        return hf_logprobs(reference, ids)
+    sglang = FakeSglang(export, logprobs=served_logprobs)
+    native = fake_native(copy.deepcopy(tiny_lfm3_hf(window=4)).to(torch.bfloat16), marker_ids=(58, 59))
+    front = fake_front(native, sglang, export)
+    front._native_sentinel = lambda ids: hf_logprobs(copy.deepcopy(native.port.hf).float(), ids)
 
-    class FakeResponse:
-        def __init__(self, payload):
-            self._data = json.dumps(payload).encode()
-        def read(self):
-            return self._data
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            return False
+    def post(url, body=None, timeout=600):
+        if url.startswith('http://sglang/'):
+            return sglang.post(url.rsplit('/', 1)[1], body)
+        path = url.removeprefix('http://front')
+        if path == '/v1/neuralese/rebind-policy':
+            return json.dumps(front.rebind_in_place(body['policy_id'], body.get('weights_sha256'), body.get('version'),
+                                                    export_dir=body.get('export_dir'),
+                                                    tensor_identity=body.get('tensor_identity')))
+        assert path == '/v1/neuralese/sentinel'
+        return json.dumps(front.sentinel(body['token_ids']))
+    monkeypatch.setattr(grpo, 'post', post)
+    monkeypatch.setattr(grpo.WeightSync, '_info', lambda self: {'routes': front.route_attestation()})
+    sync = grpo.WeightSync(learner, export, 'http://sglang', tmp_path / 'weights', front_url='http://front',
+                           base_sha256='b' * 64, start_policy={'policy_id': 'a' * 64, 'version': 0},
+                           interface_ids=((58, 59), ()), tied=True, sentinel_ids=list(range(3, 40)))
+    with torch.no_grad():                     # a policy away from the start: the merge and the routes matter
+        for _, leaf in (item for bundle in learner.bundles for item in bundle.iter_leaves()):
+            leaf.b.copy_(0.05 * torch.randn_like(leaf.b))
+        learner.trainable_rows.rows.add_(0.1)
+    return SimpleNamespace(grpo=grpo, learner=learner, sglang=sglang, front=front, native=native, sync=sync,
+                           export=export)
 
-    def fake_urlopen(url, timeout=30):
-        pid, wsha = info_state['policy_id'], info_state['weights_sha256']
-        return FakeResponse({
-            'rl_policy_binding': {'checkpoint_sha256': pid, 'served_weights_sha256': wsha},
-            'routes': {
-                'generation': {'policy_sha256': pid, 'weights_sha256': wsha},
-                'decision': {'policy_sha256': pid, 'weights_sha256': wsha},
-                'capture': {'policy_sha256': pid, 'weights_sha256': wsha},
-                'native_fallback': {'policy_sha256': pid, 'weights_sha256': wsha, 'synchronized': True},
-            },
-        })
 
-    monkeypatch.setattr(grpo, 'post', fake_post)
-    monkeypatch.setattr(grpo.urllib.request, 'urlopen', fake_urlopen)
-
-    sync = grpo.WeightSync.for_learner(
-        learner, export_dir, 'http://sglang:9000', tmp_path / 'weights', front_url='http://front:8000',
-    )
+def _publish(sync, version):
     done = []
-    sync.snapshot()
-    sync.publish(1, lambda v, ok: done.append((v, ok)))
+    sync.publish(version, lambda v, ok: done.append((v, ok)))
     sync.wait()
-    assert done == [(1, True)]
-    assert sync.last['ok'] is True
-    assert sync.last['routes_attested'] is True
-    assert sync.last_good['version'] == 1
-    assert (tmp_path / 'weights' / 'v-00001' / 'model.safetensors').exists()
-    assert [c[0] for c in calls] == ['pause_generation', 'update_weights_from_disk', 'rebind-policy', 'continue_generation']
+    return done
 
-    calls.clear()
-    fail_rebind['on'] = True
-    done.clear()
+
+def test_weight_sync_publishes_the_snapshot_and_every_route_attests_it_measured(tmp_path, monkeypatch):
+    from safetensors import safe_open
+    rig = _publication_rig(tmp_path, monkeypatch)
+    learner, sync = rig.learner, rig.sync
+    rig.sync.snapshot()
+    snapshot = {name: t.detach().clone() for name, t in learner.named_trainable_tensors().items()}
+    with torch.no_grad():                     # the next step's optimizer moves the live leaves before the export runs
+        for t in learner.named_trainable_tensors().values():
+            t.add_(0.5)
+    assert _publish(sync, 1) == [(1, True)], sync.last
+    assert sync.last['routes_attested'] and sync.last['attempts'] == 1 and sync.last['sentinel']
+    name = next(iter(learner.target_map))
+    layer, _, short = learner.target_map[name]
+    scale = getattr(learner.bundles[layer], short).scale
+    base = dict(learner.model.named_parameters())[name]
+    expect = (base.float() + scale * (snapshot[f'lora_B.{name}'].float() @ snapshot[f'lora_A.{name}'].float())).to(torch.bfloat16)
+    slot = tmp_path / 'weights' / 'slot-a'
+    with safe_open(str(slot / 'model.safetensors'), 'pt') as handle:
+        assert torch.equal(handle.get_tensor(name), expect)          # the snapshot, not the moved live leaves
+        served_embedding = handle.get_tensor(rig.grpo.EMBEDDING)
+        assert torch.equal(served_embedding[58], snapshot['trainable_rows.rows'][0].to(torch.bfloat16))
+        assert torch.equal(handle.get_tensor(rig.grpo.PRODUCER_TABLE), served_embedding)
+    assert rig.sglang.model_path == str(slot) and rig.sglang.version == '1'
+    assert torch.equal(rig.native.port.hf.get_parameter(name), expect)
+    assert sync.last_good['version'] == 1 and sync.staging == 1
+    with torch.no_grad():
+        for key, t in learner.named_trainable_tensors().items():
+            t.copy_(snapshot[key])
+    assert sync.last['policy_id'] == learner.effective_policy_sha256('b' * 64)   # bound to the base, meta.json's id
+
+
+def test_a_failed_publication_retries_once_and_restores_the_last_good_version(tmp_path, monkeypatch):
+    rig = _publication_rig(tmp_path, monkeypatch)
+    sync = rig.sync
     sync.snapshot()
-    sync.publish(2, lambda v, ok: done.append((v, ok)))
-    sync.wait()
-    assert done == [(2, False)]
-    assert sync.last['ok'] is False
-    assert sync.last['rolled_back_to'] == 1
-    assert sync.last_good['version'] == 1
-    rollback_updates = [body for ep, body in calls if ep == 'update_weights_from_disk' and body['weight_version'] == '1']
-    assert len(rollback_updates) == 1
-    assert rollback_updates[0]['model_path'].endswith('v-00001')
-    assert calls[-1][0] == 'continue_generation'
+    assert _publish(sync, 1) == [(1, True)]
+    rig.sglang.stale = True                   # SGLang reports success but keeps serving v1
+    sync.snapshot()
+    assert _publish(sync, 2) == [(2, False)]
+    assert sync.last['attempts'] == 2 and sync.last['rolled_back_to'] == 1
+    assert 'route attestation failed' in sync.last['answer'] and 'failed twice' in sync.last['answer']
+    routes = rig.front.route_attestation()
+    assert routes['native_fallback']['version'] == 1 and routes['generation']['version'] == '1'
+    assert sync.last_good['version'] == 1 and sync.staging == 1
+    rebinds = [body['weight_version'] for path, body in rig.sglang.calls if path == 'update_weights_from_disk']
+    assert rebinds == ['1', '2', '1', '2', '1']         # v1, then (v2 refused, v1 restored) twice
 
+
+def test_a_failed_first_publication_restores_the_start_export_on_every_route(tmp_path, monkeypatch):
+    rig = _publication_rig(tmp_path, monkeypatch)
+    rig.sglang.stale = True
+    rig.sync.snapshot()
+    assert _publish(rig.sync, 1) == [(1, False)]
+    assert rig.sync.last['rolled_back_to'] == 0
+    routes = rig.front.route_attestation()
+    assert routes['generation']['policy_sha256'] == 'a' * 64 and routes['native_fallback']['policy_sha256'] == 'a' * 64
+    assert routes['native_fallback']['tensor_identity'] == rig.sync.start_digests['tensor_identity']
+    assert routes['native_fallback']['source'] == str(rig.export / 'model.safetensors')
+
+
+def test_the_sentinel_catches_an_engine_that_computes_with_other_weights(tmp_path, monkeypatch):
+    rig = _publication_rig(tmp_path, monkeypatch)
+    rig.sglang.shift = 0.5                    # right directory and digest, wrong arithmetic
+    rig.sync.snapshot()
+    assert _publish(rig.sync, 1) == [(1, False)]
+    assert 'sentinel log-probabilities disagree' in rig.sync.last['answer']
+
+
+def test_reference_snapshot_is_the_start_policy_on_the_policy_graph_and_never_aliases_it():
+    import grpo
+    learner = _make_learner(rank=4, alpha=8.0, seed=4, trainable_rows=True)
+    bundles, rows = grpo.reference_snapshot(learner)
+    pairs = [(ref, live) for rb, lb in zip(bundles, learner.bundles)
+             for (_, ref), (_, live) in zip(rb.iter_leaves(), lb.iter_leaves())]
+    assert pairs and all(r.a.requires_grad and r.b.requires_grad for r, _ in pairs)   # the policy's training graph
+    assert all(torch.equal(r.a, l.a) and torch.equal(r.b, l.b) for r, l in pairs)
+    assert rows.rows.requires_grad and torch.equal(rows.rows, learner.trainable_rows.rows)
+    with torch.no_grad():
+        for _, live in pairs:
+            live.b.add_(1.)
+        learner.trainable_rows.rows.add_(1.)
+    assert all(not torch.equal(r.b, l.b) for r, l in pairs) and not torch.equal(rows.rows, learner.trainable_rows.rows)
+    # a resumed bare-base reference (saved as ``()``) is B = 0 in the live structure
+    zero, _ = grpo.reference_snapshot(learner, (), rows)
+    assert all(not leaf.b.any() for bundle in zero for _, leaf in bundle.iter_leaves())
 
 
 def test_lora_activation_table_is_the_measured_gb10_peak():

@@ -167,9 +167,11 @@ def make_handler(engine: Engine):
                 if hasattr(engine, "route_attestation"):
                     routes = engine.route_attestation()
                 else:
-                    route_entry = {"policy_sha256": engine.checkpoint_sha256, "weights_sha256": None, "version": 0}
+                    # one engine serving its checkpoint on every route (no in-place updates)
+                    route_entry = {"policy_sha256": engine.checkpoint_sha256, "version": None, "start": True}
                     routes = {name: dict(route_entry) for name in ("generation", "decision", "capture")}
                     routes["native_fallback"] = {**route_entry, "resident": True, "synchronized": True}
+                    routes["lineage"] = dict(engine.native_identity)
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width,
                                         "dtype": getattr(engine, "native_dtype", None) or str(engine.backbone.embedding_weight.dtype).replace("torch.", ""),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
@@ -330,7 +332,15 @@ def make_handler(engine: Engine):
                     return self._json(200, engine.rebind_in_place(
                         body.get("policy_id"), body.get("weights_sha256"), body.get("version"),
                         export_dir=body.get("export_dir"), weights_path=body.get("weights_path"),
-                        checkpoint_path=body.get("checkpoint_path")))
+                        checkpoint_path=body.get("checkpoint_path"), tensor_identity=body.get("tensor_identity")))
+                if self.path == "/v1/neuralese/sentinel":
+                    # the in-place update's measured check (grpo.WeightSync): one token sequence scored on SGLang and,
+                    # when resident, the native engine
+                    if not hasattr(engine, "sentinel"):
+                        return self._error(400, "unsupported", "only the SGLang actor takes in-place policy updates")
+                    body = self._object()
+                    return self._json(200, engine.sentinel(body.get("token_ids") or [],
+                                                           load_native=bool(body.get("load_native"))))
                 if self.path == "/v1/neuralese/collect":
                     referenced = self._object().get("referenced")
                     if referenced is None:

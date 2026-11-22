@@ -109,15 +109,22 @@ the forced span (`grammarCapture`). Each returns the source capture with the sta
 `token_count` rows. The learners read it as fixed stored context inside the producer document
 (`lower_rollout_turns.write_sources`, `natlang_neuralese.train.lfm3_fast.passthrough_plan`). No gap.
 
-**Merged BF16 export & 4-route reload parity (2026-11-22, lfm3opti.md):** Both SFT (`exp0_sft.py`) and GRPO (`grpo.py`)
-train with the shared `lora+rows` core (`natlang_neuralese.train.lfm3_learner` + `lfm3_fast`) and publish immutable
-merged BF16 exports (`learner_state.export_merged_checkpoint` / `export_merged_hf_safetensors`) so all four serving
-engines (managed llama-server, in-page wllama, Python native, SGLang actor) consume identical standard checkpoints.
-On in-place RL policy rebind (`POST /v1/neuralese/rebind-policy`), `sglang_actor.py` reloads its resident or
-lazy-loaded native fallback engine weights and Neuralese marker/override rows from the immutable export directory,
-flushes `native_adapter_cache` and `prefix_cache` (`NATLANG_REBIND_NATIVE_RELOAD=0` opts out), and attests all four
-routes (`generation`, `decision_scoring`, `logprob_capture`, `native_fallback`) in `GET /v1/neuralese/info`
-(`attest_all_routes`). No gap.
+**Merged BF16 export, in-place rebind and measured route attestation (2026-11-22, lfm3opti.md §6 item 4):** SFT
+(`exp0_sft.py`) and GRPO (`grpo.py`) train the shared `lora+rows` core and publish merged BF16 weights
+(`bf16(fp32(W0) + s * B A)`), so every engine serves a standard checkpoint: the managed llama-server and the in-page
+wllama load its GGUF, the Python native engine its native checkpoint, the SGLang actor its HF export. Only the SGLang
+actor takes in-place policy updates (GRPO's `WeightSync`); the other three serve one checkpoint per process. On a
+rebind (`POST /v1/neuralese/rebind-policy`) the front reloads its native route from the same export, with every
+native parameter matched by name (an unmatched name fails the reload). It drains native calls at a call boundary
+first and invalidates the adapter replacement cache and prefix cache. `NATLANG_REBIND_NATIVE_RELOAD=0` opts out, and
+the native route then attests the start. `GET /v1/neuralese/info` `routes` reports, measured, what each route serves:
+`generation`, `decision` and `capture` give SGLang's own `/model_info` directory and weight version and the front's
+SHA-256 of that weights file; `native_fallback` gives the reloaded model's `native_weights_identity`, or while not
+resident the pending source and the claimed identity its lazy load verifies; `lineage` gives the start checkpoint's
+identity, which exact native-state splicing keys on on every engine. `POST /v1/neuralese/sentinel` scores one token
+sequence on SGLang and, when resident, the native engine; GRPO requires both to agree with the learner within
+`grpo.SENTINEL_TOLERANCE` (`attest_all_routes` and `WeightSync._sentinel`). A plain engine reports its one
+checkpoint on every route. No gap.
 
 Live check, 2026-11-17: natlang-b12081 CPU with the natlang-lfm3-5ff07638 Q8_0 GGUF against the Python engine (BF16, CPU) on 5ff07638, two view sites, 400-token spans.
 - The fork's rendered prompt equals its RL capture's prompt ids.
