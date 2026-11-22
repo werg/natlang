@@ -7340,3 +7340,7 @@ rather than violate the 15GB diagnostic reserve or interrupt training.
 No held gain is claimed by source compilation or verifier tests. Observe actual
 entry breadth, nested functions, depth, branching and composition in new captures;
 judge learned capability with the paired held evaluation already used by training.
+
+### 2026-11-23: Retry teacher goals against the repaired release
+
+The Vibestudio campaign previously applied its two-attempt limit across every historical harness release. Repaired outcomes therefore left failed goals permanently exhausted. Attempt accounting now defaults to the validated release-manifest SHA as its epoch, retaining cumulative telemetry and every historical verified success. New wave plans and execution subsets carry immutable release/catalog/driver/Host provenance; old receipts and plans remain untouched, and unfinished historical captures can be archived without running their old jobs under a different release. `--attempt-epoch` provides an explicit accounting override. This changes campaign bookkeeping, not semantic outcome requirements or the existing task selection policy. Targeted tests use mocked collection; no new generation was launched. Mechanism inventory: `VIBESTUDIO_ATTEMPT_EPOCHS.md`.

@@ -14,6 +14,7 @@ import subprocess
 import time
 
 from natlang_neuralese.common import data_registry
+from natlang_neuralese.common.code_provenance import code_provenance
 
 from live_teacher_sources import load_episode
 from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registry, require_registered_open_goal
@@ -30,6 +31,15 @@ def publish(path, value):
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value, indent=2) + '\n')
     temporary.replace(path)
+
+
+def publish_immutable(path, value):
+    """A resumed controller may reuse an identical record, never replace its history."""
+    if path.exists():
+        if read(path) != value:
+            raise ValueError(f'immutable campaign record differs: {path}')
+        return
+    publish(path, value)
 
 
 def verified_episode(path, held, training):
@@ -147,14 +157,18 @@ def transfer(source, remote, destination):
         raise RuntimeError(f'archive differs after transfer: {comparison[:400]}')
 
 
-def remote_archive(args, destination, receipt, capture):
+def remote_archive(args, destination, receipt, capture, *, wave=None):
     root = args.root.resolve()
     transfer(capture, args.archive_host, destination / 'capture')
     metadata = root / 'waves' / f'{destination.name}-archive'
     metadata.mkdir(exist_ok=True)
-    publish(metadata / 'receipt.json', receipt)
-    target = f'{args.archive_host}:{destination}/receipt.json'
-    subprocess.run(['rsync', '-a', '--protect-args', str(metadata / 'receipt.json'), target], check=True)
+    publish_immutable(metadata / 'receipt.json', receipt)
+    records = [metadata / 'receipt.json']
+    if wave is not None:
+        publish_immutable(metadata / 'wave.json', wave)
+        records.append(metadata / 'wave.json')
+    subprocess.run(['rsync', '-a', '--protect-args', *map(str, records),
+                    f'{args.archive_host}:{destination}/'], check=True)
     if args.defer_export:
         return
     repo = args.archive_repo
@@ -203,21 +217,35 @@ def export_trajectories(archive, receipt, held, training):
     if output.rows:
         dataset = data_registry.record_dataset(f'vibestudio-{archive.parent.name}-{archive.name}'.lower(), archive,
                                                kind='teacher-demos', format='native Vibestudio Luna trajectories and capture evidence',
-                                               include=['capture/**', 'receipt.json', final.name], rows=output.rows)
+                                               include=['capture/**', 'receipt.json', final.name,
+                                                        *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows)
     publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None})
 
 
-def publish_status(root, cases, seeds, receipts, review_model, attempts, holds):
-    verified, counts = set(seeds), Counter()
-    states = {}
-    infrastructure = Counter()
-    for receipt in receipts:
+def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
+                   attempt_epoch=None, receipt_epochs=None):
+    verified, counts, cumulative = set(seeds), Counter(), Counter()
+    states, epoch_states = {}, {}
+    infrastructure, epoch_infrastructure = Counter(), Counter()
+    epochs = [None] * len(receipts) if receipt_epochs is None else receipt_epochs
+    if len(epochs) != len(receipts):
+        raise ValueError('each immutable receipt must have its original wave epoch')
+    for receipt, epoch in zip(receipts, epochs):
         for name, outcome in receipt.items():
+            if name not in cases:
+                continue  # Retired catalog goals remain in their immutable archived receipts.
             states[name] = outcome['status']
+            current = epoch == attempt_epoch
+            if current:
+                epoch_states[name] = outcome['status']
             if infrastructure_failure(outcome, cases[name]):
                 infrastructure[name] += 1
+                if current:
+                    epoch_infrastructure[name] += 1
                 continue
-            counts[name] += 1
+            cumulative[name] += 1
+            if current:
+                counts[name] += 1
             if outcome['status'] == 'verified':
                 verified.add(name)
     rows = {}
@@ -231,14 +259,22 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds):
         elif counts[name] < attempts:
             status = 'pending'
         else:
-            status = states[name]
-        rows[name] = {'status': status, 'attempts': counts[name], 'last_outcome': states.get(name)}
+            status = epoch_states[name]
+        rows[name] = {'status': status, 'attempts': counts[name], 'attempt_epoch': attempt_epoch,
+                      'cumulative_attempts': cumulative[name] + infrastructure[name],
+                      'cumulative_teacher_attempts': cumulative[name],
+                      'last_outcome': states.get(name), 'epoch_last_outcome': epoch_states.get(name)}
         if name in holds and status == 'prerequisite-unavailable':
             rows[name]['hold_reason'] = holds[name]
-        if name in infrastructure:
+        if infrastructure[name]:
             rows[name]['infrastructure_failures'] = infrastructure[name]
-    summary = {'total': len(cases), 'attempted_goals': len(set(counts) | set(infrastructure)),
-               'attempts': sum(counts.values()) + sum(infrastructure.values()),
+        rows[name]['epoch_infrastructure_failures'] = epoch_infrastructure[name]
+    summary = {'total': len(cases), 'attempted_goals': sum(cumulative[name] + infrastructure[name] > 0 for name in cases),
+               'attempts': sum(cumulative.values()) + sum(infrastructure.values()),
+               'attempt_epoch': attempt_epoch,
+               'epoch_attempted_goals': len(set(epoch_states)),
+               'epoch_attempts': sum(counts.values()) + sum(epoch_infrastructure.values()),
+               'epoch_teacher_attempts': sum(counts.values()),
                'infrastructure_failures': sum(infrastructure.values()),
                'counts': dict(Counter(row['status'] for row in rows.values()))}
     publish(root / 'status.json', {'model': LUNA, **summary, 'cases': rows})
@@ -270,7 +306,10 @@ def next_wave(cases, rows, size):
 
 
 def collection_environment(release_pins):
-    release = read(release_pins)['release']
+    return release_environment(read(release_pins)['release'])
+
+
+def release_environment(release):
     manifest = Path(release['manifest']).resolve(strict=True)
     if manifest.name != 'release.json' or manifest.parent.name != 'userland-builds':
         raise ValueError(f'invalid workspace release manifest path: {manifest}')
@@ -280,9 +319,49 @@ def collection_environment(release_pins):
     return {**os.environ, 'VIBESTUDIO_WORKSPACE_RELEASE_ROOT': str(manifest.parent.parent)}
 
 
+def receipt_history(waves, jobs):
+    """Legacy receipts keep their historical epoch; their content is never decorated."""
+    receipts, epochs = [], []
+    for path in sorted(waves.glob('*-result.json')):
+        receipts.append(read(path))
+        job = jobs / f'{path.name.removesuffix("-result.json")}.json'
+        epochs.append(read(job).get('attempt_epoch') if job.exists() else None)
+    return receipts, epochs
+
+
+def attempt_context(args, catalog):
+    # Resolve once per controller: changing a pin file cannot relabel an admitted wave.
+    pin_bytes = args.release_pins.read_bytes()
+    pins = json.loads(pin_bytes)
+    environment = release_environment(pins['release'])
+    provenance = {'release': pins['release'], 'release_pins_sha256': hashlib.sha256(pin_bytes).hexdigest(),
+                  'catalog_sha256': hashlib.sha256(catalog.read_bytes()).hexdigest(),
+                  'model': LUNA, 'driver': code_provenance(), 'host': code_provenance(args.host)}
+    epoch = args.attempt_epoch or pins['release']['sha256']
+    return epoch, provenance, environment
+
+
+def unfinished_wave(plans, waves, attempt_epoch, provenance, rows=None):
+    """Archive captured historical work; run unstarted work only on its admitted release."""
+    for plan in plans:
+        if (waves / f'{plan.stem}-result.json').exists():
+            continue
+        if (waves / f'{plan.stem}-capture').is_dir():
+            return plan
+        record = read(plan)
+        execution = waves / f'{plan.stem}-execution.json'
+        if rows is not None and execution.exists() and any(
+                rows.get(name, {}).get('status') != 'pending' for name in read(execution)['cases']):
+            continue  # Its admitted case list is immutable; schedule a fresh wave for any remainder.
+        if record.get('attempt_epoch') == attempt_epoch and record.get('provenance') == provenance:
+            return plan
+    return None
+
+
 def drive(args):
     root = args.root.resolve()
     held, training, cases = campaign_scope(root / 'catalog.jsonl', args.held)
+    attempt_epoch, provenance, environment = attempt_context(args, root / 'catalog.jsonl')
     seeds = {}
     by_id = {row['taskId']: name for name, row in cases.items()}
     saved_seeds = root / 'reused.json'
@@ -297,7 +376,8 @@ def drive(args):
     initial = root / 'initial-wave.txt'
     starter = jobs / '0000.json'
     if initial.is_file() and not starter.exists():
-        publish(starter, {'cases': initial.read_text().splitlines()})
+        publish_immutable(starter, {'cases': initial.read_text().splitlines(),
+                                  'attempt_epoch': attempt_epoch, 'provenance': provenance})
     for index, (name, path) in enumerate(seeds.items()):
         source = Path(path).parent
         remote_archive(args, args.archive / f'seed-{index:04d}',
@@ -306,34 +386,37 @@ def drive(args):
     completed_waves = 0
     while True:
         plans = sorted(jobs.glob('[0-9]*.json'))
-        receipts = [read(wave) for wave in sorted(waves.glob('*-result.json'))]
-        rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds)
+        receipts, epochs = receipt_history(waves, jobs)
+        rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds,
+                              attempt_epoch=attempt_epoch, receipt_epochs=epochs)
         sync_index(args, [root / 'status.json', root / 'reused.json'])
         if (root / 'stop-after-wave').exists() or completed_waves == args.max_waves:
             return
-        started = next((plan for plan in plans if not (waves / f'{plan.stem}-result.json').exists()), None)
+        started = unfinished_wave(plans, waves, attempt_epoch, provenance, rows)
         if not started:
             names = next_wave(cases, rows, args.wave_size)
             if not names:
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
                     return
-                publish(root / 'finished.json', {'collection_exhausted': True,
+                publish(root / 'finished.json', {'collection_exhausted': True, 'attempt_epoch': attempt_epoch,
                                                  'all_goals_verified': all(row['status'] == 'verified' for row in rows.values())})
                 sync_index(args, [root / 'finished.json'])
                 return
             started = jobs / f'{int(plans[-1].stem) + 1 if plans else 0:04d}.json'
-            publish(started, {'cases': names})
-        names = read(started)['cases']
+            publish_immutable(started, {'cases': names, 'attempt_epoch': attempt_epoch, 'provenance': provenance})
+        plan = read(started)
+        execution = waves / f'{started.stem}-execution.json'
+        names = read(execution)['cases'] if execution.exists() else plan['cases']
         first = cases[names[0]]
         capture = waves / f'{started.stem}-capture'
         if not capture.is_dir():
             names = [name for name in names if rows[name]['status'] == 'pending']
             if not names:
-                publish(waves / f'{started.stem}-result.json', {})
+                publish_immutable(waves / f'{started.stem}-result.json', {})
                 continue
-            if names != read(started)['cases']:
-                publish(started, {'cases': names})
-                first = cases[names[0]]
+            first = cases[names[0]]
+            publish_immutable(execution, {'cases': names, 'attempt_epoch': plan.get('attempt_epoch'),
+                                          'provenance': plan.get('provenance')})
             if shutil.disk_usage(root).free < args.reserve_disk_gib * 1024**3:
                 raise RuntimeError('insufficient local disk headroom for another managed collection wave')
             collect = ['pnpm', '--silent', 'natlang:teacher', '--model', LUNA, '--approve-codex-session',
@@ -344,17 +427,17 @@ def drive(args):
                 collect += ['--review-model', args.review_model]
             for name in names:
                 collect += ['--case', name]
-            env = collection_environment(args.release_pins)
             with (waves / f'{started.stem}-collector.log').open('ab') as log:
-                completed = subprocess.run(collect, cwd=args.host, env=env, stdout=log, stderr=subprocess.STDOUT)
+                completed = subprocess.run(collect, cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
             publish(waves / f'{started.stem}-exit.json', {'status': completed.returncode})
             if not capture.is_dir():
                 raise RuntimeError(f'collector failed before creating {capture}; see the collector log')
 
         receipt = outcomes(capture, names, held, training, cases)
         destination = args.archive / started.stem
-        remote_archive(args, destination, receipt, capture)
-        publish(waves / f'{started.stem}-result.json', receipt)
+        remote_archive(args, destination, receipt, capture,
+                       wave={'plan': plan, 'execution': read(execution) if execution.exists() else None})
+        publish_immutable(waves / f'{started.stem}-result.json', receipt)
         completed_waves += 1
         # The remote capture and receipt are durable. Deferred exports read those copies.
         shutil.rmtree(capture)
@@ -383,7 +466,8 @@ def main():
                      help='archive captures and receipts for a separate export worker')
     run.add_argument('--seed', action='append', type=Path, default=[])
     run.add_argument('--review-model')
-    run.add_argument('--attempts', type=int, default=2)
+    run.add_argument('--attempts', type=int, default=2, help='teacher attempts per goal in the current release epoch')
+    run.add_argument('--attempt-epoch', help='explicit retry epoch; defaults to the pinned release manifest SHA-256')
     run.add_argument('--wave-size', type=int, default=6)
     run.add_argument('--max-waves', type=int, help='stop after archiving this many waves and syncing status')
     run.add_argument('--concurrency', type=int, default=1)
@@ -397,7 +481,8 @@ def main():
         export_trajectories(args.archive, read(args.receipt), held, training)
         return
     reviewer = (args.review_model or '').split(':')[-1].lower().split('-')
-    if (args.attempts < 1 or (args.max_waves is not None and args.max_waves < 1)
+    if (args.attempts < 1 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
+            or (args.max_waves is not None and args.max_waves < 1)
             or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer):
         parser.error('provide positive limits, concurrency within the wave size, and an independent non-Sol reviewer when configured')
     with (args.root / '.controller.lock').open('a') as owner:
