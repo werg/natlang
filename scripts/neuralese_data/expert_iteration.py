@@ -61,6 +61,7 @@ BASE_CKPT = str(root('data_hdd') / 'natlang-development-data/archive/data/lfm3-r
 BASE_SHA = '5ff07638bbedba7c8ec506f763ce5fb7511c7755ce8c045ef764bca00ddc1d6a'
 PY = str(REPO / '.venv-neuralese/bin/python')
 LEDGER = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py')]
+FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
 
 
 def log(record):
@@ -804,7 +805,7 @@ class Cycle:
         actor = {'url': state['endpoint'], 'sglang': f'http://127.0.0.1:{self.POP_FILL_PORT}',
                  'export': collected['export'], 'checkpoint_sha256': sha}
         self.work_tokenizer()
-        self.ledger(unit, 6, 'low', self.fill_command(actor, pop=True), self.dir / 'pop-fill.log', detach=True,
+        self.ledger(unit, FILL_GB, 'low', self.fill_command(actor, pop=True), self.dir / 'pop-fill.log', detach=True,
                     repo=self.fill_repo())
         self.note(stage='pop fill', started=[unit, tunnel], policy=sha, endpoint=state['endpoint'])
 
@@ -838,7 +839,7 @@ class Cycle:
         actor = json.loads((self.collect_dir / 'actor.json').read_text())
         if actor['checkpoint_sha256'] != (sha or self.start_sha):
             raise SystemExit('collect actor serves another policy')
-        self.ledger(f'{self.a.name}-fill', 6, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True,
+        self.ledger(f'{self.a.name}-fill', FILL_GB, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True,
                     repo=self.fill_repo())
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
 
