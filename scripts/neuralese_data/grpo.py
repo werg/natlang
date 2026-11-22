@@ -269,12 +269,135 @@ def check_pin(work, commit, unpinned):
     return str(REPO)
 
 
+COMPACT_GROUP_SCHEMA = 'natlang.compact-scored-group/1'
+
+
+def parse_actor_specs(primary_actor, extra_actors=(), default_slots=1):
+    """Parse primary ``--actor`` plus repeatable ``--extra-actor URL[=SLOTS]`` specs into ``[(url, slots), ...]``
+    (async-train §7.1: multi-actor GRPO collection across DGX + Colab G4 BF16 actors)."""
+    specs = []
+    if extra_actors:
+        for raw in extra_actors:
+            for piece in str(raw).split(','):
+                piece = piece.strip()
+                if not piece:
+                    continue
+                if '=' in piece:
+                    url, _, count = piece.rpartition('=')
+                    specs.append((url.rstrip('/'), max(1, int(count))))
+                else:
+                    specs.append((piece.rstrip('/'), max(1, int(default_slots))))
+    if primary_actor:
+        primary = str(primary_actor).rstrip('/')
+        extra_slots = sum(c for _, c in specs)
+        primary_slots = max(1, int(default_slots) - extra_slots) if specs else max(1, int(default_slots))
+        specs.insert(0, (primary, primary_slots))
+    return specs
+
+
+def rho_by_staleness_summary(buckets):
+    """Per-staleness importance-ratio telemetry for ``train.jsonl`` (async-train §7.2): ``{Δv: {tokens, rho_mean,
+    abs_log_rho_mean, rho_capped_fraction}}``."""
+    out = {}
+    for stale in sorted(buckets):
+        b = buckets[stale]
+        tokens = int(b.get('tokens', 0))
+        if tokens <= 0:
+            continue
+        out[str(stale)] = {
+            'tokens': tokens,
+            'rho_mean': round(float(b['rho_sum']) / tokens, 4),
+            'abs_log_rho_mean': round(float(b['abs_log_rho_sum']) / tokens, 5),
+            'rho_capped_fraction': round(float(b['rho_capped']) / tokens, 5),
+        }
+    return out or None
+
+
+def pack_scored_group(group_dir, out_path):
+    """Pack a scored GRPO group directory into a compact zstd-compressed payload (~8 bytes/completion token: int32
+    token ids, float32 sampled logprobs, rewards, decisions, policy versions; omits raw text/logs; async-train §7.1)."""
+    import pickle
+    import zstandard as zstd
+    group_dir, out_path = Path(group_dir), Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cases_text = (group_dir / 'cases.jsonl').read_text() if (group_dir / 'cases.jsonl').exists() else ''
+    rewards_text = (group_dir / 'rewards.jsonl').read_text() if (group_dir / 'rewards.jsonl').exists() else ''
+    versions = json.loads((group_dir / 'versions.json').read_text()) if (group_dir / 'versions.json').exists() else []
+    episodes = []
+    rollouts_path = group_dir / 'rollouts.jsonl'
+    if rollouts_path.exists():
+        for line in rollouts_path.open():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            compact_turns = []
+            for turn in row.get('turns') or ():
+                cap = turn.get('capture') or turn.get('exact') or {}
+                p_ids = cap.get('prompt_ids') or cap.get('prompt_token_ids') or []
+                s_ids = cap.get('sample_ids') or cap.get('completion_token_ids') or []
+                s_lp = cap.get('sample_logprobs') or cap.get('logprobs') or []
+                entry = {
+                    'prompt_ids': np.asarray(p_ids, dtype=np.int32),
+                    'sample_ids': np.asarray(s_ids, dtype=np.int32),
+                    'sample_logprobs': np.asarray(s_lp, dtype=np.float32),
+                }
+                if turn.get('decision') is not None:
+                    entry['decision'] = turn['decision']
+                compact_turns.append(entry)
+            episodes.append({
+                'sample': row.get('sample'),
+                'task_id': row.get('task_id'),
+                'outcome': row.get('outcome'),
+                'reward': row.get('reward'),
+                'jolt_role': row.get('jolt_role', 'student'),
+                'policy_sha256': (row.get('policy') or {}).get('checkpoint_sha256'),
+                'turns': compact_turns,
+            })
+    payload = {
+        'schema': COMPACT_GROUP_SCHEMA,
+        'group_name': group_dir.name,
+        'cases_jsonl': cases_text,
+        'rewards_jsonl': rewards_text,
+        'versions': versions,
+        'episodes': episodes,
+    }
+    raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+    compressed = zstd.ZstdCompressor(level=3).compress(raw)
+    tmp = out_path.with_name(out_path.name + '.partial')
+    tmp.write_bytes(compressed)
+    os.replace(tmp, out_path)
+    return {'path': str(out_path), 'bytes': len(compressed), 'raw_bytes': len(raw), 'episodes': len(episodes)}
+
+
+def unpack_scored_group(archive_path, dest_dir):
+    """Unpack a ``pack_scored_group`` archive into ``dest_dir`` and return its payload dict."""
+    import pickle
+    import zstandard as zstd
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    raw = zstd.ZstdDecompressor().decompress(Path(archive_path).read_bytes())
+    payload = pickle.loads(raw)
+    if payload.get('schema') != COMPACT_GROUP_SCHEMA:
+        raise ValueError(f'{archive_path}: unexpected compact group schema {payload.get("schema")!r}')
+    if payload.get('cases_jsonl'):
+        (dest_dir / 'cases.jsonl').write_text(payload['cases_jsonl'])
+    if payload.get('rewards_jsonl'):
+        (dest_dir / 'rewards.jsonl').write_text(payload['rewards_jsonl'])
+    (dest_dir / 'versions.json').write_text(json.dumps(payload.get('versions') or []) + '\n')
+    with (dest_dir / 'compact-episodes.pkl').open('wb') as handle:
+        pickle.dump(payload['episodes'], handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return payload
+
+
 # ---- rollouts --------------------------------------------------------------------------------------------------------
 class Collector:
     """Work-stealing slots over an endless stream of task groups; finished groups are scored and queued for the learner."""
 
     def __init__(self, args, tasks, work, policy_sha, runtime, first_group=0, cursor=0):
         self.args, self.tasks, self.work, self.policy_sha, self.runtime = args, tasks, work, policy_sha, runtime
+        self.actor_endpoints = parse_actor_specs(getattr(args, 'actor', None),
+                                                 getattr(args, 'extra_actor', ()),
+                                                 getattr(args, 'slots', 1))
         self.lock = threading.Lock()
         self.pending = collections.deque()          # entries not yet taken by a slot
         self.groups = {}                            # group -> {'dir', 'size', 'done', 'versions', 'task_id'}
@@ -512,6 +635,14 @@ class Collector:
                 self._new_group()
             return self.pending.popleft() if self.pending else None
 
+    def endpoint_for_slot(self, index=0):
+        """Return the actor endpoint assigned to slot ``index`` (multi-actor GRPO, async-train §7.1)."""
+        endpoints = getattr(self, 'actor_endpoints', None)
+        if not endpoints:
+            return self.args.actor
+        expanded = [url for url, count in endpoints for _ in range(max(1, int(count)))]
+        return expanded[index % len(expanded)]
+
     def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
@@ -527,12 +658,14 @@ class Collector:
             workers = info['dir'] / 'workers'
             workers.mkdir(exist_ok=True)
             key = entry['key']
+            actor_url = self.endpoint_for_slot(index)
+            entry = {**entry, 'rl_endpoint': actor_url}
             queue_file, journal = workers / f'{key}.queue.jsonl', workers / f'{key}.journal.jsonl'
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
             started = self.version
             command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file), str(journal),
-                       '--runtime', str(self.runtime), '--server', self.args.actor,
-                       '--chat-completions-url', self.args.actor + '/v1/chat/completions', '--model-id', 'natlang-rl',
+                       '--runtime', str(self.runtime), '--server', actor_url,
+                       '--chat-completions-url', actor_url + '/v1/chat/completions', '--model-id', 'natlang-rl',
                        '--model-concurrency', '1', '--chat-request-config', str(sampling), '--neuralese-server']
             with (workers / f'{key}.log').open('a') as handle:
                 process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
@@ -4422,6 +4555,7 @@ def train(args):
                     chain['advantage'] = advantage
                     chain['episode'] = key
                     chain['role'] = episode.get('role', 'student')
+                    chain['stale'] = stale
                     chains.append(chain)
                 for d in episode['decisions']:
                     # every option is scored as its own copy of the prompt, so a decision is one forward of K prompts:
@@ -4588,6 +4722,7 @@ def train(args):
             phase_totals['collect_s'] += learn_started - phase_mark['time']
             phase_totals['collect_tokens'] += learn_tokens0 - phase_mark['tokens']
         sums = collections.Counter()
+        stale_buckets = collections.defaultdict(lambda: {'tokens': 0, 'rho_sum': 0.0, 'abs_log_rho_sum': 0.0, 'rho_capped': 0})
         rho_pre_max, rho_post_max, forward_tokens = 0., 0., 0
         teacher_log_rho = []   # per-chain arrays of the teacher tokens' log rho (``teacher_rho_summary``)
         rng = random.Random(args.seed + step)
@@ -4703,6 +4838,7 @@ def train(args):
         def run_policy_and_decisions(cur_pack, cur_act):
             nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
             sums.clear()
+            stale_buckets.clear()
             teacher_log_rho.clear()
             rho_pre_max = rho_post_max = 0.
             forward_tokens = 0
@@ -4806,6 +4942,12 @@ def train(args):
                         teacher_log_rho.append(log_rho.float().cpu().numpy())
                     sums['rho_capped'] += (rho > args.rho_cap).sum().item()
                     sums['abs_log_rho'] += log_rho.abs().sum().item()
+                    if chain.get('stale') is not None:
+                        sb = stale_buckets[int(chain['stale'])]
+                        sb['tokens'] += int(logp.numel())
+                        sb['rho_sum'] += float(rho.sum().item())
+                        sb['abs_log_rho_sum'] += float(log_rho.abs().sum().item())
+                        sb['rho_capped'] += int((rho > args.rho_cap).sum().item())
                     consumer = None
                     if chain.get('imports'):
                         consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
@@ -4962,6 +5104,18 @@ def train(args):
         save_native = (step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
                        or step <= args.keep_checkpoints_until)
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
+        if getattr(args, 'export_factors_dir', None):
+            from natlang_neuralese.train.learner_state import export_adapter_factors
+            t_fe = time.time()
+            fe_dir = Path(args.export_factors_dir) / f'step-{step:05d}'
+            fe_info = export_adapter_factors(
+                fe_dir, learner, base_checkpoint_sha256=source_sha, learner_step=step,
+                policy_id=record['effective_policy_sha256'], round_id=f'grpo-step-{step:05d}',
+            )
+            record['factor_export'] = {
+                'dir': str(fe_dir), 'sha256': fe_info['adapter_factors_sha256'],
+                'bytes': fe_info['adapter_factors_bytes'], 'seconds': round(time.time() - t_fe, 2),
+            }
         branch = branch_root / f'state-step-{step:05d}' if args.branch_states else None
         if branch is not None or (args.state_every and step % args.state_every == 0):
             if branch is not None:
@@ -5025,6 +5179,7 @@ def train(args):
             rho_mean=round(sums['rho'] / max(1, loss_tokens), 4), rho_pre_cap_max=round(rho_pre_max, 3),
             rho_post_cap_max=round(rho_post_max, 3), rho_capped_fraction=round(sums['rho_capped'] / max(1, loss_tokens), 5),
             abs_log_rho_mean=round(sums['abs_log_rho'] / max(1, loss_tokens), 5),
+            rho_by_staleness=rho_by_staleness_summary(stale_buckets),
             consumer_tokens=sums['consumer_tokens'],
             consumer_abs_log_rho_mean=round(sums['consumer_abs_log_rho'] / max(1, sums['consumer_tokens']), 5),
             **dict(zip(('actor_mismatch', 'actor_mismatch_shift'), actor_mismatch_summary(sums, loss_tokens))),
@@ -5080,6 +5235,10 @@ def build_parser():
     t.add_argument('--base', default=BASE)
     t.add_argument('--actor', help='natlang front of an SGLang actor serving --checkpoint (default: a child actor of this '
                    'process with the held-v2 engine arguments)')
+    t.add_argument('--extra-actor', action='append', default=[], metavar='URL[=SLOTS]',
+                   help='additional BF16 actor front URL[=SLOTS] for multi-actor GRPO collection (async-train §7.1)')
+    t.add_argument('--export-factors-dir', help='directory to export ~130 MB FP32 r=32 LoRA factors per step for WAN '
+                   'shipping to DGX/G4 actors (async-train §7.1)')
     t.add_argument('--actor-port', type=int, default=8460, help='port of the child actor (its SGLang server: +1000)')
     t.add_argument('--actor-arg', action='append', default=[], help='extra serve_native_checkpoint.py argument')
     t.add_argument('--sglang', help='its SGLang server (default: actor port + 1000)')
@@ -5163,9 +5322,9 @@ def build_parser():
                    'scripts/rl_tasks/neuralese_variants.py; off by default: a controlled addition)')
     t.add_argument('--neuralese-variant-share', type=float, default=0.5,
                    help='share of the groups of a task with a variant that run the variant')
-    t.add_argument('--teacher-attempts', type=int, default=0,
+    t.add_argument('--teacher-attempts', type=int, default=2,
                    help='JOLT+: privileged teacher attempts of the same task for a group whose students succeeded at most '
-                        '--teacher-max-successes times, trained in student form (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md)')
+                        '--teacher-max-successes times, trained in student form (async-train §8: default 2; 0 opts out)')
     t.add_argument('--teacher-max-successes', type=int, default=0)
     t.add_argument('--teacher-fact-kinds', default=None, help='comma list of fact kinds that guide a teacher (default: rl/jolt.py '
                    'TEACHER_FACT_KINDS, no answers); "all" keeps every kind')
@@ -5202,11 +5361,9 @@ def build_parser():
     t.add_argument('--sd-teacher-source', action='append', default=None,
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
                         'default: the registry role grpo-sd-teacher)')
-    t.add_argument('--reasoning-rl-weight', type=float, default=1.0,
-                   help='reasoning RL against fixed teacher actions (ReasoningRL): a search along teacher trajectory '
-                        'segments samples the student\'s own think blocks, rewarded by the teacher actions\' mean token '
-                        'log-probability after them (return-to-go); this scales their training term (0: off): the twin '
-                        'forward KL (--reasoning-rl-objective twin-fkl) or their group-normalized advantage (sequence)')
+    t.add_argument('--reasoning-rl-weight', type=float, default=0.0,
+                   help='reasoning RL against fixed teacher actions (ReasoningRL): default 0.0 (off; async-train §8: '
+                        'JOLT+ replaces the privileged twin by default; pass 1.0 to opt back in)')
     t.add_argument('--reasoning-rl-action-weight', type=float, default=0.05,
                    help='the teacher action after each closed sampled think block as a ratio-free cross-entropy (0: the '
                         'reasoning term alone)')
