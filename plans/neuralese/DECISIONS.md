@@ -7306,3 +7306,37 @@ must train with the student's filled reasoning.
     open goals 28 of 30 Vibestudio trajectories, weighted share 0.87 ≥ 0.8.
 - **Driver restart needed:** aei1 (pin bd0217420) has no `--live-work`. It needs a pin at or after this entry's commit
   and the guard's argv plus `--live-work /home/werg/data/sft-teacher-vibestudio-luna-yci2lb1n`.
+
+
+## 2026-11-23: semantic application codebase replaces universal goal/report routing
+
+Owner requested all six migration steps across the full VibeStudio corpus.
+The shared specialist hierarchy is retained; 116 typed entry kinds across 27
+roots replace universal `runUserGoal` admission. All 2,327 goal identities/hashes,
+source groups and splits are unchanged (1,748 train/579 test; 114 entry programs
+used). Application inputs and results are bound to exact capture source, ordered
+named arguments and original JavaScript JSON bytes. The native trajectory IR
+and call graph remain the training representation.
+
+Removed gratuitous read-count, execution-order, generic final-report and route
+constraints across the templates. Actual requested outcomes, required answers,
+protected scope and claimed evidence remain verified. Runtime authorized rereads
+and concurrent reads were fixed at shared bindings, including Drive cursor-chain
+reconciliation. Authored ambient declarations now reach the production compiler
+without adding runtime authority. All 116 entries compile; Host120, SST32,
+shared-library/provider30 and loader61 focused tests passed; main quick check
+passed after the ordinary merge with ongoing expert-iteration work.
+
+Failed captures remain immutable. Evidence-bound recovery exposed ten prior
+captures/42 decisions without relabeling whole tasks as successful. Incorrect
+optional root return generations remain observed but carry no supervised target;
+when effects and a false return share one completion, no fabricated token split
+is introduced. Source branches were integrated to each template main, Host main
+and Natlang main. The complete workspace release and live cutover use these
+committed sources, preserving the old release as rollback. Recovery export and
+student reasoning fill feed the existing expert-iteration pipeline; DGX jobs queue
+rather than violate the 15GB diagnostic reserve or interrupt training.
+
+No held gain is claimed by source compilation or verifier tests. Observe actual
+entry breadth, nested functions, depth, branching and composition in new captures;
+judge learned capability with the paired held evaluation already used by training.
