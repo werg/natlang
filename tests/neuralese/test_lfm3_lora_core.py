@@ -388,7 +388,7 @@ def test_linear_nll_defaults_to_the_owning_models_trainable_rows():
     assert torch.equal(nuc_implicit, nuc_explicit)
 
 
-def _native_state(learner, *, tied_layout=True, override_ids=()):
+def _native_state(learner, *, tied_layout=True, override_ids=(), backbone_dtype=torch.bfloat16):
     """A source checkpoint in the real tied layout: output_rows = None, extra_output_rows = None (sft-v8, sft-v6)."""
     embed = learner.model.model.embed_tokens.weight.detach().to(torch.bfloat16)
     marker_ids = [i for i in learner.special_ids if i not in override_ids]
@@ -399,7 +399,7 @@ def _native_state(learner, *, tied_layout=True, override_ids=()):
         interface.update(token_override_ids=tuple(override_ids),
                          extra_input_rows=embed[torch.tensor(list(override_ids))].clone(),
                          extra_output_rows=None if tied_layout else embed[torch.tensor(list(override_ids))].clone())
-    backbone = {k: v.detach().to(torch.bfloat16).clone() for k, v in learner.model.state_dict().items()}
+    backbone = {k: v.detach().to(backbone_dtype).clone() for k, v in learner.model.state_dict().items()}
     backbone['lm_head.weight'] = backbone['model.embed_tokens.weight']
     return {'schema': 'natlang.native-checkpoint/1',
             'model_config': {'marker_ids': marker_ids, 'token_override_ids': list(override_ids)},
@@ -409,8 +409,8 @@ def _native_state(learner, *, tied_layout=True, override_ids=()):
 def test_merged_export_is_exact_and_handles_the_real_tied_interface_layout(tmp_path):
     learner, _opt, ids = _trained_learner(seed=9, special_ids=(58, 59, 60), override_ids=(60,))
     _randomize_b(learner, 0.1, seed=9)                        # a large delta so a scale error is visible
-    learner.state = _native_state(learner, override_ids=(60,))
-    # merged weights are bf16(fp32(W0) + s * B @ A) exactly (a mutant applying s twice fails here)
+    learner.state = _native_state(learner, override_ids=(60,), backbone_dtype=torch.float32)
+    # merged weights are fp32(W0) + s * B @ A exactly (a mutant applying s twice fails here)
     backbone32, _ = learner.merged_backbone_and_interface(dtype=torch.float32)
     for name, (layer_idx, _kind, short) in learner.target_map.items():
         leaf = getattr(learner.bundles[layer_idx], short)
@@ -418,7 +418,7 @@ def test_merged_export_is_exact_and_handles_the_real_tied_interface_layout(tmp_p
         assert torch.equal(backbone32[name], expected), name
     # export with output_rows / extra_output_rows = None (the default tied layout) succeeds and keeps them None
     info = export_merged_checkpoint(learner, learner.state, tmp_path / 'merged.pt', source_sha256='a' * 64,
-                                    learner_step=2, special_ids=learner.special_ids)
+                                    learner_step=2)
     assert info['learner_step'] == 2 and info['source_step'] == 10
     ckpt = torch.load(tmp_path / 'merged.pt', map_location='cpu', weights_only=False)
     iface = ckpt['interface_state']
@@ -427,10 +427,10 @@ def test_merged_export_is_exact_and_handles_the_real_tied_interface_layout(tmp_p
     assert torch.equal(iface['input_rows'], rows[:2]) and torch.equal(iface['extra_input_rows'], rows[2:])
     special = torch.tensor(learner.special_ids)
     assert torch.equal(ckpt['backbone_state']['model.embed_tokens.weight'][special],
-                       learner.state['backbone_state']['model.embed_tokens.weight'][special])
+                       learner.state['backbone_state']['model.embed_tokens.weight'][special].to(torch.bfloat16))
     # the merged model (interface rows spliced in, as the native engine applies them) reproduces the learner in FP32
     merged = tiny_lfm3_hf(window=4)
-    mb = {k: v for k, v in backbone32.items()}
+    mb = {k: v for k, v in backbone32.items() if k != 'lm_head.weight'}     # tied: the head follows the embedding
     mb['model.embed_tokens.weight'] = mb['model.embed_tokens.weight'].clone()
     mb['model.embed_tokens.weight'][special] = learner.trainable_rows.rows.detach()
     merged.load_state_dict(mb, strict=False)
@@ -637,7 +637,7 @@ def _publication_rig(tmp_path, monkeypatch):
         assert path == '/v1/neuralese/sentinel'
         return json.dumps(front.sentinel(body['token_ids']))
     monkeypatch.setattr(grpo, 'post', post)
-    monkeypatch.setattr(grpo.WeightSync, '_info', lambda self: {'routes': front.route_attestation()})
+    monkeypatch.setattr(grpo.WeightSync, '_info', lambda self, front_url=None: {'routes': front.route_attestation()})
     sync = grpo.WeightSync(learner, export, 'http://sglang', tmp_path / 'weights', front_url='http://front',
                            base_sha256='b' * 64, start_policy={'policy_id': 'a' * 64, 'version': 0},
                            interface_ids=((58, 59), ()), tied=True, sentinel_ids=list(range(3, 40)))

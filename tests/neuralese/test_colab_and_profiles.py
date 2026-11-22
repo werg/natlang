@@ -520,3 +520,82 @@ def test_stop_colab_g4_kills_the_recorded_process_group_not_a_pattern(tmp_path, 
     pop_rl_actor.stop_colab_g4('g4-1')
     assert sent and 'kill -TERM -- -4242' in sent[0] and 'pkill' not in sent[0]
     assert not pop_rl_actor.colab_state_path('g4-1').exists()
+
+
+def test_run_remote_sft_of_a_round_maps_its_factor_dir_pulls_blob_first_and_starts_no_mps(tmp_path, remote, monkeypatch):
+    """An async round's recipe (--round-id, --export-factors-dir, --factors-only in launch.json): the factor directory
+    maps to the VM, the factors arrive whole at the recipe's DGX directory, and run-sft never starts MPS (that would
+    turn a learner on a session whose actor started without MPS into a failing client)."""
+    work = _launch_json(tmp_path)
+    launch = json.loads((work / 'launch.json').read_text())
+    launch['exp0_sft_args'] += f' --round-id r0007 --export-factors-dir {work}/factors --factors-only --resume'
+    (work / 'launch.json').write_text(json.dumps(launch))
+    commands = []
+    real_ssh = pop_rl_actor.ssh_host
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda h, c, **kw: commands.append(c) or real_ssh(h, c, **kw))
+    monkeypatch.setattr(pop_rl_actor, 'ensure_colab_mps', lambda host: pytest.fail('run-sft started MPS'))
+
+    def run(argv, **kw):
+        sft = shlex.split(argv[-1].split('&&', 1)[1])
+        factors = remote['to_local'](sft[sft.index('--export-factors-dir') + 1])
+        factors.mkdir(parents=True, exist_ok=True)
+        (factors / 'adapter_factors_fp32.safetensors').write_bytes(b'f' * 64)
+        import hashlib
+        (factors / 'policy_manifest.json').write_text(json.dumps({'adapter_factors_sha256':
+                                                                  hashlib.sha256(b'f' * 64).hexdigest()}))
+        learner.append(argv[-1])
+        return subprocess.CompletedProcess(argv, 0)
+    learner = []
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', run)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    args = types.SimpleNamespace(host='g4', run_name='r7', work=str(work), launch_json=str(work / 'launch.json'),
+                                 commit=None, state_sync_minutes=15.0, vram_gib=59.0, host_ram_gib=40.0)
+    assert pop_rl_actor.run_remote_sft(args) == 0
+    sft = shlex.split(learner[-1].split('&&', 1)[1])
+    assert sft[sft.index('--export-factors-dir') + 1] == '/content/natlang-work/runs/sft-r7/factors'
+    assert sft[sft.index('--round-id') + 1] == 'r0007' and sft.count('--resume') == 1
+    assert (work / 'factors' / 'adapter_factors_fp32.safetensors').read_bytes() == b'f' * 64
+    assert (work / 'factors' / 'policy_manifest.json').exists() and not (work / 'factors.pull').exists()
+    assert not any('nvidia-cuda-mps' in c for c in commands)
+
+
+def test_remote_rebind_merge_script_calls_the_exporters_with_their_real_signatures(tmp_path, monkeypatch):
+    """The VM-side merge of shipped factors called export(out_ckpt, base_dir, out_hf) against
+    export(checkpoint, out_dir, *, base=...): a TypeError on every factor rebind."""
+    import inspect
+    from natlang_neuralese.export import native_hf
+    from natlang_neuralese.train import learner_state
+    factors = tmp_path / 'factors'
+    factors.mkdir()
+    (factors / 'policy_manifest.json').write_text(json.dumps({'base_checkpoint_sha256': 'b' * 64}))
+    (factors / 'adapter_factors_fp32.safetensors').write_bytes(b'f')
+    scripts = []
+
+    def ssh_host(host, command, **kw):
+        words = shlex.split(command)
+        if words[1:2] == ['-c']:
+            scripts.append(words)
+            return json.dumps({'export_dir': words[-1], 'weights_sha256': 'w' * 64}) + '\n'
+        return ''
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', lambda *a, **k: None)
+    cfg = pop_rl_actor.host_config('colab_g4', host='g4')
+    pop_rl_actor._prepare_remote_rebind_export(host='g4', cfg=cfg, policy_id='p' * 64, version=3, factors_dir=factors)
+    (words,) = scripts
+    called = {}
+    real_export, real_merge = native_hf.export, learner_state.merge_factors_to_checkpoint
+
+    def fake_export(*a, **k):
+        inspect.signature(real_export).bind(*a, **k)
+        called['export'] = (a, k)
+        return {'weights_sha256': 'w' * 64}
+
+    def fake_merge(*a, **k):
+        inspect.signature(real_merge).bind(*a, **k)
+        called['merge'] = a
+    monkeypatch.setattr(native_hf, 'export', fake_export)
+    monkeypatch.setattr(learner_state, 'merge_factors_to_checkpoint', fake_merge)
+    monkeypatch.setattr(sys, 'argv', ['-c', *words[3:]])
+    exec(compile(words[2], '<remote-merge>', 'exec'), {'__name__': '__main__'})
+    (out_ckpt, out_hf), kw = called['export']
+    assert kw == {'base': cfg['base']} and out_hf == words[-1] and out_ckpt == called['merge'][2]

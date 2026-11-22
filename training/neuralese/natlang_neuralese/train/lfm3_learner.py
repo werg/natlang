@@ -495,39 +495,92 @@ class Lfm3Learner:
         return h.hexdigest()
 
     @torch.no_grad()
-    def merged_backbone_and_interface(self, *, device='cpu', dtype=torch.bfloat16) -> tuple[dict[str, torch.Tensor], dict]:
-        """Construct immutable merged BF16 backbone weights ``bf16(fp32(W0) + s * B_fp32 @ A_fp32)`` and updated
-        ``interface_state`` without mutating the live training model or its factors."""
-        backbone: dict[str, torch.Tensor] = {}
-        for name, param in self.model.state_dict().items():
-            if name == 'lm_head.weight':
+    def factor_tensors(self) -> tuple[dict[str, torch.Tensor], dict[str, float]]:
+        """(CPU FP32 tensors in the shipped factor layout, per-matrix scale): ``lora_A.<param>``/``lora_B.<param>`` for
+        every target, ``trainable_rows.rows``/``.token_ids`` when rows train. What ``merge_policy_state`` merges, the
+        learner's own export and a shipped factor directory alike."""
+        tensors: dict[str, torch.Tensor] = {}
+        scales: dict[str, float] = {}
+        for param_name in sorted(self.target_map):
+            layer_idx, _kind, short_name = self.target_map[param_name]
+            leaf: LinearFactorLeaf | None = getattr(self.bundles[layer_idx], short_name)
+            if leaf is None:
                 continue
-            if name in self.target_map:
-                layer_idx, _kind, short_name = self.target_map[name]
-                leaf: LinearFactorLeaf = getattr(self.bundles[layer_idx], short_name)
-                merged = param.detach().float() + float(leaf.scale) * (leaf.b.detach().float() @ leaf.a.detach().float())
-                backbone[name] = merged.to(device=device, dtype=dtype).contiguous()
-            else:
-                backbone[name] = param.detach().to(device=device, dtype=dtype).contiguous()
-        interface = dict((self.state or {}).get('interface_state') or {})
-        if self.trainable_rows is not None and self.trainable_rows.token_ids.numel():
-            rows_cpu = self.trainable_rows.rows.detach().to(device=device, dtype=dtype)
-            id_to_pos = {int(t): idx for idx, t in enumerate(self.trainable_rows.token_ids.tolist())}
-            embed = backbone['model.embed_tokens.weight'].clone()
-            embed[self.trainable_rows.token_ids.to(device=device)] = rows_cpu
-            backbone['model.embed_tokens.weight'] = embed.contiguous()
-            # Tied checkpoints hold ``output_rows = None`` / ``extra_output_rows = None`` (the head reuses the input
-            # rows): only present tensors are updated, and None stays None.
-            for ids, field, out_field in ((self.trainable_rows.marker_ids, 'input_rows', 'output_rows'),
-                                          (self.trainable_rows.override_ids, 'extra_input_rows', 'extra_output_rows')):
-                if not ids or interface.get(field) is None:
-                    continue
-                index = torch.tensor([id_to_pos[i] for i in ids], dtype=torch.long)
-                updated = rows_cpu.index_select(0, index).contiguous()
-                interface[field] = updated.to(interface[field].dtype)
-                if interface.get(out_field) is not None:
-                    interface[out_field] = updated.to(interface[out_field].dtype)
+            tensors[f'lora_A.{param_name}'] = leaf.a.detach().to(device='cpu', dtype=torch.float32).contiguous()
+            tensors[f'lora_B.{param_name}'] = leaf.b.detach().to(device='cpu', dtype=torch.float32).contiguous()
+            scales[param_name] = float(leaf.scale)
+        if self.trainable_rows is not None:
+            tensors['trainable_rows.rows'] = self.trainable_rows.rows.detach().to(device='cpu', dtype=torch.float32).contiguous()
+            tensors['trainable_rows.token_ids'] = self.trainable_rows.token_ids.detach().to(device='cpu', dtype=torch.int64).contiguous()
+        return tensors, scales
+
+    def merged_backbone_and_interface(self, *, dtype=torch.bfloat16) -> tuple[dict[str, torch.Tensor], dict]:
+        """The merged policy of this learner over its source checkpoint state (``merge_policy_state``)."""
+        if not (self.state or {}).get('backbone_state'):
+            raise ValueError('merged_backbone_and_interface: the learner has no source checkpoint state')
+        tensors, scales = self.factor_tensors()
+        backbone, interface, _changed = merge_policy_state(self.state, tensors, scales, dtype=dtype)
         return backbone, interface
+
+
+def merge_policy_state(state: dict, tensors: dict, scales: dict, *, dtype=torch.bfloat16) -> tuple[dict, dict, int]:
+    """The one merge of a ``lora+rows`` policy into its source native checkpoint ``state`` (async-train §2.5): the
+    learner's own export (``learner_state.export_merged_checkpoint``) and a shipped factor directory
+    (``learner_state.merge_factors_to_checkpoint``) both call this, so a DGX merge of shipped factors equals the
+    learner's export bit for bit. On CPU in FP32: ``W = dtype(fp32(dtype(W0)) + s * fp32(B) @ fp32(A))`` per target, every
+    other tensor ``dtype(W0)``; trainable rows replace the interface rows (``input_rows``/``output_rows`` at the marker
+    ids, ``extra_input_rows``/``extra_output_rows`` at the override ids; a tied layout's ``*output_rows`` = None stays
+    None) while the embedding keeps the source rows at those ids (the native loader merges the interface rows in);
+    the head stays tied to the embedding. ``tensors``: ``lora_A.<param>``/``lora_B.<param>`` and optionally
+    ``trainable_rows.rows``/``trainable_rows.token_ids``; ``scales``: ``<param>`` -> alpha / rank, required for every
+    target. Returns ``(backbone, interface, changed elements)``."""
+    original = state['backbone_state']
+    targets = {k[len('lora_A.'):] for k in tensors if k.startswith('lora_A.')}
+    missing = sorted(t for t in targets if t not in original or f'lora_B.{t}' not in tensors or t not in scales)
+    if missing:
+        raise ValueError(f'factor targets without a base tensor, a B factor or a scale: {missing[:4]}')
+    backbone: dict[str, torch.Tensor] = {}
+    changed = 0
+    for name, w in original.items():
+        if name == 'lm_head.weight':
+            continue
+        base = w.detach().to(device='cpu', dtype=dtype)
+        if name in targets:
+            a = tensors[f'lora_A.{name}'].to(device='cpu', dtype=torch.float32)
+            b = tensors[f'lora_B.{name}'].to(device='cpu', dtype=torch.float32)
+            merged = (base.float() + float(scales[name]) * (b @ a)).to(dtype).contiguous()
+            changed += int((merged != base).sum())
+            backbone[name] = merged
+        else:
+            backbone[name] = base.contiguous()
+    interface = dict(state.get('interface_state') or {})
+    if 'trainable_rows.rows' in tensors:
+        ids = [int(i) for i in tensors['trainable_rows.token_ids'].tolist()]
+        rows = tensors['trainable_rows.rows'].to(device='cpu', dtype=dtype)
+        position = {tid: idx for idx, tid in enumerate(ids)}
+        config = state.get('model_config') or {}
+        groups = ((tuple(int(i) for i in config.get('marker_ids') or ()), 'input_rows', 'output_rows'),
+                  (tuple(int(i) for i in config.get('token_override_ids') or ()), 'extra_input_rows', 'extra_output_rows'))
+        covered = set()
+        for group_ids, field, out_field in groups:
+            if not group_ids or interface.get(field) is None:
+                continue
+            absent = [i for i in group_ids if i not in position]
+            if absent:
+                raise ValueError(f'trainable rows lack {field} ids {absent}')
+            covered.update(group_ids)
+            updated = rows.index_select(0, torch.tensor([position[i] for i in group_ids], dtype=torch.long)).contiguous()
+            for key in (field, out_field):
+                if interface.get(key) is not None:
+                    new = updated.to(interface[key].dtype)
+                    changed += int((new != interface[key]).sum())
+                    interface[key] = new
+        stray = sorted(set(ids) - covered)
+        if stray:
+            raise ValueError(f'trainable rows {stray[:4]} are no interface row of the source checkpoint')
+    if 'lm_head.weight' in original or 'model.embed_tokens.weight' in backbone:
+        backbone['lm_head.weight'] = backbone['model.embed_tokens.weight']
+    return backbone, interface, changed
 
 
 def capture_rng_state() -> dict:

@@ -6957,3 +6957,74 @@ variants, 4-route attestation, and Colab G4 bootstrap/sizing commits already on 
     consecutive neutral measured rounds/evals; rolls back and flags bug hunt on failure), and `AsyncRoundDriver`
     (`expert_iteration.py async-drive`).
   - Targeted tests in `tests/neuralese/test_async_train.py`.
+
+## 2026-11-22 17:00 Async expert iteration: review fixes (round driver, merge, publication, round ledger, Colab paths)
+
+Two independent reviews of `222af966e`..`7c9038cf5` found the round driver could not run a round and several paths
+crashed or lost work. Fixed as the default, each with a test that fails on the defect (checked with mutants: the old
+off-by-one held rule, a non-truncating rollback, a publication that reruns, a round marked before its export, warmup 8,
+the old remote `export` call, `ensure_colab_mps` in run-sft, and in the merge: scale dropped, scale squared, rows
+reversed; every mutant fails its test).
+
+- **One merge** (`lfm3_learner.merge_policy_state`): the learner's export (`export_merged_checkpoint`), a shipped factor
+  directory (`merge_factors_to_checkpoint`) and `Lfm3Learner.merged_backbone_and_interface` all call it, on CPU in FP32
+  from the source checkpoint state. The factor merge had written trainable rows only into `input_rows` /
+  `extra_input_rows` (not `output_rows` of an untied layout) and fell back to alpha / rank when a scale was missing;
+  the learner's export merged on the GPU (TF32-dependent). Now scales are required, the embedding keeps the source rows
+  at the interface ids (the native loader merges the interface rows), and the merge of shipped factors equals the
+  learner's own export tensor for tensor (tested on a tiny LFM3 with alpha 8 / rank 4, distinct rows per id, tied and
+  untied layouts, against an independent formula).
+- **Round ledger** (`exp0_sft`): the round is marked trained only after its factor / checkpoint export committed
+  (`export_round`; before, a preemption during the export left a round "already trained" with no export). A resumed
+  state must match the chains sha and the step schedule (`--epochs`, `--batch-loss-tokens`, seed, order), or the run
+  refuses. `trained_episode_ids` is removed: the episodes a round trained are its `round.json` `episode_ids`, sha-tied
+  to its chains; a second copy in the learner state adds nothing the round id does not already identify.
+- **Publication to every engine** (`publish_merged_policy`): native (the merged checkpoint, loaded once by the export),
+  SGLang (HF export) and GGUF q8_0 (`export/native_gguf.py`; the old call named a nonexistent `export_gguf.py` and
+  recorded "skipped") for llama-server and the in-page wllama; a failed engine raises. A held success rewrites the
+  `lfm-latest` pointer and refreshes the `lfm-latest` / `lfm-latest-gguf` profiles (`promote_policy`: `natlang setup
+  --native lfm-latest --gguf q8_0` as a ledger unit); the cycle's verdict uses the same function.
+- **The round driver** (`expert_iteration.py async-drive`, `AsyncRoundDriver`), rewritten: standing DGX collection of
+  the newest published policy (restarted per policy, so every collection serves exactly one policy; remote actors
+  rebound by factors and collected from through their forwarded ports), fill beside it, teacher campaign on each round's
+  frontier; per round: snapshot of the current and previous policy's collections (registered as open snapshots),
+  frontier with the previous policy adjacent, extraction (collections, teacher campaigns, GRPO groups), replay, fills,
+  own Neuralese graph, build with `--frontier` and `--previous-policy` (the old driver rebuilt the same pool every round
+  with neither); the next round's preparation runs while this one trains; SFT from one recipe for Colab and the DGX
+  (`launch-sft.sh`: epochs 1, warmup 10, 30k loss tokens, plus `--round-id --export-factors-dir --factors-only
+  --resume`; the old DGX takeover called exp0_sft without `--base` or the recipe, outside the ledger); merge and
+  publication in one ledger unit (`publish-round`, `policy/published.json` last, idempotent: a crash after the merge
+  resumes and records); GRPO rounds (`grpo.py train --max-steps`, `--held-every-hours 0`, last step's factors) publish
+  and advance like SFT rounds (the old branch never advanced: an infinite loop). Every DGX subprocess is a ledger unit.
+- **Held in rounds** (`PhaseController`, state schema /2): every `--held-every`-th round is measured (the old rule
+  measured every N-1th and its test asserted it), in the background on the DGX series against the reference, one at a
+  time; success doubles the interval, neutral resets it, failure sets 1 and writes `bug-hunt-<sha12>.json`; a rejected
+  candidate rolls the lineage back to the reference, so the previous policy is the reference's predecessor (it had become
+  the rejected policy) and a round trained from a discarded policy is discarded at publication. Two neutral measured
+  rounds switch SFT <-> GRPO from the reference. As in cycles (902eb04f1, a4d047827) the loop continues from the
+  reference after a failure (the next round is measured); the supervisor stops it for the hunt.
+- **Colab paths**: the VM-side factor merge called `export(out_ckpt, base_dir, out_hf)` (TypeError on every factor
+  rebind); run-sft no longer starts MPS (the serve that puts an actor beside the learner starts it; starting it after a
+  non-MPS actor breaks the learner), maps `--export-factors-dir` from the recipe and pulls the factors blob first into
+  the recipe's directory, renamed whole. Endpoints of ProxyCommand-only hosts (`ssh colab-g4`, one SSH connection per
+  runtime) are forwarded over the ControlMaster (`ssh -O forward`, VM port + 10161, the tunnel unit's mapping) instead of
+  `http://colab-g4:PORT`, which never resolved.
+- **Collection defaults**: BF16 weights, no JOLT+ guided attempts (`COLLECT_WEIGHT_DTYPE`, `TEACHER_ATTEMPTS`) until the
+  FP8 weight path and JOLT+ custody work in production; the data/GRPO strand flips them.
+- **Not built / open.** The Colab learner and actor sizing still assume the 96 GB G4 (`G4_ACTOR_BESIDE_LEARNER`, the
+  run-sft VRAM claim): on the 80 GB A100 a learner beside a capped actor does not fit the admission claim. The GRPO
+  phase runs on the DGX (plan §7.1 puts its learner on the G4). No production round has run: the command for the first
+  one (one round, measured, DGX learner) is
+
+      P=/home/werg/data/lfm3-rl-dgx-20261029/ops/ei/pin-<c12>; E=/home/werg/data/lfm3-rl-dgx-20261029/ops/ei
+      python3 /home/werg/natlang/scripts/memory_ledger.py run --unit aei1-drive --budget-gb 2 --priority medium \
+        --wait 36000 --detach --workdir $E -- /usr/bin/env PYTHONPATH=$P/training/neuralese:$P HF_HUB_OFFLINE=1 \
+        PATH=$PATH $P/.venv-neuralese/bin/python $P/scripts/neuralese_data/expert_iteration.py async-drive \
+        --root $E/aei1 --name aei1 --start START.pt --start-sha SHA --commit <commit> --sft-profile dgx \
+        --held-every 1 --max-rounds 1 --fill /home/werg/data/filled-reasoning-20261120 \
+        --seed-work /home/werg/data/sft-sources-20261120b --seed-work /home/werg/data/sft-teacher-qwen-october-20261120 \
+        --aux neuralese-graph=/home/werg/natlang/runs/sft-neuralese-graph-20261117-v1/chains.pkl,share=0.05,task_tokens=40000 \
+        --aux operators=/home/werg/data/lfm3-rl-dgx-20261029/ops/operators-v1/merged/chains.pkl,share=0.03,task_tokens=2000 \
+        --aux live=/home/werg/data/vibestudio-live-corpus/seed-v2/sft/build/chains.pkl,share=all --prefer-unseen MIX...
+
+  (`--dry-run` prints the round's commands; verified against the live paths with START = sft-v8's candidate).

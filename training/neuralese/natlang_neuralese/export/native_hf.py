@@ -190,65 +190,53 @@ def export(checkpoint, out_dir, *, base=None, dtype=torch.bfloat16):
                          checkpoint_sha256=sha256_file_hex_cached(checkpoint), out_dir=out_dir, dtype=dtype)
 
 
-def publish_merged_policy(
-    merged_checkpoint,
-    *,
-    base=None,
-    sglang_export_dir=None,
-    gguf_out=None,
-    gguf_quant: str = 'q8_0',
-    lfm_latest_path=None,
-    label: str | None = None,
-    why: str | None = None,
-) -> dict:
-    """Write every serving artifact (SGLang HF export, optional GGUF for llama-server/wllama, optional
-    ``lfm-latest`` pointer) from one immutable merged BF16 native checkpoint (async-train §2.5 & §5)."""
-    import subprocess
-    import sys
+def publish_merged_policy(merged_checkpoint, *, sglang_export_dir, gguf_dir, base=None, gguf_outtypes=('q8_0',),
+                          lfm_latest_path=None, label: str | None = None, why: str | None = None) -> dict:
+    """Every engine's artifact from one immutable merged BF16 native checkpoint (async-train §2.5 & §5): the native
+    engine serves the checkpoint itself (loaded once here, so an unloadable one fails now), SGLang the HF export
+    (``export``), managed llama-server and the in-page wllama the GGUF (``native_gguf.export``, ``gguf_outtypes``);
+    ``lfm_latest_path`` (given when held adopts the policy) rewrites the ``lfm-latest`` pointer last. A failed engine
+    raises: nothing is reported published that an engine cannot serve."""
     import time
     from ..common.hashing import sha256_file_hex_cached
     from ..common.jsonio import write_json_durable
+    from .native_gguf import export as export_gguf
 
     ckpt = Path(merged_checkpoint).resolve(strict=True)
     ckpt_sha = sha256_file_hex_cached(ckpt)
+    sglang = export(ckpt, sglang_export_dir, base=base, dtype=torch.bfloat16)
+    if sglang.get('checkpoint_sha256') != ckpt_sha or not (Path(sglang_export_dir) / 'model.safetensors').is_file():
+        raise RuntimeError(f'SGLang export of {ckpt} is incomplete')
+    gguf = export_gguf(ckpt, gguf_dir, outtypes=tuple(gguf_outtypes), base=base)
+    have = {f['outtype']: f for f in gguf.get('files', ()) if (Path(gguf_dir) / f['file']).is_file()}
+    if gguf.get('checkpoint_sha256') != ckpt_sha or any(t not in have for t in gguf_outtypes):
+        raise RuntimeError(f'GGUF export of {ckpt} lacks {[t for t in gguf_outtypes if t not in have]}')
     published: dict = {
         'schema': 'natlang.published-policy/1',
-        'checkpoint': str(ckpt),
-        'checkpoint_sha256': ckpt_sha,
-        'checkpoint_bytes': ckpt.stat().st_size,
+        'checkpoint': str(ckpt), 'checkpoint_sha256': ckpt_sha, 'checkpoint_bytes': ckpt.stat().st_size,
+        'native': {'checkpoint': str(ckpt), 'sha256': ckpt_sha},
+        'sglang_export': {'dir': str(Path(sglang_export_dir).resolve()), 'weights_sha256': sglang['weights_sha256'],
+                          'schema': sglang['schema']},
+        'gguf': {'dir': str(Path(gguf_dir).resolve()),
+                 'files': {t: {'file': have[t]['file'], 'sha256': have[t]['sha256']} for t in gguf_outtypes}},
         'published_at': time.time(),
     }
-    if sglang_export_dir is not None:
-        manifest = export(ckpt, sglang_export_dir, base=base, dtype=torch.bfloat16)
-        published['sglang_export'] = {
-            'dir': str(Path(sglang_export_dir).resolve()),
-            'weights_sha256': manifest['weights_sha256'],
-            'schema': manifest['schema'],
-        }
-    if gguf_out is not None:
-        gguf_path = Path(gguf_out)
-        gguf_path.parent.mkdir(parents=True, exist_ok=True)
-        repo_root = Path(__file__).resolve().parents[4]
-        converter = repo_root / 'scripts' / 'neuralese_data' / 'export_gguf.py'
-        if converter.is_file():
-            cmd = [sys.executable, str(converter), '--checkpoint', str(ckpt), '--out', str(gguf_path),
-                   '--quant', str(gguf_quant), *(['--base', str(base)] if base else [])]
-            subprocess.run(cmd, check=True)
-            published['gguf'] = {'path': str(gguf_path), 'quant': gguf_quant}
-        else:
-            published['gguf'] = {'path': str(gguf_path), 'quant': gguf_quant, 'skipped': 'no export_gguf.py'}
     if lfm_latest_path is not None:
-        pointer = {
-            'schema': 'natlang.current-policy-pointer/1',
-            'scope': 'published merged policy pointer read by lfm-latest native source (async-train §2.5)',
-            'checkpoint': {'path': str(ckpt), 'sha256': ckpt_sha, 'bytes': ckpt.stat().st_size},
-            'label': label or ckpt.parent.name,
-            'why': why or 'published merged policy',
-            'updated': time.time(),
-        }
-        write_json_durable(Path(lfm_latest_path), pointer)
+        write_json_durable(Path(lfm_latest_path), current_policy_pointer(ckpt, ckpt_sha, label=label or ckpt.parent.name,
+                                                                         why=why or 'published merged policy'))
         published['lfm_latest'] = str(lfm_latest_path)
     return published
+
+
+def current_policy_pointer(checkpoint, sha256, *, label, why) -> dict:
+    """The ``lfm-latest`` pointer (``natlang.current-policy-pointer/1``, read by ``nativeSources.lfm-latest``)."""
+    import time
+    checkpoint = Path(checkpoint)
+    return {'schema': 'natlang.current-policy-pointer/1',
+            'scope': 'the best policy on held-v3 so far; read by the lfm-latest native source. An experiment that '
+                     'meets its declared success criteria rewrites this file (DECISIONS records it).',
+            'checkpoint': {'path': str(checkpoint), 'sha256': sha256, 'bytes': checkpoint.stat().st_size},
+            'label': label, 'why': why, 'updated': time.time()}
 
 
 def main(argv=None):

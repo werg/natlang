@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 import torch
 
@@ -25,168 +24,162 @@ for p in (REPO / 'training/neuralese', REPO, REPO / 'scripts/neuralese_data'):
 
 
 # ---- §2 / §4: FP32 factor export, DGX CPU FP32 merge, dedup ledger --------------------------------------------------
-class _MiniLeaf(torch.nn.Module):
-    def __init__(self, in_f, out_f, rank=4, alpha=4.0, seed=10):
-        super().__init__()
-        g = torch.Generator().manual_seed(seed)
-        self.a = torch.nn.Parameter(torch.randn(rank, in_f, generator=g, dtype=torch.float32) * 0.1)
-        self.b = torch.nn.Parameter(torch.randn(out_f, rank, generator=g, dtype=torch.float32) * 0.1)
-        self.scale = float(alpha) / float(rank)
-
-    def delta_fp32(self):
-        return (self.b.float() @ self.a.float()) * self.scale
-
-
-class _MiniLayerBundle(torch.nn.Module):
-    def __init__(self, seed=10):
-        super().__init__()
-        self.q_proj = _MiniLeaf(16, 16, rank=4, alpha=4.0, seed=seed)
-        self.k_proj = _MiniLeaf(16, 16, rank=4, alpha=4.0, seed=seed + 1)
-
-
-class _MiniTrainableRows(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.register_buffer('token_ids', torch.tensor([3, 5, 7], dtype=torch.int64))
-        self.rows = torch.nn.Parameter(torch.full((3, 16), 0.25, dtype=torch.float32))
-
-
-class _FakeLearner:
-    def __init__(self):
-        from natlang_neuralese.train.lfm3_learner import AdapterSpec
-        self.device = torch.device('cpu')
-        self.spec = AdapterSpec(rank=4, alpha=4.0, target_families=('q_proj', 'k_proj'), trainable_rows=True)
-        self.bundles = (_MiniLayerBundle(seed=11),)
-        self.target_map = {
-            'model.layers.0.self_attn.q_proj.weight': (0, 'attn', 'q_proj'),
-            'model.layers.0.self_attn.k_proj.weight': (0, 'attn', 'k_proj'),
-        }
-        self.trainable_rows = _MiniTrainableRows()
-
-    def named_trainable_tensors(self):
-        out = {}
-        for param_name, (layer_idx, _kind, short_name) in sorted(self.target_map.items()):
-            leaf = getattr(self.bundles[layer_idx], short_name)
-            out[f'lora_A.{param_name}'] = leaf.a
-            out[f'lora_B.{param_name}'] = leaf.b
-        out['trainable_rows.rows'] = self.trainable_rows.rows
-        return out
-
-    def effective_policy_sha256(self, base_sha=''):
-        return hashlib.sha256(f'effective:{base_sha}'.encode()).hexdigest()
+def _tiny_trained_learner(alpha=8.0, rank=4, tied_layout=True):
+    """A tiny real LFM3 learner (alpha != rank, so the scale is not 1) with random B factors and distinct trainable rows
+    per id (a row permutation is visible), over a BF16 source checkpoint state with marker and override rows."""
+    sys.path.insert(0, str(REPO / 'tests/neuralese'))
+    from test_lfm3_port import tiny_lfm3_hf
+    from natlang_neuralese.train.lfm3_learner import AdapterSpec, Lfm3Learner
+    from natlang_neuralese.tune.targets import LFM3_LORA_FAMILIES
+    model = tiny_lfm3_hf(window=4).to(dtype=torch.bfloat16)
+    spec = AdapterSpec(target_families=LFM3_LORA_FAMILIES, rank=rank, alpha=alpha, trainable_rows=True)
+    learner = Lfm3Learner.from_model(model, spec, special_ids=(58, 59, 60), marker_ids=(58, 59), override_ids=(60,),
+                                     compile_layers=False, fp8_base=False, seed=3)
+    g = torch.Generator().manual_seed(5)
+    with torch.no_grad():
+        for bundle in learner.bundles:
+            for _, leaf in bundle.iter_leaves():
+                leaf.b.copy_(torch.randn(leaf.b.shape, generator=g) * 0.1)
+        learner.trainable_rows.rows.copy_(torch.randn(learner.trainable_rows.rows.shape, generator=g))
+    embed = model.model.embed_tokens.weight.detach().clone()
+    rows = lambda ids: embed[torch.tensor(ids)].clone()
+    interface = {'marker_ids': (58, 59), 'input_rows': rows([58, 59]), 'output_rows': None if tied_layout else rows([58, 59]),
+                 'token_override_ids': (60,), 'extra_input_rows': rows([60]),
+                 'extra_output_rows': None if tied_layout else rows([60])}
+    backbone = {k: v.detach().clone() for k, v in model.state_dict().items()}
+    backbone['lm_head.weight'] = backbone['model.embed_tokens.weight']
+    learner.state = {'schema': 'natlang.native-checkpoint/1', 'step': 7,
+                     'model_config': {'marker_ids': [58, 59], 'token_override_ids': [60]},
+                     'interface_state': interface, 'backbone_state': backbone}
+    return learner
 
 
-def test_factor_export_and_dgx_fp32_merge_exact_and_fail_closed(tmp_path):
+@pytest.mark.parametrize('tied_layout', [True, False])
+def test_factor_merge_equals_the_learners_own_export_and_the_formula(tmp_path, tied_layout):
+    """The DGX merge of shipped factors (``merge_factors_to_checkpoint``) equals the learner's own export
+    (``export_merged_checkpoint``) tensor for tensor, and both equal an independent oracle: bf16(fp32(W0) + (alpha/r)
+    B A) per target, every interface row from its own id (input and, untied, output), the source embedding rows kept at
+    the interface ids, the head tied. Mutants (scale dropped, scale applied twice, rows reversed) fail the oracle."""
     from natlang_neuralese.common.hashing import sha256_file_hex
-    from natlang_neuralese.train.learner_state import (
-        FACTOR_EXPORT_SCHEMA,
-        export_adapter_factors,
-        load_learner_state,
-        merge_factors_to_checkpoint,
-        save_learner_state,
-    )
-
-    learner = _FakeLearner()
+    from natlang_neuralese.train.learner_state import (export_adapter_factors, export_merged_checkpoint,
+                                                       merge_factors_to_checkpoint)
+    learner = _tiny_trained_learner(alpha=8.0, rank=4, tied_layout=tied_layout)
     base_ckpt = tmp_path / 'base.pt'
-    g = torch.Generator().manual_seed(0)
-    embed_w = torch.randn(32, 16, generator=g, dtype=torch.bfloat16) * 0.05
-    backbone = {
-        'model.embed_tokens.weight': embed_w,
-        'lm_head.weight': embed_w,
-        'model.layers.0.self_attn.q_proj.weight': torch.randn(16, 16, generator=g, dtype=torch.bfloat16) * 0.05,
-        'model.layers.0.self_attn.k_proj.weight': torch.randn(16, 16, generator=g, dtype=torch.bfloat16) * 0.05,
-    }
-    base_payload = {
-        'schema': 'natlang.lfm3-checkpoint/1',
-        'model_config': {'vocab_size': 32, 'hidden_size': 16, 'marker_ids': [3, 5], 'token_override_ids': [7]},
-        'interface_state': {
-            'input_rows': torch.zeros(2, 16, dtype=torch.bfloat16),
-            'extra_input_rows': torch.zeros(1, 16, dtype=torch.bfloat16),
-        },
-        'step': 0,
-        'backbone_state': backbone,
-    }
-    torch.save(base_payload, base_ckpt)
+    torch.save(learner.state, base_ckpt)
     base_sha = sha256_file_hex(base_ckpt)
+    own = export_merged_checkpoint(learner, learner.state, tmp_path / 'own.pt', source_sha256=base_sha, learner_step=3)
+    factors = tmp_path / 'factors'
+    manifest = export_adapter_factors(learner, factors, base_checkpoint_sha256=base_sha, learner_step=3, round_id='r1')
+    assert set(manifest['scales'].values()) == {2.0}
+    shipped = merge_factors_to_checkpoint(base_ckpt, factors, tmp_path / 'shipped.pt')
+    assert shipped['effective_policy_sha256'] == own['effective_policy_sha256']
+    a = torch.load(tmp_path / 'own.pt', map_location='cpu', weights_only=False)
+    b = torch.load(tmp_path / 'shipped.pt', map_location='cpu', weights_only=False)
+    assert a['backbone_state'].keys() == b['backbone_state'].keys()
+    for name in a['backbone_state']:
+        assert torch.equal(a['backbone_state'][name], b['backbone_state'][name]), name
+    for key in ('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows'):
+        x, y = a['interface_state'][key], b['interface_state'][key]
+        assert (x is None and y is None) or torch.equal(x, y), key
+    # the independent oracle
+    src = learner.state['backbone_state']
+    for name, (layer, _kind, short) in learner.target_map.items():
+        leaf = getattr(learner.bundles[layer], short)
+        expected = (src[name].float() + (8.0 / 4.0) * (leaf.b.detach().float() @ leaf.a.detach().float())).to(torch.bfloat16)
+        assert torch.equal(b['backbone_state'][name], expected), name
+    rows = dict(zip(learner.trainable_rows.token_ids.tolist(), learner.trainable_rows.rows.detach().to(torch.bfloat16)))
+    iface = b['interface_state']
+    assert torch.equal(iface['input_rows'], torch.stack([rows[58], rows[59]]))
+    assert torch.equal(iface['extra_input_rows'], torch.stack([rows[60]]))
+    if tied_layout:
+        assert iface['output_rows'] is None and iface['extra_output_rows'] is None
+    else:
+        assert torch.equal(iface['output_rows'], torch.stack([rows[58], rows[59]]))
+        assert torch.equal(iface['extra_output_rows'], torch.stack([rows[60]]))
+    assert torch.equal(b['backbone_state']['model.embed_tokens.weight'], src['model.embed_tokens.weight'])
+    assert b['backbone_state']['lm_head.weight'] is b['backbone_state']['model.embed_tokens.weight'] or torch.equal(
+        b['backbone_state']['lm_head.weight'], b['backbone_state']['model.embed_tokens.weight'])
+    assert b['round_id'] == 'r1' and b['inference_source']['adapter_factors_sha256'] == manifest['adapter_factors_sha256']
 
-    # Export factors in blob-first order
-    factors_dir = tmp_path / 'factors'
-    manifest = export_adapter_factors(
-        learner, factors_dir, base_checkpoint_sha256=base_sha, learner_step=12, round_id='round-001',
-    )
-    assert manifest['schema'] == FACTOR_EXPORT_SCHEMA
-    assert manifest['round_id'] == 'round-001'
-    assert (factors_dir / 'adapter_factors_fp32.safetensors').is_file()
-    assert (factors_dir / 'policy_manifest.json').is_file()
 
-    # Merge on CPU in FP32 and verify exact bitwise match with bf16(fp32(W0) + scale * B @ A)
-    merged_ckpt = tmp_path / 'merged.pt'
-    result = merge_factors_to_checkpoint(base_ckpt, factors_dir, merged_ckpt)
-    assert merged_ckpt.is_file()
-    assert result['checkpoint_sha256'] == sha256_file_hex(merged_ckpt)
-    merged = torch.load(merged_ckpt, map_location='cpu', weights_only=False)
-    for short in ('q_proj', 'k_proj'):
-        key = f'model.layers.0.self_attn.{short}.weight'
-        w0 = backbone[key].float()
-        leaf = getattr(learner.bundles[0], short)
-        expected = (w0 + leaf.delta_fp32()).to(torch.bfloat16)
-        assert torch.equal(merged['backbone_state'][key], expected)
-    # Trainable rows applied to interface_state (input_rows + extra_input_rows) and tied lm_head preserved
-    assert torch.equal(merged['interface_state']['input_rows'], torch.full((2, 16), 0.25, dtype=torch.bfloat16))
-    assert torch.equal(merged['interface_state']['extra_input_rows'], torch.full((1, 16), 0.25, dtype=torch.bfloat16))
-    assert torch.equal(merged['backbone_state']['lm_head.weight'], merged['backbone_state']['model.embed_tokens.weight'])
-
-    # Fail-closed on corrupted factor safetensors
-    bad_factors = tmp_path / 'bad-factors'
-    bad_factors.mkdir()
-    (bad_factors / 'policy_manifest.json').write_bytes((factors_dir / 'policy_manifest.json').read_bytes())
-    raw = bytearray((factors_dir / 'adapter_factors_fp32.safetensors').read_bytes())
+def test_factor_merge_fails_closed_and_the_round_ledger_persists(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.train.learner_state import (export_adapter_factors, load_learner_state,
+                                                       merge_factors_to_checkpoint, save_learner_state)
+    learner = _tiny_trained_learner()
+    base_ckpt = tmp_path / 'base.pt'
+    torch.save(learner.state, base_ckpt)
+    base_sha = sha256_file_hex(base_ckpt)
+    factors = tmp_path / 'factors'
+    export_adapter_factors(learner, factors, base_checkpoint_sha256=base_sha, learner_step=1)
+    bad = tmp_path / 'bad'
+    bad.mkdir()
+    (bad / 'policy_manifest.json').write_bytes((factors / 'policy_manifest.json').read_bytes())
+    raw = bytearray((factors / 'adapter_factors_fp32.safetensors').read_bytes())
     raw[-1] ^= 0xFF
-    (bad_factors / 'adapter_factors_fp32.safetensors').write_bytes(bytes(raw))
+    (bad / 'adapter_factors_fp32.safetensors').write_bytes(bytes(raw))
     with pytest.raises(ValueError, match='checksum mismatch'):
-        merge_factors_to_checkpoint(base_ckpt, bad_factors, tmp_path / 'should_not_exist.pt')
-
-    # Fail-closed on wrong base checkpoint
-    other_base = tmp_path / 'other_base.pt'
-    other_base.write_bytes(b'not-the-same-base')
+        merge_factors_to_checkpoint(base_ckpt, bad, tmp_path / 'x.pt')
+    other = tmp_path / 'other.pt'
+    other.write_bytes(b'not-the-base')
     with pytest.raises(ValueError, match='base checkpoint mismatch'):
-        merge_factors_to_checkpoint(other_base, factors_dir, tmp_path / 'should_not_exist2.pt')
-
-    # Round dedup ledger persists through save_learner_state / load_learner_state
+        merge_factors_to_checkpoint(other, factors, tmp_path / 'y.pt')
+    noscale = tmp_path / 'noscale'
+    noscale.mkdir()
+    m = json.loads((factors / 'policy_manifest.json').read_text())
+    m['scales'] = {}
+    (noscale / 'policy_manifest.json').write_text(json.dumps(m))
+    (noscale / 'adapter_factors_fp32.safetensors').write_bytes((factors / 'adapter_factors_fp32.safetensors').read_bytes())
+    with pytest.raises(ValueError, match='scale'):
+        merge_factors_to_checkpoint(base_ckpt, noscale, tmp_path / 'z.pt')
+    assert not any((tmp_path / n).exists() for n in ('x.pt', 'y.pt', 'z.pt'))
     state_dir = tmp_path / 'learner-state'
-    save_learner_state(
-        state_dir, learner, learner_step=12, source_checkpoint_id=str(base_ckpt), base_weights_sha256=base_sha,
-        trained_rounds=['round-001', 'round-002'], trained_episode_ids=['ep-1', 'ep-2'],
-    )
+    save_learner_state(state_dir, learner, learner_step=1, source_checkpoint_id=str(base_ckpt),
+                       base_weights_sha256=base_sha, trained_rounds=['r1', 'r2', 'r1'])
     loaded = load_learner_state(state_dir, learner, restore_rng=False, verify_base_sha=base_sha)
-    assert loaded['trained_rounds'] == ['round-001', 'round-002']
-    assert loaded['trained_episode_ids'] == ['ep-1', 'ep-2']
+    assert loaded['trained_rounds'] == ['r1', 'r2']
 
 
 # ---- §5: Multi-engine policy publication -----------------------------------------------------------------------------
-def test_publish_merged_policy_writes_pointer_and_invokes_exports(tmp_path, monkeypatch):
-    from natlang_neuralese.export import native_hf
+def test_publish_merged_policy_writes_every_engine_and_a_failed_engine_raises(tmp_path, monkeypatch):
+    from natlang_neuralese.export import native_gguf, native_hf
 
     ckpt = tmp_path / 'policy.pt'
     ckpt.write_bytes(b'fake-merged-checkpoint')
-    calls = {}
+    sha = hashlib.sha256(b'fake-merged-checkpoint').hexdigest()
+    calls = []
 
     def fake_export(checkpoint, out_dir, *, base=None, dtype=None):
-        calls['sglang'] = (str(checkpoint), str(base), str(out_dir))
+        calls.append('sglang')
         Path(out_dir).mkdir(parents=True, exist_ok=True)
-        return {'weights_sha256': '1' * 64, 'schema': 'natlang.sglang-hf-export/1'}
+        (Path(out_dir) / 'model.safetensors').write_bytes(b'w')
+        return {'weights_sha256': '1' * 64, 'schema': 'natlang.sglang-hf-export/1', 'checkpoint_sha256': sha}
+
+    def fake_gguf(checkpoint, out_dir, *, outtypes=('bf16',), base=None, **_):
+        calls.append(('gguf', tuple(outtypes)))
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        files = []
+        for t in outtypes:
+            (Path(out_dir) / f'model-{t}.gguf').write_bytes(b'g')
+            files.append({'outtype': t, 'file': f'model-{t}.gguf', 'sha256': '2' * 64})
+        return {'checkpoint_sha256': sha, 'files': files}
 
     monkeypatch.setattr(native_hf, 'export', fake_export)
+    monkeypatch.setattr(native_gguf, 'export', fake_gguf)
     pointer = tmp_path / 'current-policy.json'
-    out = native_hf.publish_merged_policy(
-        ckpt, base=tmp_path / 'base', sglang_export_dir=tmp_path / 'sglang-hf',
-        lfm_latest_path=pointer, label='async-r1', why='unit test',
-    )
-    assert out['sglang_export']['weights_sha256'] == '1' * 64
-    assert pointer.is_file()
+    out = native_hf.publish_merged_policy(ckpt, base=tmp_path / 'base', sglang_export_dir=tmp_path / 'sglang-hf',
+                                          gguf_dir=tmp_path / 'gguf', lfm_latest_path=pointer, label='r1', why='t')
+    assert calls == ['sglang', ('gguf', ('q8_0',))]
+    assert out['native']['sha256'] == sha and out['sglang_export']['weights_sha256'] == '1' * 64
+    assert out['gguf']['files']['q8_0']['file'] == 'model-q8_0.gguf'
     ptr = json.loads(pointer.read_text())
-    assert ptr['checkpoint']['sha256'] == hashlib.sha256(b'fake-merged-checkpoint').hexdigest()
-    assert ptr['label'] == 'async-r1'
+    assert ptr['checkpoint']['sha256'] == sha and ptr['label'] == 'r1'
+    # without a pointer request the pointer is not touched; a GGUF export that lacks its file is an error, not a skip
+    pointer.unlink()
+    monkeypatch.setattr(native_gguf, 'export', lambda *a, **k: {'checkpoint_sha256': sha, 'files': []})
+    with pytest.raises(RuntimeError, match='GGUF'):
+        native_hf.publish_merged_policy(ckpt, sglang_export_dir=tmp_path / 'sglang-hf', gguf_dir=tmp_path / 'g2')
+    assert not pointer.exists()
 
 
 # ---- §1 / §3 / §5: FP8 collection actor profile, MPS, remote rebind + 4-route attestation ----------------------------
@@ -361,65 +354,275 @@ def test_fp8_collection_weights_need_fp8_hardware_and_the_forks_fp8_projections(
 
 
 # ---- §2 / §4 / §7.4: Async round blob-first commit, DGX takeover record, and SFT <-> GRPO PhaseController ------------
-def test_async_round_manifest_takeover_and_phase_controller(tmp_path):
+def test_round_manifest_is_blob_first_and_records_a_takeover(tmp_path):
     import expert_iteration as ei
-
-    round_dir = tmp_path / 'round-0001'
+    round_dir = tmp_path / 'r0001'
     chains = tmp_path / 'chains.pkl'
     chains.write_bytes(b'chains-payload-bytes')
-    manifest = ei.write_round_manifest(
-        round_dir, round_id='r0001', base_policy_sha='1' * 64, previous_policy_sha='0' * 64,
-        chains_path=chains, episode_ids=['ep-b', 'ep-a', 'ep-a'], prefer_unseen=['/mix/0'],
-        profile='colab_g4',
-    )
-    assert manifest['schema'] == ei.ROUND_MANIFEST_SCHEMA
+    manifest = ei.write_round_manifest(round_dir, round_id='r0001', base_policy_sha='1' * 64,
+                                       previous_policy_sha='0' * 64, chains_path=chains,
+                                       episode_ids=['ep-b', 'ep-a', 'ep-a'], prefer_unseen=['/mix/0'], profile='colab')
     assert manifest['episode_ids'] == ['ep-a', 'ep-b']
     assert (round_dir / 'chains.sha256').read_text().strip() == manifest['chains_sha256']
-    assert (round_dir / 'round.json').is_file()
+    updated = ei.record_profile_change(round_dir, from_profile='colab', to_profile='dgx', reason='away', at=1.)
+    assert updated['profile'] == 'dgx' and updated['profile_changes'][-1]['from_profile'] == 'colab'
+    ei.update_round_manifest(round_dir, trained_from='1' * 64)
+    assert json.loads((round_dir / 'round.json').read_text())['trained_from'] == '1' * 64
 
-    updated = ei.record_profile_change(
-        round_dir, from_profile='colab_g4', to_profile='dgx', reason='unreachable > 30 min', at=1234.5,
-    )
-    assert updated['profile'] == 'dgx'
-    assert updated['profile_changes'][-1]['from_profile'] == 'colab_g4'
-    assert updated['profile_changes'][-1]['to_profile'] == 'dgx'
 
-    # PhaseController transitions: success -> doubles held_every; 2 consecutive neutral -> sft->grpo -> grpo->sft; failure -> rollback
-    state_file = tmp_path / 'phase-state.json'
-    ctrl = ei.PhaseController.initialize(
-        state_file, start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64, held_every=2, held_every_max=8,
-    )
-    assert ctrl.phase == 'sft'
-    assert ctrl.should_measure_held() is False
-    ctrl.record_round_published('r1', '/ckpt/v1.pt', '1' * 64, mix_dir='/mix/1')
-    assert ctrl.should_measure_held() is True
+def _policy(i):
+    return f'/ckpt/v{i}.pt', f'{i:x}' * 64 if i < 16 else hashlib.sha256(str(i).encode()).hexdigest()
 
-    ev1 = ctrl.record_verdict({'verdict': 'success', 'adopt': True, 'checkpoint': '/ckpt/v1.pt', 'sha256': '1' * 64})
-    assert ev1['action'] == 'adopt'
-    assert ctrl.state['held_every'] == 4
-    assert ctrl.state['reference_policy']['sha256'] == '1' * 64
 
-    # Two consecutive neutral verdicts flip SFT -> GRPO starting from newest held-adopted policy
-    ev2 = ctrl.record_verdict({'verdict': 'neutral', 'adopt': False, 'checkpoint': '/ckpt/v2.pt', 'sha256': '2' * 64})
-    assert ev2['action'] == 'continue' and ctrl.phase == 'sft'
-    ev3 = ctrl.record_verdict({'verdict': 'neutral', 'adopt': False, 'checkpoint': '/ckpt/v3.pt', 'sha256': '3' * 64})
-    assert ev3['action'] == 'switch_phase' and ev3['from_phase'] == 'sft' and ev3['to_phase'] == 'grpo'
-    assert ctrl.phase == 'grpo'
-    assert ctrl.state['current_policy']['sha256'] == '1' * 64  # newest held-adopted policy
+@pytest.mark.parametrize('held_every', [1, 2, 3])
+def test_held_schedule_counted_in_rounds_matches_the_cycle_rule(tmp_path, held_every):
+    """With --held-every N the async loop measures every Nth round, as cycles do (Cycle.measured: since + 1 >= N with
+    since the unmeasured cycles before this one); the first round is measured only when N is 1."""
+    import expert_iteration as ei
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=held_every)
+    measured, since = [], 0
+    cycle_measured = []
+    for i in range(1, 7):
+        ckpt, sha = _policy(i)
+        ctrl.record_round_published(f'r{i}', ckpt, sha, base_sha256=ctrl.current['sha256'])
+        if ctrl.held_due():
+            ctrl.start_measurement()
+            measured.append(i)
+        cycle = since + 1 >= held_every          # the cycle path's rule with its own counter
+        cycle_measured.append(i) if cycle else None
+        since = 0 if cycle else since + 1
+    assert measured == cycle_measured == list(range(held_every, 7, held_every))
 
-    # Two consecutive neutral GRPO verdicts flip GRPO -> SFT
-    ctrl.record_verdict({'verdict': 'neutral', 'adopt': True, 'checkpoint': '/ckpt/g1.pt', 'sha256': '4' * 64})
-    ev4 = ctrl.record_verdict({'verdict': 'neutral', 'adopt': False, 'checkpoint': '/ckpt/g2.pt', 'sha256': '5' * 64})
-    assert ev4['action'] == 'switch_phase' and ev4['from_phase'] == 'grpo' and ev4['to_phase'] == 'sft'
-    assert ctrl.state['reference_policy']['sha256'] == '4' * 64
 
-    # Failure rolls back to reference_policy, sets held_every = 1, flags bug_hunt_required
-    ctrl.record_round_published('r4', '/ckpt/bad.pt', '9' * 64)
-    ev5 = ctrl.record_verdict({'verdict': 'failure', 'adopt': False, 'checkpoint': '/ckpt/bad.pt', 'sha256': '9' * 64})
-    assert ev5['action'] == 'rollback_and_bug_hunt'
-    assert ctrl.state['current_policy']['sha256'] == '4' * 64
+def test_rollback_returns_to_the_reference_and_previous_is_never_the_rejected_policy(tmp_path):
+    import expert_iteration as ei
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1)
+    for i in (1, 2):
+        ctrl.record_round_published(f'r{i}', *_policy(i), base_sha256=ctrl.current['sha256'])
+    ctrl.start_measurement()
+    assert ctrl.record_verdict({'verdict': 'success', 'adopt': True, 'checkpoint': _policy(2)[0],
+                                'sha256': _policy(2)[1]})['action'] == 'adopt'
+    assert ctrl.state['held_every'] == 2
+    # rounds 3 and 4 descend from 2 speculatively; 3 is measured and fails while 4 exists
+    for i in (3, 4):
+        ctrl.record_round_published(f'r{i}', *_policy(i), base_sha256=ctrl.current['sha256'])
+    ev = ctrl.record_verdict({'verdict': 'failure', 'adopt': False, 'checkpoint': _policy(3)[0], 'sha256': _policy(3)[1]})
+    assert ev['action'] == 'rollback' and 'bug_hunt' in ev
+    assert ctrl.current['sha256'] == _policy(2)[1]                     # the reference
+    assert ctrl.previous['sha256'] == _policy(1)[1]                    # its predecessor, not the rejected 3
+    assert not ctrl.in_lineage(_policy(3)[1]) and not ctrl.in_lineage(_policy(4)[1])
     assert ctrl.state['held_every'] == 1
-    assert ctrl.state['bug_hunt_required'] is True
+    # a round trained from the discarded 4 cannot publish; the next round from the reference is measured
+    with pytest.raises(ValueError, match='lineage head'):
+        ctrl.record_round_published('r5', *_policy(5), base_sha256=_policy(4)[1])
+    ctrl.record_round_published('r6', *_policy(6), base_sha256=ctrl.current['sha256'])
+    assert ctrl.held_due()
+    # a late verdict of a policy already rolled back is moot
+    assert ctrl.record_verdict({'verdict': 'success', 'adopt': True, 'checkpoint': _policy(4)[0],
+                                'sha256': _policy(4)[1]})['action'].startswith('moot')
+    assert ctrl.state['reference_policy']['sha256'] == _policy(2)[1]
+
+
+def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path):
+    import expert_iteration as ei
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1)
+    def publish_and_judge(i, verdict, adopt):
+        ctrl.record_round_published(f'r{i}', *_policy(i), base_sha256=ctrl.current['sha256'])
+        ctrl.start_measurement()
+        return ctrl.record_verdict({'verdict': verdict, 'adopt': adopt, 'checkpoint': _policy(i)[0],
+                                    'sha256': _policy(i)[1]})
+    publish_and_judge(1, 'neutral', True)
+    assert ctrl.phase == 'sft' and ctrl.state['reference_policy']['sha256'] == _policy(1)[1]
+    ev = publish_and_judge(2, 'neutral', False)
+    assert ev['switch_phase'] == {'from': 'sft', 'to': 'grpo'} and ctrl.phase == 'grpo'
+    assert ctrl.current['sha256'] == _policy(1)[1]                     # the newest held-adopted policy
+    publish_and_judge(3, 'neutral', True)
+    ev = publish_and_judge(4, 'neutral', True)
+    assert ev['switch_phase'] == {'from': 'grpo', 'to': 'sft'} and ctrl.current['sha256'] == _policy(4)[1]
+
+
+def _driver(tmp_path, monkeypatch, **over):
+    import expert_iteration as ei
+    monkeypatch.setattr(ei, 'OPS', tmp_path / 'ops')
+    (tmp_path / 'ops' / 'grpo-v4').mkdir(parents=True)
+    pin = tmp_path / 'pin'
+    (pin / 'scripts' / 'neuralese_data').mkdir(parents=True)
+    start = tmp_path / 'start.pt'
+    start.write_bytes(b'start')
+    argv = ['async-drive', '--root', str(tmp_path / 'loop'), '--name', 'aei', '--start', str(start),
+            '--start-sha', 'a' * 64, '--commit', 'c' * 40, '--pin', str(pin), '--sft-work', str(tmp_path / 'work'),
+            *over.pop('argv', [])]
+    parser_args = {}
+    monkeypatch.setattr(sys, 'argv', ['expert_iteration.py', *argv])
+    monkeypatch.setattr(ei, 'async_drive', lambda a: parser_args.setdefault('a', a) and 0)
+    ei.main()
+    return ei, ei.AsyncRoundDriver(parser_args['a'])
+
+
+def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_ledger(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    cur = d.controller.current
+    g4 = d.sft_env(rd, cur, activation_gb=40, preflight_only=True)
+    dgx = d.sft_env(rd, cur, activation_gb=56, preflight_only=False)
+    for env in (g4, dgx):
+        assert (env['WARMUP'], env['BLT']) == ('10', '30000')          # launch-sft.sh adds --epochs 1
+        extra = env['EXTRA'].split()
+        assert extra[extra.index('--round-id') + 1] == 'r0001' and '--factors-only' in extra and '--resume' in extra
+        assert extra[extra.index('--export-factors-dir') + 1] == str(rd / 'sft' / 'factors')
+        assert env['CKPT'] == cur['checkpoint'] and env['SHA'] == cur['sha256'] and env['WORK'] == str(rd / 'sft')
+    assert {k: v for k, v in g4.items() if k not in ('ACT', 'PREFLIGHT_ONLY')} == \
+        {k: v for k, v in dgx.items() if k != 'ACT'}
+    assert g4['PREFLIGHT_ONLY'] == '1' and 'PREFLIGHT_ONLY' not in dgx
+    launched = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: launched.append((argv, kw['env'])) or
+                        SimpleNamespace(returncode=0))
+    def finished(unit, poll=60):
+        (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
+        (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    monkeypatch.setattr(d.c, 'wait', finished)
+    assert d.train_sft(rd, cur) == rd / 'sft' / 'factors'
+    (argv, env), = launched
+    assert argv[:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')] and 'PREFLIGHT_ONLY' not in env
+    # launch-sft.sh itself execs memory_ledger.py run (the learner is a ledger unit)
+    script = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/grpo-v4/launch-sft.sh')
+    if script.exists():
+        text = script.read_text()
+        assert 'memory_ledger.py run --unit "$UNIT"' in text and '--epochs 1' in text and 'exp0_sft.py $ARGS' in text
+
+
+def test_a_round_prepares_from_the_lineages_collections_with_frontier_and_previous_policy(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--aux', 'x=/a.pkl,share=0.1'])
+    cur = d.controller.current
+    d.controller.record_round_published('r0001', '/ckpt/v1.pt', '1' * 64, base_sha256=cur['sha256'])
+    prev, cur = d.controller.previous, d.controller.current
+    for p in (prev, cur):
+        d.collect_dir(p).mkdir(parents=True)
+        (d.collect_dir(p) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': p['sha256'], 'started': 0}) + '\n')
+    rd = d.root / 'r0002'
+    frontier, lines, build = d.prepare_plan(rd, d.lineage_policies())
+    assert frontier[frontier.index('--policy') + 1] == '1' * 64
+    assert frontier[frontier.index('--previous-policy') + 1] == 'a' * 64 and '--allow-adjacent-policies' in frontier
+    assert [frontier[i + 1] for i, x in enumerate(frontier) if x == '--collect'] == \
+        [str(d.collect_dir(prev)), str(d.collect_dir(cur))]
+    extract = next(x for x in lines if 'extract' in x)
+    assert [extract[i + 1] for i, x in enumerate(extract) if x == '--rl'] == \
+        [f'{d.collect_dir(p)}:{d.collect_dir(p)}' for p in (prev, cur)]
+    assert extract[extract.index('--out-name') + 1] == 'episodes-aei-r0002'
+    assert any('replay' in x for x in lines) and any('neuralese-graph' in x for x in lines)
+    assert build[build.index('--frontier') + 1] == str(rd / 'frontier.json')
+    assert build[build.index('--previous-policy') + 1] == 'a' * 64
+    assert 'x=/a.pkl,share=0.1' in build
+
+
+def test_rounds_publish_advance_and_a_crash_after_the_merge_resumes_without_retraining(tmp_path, monkeypatch):
+    """The loop publishes every round and advances the lineage (the GRPO phase too); a driver that died after the
+    publication but before recording it resumes the same round, finds policy/published.json and only records it."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--held-every', '2', '--max-rounds', '2'])
+    calls = []
+    monkeypatch.setattr(d.c, 'pin_stage', lambda: None)
+    monkeypatch.setattr(d, 'held_loop', lambda: None)
+    monkeypatch.setattr(d, 'ensure_collection', lambda p: calls.append(('collect', p['version'])))
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda p: None)
+    monkeypatch.setattr(d, 'stop_collections', lambda: calls.append(('stop',)))
+    monkeypatch.setattr(d, 'prepare_ahead', lambda rd, pols: None)
+
+    def prepare(rd, pols):
+        if not (rd / 'round.json').exists():
+            (rd / 'mix').mkdir(parents=True, exist_ok=True)
+            (rd / 'mix' / 'chains.pkl').write_bytes(rd.name.encode())
+            ei.write_round_manifest(rd, round_id=rd.name, base_policy_sha=pols[-1]['sha256'], previous_policy_sha=None,
+                                    chains_path=rd / 'mix' / 'chains.pkl', episode_ids=[])
+            (rd / 'stages' / 'prepared.done').write_text('{}')
+        calls.append(('prepare', rd.name))
+    monkeypatch.setattr(d, 'prepare', prepare)
+    monkeypatch.setattr(d, 'train_sft', lambda rd, p: calls.append(('sft', rd.name, p['version'])) or rd / 'sft' / 'factors')
+    monkeypatch.setattr(d, 'train_grpo', lambda rd, p: calls.append(('grpo', rd.name, p['version'])) or rd / 'gf')
+    published = []
+
+    def publish_cmd(rd, p, f):
+        out = rd / 'policy'
+        out.mkdir(parents=True, exist_ok=True)
+        sha = hashlib.sha256(rd.name.encode()).hexdigest()
+        (out / 'published.json').write_text(json.dumps({'checkpoint': str(out / 'checkpoint.pt'), 'checkpoint_sha256': sha,
+                                                        'sglang_export': {'dir': str(out / 'sglang-hf')}}))
+        published.append(rd.name)
+        return ['true']
+    monkeypatch.setattr(d, 'publish_command', publish_cmd)
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, budget, prio, cmd, log, **kw: None)
+    d.publish_command_orig = None
+    # publish() runs publish_command through the ledger: make the ledger call the command builder
+    monkeypatch.setattr(d, 'publish', lambda rd, p, f: (publish_cmd(rd, p, f), json.loads((rd / 'policy' / 'published.json').read_text()))[1])
+    assert d.run() == 0
+    assert [c for c in calls if c[0] == 'sft'] == [('sft', 'r0001', 0), ('sft', 'r0002', 1)]
+    assert d.controller.current['version'] == 2 and d.controller.state['trained_rounds'] == ['r0001', 'r0002']
+    assert d.controller.state['measuring']['candidate']['version'] == 2            # every 2nd round
+    # a crash after r0003's publication: the active round resumes, nothing trains again
+    rid = d.controller.begin_round(d.controller.current['sha256'])
+    assert rid == 'r0003'
+    publish_cmd(d.root / rid, None, None)
+    calls.clear()
+    d.a.max_rounds = 1
+    d2 = ei.AsyncRoundDriver(d.a)
+    for name in ('ensure_collection', 'ensure_remote_collection', 'stop_collections', 'prepare_ahead', 'prepare', 'held_loop',
+                 'train_grpo'):
+        monkeypatch.setattr(d2, name, getattr(d, name))
+    monkeypatch.setattr(d2.c, 'pin_stage', lambda: None)
+    monkeypatch.setattr(d2.c, 'ledger', lambda *a, **k: None)
+    monkeypatch.setattr(d2, 'train_sft', lambda rd, p: (_ for _ in ()).throw(AssertionError('retrained')) if not
+                        (rd / 'policy' / 'published.json').exists() else rd / 'sft' / 'factors')
+    monkeypatch.setattr(d2, 'publish', lambda rd, p, f: json.loads((rd / 'policy' / 'published.json').read_text()))
+    assert d2.run() == 0
+    assert d2.controller.state['trained_rounds'][-1] == 'r0003' and d2.controller.current['version'] == 3
+    # the GRPO phase publishes and advances too
+    d2.controller.state['phase'] = 'grpo'
+    monkeypatch.setattr(d2, 'publish', lambda rd, p, f: (publish_cmd(rd, p, f), json.loads((rd / 'policy' / 'published.json').read_text()))[1])
+    d2.run()
+    assert d2.controller.current['version'] == 4 and any(c[0] == 'grpo' for c in calls)
+    assert ('stop',) in calls
+
+
+def test_a_verdict_applied_mid_round_discards_the_round_and_the_next_trains_from_the_reference(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--held-every', '1', '--max-rounds', '2'])
+    monkeypatch.setattr(d.c, 'pin_stage', lambda: None)
+    monkeypatch.setattr(d, 'held_loop', lambda: None)
+    for name in ('ensure_collection', 'ensure_remote_collection', 'stop_collections'):
+        monkeypatch.setattr(d, name, lambda *a: None)
+    monkeypatch.setattr(d, 'prepare_ahead', lambda rd, pols: None)
+    monkeypatch.setattr(d, 'prepare', lambda rd, pols: None)
+    monkeypatch.setattr(ei, 'update_round_manifest', lambda *a, **k: None)
+    d.controller.record_round_published('r0000', '/ckpt/v1.pt', '1' * 64, base_sha256='a' * 64)
+    d.controller.start_measurement()
+    trained = []
+
+    def train(rd, p):
+        trained.append(p['sha256'])
+        if len(trained) == 1:       # the held verdict of v1 arrives while r0001 trains from it
+            d.verdicts.append({'verdict': 'failure', 'adopt': False, 'checkpoint': '/ckpt/v1.pt', 'sha256': '1' * 64})
+        return rd / 'f'
+    monkeypatch.setattr(d, 'train_sft', train)
+    monkeypatch.setattr(d, 'publish', lambda rd, p, f: {'checkpoint': str(rd / 'c.pt'),
+                                                        'checkpoint_sha256': hashlib.sha256(rd.name.encode()).hexdigest()})
+    d.run()                         # a discarded round does not count: r0002 and r0003 complete
+    assert trained[:2] == ['1' * 64, 'a' * 64] and len(trained) == 3
+    assert (d.root / 'r0001' / 'discarded.json').exists()
+    assert [p['sha256'] for p in d.controller.state['lineage']][:1] == ['a' * 64] and not d.controller.in_lineage('1' * 64)
+    assert (d.root / f'bug-hunt-{"1" * 12}.json').exists()
+
+
+def test_dry_run_prints_one_rounds_commands(tmp_path, monkeypatch, capsys):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--dry-run'])
+    plan = d.plan()
+    assert plan['collect'][plan['collect'].index('--collect-weight-dtype') + 1] == 'bfloat16'
+    assert plan['publish'][2] == 'publish-round' and plan['grpo'][2] == 'train'
+    assert '--held-every-hours' in plan['grpo'] and plan['held']['every'] == 2
+    assert json.loads(capsys.readouterr().out)['phase'] == 'sft'
 
 
 def test_collection_defaults_bf16_weights_and_no_guided_attempts_until_flipped(tmp_path, monkeypatch):
@@ -434,3 +637,43 @@ def test_collection_defaults_bf16_weights_and_no_guided_attempts_until_flipped(t
     argv = c.collect_command('u', 'ckpt', 'sha', 8)
     assert argv[argv.index('--collect-weight-dtype') + 1] == 'bfloat16'
     assert argv[argv.index('--teacher-attempts') + 1] == '0'
+
+
+def test_a_round_is_marked_trained_only_after_its_export_committed():
+    import exp0_sft
+    events = []
+
+    def failing():
+        events.append('factors')
+        raise RuntimeError('preempted mid-export')
+    with pytest.raises(RuntimeError):
+        exp0_sft.export_round(factors=failing, checkpoint=lambda: events.append('checkpoint'), factors_only=True,
+                              round_id='r1', mark_trained=lambda: events.append('marked'))
+    assert events == ['factors']                    # unmarked: the resumed run exports again
+    events.clear()
+    exp0_sft.export_round(factors=lambda: events.append('factors'), checkpoint=lambda: events.append('checkpoint'),
+                          factors_only=True, round_id='r1', mark_trained=lambda: events.append('marked'))
+    assert events == ['factors', 'marked']
+    events.clear()
+    exp0_sft.export_round(factors=None, checkpoint=lambda: events.append('checkpoint'), factors_only=False,
+                          round_id=None, mark_trained=lambda: events.append('marked'))
+    assert events == ['checkpoint']
+
+
+def test_publication_is_idempotent_and_goes_through_the_ledger(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    ran = []
+
+    def ledger(unit, budget, prio, cmd, log, **kw):
+        ran.append((unit, cmd))
+        (rd / 'policy').mkdir(parents=True, exist_ok=True)
+        (rd / 'policy' / 'published.json').write_text(json.dumps({'checkpoint_sha256': 'b' * 64}))
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    cur = d.controller.current
+    assert d.publish(rd, cur, rd / 'sft' / 'factors')['checkpoint_sha256'] == 'b' * 64
+    (unit, cmd), = ran
+    assert unit == 'aei-r0001-publish' and cmd[2] == 'publish-round'
+    assert cmd[cmd.index('--base-checkpoint') + 1] == cur['checkpoint'] and cmd[cmd.index('--out') + 1] == str(rd / 'policy')
+    d.publish(rd, cur, rd / 'sft' / 'factors')     # a rerun after a crash: published.json exists, nothing runs again
+    assert len(ran) == 1

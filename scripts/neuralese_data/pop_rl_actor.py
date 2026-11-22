@@ -34,6 +34,7 @@ import fcntl
 import json
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -169,10 +170,51 @@ def reachable_hosts(profile='pop', hosts=None):
     return [h for h in candidates if host_reachable(h)]
 
 
+def ssh_options(host):
+    """``ssh -G host``: the effective client options of SSH alias ``host`` (lower-case keys)."""
+    out = subprocess.run(['ssh', '-G', host], capture_output=True, text=True, check=True,
+                         stdin=subprocess.DEVNULL).stdout
+    return dict(line.split(' ', 1) for line in out.splitlines() if ' ' in line)
+
+
 def host_address(host):
     """Resolve the tailscale IP/hostname configured for SSH alias ``host``."""
-    out = subprocess.run(['ssh', '-G', host], capture_output=True, text=True, check=True).stdout
-    return next(line.split()[1] for line in out.splitlines() if line.startswith('hostname '))
+    return ssh_options(host)['hostname']
+
+
+# A host reached only through its SSH ProxyCommand (a Colab runtime: `colab ssh --proxy-mode`, which admits one SSH
+# connection, so every command and forward multiplexes over its ControlMaster) has no network address the DGX can
+# open: its servers are forwarded to DGX 127.0.0.1:(port + COLAB_FORWARD_OFFSET), e.g. 8570 -> 18731 (front) and
+# 9570 -> 19731 (SGLang), the ports the session's tunnel unit forwards.
+COLAB_FORWARD_OFFSET = 10161
+
+
+def _listening(port):
+    import socket
+    with socket.socket() as sock:
+        sock.settimeout(2)
+        return sock.connect_ex(('127.0.0.1', int(port))) == 0
+
+
+def forward_port(host, local, remote):
+    """Forward DGX ``127.0.0.1:local`` to ``host``'s ``127.0.0.1:remote`` over the host's ControlMaster (``ssh -O
+    forward``: no second connection); a port already forwarded (the tunnel unit's) is kept."""
+    if _listening(local):
+        return
+    subprocess.run(['ssh', '-O', 'forward', '-L', f'{local}:127.0.0.1:{remote}', host], check=True,
+                   capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+
+
+def remote_endpoint(host, port, bind_host=None):
+    """The DGX-side URL of a server listening on ``host`` at ``port``: ``bind_host`` when given; the host's network
+    address when SSH names one (Pop over Tailscale); for a ProxyCommand-only host the forwarded loopback port."""
+    if bind_host:
+        return f'http://{bind_host}:{port}'
+    options = ssh_options(host)
+    if options.get('proxycommand', 'none') == 'none':
+        return f'http://{options["hostname"]}:{port}'
+    forward_port(host, int(port) + COLAB_FORWARD_OFFSET, int(port))
+    return f'http://127.0.0.1:{int(port) + COLAB_FORWARD_OFFSET}'
 
 
 def sync_to_remote(local_path, remote_path, host, *, attempts=None, stall_seconds=120):
@@ -858,7 +900,7 @@ def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=N
             'from natlang_neuralese.export.native_hf import export\n'
             'repo, base_ckpt, factors_dir, out_ckpt, base_dir, out_hf = sys.argv[2:8]\n'
             'merge_factors_to_checkpoint(base_ckpt, factors_dir, out_ckpt)\n'
-            'res = export(out_ckpt, base_dir, out_hf)\n'
+            'res = export(out_ckpt, out_hf, base=base_dir)\n'
             'print(json.dumps({"export_dir": str(out_hf), "weights_sha256": res["weights_sha256"]}))\n'
         )
         out = ssh_host(host, shlex.join([cfg['python'], '-c', merge_script, cfg['repo'], cfg['repo'],
@@ -961,8 +1003,7 @@ def serve_colab_g4(args):
     if beside_learner:
         ensure_colab_mps(host)
     started = time.time()
-    bind_ip = args.bind_host or host_address(host)
-    endpoint = f'http://{bind_ip}:{args.port}'
+    endpoint = remote_endpoint(host, args.port, args.bind_host)
     ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_work]))
     if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
         sync_to_remote(args.checkpoint, f'{remote_ckpt}.partial', host)
@@ -999,7 +1040,8 @@ def remap_sft_args(argv, mapping):
     """``exp0_sft`` arguments (the DGX recipe, ``launch.json`` ``exp0_sft_args``) with the values of path flags
     replaced through ``mapping`` (local path -> remote path); every --chains/--checkpoint/--base/--out-dir/--val-chains
     value must be mapped (a DGX path on the remote would fail late or read the wrong file)."""
-    out, path_flags = list(argv), ('--chains', '--checkpoint', '--base', '--out-dir', '--val-chains')
+    out, path_flags = list(argv), ('--chains', '--checkpoint', '--base', '--out-dir', '--val-chains',
+                                   '--export-factors-dir', '--state-dir')
     for i, arg in enumerate(out[:-1]):
         if arg in path_flags:
             if out[i + 1] not in mapping:
@@ -1050,17 +1092,17 @@ def run_remote_sft(args):
     local_state = local_work / 'learner-state'
     if (local_state / 'learner_manifest.json').exists():     # exact resume across a preemption (DGX holds the state)
         sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
-    ensure_colab_mps(host)
-    round_id = getattr(args, 'round_id', None)
-    factors_only = bool(getattr(args, 'factors_only', False))
-    extra_sft = []
-    if round_id:
-        extra_sft += ['--round-id', round_id]
-    if factors_only:
-        extra_sft += ['--export-factors-dir', f'{remote_run}/factors', '--factors-only']
+    # an async round's recipe exports its factors (--export-factors-dir, --round-id: one argv for the G4 and the DGX
+    # learner, expert_iteration.round_sft_env); the factors land beside the run on the VM and are pulled back
+    factors_only = '--factors-only' in recipe
+    round_id = value('--round-id') if '--round-id' in recipe else None
+    if '--export-factors-dir' in recipe:
+        mapping[value('--export-factors-dir')] = f'{remote_run}/factors'
+    # no MPS start here: the daemon must be up before the first CUDA client, so the serve that puts an actor beside
+    # the learner starts it (serve-checkpoint --beside-learner) and the learner joins it; a session with no actor
+    # beside (or one started without MPS) runs the learner as a plain CUDA process
     sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *remap_sft_args(recipe, mapping),
-               *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes),
-               *extra_sft]
+               *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(args.vram_gib), '--host-ram-gib',
                 str(args.host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
                 '--', *sft_cmd]
@@ -1095,16 +1137,21 @@ def run_remote_sft(args):
     factors_sha = None
     if rc == 0:
         if factors_only:
-            local_factors = local_work / 'factors'
-            local_factors.mkdir(parents=True, exist_ok=True)
+            # the recipe's DGX factors directory (a DGX takeover writes the same place); blob first, manifest last,
+            # staged beside it and renamed into place whole (a reader never sees a manifest without its blob)
+            local_factors = Path(value('--export-factors-dir'))
+            staged = local_factors.with_name(local_factors.name + '.pull')
+            staged.mkdir(parents=True, exist_ok=True)
             try:
-                pull_verified(f'{remote_run}/factors/policy_manifest.json',
-                              local_factors / 'policy_manifest.json', host)
                 factors_sha = pull_verified(f'{remote_run}/factors/adapter_factors_fp32.safetensors',
-                                            local_factors / 'adapter_factors_fp32.safetensors', host)
-                manifest = json.loads((local_factors / 'policy_manifest.json').read_text())
+                                            staged / 'adapter_factors_fp32.safetensors', host)
+                pull_verified(f'{remote_run}/factors/policy_manifest.json', staged / 'policy_manifest.json', host)
+                manifest = json.loads((staged / 'policy_manifest.json').read_text())
                 if manifest.get('adapter_factors_sha256') != factors_sha:
                     raise RuntimeError('pulled adapter_factors_fp32.safetensors does not match policy_manifest.json')
+                if local_factors.exists():
+                    shutil.rmtree(local_factors)
+                os.replace(staged, local_factors)
             except Exception as err:
                 rc = 1
                 pending = {'schema': 'natlang.pending-upload/1', 'host': host, 'run_name': args.run_name,
@@ -1324,9 +1371,6 @@ def main(argv=None):
     rs.add_argument('--launch-json', required=True,
                     help="the DGX preflight's launch.json (launch-sft.sh PREFLIGHT_ONLY=1): its exp0_sft_args run")
     rs.add_argument('--commit')
-    rs.add_argument('--round-id', help='round identifier recorded in the learner dedup ledger (async-train §2)')
-    rs.add_argument('--factors-only', action='store_true',
-                    help='export and pull ~0.5 GB FP32 LoRA factors instead of a 3.4 GB merged checkpoint (async-train §2)')
     rs.add_argument('--state-sync-minutes', type=float, default=15.0)
     rs.add_argument('--vram-gib', type=float, default=G4_VRAM_GIB - G4_ACTOR_BESIDE_LEARNER['vram_gib'] - 1.0,
                     help='admission claim (default: the GPU less a capped actor beside it)')

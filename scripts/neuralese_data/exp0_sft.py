@@ -934,7 +934,6 @@ def train(args):
         seed=args.seed, base_weights_sha256=source_sha,
     )
     model, state = learner.model, learner.state
-    special = learner.special_ids
     model.train()
     forward = lfm3_fast_train.hidden
     pack_tokens = args.pack_tokens if args.pack_tokens >= 0 else resident_tokens(model, args.activation_gb)
@@ -956,6 +955,16 @@ def train(args):
             print(json.dumps({'event': 'round already trained (dedup ledger)', 'round_id': round_id,
                               'trained_rounds': trained_rounds}), flush=True)
             return
+        # the state's batch cursor indexes this run's step list: a state of other chains or another schedule (epochs,
+        # loss tokens per step, seed, order) would resume at a wrong step of a different list
+        saved_chains = restored['manifest'].get('data_manifest_sha256')
+        if saved_chains and saved_chains != chains_sha:
+            raise SystemExit(f'--resume: {state_dir} trained chains {saved_chains}, not {chains_sha}')
+        saved_total = (restored.get('batch_cursor') or {}).get('total_steps')
+        saved_schedule = (restored.get('trainer_state') or {}).get('schedule') or {}
+        if saved_total is not None and int(saved_total) != total and not saved_schedule.get('replanned'):
+            raise SystemExit(f'--resume: {state_dir} has a {saved_total}-step schedule, these arguments make {total} '
+                             '(--epochs/--batch-loss-tokens/--seed/--batch-order must match the run it resumes)')
         start_step = int((restored.get('batch_cursor') or {}).get('next_step', restored['manifest']['learner_step']))
         if restored['ref_bundles'] or restored['ref_rows'] is not None:
             ref_bundles, ref_rows = restored['ref_bundles'], restored['ref_rows']
@@ -1036,11 +1045,12 @@ def train(args):
             trained_rounds=rounds_now,
             ref_bundles=ref_bundles, ref_rows=ref_rows,
             trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best,
-                           'schedule': {'total': total, 'steps': len(steps)}},
+                           'schedule': {'total': total, 'steps': len(steps), 'replanned': replanned}},
         )
         last_state_save = time.time()
         phase['state_save'] += last_state_save - t_save
 
+    replanned = bool((trainer_state or {}).get('schedule', {}).get('replanned'))
     completed_step = start_step
     for step in range(start_step, len(steps)):
         group = steps[step]
@@ -1117,8 +1127,7 @@ def train(args):
                             'leaves': {name: t.detach().cpu().clone() for name, t in learner.named_trainable_tensors().items()}}
                     if args.save_best:
                         exported = export_merged_checkpoint(learner, state, out_dir / 'checkpoint.pt',
-                                                            source_sha256=source_sha, learner_step=completed_step,
-                                                            special_ids=special)
+                                                            source_sha256=source_sha, learner_step=completed_step)
                         record['saved_best'] = {'step': completed_step, 'val_loss': current,
                                                 'checkpoint_sha256': exported['checkpoint_sha256']}
                 record['best_val'] = {'loss': best['loss'], 'step': best['step']}
@@ -1130,11 +1139,12 @@ def train(args):
             if fit < len(steps):
                 del steps[fit:]
                 total = fit
+                replanned = True
             record['replanned_steps'] = total
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
-    save_state_now(completed_step, mark_round_done=(not args.max_steps))
+    save_state_now(completed_step)
     if args.max_steps and not args.checkpoint_at_max_steps:
         return
     out_path = out_dir / 'checkpoint.pt'
@@ -1145,19 +1155,35 @@ def train(args):
                 leaf.copy_(best['leaves'][name].to(device=leaf.device, dtype=leaf.dtype))
         export_step = best['step']
         print(json.dumps({'kept_best_val': {'loss': best['loss'], 'step': best['step']}}), flush=True)
-    factors_dir = getattr(args, 'export_factors_dir', None)
-    if factors_dir:
+
+    def factors():
         from natlang_neuralese.train.learner_state import export_adapter_factors
-        f_exported = export_adapter_factors(
-            learner, factors_dir, base_checkpoint_sha256=source_sha, learner_step=export_step,
-            round_id=round_id, source_checkpoint_id=str(args.checkpoint), objective_version='sft_ambient_v1',
-        )
-        print(json.dumps({'adapter_factors': f_exported}), flush=True)
-        if getattr(args, 'factors_only', False):
-            return
-    exported = export_merged_checkpoint(learner, state, out_path, source_sha256=source_sha,
-                                        learner_step=export_step, special_ids=special)
-    print(json.dumps({'checkpoint': str(out_path), **exported}), flush=True)
+        info = export_adapter_factors(learner, args.export_factors_dir, base_checkpoint_sha256=source_sha,
+                                      learner_step=export_step, round_id=round_id,
+                                      source_checkpoint_id=str(args.checkpoint), objective_version='sft_ambient_v1')
+        print(json.dumps({'adapter_factors': info}), flush=True)
+
+    def checkpoint():
+        exported = export_merged_checkpoint(learner, state, out_path, source_sha256=source_sha, learner_step=export_step)
+        print(json.dumps({'checkpoint': str(out_path), **exported}), flush=True)
+
+    export_round(factors=factors if args.export_factors_dir else None, checkpoint=checkpoint,
+                 factors_only=args.factors_only, round_id=round_id,
+                 mark_trained=lambda: save_state_now(completed_step, mark_round_done=True))
+
+
+def export_round(*, factors, checkpoint, factors_only, round_id, mark_trained):
+    """The end of a run after its final learner state: the factor export (``factors``, an async round's, shipped and
+    merged on the DGX), the merged checkpoint unless ``factors_only``, and only then the round in the learner's ledger
+    (``mark_trained``): a preemption during an export leaves the round unmarked, so the resumed run (cursor at the
+    end) exports again instead of skipping a round that has no export."""
+    if factors is not None:
+        factors()
+    if factors is None or not factors_only:
+        checkpoint()
+    if round_id:
+        mark_trained()
+        print(json.dumps({'event': 'round trained', 'round_id': round_id}), flush=True)
 
 
 def bench(args):
