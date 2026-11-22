@@ -158,12 +158,21 @@ actually in flight; fix a stale list in the same cycle.
 
 **State.** The method is **expert iteration** (owner-approved 2026-11-20; DECISIONS "expert iteration"): one loop in
 which every source feeds a per-task pool of verified trajectories in the student's own distribution (own best-of-k
-successes first, teacher trajectories with student-filled reasoning where it cannot solve the task, never teacher
-reasoning or empty think blocks as targets), weighted by the student's measured pass rate per task, trained by Ambient
-SFT and gated by held-v3 on Pop; its new failures feed the teacher campaign. `scripts/neuralese_data/expert_iteration.py`
-drives the cycles (sft-v7 is the first). GRPO is the polish phase once SFT gains flatten, not the engine. The start
-policy is the best held-measured checkpoint (`ops/current-policy.json`); the latest DECISIONS.md entries are
-authoritative.
+successes first, then leak-checked `jolt-guided` successes, then teacher trajectories with student-filled reasoning;
+never teacher reasoning or empty think blocks as targets), weighted by the student's measured pass rate per task,
+trained by Ambient LoRA SFT and gated by held-v3 on the DGX series (`dgx-held`: BF16 weights, FP8 KV, 4 samples,
+preemptible; collections yield slots to it). Production runs discrete pipelined cycles (`expert_iteration.py cycle`,
+sft-v7..v10: collect 6 h, teacher, build, SFT, held on the adaptive interval, next cycle speculative). The round driver
+of `plans/neuralese/async-train.md` (`expert_iteration.py async-drive`: standing collection of the newest published
+policy, standing fill and teacher, back-to-back rounds with the next round's mix built during training, LoRA SFT on a
+Colab session or the DGX from one recipe, FP32 factor merge and publication to every engine in `publish-round`, held
+counted in rounds with rollback to the last measured policy and a halt on a failure verdict, SFT <-> GRPO switch after
+two neutral measured rounds) is
+built and tested at argv level; it replaces `cycle` once a first production round passes. Collection serves BF16
+weights with no JOLT+ guided attempts until the FP8 weight path and JOLT+ custody work in production
+(`COLLECT_WEIGHT_DTYPE`, `TEACHER_ATTEMPTS`). GRPO is the polish phase once SFT gains flatten, not the engine. The
+start policy is the best held-measured checkpoint (`ops/current-policy.json`, the `lfm-latest` source); the latest
+DECISIONS.md entries are authoritative.
 
 - **Standard tooling, minimal crisp code** (an HF training loop with `lfm3_fast_train`, the SGLang server). Earlier
   controllers, custody schemas and transitions consumed the effort and confounded measurements. Build infrastructure
@@ -186,10 +195,10 @@ authoritative.
   (`scripts/rl_tasks/measure_repetition.py`, `simulate_selection.py`); never pad scarce behaviours by repetition.
 - **Breadth from more natlang domains** (chat and writing included) rather than anchor KL or broad mixing; forgetting
   general ability outside natlang is acceptable.
-- **Additions are bundled by expected merit**, not entered one at a time. Off by default today: Neuralese-declaring task variants
-  (`--neuralese-variants`), whole-graph Neuralese gradients and use bonus, the JOLT+ teacher and privileged twin,
+- **Additions are bundled by expected merit**, not entered one at a time. Neuralese-declaring task variants (`--neuralese-variants`, 1,381 rows) run in expert-iteration
+  collection by default (half of a task's groups, 2026-11-22). JOLT+ guided attempts (leak-checked into the `jolt-guided` pool tier) are off in collection until their custody works in production (`TEACHER_ATTEMPTS`). Off by default today: whole-graph Neuralese gradients and use bonus, the privileged twin (`--reasoning-rl-weight 0.0`, opt-in `1.0`),
   memetic guidance programs, interleaved SFT and QAT. Turn one on in the next run when it is likely to raise held
-  task success (Neuralese task variants are cheap: they are data); leave it off when it is not.
+  task success; leave it off when it is not.
 - **Never upweight a few tokens without per-token evidence**, and check an update's direction against its gradient
   before blaming the objective (a boundary weight of 32 and stale Muon momentum each once dominated updates).
 
@@ -230,28 +239,30 @@ authoritative.
 - **Loss and optimizer.** `-min(rho, 2) * A * logp + 0.02 * k2(start || policy)` on per-call sequences, `A`
   group-normalized, `--loss-norm token`, policy term under the learner's nucleus, `--tail-logp-floor -7` for A > 0,
   sampled decisions at most 8 token units, Neuralese consumer calls with the imported state as fixed context.
-  FP32-master AdamW, `--lr 1e-5` (under review), `--warmup 2`, `--clip 1.0`, LR scaled by groups-with-spread / 12
-  (`lr_data_scale`). The KL reference runs the policy's own graph from a reference-weights file.
-- **Compute.** `lfm3_fast_train`; layers beyond `--activation-gb 12` recompute; shared prompt prefixes (>= 256 tokens)
-  run once as a prefix tree; no new episodes start while the learner runs (`--learner-phase-slots 0`; the GB10
-  time-slices the two, so overlap buys nothing: GRPO_STEP_THROUGHPUT_20261117.md).
-- **Sync and state.** Each step's BF16 weights go to the actor's safetensors on /dev/shm and SGLang reloads them in
-  place; the front attests the served sha. Native checkpoints every 2 steps (last 2 plus held-evaluated ones kept), the
-  FP32 state every 4 to `/mnt/external/natlang-grpo-v1`. `--branch-states N` keeps the last N FP32 states (~21 GB
-  each), `--keep-checkpoints-until N` every early checkpoint; `--resume [--resume-state FILE]`. Between optimizer
-  steps the AdamW moments (13.6 GB) live in `WORK/adam-moments.offload` (`--keep-moments-resident` opts out).
+  Shared LoRA+rows core (`natlang_neuralese/train/lfm3_learner.py` + `train/lfm3_fast.py`): frozen BF16 base (with
+  Blackwell FP8 frozen-base GEMMs, opt-out `--no-fp8-base`), FP32 LoRA factors on all 9 LFM3 projection families plus
+  trainable Neuralese marker/override rows (SFT `r=128/alpha=128/lr=5e-5`; RL `r=32/alpha=32/lr=1e-4`), trainable-only
+  AdamW, `--warmup 2`, `--clip 1.0`, LR scaled by groups-with-spread / 12 (`lr_data_scale`). The KL reference runs the
+  policy's own compiled graph via `learner.reference_view` (zero 3.4 GB file swap).
+- **Compute.** `natlang_neuralese/train/lfm3_fast.py`; layers beyond `--activation-gib 56` (DGX) / `80` (Colab G4)
+  recompute (parameterized activation table, OOM retry plan, token-length buckets, compile-health tracker); shared
+  prompt prefixes (>= 256 tokens) run once as a prefix tree; no new episodes start while the learner runs
+  (`--learner-phase-slots 0`).
+- **Sync and state.** `WeightSync.for_learner` runs the 7-step atomic merged-export publication state machine
+  (`SNAPSHOT -> EXPORT -> PAUSE -> REFIT & INVALIDATE -> BIND ALL ROUTES -> ATTEST & RESUME`, with `ROLLBACK` to `k-1`),
+  reloading all 4 routes (including `sglang_actor.py`'s native fallback) and verifying `attest_all_routes`. Native
+  checkpoints (`learner_state.export_merged_checkpoint`, recording actual `learner_step` and `source_step`) save every
+  2 steps; resumable FP32 learner states (`learner_state.save_learner_state`, including `rl_rollout_ledger` and RNG)
+  save atomically every `--state-every` steps (SFT: every 15 min for Colab preemption safety).
 - **Held evals.** By default on the training actor (collection pauses): the start policy at 4 samples, then a
-  checkpoint at 2 samples every 4 h, compared with step 0 in `WORK/held/step-N/`. `--held-remote pop` keeps the DGX
-  training: the start policy is measured once on Pop's engine, then the newest checkpoint back to back
-  (`pop_rl_actor.py serve-checkpoint`, `--held-remote-slots 20`, FP8 KV and 20 running on Pop, attested as
-  `max_running`; longest-expected-first dispatch within a sample, `held-pop.log`; POP_HELD_THROUGHPUT_20261117.md).
-  Each Pop evaluation is its own DGX ledger unit (`<unit-prefix>-popheld-N-*`, 11 GB) that a grpo restart adopts
-  rather than kills, and the next checkpoint is copied to Pop while the current one is measured.
+  checkpoint at 2 samples every 4 h, compared with step 0 in `WORK/held/step-N/`. `--held-remote pop|colab_g4` keeps
+  the DGX training (`pop_rl_actor.py` unified remote-actor module): Pop runs 20 running / 2 samples, while Colab G4
+  runs its own held series (`engine_host=colab_g4` in `held_eval.series()`), sharded across all reachable G4 sessions
+  at 4 samples per task.
 - **Sentinels** (`train.jsonl`): `grad_spike` (> 5x the run's median grad_norm), `reasoning_shift`, k3 `kl_mean` with
-  `ref_dlogp_max`, rho statistics, and the behaviour probe after every step (`behaviour_probe.py`,
-  `ops/grpo-v2/behaviour-probe-v2.json`: logp change, entropy and `</think>` hazard on 48 start-policy calls, and
-  p(`<|im_end|>`) after 24 short decision answers (`end_logp_change`, `reclose_p`; 10.6k more tokens), flagged as
-  `behaviour_shift`). `cuda_peak_by_phase_gb` gives each phase's memory peak.
+  `ref_dlogp_max`, rho statistics, per-family LoRA grad norms, `compile_health`, `oom_retries`, and the behaviour probe
+  after every step (`behaviour_probe.py`, `ops/grpo-v2/behaviour-probe-v2.json`, flagged as `behaviour_shift`).
+  `cuda_peak_by_phase_gib` gives each phase's memory peak in GiB.
 - **Learner bench** (minutes): `grpo.py train --replay ROLLOUTS --replay-max-group-tokens 16000 --min-groups 6
   --max-groups 6 --max-steps 6 --keep-checkpoints-until 6`; `--advantage-control shuffle|zero` are reward-free
   controls; `--replay-schedule` replays a run's exact batches. The 2026-11-15 hunt's runs are in `ops/grpo-v2/hunt/`.
@@ -261,10 +272,22 @@ authoritative.
 
 # Machines
 
-- **DGX (GB10, 128 GB unified memory)** trains: the learner, the SGLang actor and diagnostics. **Pop** (RTX 4060
-  8 GB, 14 GB host RAM) runs held evals of pinned runs first. When none is queued, it runs forward-only probes and
-  checks of the 1.7B BF16 model (not the learner); a held eval preempts them. The DGX supervisor drives Pop over ssh.
-  Cloud (CoreWeave) is unavailable. Both machines use `/home/werg/natlang` as the canonical checkout.
+- **DGX (GB10, 128 GB unified memory)** is the durable coordinator and data store: it collects, trains (cycles; an
+  async round when no Colab session answers, resuming the session's synced `learner-state/` and recording the takeover
+  in `round.json`), merges and publishes, and runs the held series (`dgx-held`). **Colab** sessions (profile `colab`,
+  old name `colab_g4`; the hardware varies by session: the current one is an A100-SXM4-80GB with 167 GB host RAM and
+  no FP8, `scripts/colab/bootstrap.py` at `/content/natlang-work`, `scripts/colab/admission.py` claims VRAM and host
+  RAM; learner and actor claims come from the session's `colab-ready.json` hardware, `execution_profile.colab_layout`)
+  run LoRA SFT (`pop_rl_actor run-sft`:
+  the DGX recipe from `launch.json`, learner state pulled every 15 min, an async round's FP32 factors pulled back
+  blob-first) and SGLang actors for collection and fills. A session is reached as `ssh colab-g4` (OpenSSH
+  ProxyCommand `colab --auth=adc ssh --proxy-mode`; no Tailscale) and admits **one** SSH connection: every command,
+  rsync and port forward multiplexes over the ControlMaster the `colab-g4a-tunnel` unit holds; a VM port P is reached at
+  DGX `127.0.0.1:P+10161` (`pop_rl_actor.remote_endpoint`, `ssh -O forward`), e.g. 8570 -> 18731 (front), 9570 -> 19731
+  (SGLang); transfers run at a few MB/s. **Pop** (RTX 4060 8 GB, 14 GB host RAM) runs the legacy held series, fills and
+  forward-only probes when idle. The DGX drives Colab and Pop over ssh through `pop_rl_actor.py` (serve, `rebind`:
+  in-place weight update with factors merged on the remote host and 4-route attestation, stop). DGX and Pop use
+  `/home/werg/natlang` as the canonical checkout.
 - **Memory ledger.** On the DGX every build, test and probe runs through
   `scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`. Units are asynchronous: wait and read the
   log. Priority is `--priority high` for training/GPU runs, `low` for data generation and check-main, and the default

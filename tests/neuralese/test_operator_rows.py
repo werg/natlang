@@ -116,7 +116,7 @@ def test_runtime_sites_render_arguments_as_the_listing_shows_them():
 def test_rows_feed_the_pass_through_plan():
     import numpy as np
     from operator_rows import RowBuilder, load_tokenizer
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     tokenizer, roles, fingerprint = load_tokenizer(sorted(LFM3)[-1])
     rows = RowBuilder(tokenizer, roles, fingerprint).build(case(), 'compact-value', 'k1')
     consumer = rows['consumer']

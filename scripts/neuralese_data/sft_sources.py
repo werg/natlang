@@ -274,6 +274,15 @@ def live_manifest_paths(manifests, capture_roots, *, allow_empty=False):
     return list(dict.fromkeys(map(str, paths)))
 
 
+def call_policy(turn):
+    """The policy that sampled one recorded call: the RL capture's ``sampling.policy`` (a rebind lands between calls,
+    so an episode may span two adjacent policies), else a turn-level ``policy``."""
+    for policy in ((turn.get('sampling') or {}).get('policy'), turn.get('policy')):
+        if isinstance(policy, dict) and policy.get('checkpoint_sha256'):
+            return policy['checkpoint_sha256']
+    return None
+
+
 def extract(args):
     live_runs = live_manifest_paths(getattr(args, 'live_run', None) or [],
                                     getattr(args, 'live_capture_root', None) or [])
@@ -309,16 +318,18 @@ def extract(args):
                 if row.get('unscored') or row.get('reward') is None:
                     c['unscored'] += 1
                     continue
-                group_rates[row['task_id']][1] += 1
-                if row.get('outcome') != SUCCESS or float(row['reward'].get('quality') or 0) < 1:
+                role = row.get('jolt_role', 'student')
+                success = row.get('outcome') == SUCCESS and float(row['reward'].get('quality') or 0) >= 1
+                if role != 'teacher':   # a guided attempt is no sample of the student's own pass rate
+                    group_rates[row['task_id']][1] += 1
+                    group_rates[row['task_id']][0] += success
+                if not success:
                     continue
-                group_rates[row['task_id']][0] += 1
                 task = cases.get(row['task_id'])
                 if task is None:
                     c['success_without_task_row'] += 1
                     continue
                 c['successes'] += 1
-                role = row.get('jolt_role', 'student')
                 if role == 'teacher':
                     # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
                     # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
@@ -330,10 +341,17 @@ def extract(args):
                         continue
                     row = student_episode(row, c)
                     c['teacher_attempt_successes'] += 1
-                out.write({'key': f"{label}:{name}:{row['sample']}", 'source': 'rl-own', 'run': label, 'group': name,
+                ep_policy = (row.get('policy') or {}).get('checkpoint_sha256')
+                call_policies = sorted({p for t in row.get('turns') or () for p in (call_policy(t),) if p})
+                if ep_policy and ep_policy not in call_policies:
+                    call_policies = sorted({*call_policies, ep_policy})
+                out.write({'key': f"{label}:{name}:{row['sample']}",
+                           'source': 'jolt-guided' if role == 'teacher' else 'rl-own',
+                           'run': label, 'group': name,
                            **({'role': 'teacher'} if role == 'teacher' else {}),
                            'sample': row['sample'], 'seed': row.get('seed'), 'task_id': row['task_id'],
-                           'family': row.get('family'), 'policy': (row.get('policy') or {}).get('checkpoint_sha256'),
+                           'family': row.get('family'), 'policy': ep_policy,
+                           **({'policies': call_policies} if call_policies else {}),
                            'task': task, 'turns': [semantic_turn(t, True) for t in row['turns']],
                            'execution_graph_events': len(row.get('execution_graph') or [])})
     for pool in args.teacher:
@@ -573,7 +591,7 @@ class TemplateRenderer:
         return [i for _, i in before], [i for _, i in rest]
 
 
-OWN_SOURCES = ('rl-own',)
+OWN_SOURCES = ('rl-own', 'jolt-guided')
 TEACHER_THINK = ('context', 'train')
 TEACHER_LEAD_IN = ('context', 'train')
 
@@ -664,25 +682,90 @@ class ThinkTreatment:
 FRONTIER_TIERS = ('solved', 'sometimes', 'never', 'unmeasured')
 
 
-def load_frontier(path):
-    """``natlang.ei-frontier/1`` -> (policy sha, {task id: {'successes', 'scored', 'tier'}})."""
+def load_frontier_full(path):
+    """``natlang.ei-frontier/1`` -> (policy sha, previous_policy sha or None, {task id: {'successes', 'scored', 'tier'}})."""
     if not path:
-        return None, {}
+        return None, None, {}
     data = json.loads(Path(path).read_text())
     if data.get('schema') != 'natlang.ei-frontier/1':
         raise ValueError(f'{path}: not a frontier file')
-    return data.get('policy'), data['tasks']
+    return data.get('policy'), data.get('previous_policy'), data['tasks']
 
 
-def frontier_drop(task_id, tiers, own_tasks):
-    """Why a non-own trajectory of ``task_id`` (teacher episode, filled teacher episode) leaves a frontier build, or
-    None: a task the policy solves reliably needs only its anchor, and a task with an own verified success trains that
-    (the student's own distribution) instead."""
+def load_frontier(path):
+    """``natlang.ei-frontier/1`` -> (policy sha, {task id: {'successes', 'scored', 'tier'}})."""
+    policy, _, tasks = load_frontier_full(path)
+    return policy, tasks
+
+
+def frontier_drop(task_id, tiers, own_tasks, guided_tasks=()):
+    """Why a lower-tier trajectory of ``task_id`` leaves a frontier build, or None (async-train §8):
+    tier hierarchy is own unguided success > leak-checked ``jolt-guided`` success > teacher / filled trajectory;
+    a task solved reliably needs only its own anchor."""
     if tiers.get(task_id) == 'solved':
         return 'frontier_task_solved'
     if task_id in own_tasks:
         return 'frontier_own_success'
+    if task_id in guided_tasks:
+        return 'frontier_jolt_guided'
     return None
+
+
+def own_policy_tier(candidate, frontier_policy, previous_policy=None):
+    """0 for own successes from ``frontier_policy`` or ``previous_policy`` (including rebind-straddling episodes
+    whose per-call policies all lie within that adjacent pair, async-train §3); 1 for older policies."""
+    if not frontier_policy:
+        return 0
+    allowed = {p for p in (frontier_policy, previous_policy) if p}
+    policies = [p for p in (candidate.get('policies') or ()) if p]
+    if not policies:
+        p = candidate.get('policy')
+        policies = [p] if p else []
+    if policies and all(p in allowed for p in policies):
+        return 0
+    return 1
+
+
+def replay_context_tokens(source):
+    """The replay runtime's context for an extracted episode: the actor's own (131072) for the student's own
+    distribution (``OWN_SOURCES``: rl-own and jolt-guided), 65536 for a teacher's."""
+    return 131072 if source in OWN_SOURCES else 65536
+
+
+def settle_deferred(deferred, admitted_tasks, task_of):
+    """Teacher data (episodes, filled aux units) of guided-only tasks after the own share (``build`` step 5): (replaced:
+    their task's guided successes entered the mix, trains: none did, so the teacher data trains)."""
+    replaced = [item for item in deferred if task_of(item) in admitted_tasks]
+    return replaced, [item for item in deferred if task_of(item) not in admitted_tasks]
+
+
+def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wrapper_share, trained=frozenset(),
+                      tiers=None):
+    """The student's own distribution of a build: unguided own successes (``rl-own``) and leak-checked JOLT+ guided
+    successes (``jolt-guided``) under one per-task cap, one family share and one wrapper share, own first under each
+    (``capped`` ``rank``). With a frontier (``tiers``): a task's guided successes go where it has unguided ones
+    (``frontier_drop``). Returns (pool, own tasks, guided-only tasks); the guided-only tasks' teacher data waits for
+    the own share (``build`` step 5: it trains unless their guided successes enter the mix)."""
+    own = [c for c in unique if c['source'] == 'rl-own']
+    own_candidate_tasks = {c['task_id'] for c in own}
+    candidates = list(own)
+    for c in unique:
+        if c['source'] != 'jolt-guided':
+            continue
+        why = frontier_drop(c['task_id'], tiers, own_candidate_tasks) if tiers is not None else None
+        if why:
+            funnel[c['source']][why] += 1
+        else:
+            candidates.append(c)
+
+    def rank(c):
+        return int(c['source'] == 'jolt-guided')
+    pool = wrapper_capped(capped(candidates, rng, funnel, cap_of, family_share, lambda c: 0, trained, rank=rank), rng,
+                          funnel, is_wrapper, wrapper_share, trained, rank=rank)
+    if tiers is None:
+        return pool, set(), set()
+    own_tasks = {c['task_id'] for c in pool if c['source'] == 'rl-own'}
+    return pool, own_tasks, {c['task_id'] for c in pool if c['source'] == 'jolt-guided'} - own_tasks
 
 
 def check_render(args):
@@ -691,7 +774,7 @@ def check_render(args):
     counts = collections.Counter()
     examples = []
     for episode in all_episodes(args.work):
-        if episode['source'] != 'rl-own':
+        if episode['source'] not in OWN_SOURCES:
             continue
         for turn in episode['turns']:
             exact = turn.get('exact')
@@ -962,7 +1045,7 @@ def replay_episode(args, server, episode, env):
         seed_base=0, root_mode=episode.get('root_mode', 'student'), match_seeds_from=None, policy_checkpoint_sha256=None))
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
-                 context_tokens=131072 if episode['source'] == 'rl-own' else 65536)
+                 context_tokens=replay_context_tokens(episode['source']))
     (directory / 'queue.jsonl').write_text(json.dumps(entry, sort_keys=True) + '\n')
     queue_file = directory / f"{entry['key']}.queue.jsonl"
     queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
@@ -1397,20 +1480,24 @@ def core_candidates(args, work, funnel, held):
     for episode, record in verified_episodes(work, funnel, extracted, drifted=getattr(args, 'admit_drifted', 'on') == 'on',
                                              workers=getattr(args, 'workers', None) or 1, light=True):
         source = episode['source']
+        if source == 'rl-own' and episode.get('role') == 'teacher':
+            source = 'jolt-guided'
         facts = episode.get('facts') or episode_facts(episode['turns'])
         task = episode['task']
         tasks[episode['task_id']] = task
+        ep_policies = list(episode.get('policies') or ([episode['policy']] if episode.get('policy') else []))
         candidates.append({'key': episode['key'], 'source': source, 'run': episode.get('run'),
                            'task_id': episode['task_id'], 'family': episode.get('family') or task.get('family'),
                            'domain': (task.get('curriculum') or {}).get('domain'),
                            'teacher': (episode.get('teacher') or {}).get('model_id'), 'policy': episode.get('policy'),
+                           'policies': ep_policies,
                            'name': record['name'],
                            **({'live_source': record['live_source'], 'world': episode['world'], 'verification_mode': 'observed-live'}
                               if record.get('verification_mode') == 'observed-live' else {}),
                            'open_goal': task['interaction']['goal']
                            if record.get('verification_mode') == 'observed-live' and task.get('interaction') else None,
                            'source_groups': task.get('source_groups', ()),
-                           'guided': episode.get('role') == 'teacher',
+                           'guided': episode.get('role') == 'teacher' or source == 'jolt-guided',
                            'backend_workaround': facts['backend_workaround'],
                            'signature': facts['signature']})
     total, missing = teacher_coverage(args.teacher_pool, extracted)
@@ -1491,6 +1578,49 @@ def trained_in(builds):
     return frozenset(keys), frozenset(tasks)
 
 
+PREFER_UNSEEN_SCOPES = ('family', 'global')
+
+
+def breadth_first(pool, key, trained_keys=frozenset(), scope='family'):
+    """A pool in selection order: every task's first episode before any task's second, and within a round the
+    families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key`` orders
+    within a family's turn: held constructs first, then low base pass rates.
+
+    ``trained_keys`` (``--prefer-unseen``): within each task its untrained episodes come first. ``scope`` 'family'
+    (default) keeps the families' turns: in each family's turn its untrained tasks come before the tasks an earlier
+    build trained, so a family whose fresh supply is gone still takes its turns with episodes the start already learned
+    (a second epoch) instead of handing its share to the families that still have fresh ones. 'global' (the sft-v7
+    rule) puts every untrained episode before any trained one: sft-v7's teacher budget then went to the unseen tail of
+    the pool, 20 generator families of ~289 tasks each (74% of its teacher episodes in 25 families, 0.2% auth tasks
+    against sft-v6's 23%), while auth carried sft-v6's held gain (DECISIONS 2026-11-22 sft-v7 no gain)."""
+    if scope not in PREFER_UNSEEN_SCOPES:
+        raise ValueError(f'prefer-unseen scope {scope!r} not in {PREFER_UNSEEN_SCOPES}')
+    rank, seen = {}, collections.Counter()
+    if scope == 'global':
+        for c in pool:
+            old = c['key'] in trained_keys
+            rank[c['key']] = (old, seen[(old, c['task_id'])])
+            seen[(old, c['task_id'])] += 1
+        ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
+    else:
+        by_task = collections.defaultdict(list)
+        for c in pool:
+            by_task[c['task_id']].append(c)
+        old_task = {}
+        for task_id, members in by_task.items():
+            members.sort(key=lambda c: c['key'] in trained_keys)    # stable: untrained first within the task
+            for index, c in enumerate(members):
+                rank[c['key']] = (index,)
+            old_task[task_id] = members[0]['key'] in trained_keys   # the task offers nothing fresh
+        ordered = sorted(pool, key=lambda c: (rank[c['key']], c['key'] in trained_keys and old_task[c['task_id']],
+                                              key(c)))
+    turn, taken = {}, collections.Counter()
+    for c in ordered:
+        turn[c['key']] = taken[(rank[c['key']], c['family'])]
+        taken[(rank[c['key']], c['family'])] += 1
+    return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
+
+
 def round_robin(members, rng, order):
     """A task's episodes taking turns by producer (source and teacher model), the producers in `order`: a cap keeps
     different producers' solutions before a second one of any producer (no single teacher fills a task)."""
@@ -1508,17 +1638,18 @@ def round_robin(members, rng, order):
     return out
 
 
-def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozenset()):
+def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozenset(), rank=lambda c: 0):
     """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest.
     Episodes whose key is in `trained` (an earlier build the start checkpoint learned, ``--prefer-unseen``) go after
-    every untrained one under each cap; with none the selection is unchanged."""
+    every untrained one under each cap; with none the selection is unchanged. ``rank`` orders tiers sharing one cap
+    (own unguided successes 0 before JOLT+ guided 1) after that."""
     by_task = collections.defaultdict(list)
     for c in candidates:
         by_task[c['task_id']].append(c)
     selected = []
     for task_id, members in sorted(by_task.items(), key=lambda item: str(item[0])):
         members = round_robin(members, rng, order)
-        members.sort(key=lambda c: c.get('key') in trained)       # stable: producers keep their turns within each part
+        members.sort(key=lambda c: (c.get('key') in trained, rank(c)))   # stable: producers keep their turns
         cap = cap_of(task_id)
         selected += members[:cap]
         for c in members[cap:]:
@@ -1530,7 +1661,7 @@ def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozens
     final = []
     for family, members in sorted(by_family.items(), key=lambda item: str(item[0])):
         rng.shuffle(members)
-        members.sort(key=lambda c: c.get('key') in trained)
+        members.sort(key=lambda c: (c.get('key') in trained, rank(c)))
         final += members[:limit]
         for c in members[limit:]:
             funnel[c['source']]['over_family_cap'] += 1
@@ -1719,13 +1850,14 @@ class RenderAhead:
             self.pool = None
 
 
-def wrapper_capped(selected, rng, funnel, is_wrapper, share, trained=frozenset()):
-    """Keep dataset-wrapper episodes to at most `share` of the selection (untrained ones first, as in `capped`)."""
+def wrapper_capped(selected, rng, funnel, is_wrapper, share, trained=frozenset(), rank=lambda c: 0):
+    """Keep dataset-wrapper episodes to at most `share` of the selection (untrained ones first, then by ``rank``, as in
+    `capped`)."""
     wrappers = [c for c in selected if is_wrapper(c)]
     rest = [c for c in selected if not is_wrapper(c)]
     limit = int(share / (1 - share) * len(rest)) if share < 1 else len(wrappers)
     rng.shuffle(wrappers)
-    wrappers.sort(key=lambda c: c.get('key') in trained)
+    wrappers.sort(key=lambda c: (c.get('key') in trained, rank(c)))
     for c in wrappers[limit:]:
         funnel[c['source']]['over_wrapper_share'] += 1
     return rest + wrappers[:limit]
@@ -1920,7 +2052,8 @@ def build(args):
     rates.update({k: (v['successes'], v['scored']) for k, v in own_rates.items()
                   if k not in rates and v['scored']})
     # the frontier: the trained policy's own measured rates replace every other rate of its tasks
-    frontier_policy, frontier = load_frontier(getattr(args, 'frontier', None))
+    frontier_policy, frontier_prev_policy, frontier = load_frontier_full(getattr(args, 'frontier', None))
+    previous_policy = getattr(args, 'previous_policy', None) or frontier_prev_policy
     rates.update({k: (v['successes'], v['scored']) for k, v in frontier.items() if v.get('scored')})
     tiers = {k: v.get('tier') for k, v in frontier.items()}
     treatment = ThinkTreatment.load(getattr(args, 'think_treatment', None), args.teacher_think)
@@ -1981,11 +2114,13 @@ def build(args):
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
     trained_keys, trained_before = trained_in(getattr(args, 'prefer_unseen', None) or [])
-    own_pool = wrapper_capped(capped([c for c in unique if c['source'] in OWN_SOURCES], rng, funnel, core_cap,
-                                     args.max_family_share, lambda c: 0, trained_keys), rng, funnel, is_wrapper,
-                              args.wrapper_share, trained_keys)
-    # frontier builds: each task's cheapest verified source (own successes, else teacher; ``frontier_drop``)
-    own_tasks = {c['task_id'] for c in own_pool} if frontier else set()
+    # the student's own distribution: unguided own successes and leak-checked JOLT+ guided successes share one per-task
+    # cap, one family share and one wrapper share (own first under each); a frontier build drops a task's guided
+    # successes where it has unguided ones (``frontier_drop``: own > jolt-guided > teacher, async-train §8)
+    student_pool, own_tasks, guided_tasks = student_selection(
+        unique, rng, funnel, core_cap, args.max_family_share, is_wrapper, args.wrapper_share, trained_keys,
+        tiers if frontier else None)
+    deferred = {'teacher': [], 'aux': []}
     teacher_candidates = []
     for c in unique:
         if c['source'] in OWN_SOURCES:
@@ -2030,7 +2165,7 @@ def build(args):
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
                                   'error': (str(error) if isinstance(error, RenderError) else repr(error))[:300]}),
                       flush=True)
-                if c['source'] in ('rl-own', 'teacher'):
+                if c['source'] in ('rl-own', 'jolt-guided', 'teacher'):
                     return False   # a verified episode is admitted whole or not at all
                 continue
             if source not in OWN_SOURCES and detour_call(turn, args.backend_workarounds):
@@ -2119,56 +2254,53 @@ def build(args):
     episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, treatment.render, args.teacher_lead_in,
                                  args.backend_workarounds, args.own_empty_think)
 
-    def breadth_first(pool, key):
-        """A pool in selection order: every task's first episode before any task's second, and within a round the
-        families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key``
-        orders within a family's turn: held constructs first, then low base pass rates. With ``--prefer-unseen`` every
-        untrained episode comes before any episode an earlier build trained (each part breadth-first)."""
-        rank, seen = {}, collections.Counter()
-        for c in pool:
-            old = c['key'] in trained_keys
-            rank[c['key']] = (old, seen[(old, c['task_id'])])
-            seen[(old, c['task_id'])] += 1
-        ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
-        turn, taken = {}, collections.Counter()
-        for c in ordered:
-            turn[c['key']] = taken[(rank[c['key']], c['family'])]
-            taken[(rank[c['key']], c['family'])] += 1
-        return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
+    unseen_scope = getattr(args, 'prefer_unseen_scope', 'family')
+
+    def ordered_pool(pool, key):
+        """``breadth_first`` under this build's ``--prefer-unseen`` builds and ``--prefer-unseen-scope``."""
+        return breadth_first(pool, key, trained_keys, unseen_scope)
 
     def priority(c):
         p = base_rate(c['task_id'])
-        # a frontier build takes the trained policy's own successes before older policies' (its own distribution)
-        return (not bool(c.get('open_goal')), bool(frontier_policy) and c.get('policy') != frontier_policy,
+        # a frontier build takes the trained (or adjacent previous) policy's own successes before older policies' (async-train §3)
+        return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy),
                 not bool(constructs.get(c['task_id'], ((), False))[0]), 0.5 if p is None else p, rng.random())
 
     # teacher successes, breadth-first under the forward-token budget (0: all of the capped pool)
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
     left_over = collections.defaultdict(list)    # candidates a budget or share left out: validation sets
     teacher_forward = 0
-    ordered = breadth_first(teacher_pool, priority)
+    ordered = ordered_pool(teacher_pool, priority)
     ahead.walk(ordered)
-    for c in ordered:
+
+    def admit_teacher(c):
+        nonlocal teacher_forward
         if args.teacher_forward_budget:
-            if teacher_forward >= 0.995 * args.teacher_forward_budget:     # full: the rest is left over unmeasured
-                funnel[c['source']]['over_forward_budget'] += 1
-                left_over['teacher'].append(c)
-                continue
             forward, weighted = episode_sizes.measure(c, rendered)
             if forward is None:
                 funnel[c['source']]['render_error'] += 1
-                continue
+                return
             if teacher_forward + forward > args.teacher_forward_budget:
                 funnel[c['source']]['over_forward_budget'] += 1
                 left_over['teacher'].append(c)
-                continue
+                return
         if not admit(c, *rendered(c)):
             funnel[c['source']]['render_error'] += 1
-            continue
+            return
         if c['key'] in trained_keys:
             funnel[c['source']]['admitted_trained_before'] += 1
         teacher_forward += sft_episodes[-1]['forward_tokens']
         task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
+
+    for c in ordered:
+        if c['task_id'] in guided_tasks:
+            deferred['teacher'].append(c)
+            continue
+        if args.teacher_forward_budget and teacher_forward >= 0.995 * args.teacher_forward_budget:
+            funnel[c['source']]['over_forward_budget'] += 1     # full: the rest is left over unmeasured
+            left_over['teacher'].append(c)
+            continue
+        admit_teacher(c)
     episode_sizes.save()
 
     # 2. October trajectories (no replayable task): compiled actions, held out, deduplicated against everything admitted,
@@ -2264,61 +2396,55 @@ def build(args):
     total_tokens = (actions_tokens + all_tokens) / (1 - fixed_share)
     aux_report, replaced_rounds = {}, {}
     taken_rounds = set()    # an episode two parts both hold (a cycle's own Neuralese graph and an older graph build) trains once
-    for part, units in loaded:
-        budget = None if part['share'] == 'all' else part['share'] * total_tokens
-        rng.shuffle(units)
-        taken, used, per_task = 0, collections.Counter(), collections.Counter()
-        for unit in units:
-            why = frontier_drop(unit['task'], tiers, own_tasks) if frontier and part.get('replaces') else None
-            if why:   # a filled teacher episode of a task the policy solves: its own successes train instead
-                used[why] += 1
-                continue
-            if (unit['task'], unit['round']) in taken_rounds:
-                used['duplicate_round'] += 1
-                continue
-            if budget is not None and taken + unit['weighted'] > budget:   # a unit that would overshoot: a smaller one may fit
-                used['over_share'] += 1
-                continue
-            if part['task_tokens'] and per_task[unit['task']] + unit['weighted'] > part['task_tokens']:
-                used['over_task_tokens'] += 1
-                continue
-            per_task[unit['task']] += unit['weighted']
-            taken += unit['weighted']
-            taken_rounds.add((unit['task'], unit['round']))
-            replaced = replaced_round(part, unit)
-            if replaced is not None:
-                replaced_rounds[(part['replaces'], replaced)] = part['name']
-            used['units'] += 1
-            used['chains'] += len(unit['chains'])
-            used['forward_tokens'] += sum(len(chain['ids']) + source_tokens(chain) for chain in unit['chains'])
-            all_chains.extend(unit['chains'])
-            for chain in unit['chains']:
-                chain['part'] = part['name']
-        aux_report[part['name']] = {**{k: v for k, v in part.items()}, 'sha256': sha256_file(part['path']),
-                                    'available_units': len(units), 'weighted_target_tokens': int(taken),
-                                    'tasks': len(per_task), 'budget_tokens': None if budget is None else int(budget),
-                                    'max_task_tokens': int(max(per_task.values(), default=0)), **used}
+    aux_state = {}
 
-    if replaced_rounds:   # episodes an aux unit stands in for (``replaces``): their own chains go
-        def replaced(chain):
-            return (chain.get('part'), str(chain.get('round'))) in replaced_rounds
-        dropped = [chain for chain in all_chains if replaced(chain)]
-        kept = [chain for chain in all_chains if not replaced(chain)]
-        for chain in dropped:
-            r = aux_report[replaced_rounds[(chain.get('part'), str(chain.get('round')))]]
-            r['replaced_chains'] = r.get('replaced_chains', 0) + 1
-            r['replaced_weighted_target_tokens'] = r.get('replaced_weighted_target_tokens', 0) + int(chain_mass(chain))
-            r.setdefault('replaced_episodes', set()).add(str(chain.get('round')))
-        for r in aux_report.values():
-            if 'replaced_episodes' in r:
-                r['replaced_episodes'] = len(r['replaced_episodes'])
-        all_chains[:] = kept
+    def take_unit(part, unit):
+        state = aux_state[part['name']]
+        used, per_task = state['used'], state['per_task']
+        if (unit['task'], unit['round']) in taken_rounds:
+            used['duplicate_round'] += 1
+            return
+        if state['budget'] is not None and state['taken'] + unit['weighted'] > state['budget']:
+            used['over_share'] += 1     # a unit that would overshoot: a smaller one may fit
+            return
+        if part['task_tokens'] and per_task[unit['task']] + unit['weighted'] > part['task_tokens']:
+            used['over_task_tokens'] += 1
+            return
+        per_task[unit['task']] += unit['weighted']
+        state['taken'] += unit['weighted']
+        taken_rounds.add((unit['task'], unit['round']))
+        replaced = replaced_round(part, unit)
+        if replaced is not None:
+            replaced_rounds[(part['replaces'], replaced)] = part['name']
+        used['units'] += 1
+        used['chains'] += len(unit['chains'])
+        used['forward_tokens'] += sum(len(chain['ids']) + source_tokens(chain) for chain in unit['chains'])
+        all_chains.extend(unit['chains'])
+        for chain in unit['chains']:
+            chain['part'] = part['name']
+
+    for part, units in loaded:
+        aux_state[part['name']] = {'budget': None if part['share'] == 'all' else part['share'] * total_tokens,
+                                   'taken': 0, 'used': collections.Counter(), 'per_task': collections.Counter(),
+                                   'units': len(units)}
+        rng.shuffle(units)
+        for unit in units:
+            if frontier and part.get('replaces'):
+                why = frontier_drop(unit['task'], tiers, own_tasks)
+                if why:   # a filled teacher episode of a task the policy solves: its own successes train instead
+                    aux_state[part['name']]['used'][why] += 1
+                    continue
+                if unit['task'] in guided_tasks:
+                    deferred['aux'].append((part, unit))
+                    continue
+            take_unit(part, unit)
 
     # 4. the student's own verified successes (their reasoning included) up to their share, breadth-first over tasks,
-    #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``)
+    #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``);
+    #    leak-checked JOLT+ guided successes follow unguided own successes within the student-distribution share
     own_budget = args.own_loss_share * total_tokens if args.own_loss_share else None
     own_tokens = 0
-    ordered = breadth_first(own_pool, priority)
+    ordered = ordered_pool(student_pool, priority)   # own before guided within each task, breadth-first over tasks
     ahead.walk(ordered)
     for c in ordered:
         if own_budget is not None and own_tokens >= 0.99 * own_budget:     # full: the rest is left over unmeasured
@@ -2343,7 +2469,48 @@ def build(args):
             funnel[c['source']]['admitted_trained_before'] += 1
         own_tokens += sft_episodes[-1]['weighted_target_tokens']
         task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
+    # 5. a task whose teacher data waited for its JOLT+ guided successes: those that entered replace it
+    #    (``frontier_jolt_guided``); where none did (the own share or a cap left them out) the teacher data trains
+    admitted_student = {e['task_id'] for e in sft_episodes if e['source'] in OWN_SOURCES}
+    replaced, trains = settle_deferred(deferred['teacher'], admitted_student, lambda c: c['task_id'])
+    for c in replaced:
+        funnel[c['source']]['frontier_jolt_guided'] += 1
+    for c in trains:
+        if args.teacher_forward_budget and teacher_forward >= 0.995 * args.teacher_forward_budget:
+            funnel[c['source']]['over_forward_budget'] += 1
+            left_over['teacher'].append(c)
+        else:
+            funnel[c['source']]['frontier_jolt_guided_not_admitted'] += 1
+            admit_teacher(c)
+    replaced, trains = settle_deferred(deferred['aux'], admitted_student, lambda item: item[1]['task'])
+    for part, unit in replaced:
+        aux_state[part['name']]['used']['frontier_jolt_guided'] += 1
+    for part, unit in trains:
+        aux_state[part['name']]['used']['frontier_jolt_guided_not_admitted'] += 1
+        take_unit(part, unit)
     episode_sizes.save()
+    for part, units in loaded:
+        state = aux_state[part['name']]
+        aux_report[part['name']] = {**{k: v for k, v in part.items()}, 'sha256': sha256_file(part['path']),
+                                    'available_units': state['units'], 'weighted_target_tokens': int(state['taken']),
+                                    'tasks': len(state['per_task']),
+                                    'budget_tokens': None if state['budget'] is None else int(state['budget']),
+                                    'max_task_tokens': int(max(state['per_task'].values(), default=0)),
+                                    **state['used']}
+    if replaced_rounds:   # episodes an aux unit stands in for (``replaces``): their own chains go
+        def replaced(chain):
+            return (chain.get('part'), str(chain.get('round'))) in replaced_rounds
+        dropped = [chain for chain in all_chains if replaced(chain)]
+        kept = [chain for chain in all_chains if not replaced(chain)]
+        for chain in dropped:
+            r = aux_report[replaced_rounds[(chain.get('part'), str(chain.get('round')))]]
+            r['replaced_chains'] = r.get('replaced_chains', 0) + 1
+            r['replaced_weighted_target_tokens'] = r.get('replaced_weighted_target_tokens', 0) + int(chain_mass(chain))
+            r.setdefault('replaced_episodes', set()).add(str(chain.get('round')))
+        for r in aux_report.values():
+            if 'replaced_episodes' in r:
+                r['replaced_episodes'] = len(r['replaced_episodes'])
+        all_chains[:] = kept
 
     chains = all_chains
     mix = mix_report(chains, aux_report)
@@ -2414,15 +2581,17 @@ def build(args):
                    'october_family_share': args.october_family_share,
                    'teacher_think': args.teacher_think, 'think_treatment': treatment.report(),
                    'frontier': {'path': getattr(args, 'frontier', None), 'policy': frontier_policy,
+                                'previous_policy': previous_policy,
                                 'sha256': sha256_file(args.frontier) if getattr(args, 'frontier', None) else None,
                                 'tiers': dict(collections.Counter(tiers.values())),
                                 'anchor_per_task': getattr(args, 'anchor_per_task', 1),
-                                'rule': 'own successes where the task has any; a solved task keeps anchor_per_task own '
-                                        'episodes and no teacher; teacher (filled first) only where no own success'}
+                                'rule': 'own successes where the task has any, else leak-checked jolt-guided, else '
+                                        'teacher (filled first); a solved task keeps anchor_per_task own episodes'}
                    if frontier else None, 'teacher_lead_in': args.teacher_lead_in,
                    'exclude_run': args.exclude_run, 'guided': args.guided,
                    'prefer_unseen': {'builds': list(getattr(args, 'prefer_unseen', None) or []),
-                                     'episodes': len(trained_keys), 'tasks': len(trained_before)},
+                                     'episodes': len(trained_keys), 'tasks': len(trained_before),
+                                     'scope': unseen_scope},
                    'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
                    'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
@@ -2439,6 +2608,7 @@ def build(args):
         'funnel': {k: dict(v) for k, v in funnel.items()},
         'stats': {k: dict(v) for k, v in stats.items()},
         'episodes': len(sft_episodes), 'tasks': len({e['task_id'] for e in sft_episodes}),
+        'admitted_episode_keys': sorted(e['round'] for e in sft_episodes),
         'chains': len(chains), 'forward_tokens': forward,
         'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
         'target_mass': target_mass_report(target_mass),
@@ -2670,7 +2840,7 @@ def neuralese_graph(args):
         run_dir, archive_dir = spec.split(':')
         archives['rl:' + '/'.join(Path(run_dir).parts[-2:])] = (run_dir, archive_dir)
     excluded_runs = [re.compile(pattern) for pattern in getattr(args, 'exclude_run', None) or ()]
-    episodes = [e for e in all_episodes(work, workers, keep=has_native_state) if e.get('source') == 'rl-own']
+    episodes = [e for e in all_episodes(work, workers, keep=has_native_state) if e.get('source') in OWN_SOURCES]
     funnel['native_state_episodes'] = len(episodes)
     funnel['excluded_run'] = sum(1 for e in episodes if any(p.search(e.get('run') or '') for p in excluded_runs))
     episodes = [e for e in episodes if not any(p.search(e.get('run') or '') for p in excluded_runs)]
@@ -2850,9 +3020,9 @@ def main():
                    help='text a non-student reply writes before its first tool call: context (default) or train')
     b.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help="own successes of runs matching REGEX stay out (e.g. 'grpo-v2/'; run labels 'rl:grpo-v3/run1')")
-    b.add_argument('--guided', choices=('train', 'exclude'), default='exclude',
-                   help='JOLT+ guided attempts (own, student form): exclude (default: grpo-v4-run1 guided successes '
-                        'refer to the removed guidance in 4 of 11 and 6 of 11 had the answer in it) or train')
+    b.add_argument('--guided', choices=('train', 'exclude'), default='train',
+                   help='JOLT+ leak-checked guided attempts (own, student form, jolt-guided tier; async-train §8): '
+                        'train (default, between own successes and teacher trajectories) or exclude (opt-out)')
     b.add_argument('--backend-workarounds', choices=('context', 'context-refused-only', 'exclude', 'train'),
                    default='context',
                    help="teacher episodes that met the text backend's Neuralese refusal: context (default: every call "
@@ -2873,6 +3043,11 @@ def main():
                    help='an earlier build the start checkpoint already trained (its OUT dir): its episodes go after '
                         'every untrained one at each cap and budget, and its tasks stay out of validation (for SFT from '
                         'a checkpoint descended from that build; repeatable)')
+    b.add_argument('--prefer-unseen-scope', choices=PREFER_UNSEEN_SCOPES, default='family',
+                   help='family (default): each family takes its breadth-first turns, untrained tasks first within '
+                        'its turn, then tasks an earlier build trained (a second epoch where a family has nothing '
+                        'fresh); global: every untrained episode before any trained one (sft-v7: the budget went to '
+                        'the unseen tail of 20 generator families; DECISIONS 2026-11-22)')
     b.add_argument('--val-episodes', type=int, default=40,
                    help='left-over own and teacher successes on untrained tasks written as OUT/val-{own,teacher}.pkl')
     b.add_argument('--aux', action='append', default=[],
@@ -2888,6 +3063,8 @@ def main():
                         f'{THINK_TREATMENT_ROLE} when registered, else --teacher-think for every episode)')
     b.add_argument('--frontier', help='expert_iteration.py frontier JSON: per-task pass rates and tiers of the policy '
                    'this build trains; each task keeps its cheapest verified source (frontier_drop)')
+    b.add_argument('--previous-policy', help='adjacent previous policy SHA-256 whose own successes share top priority '
+                   'with --frontier policy (async-train §3; default: frontier.json previous_policy)')
     b.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
                    help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
     b.add_argument('--anchor-per-task', type=int, default=1,

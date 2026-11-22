@@ -45,14 +45,12 @@ def save(out, chains, values):
 
 def trainer(args):
     import torch
-    import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
+    from natlang_neuralese.train.lfm3_learner import load_effective_policy
     from natlang_neuralese.common.cuda_context import ensure_context
     ensure_context('cuda')   # GB10: context creation can fail under host-memory fragmentation; retried
     chains = sample_chains(args)
-    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base, dtype=torch.bfloat16)
-    model.eval()
-    lfm3_fast_train.prepare(model)
+    model, _state, _learner = load_effective_policy(args.checkpoint, args.base, device='cuda', dtype=torch.bfloat16)
     values = []
     for chain in chains:
         ids = torch.from_numpy(chain['ids'].astype(np.int64)).cuda()

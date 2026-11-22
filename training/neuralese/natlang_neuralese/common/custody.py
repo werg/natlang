@@ -112,6 +112,12 @@ def _jsonl(path):
 
 
 def _source_path(value, root):
+    """A declared source or registry entry path: absolute, ``root:rel`` under a logical machine root (the corpus
+    registry's portable form, ``corpus_registry.entry_root``), or relative to ``root``."""
+    head, sep, _ = str(value).partition(':')
+    if sep and '/' not in head and not Path(str(value)).is_absolute():
+        from .corpus_registry import entry_root
+        return entry_root(str(value), root)
     path = Path(value)
     return path if path.is_absolute() else Path(root) / path
 

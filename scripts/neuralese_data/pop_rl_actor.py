@@ -34,6 +34,7 @@ import fcntl
 import json
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -94,14 +95,215 @@ POP_MAX_RUNNING = 20
 POP_MEM_FRACTION = 0.77
 
 
-def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING):
-    """(job['sglang'] settings, actor export format) of Pop's SGLang engine. max_total_tokens is only a cap: SGLang
-    sizes the pool from what POP_MEM_FRACTION leaves (at 0.8: BF16 94.7k, FP8 about 180k tokens; a fork with hybrid
-    SWA KV keeps the 5 sliding layers at their window, about 1.7x the tokens, so the caps leave room for that)."""
+from natlang_neuralese.common.execution_profile import PROFILE_ALIASES, colab_layout  # noqa: E402
+
+
+def profile_key(profile):
+    """A host profile's name: ``pop`` or ``colab`` (``colab_g4``, the old name, is accepted)."""
+    key = str(profile).lower().replace('-', '_')
+    return PROFILE_ALIASES.get(key, key)
+
+COLAB_ROOT = os.environ.get('NATLANG_COLAB_ROOT', '/content/natlang-work')
+COLAB_SGLANG_EXPORT_FORMAT = 'sglang-colab-bf16-vendor-projection'
+COLAB_MAX_RUNNING = 128
+COLAB_MEM_FRACTION = 0.88
+
+
+def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING, profile='pop',
+               weight_dtype='bfloat16'):
+    """(job['sglang'] settings, actor export format) of a remote SGLang engine (Pop or Colab G4).
+    ``weight_dtype`` is ``'bfloat16'`` (held and GRPO) or ``'fp8'`` (SFT collection actors, async-train §3)."""
+    if weight_dtype not in ('bfloat16', 'fp8'):
+        raise ValueError(f'weight_dtype must be bfloat16 or fp8, got {weight_dtype!r}')
     fp8 = kv_cache_dtype != 'auto'
+    w_suffix = '-w-fp8' if weight_dtype == 'fp8' else ''
+    w_extra = {'weight_dtype': 'fp8'} if weight_dtype == 'fp8' else {}
+    if profile_key(profile) == 'colab':
+        cap = max_running if max_running is not None else COLAB_MAX_RUNNING
+        settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': cap, 'mem_fraction': COLAB_MEM_FRACTION,
+                    'max_total_tokens': 2097152 if fp8 else 1048576, **w_extra}
+        return settings, COLAB_SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '') + w_suffix
     settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': max_running, 'mem_fraction': POP_MEM_FRACTION,
-                'max_total_tokens': 524288 if fp8 else 262144}
-    return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '')
+                'max_total_tokens': 524288 if fp8 else 262144, **w_extra}
+    return settings, SGLANG_EXPORT_FORMAT + (f'-kv-{kv_cache_dtype}' if fp8 else '') + w_suffix
+
+
+def ensure_colab_mps(host):
+    """Ensure the NVIDIA MPS daemon is running on a Colab G4 VM so an SFT learner and capped collection actor share
+    SMs concurrently (async-train §1). Non-fatal when MPS is unavailable in a restricted container; opt out with
+    ``NATLANG_COLAB_MPS=0``."""
+    if os.environ.get('NATLANG_COLAB_MPS', '1') == '0':
+        return {'host': host, 'mps': 'disabled'}
+    out = ssh_host(host, 'pgrep -x nvidia-cuda-mps-control >/dev/null 2>&1 && echo running '
+                         '|| (nvidia-cuda-mps-control -d >/dev/null 2>&1 && echo started || echo unavailable)',
+                   check=False, timeout=30).strip()
+    status = out.splitlines()[-1] if out else 'unavailable'
+    log(event='Colab G4 MPS checked', host=host, mps=status)
+    return {'host': host, 'mps': status}
+
+
+def colab_hosts(explicit=None):
+    """Ordered Colab G4 SSH host aliases from explicit arg, NATLANG_COLAB_HOSTS, or ROOT/config.json."""
+    from natlang_neuralese.common.execution_profile import parse_colab_hosts
+    return list(parse_colab_hosts(explicit, ROOT / 'config.json'))
+
+
+def ssh_host(host, command, *, input=None, timeout=600, check=True):
+    """Run an SSH command on any remote host (Pop or Colab G4) over Tailscale."""
+    result = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', host, command], input=input,
+                            text=True, capture_output=True, timeout=timeout)
+    if check and result.returncode:
+        raise RuntimeError(f'Remote command on {host} failed ({result.returncode}): {command[:200]}: {result.stderr[-2000:]}')
+    return result.stdout
+
+
+def host_reachable(host, timeout=20):
+    """True when ``host`` accepts batch SSH over Tailscale within ``timeout`` seconds."""
+    if not host:
+        return False
+    try:
+        return subprocess.run(['ssh', '-o', f'ConnectTimeout={min(timeout, 15)}', '-o', 'BatchMode=yes', host, 'true'],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def reachable_hosts(profile='pop', hosts=None):
+    """Return reachable SSH hosts for ``profile`` ('pop' or 'colab')."""
+    key = profile_key(profile)
+    candidates = list(hosts) if hosts else (colab_hosts() if key == 'colab' else ([POP] if POP else []))
+    return [h for h in candidates if host_reachable(h)]
+
+
+def ssh_options(host):
+    """``ssh -G host``: the effective client options of SSH alias ``host`` (lower-case keys)."""
+    out = subprocess.run(['ssh', '-G', host], capture_output=True, text=True, check=True,
+                         stdin=subprocess.DEVNULL).stdout
+    return dict(line.split(' ', 1) for line in out.splitlines() if ' ' in line)
+
+
+def host_address(host):
+    """Resolve the tailscale IP/hostname configured for SSH alias ``host``."""
+    return ssh_options(host)['hostname']
+
+
+# A host reached only through its SSH ProxyCommand (a Colab runtime: `colab ssh --proxy-mode`, which admits one SSH
+# connection, so every command and forward multiplexes over its ControlMaster) has no network address the DGX can
+# open: its servers are forwarded to DGX 127.0.0.1:(port + COLAB_FORWARD_OFFSET), e.g. 8570 -> 18731 (front) and
+# 9570 -> 19731 (SGLang), the ports the session's tunnel unit forwards.
+COLAB_FORWARD_OFFSET = 10161
+
+
+def _listening(port):
+    import socket
+    with socket.socket() as sock:
+        sock.settimeout(2)
+        return sock.connect_ex(('127.0.0.1', int(port))) == 0
+
+
+def forward_port(host, local, remote):
+    """Forward DGX ``127.0.0.1:local`` to ``host``'s ``127.0.0.1:remote`` over the host's ControlMaster (``ssh -O
+    forward``: no second connection); a port already forwarded (the tunnel unit's) is kept."""
+    if _listening(local):
+        return
+    subprocess.run(['ssh', '-O', 'forward', '-L', f'{local}:127.0.0.1:{remote}', host], check=True,
+                   capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+
+
+def remote_endpoint(host, port, bind_host=None):
+    """The DGX-side URL of a server listening on ``host`` at ``port``: ``bind_host`` when given; the host's network
+    address when SSH names one (Pop over Tailscale); for a ProxyCommand-only host the forwarded loopback port."""
+    if bind_host:
+        return f'http://{bind_host}:{port}'
+    options = ssh_options(host)
+    if options.get('proxycommand', 'none') == 'none':
+        return f'http://{options["hostname"]}:{port}'
+    forward_port(host, int(port) + COLAB_FORWARD_OFFSET, int(port))
+    return f'http://127.0.0.1:{int(port) + COLAB_FORWARD_OFFSET}'
+
+
+def sync_to_remote(local_path, remote_path, host, *, attempts=None, stall_seconds=120):
+    """Resumable rsync from DGX to a remote host (Pop or Colab G4)."""
+    ssh_host(host, shlex.join(['mkdir', '-p', str(PurePosixPath(remote_path).parent)]))
+    copy_resumable(str(local_path), f'{host}:{remote_path}', attempts=attempts, stall_seconds=stall_seconds)
+
+
+def sync_from_remote(remote_path, local_path, host, *, attempts=None, stall_seconds=120):
+    """Resumable rsync from a remote host (Colab G4 or Pop) back to DGX."""
+    Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+    copy_resumable(f'{host}:{remote_path}', str(local_path), attempts=attempts, stall_seconds=stall_seconds)
+
+
+def remote_identity(host, remote_path):
+    """(size in bytes, sha256) of a file on ``host``."""
+    out = ssh_host(host, f'stat -c %s {shlex.quote(remote_path)} && sha256sum {shlex.quote(remote_path)}', timeout=1800)
+    lines = out.split()
+    return int(lines[0]), lines[1]
+
+
+def pull_verified(remote_path, local_path, host, *, attempts=5):
+    """Copy a finished artifact (an SFT ``checkpoint.pt``) from ``host`` to ``local_path`` only whole: rsync into
+    ``<local>.pull`` (resumable across attempts), check its size and sha256 against the remote file, then rename it
+    into place. A failed or truncated copy never appears under the final name (a partial ``checkpoint.pt`` was once
+    adopted as the cycle's SFT result). Returns the sha256."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    local_path = Path(local_path)
+    temp = local_path.with_name(local_path.name + '.pull')
+    size, sha = remote_identity(host, remote_path)
+    sync_from_remote(remote_path, temp, host, attempts=attempts)
+    got_size = temp.stat().st_size
+    got_sha = sha256_file_hex(temp) if got_size == size else None
+    if got_size != size or got_sha != sha:
+        temp.unlink(missing_ok=True)
+        raise RuntimeError(f'{host}:{remote_path} arrived as {got_size} bytes (sha {got_sha}), the remote file is '
+                           f'{size} bytes (sha {sha}); the copy was discarded')
+    os.replace(temp, local_path)
+    return sha
+
+
+def colab_state_path(host):
+    safe = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in str(host))
+    return ROOT / f'colab-actor-{safe}.json'
+
+
+def host_config(profile='pop', *, host=None):
+    """Unified remote-host layout for ``pop`` and ``colab``."""
+    key = profile_key(profile)
+    if key == 'colab':
+        chosen = host or (colab_hosts()[0] if colab_hosts() else None)
+        return {
+            'profile': 'colab',
+            'host': chosen,
+            'root': COLAB_ROOT,
+            'repo': f'{COLAB_ROOT}/natlang',
+            'python': f'{COLAB_ROOT}/natlang/.venv-neuralese/bin/python',
+            'base': f'{COLAB_ROOT}/base-lfm3',
+            'checkpoints': f'{COLAB_ROOT}/checkpoints',
+            'work_root': f'{COLAB_ROOT}/runs',
+            'kv_cache_dtype': POP_KV_CACHE_DTYPE,
+            'max_running': COLAB_MAX_RUNNING,
+            'mem_fraction': COLAB_MEM_FRACTION,
+            'admission': f'{COLAB_ROOT}/natlang/scripts/colab/admission.py',
+            # the fork's venv (scripts/colab/bootstrap.py installs training/neuralese/sglang-fork.json's commit there)
+            'sglang_python': f'{COLAB_ROOT}/sglang-natlang-venv/bin/python',
+            'env': f'{COLAB_ROOT}/natlang-env.sh',
+        }
+    return {
+        'profile': 'pop',
+        'host': host or POP,
+        'root': POP_EVAL_ROOT,
+        'repo': POP_REPO,
+        'python': POP_REPO + '/.venv-neuralese/bin/python',
+        'base': POP_BASE,
+        'checkpoints': POP_CHECKPOINTS,
+        'work_root': POP_EVAL_ROOT,
+        'kv_cache_dtype': POP_KV_CACHE_DTYPE,
+        'max_running': POP_MAX_RUNNING,
+        'mem_fraction': POP_MEM_FRACTION,
+        'admission': POP_REPO + '/scripts/memory_ledger.py',
+        'vram_gib': 7.5,
+        'host_ram_gib': 10.5,
+    }
 
 
 SGLANG_MEMORY_GB = 11   # 8 GiB was OOM-killed at CUDA-graph capture (2026-11-12): front + view on CPU + server
@@ -468,6 +670,7 @@ def start(args):
             and attested(previous['endpoint'], args.policy_id, adapters)):
         log(event='Pop RL actor already serves the policy', endpoint=previous['endpoint'])
         return previous
+    stop_pop_fills()
     if previous:
         stop_unit(previous)
     host = args.bind_host or pop_host_address()
@@ -555,8 +758,26 @@ def pop_actor_units():
     return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
 
 
+def pop_fill_units():
+    """DGX units drawing fills from Pop's server (expert_iteration ``<cycle>-popfill`` and its tunnel)."""
+    out = subprocess.run(['systemctl', '--user', 'list-units', '*-popfill.service', '*-popfill-tunnel.service',
+                          '--state=active,activating', '--plain', '--no-legend'], capture_output=True, text=True).stdout
+    return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+
+
+def stop_pop_fills():
+    """A cycle's Pop fill runs on until Pop serves something else (DECISIONS 2026-11-22 "Pop fills through build"):
+    every serve stops it first, so no fill draws from a policy it did not start on."""
+    for unit in pop_fill_units():
+        subprocess.run(['/usr/bin/python3', LEDGER, 'cancel', '--unit', unit], stderr=subprocess.DEVNULL)
+        for suffix in ('-waiter', ''):
+            subprocess.run(['systemctl', '--user', 'stop', f'{unit}{suffix}.service'], stderr=subprocess.DEVNULL)
+        log(event='stopped Pop fill', unit=unit)
+
+
 def stop_pop_actors():
     """Stop every Pop actor unit and wait until the GPU has no compute process (the driver refuses a busy GPU)."""
+    stop_pop_fills()
     for unit in pop_actor_units():
         stop_unit({'unit': unit})
     for _ in range(45):
@@ -586,8 +807,423 @@ def prune_pop_newest(pattern, keep, protect=()):
     return old
 
 
+def stop_colab(host):
+    """Stop the natlang SGLang actor this DGX started on a Colab G4 VM: its admission process group, by the PID the
+    launch recorded (never by pattern: a ``pkill -f`` over ssh matches the remote shell running it)."""
+    state_file = colab_state_path(host)
+    state = read_json(state_file) or {}
+    pid = state.get('pid')
+    if pid:
+        ssh_host(host, f'kill -TERM -- -{int(pid)} 2>/dev/null; for i in $(seq 30); do kill -0 {int(pid)} 2>/dev/null '
+                       f'|| exit 0; sleep 2; done; kill -KILL -- -{int(pid)} 2>/dev/null; true', check=False, timeout=120)
+    state_file.unlink(missing_ok=True)
+    log(event='Colab G4 actor stopped', host=host, pid=pid, previous=state.get('policy_id'))
+    return state
+
+
+def colab_hardware(host):
+    """The session's attested hardware: ``colab-ready.json`` ``hardware`` (bootstrap's probe: GPU name, VRAM, host
+    RAM, compute capability), the compute capability asked of nvidia-smi when the ready file predates that field."""
+    cfg = host_config('colab', host=host)
+    ready = json.loads(ssh_host(host, shlex.join(['cat', f'{cfg["root"]}/colab-ready.json']), timeout=60))
+    hardware = dict(ready.get('hardware') or {})
+    if not hardware.get('vram_total_gib'):
+        raise RuntimeError(f'{host}: colab-ready.json records no GPU (bootstrap the session first)')
+    if not hardware.get('compute_cap'):
+        cap = ssh_host(host, 'nvidia-smi --query-gpu=compute_cap --format=csv,noheader', check=False, timeout=60).strip()
+        hardware['compute_cap'] = cap.splitlines()[0].strip() if cap else None
+    return hardware
+
+
+def colab_serve_command(cfg, *, checkpoint, sha, port, work, beside_learner, kv_cache_dtype,
+                        weight_dtype='bfloat16', layout):
+    """(serve argv, admission claim, sglang settings, export format) of a Colab SGLang actor sized from the session's
+    hardware (``colab_layout``): alone it takes the GPU (mem fraction 0.88, 128 running); beside the SFT learner under
+    MPS (async-train §1) its KV is capped at a quarter of the GPU and it claims only that share, so the learner's
+    admission still fits. FP8 weights on a GPU without FP8 GEMMs (sm_80) serve BF16."""
+    sizing = layout['actor_beside_learner'] if beside_learner else layout['actor_alone']
+    if weight_dtype == 'fp8' and not layout['fp8']:
+        log(event='Colab FP8 weights unsupported: BF16', gpu=layout['gpu_name'],
+            compute_capability=layout['compute_capability'])
+        weight_dtype = 'bfloat16'
+    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab',
+                                       weight_dtype=weight_dtype)
+    memory = (['--sglang-kv-gb', str(sizing['kv_gb'])] if sizing['kv_gb'] else
+              ['--sglang-mem-fraction', str(sglang['mem_fraction'])])
+    if sizing['kv_gb']:
+        sglang = {**{k: v for k, v in sglang.items() if k != 'mem_fraction'}, 'kv_gb': sizing['kv_gb']}
+    weight_args = ['--sglang-weight-dtype', 'fp8'] if weight_dtype == 'fp8' else []
+    serve = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/serve_native_checkpoint.py',
+             '--store-dir', f'{work}/store', '--checkpoint', checkpoint, '--checkpoint-sha256', sha,
+             '--base', cfg['base'], '--host', '0.0.0.0', '--port', str(port), '--prompt-rendering', 'full',
+             '--engine', 'sglang', '--sglang-python', cfg['sglang_python'], '--sglang-projection', 'vendor',
+             '--sglang-kv-cache-dtype', sglang['kv_cache_dtype'], '--sglang-max-running', str(sglang['max_running']),
+             *weight_args, *memory, '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
+    return serve, {'vram_gib': sizing['vram_gib'], 'host_ram_gib': sizing['host_ram_gib']}, sglang, sglang_format
+
+
+def _http_json(url, payload=None, *, host=None, timeout=600):
+    """GET (``payload is None``) or POST JSON to ``url``; when ``host`` is set and ``url`` targets loopback
+    (e.g. a remote SGLang server on ``127.0.0.1``), execute the HTTP request over SSH on ``host``."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    use_ssh = bool(host) and parsed.hostname in ('127.0.0.1', 'localhost', '::1')
+    if use_ssh:
+        script = (
+            'import json, sys, urllib.request\n'
+            'url, timeout, body = sys.argv[1], float(sys.argv[2]), sys.stdin.read()\n'
+            'req = urllib.request.Request(url, data=(body.encode() if body else None),\n'
+            '    headers=({"Content-Type": "application/json"} if body else {}))\n'
+            'with urllib.request.urlopen(req, timeout=timeout) as r:\n'
+            '    sys.stdout.write(r.read().decode())\n'
+        )
+        raw = ssh_host(host, shlex.join(['python3', '-I', '-c', script, url, str(timeout)]),
+                       input=(json.dumps(payload) if payload is not None else ''), timeout=int(timeout) + 30)
+        return json.loads(raw) if raw.strip() else {}
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers = {'Content-Type': 'application/json'} if data is not None else {}
+    req = urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode()
+    return json.loads(raw) if raw.strip() else {}
+
+
+def _default_sglang_url(front_url):
+    from urllib.parse import urlparse
+    parsed = urlparse(front_url)
+    port = (parsed.port or 80) + 1000
+    return f'http://127.0.0.1:{port}'
+
+
+def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=None, factors_dir=None,
+                                  base_checkpoint=None):
+    """Stage a versioned HF export directory on ``host`` for in-place rebind.
+    When ``factors_dir`` is given (async-train §7.1), ships only the ~130 MB / ~0.5 GB FP32 factors and runs
+    ``merge_factors_to_checkpoint`` + ``export.native_hf.export`` on the remote host against its local base
+    checkpoint; otherwise syncs ``export_dir`` directly. Returns ``(remote_export_dir, weights_sha256)``."""
+    remote_export = f'{cfg["work_root"]}/sglang-hf-v{version}-{policy_id[:12]}'
+    if factors_dir is not None:
+        factors_dir = Path(factors_dir)
+        manifest = json.loads((factors_dir / 'policy_manifest.json').read_text())
+        base_sha = manifest['base_checkpoint_sha256']
+        remote_factors = f'{cfg["work_root"]}/rebind-factors/{policy_id[:12]}-v{version}'
+        ssh_host(host, shlex.join(['mkdir', '-p', remote_factors, remote_export, cfg['checkpoints']]))
+        sync_to_remote(str(factors_dir / 'adapter_factors_fp32.safetensors'),
+                       f'{remote_factors}/adapter_factors_fp32.safetensors', host)
+        sync_to_remote(str(factors_dir / 'policy_manifest.json'),
+                       f'{remote_factors}/policy_manifest.json', host)
+        remote_base = base_checkpoint or f'{cfg["checkpoints"]}/{base_sha}.pt'
+        remote_merged = f'{cfg["checkpoints"]}/{policy_id}.pt'
+        merge_script = (
+            'import json, sys\n'
+            'from pathlib import Path\n'
+            'sys.path[:0] = [sys.argv[1] + "/training/neuralese", sys.argv[1]]\n'
+            'from natlang_neuralese.train.learner_state import merge_factors_to_checkpoint\n'
+            'from natlang_neuralese.export.native_hf import export\n'
+            'repo, base_ckpt, factors_dir, out_ckpt, base_dir, out_hf = sys.argv[2:8]\n'
+            'merge_factors_to_checkpoint(base_ckpt, factors_dir, out_ckpt)\n'
+            'res = export(out_ckpt, out_hf, base=base_dir)\n'
+            'print(json.dumps({"export_dir": str(out_hf), "weights_sha256": res["weights_sha256"]}))\n'
+        )
+        out = ssh_host(host, shlex.join([cfg['python'], '-c', merge_script, cfg['repo'], cfg['repo'],
+                                         remote_base, remote_factors, remote_merged, cfg['base'], remote_export]),
+                       timeout=1800)
+        info = json.loads(out.strip().splitlines()[-1])
+        return info['export_dir'], info['weights_sha256']
+    if not export_dir:
+        raise ValueError('rebind_actor requires export_dir or factors_dir')
+    local_export = Path(export_dir)
+    if local_export.is_dir():
+        ssh_host(host, shlex.join(['mkdir', '-p', remote_export]))
+        sync_to_remote(f'{local_export}/', f'{remote_export}/', host)
+        weights_file = local_export / 'model.safetensors'
+        weights_sha = None
+        if weights_file.is_file():
+            from natlang_neuralese.common.hashing import sha256_file_hex
+            weights_sha = sha256_file_hex(weights_file)
+        return remote_export, weights_sha
+    # Already a remote path on host
+    _, weights_sha = remote_identity(host, f'{export_dir}/model.safetensors')
+    return str(export_dir), weights_sha
+
+
+def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha256=None, tensor_identity=None,
+                 export_dir=None, factors_dir=None, base_checkpoint=None, host=None, host_profile='colab',
+                 timeout=600):
+    """In-place weight update + 4-route measured attestation of a standing SGLang actor (DGX local or remote G4/Pop).
+    Pause (retract) -> ``update_weights_from_disk`` -> ``/v1/neuralese/rebind-policy`` -> ``attest_all_routes`` ->
+    ``continue_generation`` (always resumed in ``finally``). When ``host`` and ``factors_dir`` are provided, ships only
+    FP32 LoRA factors and merges + exports on the remote host (async-train §5, §7.1)."""
+    from natlang_neuralese.serve.sglang_actor import attest_all_routes
+    started = time.time()
+    front_url = front_url.rstrip('/')
+    sglang_url = (sglang_url or _default_sglang_url(front_url)).rstrip('/')
+    target_dir = str(export_dir) if export_dir is not None else None
+    if host:
+        cfg = host_config(host_profile, host=host)
+        target_dir, measured_sha = _prepare_remote_rebind_export(
+            host=host, cfg=cfg, policy_id=policy_id, version=version,
+            export_dir=export_dir, factors_dir=factors_dir, base_checkpoint=base_checkpoint)
+        weights_sha256 = weights_sha256 or measured_sha
+    else:
+        if target_dir is None:
+            raise ValueError('local rebind_actor requires export_dir')
+        if weights_sha256 is None and (Path(target_dir) / 'model.safetensors').is_file():
+            from natlang_neuralese.common.hashing import sha256_file_hex
+            weights_sha256 = sha256_file_hex(Path(target_dir) / 'model.safetensors')
+    _http_json(f'{sglang_url}/pause_generation', {'mode': 'retract'}, host=host, timeout=timeout)
+    try:
+        upd = _http_json(f'{sglang_url}/update_weights_from_disk',
+                         {'model_path': target_dir, 'flush_cache': True, 'weight_version': str(version)},
+                         host=host, timeout=timeout)
+        if not upd.get('success', False):
+            raise RuntimeError(f'update_weights_from_disk failed on {sglang_url}: {json.dumps(upd)[:400]}')
+        rebind_body = {'policy_id': policy_id, 'version': version, 'export_dir': target_dir}
+        if weights_sha256 is not None:
+            rebind_body['weights_sha256'] = weights_sha256
+        if tensor_identity is not None:
+            rebind_body['tensor_identity'] = tensor_identity
+        _http_json(f'{front_url}/v1/neuralese/rebind-policy', rebind_body, host=host, timeout=timeout)
+        info = _http_json(f'{front_url}/v1/neuralese/info', None, host=host, timeout=min(timeout, 120))
+        expected = {'policy_id': policy_id, 'version': version, 'model_path': target_dir,
+                    'weights_sha256': weights_sha256, 'tensor_identity': tensor_identity}
+        ok, mismatches = attest_all_routes(info, expected)
+        if not ok:
+            raise RuntimeError(f'rebind_actor route attestation failed for {front_url}: {json.dumps(mismatches)[:600]}')
+    finally:
+        _http_json(f'{sglang_url}/continue_generation', {}, host=host, timeout=min(timeout, 120))
+    result = {'front_url': front_url, 'sglang_url': sglang_url, 'host': host, 'policy_id': policy_id,
+              'version': version, 'export_dir': target_dir, 'weights_sha256': weights_sha256,
+              'routes_attested': True, 'seconds': round(time.time() - started, 2)}
+    log(event='Actor rebound in place', **result)
+    return result
+
+
+def serve_colab(args):
+    """Serve a merged BF16 checkpoint on a Colab G4 VM under scripts/colab/admission.py (a VRAM/host-RAM claim that
+    lasts while the actor runs) and wait until it attests the checkpoint."""
+    cfg = host_config('colab', host=getattr(args, 'host', None))
+    host = cfg['host']
+    if not host:
+        raise RuntimeError('set --host, NATLANG_COLAB_HOSTS, or "colab_hosts" in ' + str(ROOT / 'config.json'))
+    sha, commit = args.policy_id, args.commit
+    beside_learner = bool(getattr(args, 'beside_learner', False))
+    weight_dtype = getattr(args, 'weight_dtype', 'bfloat16')
+    remote_ckpt = f'{cfg["checkpoints"]}/{sha}.pt'
+    remote_work = f'{cfg["work_root"]}/actor-{sha[:12]}'
+    layout = colab_layout(colab_hardware(host))
+    serve_cmd, claim, sglang, sglang_format = colab_serve_command(
+        cfg, checkpoint=remote_ckpt, sha=sha, port=args.port, work=remote_work,
+        beside_learner=beside_learner, kv_cache_dtype=args.kv_cache_dtype, weight_dtype=weight_dtype, layout=layout)
+    state_file = colab_state_path(host)
+    previous = read_json(state_file)
+    if (previous and previous.get('policy_id') == sha and previous.get('code') == commit
+            and previous.get('sglang') == sglang and attested(previous['endpoint'], sha)):
+        log(event='Colab G4 actor already serves the checkpoint', host=host, endpoint=previous['endpoint'])
+        return previous
+    if previous:
+        stop_colab(host)
+    if beside_learner:
+        ensure_colab_mps(host)
+    started = time.time()
+    endpoint = remote_endpoint(host, args.port, args.bind_host)
+    ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_work]))
+    if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
+        sync_to_remote(args.checkpoint, f'{remote_ckpt}.partial', host)
+        if remote_identity(host, f'{remote_ckpt}.partial')[1] != sha:
+            raise RuntimeError(f'the checkpoint copied to {host} does not hash to {sha}')
+        ssh_host(host, shlex.join(['mv', f'{remote_ckpt}.partial', remote_ckpt]))
+    copied = time.time()
+    ssh_host(host, f'git -C {shlex.quote(cfg["repo"])} fetch -q origin && '
+                   f'git -C {shlex.quote(cfg["repo"])} checkout -q -f {shlex.quote(commit)}', timeout=300)
+    admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(claim['vram_gib']),
+                '--host-ram-gib', str(claim['host_ram_gib']), '--label', f'actor-{sha[:12]}', '--wait', '300',
+                '--workdir', cfg['repo'], '--', *serve_cmd]
+    # setsid: the admission process leads its own group (stop_colab signals it); its PID is the launch's output
+    pid = ssh_host(host, f'. {shlex.quote(cfg["env"])} && setsid nohup {shlex.join(admitted)} '
+                         f'> {shlex.quote(remote_work + "/actor.log")} 2>&1 < /dev/null & echo $!', timeout=60).strip()
+    result = {'endpoint': endpoint, 'host': host, 'profile': 'colab', 'policy_id': sha, 'work': remote_work,
+              'beside_learner': beside_learner, 'gpu': layout['gpu_name'],
+              'code': commit, 'engine': 'sglang', 'sglang': sglang, 'export_format': sglang_format,
+              'pid': int(pid.splitlines()[-1]), 'claim': claim, 'copy_seconds': round(copied - started, 1),
+              'started': started}
+    write_json(state_file, result)
+    deadline = time.monotonic() + args.ready_seconds
+    while time.monotonic() < deadline:
+        if attested(endpoint, sha):
+            result['ready_seconds'] = round(time.time() - started, 1)
+            write_json(state_file, result)
+            log(event='Colab G4 actor ready', **result)
+            return result
+        time.sleep(5)
+    stop_colab(host)
+    raise RuntimeError(f'Colab G4 actor on {host} did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
+
+
+def colab_learner_layout(host):
+    """The SFT learner's claims on ``host`` (``colab_layout``): beside the capped actor when this DGX's record of
+    the session's actor says it was served beside the learner, else alone."""
+    layout = colab_layout(colab_hardware(host))
+    actor = read_json(colab_state_path(host)) or {}
+    beside = bool(actor.get('beside_learner')) and actor.get('pid') is not None
+    return {**layout['learner_beside_actor' if beside else 'learner_alone'], 'beside_actor': beside,
+            'gpu': layout['gpu_name']}
+
+
+def remap_sft_args(argv, mapping):
+    """``exp0_sft`` arguments (the DGX recipe, ``launch.json`` ``exp0_sft_args``) with the values of path flags
+    replaced through ``mapping`` (local path -> remote path); every --chains/--checkpoint/--base/--out-dir/--val-chains
+    value must be mapped (a DGX path on the remote would fail late or read the wrong file)."""
+    out, path_flags = list(argv), ('--chains', '--checkpoint', '--base', '--out-dir', '--val-chains',
+                                   '--export-factors-dir', '--state-dir')
+    for i, arg in enumerate(out[:-1]):
+        if arg in path_flags:
+            if out[i + 1] not in mapping:
+                raise ValueError(f'{arg} {out[i + 1]} has no remote copy')
+            out[i + 1] = mapping[out[i + 1]]
+    return out
+
+
+def run_remote_sft(args):
+    """Run the DGX SFT recipe on a Colab G4 VM: exactly the ``exp0_sft`` arguments the DGX preflight
+    (``ops/grpo-v4/launch-sft.sh`` with PREFLIGHT_ONLY=1: input identity, held exclusion; ``--launch-json``) recorded,
+    with paths mapped to the VM's copies, plus ``--resume`` and the learner-state saves the DGX pulls every
+    ``--state-sync-minutes``. The finished checkpoint arrives verified (``pull_verified``) or not at all."""
+    import threading
+    cfg = host_config('colab', host=args.host)
+    host = cfg['host']
+    if not host:
+        raise RuntimeError('run-sft requires --host or NATLANG_COLAB_HOSTS')
+    launch = json.loads(Path(args.launch_json).read_text())
+    recipe = shlex.split(launch['exp0_sft_args'])
+    local_work = Path(args.work).resolve()
+    local_work.mkdir(parents=True, exist_ok=True)
+    remote_run = f'{cfg["work_root"]}/sft-{args.run_name}'
+    ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_run, f'{remote_run}/learner-state']))
+    if args.commit:
+        ssh_host(host, f'git -C {shlex.quote(cfg["repo"])} fetch -q origin && '
+                       f'git -C {shlex.quote(cfg["repo"])} checkout -q -f {shlex.quote(args.commit)}', timeout=300)
+    value = lambda flag: recipe[recipe.index(flag) + 1]
+    mapping = {value('--base'): cfg['base'], value('--out-dir'): remote_run}
+    chains_remote = f'{remote_run}/chains.pkl'
+    sync_to_remote(value('--chains'), chains_remote, host)
+    if remote_identity(host, chains_remote)[1] != launch['chains_sha256']:
+        raise RuntimeError(f'the chains copied to {host} do not hash to {launch["chains_sha256"]}')
+    mapping[value('--chains')] = chains_remote
+    start_sha = launch['start_checkpoint_sha256']
+    remote_ckpt = f'{cfg["checkpoints"]}/{start_sha}.pt'
+    if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
+        sync_to_remote(value('--checkpoint'), f'{remote_ckpt}.partial', host)
+        if remote_identity(host, f'{remote_ckpt}.partial')[1] != start_sha:
+            raise RuntimeError(f'the start checkpoint copied to {host} does not hash to {start_sha}')
+        ssh_host(host, shlex.join(['mv', f'{remote_ckpt}.partial', remote_ckpt]))
+    mapping[value('--checkpoint')] = remote_ckpt
+    vals = [recipe[i + 1] for i, a in enumerate(recipe[:-1]) if a == '--val-chains']
+    for idx, vpath in enumerate(vals):
+        rv = f'{remote_run}/val-{idx}-{Path(vpath).name}'
+        sync_to_remote(vpath, rv, host)
+        mapping[vpath] = rv
+    local_state = local_work / 'learner-state'
+    if (local_state / 'learner_manifest.json').exists():     # exact resume across a preemption (DGX holds the state)
+        sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
+    # an async round's recipe exports its factors (--export-factors-dir, --round-id: one argv for the G4 and the DGX
+    # learner, expert_iteration.round_sft_env); the factors land beside the run on the VM and are pulled back
+    factors_only = '--factors-only' in recipe
+    round_id = value('--round-id') if '--round-id' in recipe else None
+    if '--export-factors-dir' in recipe:
+        mapping[value('--export-factors-dir')] = f'{remote_run}/factors'
+    # no MPS start here: the daemon must be up before the first CUDA client, so the serve that puts an actor beside
+    # the learner starts it (serve-checkpoint --beside-learner) and the learner joins it; a session with no actor
+    # beside (or one started without MPS) runs the learner as a plain CUDA process
+    # the learner's box on this session's hardware: alone, or beside the capped MPS actor its serve started; the
+    # activation budget follows (it changes memory, not the step list, so a DGX takeover resumes the same steps)
+    learner = colab_learner_layout(host)
+    vram_gib = args.vram_gib if args.vram_gib is not None else learner['vram_gib']
+    host_ram_gib = args.host_ram_gib if args.host_ram_gib is not None else learner['host_ram_gib']
+    sft_args = remap_sft_args(recipe, mapping)
+    if '--activation-gb' in sft_args:
+        sft_args[sft_args.index('--activation-gb') + 1] = str(learner['activation_gib'])
+    else:
+        sft_args += ['--activation-gb', str(learner['activation_gib'])]
+    log(event='Colab SFT layout', host=host, **learner)
+    sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *sft_args,
+               *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
+    admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(vram_gib), '--host-ram-gib',
+                str(host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
+                '--', *sft_cmd]
+    stop_sync = threading.Event()
+    sync_interval = max(60.0, float(args.state_sync_minutes) * 60.0)
+
+    def pull_state(attempts):
+        sync_from_remote(f'{remote_run}/learner-state/', f'{local_state}/', host, attempts=attempts)
+        sync_from_remote(f'{remote_run}/train.jsonl', str(local_work / 'train.jsonl'), host, attempts=1)
+
+    def sync_loop():
+        while not stop_sync.wait(sync_interval):
+            try:
+                pull_state(2)
+            except Exception as err:
+                log(event='Colab SFT state sync warning', host=host, error=repr(err)[:200])
+
+    sync_thread = threading.Thread(target=sync_loop, daemon=True)
+    sync_thread.start()
+    started, rc = time.time(), 1
+    try:
+        rc = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', host,
+                             f'. {shlex.quote(cfg["env"])} && {shlex.join(admitted)}'], timeout=24 * 3600).returncode
+    finally:
+        stop_sync.set()
+        sync_thread.join(timeout=30)
+        try:      # the latest learner state, so the DGX can resume a preempted run
+            pull_state(3)
+        except Exception as err:
+            log(event='Colab SFT post-run pull warning', error=repr(err)[:200])
+    sha = None
+    factors_sha = None
+    if rc == 0:
+        if factors_only:
+            # the recipe's DGX factors directory (a DGX takeover writes the same place); blob first, manifest last,
+            # staged beside it and renamed into place whole (a reader never sees a manifest without its blob)
+            local_factors = Path(value('--export-factors-dir'))
+            staged = local_factors.with_name(local_factors.name + '.pull')
+            staged.mkdir(parents=True, exist_ok=True)
+            try:
+                factors_sha = pull_verified(f'{remote_run}/factors/adapter_factors_fp32.safetensors',
+                                            staged / 'adapter_factors_fp32.safetensors', host)
+                pull_verified(f'{remote_run}/factors/policy_manifest.json', staged / 'policy_manifest.json', host)
+                manifest = json.loads((staged / 'policy_manifest.json').read_text())
+                if manifest.get('adapter_factors_sha256') != factors_sha:
+                    raise RuntimeError('pulled adapter_factors_fp32.safetensors does not match policy_manifest.json')
+                if local_factors.exists():
+                    shutil.rmtree(local_factors)
+                os.replace(staged, local_factors)
+            except Exception as err:
+                rc = 1
+                pending = {'schema': 'natlang.pending-upload/1', 'host': host, 'run_name': args.run_name,
+                           'round_id': round_id, 'remote_factors_dir': f'{remote_run}/factors',
+                           'error': repr(err)[:300], 'at': round(time.time(), 1)}
+                write_json(local_work / 'pending-upload.json', pending)
+                try:
+                    ssh_host(host, shlex.join(['bash', '-c', f'cat > {shlex.quote(remote_run + "/pending-upload.json")}']),
+                             input=json.dumps(pending), check=False, timeout=30)
+                except Exception:
+                    pass
+                log(event='Colab SFT factors pull failed; recorded pending-upload.json', host=host, error=repr(err)[:300])
+        else:
+            try:
+                sha = pull_verified(f'{remote_run}/checkpoint.pt', local_work / 'checkpoint.pt', host)
+            except Exception as err:
+                rc = 1
+                log(event='Colab SFT checkpoint pull failed', host=host, error=repr(err)[:300])
+    log(event='Colab G4 SFT finished', host=host, returncode=rc, seconds=round(time.time() - started, 1),
+        checkpoint_sha256=sha, adapter_factors_sha256=factors_sha)
+    return rc
+
+
 def serve_checkpoint(args):
-    """Serve a pruned native checkpoint on Pop's GPU (replacing whatever Pop's actor serves) and wait until it attests."""
+    """Serve a pruned native checkpoint on Pop or Colab G4 and wait until it attests."""
+    if profile_key(getattr(args, 'host_profile', 'pop')) == 'colab':
+        return serve_colab(args)
     sha, commit = args.policy_id, args.commit
     sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
     release, adapters, rank = adapter_release(args)   # a program fit served by default (TUNING_RESTORE_20261117.md)
@@ -647,10 +1283,9 @@ def serve_checkpoint(args):
     raise RuntimeError(f'Pop actor did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
 
 
-def serving_endpoint(policy, export_format):
-    """Pop's actor endpoint when it serves checkpoint ``policy`` in ``export_format`` (the engine's attested precision
-    and KV law), else None."""
-    state = read_json(STATE) or {}
+def serving_endpoint(policy, export_format, *, profile='pop', host=None):
+    """Remote actor endpoint when it serves checkpoint ``policy`` in ``export_format``, else None."""
+    state = read_json(colab_state_path(host) if profile_key(profile) == 'colab' and host else STATE) or {}
     try:
         with urllib.request.urlopen(state['endpoint'] + '/v1/neuralese/info', timeout=10) as response:
             binding = json.loads(response.read()).get('rl_policy_binding') or {}
@@ -668,20 +1303,19 @@ def complete(result_path):
 
 
 def held_eval_job(args):
-    """One held evaluation on Pop from ``--spec`` (written by grpo's --held-remote pop loop): serve the policy unless Pop
-    serves it (``serve``: this script's start/serve-checkpoint arguments), ``held_eval measure`` (``measure``: its
-    arguments without --endpoint) against it with ``slots`` episodes in flight, then ``compare`` when given and the
-    measurement succeeded. Children run this checkout (the run's pin). The outcome goes to ``done`` (returncode,
-    serve_seconds, seconds), so a training run that restarted meanwhile reports it."""
+    """One held evaluation on Pop from ``--spec`` (grpo ``--held-remote pop``). The Colab G4 held series is superseded
+    (async-train §1: the held series runs on the DGX), so a spec naming another host profile is refused."""
     spec = json.loads(Path(args.spec).read_text())
     started, code, serving = time.time(), 1, None
-    # A stop of the unit reaches the measurement too, which drains and writes its partial result: wait for it and
-    # record the outcome rather than die first (a handler, not SIG_IGN, so children keep the default disposition).
     signal.signal(signal.SIGTERM, lambda *_: None)
+    profile = str(spec.get('host_profile') or 'pop').lower().replace('-', '_')
     env = {**os.environ, 'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
     python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
     with open(spec['log'], 'a') as handle:
         try:
+            if profile != 'pop':
+                raise RuntimeError(f'held evaluations run on Pop or the DGX, not {profile}: the Colab G4 held series is '
+                                   'superseded by the DGX series (plans/neuralese/async-train.md §1)')
             endpoint = serving_endpoint(spec['policy'], spec['format'])
             if endpoint is None:
                 subprocess.run([sys.executable, str(Path(__file__).resolve()), *spec['serve']], cwd=REPO, env=env,
@@ -693,7 +1327,7 @@ def held_eval_job(args):
             code = subprocess.run([*python, 'measure', *spec['measure'], '--endpoint', f'{endpoint}={spec["slots"]}'],
                                   cwd=REPO, env=env, stdout=handle, stderr=subprocess.STDOUT).returncode
             compare = spec.get('compare')
-            if compare:   # complete measurements only (a cut one writes result.json with complete false)
+            if compare:
                 Path(compare[compare.index('--out') + 1]).unlink(missing_ok=True)
             if code == 0 and compare and all(complete(path) for path in compare[:2]):
                 subprocess.run([*python, 'compare', *compare], cwd=REPO, env=env, stdout=handle,
@@ -707,14 +1341,16 @@ def held_eval_job(args):
     return code
 
 
-def stop(_args=None):
+def stop(args=None):
+    if args is not None and profile_key(getattr(args, 'host_profile', 'pop')) == 'colab':
+        targets = [args.host] if getattr(args, 'host', None) else colab_hosts()
+        for h in targets:
+            stop_colab(h)
+        return
     state = read_json(STATE)
     if state:
         stop_unit(state)
         ssh(shlex.join(['docker', 'rm', '-f', state['container']]), check=False, timeout=60)
-        # The store stays: this hook also runs when a controller stops or crashes mid-round, before the collector has
-        # bundled the round's blocks (2026-11-08: deleting it lost 22 native states of Pop-sampled rollouts). Only
-        # compile caches are removed; the container wrote them as root, so from a throwaway container.
         work = state['work']
         ssh(shlex.join(['docker', 'run', '--rm', '-v', f'{work}:/work', 'alpine:3.21', 'sh', '-c',
                             'rm -rf ' + ' '.join(f'/work/{name}' for name in ('inductor', 'triton', 'hf', 'cuda'))]),
@@ -732,64 +1368,117 @@ def main(argv=None):
     s.add_argument('--port', type=int, default=RL_PORT)
     s.add_argument('--bind-host')
     s.add_argument('--ready-seconds', type=int, default=900)
-    s.add_argument('--engine', choices=('sglang', 'native'), default='sglang',
-                   help="Pop's serving engine: the SGLang fork (host venv, see pop_actor_driver.serve_sglang) or the "
-                        'native engine in its container')
-    s.add_argument('--prepare-wait', type=int, default=900, help='ledger admission bound of the DGX view preparation')
-    s.add_argument('--adapter-release', help='a program fit (tune.build output on the DGX) the actor serves by default')
-    c = commands.add_parser('serve-checkpoint', help='serve a pruned native checkpoint on Pop (exits once it attests)')
+    s.add_argument('--engine', choices=('sglang', 'native'), default='sglang')
+    s.add_argument('--prepare-wait', type=int, default=900)
+    s.add_argument('--adapter-release')
+    c = commands.add_parser('serve-checkpoint', help='serve a pruned native checkpoint on Pop or Colab G4')
     for sub in (s, c):
-        sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE,
-                         help="SGLang KV dtype (part of the attested engine: held results pair only within one setting; "
-                              "auto = BF16, Pop's engine until 2026-11-13)")
-        sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='concurrent sequences on SGLang (capacity)')
+        sub.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='pop')
+        sub.add_argument('--host', help='explicit SSH host alias (default: Pop or first Colab G4 host)')
+        sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE)
+        sub.add_argument('--weight-dtype', choices=('bfloat16', 'fp8'), default='bfloat16',
+                         help='SGLang linear weight dtype (fp8 for SFT collection actors; bfloat16 for held and GRPO)')
+        sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='Pop running cap (a Colab actor '
+                         'runs 128 alone, 64 with --beside-learner)')
+        sub.add_argument('--beside-learner', action='store_true',
+                         help='Colab: cap the actor (KV a quarter of the GPU, its running cap scaled; colab_layout) to share '
+                         'the GPU with the SFT learner under MPS')
     c.add_argument('--checkpoint', required=True)
-    c.add_argument('--policy-id', required=True, help="the checkpoint file's sha256")
-    c.add_argument('--commit', required=True, help='code commit the actor runs (exported on Pop)')
+    c.add_argument('--policy-id', required=True)
+    c.add_argument('--commit', required=True)
     c.add_argument('--step', type=int, default=0)
     c.add_argument('--port', type=int, default=RL_PORT)
     c.add_argument('--bind-host')
     c.add_argument('--ready-seconds', type=int, default=1800)
-    c.add_argument('--adapter-release', help='a program fit (tune.build output on the DGX) the actor serves by default')
-    f = commands.add_parser('prefetch', help='copy a pruned native checkpoint to Pop ahead of its serve-checkpoint')
+    c.add_argument('--adapter-release')
+    rb = commands.add_parser('rebind', help='in-place rebind + 4-route attestation of a standing SGLang actor')
+    rb.add_argument('--front-url', required=True)
+    rb.add_argument('--sglang-url', help='SGLang server URL (default: http://127.0.0.1:<front_port + 1000>)')
+    rb.add_argument('--policy-id', required=True)
+    rb.add_argument('--version', type=int, required=True)
+    rb.add_argument('--weights-sha256')
+    rb.add_argument('--tensor-identity')
+    rb.add_argument('--export-dir', help='HF export directory (local or remote)')
+    rb.add_argument('--factors-dir', help='FP32 adapter factors dir to ship and merge locally on --host')
+    rb.add_argument('--base-checkpoint', help='base checkpoint path on --host when using --factors-dir')
+    rb.add_argument('--host', help='remote SSH host alias (omit for local DGX actor)')
+    rb.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='colab')
+    rb.add_argument('--timeout', type=int, default=600)
+    f = commands.add_parser('prefetch')
     f.add_argument('--checkpoint', required=True)
-    f.add_argument('--policy-id', required=True, help="the checkpoint file's sha256")
+    f.add_argument('--policy-id', required=True)
     f.add_argument('--step', type=int, default=0)
-    h = commands.add_parser('held-eval', help='one held evaluation on Pop from a spec file (serve, measure, compare)')
+    h = commands.add_parser('held-eval')
     h.add_argument('--spec', required=True)
-    commands.add_parser('stop')
-    commands.add_parser('status')
+    rs = commands.add_parser('run-sft', help='run the DGX SFT recipe on a Colab G4 VM with periodic state sync back')
+    rs.add_argument('--host', required=True)
+    rs.add_argument('--run-name', required=True)
+    rs.add_argument('--work', required=True, help='local DGX work directory (receives learner-state and checkpoint.pt or factors/)')
+    rs.add_argument('--launch-json', required=True,
+                    help="the DGX preflight's launch.json (launch-sft.sh PREFLIGHT_ONLY=1): its exp0_sft_args run")
+    rs.add_argument('--commit')
+    rs.add_argument('--state-sync-minutes', type=float, default=15.0)
+    rs.add_argument('--vram-gib', type=float, help='admission claim (default: from the session hardware, the learner '
+                    'alone or beside the capped actor the session runs)')
+    rs.add_argument('--host-ram-gib', type=float, help='admission claim (default: from the session hardware)')
+    rc = commands.add_parser('reachable', help='list reachable remote hosts for a profile')
+    rc.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='colab')
+    rc.add_argument('--hosts', help='comma-separated SSH host aliases')
+    st_cmd = commands.add_parser('stop')
+    st_cmd.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='pop')
+    st_cmd.add_argument('--host')
+    status_cmd = commands.add_parser('status')
+    status_cmd.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='pop')
+    status_cmd.add_argument('--host')
     p = commands.add_parser('prepare-view', help=argparse.SUPPRESS)
     for flag in ('--checkpoint', '--out', '--receipt'):
         p.add_argument(flag, required=True)
     p.add_argument('--expect-sha256')
     args = parser.parse_args(argv)
+    if args.action == 'reachable':
+        hosts = colab_hosts(args.hosts) if profile_key(args.host_profile) == 'colab' else ([POP] if POP else [])
+        up = reachable_hosts(args.host_profile, hosts)
+        print(json.dumps({'profile': args.host_profile, 'configured': hosts, 'reachable': up}))
+        return 0
     if args.action == 'status':
-        print(json.dumps({'state': read_json(STATE)}))
+        if profile_key(args.host_profile) == 'colab':
+            hosts = [args.host] if args.host else colab_hosts()
+            print(json.dumps({'profile': 'colab', 'states': {h: read_json(colab_state_path(h)) for h in hosts}}))
+        else:
+            print(json.dumps({'state': read_json(STATE)}))
         return 0
     if args.action == 'prepare-view':
         prepare_view(args)
         return 0
-    if args.action == 'serve-checkpoint':   # fails loudly: its caller (grpo --held-remote) retries later
+    if args.action == 'serve-checkpoint':
         print(json.dumps(serve_checkpoint(args)), flush=True)
+        return 0
+    if args.action == 'rebind':
+        print(json.dumps(rebind_actor(
+            front_url=args.front_url, sglang_url=args.sglang_url, policy_id=args.policy_id, version=args.version,
+            weights_sha256=args.weights_sha256, tensor_identity=args.tensor_identity,
+            export_dir=args.export_dir, factors_dir=args.factors_dir, base_checkpoint=args.base_checkpoint,
+            host=args.host, host_profile=args.host_profile, timeout=args.timeout)), flush=True)
         return 0
     if args.action == 'prefetch':
         prefetch(args)
         return 0
     if args.action == 'held-eval':
         return held_eval_job(args)
+    if args.action == 'run-sft':
+        return run_remote_sft(args)
     try:
         if args.action == 'start':
             print(json.dumps(start(args)), flush=True)
         else:
-            stop()
-    except BaseException as error:   # a failed start never fails the caller: its attestation poll drops the endpoint
-        log(event=f'Pop RL actor {args.action} failed', error=repr(error)[:2000])
+            stop(args)
+    except BaseException as error:
+        log(event=f'Remote RL actor {args.action} failed', error=repr(error)[:2000])
         if args.action == 'start':
             try:
-                stop()
+                stop(args)
             except Exception as cleanup:
-                log(event='Pop RL actor cleanup failed', error=repr(cleanup)[:500])
+                log(event='Remote RL actor cleanup failed', error=repr(cleanup)[:500])
         if isinstance(error, KeyboardInterrupt):
             raise
     return 0

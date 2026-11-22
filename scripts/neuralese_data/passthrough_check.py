@@ -78,7 +78,7 @@ def rel(a, b):
 def capture(args):
     import torch
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     from lower_rollout_turns import NativeStates, episode_turns, write_sources
     from natlang_neuralese.serve.store import read_native_state_file
     store = NativeStates(args.store)
@@ -102,7 +102,7 @@ def capture(args):
     blocks = {k: s for k, s in blocks.items() if k in needed or len(needed) < args.blocks and not needed.add(k)}
     print(json.dumps({'blocks': len(blocks), 'consumers': len(consumers),
                       'document_tokens': [len(s['ids']) for s in blocks.values()]}), flush=True)
-    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base)
+    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base, dtype=torch.float32)   # the FP32 reference first
     model.eval()
     fp32 = {b: layer_states(model, torch.as_tensor(s['ids'], dtype=torch.long, device='cuda')) for b, s in blocks.items()}
     model.to(torch.bfloat16)
@@ -173,7 +173,7 @@ def capture(args):
 def bench(args):
     import torch
     import exp0_sft
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     import zstandard
     from lower_rollout_turns import episode_turns
     chains = []
@@ -191,12 +191,12 @@ def bench(args):
         if len(chains) >= args.chains:
             break
     chains = chains[:args.chains]
-    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base, dtype=torch.bfloat16)
-    model.gradient_checkpointing_enable()
-    model.config.use_cache = False
+    from natlang_neuralese.train.lfm3_learner import AdapterSpec, Lfm3Learner
+    learner = Lfm3Learner.from_checkpoint(args.checkpoint, args.base, AdapterSpec.for_sft(), device='cuda',
+                                          dtype=torch.bfloat16)
+    model = learner.model
     model.train()
-    lfm3_fast_train.prepare(model)
-    params = list(model.parameters())
+    params = learner.trainable_parameters()
     print(json.dumps({'chains': len(chains), 'chain_tokens': [len(c['ids']) for c in chains],
                       'producer_document_tokens': [exp0_sft.source_tokens(c) for c in chains],
                       'imports': [len(c['imports']) for c in chains]}), flush=True)
@@ -227,7 +227,7 @@ def bench(args):
                     p.grad = None
                 del h, nll
         results[mode] = {'fwd_bwd_tokens_per_s': round(tokens / seconds), 'seconds': round(seconds, 2),
-                         'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 2), 'loss': losses}
+                         'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 2), 'loss': losses}
         print(json.dumps({'mode': mode, **results[mode]}), flush=True)
     if args.out:
         Path(args.out).write_text(json.dumps(results, indent=1) + '\n')

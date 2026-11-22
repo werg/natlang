@@ -1009,6 +1009,7 @@ def test_in_place_update_is_named_in_every_capture():
     assert front._served_policy() is None
     front.rebind_in_place('c' * 64, 'd' * 64, version=3)
     assert front._served_policy() == {'version': 3, 'policy_id': 'c' * 64, 'weights_sha256': 'd' * 64,
+                                      'tensor_identity': None,
                                       'native_engine': 'start checkpoint (not updated in place)'}
     assert front.sglang_actor_export['sha256'] == 'd' * 64 and front.rl_policy_binding['start_checkpoint_sha256'] == 'b' * 64
 

@@ -45,7 +45,20 @@ from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import lfm3_fast_train
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
+from natlang_neuralese.train.learner_state import (
+    export_merged_checkpoint,
+    load_learner_state,
+    save_learner_state,
+)
+from natlang_neuralese.train.lfm3_learner import (
+    DEFAULT_SFT_LR,
+    AdapterSpec,
+    Lfm3Learner,
+    OOMRetryPlan,
+    load_base_model,
+    run_step_with_oom_retry,
+)
 # One implementation for every learner (grpo, exp0_sft, program tune).
 from natlang_neuralese.train.reply_format import SECOND_CLOSE_STOPS, second_close_mask
 
@@ -91,36 +104,9 @@ def chains_of(episodes, max_len=MAX_LEN):
     return chains
 
 
-def load_model(checkpoint, base, device='cuda', dtype=torch.float32):
-    from transformers import AutoConfig, AutoModelForCausalLM
-    from natlang_neuralese.third_party import lfm3
-    lfm3.register()
-    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    state = CheckpointPolicy.load(Path(checkpoint))
-    config = AutoConfig.from_pretrained(base, trust_remote_code=False)
-    model = AutoModelForCausalLM.from_pretrained(base, config=config, dtype=dtype, trust_remote_code=False,
-                                                 attn_implementation='sdpa')
-    backbone = dict(state['backbone_state'])
-    embedding = backbone['model.embed_tokens.weight']
-    head = backbone.pop('lm_head.weight', None)
-    if head is not None and not torch.equal(head, embedding):
-        raise ValueError('untied lm_head: this script serves tied-embedding checkpoints only')
-    if not config.tie_word_embeddings:
-        raise ValueError('tied embeddings expected')
-    interface = state['interface_state']
-    merged = embedding.clone()
-    sparse = [(state['model_config']['marker_ids'], interface['input_rows'])]
-    if state['model_config'].get('token_override_ids'):
-        sparse.append((state['model_config']['token_override_ids'], interface['extra_input_rows']))
-    special = []
-    for ids, rows in sparse:
-        merged[torch.tensor(list(ids))] = rows.to(merged.dtype)
-        special += [int(i) for i in ids]
-    backbone['model.embed_tokens.weight'] = merged
-    missing = model.load_state_dict({k: v.to(dtype) for k, v in backbone.items()}, strict=False)
-    if missing.unexpected_keys or [k for k in missing.missing_keys if k != 'lm_head.weight']:
-        raise ValueError(f'state mismatch {missing}')
-    model.to(device)
+def load_model(checkpoint, base, device='cuda', dtype=torch.bfloat16):
+    """Load an HF LFM3 backbone from a native checkpoint via the shared learner core."""
+    model, state, special, _markers, _overrides = load_base_model(checkpoint, base, device=device, dtype=dtype)
     return model, state, special
 
 
@@ -169,29 +155,34 @@ def _nll(weight, h, target):
     return F.cross_entropy(logits, target, reduction='none')
 
 
-def token_nll(model, h, positions, targets, chunk=2048):
-    """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (logits only for those rows, chunk-checkpointed;
-    a `lfm3_fast_train.prepare`d model uses its fused linear NLL: the same rounding, logits recomputed once, never stored)."""
+def token_nll(model, h, positions, targets, chunk=2048, *, trainable_rows=None):
+    """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (fused chunked linear NLL)."""
+    rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else (
+        None if trainable_rows is False else trainable_rows
+    )
     if getattr(model, '_lfm3_fast', None) is not None:
-        return lfm3_fast_train.linear_nll(h[positions], model.lm_head.weight, targets)
+        return lfm3_fast_train.linear_nll(h[positions], model.lm_head.weight, targets, trainable_rows=rows)
     out = []
     weight = model.lm_head.weight
     for start in range(0, len(positions), chunk):
-        rows = h[positions[start:start + chunk]]
+        h_rows = h[positions[start:start + chunk]]
         target = targets[start:start + chunk]
         if torch.is_grad_enabled():
-            out.append(torch_checkpoint(_nll, weight, rows, target, use_reentrant=False))
+            out.append(torch_checkpoint(_nll, weight, h_rows, target, use_reentrant=False))
         else:
-            out.append(_nll(weight, rows, target))
+            out.append(_nll(weight, h_rows, target))
     return torch.cat(out)
 
 
-def token_nll_nucleus(model, h, positions, targets, top_p):
+def token_nll_nucleus(model, h, positions, targets, top_p, *, trainable_rows=None):
     """(nll, nll under each row's own top-p nucleus, target outside the nucleus) of ``targets`` at hidden rows
-    ``positions`` (`lfm3_fast_train.linear_nll_nucleus`; prepared models only)."""
+    ``positions`` (`lfm3_fast.linear_nll_nucleus`; prepared models only)."""
     if getattr(model, '_lfm3_fast', None) is None:
-        raise ValueError('the nucleus NLL needs a lfm3_fast_train.prepare()d model')
-    return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p)
+        raise ValueError('the nucleus NLL needs a lfm3_fast.prepare()d model')
+    rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else (
+        None if trainable_rows is False else trainable_rows
+    )
+    return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p, trainable_rows=rows)
 
 
 # Ambient SFT (Daras et al., arXiv 2611.23229, Algorithm 1; DECISIONS 2026-11-20): with probability ``--ambient-p-clean``
@@ -211,22 +202,36 @@ def ambient_clean(seed, step, p_clean):
     return random.Random(f'{seed}:ambient:{step}').random() < p_clean
 
 
-def _tm_ce(weight, h, teacher_h, teacher_weight, temperature):
-    s = F.linear(h, weight).float() / temperature
+def _tm_ce(weight, h, teacher_h, teacher_weight, temperature, sparse_ids=None, sparse_rows=None,
+           teacher_sparse_ids=None, teacher_sparse_rows=None):
+    s_logits = F.linear(h, weight)
+    if sparse_ids is not None and sparse_rows is not None and sparse_ids.numel():
+        s_logits = s_logits.clone()
+        s_logits[:, sparse_ids] = F.linear(h, sparse_rows.to(h.dtype))
+    s = s_logits.float() / temperature
     with torch.no_grad():
-        t = F.linear(teacher_h, teacher_weight).float() / temperature
+        t_logits = F.linear(teacher_h, teacher_weight)
+        if teacher_sparse_ids is not None and teacher_sparse_rows is not None and teacher_sparse_ids.numel():
+            t_logits = t_logits.clone()
+            t_logits[:, teacher_sparse_ids] = F.linear(teacher_h, teacher_sparse_rows.to(teacher_h.dtype))
+        t = t_logits.float() / temperature
         q = torch.softmax(t, -1)
         entropy = -(q * torch.log_softmax(t, -1)).sum(-1)
     return -(q * torch.log_softmax(s, -1)).sum(-1), entropy
 
 
-def tm_ce(weight, h_rows, teacher_rows, teacher_weight, temperature, chunk=512):
+def tm_ce(weight, h_rows, teacher_rows, teacher_weight, temperature, chunk=512, *,
+          trainable_rows=None, teacher_trainable_rows=None):
     """(per-row cross-entropy from softmax(teacher logits / T) to log_softmax(student logits / T), per-row teacher
-    entropy (no grad)) over the full vocabulary; ``h_rows`` / ``teacher_rows`` are the hidden rows that predict the
-    targets. Chunk-checkpointed: at most ``chunk`` rows of fp32 logits of each model exist at once, none is stored."""
+    entropy (no grad)) over the full vocabulary, with optional tied trainable sparse rows."""
     ces, entropies = [], []
+    s_ids = trainable_rows.token_ids.to(h_rows.device) if trainable_rows is not None else None
+    s_rows = trainable_rows.rows if trainable_rows is not None else None
+    t_ids = teacher_trainable_rows.token_ids.to(teacher_rows.device) if teacher_trainable_rows is not None else None
+    t_rows = teacher_trainable_rows.rows if teacher_trainable_rows is not None else None
     for start in range(0, len(h_rows), chunk):
-        args = (weight, h_rows[start:start + chunk], teacher_rows[start:start + chunk], teacher_weight, temperature)
+        args = (weight, h_rows[start:start + chunk], teacher_rows[start:start + chunk], teacher_weight, temperature,
+                s_ids, s_rows, t_ids, t_rows)
         ce, entropy = (torch_checkpoint(_tm_ce, *args, use_reentrant=False) if torch.is_grad_enabled()
                        else _tm_ce(*args))
         ces.append(ce)
@@ -650,7 +655,9 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
         if ambient is None:
             return targets_nll(model, h, positions, targets, sampled, student_top_p) * weights
         teacher = torch.cat([ambient['rows'][index] for index in indices])
-        ce, entropy = tm_ce(model.lm_head.weight, h[positions], teacher, ambient['head'], ambient['temperature'])
+        ce, entropy = tm_ce(model.lm_head.weight, h[positions], teacher, ambient['head'], ambient['temperature'],
+                            trainable_rows=getattr(model, '_lfm3_trainable_rows', None),
+                            teacher_trainable_rows=ambient.get('teacher_trainable_rows'))
         ambient['kl'] = ambient.get('kl', 0.) + ((ce.detach() - entropy) * weights).sum().item()
         return ce * weights
     if not fast:                     # the stock HF path: one chain per forward, no imports
@@ -703,13 +710,46 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
     return total_nll, lfm3_fast_train.tree_tokens(nodes, [tokens(i, 0) for i in range(len(chains))])
 
 
+def ambient_teacher_rows_lora(learner: Lfm3Learner, chains, ref_bundles, ref_rows, pack_tokens, activation_gb,
+                              share_prefix_tokens, passthrough=True, mode='levels', tree_batch_tokens=None,
+                              retained_gb=None):
+    """Frozen teacher hidden rows for an Ambient SFT Temperature Matching step using the learner's immutable
+    reference view (zero 3.4 GB base weight copy, zero live weight swap)."""
+    model = learner.model
+    device = model.lm_head.weight.device
+    rows = {}
+    nodes = step_tree(chains, share_prefix_tokens)
+    cuda_ids = {}
+
+    def ids_of(index, start, end):
+        if index not in cuda_ids:
+            cuda_ids[index] = torch.from_numpy(chains[index]['ids'].astype(np.int64)).to(device)
+        return cuda_ids[index][start:end]
+
+    def tokens(index, start):
+        return len(chains[index]['ids']) - start + source_tokens(chains[index])
+
+    def leaf(items, run):
+        ids, positions, _targets, _, lengths, imports = row_inputs(
+            [chains[index] for index, _ in items], device, passthrough, starts=[start for _, start in items])
+        h = run(ids, lengths, imports)[positions].detach()
+        counts = [chain_loss_tokens(chains[index]) for index, _ in items]
+        for (index, _), part in zip(items, h.split(counts)):
+            rows[index] = part
+
+    with learner.reference_view(ref_bundles, ref_rows) as ref_kw, torch.enable_grad():
+        lfm3_fast_train.run_prefix_tree(
+            model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
+            backward=False, mode=mode if share_prefix_tokens > 0 else 'levels',
+            batch_tokens=tree_batch_tokens, retained_gb=retained_gb, **ref_kw.kwargs,
+        )
+    learner.zero_grad(set_to_none=True)
+    return rows
+
+
 def ambient_teacher_rows(model, forward, chains, live, teacher, restore, pack_tokens, activation_gb, share_prefix_tokens,
                          fast=True, passthrough=True, mode='levels', tree_batch_tokens=None, retained_gb=None):
-    """The frozen teacher's hidden rows at every target of the step's ``chains`` ({chain index: (targets, D) BF16}), for
-    a Temperature Matching step. The teacher's BF16 parameters (``teacher`` {name: tensor}, the start checkpoint) are
-    loaded into the policy's own module (``live``) for this forward, as grpo's ``ReferenceWeights`` does for its KL
-    reference (no second module or compile), and ``restore()`` puts the policy back from its FP32 masters (exact: the BF16
-    parameters are always the masters rounded). The same prefix tree and packing as the step's own pass, no backward."""
+    """Legacy helper kept for standalone unit tests (`test_ambient_sft.py`); production SFT uses ``ambient_teacher_rows_lora``."""
     device = model.lm_head.weight.device
     rows = {}
     with torch.no_grad():
@@ -739,7 +779,6 @@ def ambient_teacher_rows(model, forward, chains, live, teacher, restore, pack_to
             counts = [chain_loss_tokens(chains[index]) for index, _ in items]
             for (index, _), part in zip(items, h.split(counts)):
                 rows[index] = part
-        # grad mode on, no backward: the policy's own compiled training graph (as grpo's reference pass), graphs dropped
         with torch.enable_grad():
             lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
                                             backward=False, mode=mode if share_prefix_tokens > 0 else 'levels',
@@ -818,10 +857,13 @@ def write_checkpoint(model, state, special, out_path, source_sha256, step, train
     if 'lm_head.weight' in original:
         backbone['lm_head.weight'] = backbone['model.embed_tokens.weight']
     out = {k: state[k] for k in ('schema', 'model_config', 'interface_state')}
-    out.update(backbone_state=backbone, step=int(state['step']), inference_only=True, optimizer_pruned=True,
-               optimizer_pruned_keys=['training'],
+    source_step = int(state['step'])
+    learner_step = int(step)
+    out.update(backbone_state=backbone, step=learner_step, learner_step=learner_step, source_step=source_step,
+               inference_only=True, optimizer_pruned=True, optimizer_pruned_keys=['training'],
                inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
-                                 'training_checkpoint_bytes': 0, 'step': int(state['step'])})
+                                 'training_checkpoint_bytes': 0, 'step': learner_step,
+                                 'learner_step': learner_step, 'source_step': source_step})
     # atomic; a target on the external disk is written to the NVMe and moved in the background (staged_write)
     from natlang_neuralese.train.checkpoint_offload import staged_write
     with staged_write(out_path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
@@ -852,7 +894,7 @@ def train(args):
     chains = bundle['chains'] if args.chains else chains_of(episodes)
     loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
     val_sets = {Path(path).stem: load_chains(path) for path in args.val_chains}
-    student_top_p = 1. if args.stock_model else args.student_top_p
+    student_top_p = args.student_top_p
     if args.context_masks == 'on':
         from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)
@@ -876,89 +918,144 @@ def train(args):
         print(json.dumps({'planned_open_user_goals': check_open_goal_exposure(report, minimum)}), flush=True)
         depths = open_goal_depth_report(chains[index] for step in steps for index in step)
         print(json.dumps({'planned_open_user_goal_depths': depths}), flush=True)
-    model, state, special = load_model(args.checkpoint, args.base)
-    state = {k: v for k, v in state.items() if k != 'training'}   # the source's optimizer state (5.5 GB host): never used
-    # FP32 master weights live in the optimizer; the model computes in BF16 (as the actor does) and its BF16 gradients
-    # accumulate into FP32 buffers
-    masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
-    model.to(torch.bfloat16)
-    model.gradient_checkpointing_enable()
-    model.config.use_cache = False
+
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    source_sha = sha256_file_hex_cached(Path(args.checkpoint))
+    chains_sha = sha256_file_hex_cached(Path(args.chains)) if args.chains else None
+    spec = AdapterSpec.for_sft(
+        rank=args.lora_rank,
+        alpha=args.lora_alpha,
+        trainable_rows=not args.no_trainable_rows,
+        gate_rank=args.gate_rank,
+    )
+    learner = Lfm3Learner.from_checkpoint(
+        args.checkpoint, args.base, spec, device='cuda', dtype=torch.bfloat16,
+        compile_layers=not args.no_compile, fp8_base=False if args.no_fp8_base else None,
+        seed=args.seed, base_weights_sha256=source_sha,
+    )
+    model, state = learner.model, learner.state
     model.train()
-    forward = hidden
-    if not args.stock_model:
-        lfm3_fast_train.prepare(model)
-        forward = lfm3_fast_train.hidden
-    pack_tokens = 0 if args.stock_model else args.pack_tokens if args.pack_tokens >= 0 else \
-        resident_tokens(model, args.activation_gb)
-    special_index = torch.tensor(special, device='cuda')
-    live = {name: p for name, p in model.named_parameters()}
-    # Ambient SFT's frozen teacher: the start checkpoint's BF16 parameters, kept resident (3.4 GB for LFM3-1.7B) and
-    # loaded into the module only for a Temperature Matching step's teacher forward (``ambient_teacher_rows``)
-    ambient_teacher = ({name: p.detach().clone() for name, p in live.items()}
-                       if args.ambient_p_clean < 1 else None)
+    forward = lfm3_fast_train.hidden
+    pack_tokens = args.pack_tokens if args.pack_tokens >= 0 else resident_tokens(model, args.activation_gb)
+    ref_bundles, ref_rows = learner.snapshot_reference()
+    optimizer = learner.build_optimizer(lr=args.lr, betas=(0.9, 0.95), eps=1e-8, weight_decay=args.weight_decay)
+    parameters = learner.trainable_parameters()
 
-    def restore_live():
-        with torch.no_grad():
-            torch._foreach_copy_(list(live.values()), [masters[name] for name in live])
-    parameters = [masters[name] for name in live]
-    for master in parameters:
-        master.grad = torch.zeros_like(master)
+    start_step = 0
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_dir = Path(args.state_dir) if args.state_dir else out_dir / 'learner-state'
+    trainer_state = None
+    trained_rounds: list[str] = []
+    round_id = getattr(args, 'round_id', None)
+    if args.resume and (state_dir / 'learner_manifest.json').is_file():
+        restored = load_learner_state(state_dir, learner, optimizer, verify_base_sha=source_sha)
+        trained_rounds = list(restored.get('trained_rounds') or ())
+        if round_id and round_id in trained_rounds:
+            print(json.dumps({'event': 'round already trained (dedup ledger)', 'round_id': round_id,
+                              'trained_rounds': trained_rounds}), flush=True)
+            return
+        # the state's batch cursor indexes this run's step list: a state of other chains or another schedule (epochs,
+        # loss tokens per step, seed, order) would resume at a wrong step of a different list
+        saved_chains = restored['manifest'].get('data_manifest_sha256')
+        if saved_chains and saved_chains != chains_sha:
+            raise SystemExit(f'--resume: {state_dir} trained chains {saved_chains}, not {chains_sha}')
+        saved_total = (restored.get('batch_cursor') or {}).get('total_steps')
+        saved_schedule = (restored.get('trainer_state') or {}).get('schedule') or {}
+        if saved_total is not None and int(saved_total) != total and not saved_schedule.get('replanned'):
+            raise SystemExit(f'--resume: {state_dir} has a {saved_total}-step schedule, these arguments make {total} '
+                             '(--epochs/--batch-loss-tokens/--seed/--batch-order must match the run it resumes)')
+        start_step = int((restored.get('batch_cursor') or {}).get('next_step', restored['manifest']['learner_step']))
+        if restored['ref_bundles'] or restored['ref_rows'] is not None:
+            ref_bundles, ref_rows = restored['ref_bundles'], restored['ref_rows']
+        trainer_state = restored.get('trainer_state') or {}
+        # the --hours replan cut the schedule: the resume trains the same cut schedule with the same cosine
+        schedule = trainer_state.get('schedule')
+        if schedule:
+            total = int(schedule['total'])
+            del steps[int(schedule['steps']):]
+        print(json.dumps({'resumed_from': str(state_dir), 'start_step': start_step,
+                          'effective_policy_sha256': learner.effective_policy_sha256(source_sha)}), flush=True)
 
-    # Each backward's BF16 gradient is added into its FP32 master gradient as soon as autograd finishes it, then freed
-    # (as grpo.py does): a prefix tree's leaves and prefixes each backpropagate separately.
-    def into_master(master):
-        def hook(param):
-            master.grad.add_(param.grad)
-            param.grad = None
-        return hook
-    for name, p in live.items():
-        p.register_post_accumulate_grad_hook(into_master(masters[name]))
-    decay = [p for p in parameters if p.ndim >= 2]
-    no_decay = [p for p in parameters if p.ndim < 2]
-    optimizer = torch.optim.AdamW([{'params': decay, 'weight_decay': args.weight_decay}, {'params': no_decay, 'weight_decay': 0.}],
-                                  lr=args.lr, betas=(0.9, 0.95), eps=1e-8, fused=True)  # parameters are the FP32 masters
-    embedding_name = next(n for n, p in live.items() if p is model.get_input_embeddings().weight)
-    embedding_master = masters[embedding_name]
-    saved_rows = embedding_master[special_index].clone()
     share_prefix_tokens, tree_mode = prefix_tree_settings(args)
-    if share_prefix_tokens and args.stock_model:
-        raise SystemExit('--share-prefix-tokens needs the lfm3_fast_train path (pass 0 with --stock-model)')
     importing = sum(1 for chain in chains if chain.get('imports'))
     adapter = sorted(k for k in state['interface_state'] if k.startswith('adapter.'))
-    if importing and (adapter or args.stock_model):
-        # the producer documents embed their span with the producer table, which is the embedding only without an adapter
-        raise SystemExit(f'{importing} chains import Neuralese state: needs the fast path and a checkpoint without a '
+    if importing and adapter:
+        raise SystemExit(f'{importing} chains import Neuralese state: needs a checkpoint without a '
                          f'producer adapter (has {adapter})')
-    print(json.dumps({'optimizer_steps': total, 'lr': args.lr, 'batch_loss_tokens': args.batch_loss_tokens,
+    print(json.dumps({'optimizer_steps': total, 'start_step': start_step, 'lr': args.lr,
+                      'batch_loss_tokens': args.batch_loss_tokens, 'pack_tokens': pack_tokens,
+                      'activation_gib': args.activation_gb,
                       'share_prefix_tokens': share_prefix_tokens, 'prefix_tree_mode': tree_mode, 'batch_order': order,
+                      'learner': learner.parameter_summary(),
                       'ambient': {'p_clean': args.ambient_p_clean, 'temperature': args.ambient_temperature}}),
           flush=True)
-    log = open(Path(args.out_dir) / 'train.jsonl', 'a')
-    if val_sets:
+    log = open(out_dir / 'train.jsonl', 'a')
+    if val_sets and start_step == 0:
         model.eval()
         record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()}}
         model.train()
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
     started = time.time()
+    last_state_save = started
     forward_tokens = 0
     phase = collections.Counter()
+    compile_health = lfm3_fast_train.CompileHealthTracker()
+    oom_plan = OOMRetryPlan(pack_tokens=pack_tokens or 1, activation_gib=float(args.activation_gb))
     best = None
-    if args.keep_best_val:
+    if trainer_state:
+        if trainer_state.get('oom_plan'):
+            oom_plan = OOMRetryPlan.from_dict(trainer_state['oom_plan'])   # a shrunk plan stays shrunk
+        best = trainer_state.get('best')                                   # --keep-best-val's earlier best
+    if args.keep_best_val and start_step == 0:
         if not val_sets or f'val_loss:{args.keep_best_val}' not in record:
             raise SystemExit(f'--keep-best-val {args.keep_best_val}: no such --val-chains set')
-        best = {'loss': record[f'val_loss:{args.keep_best_val}'], 'step': 0,   # step 0: the unchanged source
-                'masters': {name: master.detach().cpu().clone() for name, master in masters.items()}}
+        best = {'loss': record[f'val_loss:{args.keep_best_val}'], 'step': 0,
+                'leaves': {name: t.detach().cpu().clone() for name, t in learner.named_trainable_tensors().items()}}
+
+    peak_by_phase = {}
 
     def mark(name, since):
         torch.cuda.synchronize()
         now = time.time()
         phase[name] += now - since
+        # the CUDA peak of the phase that just ended (each mark starts a new peak window)
+        peak = torch.cuda.max_memory_allocated() / 2**30
+        peak_by_phase[name] = round(max(peak_by_phase.get(name, 0.), peak), 2)
+        torch.cuda.reset_peak_memory_stats()
         return now
 
-    for step, group in enumerate(steps):
+    def save_state_now(next_step_idx: int, *, mark_round_done: bool = False):
+        nonlocal last_state_save
+        t_save = time.time()
+        rounds_now = list(trained_rounds)
+        if mark_round_done and round_id and round_id not in rounds_now:
+            rounds_now.append(round_id)
+        save_learner_state(
+            state_dir, learner, optimizer, learner_step=next_step_idx,
+            source_checkpoint_id=str(args.checkpoint), source_step=int(state['step']),
+            base_weights_sha256=source_sha, objective_version='sft_ambient_v1',
+            optimizer_config={'lr': args.lr, 'betas': [0.9, 0.95], 'eps': 1e-8, 'weight_decay': args.weight_decay,
+                              'clip': args.clip, 'warmup': args.warmup, 'min_lr_fraction': args.min_lr_fraction},
+            ambient_state={'seed': args.seed, 'step': next_step_idx, 'p_clean': args.ambient_p_clean,
+                           'temperature': args.ambient_temperature},
+            data_manifest_sha256=chains_sha,
+            batch_cursor={'next_step': next_step_idx, 'total_steps': total},
+            trained_rounds=rounds_now,
+            ref_bundles=ref_bundles, ref_rows=ref_rows,
+            trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best,
+                           'schedule': {'total': total, 'steps': len(steps), 'replanned': replanned}},
+        )
+        last_state_save = time.time()
+        phase['state_save'] += last_state_save - t_save
+
+    replanned = bool((trainer_state or {}).get('schedule', {}).get('replanned'))
+    completed_step = start_step
+    for step in range(start_step, len(steps)):
+        group = steps[step]
         if args.stop_file and Path(args.stop_file).exists():
+            save_state_now(step)
             print(json.dumps({'stopped_by': args.stop_file, 'at_step': step}), flush=True)
             break
         fraction = step / max(1, total - 1)
@@ -968,148 +1065,185 @@ def train(args):
         denominator = sum(chain_mass(chains[i]) for i in group)
         step_started = time.time()
         torch.cuda.reset_peak_memory_stats()
+        peak_by_phase.clear()
         step_chains = [chains[i] for i in group]
-        ambient = None
-        if not ambient_clean(args.seed, step, args.ambient_p_clean):
-            t = time.time()
-            rows = ambient_teacher_rows(model, forward, step_chains, live, ambient_teacher, restore_live, pack_tokens,
-                                        args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
-                                        passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
-                                        tree_batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb)
-            mark('ambient_teacher', t)
-            ambient = {'temperature': args.ambient_temperature, 'head': ambient_teacher[embedding_name], 'rows': rows}
-        total_nll, computed = step_backward(model, forward, step_chains, denominator, pack_tokens,
-                                            args.activation_gb, share_prefix_tokens, fast=not args.stock_model,
-                                            mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
-                                            tree_batch_tokens=args.tree_batch_tokens,
-                                            retained_gb=args.prefix_retained_gb, student_top_p=student_top_p,
-                                            ambient=ambient)
+        is_clean = ambient_clean(args.seed, step, args.ambient_p_clean)
+
+        def run_step_body(cur_pack_tokens, cur_act_gib):
+            ambient = None
+            if not is_clean:
+                t_amb = time.time()
+                rows = ambient_teacher_rows_lora(
+                    learner, step_chains, ref_bundles, ref_rows, cur_pack_tokens, cur_act_gib,
+                    share_prefix_tokens, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
+                    tree_batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb,
+                )
+                mark('ambient_teacher', t_amb)
+                ambient = {'temperature': args.ambient_temperature, 'head': model.lm_head.weight,
+                           'teacher_trainable_rows': ref_rows, 'rows': rows}
+            total_nll_val, computed_val = step_backward(
+                model, forward, step_chains, denominator, cur_pack_tokens, cur_act_gib, share_prefix_tokens,
+                fast=True, mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
+                tree_batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb,
+                student_top_p=student_top_p, ambient=ambient,
+            )
+            return total_nll_val, computed_val, ambient
+
+        total_nll, computed, ambient = run_step_with_oom_retry(run_step_body, learner, oom_plan)
         forward_tokens += computed
         t = time.time()
-        embedding_master.grad[special_index] = 0
         norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
+        fam_grads = learner.family_grad_norms()
         optimizer.step()
-        optimizer.zero_grad(set_to_none=False)       # zeroes the FP32 accumulators in place (foreach)
-        with torch.no_grad():
-            embedding_master[special_index] = saved_rows
-            torch._foreach_copy_(list(live.values()), [masters[name] for name in live])
+        optimizer.zero_grad(set_to_none=True)
         mark('optimizer', t)
-        # 'loss' is the step's trained objective: the weighted NLL on a clean step, the weighted Temperature Matching
-        # cross-entropy on a TM step ('tm_kl': its KL part); validation stays the plain NLL
-        record = {'step': step + 1, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale, 'grad_norm': norm,
+        completed_step = step + 1
+        step_s = time.time() - step_started
+        record = {'step': completed_step, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale,
+                  'grad_norm': norm, 'family_grad_norms': fam_grads,
                   'loss_kind': 'sft' if ambient is None else 'tm',
                   **({} if ambient is None else {'tm_kl': ambient.get('kl', 0.) / denominator}),
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
                   'chain_tokens': int(sum(len(chains[i]['ids']) for i in group)), 'computed_tokens': computed,
-                  'forward_tokens_per_s': round(forward_tokens / (time.time() - started)),
-                  'step_seconds': round(time.time() - step_started, 1),
+                  'forward_tokens_per_s': round(forward_tokens / max(1e-6, time.time() - started)),
+                  'step_seconds': round(step_s, 1),
                   'phase_seconds': {k: round(v, 1) for k, v in phase.items()},
-                  'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}
-        if val_sets and ((step + 1) % args.val_every == 0 or step + 1 == len(steps)):
+                  'cuda_peak_gib': round(max([torch.cuda.max_memory_allocated() / 2**30, *peak_by_phase.values()]), 1),
+                  'cuda_peak_by_phase_gb': dict(peak_by_phase),
+                  'oom_plan': {'pack_tokens': oom_plan.pack_tokens, 'activation_gib': oom_plan.activation_gib},
+                  'oom_retries': oom_plan.retries,
+                  'compile_health': compile_health.record_step(step_s, is_warmup=(step == start_step))}
+        if args.state_save_minutes > 0 and (time.time() - last_state_save) >= args.state_save_minutes * 60:
+            save_state_now(completed_step)
+            record['saved_state_step'] = completed_step
+        if val_sets and (completed_step % args.val_every == 0 or completed_step == len(steps)):
             model.eval()
-            record.update({f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()})
+            record.update({f'val_loss:{name}': validation_loss(model, forward, c, oom_plan.pack_tokens, student_top_p) for name, c in val_sets.items()})
             model.train()
             if args.keep_best_val:
-                # the checkpoint written is the FP32 master state at the lowest validation NLL of the named set
                 current = record[f'val_loss:{args.keep_best_val}']
                 if best is None or current < best['loss']:
-                    best = {'loss': current, 'step': step + 1,
-                            'masters': {name: master.detach().cpu().clone() for name, master in masters.items()}}
+                    best = {'loss': current, 'step': completed_step,
+                            'leaves': {name: t.detach().cpu().clone() for name, t in learner.named_trainable_tensors().items()}}
                     if args.save_best:
-                        # the live BF16 parameters are the rounded masters of this very step: write them now, so the
-                        # best checkpoint exists on disk whatever happens to the run (preemption, an early stop)
-                        from natlang_neuralese.common.hashing import sha256_file_hex_cached
-                        write_checkpoint(model, state, special, Path(args.out_dir) / 'checkpoint.pt',
-                                         sha256_file_hex_cached(Path(args.checkpoint)), total)
-                        record['saved_best'] = {'step': step + 1, 'val_loss': current}
+                        exported = export_merged_checkpoint(learner, state, out_dir / 'checkpoint.pt',
+                                                            source_sha256=source_sha, learner_step=completed_step)
+                        record['saved_best'] = {'step': completed_step, 'val_loss': current,
+                                                'checkpoint_sha256': exported['checkpoint_sha256']}
                 record['best_val'] = {'loss': best['loss'], 'step': best['step']}
-        if args.hours and step + 1 == args.replan_step and step + 1 < len(steps):
-            # fit the schedule to the wall-clock budget from the measured rate (compile included: conservative)
-            rate = forward_tokens / (time.time() - started)
+        if args.hours and completed_step == args.replan_step and completed_step < len(steps):
+            rate = forward_tokens / max(1e-6, time.time() - started)
             left = args.hours * 3600 - (time.time() - run_started) - args.reserve_minutes * 60
-            mean = np.mean([sum(len(chains[i]['ids']) for i in g) for g in steps[step + 1:]])
-            fit = step + 1 + max(0, int(left * rate / mean))
+            mean = np.mean([sum(len(chains[i]['ids']) for i in g) for g in steps[completed_step:]])
+            fit = completed_step + max(0, int(left * rate / mean))
             if fit < len(steps):
                 del steps[fit:]
                 total = fit
+                replanned = True
             record['replanned_steps'] = total
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
+    save_state_now(completed_step)
     if args.max_steps and not args.checkpoint_at_max_steps:
         return
-    out_path = Path(args.out_dir) / 'checkpoint.pt'
-    from natlang_neuralese.common.hashing import sha256_file_hex_cached
-    source_sha = sha256_file_hex_cached(Path(args.checkpoint))
+    out_path = out_dir / 'checkpoint.pt'
+    export_step = completed_step
     if best is not None:
-        masters = best['masters']
+        with torch.no_grad():
+            for name, leaf in learner.named_trainable_tensors().items():
+                leaf.copy_(best['leaves'][name].to(device=leaf.device, dtype=leaf.dtype))
+        export_step = best['step']
         print(json.dumps({'kept_best_val': {'loss': best['loss'], 'step': best['step']}}), flush=True)
-    with torch.no_grad():
-        for name, p in live.items():
-            p.copy_(masters[name])   # rounded once, nearest, from the FP32 master
-    changed = write_checkpoint(model, state, special, out_path, source_sha, total)
-    print(json.dumps({'checkpoint': str(out_path), 'changed_elements': changed}), flush=True)
+
+    def factors():
+        from natlang_neuralese.train.learner_state import export_adapter_factors
+        info = export_adapter_factors(learner, args.export_factors_dir, base_checkpoint_sha256=source_sha,
+                                      learner_step=export_step, round_id=round_id,
+                                      source_checkpoint_id=str(args.checkpoint), objective_version='sft_ambient_v1')
+        print(json.dumps({'adapter_factors': info}), flush=True)
+
+    def checkpoint():
+        exported = export_merged_checkpoint(learner, state, out_path, source_sha256=source_sha, learner_step=export_step)
+        print(json.dumps({'checkpoint': str(out_path), **exported}), flush=True)
+
+    export_round(factors=factors if args.export_factors_dir else None, checkpoint=checkpoint,
+                 factors_only=args.factors_only, round_id=round_id,
+                 mark_trained=lambda: save_state_now(completed_step, mark_round_done=True))
+
+
+def export_round(*, factors, checkpoint, factors_only, round_id, mark_trained):
+    """The end of a run after its final learner state: the factor export (``factors``, an async round's, shipped and
+    merged on the DGX), the merged checkpoint unless ``factors_only``, and only then the round in the learner's ledger
+    (``mark_trained``): a preemption during an export leaves the round unmarked, so the resumed run (cursor at the
+    end) exports again instead of skipping a round that has no export."""
+    if factors is not None:
+        factors()
+    if factors is None or not factors_only:
+        checkpoint()
+    if round_id:
+        mark_trained()
+        print(json.dumps({'event': 'round trained', 'round_id': round_id}), flush=True)
 
 
 def bench(args):
-    """Stock vs fast forward+backward (BF16, the training dtype) on the same fixed chains: per-chain loss, global gradient
-    agreement and tokens/s. The stock pass runs first; the model is then patched in place."""
+    """Eager vs compiled fast forward+backward on the shared LoRA+rows learner core: per-chain loss,
+    trainable-leaf gradient agreement and tokens/s."""
+    from natlang_neuralese.train.lfm3_learner import AdapterSpec, Lfm3Learner
     episodes = pickle.load(open(args.turns, 'rb'))['episodes']
     chains = [c for c in chains_of(episodes) if args.min_tokens <= len(c['ids']) <= args.max_tokens][:args.chains]
-    model, _, _ = load_model(args.checkpoint, args.base)
-    model.gradient_checkpointing_enable()
-    model.config.use_cache = False
-    model.train()
-    params = [p for p in model.parameters()]
+    spec = AdapterSpec.for_sft()
 
-    def run(forward, label, before=None):
+    def run_variant(compile_layers, label):
+        learner = Lfm3Learner.from_checkpoint(
+            args.checkpoint, args.base, spec, device='cuda',
+            fp8_base=not getattr(args, 'no_fp8_base', False), compile_layers=compile_layers,
+        )
+        model = learner.model
+        params = learner.trainable_parameters()
         grads = [torch.zeros_like(p, dtype=torch.float32) for p in params]
         losses, seconds, tokens = [], 0., 0
-        for repeat in range(args.repeats + 1):          # the first pass compiles and warms up
+        for repeat in range(args.repeats + 1):
             if repeat == 1:
                 seconds, tokens = 0., 0
             for chain in chains:
                 ids, positions, targets = chain_tensors(chain, 'cuda')
-                if before is not None:
-                    before(len(ids))
+                set_checkpointing(model, len(ids), args.activation_gb, parameterization='lora')
                 torch.cuda.synchronize()
                 started = time.time()
-                nll = token_nll(model, forward(model, ids), positions, targets)
+                h = lfm3_fast_train.hidden(model, ids, adapters=learner.bundles,
+                                           trainable_rows=learner.trainable_rows, fp8_base=learner.fp8_base)
+                nll = token_nll(model, h, positions, targets, trainable_rows=learner.trainable_rows)
                 (nll.sum() / len(targets)).backward()
                 torch.cuda.synchronize()
                 seconds += time.time() - started
                 tokens += len(ids)
                 if repeat == 0:
                     losses.append(nll.mean().item())
-                    torch._foreach_add_(grads, [p.grad for p in params])
+                    for g, p in zip(grads, params):
+                        if p.grad is not None:
+                            g.add_(p.grad.float())
                 for p in params:
                     p.grad = None
         print(json.dumps({'impl': label, 'chain_tokens': [len(c['ids']) for c in chains], 'loss': [round(x, 5) for x in losses],
-                          'fwd_bwd_tokens_per_s': round(tokens / seconds), 'cuda_peak_gb': round(torch.cuda.max_memory_allocated() / 2**30, 1)}), flush=True)
+                          'fwd_bwd_tokens_per_s': round(tokens / max(seconds, 1e-6)),
+                          'cuda_peak_gib': round(torch.cuda.max_memory_allocated() / 2**30, 1)}), flush=True)
         return losses, grads
 
-    reference = None
-    if args.fp32_reference:          # the BF16 noise floor: the same chains with FP32 compute (no autocast, no TF32)
-        args.repeats, repeats = 0, args.repeats
-        _, reference = run(hidden, 'fp32-reference')
-        args.repeats = repeats
-    model.to(torch.bfloat16)
-    stock_losses, stock_grads = run(hidden, 'stock')
-    lfm3_fast_train.prepare(model)
-    fast_losses, fast_grads = run(lfm3_fast_train.hidden, 'fast', before=lambda n: set_checkpointing(model, n, args.activation_gb))
+    eager_losses, eager_grads = run_variant(False, 'lora-eager')
+    fast_losses, fast_grads = run_variant(True, 'lora-compiled')
+
     def agreement(x, y):
         dot = sum((a * b).sum().item() for a, b in zip(x, y))
         na = math.sqrt(sum((a * a).sum().item() for a in x))
         nb = math.sqrt(sum((b * b).sum().item() for b in y))
         diff = math.sqrt(sum(((a - b) ** 2).sum().item() for a, b in zip(x, y)))
-        return {'cosine': dot / (na * nb), 'rel_l2': diff / na, 'norm_a': na, 'norm_b': nb}
+        return {'cosine': dot / max(na * nb, 1e-12), 'rel_l2': diff / max(na, 1e-12), 'norm_a': na, 'norm_b': nb}
 
-    if reference is not None:
-        print(json.dumps({'stock_vs_fp32': agreement(reference, stock_grads), 'fast_vs_fp32': agreement(reference, fast_grads)}), flush=True)
-    print(json.dumps({'stock_vs_fast': agreement(stock_grads, fast_grads)}), flush=True)
-    print(json.dumps({'loss_abs_diff_max': max(abs(a - b) for a, b in zip(stock_losses, fast_losses)),
-                      'loss_mean_stock': float(np.mean(stock_losses)), 'loss_mean_fast': float(np.mean(fast_losses)),
-                      }), flush=True)
+    print(json.dumps({'eager_vs_compiled': agreement(eager_grads, fast_grads)}), flush=True)
+    print(json.dumps({'loss_abs_diff_max': max(abs(a - b) for a, b in zip(eager_losses, fast_losses)),
+                      'loss_mean_eager': float(np.mean(eager_losses)), 'loss_mean_compiled': float(np.mean(fast_losses))}),
+          flush=True)
 
 
 def main():
@@ -1132,13 +1266,26 @@ def main():
     p.add_argument('--activation-gb', type=float, default=20.)
     p.add_argument('--fp32-reference', action='store_true')
     p = sub.choices['train']
-    p.add_argument('--stock-model', action='store_true', help='the unpatched HF layers with full checkpointing (about 3x slower)')
-    p.add_argument('--activation-gb', type=float, default=20., help='saved-activation budget per sequence; layers beyond it are recomputed')
-    p.add_argument('--pack-tokens', type=int, default=-1, help='pack a step\'s chains back to back into rows of at most this many tokens (documents stay separate); default: the longest row --activation-gb holds without recompute (about 10k at 20 GB); 0: one chain per forward')
+    p.add_argument('--activation-gb', '--activation-gib', dest='activation_gb', type=float, default=56.,
+                   help='saved-activation budget (GiB) per sequence; layers beyond it are recomputed (G4: 80, GB10: 56)')
+    p.add_argument('--pack-tokens', type=int, default=-1, help='pack a step\'s chains back to back into rows of at most this many tokens; default: the longest row --activation-gib holds without recompute; 0: one chain per forward')
+    p.add_argument('--lora-rank', type=int, default=128, help='LoRA rank on all 9 LFM3 projection families (default 128)')
+    p.add_argument('--lora-alpha', type=float, default=None, help='LoRA alpha (default: equal to --lora-rank)')
+    p.add_argument('--gate-rank', type=int, default=None, help='optional attention gate_proj rank (<= 16; default frozen)')
+    p.add_argument('--no-trainable-rows', action='store_true', help='freeze Neuralese marker/override embedding rows (default trainable)')
+    p.add_argument('--no-fp8-base', action='store_true', help='disable Blackwell FP8 frozen-base GEMMs (BF16 base opt-out)')
+    p.add_argument('--no-compile', action='store_true', help='disable torch.compile on fast layers')
+    p.add_argument('--resume', action='store_true', help='resume from --state-dir (default OUT_DIR/learner-state)')
+    p.add_argument('--state-dir', help='resumable learner state directory (default OUT_DIR/learner-state)')
+    p.add_argument('--state-save-minutes', type=float, default=15.,
+                   help='save resumable learner state atomically every N minutes (default 15 for Colab preemption safety; 0: end only)')
+    p.add_argument('--round-id', help='async-train round identifier recorded in learner_state dedup ledger')
+    p.add_argument('--export-factors-dir', help='write FP32 LoRA factors + trainable rows + policy_manifest.json (WAN shipping)')
+    p.add_argument('--factors-only', action='store_true', help='with --export-factors-dir: skip local 3.4 GB merged checkpoint.pt write (DGX merges)')
     p.add_argument('--max-steps', type=int, default=0, help='stop after this many optimizer steps without writing a checkpoint')
     p.add_argument('--share-prefix-tokens', type=int, default=256,
                    help='compute a prefix that several of a step\'s chains share (system prompt, task prompt, earlier calls) '
-                   'once when it is at least this long (exact gradients, lfm3_fast_train.prefix_tree); 0: every chain whole')
+                   'once when it is at least this long (exact gradients, lfm3_fast.prefix_tree); 0: every chain whole')
     add_prefix_tree_args(p)
     p.add_argument('--no-neuralese-passthrough', action='store_true',
                    help='imported Neuralese state as fixed context: the same in-graph state from the producer document, '
@@ -1150,7 +1297,7 @@ def main():
                    '(default): stratified')
     p.add_argument('--out-dir', required=True)
     p.add_argument('--epochs', type=int, default=3)
-    p.add_argument('--lr', type=float, default=1e-5)
+    p.add_argument('--lr', type=float, default=DEFAULT_SFT_LR)
     p.add_argument('--weight-decay', type=float, default=0.)
     p.add_argument('--warmup', type=int, default=8)
     p.add_argument('--min-lr-fraction', type=float, default=0.1)

@@ -6,14 +6,17 @@
 //   3. edits: applies each retained `edit` to the errata / exclusion / annotation layers (data_service `edits.apply`) and
 //      records the outcome with `recordApplication` (operation id `apply-<edit operation id>`, so a restart never duplicates);
 //   4. inbox: copies questions asked from the page into <data>/ops/dashboard/inbox.jsonl for the supervising agent.
-// Browser pairing: enrollment stays open while this runs; every browser is approved once by the owner on tendriller.dev.
+// Browser pairing: enrollment stays open while this runs (helpers/participant-lifecycle.mjs, woken by the host's setup
+// notifications); every browser is approved once by the owner on the service origin.
+import './helpers/websocket-close-guard.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openSession } from './session.mjs';
 import { readFile, appendFile } from 'node:fs/promises';
 import { privateDirectory } from './local.mjs';
-import { startPairingWindow } from './pairing-native.mjs';
+import { superviseParticipant } from './helpers/participant-lifecycle.mjs';
+import { createCliLifetime } from './helpers/cli-lifetime.mjs';
 import { TOPICS, encodeReply, validId, editRef, MAX_REPLY_CHUNKS, REPLY_TTL_MS } from './ops-protocol.mjs';
 
 const log = obj => console.log(JSON.stringify({ t: new Date().toISOString(), ...obj }));
@@ -129,20 +132,19 @@ async function reconcile(session, rpc, nativeId) {
   await rpc('inbox.sync', inbox.value);
 }
 
-export async function runOpsPeer({ signal }) {
+export async function runOpsPeer({ signal }, { onOwned, onClosed } = {}) {
   const owned = await openSession({ signal });
+  onOwned?.();
   const { session } = owned, nativeId = session.deviceId;
   const rpc = dataService({ signal });
   log({ running: true, deviceId: nativeId, ownerInstanceId: owned.supervisor.ownerInstanceId });
   session.participation.onStatus(s => log({ connection: s.phase, error: s.error }));
-  // Browser enrollment stays open for the participant's lifetime; host notices wake it when a browser asks or the owner
-  // approves on tendriller.dev. A transition in flight keeps its durable pause and is reconciled by the next pass.
-  let lastPairing = '';
-  const pairingWindow = startPairingWindow({ owned, signal, onStatus: status => {
-    if (!status?.state || status.state === 'idle') return;
-    const k = JSON.stringify(status); if (k !== lastPairing) { lastPairing = k; log({ pairing: status }); } } });
-  const pairingLoop = pairingWindow.done.catch(e => log({ pairing_error: e.message }));
-  const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal), serveTelemetry(session, rpc, signal)];   // pairingLoop may end on a pause; serving goes on
+  // Browser enrollment stays open for the participant's lifetime; the host's setup notifications wake it when a browser asks
+  // or the owner approves on the service origin. A transition in flight keeps its durable pause and is reconciled by the next pass.
+  let lastReport = '';
+  const lifecycle = superviseParticipant({ owned, signal, watch: owned.watchSetup, report: status => {
+    const k = JSON.stringify(status); if (k !== lastReport) { lastReport = k; log(status); } } });
+  const jobs = [serveQueries(session, rpc, signal), ticks(session, rpc, signal), serveTelemetry(session, rpc, signal)];
   let busy = false, again = false;
   const kick = async () => {
     if (busy) { again = true; return; }
@@ -154,12 +156,12 @@ export async function runOpsPeer({ signal }) {
   await kick();
   jobs.push((async () => { for await (const change of session.changes({ signal })) { void change; await kick(); } })());
   try { await Promise.race(jobs.map(j => j.catch(e => { if (!signal.aborted) throw e; }))); }
-  finally { await pairingLoop.catch(() => {}); await owned.close(); }
+  finally { try { await lifecycle.close(); } finally { await owned.close(); } onClosed?.(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const stopped = new AbortController();
-  process.once('SIGINT', () => stopped.abort()); process.once('SIGTERM', () => stopped.abort());
-  try { await runOpsPeer({ signal: stopped.signal }); }
-  catch (e) { if (!stopped.signal.aborted) { console.error(`${e.code ?? e.name}: ${e.message}`); process.exitCode = 1; } }
+  const cli = createCliLifetime();
+  try { await runOpsPeer({ signal: cli.signal }, { onOwned: cli.opened, onClosed: cli.closed }); }
+  catch (error) { cli.fail(error); }
+  process.exit(await cli.finish());
 }

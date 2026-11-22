@@ -20,7 +20,7 @@ def resolve(ref, repo: Path = REPO) -> tuple[Path, str | None]:
     entry = entries.get(str(ref))
     if entry is None or entry.get("kind") != "cross-corpus-index":
         raise FileNotFoundError(f"cross-corpus index {ref!r}: neither a directory nor a registered index id")
-    root = repo / entry["path"]
+    root = corpus_registry.entry_root(entry, repo)
     if not (root / "index.json").is_file():
         raise FileNotFoundError(f"cross-corpus index {ref!r} is registered but not synced here: {root} "
                                 f"(scripts/sync_training_corpora.py sync --id {ref})")

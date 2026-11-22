@@ -3,6 +3,23 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-22 — a Neuralese block from an earlier policy version of the same run splices exactly again
+
+Commit 07efc838c made the SGLang actor front change its native identity (checkpoint id and embedding digest) at every
+in-place policy update. Exact splicing (`_sglang_exact`, `Engine._native_exact`) compares a block's recorded identity
+with the consumer's. So a consumer in a GRPO episode stopped reading a state its producer had written under an earlier
+version of the run. The front re-encoded the state from its text instead. On first principles, the consumer must
+consume the state that was actually produced in the episode.
+
+Exact splicing now keys on the lineage: the start checkpoint's architecture, tokenizer and base identity. That
+identity no longer changes on a rebind. Each block's producing policy is recorded as provenance: the producing
+turn's RL capture names its in-place update beside the block it stored, and the front keeps `producer_policy(id)`
+(policy id, version, engine). Import receipts stay identical to the native engine's. Blocks of
+another checkpoint or lineage are still re-encoded from their text, as before. All engines share one rule. The
+managed llama-server, in-page wllama and the Python native engine each serve one checkpoint, so their identity was
+always the lineage's. The SGLang front was the only engine that changed identity in place.
+No opt-out: the prior behaviour was a regression introduced the same day.
+
 ### 2026-11-21 — show entry signatures first for large callable scopes
 
 The System Vibestudio open-goal program rendered 104,742 LFM3 tokens before
@@ -2812,3 +2829,14 @@ It leaves the eval permissions intact. NativeToolAgent produces these messages
 for Node, browser, and Workerd. The serving engines and source collectors consume
 the same request and trajectory records. The existing `compact-callable-scope`
 setting controls the compact opening and its service list.
+
+### 2026-11-22 — an eval that computes for 60 s without pausing fails with a teaching error
+
+An eval's unpruned recursive search (no `timeout_ms`) blocked a shared collector's
+event loop for an hour, and 7 co-hosted held episodes timed out with it (DECISIONS
+2026-11-22 02:30). On Node hosts one synchronous stretch of an eval or of
+callable-folder module code now stops after 60 s with "eval stopped: it computed
+for more than 60 s without pausing; use a bounded or faster approach (prune the
+search, check the input sizes, or compute in smaller parts)". The call continues
+and the model sees the error as the eval's observation. `NATLANG_EVAL_SYNC_SECONDS`
+sets the bound (0 turns it off). Browser evals are not bounded.

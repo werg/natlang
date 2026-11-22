@@ -21,7 +21,7 @@ if (preview) {
   const conn = await createConnection({ status: () => {}, pairing: () => {} });
   let source;
   const connection = createOwnerConnection({ configuration: conn.configuration, pairing: conn.pairing, appName: 'natlang ops',
-    async connect() { source = await conn.connect(); },
+    async connect({ signal } = {}) { source = await conn.connect({ signal }); },
     onState(state) { if (state.phase === 'connected') start(source); else { view.render(state); showGate(holder); } } });
   void connection.start();
 }

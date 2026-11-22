@@ -245,6 +245,12 @@ def test_next_cycle_argv_replaces_this_cycles_own_flags_and_adds_seed_works():
     assert parsed.no_teacher_campaign and parsed.fill == '/fill' and parsed.k == 4 and not parsed.no_pipeline
 
 
+def test_lineage_builds_carry_what_the_start_trained_into_the_next_cycles_prefer_unseen():
+    assert ei.lineage_builds('/v7/mix', ['/v6/mix']) == ['/v7/mix', '/v6/mix']
+    assert ei.lineage_builds('/v7/mix', ['/v6/mix', '/v7/mix', '/v6/mix']) == ['/v7/mix', '/v6/mix']
+    assert ei.lineage_builds('/v7/mix', []) == ['/v7/mix']
+
+
 def _cycle_args(argv):
     import sys
     captured = []
@@ -300,8 +306,51 @@ def test_gate_keeps_a_neutral_rejections_collection_and_trains_the_previous_star
     assert cycle.collect_policy() == ('/v7.pt', 'cand')          # the sibling's collection stays
 
 
-def test_gate_recollects_from_the_previous_start_after_a_failure(tmp_path, monkeypatch):
+def test_a_failure_ends_the_pipeline_at_the_gate_and_collects_the_reference(tmp_path, monkeypatch):
+    """AGENTS.md: a significant unexplained held regression ends the experiment at that eval. The speculative cycle
+    after a failed candidate trains nothing and launches no next cycle: it writes bug-hunt.json, starts a detached
+    collection of the reference (the machines keep working) and exits; a neutral rejection proceeds."""
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'failure', 'adopt': False, 'vs_start': {'delta': -0.05},
+                                          'next_start': '/v6.pt', 'reference': {'checkpoint': '/v6.pt'}})
+    cycle.a.kv_gb, cycle.a.k, cycle.a.collect_hours, cycle.a.no_neuralese_variants = 12, 4, 6., True
+    cycle.a.name, cycle.a.no_pipeline = 'sft-v8', False
+    launched = []
+    monkeypatch.setattr(cycle, 'ledger', lambda unit, budget, prio, cmd, log, **kw: launched.append((unit, cmd, kw)))
+    monkeypatch.setattr(cycle, 'active', lambda unit: False)
+    with pytest.raises(SystemExit, match='experiment ends'):
+        cycle.gate_stage()
+    assert not cycle.gate() and cycle.done('halted')
+    assert json.loads((cycle.dir / 'bug-hunt.json').read_text())['reference'] == '/v6.pt'
+    (unit, cmd, kw), = launched
+    assert unit == 'sft-v8-recollect' and kw.get('detach') and cmd[cmd.index('--checkpoint') + 1] == '/v6.pt'
+    assert cmd[cmd.index('--checkpoint-sha256') + 1] == 'six'
+    with pytest.raises(SystemExit, match='experiment ends'):        # nor does it launch a next cycle
+        cycle.next_stage()
+    neutral = _speculative_cycle(tmp_path / 'n', {'verdict': 'neutral', 'adopt': False, 'vs_start': {},
+                                                  'next_start': '/v6.pt'})
+    neutral.gate_stage()
+    assert neutral.train_policy()[:2] == ('/v6.pt', 'six')
+
+
+def test_a_late_failure_stops_the_cycle_and_its_next_one(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, None)
+    cycle.a.name = 'sft-v8'
+    (cycle.dir / 'stages' / 'gate.done').write_text(json.dumps({'start': '/v7.pt', 'start_sha': 'cand',
+                                                                'prefer_unseen': [], 'verdict_pending': True}))
+    cycle.mark('next', name='sft-v9', unit='sft-v9-drive-1')
+    (Path(cycle.a.speculative_after) / 'verdict.json').write_text(json.dumps(
+        {'verdict': 'failure', 'adopt': False, 'vs_start': {}, 'next_start': '/v6.pt'}))
+    stopped = []
+    monkeypatch.setattr(cycle, 'active', lambda unit: unit in ('sft-v9-drive-1', 'sft-v9-collect'))
+    monkeypatch.setattr(cycle, 'stop_unit', stopped.append)
+    with pytest.raises(SystemExit, match='experiment ends'):
+        cycle.held_stage()
+    assert stopped == ['sft-v9-drive-1', 'sft-v9-collect'] and not cycle.done('held')
+
+
+def test_after_the_hunt_a_failure_is_a_rejection_that_recollects_from_the_previous_start(tmp_path, monkeypatch):
     cycle = _speculative_cycle(tmp_path, {'verdict': 'failure', 'adopt': False, 'vs_start': {}, 'next_start': '/v6.pt'})
+    cycle.a.resume_after_hunt = True
     assert cycle.recollect_due()
     (cycle.collect_dir).mkdir()
     (cycle.collect_dir / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': 'cand'}) + '\n')
@@ -363,7 +412,8 @@ def test_pop_held_measures_the_start_and_the_base_only_on_request(tmp_path, monk
     measured, reused = [], []
     monkeypatch.setattr(ei.Cycle, 'pop_held', lambda self, name, checkpoint: measured.append(name))
     monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: reused.append(out.name))
-    args = dict(dir=str(tmp_path), pin=str(tmp_path / 'pin'), held_samples=2, after=None, no_held_reuse=False)
+    args = dict(dir=str(tmp_path), pin=str(tmp_path / 'pin'), held_samples=2, after=None, no_held_reuse=False,
+                held_profile='pop', held_slots=64, name=None)     # the subcommand's defaults (sft-v9 spawns it so)
     ei.pop_held(argparse.Namespace(start='/v7.pt', held_base=False, **args))
     assert (measured, reused) == (['start'], ['base'])
     measured.clear()
@@ -372,7 +422,7 @@ def test_pop_held_measures_the_start_and_the_base_only_on_request(tmp_path, monk
     assert measured == ['start', 'base', 'base']
 
 
-def test_latest_base_takes_the_newest_complete_base_result_of_any_series(tmp_path):
+def test_latest_base_takes_the_newest_complete_base_result_of_any_series_of_the_host(tmp_path):
     paths = []
     for i, r in enumerate([{'complete': True, 'policy_id': ei.BASE_SHA, 'samples_per_task': 2, 'series': {'key': 'a'}},
                            {'complete': True, 'policy_id': ei.BASE_SHA, 'samples_per_task': 2, 'series': {'key': 'b'}},
@@ -385,3 +435,380 @@ def test_latest_base_takes_the_newest_complete_base_result_of_any_series(tmp_pat
         paths.append(path)
     assert ei.latest_base(paths, 2) == paths[1].parent
     assert ei.latest_base(paths, 4) is None
+
+
+def test_held_pin_measures_on_its_harness_and_is_carried_to_the_next_cycle(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: calls.append((argv, kw.get('env'))))
+    argv = ['--dir', str(tmp_path / 'sft-v8'), '--name', 'sft-v8', '--start', '/v7.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', '/pin-new', '--held-pin', '/pin-held', '--held-profile', 'pop']
+    cycle = ei.Cycle(_cycle_args(argv))
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
+    import pop_rl_actor
+    stopped = []
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: stopped.append(1))
+    cycle.pop_held('candidate', tmp_path / 'c.pt')
+    assert stopped                     # a measurement first stops any Pop fill
+    assert calls[-1][0][2] == '/pin-held' and calls[-1][1] is None
+    assert cycle.held_env['NATLANG_REPO'] == '/pin-held' and cycle.env['NATLANG_REPO'] == '/pin-new'
+    out = ei.next_cycle_argv(argv, directory='/sft-v9', name='sft-v9', start='/v8.pt', start_sha='ccc', commit='d' * 40,
+                             previous='/sft-v8', prefer_unseen=[], fallback_prefer_unseen=[])
+    assert _cycle_args(out).held_pin == '/pin-held'
+
+
+def test_popbase_unit_runs_the_drivers_pop_held_on_the_held_pin(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: calls.append(argv))
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    argv = ['--dir', str(tmp_path / 'sft-v8'), '--name', 'sft-v8', '--start', '/v7.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', '/pin-new', '--held-pin', '/pin-held', '--held-profile', 'pop']
+    ei.Cycle(_cycle_args(argv)).popbase_stage()
+    unit = calls[-1]
+    assert all(isinstance(x, str) for x in unit) and '--setenv=NATLANG_REPO=/pin-held' in unit
+    assert unit[unit.index('pop-held') - 1] == str(Path(ei.__file__).resolve()) and '/pin-held' in unit
+
+
+def test_held_every_skips_held_on_unmeasured_cycles_and_adopts_their_candidate(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'success', 'adopt': True, 'vs_start': {}, 'next_start': '/v7.pt'})
+    cycle.a.held_every, cycle.a.since_held = 2, 0
+    assert not cycle.measured()
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda *a: pytest.fail('an unmeasured cycle must not use Pop'))
+    cycle.held_stage()
+    cycle.verdict_stage()
+    v = json.loads((cycle.dir / 'verdict.json').read_text())
+    assert v['verdict'] == 'unmeasured' and v['adopt'] and v['next_start'] == str(cycle.dir / 'sft' / 'checkpoint.pt')
+    assert v['reference'] == {'checkpoint': '/v7.pt'}           # the last measured policy (the previous next_start)
+    cycle.a.since_held = 1
+    assert cycle.measured()
+
+
+def test_a_measured_cycle_after_an_unmeasured_one_is_judged_against_and_rolls_back_to_the_reference(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'unmeasured', 'adopt': True, 'vs_start': {},
+                                          'next_start': '/v7.pt', 'reference': {'checkpoint': '/v6.pt'}})
+    cycle.a.held_every, cycle.a.since_held, cycle.a.fail_pts, cycle.a.success_pts = 2, 1, 3., 2.
+    cycle.a.held_samples = 2
+    monkeypatch.setattr(ei, 'latest_base', lambda results, samples, host: None)
+    compared = []
+
+    def compare(self, a, b, out):
+        compared.append((a.name, b.name))
+        return {'primary': {'delta': -0.06, 'permutation_p': 0.01}, 'ran_out_rate_delta': 0}
+    monkeypatch.setattr(ei.Cycle, 'compare', compare)
+    cycle.held.mkdir(parents=True)
+    cycle.verdict_stage()
+    v = json.loads((cycle.dir / 'verdict.json').read_text())
+    assert compared[0] == ('start', 'candidate')
+    assert v['verdict'] == 'failure' and v['next_start'] == '/v6.pt' and v['reference'] == {'checkpoint': '/v6.pt'}
+
+
+def test_next_cycle_counts_unmeasured_cycles():
+    argv = ['--dir', '/d', '--name', 'sft-v8', '--start', '/v7.pt', '--commit', 'c', '--since-held', '1']
+    out = ei.next_cycle_argv(argv, directory='/d9', name='sft-v9', start='/v8.pt', start_sha='s', commit='c9',
+                             previous='/d', prefer_unseen=[], fallback_prefer_unseen=[], since_held=0)
+    assert _cycle_args(out).since_held == 0 and _cycle_args(out).held_every == 2
+    out = ei.next_cycle_argv(argv, directory='/d9', name='sft-v9', start='/v8.pt', start_sha='s', commit='c9',
+                             previous='/d', prefer_unseen=[], fallback_prefer_unseen=[], since_held=2)
+    assert _cycle_args(out).since_held == 2
+
+
+def test_pop_fill_draws_at_pops_running_cap_and_opts_out(tmp_path, monkeypatch):
+    argv = ['--dir', str(tmp_path / 'sft-v8'), '--name', 'sft-v8', '--start', '/v7.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin'), '--fill', str(tmp_path / 'fill')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    monkeypatch.setattr(ei.data_registry if hasattr(ei, 'data_registry') else
+                        __import__('natlang_neuralese.common.data_registry', fromlist=['x']), 'role_paths', lambda r: [])
+    command = cycle.fill_command({'url': 'http://pop:18531', 'sglang': 'http://127.0.0.1:19631', 'export': '/e'}, pop=True)
+    i = command.index('--max-running')
+    assert command[i + 1] == '32' and command[command.index('--workers') + 1] == '48' and '--polite' not in command
+    started = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda **kw: started.append(kw) or type('T', (), {'start': lambda s: 0})())
+    cycle.pop_fill_open()
+    assert started
+    started.clear()
+    cycle = ei.Cycle(_cycle_args([*argv, '--no-pop-fill']))
+    cycle.pop_fill_open()
+    assert not started
+
+
+@pytest.mark.parametrize('previous,expected', [
+    ({'verdict': 'unmeasured', 'since_held': 0, 'held_every': 4}, (1, 4)),
+    ({'verdict': 'success', 'since_held': 1, 'held_every': 2}, (0, 4)),
+    ({'verdict': 'success', 'since_held': 7, 'held_every': 8}, (0, 8)),
+    ({'verdict': 'neutral', 'since_held': 3, 'held_every': 4}, (0, 2)),
+    ({'verdict': 'failure', 'since_held': 1, 'held_every': 2}, (0, 1)),
+    ({'verdict': 'success'}, (0, 2))])                # an older verdict: the flags
+def test_held_interval_doubles_on_success_and_resets_otherwise(tmp_path, previous, expected):
+    cycle = _speculative_cycle(tmp_path, {'adopt': True, 'vs_start': {}, 'next_start': '/v7.pt', **previous})
+    cycle.a.held_every, cycle.a.held_every_max, cycle.a.since_held = 2, 8, 0
+    assert cycle.held_schedule() == expected
+    assert cycle.measured() == (expected[0] + 1 >= expected[1])
+
+
+def test_pop_serves_stop_earlier_pop_fills(monkeypatch):
+    import pop_rl_actor
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        out = 'sft-v8-popfill.service loaded active running x\nsft-v8-popfill-tunnel.service loaded active running y\n'
+        return type('R', (), {'stdout': out if argv[:2] == ['systemctl', '--user'] and argv[2] == 'list-units' else '',
+                              'returncode': 0})()
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', run)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    pop_rl_actor.stop_pop_fills()
+    stopped = [a[-1] for a in calls if a[:3] == ['systemctl', '--user', 'stop']]
+    assert stopped == ['sft-v8-popfill-waiter.service', 'sft-v8-popfill.service',
+                       'sft-v8-popfill-tunnel-waiter.service', 'sft-v8-popfill-tunnel.service']
+    monkeypatch.setattr(pop_rl_actor, 'ssh', lambda *a, **k: '')
+    calls.clear()
+    pop_rl_actor.stop_pop_actors()
+    assert any(a[:3] == ['systemctl', '--user', 'stop'] for a in calls)
+
+
+def test_unreachable_pop_defers_the_held_eval_and_the_next_cycle_is_measured(tmp_path, monkeypatch):
+    previous = tmp_path / 'sft-v8'
+    previous.mkdir()
+    (previous / 'verdict.json').write_text(json.dumps({'verdict': 'unmeasured', 'adopt': True, 'since_held': 0,
+                                                       'held_every': 2, 'next_start': '/v8.pt'}))
+    argv = ['--dir', str(tmp_path / 'sft-v9'), '--name', 'sft-v9', '--start', '/v8.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin'), '--speculative-after', str(previous),
+            '--pop-wait-hours', '0', '--held-profile', 'pop']
+    cycle = ei.Cycle(_cycle_args(argv))
+    (cycle.dir / 'stages').mkdir(parents=True, exist_ok=True)
+    assert cycle.measured()
+    monkeypatch.setattr(ei, 'pop_reachable', lambda: False)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda *a: pytest.fail('measured with Pop down'))
+    cycle.held_stage()
+    assert cycle.held_deferred()
+    cycle.verdict_stage()
+    v = json.loads((cycle.dir / 'verdict.json').read_text())
+    assert v['verdict'] == 'unmeasured' and v['adopt'] and v['deferred'] == 'pop unreachable'
+    assert v['since_held'] == 1 and v['held_every'] == 2      # the next cycle: since 1 + 1 >= 2, measured
+
+
+def test_sft_gets_the_activation_memory_flag(tmp_path, monkeypatch):
+    argv = ['--dir', str(tmp_path / 'sft-v9'), '--name', 'sft-v9', '--start', '/v8.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    args = _cycle_args(argv)
+    assert args.sft_activation_gb == 56 and args.sft_budget == 100
+    cycle = ei.Cycle(_cycle_args([*argv, '--sft-activation-gb', '24']))
+    (cycle.mix).mkdir(parents=True)
+    (cycle.mix / 'chains.sha256').write_text('abc\n')
+    seen = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: seen.append(kw['env']))
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei.Cycle, 'wait', lambda self, unit, poll=60: None)
+    with pytest.raises(SystemExit):           # no checkpoint written by the stubbed launch
+        cycle.sft_stage()
+    assert seen[0]['ACT'] == '24' and seen[0]['BUDGET'] == '100'
+
+
+def test_collection_runs_neuralese_variants_by_default_and_opts_out(tmp_path):
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    flags = cycle.variant_args()
+    assert flags[0] == '--neuralese-variants' and flags[1].endswith('natlang-rl-neuralese-variants-20261113/cases.jsonl')
+    assert float(flags[3]) == 0.5
+    assert ei.Cycle(_cycle_args([*argv, '--no-neuralese-variants'])).variant_args() == []
+
+
+
+# ---- the DGX held series (async-train §1) -----------------------------------------------------------------------------
+def _held_result(path, host=None, fmt='sglang-hf-bfloat16-vendor-projection-kv-fp8_e4m3', policy='p', samples=4, key='k'):
+    path.mkdir(parents=True, exist_ok=True)
+    series = {'key': key, **({'engine_host': host} if host else {})}
+    (path / 'result.json').write_text(json.dumps({'complete': True, 'policy_id': policy, 'samples_per_task': samples,
+                                                  'series': series, 'engine': {'export_format': fmt}}))
+    return path / 'result.json'
+
+
+def test_a_dgx_cycle_measures_on_the_dgx_through_the_ledger_and_re_measures_a_pop_start(tmp_path, monkeypatch):
+    """--held-profile dgx was accepted but measured on Pop; popbase wrote held/start from Pop beside the candidate."""
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin'), '--held-every', '1']
+    cycle = ei.Cycle(_cycle_args(argv))
+    assert cycle.held_host == 'dgx' and cycle.a.held_samples == 4 and cycle.base_unit() == 'sft-v10-heldbase'
+    pop_start = _held_result(cycle.held / 'start', fmt='sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3')
+    (cycle.dir / 'sft').mkdir()
+    (cycle.dir / 'sft' / 'checkpoint.pt').write_bytes(b'candidate')
+    monkeypatch.setattr(ei.Cycle, 'reference', lambda self: {'checkpoint': '/v9.pt'})
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: False)
+    monkeypatch.setattr(ei, 'pop_reachable', lambda: pytest.fail('a DGX cycle never waits for Pop'))
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda *a: pytest.fail('a DGX cycle never measures on Pop'))
+    import natlang_neuralese.common.hashing as hashing
+    monkeypatch.setattr(hashing, 'sha256_file_hex_cached', lambda path: 'h' * 64)
+    units = []
+
+    def ledger(self, unit, budget, priority, command, log, detach=False, workdir=None, repo=None):
+        units.append((unit, budget, priority, command, repo))
+        _held_result(Path(command[command.index('--out') + 1]), host='dgx', policy='h' * 64)
+    monkeypatch.setattr(ei.Cycle, 'ledger', ledger)
+    cycle.held_stage()
+    names = [u[0] for u in units]
+    assert names == ['sft-v10-held-candidate', 'sft-v10-held-start']       # the Pop start is re-measured here
+    unit, budget, priority, command, repo = units[0]
+    assert command[1] == str(Path(ei.__file__).resolve()) and command[2] == 'dgx-held' and repo == cycle.held_pin
+    assert command[command.index('--samples') + 1] == '4' and budget == ei.held_budget_gb() == 32   # fits beside a collection
+    assert [p.name for p in cycle.held.iterdir() if p.name.startswith('start-pop-')]   # kept aside, not paired
+    assert json.loads(pop_start.read_text())['series']['engine_host'] == 'dgx'      # held/start is the DGX one now
+    assert json.loads((cycle.dir / 'stages' / 'held.done').read_text())['profile'] == 'dgx'
+
+
+def test_held_reuse_and_the_latest_base_never_cross_hosts(tmp_path):
+    pop = _held_result(tmp_path / 'a', fmt='sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3')
+    dgx_old = _held_result(tmp_path / 'b')                     # predates engine_host: placed by its export format
+    dgx = _held_result(tmp_path / 'c', host='dgx')
+    assert ei.reusable_held([pop], 'p', 4, 'k', host='dgx') is None      # one key (an old pin), another host
+    assert ei.reusable_held([pop, dgx_old], 'p', 4, 'k', host='dgx') == dgx_old
+    assert ei.reusable_held([dgx, pop], 'p', 4, 'k', host='pop') == pop
+    bases = [_held_result(tmp_path / f'base{i}', policy=ei.BASE_SHA, host=h, fmt=f)
+             for i, (h, f) in enumerate([(None, 'sglang-pop-rtx4060-x'), ('dgx', 'sglang-hf-x')])]
+    os.utime(bases[0], (5, 5))
+    os.utime(bases[1], (1, 1))
+    assert ei.latest_base(bases, 4, 'pop') == bases[0].parent and ei.latest_base(bases, 4, 'dgx') == bases[1].parent
+
+
+def test_compare_refuses_a_pop_result_against_a_dgx_one():
+    from natlang_neuralese.rl import held_eval
+    sample = {'task_id': 't', 'sample': 0, 'ran': True, 'scored': True, 'success': True, 'outcome': 'pass'}
+
+    def result(**kw):
+        return {'complete': True, 'policy_id': 'p', 'series': {'key': 'k'}, 'samples': [sample], 'ran': 1, 'scored': 1,
+                'successes': 1, 'loop_rate': 0, **kw}
+    pop = result(engine={'engine': 'sglang', 'export_format': 'sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3'})
+    dgx = result(engine={'engine': 'sglang', 'export_format': 'sglang-hf-bfloat16-vendor-projection-kv-fp8_e4m3'})
+    assert held_eval.engine_host_of(pop) == 'pop' and held_eval.engine_host_of(dgx) == 'dgx'
+    assert held_eval.engine_host_of({**dgx, 'series': {'key': 'k', 'engine_host': 'colab_g4'}}) == 'colab_g4'
+    with pytest.raises(ValueError, match='different engine hosts'):
+        held_eval.compare(pop, dgx)
+
+
+def test_the_dgx_series_key_has_its_host_and_pops_stays(monkeypatch):
+    from natlang_neuralese.rl.held_eval import series
+    monkeypatch.delenv('NATLANG_HELD_SERIES_HOST', raising=False)
+    legacy = series()
+    assert series(engine_host='pop') == legacy and 'engine_host' not in legacy
+    monkeypatch.setenv('NATLANG_HELD_SERIES_HOST', 'dgx')
+    assert series()['engine_host'] == 'dgx' and series()['key'] != legacy['key']
+
+
+def test_a_carried_pop_held_pin_starts_the_dgx_series_on_the_cycles_own_pin_and_the_next_cycle_carries_it(tmp_path):
+    """sft-v9's driver launches sft-v10 with --held-pin pin-5b58 (its Pop series) and no host: that harness predates
+    host keys and is another machine's series."""
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', '/pin-own', '--held-pin', '/pin-5b58']
+    cycle = ei.Cycle(_cycle_args(argv))
+    assert cycle.held_pin == Path('/pin-own') and cycle.held_env['NATLANG_REPO'] == '/pin-own'
+    out = ei.next_cycle_argv(argv, directory=tmp_path / 'sft-v11', name='sft-v11', start='/v10.pt', start_sha='ccc',
+                             commit='d' * 40, previous='/sft-v10', prefer_unseen=[], fallback_prefer_unseen=[],
+                             held_pin=cycle.held_pin, held_series_host=cycle.held_host)
+    nxt = _cycle_args(out)
+    assert (nxt.held_pin, nxt.held_series_host) == ('/pin-own', 'dgx') and out.count('--held-pin') == 1
+    assert ei.Cycle(nxt).held_pin == Path('/pin-own')                       # the series stays fixed from here on
+    pop = ei.Cycle(_cycle_args([*argv, '--held-profile', 'pop']))
+    assert pop.held_pin == Path('/pin-5b58') and pop.held_host == 'pop' and pop.a.held_samples == 2
+
+
+def test_dgx_held_serves_the_pinned_engine_claims_priority_and_measures_on_the_training_law(tmp_path, monkeypatch):
+    out, pin = tmp_path / 'held' / 'candidate', tmp_path / 'pin'
+    manifest = tmp_path / 'held-v3' / 'manifest.json'
+    manifest.parent.mkdir()
+    manifest.write_text('{}')
+    (manifest.parent / 'engine.json').write_text(json.dumps({'serve_args': ['--engine', 'sglang', '--sglang-projection',
+                                                                            'vendor', '--sglang-kv-cache-dtype', 'fp8_e4m3']}))
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    launched, claims = [], []
+
+    class Proc:
+        pid = 4321
+
+        def __init__(self, argv, **kw):
+            launched.append((argv, kw['env']))
+
+        def poll(self):
+            return 0
+    monkeypatch.setattr(ei.subprocess, 'Popen', Proc)
+    monkeypatch.setattr(ei, 'wait_actor', lambda url, sha, process, log, timeout=3600: {})
+
+    def run(argv, **kw):
+        claims.extend(ei.held_priority_claims(tmp_path / 'prio'))
+        launched.append((argv, kw['env']))
+        return subprocess_result(0)
+    import subprocess as sp
+    subprocess_result = lambda rc: sp.CompletedProcess([], rc)
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    monkeypatch.setattr(ei.signal, 'signal', lambda *a: None)
+    args = argparse.Namespace(out=str(out), checkpoint='/c.pt', policy_id='h' * 64, samples=4, slots=16, kv_gb=3,
+                              max_running=16,
+                              held_pin=str(pin), manifest=str(manifest), label='sft-v10-candidate',
+                              unit='sft-v10-held-candidate')
+    assert ei.dgx_held(args) == 0
+    serve, env = launched[0]
+    assert serve[1] == str(pin / 'scripts/neuralese_data/serve_native_checkpoint.py') and env['NATLANG_REPO'] == str(pin)
+    assert serve[serve.index('--sglang-projection') + 1] == 'vendor' and '--sglang-overlap-schedule' not in serve
+    # the pinned args first, the beside-collection size after them (argparse: the last value wins)
+    assert serve[len(serve) - 1 - serve[::-1].index('--sglang-kv-gb') + 1] == '3'
+    assert serve[len(serve) - 1 - serve[::-1].index('--sglang-max-running') + 1] == '16'
+    measure, env = launched[1]
+    assert measure[1:4] == ['-m', 'natlang_neuralese.rl.held_eval', 'measure'] and '--allow-other-engine' not in measure
+    assert measure[measure.index('--samples') + 1] == '4' and measure[measure.index('--top-p') + 1] == '0.95'
+    assert measure[measure.index('--max-model-requests') + 1] == '40'
+    assert env['NATLANG_HELD_SERIES_HOST'] == 'dgx' and claims and claims[0]['unit'] == 'sft-v10-held-candidate'
+    assert not list((tmp_path / 'prio').iterdir())             # the claim ends with the measurement
+
+
+def test_pop_held_subcommand_measures_on_the_profile_it_is_given(tmp_path, monkeypatch):
+    measured = []
+    monkeypatch.setattr(ei.Cycle, 'dgx_held', lambda self, name, checkpoint: measured.append(('dgx', name)))
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda self, name, checkpoint: measured.append(('pop', name)))
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: None)
+    args = dict(dir=str(tmp_path), pin=str(tmp_path / 'pin'), held_samples=4, after=None, no_held_reuse=False,
+                held_base=False, held_slots=64, name='sft-v10', start='/v9.pt')
+    ei.pop_held(argparse.Namespace(held_profile='dgx', **args))
+    ei.pop_held(argparse.Namespace(held_profile='pop', **args))
+    assert measured == [('dgx', 'start'), ('pop', 'start')]
+
+
+def test_the_gate_never_waits_for_a_held_eval_and_a_late_rejection_is_judged_at_the_held_stage(tmp_path, monkeypatch):
+    """Training never waits: the DGX held of the previous candidate may still run when this cycle's collection ends."""
+    cycle = _speculative_cycle(tmp_path, None)
+    cycle.a.held_every, cycle.a.held_every_max, cycle.a.since_held = 2, 8, 0
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: pytest.fail('the gate waited'))
+    cycle.gate_stage()
+    assert cycle.gate()['verdict_pending'] and cycle.train_policy() == ('/v7.pt', 'cand', ['/v7/mix'])
+    assert cycle.collect_policy() == ('/v7.pt', 'cand')
+    prev = Path(cycle.a.speculative_after)
+    (prev / 'verdict.json').write_text(json.dumps({'verdict': 'neutral', 'adopt': False, 'vs_start': {},
+                                                   'next_start': '/v6.pt', 'reference': {'checkpoint': '/v6.pt'},
+                                                   'since_held': 0, 'held_every': 2}))
+    assert cycle.held_schedule() == (0, 1) and cycle.measured()           # the rejected lineage is judged now
+    assert cycle.reference() == {'checkpoint': '/v6.pt'}                    # against, and back to, the measured start
+
+
+def test_a_preempted_held_unit_is_joined_until_it_resumes_and_finishes(tmp_path, monkeypatch):
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    monkeypatch.setattr(ei.Cycle, 'reuse_held', lambda self, out, checkpoint: False)
+    import natlang_neuralese.common.hashing as hashing
+    monkeypatch.setattr(hashing, 'sha256_file_hex_cached', lambda path: 'h' * 64)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    launches, queue = [], iter([True, True, False])          # preempted: requeued twice, then relaunched by the ledger
+
+    def ledger(self, unit, budget, priority, command, log, **kw):
+        launches.append((unit, priority))
+    monkeypatch.setattr(ei.Cycle, 'ledger', ledger)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+
+    def queued(unit):
+        state = next(queue, False)
+        if state is False and not (cycle.held / 'candidate' / 'result.json').exists():
+            _held_result(cycle.held / 'candidate', host='dgx', policy='h' * 64)
+        return state
+    monkeypatch.setattr(ei, 'ledger_queued', queued)
+    cycle.dgx_held('candidate', tmp_path / 'c.pt')
+    assert launches == [('sft-v10-held-candidate', 'medium')]       # joined, not launched twice; below training's high

@@ -365,3 +365,21 @@ def test_drifted_successes_are_a_separate_admission_class():
     assert not sft_sources.drifted_success({**base, 'exact': True, 'served': {'exact': 3}})   # exact ones are exact
     assert fr.build_parser().parse_args(['generate', '--out', 'o', '--sglang', 's', '--export', 'e',
                                          '--render-tokenizer', 't']).admit_drifted == 'on'
+
+
+def test_claims_keep_generators_sharing_out_on_disjoint_episodes(tmp_path):
+    import os
+    assert fr.claim(tmp_path, 'e1')
+    assert fr.claim(tmp_path, 'e1')                  # this process already holds it
+    path = next(tmp_path.glob('*.claim'))
+    path.write_text(json.dumps({'pid': 1, 'host': os.uname().nodename}))       # pid 1 is not a generator: stale
+    assert fr.claim(tmp_path, 'e1')
+    path.write_text(json.dumps({'pid': os.getpid(), 'host': 'elsewhere'}))       # another host's live claim
+    assert not fr.claim(tmp_path, 'e1')
+    fr.release(tmp_path, 'e1')
+    assert fr.claim(tmp_path, 'e1')
+
+
+def test_finished_finds_a_key_in_fills(tmp_path):
+    (tmp_path / 'fills.jsonl').write_text(json.dumps({'schema': 's', 'key': 'teacher:a:1', 'chains': [1] * 100}) + '\n')
+    assert fr.finished(tmp_path, 'teacher:a:1') and not fr.finished(tmp_path, 'teacher:a:2')

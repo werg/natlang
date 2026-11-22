@@ -46,11 +46,16 @@ def test_decision_tokens_count_the_prompt_once_per_option():
 
 
 def _sync(tmp_path):
-    torch = pytest.importorskip('torch')
+    """A WeightSync without a learner or mapped slots: what release/restore/publish do around the actor, publishing the
+    start export (``publish_start``)."""
+    pytest.importorskip('torch')
     sync = object.__new__(grpo.WeightSync)
-    sync.header, sync.buffer = b'h', torch.zeros(8, dtype=torch.uint8)
-    sync.weights_dir, sync.sglang_url, sync.front_url = tmp_path, None, None
-    sync.thread, sync.last = None, {'version': 0, 'ok': True}
+    sync.export_dir, sync.weights_dir, sync.sglang_url, sync.front_url = tmp_path, tmp_path, None, None
+    sync.thread, sync.last, sync.released, sync.pending, sync.publishing = None, {'version': 0, 'ok': True}, None, None, None
+    sync.sentinel_ids, sync.slots, sync.staging = [], [], 0
+    sync.start_digests = {'weights_sha256': '1' * 64, 'tensor_identity': '2' * 64}
+    sync.last_good = {'version': 0, 'dir': str(tmp_path), 'policy_id': 'a' * 64, 'slot': None, **sync.start_digests}
+    sync.pending = {'kind': 'start', 'policy_id': 'a' * 64}
     return sync
 
 
@@ -67,7 +72,7 @@ def test_a_checkpoint_write_failure_keeps_the_actor_update(tmp_path):
 def test_a_publish_failure_is_this_versions_failure(tmp_path):
     """An exception in the publish thread used to leave the previous version's ok in ``last`` (the loop went on)."""
     sync, done = _sync(tmp_path), []
-    sync.buffer, sync.front_url = None, 'http://127.0.0.1:9'    # the served weights' digest fails
+    sync.pending = None                       # nothing to publish: the thread raises
     sync.publish(4, lambda version, ok: done.append((version, ok)))
     sync.wait()
     assert done == [(4, False)] and sync.last['version'] == 4 and not sync.last['ok']
@@ -102,6 +107,7 @@ def test_a_released_actor_resumes_before_its_weight_update(tmp_path, monkeypatch
     assert calls[0][1] == {'tags': ['kv_cache', 'weights', 'cuda_graph']}
     assert done == [(5, True)] and sync.released is None and 'actor_resume_s' in sync.last
     calls.clear()
+    sync.pending = {'kind': 'start', 'policy_id': 'a' * 64}
     sync.publish(6, lambda version, ok: None)   # not released: no resume
     sync.wait()
     assert [c[0] for c in calls] == ['pause_generation', 'update_weights_from_disk', 'continue_generation']
@@ -117,7 +123,8 @@ def test_a_skipped_update_restores_the_released_actor_on_its_served_weights(tmp_
     calls.clear()
     sync.restore(3)
     assert [c[0] for c in calls] == ['resume_memory_occupation', 'update_weights_from_disk', 'continue_generation']
-    assert calls[1][1]['model_path'] == str(tmp_path) and sync.released is None
+    assert calls[1][1]['model_path'] == str(tmp_path) and calls[1][1]['weight_version'] == '0'   # the last good version
+    assert sync.released is None
 
 
 def test_a_failed_release_continues_generation(tmp_path, monkeypatch):
@@ -141,111 +148,6 @@ def test_no_actor_sync_releases_nothing(tmp_path, monkeypatch):
     sync = _sync(tmp_path)
     sync.released = None
     assert sync.release(['kv_cache']) == 0. and calls == [] and sync.released is None
-
-
-def _export(tmp_path, model, extra):
-    torch = pytest.importorskip('torch')
-    from safetensors.torch import save_file
-    export = tmp_path / 'export'
-    export.mkdir()
-    tensors = {name: torch.zeros_like(p) for name, p in model.named_parameters()}
-    tensors.update(extra)
-    save_file(tensors, str(export / 'model.safetensors'), metadata={'format': 'pt'})
-    (export / 'config.json').write_text('{}')
-    return export
-
-
-def _tiny_model(torch):
-    model = torch.nn.Module()
-    model.model = torch.nn.Module()
-    model.model.embed_tokens = torch.nn.Embedding(6, 4).to(torch.bfloat16)
-    model.layer = torch.nn.Linear(4, 3, bias=False).to(torch.bfloat16)
-    return model
-
-
-def test_weight_sync_serves_the_snapshot_from_the_mapped_export_file(tmp_path):
-    """One host copy: the snapshot lands in the actor's export file itself (no pinned buffer written out per publish),
-    the producer table keeps its exported values, and the native checkpoint's views leave the served weights alone."""
-    torch = pytest.importorskip('torch')
-    from safetensors import safe_open
-    model = _tiny_model(torch)
-    producer = torch.arange(10, dtype=torch.float32).reshape(2, 5).to(torch.bfloat16)
-    export = _export(tmp_path, model, {'producer.weight': producer})
-    sync = grpo.WeightSync(model, export, None, tmp_path / 'weights')
-    assert (tmp_path / 'weights' / 'config.json').exists()
-    embed, layer = 'model.embed_tokens.weight', 'layer.weight'
-    live = dict(model.named_parameters())
-    with torch.no_grad():
-        live[layer].add_(1)
-    sync.snapshot()
-    with safe_open(str(tmp_path / 'weights' / 'model.safetensors'), 'pt') as handle:
-        assert torch.equal(handle.get_tensor(layer), live[layer].detach())
-        assert torch.equal(handle.get_tensor(embed), live[embed].detach())
-        assert torch.equal(handle.get_tensor('producer.weight'), producer)
-    backbone = sync.backbone()
-    assert backbone[layer].untyped_storage().nbytes() == live[layer].numel() * 2      # its own storage, as a clone's
-    served = backbone[embed].clone()
-    path = tmp_path / 'checkpoint.pt'
-    native_rows = {'embedding_rows': torch.full((1, 4), 7.).to(torch.bfloat16), 'tied_head': True, 'names': [embed, layer]}
-    state = {'schema': 's', 'model_config': {}, 'interface_state': {}, 'step': 1}
-    grpo.write_pruned_checkpoint(state, native_rows, [2], path, 'sha', backbone)
-    assert torch.equal(sync.backbone()[embed], served)            # the served weights untouched
-    saved = torch.load(path, weights_only=False)['backbone_state']
-    assert torch.equal(saved[embed][2], native_rows['embedding_rows'][0]) and torch.equal(saved[layer], live[layer].detach())
-    assert saved['lm_head.weight'] is saved[embed]
-    done = []
-    sync.publish(1, lambda version, ok: done.append((version, ok)))
-    sync.wait()
-    assert done == [(1, True)]
-    sync.close()     # a registration left behind makes a later test's cudaHostRegister of the reused range fail
-
-
-def test_weight_sync_publishes_the_producer_table_from_the_trained_embedding(tmp_path):
-    """The producer table is the embedding (no producer adapter): kept at the export's start values it served stale rows
-    to every Neuralese text write after step 1. It follows the embedding, stays out of the native checkpoint's backbone,
-    and ``producer_from_embedding=False`` keeps the exported table."""
-    torch = pytest.importorskip('torch')
-    from safetensors import safe_open
-    model = _tiny_model(torch)
-    start = torch.full((6, 4), 3.).to(torch.bfloat16)
-    export = _export(tmp_path, model, {grpo.PRODUCER_TABLE: start})
-    live = dict(model.named_parameters())
-    with torch.no_grad():
-        live[grpo.EMBEDDING].add_(1)
-    for follow, directory in ((True, 'follow'), (False, 'frozen')):
-        sync = grpo.WeightSync(model, export, None, tmp_path / directory, producer_from_embedding=follow)
-        sync.snapshot()
-        with safe_open(str(tmp_path / directory / 'model.safetensors'), 'pt') as handle:
-            table = handle.get_tensor(grpo.PRODUCER_TABLE)
-            assert torch.equal(handle.get_tensor(grpo.EMBEDDING), live[grpo.EMBEDDING].detach())
-        assert torch.equal(table, live[grpo.EMBEDDING].detach() if follow else start)
-        assert grpo.PRODUCER_TABLE not in sync.backbone() and grpo.EMBEDDING in sync.backbone()
-        sync.close()
-    assert grpo.producer_adapter_keys({'input_rows': 0, 'adapter.up.weight': 0}) == ['adapter.up.weight']
-
-
-def test_reference_weights_load_into_the_policy_and_restore_it_exactly(tmp_path):
-    torch = pytest.importorskip('torch')
-    model = _tiny_model(torch)
-    live = dict(model.named_parameters())
-    start = {name: p.detach().clone() for name, p in live.items()}
-    path = tmp_path / 'reference.safetensors'
-    reference = grpo.ReferenceWeights(path, live, {'source_sha256': 'a'})
-    written = path.stat().st_mtime_ns
-    grpo.ReferenceWeights(path, live, {'source_sha256': 'a'})          # the same start policy: reused as it is
-    assert path.stat().st_mtime_ns == written
-    masters = {name: (p.float() + torch.randn(p.shape) * 0.3) for name, p in live.items()}   # the policy moved on
-    with torch.no_grad():
-        for name, p in live.items():
-            p.copy_(masters[name])
-    policy = {name: p.detach().clone() for name, p in live.items()}
-    reference.load_into(live)
-    assert all(torch.equal(live[name], start[name]) for name in live)
-    grpo.ReferenceWeights.restore(live, masters)
-    assert all(torch.equal(live[name], policy[name]) for name in live)
-    assert dict(reference.tensors()).keys() == live.keys()
-    grpo.ReferenceWeights(path, live, {'source_sha256': 'b'})          # another start policy: rewritten
-    assert torch.equal(dict(reference.tensors())['layer.weight'], policy['layer.weight'])
 
 
 def test_pruned_groups_keep_their_rollouts_compressed(tmp_path):
@@ -378,6 +280,68 @@ def test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero
     assert abs(np.mean(pushes)) < 4 * np.std(pushes) / math.sqrt(len(pushes))
 
 
+def test_close_probability_and_twin_kl_read_the_trained_head_rows():
+    """The learner's logits use the trainable Neuralese rows at their ids (tied head); the frozen head's rows there
+    are stale from step 1. Both diagnostics must see the effective head."""
+    import torch
+    torch.manual_seed(3)
+    vocab, close = 11, 3
+    h = torch.randn(20, 8)
+    weight = torch.randn(vocab, 8)
+    rows = torch.randn(2, 8, requires_grad=True)
+    ids = torch.tensor([close, 7])               # </think> itself is one of the trained ids here
+    effective = weight.clone()
+    effective[ids] = rows.detach()
+    positions = torch.arange(20)
+    logits = (h @ effective.T).log_softmax(-1)
+    targets = torch.tensor([7, 1] * 10)
+    target_logp = logits.gather(1, targets[:, None])[:, 0]
+    p_close = grpo.close_probability(h, positions, weight, targets, target_logp, close, trainable=(ids, rows))
+    assert p_close.tolist() == pytest.approx(logits[:, close].exp().tolist(), rel=1e-4)
+    stale = grpo.close_probability(h, positions, weight, targets, target_logp, close)
+    assert not torch.allclose(stale, p_close)
+    top = torch.tensor([[close, 7, 0]] * 20)
+    teacher = torch.log_softmax(torch.randn(20, 3), -1) - 0.1
+    fkl = grpo.twin_forward_kl(h, positions, weight, targets, target_logp, top, teacher, trainable=(ids, rows))
+    p_t = teacher.exp()
+    tail_t = 1 - p_t.sum(-1)
+    p_s = logits.gather(1, top).exp()
+    exact = (p_t * (teacher - p_s.log())).sum(-1) + tail_t * (tail_t.log() - (1 - p_s.sum(-1)).log())
+    assert fkl.tolist() == pytest.approx(exact.tolist(), rel=1e-4, abs=1e-6)
+    fkl.sum().backward()
+    assert rows.grad is not None and rows.grad.abs().sum() > 0       # the twin term reaches the trained rows
+
+
+def test_interface_with_rows_writes_the_trained_marker_and_override_rows():
+    import torch
+    interface = {'input_rows': torch.zeros(2, 4, dtype=torch.bfloat16), 'output_rows': None,
+                 'extra_input_rows': torch.zeros(1, 4, dtype=torch.bfloat16), 'extra_output_rows': None}
+    rows = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+    out = grpo.interface_with_rows(interface, torch.tensor([9, 5, 6]), rows, (5, 6), (9,))
+    assert torch.equal(out['input_rows'], rows[1:].to(torch.bfloat16))
+    assert torch.equal(out['extra_input_rows'], rows[:1].to(torch.bfloat16))
+    assert out['output_rows'] is None and out['extra_output_rows'] is None and interface['input_rows'].sum() == 0
+
+
+def test_a_resume_refuses_another_base_and_a_full_ft_state(tmp_path):
+    state = tmp_path / 'state'
+    learner = state / 'learner-state'
+    learner.mkdir(parents=True)
+    (learner / 'learner_manifest.json').write_text(json.dumps({'base_weights_sha256': 'b' * 64}))
+    grpo.refuse_legacy_resume(learner, state, 'b' * 64)
+    with pytest.raises(SystemExit, match='trained on base'):
+        grpo.refuse_legacy_resume(learner, state, 'c' * 64)
+    (learner / 'learner_manifest.json').write_text(json.dumps({'base_weights_sha256': ''}))   # unrecorded base
+    with pytest.raises(SystemExit, match='unrecorded'):
+        grpo.refuse_legacy_resume(learner, state, 'b' * 64)
+    old = tmp_path / 'old'
+    old.mkdir()
+    (old / 'training-state.safetensors').write_bytes(b'x')
+    with pytest.raises(SystemExit, match='full-FT training state'):
+        grpo.refuse_legacy_resume(old / 'learner-state', old, 'b' * 64)
+    grpo.refuse_legacy_resume(tmp_path / 'fresh' / 'learner-state', tmp_path / 'fresh', 'b' * 64)   # nothing: fresh
+
+
 def test_tail_guard_masks_only_tail_tokens_of_positive_episodes():
     import torch
     rho = torch.tensor([1., 3., .5, 1.])
@@ -407,7 +371,7 @@ def test_think_mask_and_moment_cosine():
 
 
 def test_prefix_tree_over_a_subset_maps_back_to_the_steps_chains():
-    import lfm3_fast_train
+    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     system = np.arange(10)
     chains = [np.concatenate([system, [50 + i] * 4]) for i in range(3)] + [np.arange(30, 40)]
     keep = [0, 2, 3]                      # chain 1 reads imported state: it stays whole
@@ -608,88 +572,6 @@ def test_replay_bench_keeps_short_groups_only(tmp_path):
     assert branch.take_groups(2, 2, stop) == [2, 3]           # a resumed replay continues after its state's groups
 
 
-def test_reference_tensors_hold_no_mapping_of_the_file(tmp_path):
-    """Each reference tensor is its own buffer: a kept tensor must not keep a mapping of the whole file (a private
-    mapping the GPU copy made anonymous held 3.4 GB in grpo-v3-run1's learner between steps)."""
-    torch = pytest.importorskip('torch')
-    live = dict(_tiny_model(torch).named_parameters())
-    path = tmp_path / 'reference.safetensors'
-    reference = grpo.ReferenceWeights(path, live, {'source_sha256': 'a'})
-    kept = list(reference.tensors())
-    assert [name for name, _ in kept] == list(live)
-    for name, tensor in kept:
-        assert tensor.dtype == torch.bfloat16 and torch.equal(tensor, live[name].detach())
-        assert tensor.untyped_storage().nbytes() == tensor.numel() * 2      # not a view of a whole-file storage
-    assert str(path) not in Path('/proc/self/maps').read_text()
-    path.write_bytes(path.read_bytes()[:-2])                                # a truncated file is refused
-    with pytest.raises(ValueError, match='ends inside tensor'):
-        list(reference.tensors())
-
-
-def test_moment_offload_round_trips_bit_exactly_and_frees_the_moments(tmp_path):
-    """MomentOffload: after ``put`` the moments hold no storage; ``get`` restores the same tensor objects bit for bit, after
-    an in-flight saver that reads them has finished."""
-    torch = pytest.importorskip('torch')
-    if not torch.cuda.is_available():
-        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
-    generator = torch.Generator(device='cuda').manual_seed(0)
-    tensors = [torch.randn(shape, device='cuda', generator=generator) for shape in ((300, 7), (5,), (1 << 20,))]
-    tensors[1][0] = float('nan')                        # bit-exact means bit-exact
-    expected = [t.clone() for t in tensors]
-    ids = [id(t) for t in tensors]
-    order = []
-
-    class Saver:                                         # a background state save that reads the moments
-        def wait(self):
-            order.append(('saver', all(t.untyped_storage().nbytes() > 0 for t in tensors)))
-
-    offload = grpo.MomentOffload(tmp_path / 'moments.offload', staging_mb=1)   # several staging chunks per tensor
-    offload.put(tensors, after=Saver())
-    offload.wait()
-    assert order == [('saver', True)]
-    assert all(t.untyped_storage().nbytes() == 0 for t in tensors)
-    assert (tmp_path / 'moments.offload').stat().st_size == sum(t.numel() * 4 for t in expected)
-    assert offload.get() >= 0 and offload.get() < 1 and not offload.out   # a second get is a no-op
-    assert [id(t) for t in tensors] == ids
-    for t, e in zip(tensors, expected):
-        assert torch.equal(t.view(torch.int32), e.view(torch.int32))
-
-
-def test_a_failed_moment_offload_write_keeps_the_moments_resident(tmp_path):
-    torch = pytest.importorskip('torch')
-    if not torch.cuda.is_available():
-        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
-    (tmp_path / 'file').write_text('')
-    tensors = [torch.arange(10., device='cuda')]
-    offload = grpo.MomentOffload(tmp_path / 'file' / 'moments.offload', staging_mb=1)   # a parent that is a file
-    offload.put(tensors)
-    assert offload.get() < 1 and not offload.out and "put_error" in offload.last
-    assert torch.equal(tensors[0], torch.arange(10., device='cuda'))
-
-
-def test_moments_a_resume_loaded_go_out_to_the_offload_file_and_come_back_exactly(tmp_path):
-    """offload_loaded_moments: a resume's resident moments are put out at once (the first step after a resume kept them
-    resident: +13.6 GB, grpo-v4-run2 step 23); a fresh run before its first optimizer step has none and puts nothing."""
-    torch = pytest.importorskip('torch')
-    if not torch.cuda.is_available():
-        pytest.skip('MomentOffload stages through pinned memory and a CUDA stream')
-    masters = {'a': torch.randn(64, 33, device='cuda', requires_grad=True), 'b': torch.randn(9, device='cuda', requires_grad=True)}
-    optimizer = torch.optim.AdamW(list(masters.values()), lr=1e-3, fused=True)
-    offload = grpo.MomentOffload(tmp_path / 'moments.offload', staging_mb=1)
-    assert grpo.offload_loaded_moments(offload, optimizer, masters, list(masters)) is False
-    assert not offload.out and offload.thread is None
-    for p in masters.values():
-        p.grad = torch.randn_like(p)
-    optimizer.step()
-    expected = [t.clone() for t in grpo.moment_tensors(optimizer, masters, list(masters))]
-    assert grpo.offload_loaded_moments(offload, optimizer, masters, list(masters)) is True
-    offload.wait()
-    assert offload.out and all(t.untyped_storage().nbytes() == 0 for t in grpo.moment_tensors(optimizer, masters, list(masters)))
-    offload.get()
-    for t, e in zip(grpo.moment_tensors(optimizer, masters, list(masters)), expected):
-        assert torch.equal(t.view(torch.int32), e.view(torch.int32))
-
-
 def test_free_cuda_cache_returns_what_the_garbage_collection_frees(monkeypatch):
     """A tensor kept alive only by a reference cycle is freed by ``gc.collect`` into PyTorch's cache: an ``empty_cache``
     that ran first left it reserved (the post-optimizer read of grpo-v4-run2: 31-43 GB reserved, 24 GB live)."""
@@ -710,20 +592,6 @@ def test_free_cuda_cache_returns_what_the_garbage_collection_frees(monkeypatch):
         assert fixed['gc_freed_gb'] >= 0.24 and fixed['reserved_gb'] < 0.1
     finally:
         gc.enable()
-
-
-def test_state_saver_writes_a_safetensors_file_that_loads_back_exactly(tmp_path, monkeypatch):
-    torch = pytest.importorskip('torch')
-    if not torch.cuda.is_available():
-        pytest.skip('StateSaver stages through pinned memory and a CUDA stream')
-    from safetensors.torch import load_file
-    monkeypatch.setattr(grpo, 'CACHE_DROP_BYTES', 1 << 20)   # several flush-and-drop rounds
-    tensors = {'master/a': torch.randn(700, 1000, device='cuda'), 'exp_avg/b': torch.randn(3, device='cuda')}
-    saver = grpo.StateSaver(staging_mb=1)
-    saver.save(tmp_path / 'state.safetensors', tensors, {'step': '3'})
-    saver.wait()
-    loaded = load_file(str(tmp_path / 'state.safetensors'))
-    assert set(loaded) == set(tensors) and all(torch.equal(loaded[k], tensors[k].cpu()) for k in tensors)
 
 
 def test_a_second_think_close_and_what_follows_up_to_the_action_are_never_reinforced():

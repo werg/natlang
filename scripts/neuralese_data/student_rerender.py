@@ -46,6 +46,11 @@ VENV_PY = REPO / '.venv-neuralese/bin/python'
 PYTHONPATH = f'{REPO}/training/neuralese:{REPO}'
 
 
+
+def _corpus_root(entry):
+    from natlang_neuralese.common import corpus_registry
+    return corpus_registry.entry_root(entry, REPO)
+
 def _registry():
     sys.path.insert(0, str(REPO / 'training/neuralese'))
     from natlang_neuralese.common import corpus_registry
@@ -190,7 +195,7 @@ def plan(args):
                 continue
             if entry['id'] in items and items[entry['id']].get('status') not in (None, 'blocked', 'missing-source'):
                 continue
-            path = REPO / entry['path']
+            path = _corpus_root(entry)
             out = REPO / args.out_root / entry['id']
             item = {'id': entry['id'], 'new_id': new_id, 'path': entry['path'], 'out': rel(out),
                     'tier': args.tier_external if entry['id'].startswith('external-expansion') else 1,

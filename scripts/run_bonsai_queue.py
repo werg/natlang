@@ -802,6 +802,10 @@ class SharedChild:
         line, self._buffer = self._buffer.split(b'\n', 1)
         return line.decode()
 
+    # A server that died answers nothing (killed by its stall watchdog, cli.ts --stall-kill-seconds, or by the OOM
+    # killer): ``lost`` tells run_queue that the invocation ended without an exit of its own, an infrastructure failure.
+    lost = False
+
     def wait(self, timeout=None):
         if self.returncode is not None:
             return self.returncode
@@ -810,7 +814,8 @@ class SharedChild:
         except TimeoutError:
             raise subprocess.TimeoutExpired('shared collector', timeout)
         reply = json.loads(line) if line else {}
-        self.returncode = int(reply['exit']) if 'exit' in reply else 1   # a server that died answers nothing
+        self.lost = 'exit' not in reply
+        self.returncode = int(reply['exit']) if 'exit' in reply else 1
         self.connection.close()
         return self.returncode
 
@@ -1085,6 +1090,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     log.flush()
             if child is None:
                 child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
+            # NATLANG_COLLECTOR_FAILOVER=0 opts out of resuming an episode whose shared server died.
+            failover = os.environ.get('NATLANG_COLLECTOR_FAILOVER', '1') != '0'
             try:
                 for tick in range(math.ceil(case_seconds / repetition_poll_seconds)):
                     remaining = case_seconds - (time.monotonic() - start)
@@ -1093,6 +1100,23 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         raise subprocess.TimeoutExpired(command, case_seconds)
                     try:
                         code = child.wait(timeout=min(repetition_poll_seconds, remaining))
+                        if getattr(child, 'lost', False) and failover:
+                            # The shared server died under this invocation (its stall watchdog killed a blocked event
+                            # loop, or the OOM killer): an infrastructure failure, never the episode's outcome. The
+                            # episode resumes from its journal (saved replies replay, nothing is sampled twice) in its
+                            # own process, so the invocation that blocked the server can block only itself there (sft-v7
+                            # held candidate 2026-11-22: 8 co-hosted episodes of one blocked server timed out at 3600 s).
+                            failover = False
+                            record({'event': 'shared_collector_lost', 'key': entry['key'], 'time': time.time(),
+                                    'server_pid': getattr(child, 'server_pid', None),
+                                    'elapsed_seconds': round(time.monotonic() - start, 1),
+                                    'disposition': 'resumed from the journal in an own process'})
+                            log.write(json.dumps({'event': 'shared_collector_lost',
+                                                  'server_pid': getattr(child, 'server_pid', None)}) + '\n')
+                            log.flush()
+                            child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=child_env)
+                            code = child.wait(timeout=max(0.001, min(repetition_poll_seconds,
+                                                                     case_seconds - (time.monotonic() - start))))
                         break
                     except subprocess.TimeoutExpired:
                         now = time.monotonic()

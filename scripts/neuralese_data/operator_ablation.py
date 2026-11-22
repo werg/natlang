@@ -29,7 +29,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import exp0_sft  # noqa: E402
-import lfm3_fast_train  # noqa: E402
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train  # noqa: E402
 
 ARMS = ('actual', 'standalone', 'shuffled', 'text-cut')
 
@@ -138,11 +138,10 @@ def main():
     rows = Path(args.rows)
     manifest = json.loads((rows / 'manifest.json').read_text())
     produce_open = manifest['role_ids'][0]
-    model, state, _ = exp0_sft.load_model(args.checkpoint, args.base)
-    if sorted(k for k in state['interface_state'] if k.startswith('adapter.')):
+    from natlang_neuralese.train.lfm3_learner import load_effective_policy
+    model, state, _learner = load_effective_policy(args.checkpoint, args.base, device='cuda', dtype=torch.bfloat16)
+    if state and sorted(k for k in state['interface_state'] if k.startswith('adapter.')):
         raise SystemExit('the pass-through embeds producer spans with the embedding: a producer adapter is not modelled')
-    model.to(torch.bfloat16).eval()
-    lfm3_fast_train.prepare(model)
     wanted = set(args.sources.split(',')) if args.sources else None
     report = {'rows': str(rows), 'checkpoint': args.checkpoint, 'sources': {}}
     for name, entry in sorted(manifest['sources'].items()):

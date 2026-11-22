@@ -6454,3 +6454,670 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - DGX `/` was at 27 GB free (floor 40): deleted grpo-v4/run2's and grpo-v5/run1's `adam-moments.offload` (13.8 GB each;
   both GRPO runs ended, their FP32 states are on /mnt/external) and the unused pins 0722eb609f51 and 817c43c567de with
   prebase-0722eb609f51: 62 GB free.
+
+## 2026-11-22 01:30 fewer held evals, Pop rollouts (owner: "skip some evals and keep training and instead do roll outs"; "regression mainly means debugging -- we should be progressing")
+
+- **One held series** (`expert_iteration --held-pin`, carried to the next cycle): held evals keep one harness, so a
+  cycle's start is the previous candidate's measurement (reuse) and a cycle costs Pop one candidate held, never a
+  start re-measure. sft-v8 runs with `--held-pin ops/ei/pin-b17d5fd8527d` (sft-v7's series ba9aa56f); training,
+  collection and data keep their own pins.
+- **Held every 2nd cycle** (`--held-every 2`, default; 1 = every cycle): an unmeasured cycle adopts its candidate
+  (verdict `unmeasured`) and the pipeline trains on. A measured cycle is judged against the *reference*, the last
+  held-measured policy its training descends from (verdict.json `reference`; pop-held measures it, normally by
+  reuse), and a rejection rolls back to it. A failure verdict carries `debug`: a regression is a bug hunt, not a
+  routine rollback. sft-v8 is unmeasured; sft-v9 is measured against sft-v8's reference (sft-v7's candidate if its
+  verdict adopts it, else sft-v6).
+- **Pop rollouts** (default on, `--no-pop-fill`): once the cycle's popbase is done and the collect actor is up, Pop
+  serves the collected policy (32 running, FP8 KV) and `filled_reasoning generate` draws fills for this cycle's build
+  through an ssh tunnel, beside the DGX fill on the collect actor; stopped at the data stage, before any held eval of
+  the cycle. On 11-21 Pop alone filled ~45 episodes/h (14:00-19:00, the DGX fill window closed for sft-v7's SFT), about
+  the DGX actor's fill rate, so it roughly doubles fill supply, the cycle's bottleneck.
+- `filled_reasoning generate` claims each episode (OUT/claims/, O_EXCL; a dead process's claim is taken over) and
+  skips one another generator finished, so generators sharing OUT draw disjoint episodes (`--no-claims` opts out).
+- Tests: 57 pass (test_filled_reasoning, test_expert_iteration).
+- **Adaptive interval** (owner: "if we make progress somewhat reliably we should do evals less frequently than every
+  2"): each verdict records `since_held` and `held_every`. A measured success doubles the interval up to
+  `--held-every-max` (8), a neutral result returns it to `--held-every` (2) and a failure measures the next cycle too.
+  Tests: 43 pass.
+
+## 2026-11-22 02:30 shared collector: a runaway eval held s000 for an hour (eval run-time bound, stall watchdog, failover)
+
+**Observation.** sft-v7's candidate held eval (pin b17d5fd8527d, popheld-candidate-1795291994) had 9 episodes end as
+3600 s timeouts (start policy: 0). 8 of them ran on shared collector server s000 (pid 974965), started 00:29-00:38 and
+got no observation after ~00:38; s000.log ends at 00:38:30 with no `loop_stall` (logged only after a stall ends).
+
+**Root cause (established).** The last event in s000.log is a `teacher_action_frame` of attempt ee2623a3
+(s7-task-228-01, row-228): the model's eval (no `timeout_ms`) ran `find(allValues(nums))`, an unpruned recursive search
+over a 40-element list (each level tries every pair and 4 operators on 1 fewer element; the elements were arrays, so
+`+` built strings and the target test never held). Eval code runs synchronously in the shared node process
+(`environment.ts` VmRealm `runInContext`, a `timeout` only when the eval passes `timeout_ms`), so the event loop
+stopped: the other 7 invocations (058, 254, 199, 124, 020, 099, 175; each had sent its next request or was about to)
+never processed a reply. Every other attempt in the log tail continued after its last frame; ee2623a3 is the only one
+whose action frame is the last event. Nothing ended the stall (the memory bound did not trip: recursion depth <= 40,
+string growth only) until the client wall. The same mechanism shows in earlier logs: `loop_stall` of 2-67 min on
+2026-11-19..21 (4044 s, 1972 s, 1603 s, 1224 s, 351 s, ...) in /tmp/natlang-collector-1000/*/s*.log, each holding up to
+8 co-hosted episodes. The 9th timeout (s7-task-251-01, s002) is different: 31 turns, still replying ~5 min before the
+wall (not investigated further).
+
+**Consequence for sft-v7's verdict.** 7 of the candidate's failures (s7-task-058/254/199/124/020/099/175, sample 01)
+are harness failures, not policy outcomes; s7-task-228-01's own eval would have timed out alone. Re-measure those 7
+rows (or discount them) before reading sft-v7's candidate as a regression.
+
+**Fix (default on, opt-outs, targeted tests).**
+- *Eval run-time bound* (`native/eval-memory.ts` `syncGuard`, wired in `native/realm.ts`): one synchronous stretch of
+  eval code (up to its next `await`) may run 60 s (`NATLANG_EVAL_SYNC_SECONDS`, 0 off; `TypeScriptEnvironment`
+  `syncLimitSeconds`). It reuses the memory bound's guard calls (every loop iteration and function body) and the vm
+  interrupt covers the first stretch, builtins included (a backtracking regex). Over the bound the eval fails with a
+  one-sentence teaching error ("eval stopped: it computed for more than 60 s without pausing; use a bounded or faster
+  approach ..."), sticky for that eval; the episode continues. A smaller `timeout_ms` keeps its own error.
+  Callable-folder module code gets the same bound per synchronous run. 60 s is above the p90 of all logged stalls
+  (25 s; those include GC) and ends the hour-long ones.
+- *Stall watchdog* (`teacher/cli.ts` serve): a worker thread kills the server (SIGKILL, `loop_stall_kill` logged with
+  `writeSync` so a blocked loop cannot hold it) once the event loop has not ticked for 300 s
+  (`--stall-kill-seconds`, `NATLANG_COLLECTOR_STALL_KILL_SECONDS`, 0 off). It covers what the guard cannot interrupt.
+- *Failover* (`scripts/run_bonsai_queue.py`): a shared invocation whose connection closes without an exit (watchdog,
+  OOM killer) is `lost`; `run_queue` records `shared_collector_lost` and resumes the episode from its journal (saved
+  replies replay, nothing is sampled twice) in its own process, within the same case budget, once
+  (`NATLANG_COLLECTOR_FAILOVER=0` opts out). An invocation that blocked its server can then block only itself.
+- Tests: ts-host environment.test.mjs (incident-shaped search, stretch after await, catch-and-continue, regex, pausing
+  work passes, timeout_ms precedence, setting); tests/test_bonsai_queue.py (failover and opt-out; end to end through a
+  real shared server and a fake chat model: the bounded eval's error reaches the model's next request; with the bound
+  off the watchdog kills the blocked server in seconds and the client sees `lost`). 52 + env tests pass.
+
+**Consumers covered.** Every collector episode goes through `run_bonsai_queue.run_queue` -> `SharedChild`/own process
+and every node eval through `TypeScriptEnvironment`: held_eval measure (rl/held_eval.py:486), grpo collection
+(grpo.py:532), expert_iteration collect (exp1_collect.py:164), teacher_gen (teacher_gen.py:257), memetic_workspace,
+replenish_luna_held_shapes, run_reviewed_luna_dispatcher; collector.ts:1745, runtime/node.ts:46/268, node-runtime.ts:47.
+sft_sources replay already opts out of sharing (sft_sources.py:1032) and gets the eval bound. Left out: the browser
+TypeScriptEnvironment (browser/environment.ts, browser/index.ts:34): it hosts no co-hosted episodes and a runaway ends
+only the user's tab, as with the memory bound. function-effects.ts already bounds its calls (vm timeout 1 s, lines
+29/41/53); folder python has its 30 s watchdog (folder-python.ts:106/143); folder bash refuses open loops and caps
+loop iterations (folder-shell.ts:188/347). Pinned runtimes (b17d5fd8527d and the running sft-v8 pin) have none of
+this until their next pin; the failover needs only the new run_bonsai_queue.py and a dying server.
+
+## 2026-11-22 02:45, why sft-v7 gave no held gain: its teacher budget went to the pool's unseen tail; prefer-unseen is now per family (sft-v7 diagnosis strand)
+
+**Observed.** sft-v7 (from sft-v6) vs sft-v6 on held-v3, 2 samples, pin b17d5fd8: -0.2 pts, p 1.0, CI [-4.5, +3.7];
+tasks up 43, down 43; ran-out +1.76 pts; 9 timeouts vs 0.
+- **The ran-out rise is the timeouts:** budget exhaustion is 60 vs 60, and `ran_out_rate` counts the 9 unresolved
+  episodes.
+- **7 of the 9 timeouts are a harness stall** (02:30 entry, 32fdbad51): one model eval blocked shared collector s000
+  and froze 7 co-hosted episodes, 4 of which the start had solved. Without those 7 pairs the result is +0.6 pts, with
+  ran-out +0.4.
+- So sft-v7 is flat against sft-v6, where +2 to +5 was expected.
+- **Episodes got shorter at equal success:**
+
+  | metric | sft-v6 | sft-v7 |
+  |---|---|---|
+  | tokens per success | 10.8k | 8.9k |
+  | calls per success | 10.9 | 9.3 |
+  | reasoning per call, median | 1,637 ch | 1,410 ch |
+  | calls under 200 ch | 15.9% | 18.2% |
+
+  The base was at 1,899 ch.
+
+**Where sft-v6's gain sits and what sft-v7 trained** (held family groups, delta in pts):
+
+| family group | held eps | v6 - base | v7 - v6 | v6 teacher eps | v7 teacher eps |
+|---|---|---|---|---|---|
+| auth | 194 | +12.4 | -3.6 | 22.8% | 0.2% |
+| codebase | 98 | +10.2 | +2.0 | 12.1% | 26.1% |
+| ext other | 110 | +2.7 | 0.0 | 44.2% | 39.1% |
+| bgkit | 32 | 0.0 | -12.5 | 3.4% | 17.3% |
+| composed-Neuralese | 24 | -4.2 | 0.0 | 2.8% | 13.8% |
+
+- sft-v7's teacher episodes cover 167 families against sft-v6's 368. 20 families have about 289 tasks each, and the
+  top 25 families hold 74% of the episodes (sft-v6: 17%, at most 53 tasks a family). sft-v6 and sft-v7 share 7 tasks.
+- Teacher calls zero-weighted as text-backend detours: 44% (29,972 of 67,606) against 14% for sft-v6. Weighted teacher
+  target is 3.03M tokens against 4.26M, on the same 180M forward tokens.
+
+**Mechanism.** `--prefer-unseen` ordered every untrained episode before any trained one across the whole pool (the
+`breadth_first` rank's first key).
+- sft-v6 had used up the fresh teacher episodes of the small families: auth has 2,370 episodes over 2,367 tasks, about
+  one per task.
+- The fixed 180M budget was therefore filled by the unseen tail of a few generator families: bgkit, composed-Neuralese
+  and codebase. Their text-backend teacher runs are mostly masked detours.
+- The families where sft-v6's gain sits got no data.
+- Predicted: about 0 gain where the tail families add nothing new. A small decay on auth, where 38% of held-v3 sits,
+  for lack of reinforcement while the policy drifts elsewhere. Observed: flat overall, auth -3.6. Bgkit's -12.5 is on
+  32 episodes and is not readable.
+- The validation losses agree. Teacher NLL fell 0.404 -> 0.327. NLL on held-out own successes, mostly sft-v6's own
+  from this collection, rose 0.571 -> 0.575. The update moved toward the tail teachers' actions, not toward more of the
+  student's own successful behaviour.
+
+**Changed (default on, opt-out, tests).**
+- `sft_sources build --prefer-unseen-scope family` (default; `global` is the sft-v7 rule): untrained episodes still
+  come first within each task and within each family's breadth-first turn, but every family keeps its turns. A family
+  with no fresh episodes takes its turns with episodes the start already trained, a second epoch.
+- The ordering is now a module-level `breadth_first`. With nothing trained, both scopes give the same order (test).
+- **Rebuilt on sft-v7's exact inputs** (`ops/ei/sft-v7/mix-familyscope`, unit `sftsrc-familyscope-v7-1`):
+
+  | | sft-v7 build | family scope |
+  |---|---|---|
+  | teacher families | 167 | 366 |
+  | largest family | 289 tasks | 62 tasks |
+  | top-25 share | 74% | 20% |
+  | auth | 0.2% | 22.1% |
+  | detour calls | 30.0k | 11.4k |
+  | weighted teacher tokens | 3.03M | 3.89M (+29%) |
+
+  3,978 of its 7,648 teacher episodes are second epochs of sft-v6's. Loss shares are unchanged (teacher 0.48, own
+  0.34). It has 35,618 chains.
+- `expert_iteration` next-cycle launch: `--prefer-unseen` is the lineage (`lineage_builds`: this mix plus every build
+  its start trained). Before, it was this mix alone, so a cycle training sft-v7's candidate would have treated sft-v6's
+  build as unseen.
+- Tests: `test_prefer_unseen_family_scope_...`, `test_lineage_builds_...`; 90 passed (test_sft_sources and
+  test_expert_iteration).
+
+**For sft-v8 (supervisor).**
+- sft-v8's build runs `--data-repo ops/ei/pin-2946f13981cd`, which predates this commit. The new default enters only
+  if the driver restarts with `--data-repo` (and `--fill-repo`) at a pin of this commit or later. Both are own flags,
+  and stages resume.
+- If sft-v7's candidate is adopted, sft-v8's `--prefer-unseen` should also name `/home/werg/natlang/runs/sft-mix-20261120-v2`.
+- The verdict 'neutral, not adopted' rests on the 7 stalled pairs: -0.2 and ran-out +1.76 with them, +0.6 and +0.4
+  without. Under the neutral rule (point estimate > 0, ran-out <= +2) the corrected result adopts. Re-measuring the 7
+  rows on Pop would settle it.
+
+**Dragnet** (checked, with evidence):
+- Masking: teacher think through `</think>` and lead-in are context (`serve/targets.non_student_context`). Detours are
+  zero weight (`rendered_row`). Own replies train in full. Context masks: 16 second-close rows, as in sft-v6.
+- Rendering: the mix was rendered at the held pin b17d5fd8, own rows from exact replays.
+- Loss weighting: own share 0.34 over 235 episodes (about 26x a teacher episode's weight each). 105 of the 235 are
+  on-policy (sft-v6) and 130 come from older GRPO policies. Top 1% of tasks hold 0.278 of the loss.
+- LR and steps: the same schedule as sft-v6 (peak 4.98e-6, cosine to 5e-7, 187 steps). Grad norm median 1.48 against
+  clip 1.0, so most steps clip in both runs.
+- Ambient TM: 46 of 187 steps toward the start, tm_kl median 0.008 (sft-v6: 0.08 toward the base). This damps
+  movement both ways; it predicts no direction.
+- Eval: same code, series, engine and manifest; the timeouts are the harness stall.
+
+**Not checked:** token-level identity between training renders and held prompts; whether a second epoch on sft-v6's
+teacher episodes helps more than fresh tail episodes (first principles: it restores the family balance that produced
+sft-v6's gain; the next held eval judges it); per-task held effects beyond family groups (2 samples, noise ~±8 pts per
+family); the 2 timeouts that are not the stall (s7-task-228-01 is the blocking eval's own episode; s7-task-251-01 was
+a long episode).
+
+## 2026-11-22 02:15 sft-v7 adopted after the stall correction; sft-v8 on the family-scope build
+
+- sft-v7's verdict was neutral and not adopted (-0.2 pts, ran-out +1.76). The diagnosis (DECISIONS "sft-v7 no-gain
+  diagnosis") found 7 of the 9 candidate timeouts were a harness stall (one never-ending model-written eval froze
+  shared collector s000; fixed 32fdbad51), not the policy; without those pairs +0.6 pts, ran-out +0.4, which the
+  neutral rule adopts. `ops/ei/sft-v7/verdict.json` now adopts the candidate (`corrected` records why; the original
+  is `verdict-original.json`); the pointer stays sft-v6 (no success). sft-v8's collection was drawn from that
+  candidate, so it trains on-policy.
+- sft-v8 restarted with `--data-repo`/`--fill-repo` at pin-5b58f9444689 (`--prefer-unseen-scope family`, the stall
+  fix) and `--prefer-unseen` naming sft-v6's build too (runs/sft-mix-20261120-v2), and `--held-pin` at the same pin
+  so later held evals run with the stall fix. That is a new series: sft-v9 (measured: held every 2) re-measures its
+  reference, sft-v7's candidate, in its popbase during its collection (3.5 h of Pop that would otherwise fill), so the
+  gate does not wait.
+
+## 2026-11-22 02:30, uncapped operator fit (build-v3) loses to build-v2 at the same step budget; build-v2 stays served; evaluator identity fix (operator soft-state strand)
+
+- **What ran.** Two copies of the fit watcher ran at once: mine, and the supervisor's edit, which fits and evaluates on the sft-v7
+  checkpoint. Both used the unit names softop-fit-10 and softop-eval-3, so one of each ran. The fit ran plan-v3 on 5ff07638
+  (19:53-00:53, 120 steps x 8 rows, all 448 verified rows; peak CUDA 13.6 GB allocated / 15.1 GB reserved, RSS 4.0 GB). The
+  evaluation ran the supervisor's command, scoring those 5ff07638 states on the sft-v7 checkpoint. That result
+  (text 0.435, primed 0.508, trained 0.453) is moved to `eval-v3-INVALID-sftv7-checkpoint.json`. The two copies then wrote opposite `served`
+  decisions; mine (build-v3) landed last and was wrong.
+- **Evaluator bug, fixed.** `operator_soft_states.py evaluate` passed each block's own identity as the expected one, so a state fit on
+  another checkpoint was scored instead of refused. It now takes the identity from the consuming engine, and it exits at the start when
+  the build's states were fit on another checkpoint. Serving was never affected: `serve/engine.py:515` checks the execution identity.
+- **Valid comparison** (`eval-v3-base.json`: same 565 rows, same 5ff07638 base, text arm identical to `eval-final.json`):
+  trained NLL v2 0.467 vs v3 0.498 overall. Short rows: 0.482 vs 0.516, v3 - v2 +0.034 +- 0.003, v3 lower on 145/534. Long rows:
+  0.206 vs 0.201, -0.005 +- 0.001, v3 lower on 26/31. Mechanism, matching the direction: both fits had 960 row-steps, and
+  v3 spread them over 448 rows (118 long) instead of 330, so short rows got about 26% fewer updates and long rows their first.
+  Long inputs gain from being trained, as expected. The fair uncapped fit scales its steps with its rows (about 165 for 448).
+- **Served.** `served` points back at build-v2. Both builds are fit on 5ff07638, while `ops/current-policy.json` now names
+  sft-v6 (dc95f29d), so a served operator state needs a refit on whichever policy serves. `plan-v3-sftv7.json` (sft-v7
+  candidate) is written; the next fit takes all 448 rows with about 165 steps on that policy.
+
+## 2026-11-22 04:50 Pop fills through build and SFT
+
+- Pop sat idle from each cycle's data stage until the next cycle's popbase or fill (sft-v8: since 04:10, the build
+  and SFT take ~2-3 h). Fills go to the shared `--fill` directory, so draws after the data stage feed the next cycle's
+  mix (one policy step stale, as the DGX fill window already is). The Pop fill now runs on past the data stage
+  (`--pop-fill-stop-at-data` opts out); every Pop serve stops it first (`pop_rl_actor.stop_pop_fills` in `start` and
+  `stop_pop_actors`, and in expert_iteration's held measurement and Pop fill, whose held pin may predate it), so no fill
+  draws from a policy it did not start on. sft-v8's Pop fill restarted by hand on 9ebc for the rest of its build/SFT.
+
+## 2026-11-22 08:20 Pop unreachable: held evals defer, training goes on
+
+- Pop dropped off the tailnet at ~05:59 (tailscale "offline, last seen 04:59Z"; ssh, ping and its SGLang port time
+  out from the DGX; the owner cannot reach it either and has no physical access today). sft-v8's Pop fill had drawn
+  ~490 fills since 04:50; stopped. sft-v8 is unmeasured, so nothing waits on Pop yet, but sft-v9 is measured and its
+  missing verdict would have parked sft-v10 at its gate after its collection.
+- A measured cycle now waits `--pop-wait-hours` (1) for an unreachable Pop, then is adopted unmeasured with
+  `deferred: "pop unreachable"`; `since_held` counts on, so the next cycle is measured. The held stage also measures
+  the reference itself when the popbase unit left none (Pop down at popbase time). Held measurement on the DGX was
+  not chosen: results pair only within one engine, so it would cost two DGX evals (reference and candidate) of
+  training time; deferring matches "fewer evals, more training".
+
+## 2026-11-22 09:00 SFT activation memory 16 -> 40 GB from sft-v9
+
+- sft-v8's SFT (362 steps, ~7.3 h vs sft-v7's 4.5 h for 188) runs alone on the DGX at 2.8-3.0k forward tok/s, against
+  ~4.8k measured idle (2026-11-12 kernel strand) and the 5.5k its launch estimate assumed. Its phase seconds: backward
+  3.1x forward (8389 vs 2720 s by step 195), i.e. layers beyond `--activation-gb 16` recomputed; CUDA peak 53 GB of an
+  80 GB ledger budget, the fill window closed. More saved activations is the standard memory-for-speed trade, so
+  expert_iteration's SFT now runs `--sft-activation-gb 40` with `--sft-budget 100` (peak expected <= ~77 GB; read the
+  first steps' `cuda_peak_gb`). sft-v8 keeps its settings (3.3 h left; not worth a resume).
+
+## 2026-11-22 11:30 LoRA is the default parameterization (owner); every learner speed item is required work
+
+- Owner: no LoRA-vs-full comparison eval; the plan (`plans/neuralese/lfm3opti.md` v3) makes `lora+rows` the default for
+  SFT and GRPO once the learner core lands (r=128 SFT, r=32 RL, all 9 projection families, 10x the full-FT LR, FP32
+  factors with BF16/TF32 adapter compute, Neuralese marker/override rows trainable; each cycle merges in FP32, rounds to
+  BF16 once and restarts factors). `full` stays a working setting. Until the core lands the existing full SFT runs on
+  the G4 unchanged. Every item in the brief's §6 (no recomputation, Blackwell kernels and recompile audit, FP8 frozen-base
+  GEMMs, DiLoCo multi-worker, RL publication with adapter slots on every engine, learner/actor overlap on the G4) is a
+  required deliverable.
+
+## 2026-11-22 12:00 lfm3opti v3 decided on first principles (owner: no options, no deferrals)
+
+- Required: Colab G4 as a machine (remote-actor module shared with Pop, ExecutionProfile with DGX fallback after 30
+  min); G4 held series at 4 samples; `lora+rows` as the only parameterization (full path removed when the core lands);
+  native-route reload at rebind; resident activations; Blackwell kernels with length buckets; FP8 frozen-base GEMMs;
+  GRPO merged-export publication; collection and held eval sharded across all G4 sessions.
+- Dropped, with reasons in the brief §6: DiLoCo multi-worker (SFT ~1 h on one G4; collection is the larger stage and
+  shards by task), SGLang adapter slots (a merged reload takes seconds against minute-long GRPO steps), learner/actor
+  overlap (stages sequential by on-policy dependency; pipelined cycles already overlap machines), L4 (GB10 bandwidth).
+  This supersedes the 11:30 entry's "every §6 item required".
+
+## 2026-11-22 12:40 Async expert iteration (async-train.md v2) supersedes the cycle placement
+
+- The other agent's "Phase 2 async RL" draft (dc17fcf68) assumed async GRPO and a learner-only G4. Revised to our
+  method:
+  - Continuous collection from the newest published policy on every actor.
+  - Back-to-back LoRA SFT rounds on the G4 (~1 h each), with the mix built on the DGX while the previous round trains.
+  - FP32 factors (~0.5 GB at r=128) shipped to the DGX, merged there in FP32 and rounded to BF16 once, then every
+    actor is rebound (all routes, native reload).
+  - Speculative adoption, with held on the adaptive interval counted in rounds.
+  - The G4 runs an actor beside the learner under MPS, because decode bandwidth is its largest advantage over the
+    GB10.
+  - The held series is on the DGX: BF16 weights, 4 samples, always available.
+  - Collection actors use FP8 weights; there is no ratio in SFT, so no bias.
+- Not built: score centering, top-K capture, staleness windows (no importance-weighted gradient in SFT); the cloud
+  bucket (Tailscale plus the DGX store does the same); LoRA slots; the quantization gate.
+
+## 2026-11-22 13:10 GRPO and JOLT+ in the async topology (async-train.md §7-8)
+
+- GRPO stays the polish phase in the same topology:
+  - G4 LoRA learner, r=32 at LR 1e-4, `natlang_grpo_v1`, with the reference as the bare merged base;
+  - continuous sampling on the DGX and G4 actors;
+  - per-step factor shipping (~130 MB);
+  - staleness ≤2 with TIS as today;
+  - **BF16-weight actors**.
+- Score centering with FP8 actors is not built. Its per-token top-K payload (~1.8 GB per step at K=64) over Tailscale
+  costs more than FP8 decode saves, and matched weights remove the bias for free.
+- Phase switching: two consecutive neutral measured SFT rounds start GRPO; two neutral GRPO evals return to SFT
+  rounds.
+- JOLT+ guided episodes run on by default on the frontier's never-solved and lowest-rate tiers:
+  - guidance stripped from the trained context;
+  - leak-filtered;
+  - a pool tier between own successes and teacher trajectories.
+  The privileged-twin KL term stays off, because it would count the same signal twice.
+
+## 2026-11-22 — lfm3opti v3 implementation landed across all 4 strands
+
+Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc838c`, `12918a70a`, `eee8c4603`, `c9932d915`, `51bca61b4`:
+- **Strand 2 (Defects fixed, §3):** Fixed `sglang_actor.py` split-brain native-fallback reload on `/v1/neuralese/rebind-policy` (`NATLANG_REBIND_NATIVE_RELOAD=0` opt-out) + 4-route attestation (`attest_all_routes` in `/v1/neuralese/info`); recorded actual `learner_step` beside `source_step` in SFT and GRPO checkpoints; trainable-only AdamW state; parameterized `ACTIVATION_BYTES_TABLE` replacing `88e3`; renamed GiB telemetry fields to `*_gib` (dashboard reads both).
+- **Strand 3 (Shared LoRA+rows core, §5):** Moved `lfm3_fast_train.py` -> `natlang_neuralese/train/lfm3_fast.py`; pure `factored_linear` in `model/native_adapters.py`; 9-family target inventory in `tune/targets.py`; flat adapter bundles + trainable Neuralese sparse rows through all 4 fast layer paths + readout; `train/lfm3_learner.py` (`AdapterSpec` SFT `r=128/alpha=128/lr=5e-5`, RL `r=32/alpha=32/lr=1e-4`, `reference_view`, `OOMRetryPlan`) and `train/learner_state.py` (atomic resumable state + immutable merged BF16 export); switched `exp0_sft.py`, `grpo.py`, and all probes (`behaviour_probe.py`, `sanity_logprob_paths.py`, `operator_ablation.py`, `passthrough_check.py`) to the core and removed full-FT paths; added v2 §10.1 oracle test suite (`tests/neuralese/test_lfm3_lora_core.py`).
+- **Strand 4 (Speed & atomic publication, §6):** Resident activations (`--activation-gib 56` DGX / `80` G4), Blackwell attention/conv configs + token-length buckets (`NATLANG_COMPILE_BUCKETS=0` opt-out) + `CompileHealthTracker`, Blackwell `torch._scaled_mm` FP8 frozen-base GEMMs (`NATLANG_FP8_BASE=0` opt-out), and GRPO's 7-step atomic merged-export publication state machine with `k-1` rollback (`WeightSync.for_learner`).
+- **Strand 1 (Colab G4 machine, §1/§2/§4/§6/§7):** Added `common/execution_profile.py` (`dgx`, `colab_g4`, `pop`, rejecting L4; 30-min unreachable DGX fallback; `CostTelemetry`), `scripts/colab/bootstrap.py` (Tailscale userspace + sshd + venv/torchao/sglang + ts-host + base fetch + hardware probe) and `scripts/colab/admission.py` (separate VRAM + host RAM admission), generalized `pop_rl_actor.py` across Pop and Colab G4 (`run-sft` with 15-min state sync back to DGX, multi-host sharded `held-eval`), added `engine_host` to `held_eval.series()` (G4 held series at 4 samples), and wired sharded collection/held/remote SFT + `cycle-cost.json` in `expert_iteration.py`.
+
+
+## 2026-11-22 13:40 Neuralese variants in expert iteration
+
+- Neuralese-declaring task variants (1,381 replay-qualified rows in 47 families; on in grpo-v5-run1) were never wired
+  into expert-iteration collection. Its collector inherits grpo's variant swap, but `collect` never loaded the file.
+  The SFT mix carried Neuralese only as aux chains (neuralese-graph 5%, own-neuralese-graph 5%).
+- They are data and cheap, so they are now on by default: `cycle --neuralese-variants` defaults to the registry file
+  and share 0.5, and `--no-neuralese-variants` opts out. `collect` loads them with `grpo.load_variants`, which applies
+  the held exclusion and the train split. Variant successes reach the mix through the groups' cases.jsonl.
+- They enter at the next cycle the pipeline launches (sft-v10); sft-v9's collection, which started at 11:17, keeps its
+  settings. AGENTS.md's off-by-default list is updated.
+
+## 2026-11-22 15:00 DGX held series by default; Colab G4 profile defects fixed (review of 51bca61b4/e55a0813a)
+
+- **Held series on the DGX** (async-train §1), default from sft-v10 (`cycle --held-profile dgx`; `pop` keeps the
+  legacy series; there is no Colab held series, its path is removed). One measurement is one ledger unit
+  (`expert_iteration.py dgx-held`, medium priority, resumable: the SFT may preempt it and it resumes): the pinned held
+  engine as its child (`ops/held-v3/engine.json` serve_args: SGLang, vendor projection, FP8 KV, BF16 weights;
+  `held_eval measure` attests it without `--allow-other-engine`), 4 samples per task, the training sampling law
+  (top-p 0.95, 40 calls), 64 collector slots (40 + 19 + 2 GB). While it runs, every DGX collection shrinks to 25% of
+  its slots (`OPS/ei/held-priority/<unit>.json` claims with a heartbeat; `collect --held-priority-share`,
+  `--no-held-priority`).
+- **Series never mix.** `series()` keys carry `engine_host=dgx` (Pop keeps its legacy keys). `held_eval.compare`
+  refuses results of two hosts, placing results without the field by their attested export format (`sglang-pop-*`
+  Pop, `sglang-hf-*` DGX). `reusable_held` and `latest_base` match the host besides the key (an old pin gives Pop and
+  DGX one key). A held result of another host in a cycle's `held/` moves aside and is re-measured. The reference is
+  re-measured on the DGX series when none exists. vs-base uses the latest DGX base (none yet: vs_base is None until
+  a cycle runs with `--held-base`).
+- **The carried `--held-pin` belongs to a host** (`--held-series-host`, carried with it). sft-v10 arrives with sft-v9's
+  Pop pin (pin-5b58) and no host, so it starts the DGX series on its own pin and hands that pin on. Checked on
+  sft-v9's real argv: the old in-memory `next_cycle_argv` output parses with the new parser, and the Cycle comes out
+  dgx/dgx/dgx with 4 samples. sft-v9's own held stage (old code in its driver) is unaffected.
+- **Colab G4 fixes** (none live yet: no session exists): the SFT checkpoint is pulled to `.pull`, size and sha256
+  checked against the VM, then renamed (a truncated pull was adopted before); the Colab SFT runs exactly the DGX
+  recipe, `launch-sft.sh PREFLIGHT_ONLY=1` (input identity, held exclusion) then the recorded `exp0_sft_args` with
+  paths mapped (it lacked `--epochs 1`, `--val-every` and the preflight); `choose_profile` takes names (a string
+  crashed the driver); the admission shim keeps claims in a file and holds its lock only while it reads and writes
+  them (it held the lock for the child's life, so a nohup'd actor blocked every later command), and the learner
+  (59 GiB) and a capped MPS actor (24 GB KV, 64 running, 34 GiB) are admitted together; the G4 learner activation is
+  44 GiB to fit beside that actor; Colab actors are stopped by recorded process group (not `pkill -f`) when the collect
+  stage ends, and sessions are charged from start to stop (`CostTelemetry.open_session`/`close_session`).
+- **Sharded collection:** an endpoint that stops answering or serving the policy is dropped; its in-flight episodes are
+  abandoned (never scored), the task goes back to the front of the order, and its slots idle until it returns (checked
+  every 2 min). Both collection paths use one command builder (Neuralese variants included), wait the same way
+  (speculative recollect stop included), and budget 0.3 GB per collector slot.
+- **Bootstrap:** `pgrep -x tailscaled` (the `-f` form matched its own shell, the daemon never started); the auth key is
+  passed as `--auth-key=file:` and every logged command and error is redacted; the env is the DGX's (shared
+  requirements over Colab's torch, the repository on PYTHONPATH via `natlang-env.sh`; `pip install -e
+  training/neuralese` failed); the SGLang fork at `sglang-fork.json`'s commit in its own venv (was upstream
+  `sglang[all]`); Node 24 when the image's is < 22.13; the MPS daemon.
+
+## 2026-11-22 15:40 Held evaluation never delays training (follow-up to the DGX held series)
+
+- **The gate no longer waits for the previous verdict** (it did, unbounded, and that verdict waits on the previous
+  candidate's held eval). A verdict not in when the collection ends adopts the candidate as collected
+  (`gate.done` `verdict_pending`, `--gate-wait-hours`, default 0), as an unmeasured cycle is. The verdict is read at
+  this cycle's held stage, after the next cycle has launched: it sets the reference and the rollback target, and a
+  rejection makes this cycle's candidate measured (`held_schedule` -> (0, 1)). Nothing else before the SFT waits on a
+  held unit (checked: select, collect, frontier, teacher, data, build, sft; the background start measurement is never
+  joined before the held stage).
+- **The SFT preempts a held measurement.** Held units are medium and resumable; the SFT and collections are high. A
+  preempted unit is requeued by the ledger and `dgx_held` joins it until it finishes (`ledger_queued`); the
+  measurement resumes its episodes from run.json.
+- **The held unit fits beside a collection: 32 GB** (121 GB - 74 GB collection - 15 GB headroom). A second, small actor
+  with the pinned engine's serve args (attested arithmetic unchanged, overlap off) and a 3 GB FP8 KV pool (~450k
+  tokens), 16 running, 16 collector slots: 3 + 24 + 16 x 0.3. KV size is not attested and every DGX-series result uses
+  the same running cap, so the series is one engine. The collection actor cannot measure: it runs the overlap scheduler
+  and 160 running, and `held_eval measure` refuses `overlap_schedule` against the pin. While a held unit runs the
+  collection keeps 75% of its slots.
+- **Timing (estimated, not measured):** 1024 episodes at 16 parallel, time-sliced with the collection engine, about
+  8-10 h per measurement (Pop ran 512 at 20 slots in ~3.4 h on similar memory bandwidth). A verdict therefore lands
+  about one cycle late; with `--held-every 2` that is within the schedule, and the gate no longer waits for it.
+
+## 2026-11-22 13:40 sft-v10 guard; DGX disk leak from paused operator fits
+
+- **sft-v10 guard.** The LoRA/Colab implementation (07efc838c..e55a0813a) is under repair: reviews found GRPO cannot
+  start, every merged export crashes on real checkpoints, and FP8 crashes under compile and is ~10x off in logprobs.
+  sft-v9's driver launches sft-v10 on current main at its `next` stage (~01:00).
+  - The unit `sft-v10-guard` (`ops/ei/watch/sft-v10-guard.sh`) stops that driver and relaunches sft-v10 with the same
+    argv on sft-v9's own pin 0724bd764 (full-FT recipe) unless `ops/ei/lora-ready.json` names a verified commit that
+    sft-v10's commit contains.
+  - The supervisor writes that file once the learner fixer's real-GPU LoRA SFT smoke passes on main.
+- **Disk.** DGX / fell from 51 to 9 GB in about two hours.
+  - Cause: the operator soft-state fit, paused (SIGTERM) each time an `*-sft` unit ran, left its 5-7.6 GB
+    `natlang-fit-store-*` scratch behind, because its `weakref.finalize` cleanup never runs on a signal. Five stores
+    leaked, about 35 GB.
+  - Removed them and the rejected build-v3 (9.4 GB). sft-v7's finished collection actor store (24 GB) moved to
+    /mnt/external. / is back to 46 GB.
+  - Mechanism fix: `tune/build.fit_store` writes the owner pid into its store and first removes sibling stores whose
+    owner is dead. This covers every fit caller.
+
+## 2026-11-22 14:20 Colab over `colab ssh`; first session is an A100 80GB
+
+- **Access.** The DGX's Colab CLI was not logged in. ADC is now minted with the Colab scopes; the old ADC file is backed
+  up as `~/.config/gcloud/application_default_credentials.json.bak-20261122`. The balance is 412 CU.
+- **Hardware.**
+  - G4 assignment answered 503 ("Service Unavailable") three times, and H100 is not entitled.
+  - Session `g4a` is an A100-SXM4-80GB, high-RAM (167 GB host, 12 vCPU), at 8.88 CU/h: about 46 h of budget.
+- **No Tailscale.** `colab ssh --proxy-mode` is an OpenSSH ProxyCommand, so the DGX reaches the VM as `ssh colab-g4`
+  (~/.ssh/config), with rsync and -L tunnels working.
+  - The runtime allows one ssh connection (HTTP 429 for a second), so all traffic shares a ControlMaster connection.
+  - Throughput through the proxy is a few MB/s: a 3.4 GB checkpoint takes over 10 minutes.
+- **Bootstrap.** `scripts/colab/bootstrap.py` joins a tailnet and installs sshd only when TAILSCALE_AUTHKEY and
+  SSH_AUTHORIZED_KEY are given; with neither, it relies on colab ssh.
+- **First production use.** The VM serves sft-v9's collection policy (sft-v8 candidate 66422fcf) for filled-reasoning
+  draws, as Pop fill did, so it is never idle. Per the owner, the monitored production run is its own smoke test.
+
+## 2026-11-22 14:00 LoRA core fixes (review of 12918a70a/eee8c4603/c9932d915/e55a0813a): FP8 off, memory table, export, smoke
+
+Commits 3e5144bb1, fe647b297, 0b278b97e, ae67f8054, b30d41bf9 (+ this). All measured on the GB10 beside sft-v9's
+collection actor (shared GPU, so absolute speeds are low; ratios come from interleaved A/B).
+
+- **FP8 frozen base: default OFF** (`NATLANG_FP8_BASE=1` / `fp8_base=True` opt in). Rewritten as `torch.library` ops
+  (weights quantized once, per output channel; per-token activation and output-gradient scales; row-wise
+  `_scaled_mm` works on sm_121, BF16 output only). It compiles now (the Dynamo `lift_tracked_freevar` crash is gone) and
+  packing no longer couples documents (alone == packed bitwise). Accuracy still fails the bar: on the sft-v8 checkpoint,
+  6 x 2048 tokens, B = 0: BF16-vs-FP32 mean 0.043 nats (p99 0.23), FP8-vs-BF16 mean 0.272 (p99 1.65, max 6.5); LoRA
+  gradient cosine FP8 vs BF16 0.97 (rel L2 0.24). E4M3's 3 mantissa bits, not the scaling, set the error; nothing in
+  reach today meets the BF16-vs-FP32 envelope.
+- **Base GEMM keeps its FP32 accumulator** under lora+rows (`natlang::frozen_linear_f32`), the BF16 low-rank delta is
+  added in FP32 and rounded once; B = 0 equals the bare base exactly. Interleaved compiled fwd+bwd, 4096 tokens, no
+  recompute: full FT 2449 tok/s, LoRA (this) 2237, LoRA as shipped before (BF16 base, FP32 add) 1498. BF16
+  reduced-precision split-K reductions are off in `prepare`.
+- **Activation table** (lora+rows, r = 128, compiled): 127 KB/token/layer of peak (saved 105), eager 150 (saved 127);
+  was 34-38. 56 GiB now plans ~19.6k-token packs instead of ~70k. Smoke at 16 GiB: CUDA peak 22-25.7 GiB (fixed 5.2 +
+  ~1.2 x budget), cgroup peak 35 GB. EI defaults kept (--sft-activation-gb 56, --sft-budget 100): predicted ~85 GB.
+  Not measured at 56 (no 100 GB was admissible today): the first sft-v10 steps' `cuda_peak_by_phase_gb` confirm it.
+- **Packing (item 10): not a leak.** A 256-token document packed with B1 vs with B2 (same length) is bitwise identical,
+  old commit bfc5a7a7d (full model) and now. Alone vs packed differs by 0.055-0.063 nats mean, the same at bfc5a7a7d
+  and now, and exactly 0 under FP8 (whose GEMM rows do not depend on M): BF16 GEMMs choose shape-dependent algorithms,
+  and the differing roundings grow through 24 layers to the BF16 noise floor (BF16-vs-FP32 0.043).
+- Fixed: merged export with real tied interfaces (`output_rows = None`), learner API (`checkpoint_state`,
+  `special_ids`, `native_rows`, `fp8_base`, `parameterization='lora'`), a `reference_view` that switches the model (None
+  = bare base, never live), `linear_nll` default rows, OOM retry (cleanup outside except, plan persisted,
+  `choose_retained_gib(0)` = 1 GiB), SFT resume keeps `--keep-best-val`'s best and the `--hours` schedule,
+  passthrough_check's FP32 reference. Tests rewritten to fail on each bug; 12 mutants run, all killed.
+- **Smoke** (exp0_sft train, EI's flags, sft-v8 checkpoint and mix, 10 steps, ACT 16): loss 0.28-0.48 (one TM step,
+  tm_kl 7e-4), val-own 0.5748 -> 0.5796, val-teacher 0.3568 -> 0.3626 (the mix is the one sft-v8 trained on), 1.45k
+  forward tok/s cumulative incl. compile under contention (sft-v8 full FT alone: 3.17k). checkpoint.pt loaded by the
+  native engine and exported as SGLang serves it vs the learner's effective policy: mean 0.025 nats (p99 0.20) on 5.7k
+  val tokens, inside the BF16 envelope. Run in /home/werg/data/fixa-sft/smoke2.
+
+## 2026-11-22 14:55 First Colab production: A100 fill for sft-v10's mix
+
+- **Bootstrap fixes found on the real VM** (Python 3.13 image, x86_64, no cargo, private fork repo):
+  - venv via uv, because the image has no ensurepip;
+  - uv from PATH;
+  - the fork's Rust extensions skipped (`SGLANG_BUILD_RUST_EXTS=none`; the single-engine actor does not use them);
+  - the private fork shipped from the DGX as `git archive <pinned commit>` with a `.natlang-archive` marker the
+    bootstrap checks.
+  - Bootstrap then completes in ~7 min.
+- **Access.**
+  - `~/.ssh/config` host `colab-g4` uses `colab ssh --proxy-mode -s g4a`, multiplexed (ControlMaster), because the
+    runtime allows one connection.
+  - The master is the unit `colab-g4a-tunnel` (Restart=always), carrying the forwards DGX:19731 → VM SGLang 9570 and
+    DGX:18731 → VM front 8570.
+- **Production use.**
+  - The VM serves sft-v9's collection policy 66422fcf (pin 0724bd764, the DGX fill actor's flags, KV 40 GB, 128
+    running).
+  - `colab-g4a-fill` (ledger, 3.5 GB) runs `filled_reasoning generate` against it at 128 in flight, into the shared
+    fill directory, so it feeds sft-v10's mix.
+  - Measured: 127 running, 85% GPU, ~4.4k gen tok/s, against the DGX collection actor's ~1.7k at 159 running beside
+    other work.
+- **Next for the VM.** It serves each new collection policy when a cycle starts; the A100 takes the SFT once the remote
+  SFT path runs in production (sft-v10's SFT stays on the DGX: the LoRA path's first production run is watched there).
+
+## 2026-11-22 15:20 Async expert iteration implementation (`plans/neuralese/async-train.md` v2)
+
+Implemented the full `async-train.md` v2 architecture across 4 commits (building on the DGX held-series, Neuralese
+variants, 4-route attestation, and Colab G4 bootstrap/sizing commits already on `main`):
+
+- **FP32 LoRA factor export/merge, dedup ledger & multi-engine publication (§2, §4, §5; `222af966e`):**
+  - `learner_state.py`: `export_adapter_factors` (blob-first `adapter_factors_fp32.safetensors` + `policy_manifest.json`,
+    ~0.5 GB at `r=128`, ~130 MB at `r=32`), pure CPU DGX `merge_factors_to_checkpoint` (`bf16(fp32(W0) + s*BA)` +
+    trainable Neuralese rows, fail-closed base & factor SHA-256 checks), and `trained_rounds` / `trained_episode_ids`
+    dedup ledger persisted in `save_learner_state` / `load_learner_state`.
+  - `export/native_hf.py`: `publish_merged_policy` (SGLang HF export, optional GGUF export, optional `ops/current-policy.json`).
+  - `exp0_sft.py`: `--round-id`, `--export-factors-dir`, `--factors-only` (skips already-trained rounds on `--resume`).
+- **FP8 collection actors, Colab G4 MPS, remote in-place rebind & factor-shipping SFT (§1, §3, §5, §7.1; `1a5cae217`):**
+  - `serve_native_checkpoint.py` & `sglang_actor.py`: `--sglang-weight-dtype {bfloat16,fp8}` (linear weights FP8 for
+    collection actors, conv states & `lm_head` stay BF16, attested as `-w-fp8` + `dtype='fp8'` so held BF16 results never
+    pair with FP8 collection actors).
+  - `pop_rl_actor.py`: `ensure_colab_mps`, `weight_dtype` on `pop_sglang`/`colab_serve_command`/`serve-checkpoint`,
+    `rebind_actor` / `pop_rl_actor.py rebind` (local DGX or remote G4 with remote factor-merge, full pause ->
+    `update_weights_from_disk` -> `/v1/neuralese/rebind-policy` -> `attest_all_routes` -> continue), and `run-sft
+    --round-id --factors-only` with `pending-upload.json` resilience on transfer failure.
+- **JOLT+ `jolt-guided` tier, adjacent-policy own priority, GRPO `rho_by_staleness` & compact group transport (§3, §7, §8):**
+  - `sft_sources.py`: `jolt-guided` tier (`own > jolt-guided > teacher`, `--guided train` default, opt-out `exclude`),
+    `own_policy_tier` giving `{current, previous}` and rebind-straddling own episodes top priority, `admitted_episode_keys`
+    in `build.json`.
+  - `grpo.py`: `rho_by_staleness` telemetry in `train.jsonl`, JOLT+ default on (`--teacher-attempts 2`, opt-out `0`),
+    privileged twin default off (`--reasoning-rl-weight 0.0`, opt-in `1.0`), `pack_scored_group`/`unpack_scored_group`
+    compact zstd transport (~8 bytes/token), repeatable `--extra-actor URL[=SLOTS]`, and `--export-factors-dir`.
+- **Async round driver & SFT <-> GRPO phase switching (§2, §4, §7.4):**
+  - `expert_iteration.py`: FP8 collection weights (`--collect-weight-dtype fp8`, opt-out `bfloat16`; held stays BF16) and
+    JOLT+ (`--teacher-attempts 2`) wired into `collect`/`cycle`, `frontier --previous-policy --allow-adjacent-policies`,
+    blob-first `write_round_manifest` + `record_profile_change`, `PhaseController` (switches SFT <-> GRPO after 2
+    consecutive neutral measured rounds/evals; rolls back and flags bug hunt on failure), and `AsyncRoundDriver`
+    (`expert_iteration.py async-drive`).
+  - Targeted tests in `tests/neuralese/test_async_train.py`.
+
+## 2026-11-22 17:00 Async expert iteration: review fixes (round driver, merge, publication, round ledger, Colab paths)
+
+Two independent reviews of `222af966e`..`7c9038cf5` found the round driver could not run a round and several paths
+crashed or lost work. Fixed as the default, each with a test that fails on the defect (checked with mutants: the old
+off-by-one held rule, a non-truncating rollback, a publication that reruns, a round marked before its export, warmup 8,
+the old remote `export` call, `ensure_colab_mps` in run-sft, and in the merge: scale dropped, scale squared, rows
+reversed; every mutant fails its test).
+
+- **One merge** (`lfm3_learner.merge_policy_state`): the learner's export (`export_merged_checkpoint`), a shipped factor
+  directory (`merge_factors_to_checkpoint`) and `Lfm3Learner.merged_backbone_and_interface` all call it, on CPU in FP32
+  from the source checkpoint state. The factor merge had written trainable rows only into `input_rows` /
+  `extra_input_rows` (not `output_rows` of an untied layout) and fell back to alpha / rank when a scale was missing;
+  the learner's export merged on the GPU (TF32-dependent). Now scales are required, the embedding keeps the source rows
+  at the interface ids (the native loader merges the interface rows), and the merge of shipped factors equals the
+  learner's own export tensor for tensor (tested on a tiny LFM3 with alpha 8 / rank 4, distinct rows per id, tied and
+  untied layouts, against an independent formula).
+- **Round ledger** (`exp0_sft`): the round is marked trained only after its factor / checkpoint export committed
+  (`export_round`; before, a preemption during the export left a round "already trained" with no export). A resumed
+  state must match the chains sha and the step schedule (`--epochs`, `--batch-loss-tokens`, seed, order), or the run
+  refuses. `trained_episode_ids` is removed: the episodes a round trained are its `round.json` `episode_ids`, sha-tied
+  to its chains; a second copy in the learner state adds nothing the round id does not already identify.
+- **Publication to every engine** (`publish_merged_policy`): native (the merged checkpoint, loaded once by the export),
+  SGLang (HF export) and GGUF q8_0 (`export/native_gguf.py`; the old call named a nonexistent `export_gguf.py` and
+  recorded "skipped") for llama-server and the in-page wllama; a failed engine raises. A held success rewrites the
+  `lfm-latest` pointer and refreshes the `lfm-latest` / `lfm-latest-gguf` profiles (`promote_policy`: `natlang setup
+  --native lfm-latest --gguf q8_0` as a ledger unit); the cycle's verdict uses the same function.
+- **The round driver** (`expert_iteration.py async-drive`, `AsyncRoundDriver`), rewritten: standing DGX collection of
+  the newest published policy (restarted per policy, so every collection serves exactly one policy; remote actors
+  rebound by factors and collected from through their forwarded ports), fill beside it, teacher campaign on each round's
+  frontier; per round: snapshot of the current and previous policy's collections (registered as open snapshots),
+  frontier with the previous policy adjacent, extraction (collections, teacher campaigns, GRPO groups), replay, fills,
+  own Neuralese graph, build with `--frontier` and `--previous-policy` (the old driver rebuilt the same pool every round
+  with neither); the next round's preparation runs while this one trains; SFT from one recipe for Colab and the DGX
+  (`launch-sft.sh`: epochs 1, warmup 10, 30k loss tokens, plus `--round-id --export-factors-dir --factors-only
+  --resume`; the old DGX takeover called exp0_sft without `--base` or the recipe, outside the ledger); merge and
+  publication in one ledger unit (`publish-round`, `policy/published.json` last, idempotent: a crash after the merge
+  resumes and records); GRPO rounds (`grpo.py train --max-steps`, `--held-every-hours 0`, last step's factors) publish
+  and advance like SFT rounds (the old branch never advanced: an infinite loop). Every DGX subprocess is a ledger unit.
+- **Held in rounds** (`PhaseController`, state schema /2): every `--held-every`-th round is measured (the old rule
+  measured every N-1th and its test asserted it), in the background on the DGX series against the reference, one at a
+  time; success doubles the interval, neutral resets it, failure sets 1 and writes `bug-hunt-<sha12>.json`; a rejected
+  candidate rolls the lineage back to the reference, so the previous policy is the reference's predecessor (it had become
+  the rejected policy) and a round trained from a discarded policy is discarded at publication. Two neutral measured
+  rounds switch SFT <-> GRPO from the reference. As in cycles (902eb04f1, a4d047827) the loop continues from the
+  reference after a failure (the next round is measured); the supervisor stops it for the hunt. **Superseded 17:40
+  (coordinator):** a failure verdict ends the experiment at that eval, as AGENTS.md says (below).
+- **Colab paths**: the VM-side factor merge called `export(out_ckpt, base_dir, out_hf)` (TypeError on every factor
+  rebind); run-sft no longer starts MPS (the serve that puts an actor beside the learner starts it; starting it after a
+  non-MPS actor breaks the learner), maps `--export-factors-dir` from the recipe and pulls the factors blob first into
+  the recipe's directory, renamed whole. Endpoints of ProxyCommand-only hosts (`ssh colab-g4`, one SSH connection per
+  runtime) are forwarded over the ControlMaster (`ssh -O forward`, VM port + 10161, the tunnel unit's mapping) instead of
+  `http://colab-g4:PORT`, which never resolved.
+- **Collection defaults**: BF16 weights, no JOLT+ guided attempts (`COLLECT_WEIGHT_DTYPE`, `TEACHER_ATTEMPTS`) until the
+  FP8 weight path and JOLT+ custody work in production; the data/GRPO strand flips them.
+- **Not built / open.** The Colab learner and actor sizing still assume the 96 GB G4 (`G4_ACTOR_BESIDE_LEARNER`, the
+  run-sft VRAM claim): on the 80 GB A100 a learner beside a capped actor does not fit the admission claim. The GRPO
+  phase runs on the DGX (plan §7.1 puts its learner on the G4). No production round has run: the command for the first
+  one (one round, measured, DGX learner) is
+
+      P=/home/werg/data/lfm3-rl-dgx-20261029/ops/ei/pin-<c12>; E=/home/werg/data/lfm3-rl-dgx-20261029/ops/ei
+      python3 /home/werg/natlang/scripts/memory_ledger.py run --unit aei1-drive --budget-gb 2 --priority medium \
+        --wait 36000 --detach --workdir $E -- /usr/bin/env PYTHONPATH=$P/training/neuralese:$P HF_HUB_OFFLINE=1 \
+        PATH=$PATH $P/.venv-neuralese/bin/python $P/scripts/neuralese_data/expert_iteration.py async-drive \
+        --root $E/aei1 --name aei1 --start START.pt --start-sha SHA --commit <commit> --sft-profile dgx \
+        --held-every 1 --max-rounds 1 --fill /home/werg/data/filled-reasoning-20261120 \
+        --seed-work /home/werg/data/sft-sources-20261120b --seed-work /home/werg/data/sft-teacher-qwen-october-20261120 \
+        --aux neuralese-graph=/home/werg/natlang/runs/sft-neuralese-graph-20261117-v1/chains.pkl,share=0.05,task_tokens=40000 \
+        --aux operators=/home/werg/data/lfm3-rl-dgx-20261029/ops/operators-v1/merged/chains.pkl,share=0.03,task_tokens=2000 \
+        --aux live=/home/werg/data/vibestudio-live-corpus/seed-v2/sft/build/chains.pkl,share=all --prefer-unseen MIX...
+
+  (`--dry-run` prints the round's commands; verified against the live paths with START = sft-v8's candidate).
+
+## 2026-11-22 17:40 A held failure ends the run (async driver and cycles)
+
+AGENTS.md: "A significant unexplained held regression ends the experiment at that eval." A `failure` verdict (below
+-`--fail-pts` with p < 0.05) now stops both pipelines; `neutral` keeps going as before (a neutral rejection rolls back
+and continues).
+- `async-drive`: the lineage rolls back to the reference, `phase-state.json` records `halted`, no new round starts (a
+  round in flight is discarded at publication), the standing collection serves the reference so the DGX keeps
+  collecting, `bug-hunt-<sha12>.json` is written, and the driver exits 3 with the message. A rerun stays halted;
+  `--resume-after-hunt` clears it and rounds start from the reference.
+- `cycle`: the speculative cycle after a failed candidate halts at its gate (no SFT, no next cycle; a detached
+  collection of the reference starts), and a cycle whose gate adopted before the verdict halts at its held stage when
+  the late verdict is a failure and stops the next cycle it launched (driver, collection, fill, SFT units).
+  `bug-hunt.json` and `stages/halted.done` record it; `--resume-after-hunt` (never carried to a next cycle) restores
+  the old rejection (train the previous start, recollect).
+
+## 2026-11-22 18:00 Colab sizing from the session's hardware; profile `colab`
+
+The Colab learner and actor claims were G4 constants (96 GB): on the live A100-SXM4-80GB a learner beside a capped
+actor (59 + 34 GiB) could not be admitted, and FP8 weights would have been requested on sm_80, which has no FP8 GEMMs.
+- `execution_profile.colab_layout(hardware)` sizes the four layouts from `colab-ready.json` `hardware` (VRAM, host RAM,
+  GPU name, compute capability; bootstrap now probes `compute_cap`, and `pop_rl_actor.colab_hardware` asks nvidia-smi
+  when an older ready file lacks it) by the measured memory model: learner CUDA peak 5.2 GiB + 1.2 x
+  `--activation-gb` (127 KB/token/layer saved activations, 24 layers), 2 GiB allocator slack, 1 GiB admission reserve;
+  an actor is 10 GiB + its KV, beside the learner its KV is a quarter of the usable GPU.
+  - A100 80 GB (78 usable): learner alone 77 GiB (activation 58, ~20k resident tokens); beside an actor 47 GiB
+    (activation 33, ~11k tokens) + actor 30 GiB (KV 20, 53 running); actor alone 70 GiB (mem fraction 0.88). FP8 off.
+  - G4 96 GB: the earlier measured layout (actor 34 GiB / KV 24 / 64 running, learner 59 GiB, actor alone 84); FP8 on.
+- `serve-checkpoint` sizes the actor from the session and serves BF16 when an FP8 request meets a GPU without FP8;
+  `run-sft` claims the learner box (beside the actor when the session's recorded actor was served beside the learner,
+  else alone) and sets the recipe's `--activation-gb` to it (memory only: the step list, and so a DGX takeover, is
+  unchanged).
+- The profile is `colab` (hardware-neutral; `colab_g4` still resolves), the actor export format `sglang-colab-...`
+  (held_eval places both prefixes on host `colab`).
+
+## 2026-11-22 18:30 Async-train data/GRPO/serving review fixes: FP8 collection weights, JOLT+ custody, GRPO exchange and extra actors, sft_sources student tier
+
+Two independent reviews of 222af966e..7c9038cf5 found six defects in the data, GRPO and serving side; all are fixed as
+the default with tests that fail on each (mutants checked).
+
+- **FP8 collection weights could not run on our fork.** The natlang export sets `config.natlang_producer`, so every
+  LFM3 projection goes through `natlang_native_projection` / `natlang_source_ffn_projection`, which refused any
+  quantized layer. Fork ec27f0809a (branch natlang, pushed; pin bumped in `training/neuralese/sglang-fork.json`):
+  online-FP8 layers run their FP8 GEMM there, and `update_weights_from_disk` requantizes in place into the existing
+  FP8 weight/scale storage (CUDA graphs keep valid buffers; per-channel scales, so shard-wise staging is exact). Marker
+  `NATLANG_FP8_WEIGHTS`; `serve_native_checkpoint.serving_weight_dtype` serves BF16 with a `sglang_weight_dtype_fallback`
+  event on a fork without it or a GPU below sm_89 (the Colab A100, sm_80: no FP8 GEMM; Marlin weight-only FP8 exists
+  there but is unmeasured, so BF16). Checked on the DGX (sm_121), sft-v9's collection policy (sft-v8 checkpoint
+  66422fcf, its existing export), fork worktree via PYTHONPATH, through the ledger beside the live collection:
+  - fork test: requantization bitwise equal to a fresh quantization, storage pointers unchanged, GEMM within 10% of FP32;
+  - live reload sft-v8 -> sft-v7 -> sft-v8 export: batch-1 prefill log-probabilities after the round trip bitwise equal
+    to the fresh load (512 tokens; a repeat is deterministic; the other policy differs by 0.26 nats mean);
+  - log-probability agreement, FP8-sampled tokens (32 real collection prompts of 5-16k tokens, 256 tokens each) scored by
+    both engines' prefill: mean |d| 0.053, median 0.001, p90 0.16, p99 0.54, mean d +0.0017 (8,160 tokens). For SFT
+    (no ratio) this does not bias training; held and GRPO actors stay BF16 (the actor law carries `-w-fp8`);
+  - decode throughput at equal settings (32 running, FP8 KV, both servers up and measured alternately because the GB10
+    is shared with the live collection): FP8 848 vs BF16 642 tok/s median (paired ratios 2.21, 1.39, 1.31, 1.28;
+    the first round's 2.2 is contention noise). Prefill 21.8 vs 23.9 s for 32 prompts.
+  `expert_iteration.COLLECT_WEIGHT_DTYPE = 'fp8'`. **The DGX fork checkout (`/home/werg/sglang-natlang`, an editable
+  install that live actors import) stays at dbc51ddb72 until a boundary with no live actor**; until then FP8 requests
+  serve BF16 with the fallback event. Moving it (`git -C /home/werg/sglang-natlang pull`, python only, no reinstall)
+  changes the attested fork commit, so the held series re-measures its base there; BF16 serving code is unchanged.
+- **JOLT+ custody crashed every default GRPO run** (`teacher_attempts > 0`): `custody._source_path` joined the held-v2/v3
+  registry entries' `data_nvme:` paths (since 11-20) to the checkout. Fixed in fb75ccb78 for custody and the seven
+  readers that joined `repo / entry['path']` (one helper, `corpus_registry.entry_root`). On real sft-v9 groups with
+  failed students, `jolt.teacher_entries` under the real `ProtectedWorlds` now builds guided entries (7 of 17 groups;
+  10 had no usable facts). `expert_iteration.TEACHER_ATTEMPTS = 2`: the next production collection is its first real
+  run; watch `teacher attempts` / `no teacher attempts` events and the extract's `teacher_attempt_guidance_leak`.
+- **GRPO compact group exchange** (schema /2): ships `load_group`'s lowered learner inputs plus the stored Neuralese
+  states they import; /1 shipped 0 sampled ids. Byte-identical round trip on five real grpo-v5 run1 groups.
+- **`--extra-actor URL[=SLOTS][@HOST]`** actors get every published version after the primary (local reload or
+  `pop_rl_actor.rebind_actor`, all routes attested); episodes carry the version their own actor served; a lagging actor
+  idles past `--max-staleness`. `rho_by_staleness` covers students' own episodes only.
+- **`--reasoning-rl-weight`** scales ReasoningRL, whose default objective (twin-fkl, 11-20) is exactly the privileged
+  twin's forward KL that §8 keeps off: the 0 default stays and its help/docstring now say so.
+- **sft_sources student tier:** own and jolt-guided successes share one per-task, family and wrapper cap (own first);
+  a frontier task whose only student data is guided keeps its teacher episodes and filled units until its guided
+  successes actually enter the own share (step 5), else they train; jolt-guided replays get the actor's 131072 context;
+  extract's pass rates count student samples only; per-call policies now read `sampling.policy` (they were always
+  empty, so the adjacent-policy tier saw only the episode policy). `--guided train` admits 12 guided episodes from the
+  real pool (`/home/werg/data/ei-sources`: 6 grpo-v4/run1, which the builds' `--exclude-run` drops, and 6 grpo-v4/run2):
+  their extraction dropped 5 and 7 leaked ones (`teacher_attempt_guidance_leak`) and none is in the held-v3 exclusion.
+- **Not checked:** FP8 on Pop (sm_89) and Colab hardware; FP8 with native adapters slots in use, Neuralese capture/import
+  requests and n-gram speculation on an FP8 actor (code paths act on embeddings, K/V and conv inputs only, unexercised
+  live); the extra-actor publication against a real remote actor; a GRPO learner consuming packed groups (no remote
+  learner flow exists yet: the exchange is lossless but unused).

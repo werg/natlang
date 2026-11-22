@@ -99,7 +99,7 @@ def catalog(repo, config=None):
     corpus_registry_path = repo / _cr.ENTRIES
     corpus_registry = _cr.load(repo)
     registered_corpora = []
-    registered_roots = {repo / entry['path'] for entry in corpus_registry['corpora']}
+    registered_roots = {_cr.entry_root(entry, repo) for entry in corpus_registry['corpora']}
     for entry in corpus_registry['corpora']:
         manifest_path = repo / 'training/corpus-manifests' / (entry['id'] + '.json')
         manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
@@ -107,7 +107,7 @@ def catalog(repo, config=None):
             'manifest_sha256': sha256_file(manifest_path) if manifest else None,
             'snapshot_bytes': manifest.get('bytes', sum(item['bytes'] for item in manifest['files'])) if manifest else None,
             'snapshot_files': len(manifest['files']) if manifest else None,
-            'availability': 'present' if (repo / entry['path']).is_dir() else 'missing',
+            'availability': 'present' if _cr.entry_root(entry, repo).is_dir() else 'missing',
             'integration': 'dedicated_neuralese_pipeline; admission remains explicit, not a native-SFT input'})
     paths = []
     for folder, children, files in os.walk(repo / 'data'):
@@ -238,7 +238,7 @@ def catalog(repo, config=None):
                 chain.append(target)
             replacement = chain[-1] if len(chain) > 1 else None
             decision = next((d for d in policy['decisions'] if fnmatch.fnmatch(entry['path'], d['glob'])), None)
-            provenance = provenance_only.get(str((repo / entry['path']).resolve()))
+            provenance = provenance_only.get(str(_cr.entry_root(entry, repo).resolve()))
             resolution = ('replacement_positive_input' if replacement and str((repo / replacement).resolve()) in inputs else
                           'replacement_positive_carrier' if replacement and str((repo / replacement).resolve()) in positive_carriers else
                           'recorded_source_decision' if decision else

@@ -46,6 +46,15 @@ def entry_path(repo, identity: str) -> Path:
     return repo_of(repo) / ENTRIES / f'{identity}.json'
 
 
+def entry_root(entry, repo=None) -> Path:
+    """The local directory of a registry entry (or of a bare ``path`` value): a ``root:rel`` portable path under a
+    logical machine root (``data_nvme:...``, used by held-v2/v3 since 2026-11-20) or a checkout-relative one. Every
+    reader resolves entry paths here, never as ``repo / entry['path']``."""
+    from .data_registry import absolute
+    value = entry['path'] if isinstance(entry, dict) else str(entry)
+    return absolute(value, repo_of(repo) if repo is not None else Path(__file__).resolve().parents[4])
+
+
 def entry_text(entry: dict) -> str:
     return json.dumps(entry, indent=2, ensure_ascii=False) + '\n'
 

@@ -14,7 +14,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'scripts/neuralese_data'), str(ROOT / 'tests/neuralese')]
-import lfm3_fast_train  # noqa: E402
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 # the start policy 5ff07638 (grpo-v3's --checkpoint)
@@ -72,7 +72,7 @@ sys.path[:0] = {paths!r}
 from natlang_neuralese.common.cuda_context import ensure_context
 ensure_context()   # a fresh process's CUDA context: retried after compaction on GB10 fragmentation
 from test_lfm3_compiled_numerics import _model, _logp
-import lfm3_fast_train
+from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
 model = _model()
 torch.manual_seed(1)
 ids = torch.randint(0, 4096, (3000,), device='cuda')

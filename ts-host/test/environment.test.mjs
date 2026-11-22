@@ -197,6 +197,45 @@ test('memory checks keep eval semantics and line numbers; the bound is a setting
   assert.throws(() => evalMemoryLimitMb({ NATLANG_EVAL_MEMORY_MB: 'lots' }), /NATLANG_EVAL_MEMORY_MB/);
 });
 
+test('an eval that computes without pausing fails alone with the time teaching error; co-hosted work goes on', async () => {
+  // sft-v7 held candidate 2026-11-22: an eval's runaway recursion held a shared collector's event loop for an hour.
+  const { evalSyncLimitSeconds, syncGuard } = await import('../dist/native/eval-memory.js');
+  const limit = /eval stopped: it computed for more than 0.2 s without pausing; use a bounded or faster approach/;
+  const runaway = new TypeScriptEnvironment({ syncLimitSeconds: 0.2 });
+  const sibling = new TypeScriptEnvironment({ syncLimitSeconds: 0.2 });
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 20);
+  // The exponential search of the incident (no timeout_ms), a stretch after an await, and code that catches the error.
+  const search = 'function find(xs: any[]): boolean { if (xs.length === 1) return false;\n' +
+    'for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) if (find([xs[i] + xs[j], ...xs.filter((_, k) => k !== i && k !== j)])) return true;\n' +
+    'return false; }\nreturn find(Array.from({ length: 40 }, (_, i) => i));';
+  assert.throws(() => runaway.execute(evalRequest(search)), limit);
+  await assert.rejects(runaway.executeAsync(evalRequest('await null;\nlet n = 0;\nwhile (true) n++;')), limit);
+  await assert.rejects(runaway.executeAsync(evalRequest('await null;\nfor (;;) { try { for (;;) {} } catch {} }')), limit);
+  // A builtin that does not return within the first stretch (catastrophic backtracking) is interrupted too.
+  assert.throws(() => runaway.execute(evalRequest('return /^(a+)+$/.test("a".repeat(40) + "b");')), limit);
+  // Work that pauses is not one stretch; a smaller timeout_ms keeps its own error; the environment lives on.
+  assert.equal((await sibling.executeAsync(evalRequest('let total = 0;\nfor (let r = 0; r < 6; r++) {\n' +
+    'const end = performance.now() + 60; while (performance.now() < end) total++;\nawait new Promise(resolve => setTimeout(resolve, 1)); }\n' +
+    'return total > 0;'))).result, true);
+  assert.throws(() => runaway.execute({ ...evalRequest('for (;;) {}'), timeoutMs: 50 }), /timed out after 50ms/);
+  assert.equal(runaway.execute(evalRequest('return 1 + 1;')).result, 2);
+  clearInterval(timer);
+  assert.ok(ticks > 0);
+  // The bound is a setting; 0 turns it off; module guards reset per run.
+  assert.equal(evalSyncLimitSeconds({}), 60);
+  assert.equal(evalSyncLimitSeconds({ NATLANG_EVAL_SYNC_SECONDS: '0' }), 0);
+  assert.equal(evalSyncLimitSeconds({ NATLANG_EVAL_SYNC_SECONDS: '120' }), 120);
+  assert.throws(() => evalSyncLimitSeconds({ NATLANG_EVAL_SYNC_SECONDS: 'long' }), /NATLANG_EVAL_SYNC_SECONDS/);
+  assert.equal(new TypeScriptEnvironment({ syncLimitSeconds: 0 }).syncLimitSeconds, undefined);
+  let clock = 0;
+  const once = syncGuard(1, 'stop', false, () => clock);
+  once(); clock = 5000; assert.throws(() => { for (let i = 0; i < 200; i++) once(); }, /stop/);
+  await null;
+  once(); for (let i = 0; i < 200; i++) once();
+  runaway.close(); sibling.close();
+});
+
 test('callable-folder module code is bounded per synchronous run', async () => {
   const environment = new TypeScriptEnvironment({ mode: 'retained', memoryLimitMb: 64 });
   const module = { exports: {} };
