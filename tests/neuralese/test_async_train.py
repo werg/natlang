@@ -491,7 +491,8 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
     (argv, env), = launched
     assert argv[:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')] and 'PREFLIGHT_ONLY' not in env
     # launch-sft.sh itself execs memory_ledger.py run (the learner is a ledger unit)
-    script = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/grpo-v4/launch-sft.sh')
+    from natlang_neuralese.common.paths import root
+    script = root('data_nvme') / 'lfm3-rl-dgx-20261029' / 'ops' / 'grpo-v4' / 'launch-sft.sh'
     if script.exists():
         text = script.read_text()
         assert 'memory_ledger.py run --unit "$UNIT"' in text and '--epochs 1' in text and 'exp0_sft.py $ARGS' in text
