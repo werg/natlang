@@ -7002,7 +7002,8 @@ reversed; every mutant fails its test).
   candidate rolls the lineage back to the reference, so the previous policy is the reference's predecessor (it had become
   the rejected policy) and a round trained from a discarded policy is discarded at publication. Two neutral measured
   rounds switch SFT <-> GRPO from the reference. As in cycles (902eb04f1, a4d047827) the loop continues from the
-  reference after a failure (the next round is measured); the supervisor stops it for the hunt.
+  reference after a failure (the next round is measured); the supervisor stops it for the hunt. **Superseded 17:40
+  (coordinator):** a failure verdict ends the experiment at that eval, as AGENTS.md says (below).
 - **Colab paths**: the VM-side factor merge called `export(out_ckpt, base_dir, out_hf)` (TypeError on every factor
   rebind); run-sft no longer starts MPS (the serve that puts an actor beside the learner starts it; starting it after a
   non-MPS actor breaks the learner), maps `--export-factors-dir` from the recipe and pulls the factors blob first into
@@ -7028,3 +7029,18 @@ reversed; every mutant fails its test).
         --aux live=/home/werg/data/vibestudio-live-corpus/seed-v2/sft/build/chains.pkl,share=all --prefer-unseen MIX...
 
   (`--dry-run` prints the round's commands; verified against the live paths with START = sft-v8's candidate).
+
+## 2026-11-22 17:40 A held failure ends the run (async driver and cycles)
+
+AGENTS.md: "A significant unexplained held regression ends the experiment at that eval." A `failure` verdict (below
+-`--fail-pts` with p < 0.05) now stops both pipelines; `neutral` keeps going as before (a neutral rejection rolls back
+and continues).
+- `async-drive`: the lineage rolls back to the reference, `phase-state.json` records `halted`, no new round starts (a
+  round in flight is discarded at publication), the standing collection serves the reference so the DGX keeps
+  collecting, `bug-hunt-<sha12>.json` is written, and the driver exits 3 with the message. A rerun stays halted;
+  `--resume-after-hunt` clears it and rounds start from the reference.
+- `cycle`: the speculative cycle after a failed candidate halts at its gate (no SFT, no next cycle; a detached
+  collection of the reference starts), and a cycle whose gate adopted before the verdict halts at its held stage when
+  the late verdict is a failure and stops the next cycle it launched (driver, collection, fill, SFT units).
+  `bug-hunt.json` and `stages/halted.done` record it; `--resume-after-hunt` (never carried to a next cycle) restores
+  the old rejection (train the previous start, recollect).

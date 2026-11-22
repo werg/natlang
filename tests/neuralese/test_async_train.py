@@ -589,11 +589,17 @@ def test_rounds_publish_advance_and_a_crash_after_the_merge_resumes_without_retr
     assert ('stop',) in calls
 
 
-def test_a_verdict_applied_mid_round_discards_the_round_and_the_next_trains_from_the_reference(tmp_path, monkeypatch):
+def test_a_failure_verdict_ends_the_experiment_and_the_collection_serves_the_reference(tmp_path, monkeypatch, capsys):
+    """AGENTS.md: a significant unexplained held regression ends the experiment at that eval. The failure arriving while
+    r0001 trains from the candidate rolls the lineage back, discards r0001, issues no new round, leaves the standing
+    collection on the reference, writes the bug-hunt record and exits 3 with a message; --resume-after-hunt goes on
+    from the reference. A neutral rejection rolls back and keeps going."""
     ei, d = _driver(tmp_path, monkeypatch, argv=['--held-every', '1', '--max-rounds', '2'])
     monkeypatch.setattr(d.c, 'pin_stage', lambda: None)
     monkeypatch.setattr(d, 'held_loop', lambda: None)
-    for name in ('ensure_collection', 'ensure_remote_collection', 'stop_collections'):
+    collected = []
+    monkeypatch.setattr(d, 'ensure_collection', lambda p: collected.append(p['sha256']))
+    for name in ('ensure_remote_collection', 'stop_collections'):
         monkeypatch.setattr(d, name, lambda *a: None)
     monkeypatch.setattr(d, 'prepare_ahead', lambda rd, pols: None)
     monkeypatch.setattr(d, 'prepare', lambda rd, pols: None)
@@ -601,20 +607,35 @@ def test_a_verdict_applied_mid_round_discards_the_round_and_the_next_trains_from
     d.controller.record_round_published('r0000', '/ckpt/v1.pt', '1' * 64, base_sha256='a' * 64)
     d.controller.start_measurement()
     trained = []
+    verdict = {'verdict': 'failure', 'adopt': False, 'checkpoint': '/ckpt/v1.pt', 'sha256': '1' * 64,
+               'vs_start': {'delta': -0.06, 'p': 0.01}}
 
     def train(rd, p):
         trained.append(p['sha256'])
         if len(trained) == 1:       # the held verdict of v1 arrives while r0001 trains from it
-            d.verdicts.append({'verdict': 'failure', 'adopt': False, 'checkpoint': '/ckpt/v1.pt', 'sha256': '1' * 64})
+            d.verdicts.append(dict(verdict))
         return rd / 'f'
     monkeypatch.setattr(d, 'train_sft', train)
     monkeypatch.setattr(d, 'publish', lambda rd, p, f: {'checkpoint': str(rd / 'c.pt'),
                                                         'checkpoint_sha256': hashlib.sha256(rd.name.encode()).hexdigest()})
-    d.run()                         # a discarded round does not count: r0002 and r0003 complete
-    assert trained[:2] == ['1' * 64, 'a' * 64] and len(trained) == 3
-    assert (d.root / 'r0001' / 'discarded.json').exists()
-    assert [p['sha256'] for p in d.controller.state['lineage']][:1] == ['a' * 64] and not d.controller.in_lineage('1' * 64)
-    assert (d.root / f'bug-hunt-{"1" * 12}.json').exists()
+    assert d.run() == 3
+    assert trained == ['1' * 64] and (d.root / 'r0001' / 'discarded.json').exists()
+    assert collected[-1] == 'a' * 64 and d.controller.current['sha256'] == 'a' * 64
+    assert (d.root / f'bug-hunt-{"1" * 12}.json').exists() and d.controller.state['halted']['sha256'] == '1' * 64
+    assert 'experiment ends at this eval' in capsys.readouterr().err
+    assert d.run() == 3 and trained == ['1' * 64]            # a rerun without the flag stays halted
+    d.a.resume_after_hunt, d.a.max_rounds = True, 1
+    assert d.run() == 0 and trained == ['1' * 64, 'a' * 64] and not d.controller.state['halted']
+
+
+def test_a_neutral_rejection_rolls_back_and_keeps_going(tmp_path):
+    import expert_iteration as ei
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1)
+    ctrl.record_round_published('r1', *_policy(1), base_sha256='0' * 64)
+    ctrl.start_measurement()
+    ev = ctrl.record_verdict({'verdict': 'neutral', 'adopt': False, 'checkpoint': _policy(1)[0], 'sha256': _policy(1)[1]})
+    assert ev['action'] == 'rollback' and not ctrl.state.get('halted') and ctrl.current['sha256'] == '0' * 64
 
 
 def test_dry_run_prints_one_rounds_commands(tmp_path, monkeypatch, capsys):

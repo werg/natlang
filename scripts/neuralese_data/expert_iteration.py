@@ -631,6 +631,8 @@ def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous
             skip = False
             continue
         flag = arg.split('=', 1)[0]
+        if flag == '--resume-after-hunt':      # one cycle's decision, never inherited
+            continue
         if flag in own:
             skip = '=' not in arg
             continue
@@ -1221,6 +1223,8 @@ class Cycle:
             (self.dir / 'stages' / 'gate.done').write_text(json.dumps({'time': time.time(), **info}) + '\n')
             self.note(stage='gate', done=True, **info)
             return
+        if v['verdict'] == 'failure' and not getattr(self.a, 'resume_after_hunt', False):
+            self.halt(v, collect_reference=True)
         if v['adopt']:
             info = {'start': self.a.start, 'start_sha': self.start_sha, 'prefer_unseen': list(self.a.prefer_unseen),
                     'collection': 'adopted'}
@@ -1594,6 +1598,9 @@ class Cycle:
         # needs it now, for the schedule, the reference and the rollback target
         while self.speculative and (self.gate() or {}).get('verdict_pending') and not self.previous_verdict():
             time.sleep(300)
+        late = self.previous_verdict() if self.speculative and (self.gate() or {}).get('verdict_pending') else None
+        if late and late['verdict'] == 'failure' and not getattr(self.a, 'resume_after_hunt', False):
+            self.halt(late, stop_next=True)        # this cycle trained from the rejected candidate
         if not self.measured():
             return self.mark('held', skipped=f'--held-every {self.a.held_every}')
         while self.active(self.base_unit()):     # one held measurement at a time (Pop serves one policy; the DGX one
@@ -1663,11 +1670,44 @@ class Cycle:
                            label=self.a.name, why=f'{self.a.name}: {json.dumps(result)}', unit=f'{self.a.name}-promote')
         self.mark('verdict', **result)
 
+    def halt(self, verdict, *, collect_reference=False, stop_next=False):
+        """A held failure (below -``--fail-pts`` with p < 0.05) ends the experiment at that eval (AGENTS.md): no
+        further SFT and no next cycle; ``bug-hunt.json`` records it. ``collect_reference``: the machines keep working:
+        a collection of the reference (the policy the lineage rolls back to) starts detached, data for the restart.
+        ``stop_next``: a next cycle launched before the late verdict (it descends from the rejected candidate) stops.
+        Rerun with ``--resume-after-hunt`` when the hunt is closed (the rejection then proceeds as before)."""
+        reference = (verdict.get('reference') or {}).get('checkpoint') or verdict['next_start']
+        record = {'verdict': verdict, 'reference': reference, 'cycle': self.a.name, 'at': time.time(),
+                  'debug': verdict.get('debug') or 'regression: hunt it (AGENTS.md "degradation means bug")'}
+        (self.dir / 'bug-hunt.json').write_text(json.dumps(record, indent=1, default=str) + '\n')
+        if collect_reference and not self.active(f'{self.a.name}-recollect'):
+            sha = self.previous_start_sha(reference)
+            self.set_collect_aside(sha)
+            unit = f'{self.a.name}-recollect'
+            budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
+            self.ledger(unit, budget, 'high', self.collect_command(unit, reference, sha, self.a.slots),
+                        self.dir / 'collect.log', detach=True)
+            record['collecting'] = unit
+        if stop_next and self.done('next'):
+            nxt = json.loads((self.dir / 'stages' / 'next.done').read_text())
+            for unit in [nxt.get('unit'), *(f'{nxt.get("name")}-{u}' for u in ('collect', 'recollect', 'fill', 'sft'))]:
+                if unit and self.active(unit):
+                    self.stop_unit(unit)
+            record['stopped_next'] = nxt.get('name')
+        (self.dir / 'stages' / 'halted.done').write_text(json.dumps(record, default=str) + '\n')
+        self.note(stage='halted', **{k: v for k, v in record.items() if k != 'verdict'})
+        raise SystemExit(f'{self.a.name}: held failure of the previous candidate ({json.dumps(verdict.get("vs_start"))}): '
+                         f'the experiment ends at this eval (AGENTS.md); bug hunt: {self.dir}/bug-hunt.json; rerun with '
+                         '--resume-after-hunt when it is closed')
+
     def next_stage(self):
         """Launch the next cycle from this cycle's candidate (its own driver unit, as ops/ei/launch.sh does), pinned
         to ``--next-commit`` (default origin/main now: improvements enter at the next pin)."""
         if self.a.no_pipeline:
             return self.mark('next', skipped=True)
+        v = self.previous_verdict() if self.speculative else None
+        if v and v['verdict'] == 'failure' and not getattr(self.a, 'resume_after_hunt', False):
+            self.halt(v)
         name = self.a.next_name or next_name(self.a.name)
         if not name:
             return self.mark('next', skipped=f'no next name for {self.a.name}')
@@ -1985,6 +2025,14 @@ class PhaseController:
         self.save()
         return self.current
 
+    def resume_after_hunt(self):
+        """The supervisor closed the hunt: rounds start again from the lineage head (the reference)."""
+        if self.state.get('halted'):
+            self.state['history'].append({'at': round(time.time(), 1), 'action': 'resume after hunt',
+                                          'halted': self.state['halted']})
+            self.state['halted'] = None
+            self.save()
+
     def held_due(self):
         return int(self.state['since_held']) >= int(self.state['held_every'])
 
@@ -2034,6 +2082,10 @@ class PhaseController:
             self.state['consecutive_neutral'] = 0
             event['bug_hunt'] = f'regression vs {self.state["reference_policy"]["sha256"][:12]}: hunt it (AGENTS.md ' \
                                 '"degradation means bug")'
+            # AGENTS.md: a significant unexplained held regression ends the experiment at that eval
+            self.state['halted'] = {'at': round(time.time(), 1), 'sha256': sha, 'checkpoint': str(ckpt),
+                                    'reference': dict(self.state['reference_policy']),
+                                    'vs_start': verdict_record.get('vs_start'), 'reason': event['bug_hunt']}
         if adopt:
             self.state['reference_policy'] = {'checkpoint': str(ckpt), 'sha256': str(sha)}
             event['action'] = 'adopt'
@@ -2532,10 +2584,14 @@ class AsyncRoundDriver:
         self.c.pin_stage()
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
+        if getattr(self.a, 'resume_after_hunt', False):
+            self.controller.resume_after_hunt()
         completed = 0
         while self.a.max_rounds <= 0 or completed < self.a.max_rounds:
             with self.lock:
                 self.apply_verdicts()
+            if self.controller.state.get('halted'):
+                return self.halt()
             cur, phase = self.controller.current, self.controller.phase
             rid = self.controller.begin_round(cur['sha256'])
             round_dir = self.round_dir(rid)
@@ -2586,6 +2642,22 @@ class AsyncRoundDriver:
             self.note(round=rid, published=new['sha256'], version=new['version'])
             completed += 1
         return 0
+
+    def halt(self):
+        """A failure verdict ended the experiment (AGENTS.md): no new round; the standing collection serves the
+        lineage head (the reference the lineage rolled back to) so the machines keep collecting its outcomes while the
+        bug hunt runs; ``--resume-after-hunt`` starts rounds again."""
+        halted = self.controller.state['halted']
+        cur = self.controller.current
+        self.ensure_collection(cur)
+        message = (f'{self.a.name}: held failure of {halted["sha256"][:12]} vs {halted["reference"]["sha256"][:12]} '
+                   f'({json.dumps(halted.get("vs_start"))}): the experiment ends at this eval (AGENTS.md); the lineage '
+                   f'is back at {cur["sha256"][:12]}, whose collection keeps running ({self.collection_unit(cur)}). '
+                   f'Bug hunt: {self.root}/bug-hunt-{halted["sha256"][:12]}.json; rerun with --resume-after-hunt '
+                   'when it is closed.')
+        self.note(halted=halted['sha256'], message=message)
+        print(message, file=sys.stderr, flush=True)
+        return 3
 
     def plan(self):
         """``--dry-run``: the commands one round of the current state would run, without running them."""
@@ -2800,6 +2872,9 @@ def main():
                    help='observed Colab G4 compute-unit burn rate per session-hour for cycle-cost.json')
     y.add_argument('--held-samples', type=int, default=None,
                    help='samples per held task (default: the held profile\'s, 4 on the DGX, 2 on Pop)')
+    y.add_argument('--resume-after-hunt', action='store_true',
+                   help='a held failure halted the pipeline (AGENTS.md: the experiment ends at that eval); the hunt is '
+                        'closed: treat the failure as a rejection again (train the previous start)')
     y.add_argument('--success-pts', type=float, default=2.)
     y.add_argument('--fail-pts', type=float, default=3.)
     h = sub.add_parser('pop-held')
@@ -2883,6 +2958,9 @@ def main():
     ad.add_argument('--prefer-unseen', action='append', default=[])
     ad.add_argument('--max-rounds', type=int, default=0, help='stop after N rounds (0: continuous)')
     ad.add_argument('--dry-run', action='store_true', help="print one round's commands for the current state and exit")
+    ad.add_argument('--resume-after-hunt', action='store_true',
+                    help='a held failure halted the loop (AGENTS.md: the experiment ends at that eval); the hunt is '
+                         'closed: start rounds again from the lineage head')
     pr = sub.add_parser('publish-round', help='merge shipped factors and write every engine (a ledger unit of async-drive)')
     pr.add_argument('--base-checkpoint', required=True)
     pr.add_argument('--factors', required=True)

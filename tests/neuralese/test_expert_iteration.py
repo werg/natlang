@@ -306,8 +306,51 @@ def test_gate_keeps_a_neutral_rejections_collection_and_trains_the_previous_star
     assert cycle.collect_policy() == ('/v7.pt', 'cand')          # the sibling's collection stays
 
 
-def test_gate_recollects_from_the_previous_start_after_a_failure(tmp_path, monkeypatch):
+def test_a_failure_ends_the_pipeline_at_the_gate_and_collects_the_reference(tmp_path, monkeypatch):
+    """AGENTS.md: a significant unexplained held regression ends the experiment at that eval. The speculative cycle
+    after a failed candidate trains nothing and launches no next cycle: it writes bug-hunt.json, starts a detached
+    collection of the reference (the machines keep working) and exits; a neutral rejection proceeds."""
+    cycle = _speculative_cycle(tmp_path, {'verdict': 'failure', 'adopt': False, 'vs_start': {'delta': -0.05},
+                                          'next_start': '/v6.pt', 'reference': {'checkpoint': '/v6.pt'}})
+    cycle.a.kv_gb, cycle.a.k, cycle.a.collect_hours, cycle.a.no_neuralese_variants = 12, 4, 6., True
+    cycle.a.name, cycle.a.no_pipeline = 'sft-v8', False
+    launched = []
+    monkeypatch.setattr(cycle, 'ledger', lambda unit, budget, prio, cmd, log, **kw: launched.append((unit, cmd, kw)))
+    monkeypatch.setattr(cycle, 'active', lambda unit: False)
+    with pytest.raises(SystemExit, match='experiment ends'):
+        cycle.gate_stage()
+    assert not cycle.gate() and cycle.done('halted')
+    assert json.loads((cycle.dir / 'bug-hunt.json').read_text())['reference'] == '/v6.pt'
+    (unit, cmd, kw), = launched
+    assert unit == 'sft-v8-recollect' and kw.get('detach') and cmd[cmd.index('--checkpoint') + 1] == '/v6.pt'
+    assert cmd[cmd.index('--checkpoint-sha256') + 1] == 'six'
+    with pytest.raises(SystemExit, match='experiment ends'):        # nor does it launch a next cycle
+        cycle.next_stage()
+    neutral = _speculative_cycle(tmp_path / 'n', {'verdict': 'neutral', 'adopt': False, 'vs_start': {},
+                                                  'next_start': '/v6.pt'})
+    neutral.gate_stage()
+    assert neutral.train_policy()[:2] == ('/v6.pt', 'six')
+
+
+def test_a_late_failure_stops_the_cycle_and_its_next_one(tmp_path, monkeypatch):
+    cycle = _speculative_cycle(tmp_path, None)
+    cycle.a.name = 'sft-v8'
+    (cycle.dir / 'stages' / 'gate.done').write_text(json.dumps({'start': '/v7.pt', 'start_sha': 'cand',
+                                                                'prefer_unseen': [], 'verdict_pending': True}))
+    cycle.mark('next', name='sft-v9', unit='sft-v9-drive-1')
+    (Path(cycle.a.speculative_after) / 'verdict.json').write_text(json.dumps(
+        {'verdict': 'failure', 'adopt': False, 'vs_start': {}, 'next_start': '/v6.pt'}))
+    stopped = []
+    monkeypatch.setattr(cycle, 'active', lambda unit: unit in ('sft-v9-drive-1', 'sft-v9-collect'))
+    monkeypatch.setattr(cycle, 'stop_unit', stopped.append)
+    with pytest.raises(SystemExit, match='experiment ends'):
+        cycle.held_stage()
+    assert stopped == ['sft-v9-drive-1', 'sft-v9-collect'] and not cycle.done('held')
+
+
+def test_after_the_hunt_a_failure_is_a_rejection_that_recollects_from_the_previous_start(tmp_path, monkeypatch):
     cycle = _speculative_cycle(tmp_path, {'verdict': 'failure', 'adopt': False, 'vs_start': {}, 'next_start': '/v6.pt'})
+    cycle.a.resume_after_hunt = True
     assert cycle.recollect_due()
     (cycle.collect_dir).mkdir()
     (cycle.collect_dir / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': 'cand'}) + '\n')

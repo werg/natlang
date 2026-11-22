@@ -166,7 +166,8 @@ sft-v7..v10: collect 6 h, teacher, build, SFT, held on the adaptive interval, ne
 of `plans/neuralese/async-train.md` (`expert_iteration.py async-drive`: standing collection of the newest published
 policy, standing fill and teacher, back-to-back rounds with the next round's mix built during training, LoRA SFT on a
 Colab session or the DGX from one recipe, FP32 factor merge and publication to every engine in `publish-round`, held
-counted in rounds with rollback to the last measured policy, SFT <-> GRPO switch after two neutral measured rounds) is
+counted in rounds with rollback to the last measured policy and a halt on a failure verdict, SFT <-> GRPO switch after
+two neutral measured rounds) is
 built and tested at argv level; it replaces `cycle` once a first production round passes. Collection serves BF16
 weights with no JOLT+ guided attempts until the FP8 weight path and JOLT+ custody work in production
 (`COLLECT_WEIGHT_DTYPE`, `TEACHER_ATTEMPTS`). GRPO is the polish phase once SFT gains flatten, not the engine. The
