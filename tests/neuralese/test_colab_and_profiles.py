@@ -350,17 +350,16 @@ def test_run_remote_sft_runs_the_dgx_recipe_and_pulls_only_a_verified_checkpoint
     """The Colab SFT ran exp0_sft without --epochs 1 (default 3), without the preflight and --val-every; and pulled
     checkpoint.pt with rsync --partial to its final name, where a truncated copy was adopted."""
     work = _launch_json(tmp_path)
-    ran = []
+    ran, checkouts = [], []
 
-    def run(argv, **kw):
-        ran.append(argv)
-        remote_cmd = argv[-1]
-        out_dir = shlex.split(remote_cmd.split('&&', 1)[1])
-        out_dir = out_dir[out_dir.index('--out-dir') + 1]
+    def run_detached(host, cfg, remote_run, command, **kw):
+        ran.append(command)
+        out_dir = command[command.index('--out-dir') + 1]
         dest = remote['to_local'](out_dir) / 'checkpoint.pt'
         dest.write_bytes(b'trained' * 100)
-        return subprocess.CompletedProcess(argv, 0)
-    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', run)
+        return 0
+    monkeypatch.setattr(pop_rl_actor, 'run_detached', run_detached)
+    monkeypatch.setattr(pop_rl_actor, 'colab_checkout', lambda host, cfg, commit: checkouts.append(commit))
     monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
     args = types.SimpleNamespace(host='g4', run_name='sft-v10', work=str(work), launch_json=str(work / 'launch.json'),
                                  commit='c' * 40, state_sync_minutes=15.0, vram_gib=59.0, host_ram_gib=40.0)
@@ -368,8 +367,8 @@ def test_run_remote_sft_runs_the_dgx_recipe_and_pulls_only_a_verified_checkpoint
     assert pop_rl_actor.run_remote_sft(args) == 1 and not (work / 'checkpoint.pt').exists()
     remote['truncate'] = False
     assert pop_rl_actor.run_remote_sft(args) == 0 and (work / 'checkpoint.pt').read_bytes() == b'trained' * 100
-    remote_cmd = shlex.split(ran[-1][-1].split('&&', 1)[1])
-    sft = remote_cmd[remote_cmd.index('--') + 1:]
+    assert checkouts == ['c' * 40] * 2
+    sft = ran[-1][ran[-1].index('--') + 1:]
     assert sft[1].endswith('scripts/neuralese_data/exp0_sft.py') and sft[2] == 'train'
     assert sft[sft.index('--epochs') + 1] == '1' and sft[sft.index('--val-every') + 1] == '20'
     assert sft[sft.index('--base') + 1] == '/content/natlang-work/base-lfm3'
@@ -378,7 +377,7 @@ def test_run_remote_sft_runs_the_dgx_recipe_and_pulls_only_a_verified_checkpoint
     assert sft[sft.index('--val-chains') + 1].startswith('/content/natlang-work/runs/sft-sft-v10/val-0-')
     assert '--resume' in sft and sft[sft.index('--state-save-minutes') + 1] == '15.0'
     assert not any(str(tmp_path) in a for a in sft)       # no DGX path reaches the VM
-    assert remote_cmd[remote_cmd.index('--vram-gib') + 1] == '59.0'
+    assert ran[-1][ran[-1].index('--vram-gib') + 1] == '59.0'
 
 
 def test_cycle_sft_with_a_colab_profile_preflights_on_the_dgx_and_falls_back_without_adopting(tmp_path, monkeypatch):
@@ -587,23 +586,22 @@ def test_run_remote_sft_of_a_round_maps_its_factor_dir_pulls_blob_first_and_star
     monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda h, c, **kw: commands.append(c) or real_ssh(h, c, **kw))
     monkeypatch.setattr(pop_rl_actor, 'ensure_colab_mps', lambda host: pytest.fail('run-sft started MPS'))
 
-    def run(argv, **kw):
-        sft = shlex.split(argv[-1].split('&&', 1)[1])
+    def run_detached(host, cfg, remote_run, sft, **kw):
         factors = remote['to_local'](sft[sft.index('--export-factors-dir') + 1])
         factors.mkdir(parents=True, exist_ok=True)
         (factors / 'adapter_factors_fp32.safetensors').write_bytes(b'f' * 64)
         import hashlib
         (factors / 'policy_manifest.json').write_text(json.dumps({'adapter_factors_sha256':
                                                                   hashlib.sha256(b'f' * 64).hexdigest()}))
-        learner.append(argv[-1])
-        return subprocess.CompletedProcess(argv, 0)
+        learner.append(sft)
+        return 0
     learner = []
-    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', run)
+    monkeypatch.setattr(pop_rl_actor, 'run_detached', run_detached)
     monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
     args = types.SimpleNamespace(host='g4', run_name='r7', work=str(work), launch_json=str(work / 'launch.json'),
                                  commit=None, state_sync_minutes=15.0, vram_gib=59.0, host_ram_gib=40.0)
     assert pop_rl_actor.run_remote_sft(args) == 0
-    sft = shlex.split(learner[-1].split('&&', 1)[1])
+    sft = learner[-1]
     assert sft[sft.index('--export-factors-dir') + 1] == '/content/natlang-work/runs/sft-r7/factors'
     assert sft[sft.index('--round-id') + 1] == 'r0007' and sft.count('--resume') == 1
     assert (work / 'factors' / 'adapter_factors_fp32.safetensors').read_bytes() == b'f' * 64
@@ -613,15 +611,15 @@ def test_run_remote_sft_of_a_round_maps_its_factor_dir_pulls_blob_first_and_star
 
 def test_remote_rebind_merge_script_calls_the_exporters_with_their_real_signatures(tmp_path, monkeypatch):
     """The VM-side merge of shipped factors called export(out_ckpt, base_dir, out_hf) against
-    export(checkpoint, out_dir, *, base=...): a TypeError on every factor rebind."""
+    export(checkpoint, out_dir, *, base=...): a TypeError on every factor rebind. The merge itself is ``remote_merge``
+    (checked against the published sha), never a write to CHECKPOINTS/<sha>.pt that need not hash to its name."""
     import inspect
     from natlang_neuralese.export import native_hf
-    from natlang_neuralese.train import learner_state
     factors = tmp_path / 'factors'
     factors.mkdir()
     (factors / 'policy_manifest.json').write_text(json.dumps({'base_checkpoint_sha256': 'b' * 64}))
     (factors / 'adapter_factors_fp32.safetensors').write_bytes(b'f')
-    scripts = []
+    scripts, merges = [], []
 
     def ssh_host(host, command, **kw):
         words = shlex.split(command)
@@ -631,23 +629,127 @@ def test_remote_rebind_merge_script_calls_the_exporters_with_their_real_signatur
         return ''
     monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
     monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', lambda *a, **k: None)
+    monkeypatch.setattr(pop_rl_actor, 'remote_merge', lambda host, cfg, **kw: merges.append(kw) or True)
     cfg = pop_rl_actor.host_config('colab_g4', host='g4')
     pop_rl_actor._prepare_remote_rebind_export(host='g4', cfg=cfg, policy_id='p' * 64, version=3, factors_dir=factors)
+    assert merges == [{'base_sha': 'b' * 64, 'factors_dir': factors, 'expect_sha': 'p' * 64}]
     (words,) = scripts
     called = {}
-    real_export, real_merge = native_hf.export, learner_state.merge_factors_to_checkpoint
+    real_export = native_hf.export
 
     def fake_export(*a, **k):
         inspect.signature(real_export).bind(*a, **k)
         called['export'] = (a, k)
         return {'weights_sha256': 'w' * 64}
-
-    def fake_merge(*a, **k):
-        inspect.signature(real_merge).bind(*a, **k)
-        called['merge'] = a
     monkeypatch.setattr(native_hf, 'export', fake_export)
-    monkeypatch.setattr(learner_state, 'merge_factors_to_checkpoint', fake_merge)
     monkeypatch.setattr(sys, 'argv', ['-c', *words[3:]])
-    exec(compile(words[2], '<remote-merge>', 'exec'), {'__name__': '__main__'})
+    exec(compile(words[2], '<remote-export>', 'exec'), {'__name__': '__main__'})
     (out_ckpt, out_hf), kw = called['export']
-    assert kw == {'base': cfg['base']} and out_hf == words[-1] and out_ckpt == called['merge'][2]
+    assert kw == {'base': cfg['base']} and out_hf == words[-1] and out_ckpt == f'{cfg["checkpoints"]}/{"p" * 64}.pt'
+    monkeypatch.setattr(pop_rl_actor, 'remote_merge', lambda host, cfg, **kw: False)
+    with pytest.raises(RuntimeError, match='does not hash'):
+        pop_rl_actor._prepare_remote_rebind_export(host='g4', cfg=cfg, policy_id='p' * 64, version=3, factors_dir=factors)
+
+
+def test_ensure_remote_checkpoint_keeps_merges_or_ships_and_never_trusts_a_name(tmp_path, remote, monkeypatch):
+    """A start checkpoint on the VM: kept when it hashes to its name, removed when not (an older VM merge wrote
+    CHECKPOINTS/<sha>.pt unverified); merged on the VM from a published round's base and factors; shipped otherwise
+    (also when the merge does not reproduce the DGX's sha)."""
+    import hashlib
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    cfg = pop_rl_actor.host_config('colab', host='g4')
+    local = tmp_path / 'policy' / 'checkpoint.pt'
+    local.parent.mkdir()
+    local.write_bytes(b'policy')
+    sha = hashlib.sha256(b'policy').hexdigest()
+    target = remote['to_local'](f'{cfg["checkpoints"]}/{sha}.pt')
+    assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'shipped' and target.read_bytes() == b'policy'
+    assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'present'
+    target.write_bytes(b'not it')
+    removed = []
+    real_ssh = pop_rl_actor.ssh_host
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda h, c, **kw: (
+        removed.append(c) or target.unlink() or '') if c.startswith('rm -f') else real_ssh(h, c, **kw))
+    assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'shipped' and target.read_bytes() == b'policy'
+    assert removed
+    target.unlink()
+    (local.parent / 'published.json').write_text(json.dumps({
+        'checkpoint_sha256': sha, 'factors_dir': str(tmp_path / 'f'), 'merge': {'base_checkpoint_sha256': 'b' * 64}}))
+    merges = []
+
+    def merge(host, cfg, **kw):
+        merges.append(kw)
+        target.write_bytes(b'policy')
+        return True
+    monkeypatch.setattr(pop_rl_actor, 'remote_merge', merge)
+    monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', lambda *a, **k: pytest.fail('shipped a mergeable policy'))
+    assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'merged'
+    assert merges == [{'base_sha': 'b' * 64, 'factors_dir': str(tmp_path / 'f'), 'expect_sha': sha}]
+    target.unlink()
+    shipped = []
+    monkeypatch.setattr(pop_rl_actor, 'remote_merge', lambda host, cfg, **kw: False)
+    monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', lambda local, path, host, **kw: shipped.append(path) or
+                        remote['to_local'](path).write_bytes(Path(local).read_bytes()))
+    assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'shipped' and shipped
+
+
+def test_run_detached_survives_the_link_and_never_starts_a_second_learner(monkeypatch):
+    """The learner ran in the foreground of its SSH session: a dropped colab-ssh link killed it. It now runs under
+    setsid with a pid and an exit-status file; a call that finds this run's learner alive waits for it; an unreachable
+    host returns None after the away time; a learner gone without a status is a failure."""
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    monkeypatch.setattr(pop_rl_actor.time, 'sleep', lambda s: None)
+    cfg = pop_rl_actor.host_config('colab', host='g4')
+
+    def fake(states):
+        sent = []
+
+        def ssh_host(host, command, **kw):
+            sent.append(command)
+            if 'setsid nohup' in command:
+                return ''
+            state = states.pop(0)
+            if isinstance(state, Exception):
+                raise state
+            return state + '\n'
+        return sent, ssh_host
+    sent, ssh = fake(['none', 'running', 'running', 'rc 0'])
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py']) == 0
+    (launch,) = [c for c in sent if 'setsid nohup' in c]
+    assert '/r/learner.rc' in launch and '/r/learner.pid' in launch and 'x.py' in launch
+    sent, ssh = fake(['running', RuntimeError('link down'), 'rc 3'])
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py']) == 3
+    assert not any('setsid nohup' in c for c in sent)
+    sent, ssh = fake(['running', RuntimeError('link down')])
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py'], away_seconds=0) is None
+    sent, ssh = fake(['running', 'none'])
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh)
+    assert pop_rl_actor.run_detached('g4', cfg, '/r', ['python', 'x.py']) == 1
+
+
+def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remote, monkeypatch):
+    """A recorded actor served alone (70 of 78 GiB) left the learner alone (77 GiB) waiting out its admission: run-sft
+    stops it for the round and serves it again from its recorded arguments afterwards. An actor capped beside the
+    learner keeps running."""
+    work = _launch_json(tmp_path)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    monkeypatch.setattr(pop_rl_actor, 'run_detached', lambda *a, **k: (
+        remote['to_local']('/content/natlang-work/runs/sft-y/checkpoint.pt').write_bytes(b'ok') and 0))
+    events = []
+    monkeypatch.setattr(pop_rl_actor, 'stop_colab', lambda host: events.append('stop') or pop_rl_actor.read_json(
+        pop_rl_actor.colab_state_path(host)))
+    monkeypatch.setattr(pop_rl_actor, 'serve_colab', lambda ns: events.append(('serve', ns.policy_id, ns.port)))
+    args = types.SimpleNamespace(host='g4', run_name='y', work=str(work), launch_json=str(work / 'launch.json'),
+                                 commit=None, state_sync_minutes=15.0, vram_gib=None, host_ram_gib=None)
+    record = {'pid': 7, 'beside_learner': False, 'policy_id': 'p' * 64,
+              'serve_args': {'policy_id': 'p' * 64, 'port': 8570, 'checkpoint': 'x', 'host': 'g4'}}
+    pop_rl_actor.colab_state_path('g4').parent.mkdir(parents=True, exist_ok=True)
+    pop_rl_actor.write_json(pop_rl_actor.colab_state_path('g4'), record)
+    assert pop_rl_actor.run_remote_sft(args) == 0
+    assert events == ['stop', ('serve', 'p' * 64, 8570)]
+    events.clear()
+    pop_rl_actor.write_json(pop_rl_actor.colab_state_path('g4'), {**record, 'beside_learner': True})
+    assert pop_rl_actor.run_remote_sft(args) == 0 and events == []

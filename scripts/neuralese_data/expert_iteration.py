@@ -2705,7 +2705,10 @@ def publish_round(args):
     published = publish_merged_policy(ckpt, base=args.base, sglang_export_dir=out / 'sglang-hf', gguf_dir=out / 'gguf',
                                       label=args.label, why=f'async round {args.label}')
     (out / 'sha256.txt').write_text(merged['checkpoint_sha256'] + '\n')
-    write_json_durable(out / 'published.json', {**published, 'merge': merged})
+    # factors_dir: a Colab learner merges the next round's start from it on the VM instead of receiving 3.4 GB
+    # (pop_rl_actor.ensure_remote_checkpoint)
+    write_json_durable(out / 'published.json', {**published, 'merge': merged,
+                                                'factors_dir': str(Path(args.factors).resolve())})
     log({'event': 'round published', 'checkpoint_sha256': merged['checkpoint_sha256'], 'out': str(out)})
 
 
