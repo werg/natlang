@@ -6305,6 +6305,12 @@ best-of-k: 16 draws in flight (32 with spare slots), policy sft-v6 dc95f29d, pin
 - Wave 0014 ran eight new Gmail and Google Handoff goals through six worker slots in one shared instance. All eight captures reached DGX. Four passed and were registered as trajectory IR with 79 learnable decisions. The wave took 7 min 13 s end to end and peaked at 7.5 GiB without hitting a memory limit. One evaluation-status read and four background workspace requests reset in the sampled server log. All runs completed. The archive now has 22 verified Luna trajectories.
 - The tested release is the default campaign pin. Wave 0015 continues with eight fresh Google Handoff goals at six workers. Eight simultaneous workers stay deferred while the shared listener still drops status requests under load.
 
+### 2026-11-22 — resume the full Luna queue after Tick restarts
+
+- Wave 0015 archived all eight Google Handoff captures and registered three trajectories, for 25 verified Luna trajectories at the reboot boundary. The full collection resumed from wave 0016 on the same release with six slots and eight goals per wave. The controller has no wave-count limit and continues from the saved receipts. Terminal transport failures still preserve captures before the controller pauses.
+- The installed Vibestudio server package `0.1.105` passed the deployment preflight, including the packaged Iroh binding. The controller picks it up at a wave boundary so the seven deployment goals can enter the queue. Tick booted a campaign-owned Android emulator with a separate writable profile and verified its name and boot status via ADB. The emulator retires during the bulk phase. Its eight Android goals are scheduled sequentially once the bulk queue drains, with the real device state checked before each case.
+- The Examples wave archived all eight captures on DGX. Two passed and were registered as trajectory IR, bringing the total to 27 verified Luna trajectories. All eight reached a root model call and recorded no terminal execution error. Tick's peak approached the original 11 GiB limit. The controller received a 12.5 GiB limit with the 7.5 GiB host reserve intact, and recorded zero memory-limit events.
+
 ## 2026-11-21 16:55 Pop fill widened; operator soft-state fit retargeted to the serving policy
 
 - Pop's fill ran 24 staged episodes against 32 engine slots (GPU 18–36%, 360–1,385 tok/s): relaunched as
