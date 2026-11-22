@@ -156,15 +156,41 @@ def select(args):
 
 
 # ---- collect ---------------------------------------------------------------------------------------------------------
+def parse_actor_endpoints(raw_actors, default_slots):
+    """Parse repeatable ``--actor URL[=SLOTS]`` specs into ``[(url, slots), ...]``."""
+    if not raw_actors:
+        return []
+    items = [raw_actors] if isinstance(raw_actors, str) else list(raw_actors)
+    endpoints = []
+    for raw in items:
+        for piece in str(raw).split(','):
+            piece = piece.strip()
+            if not piece:
+                continue
+            if '=' in piece:
+                url, _, count = piece.rpartition('=')
+                endpoints.append((url.rstrip('/'), max(1, int(count))))
+            else:
+                endpoints.append((piece.rstrip('/'), max(1, int(default_slots))))
+    return endpoints
+
+
+def endpoint_for_slot(endpoints, slot_index):
+    """Assign slot ``slot_index`` to one actor endpoint proportional to each endpoint's slot weight."""
+    expanded = [url for url, count in endpoints for _ in range(max(1, int(count)))]
+    return expanded[slot_index % len(expanded)]
+
+
 def frontier_collector(base):
     class FrontierCollector(base):
         """grpo's Collector over a fixed task order: one group of ``--group`` samples per task, in order, no new group
-        after the deadline; tasks this WORK already scored are skipped (resume)."""
+        after the deadline; supports sharding across multiple actor endpoints (e.g. multiple Colab G4 sessions)."""
 
-        def setup(self, order, deadline):
+        def setup(self, order, deadline, endpoints=None):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
-            self._learnable()         # reads --pass-rates once: the dynamic-sampling prior
+            self.endpoints = list(endpoints) if endpoints else [(self.args.actor, self.args.slots)]
+            self._learnable()
 
         def _pick(self):
             return self.by_id[self.order.popleft()]
@@ -181,6 +207,70 @@ def frontier_collector(base):
         def finished(self):
             with self.lock:
                 return not self.pending and self.outstanding == 0 and (not self.order or time.time() >= self.deadline)
+
+        def slot(self, index=0):
+            if len(self.endpoints) <= 1:
+                return super().slot(index)
+            actor_url = endpoint_for_slot(self.endpoints, index)
+            sampling = self.work / 'sampling-config.json'
+            while not self.stop.is_set():
+                if index >= self.active_slots:
+                    time.sleep(2)
+                    continue
+                item = self._take()
+                if item is None:
+                    time.sleep(2)
+                    continue
+                group, entry = item
+                info = self.groups[group]
+                workers = info['dir'] / 'workers'
+                workers.mkdir(exist_ok=True)
+                key = entry['key']
+                entry = {**entry, 'rl_endpoint': actor_url}
+                queue_file, journal = workers / f'{key}.queue.jsonl', workers / f'{key}.journal.jsonl'
+                queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
+                started = self.version
+                command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file), str(journal),
+                           '--runtime', str(self.runtime), '--server', actor_url,
+                           '--chat-completions-url', actor_url + '/v1/chat/completions', '--model-id', 'natlang-rl',
+                           '--model-concurrency', '1', '--chat-request-config', str(sampling), '--neuralese-server']
+                with (workers / f'{key}.log').open('a') as handle:
+                    process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
+                                               start_new_session=True)
+                    with self.lock:
+                        self.running += 1
+                    try:
+                        while process.poll() is None:
+                            if self.stop.wait(2):
+                                os.killpg(process.pid, signal.SIGTERM)
+                                process.wait()
+                                return
+                    finally:
+                        with self.lock:
+                            self.running -= 1
+                if process.returncode < 0 or self.stop.is_set():
+                    self._abandon(group, key, process.returncode)
+                    if self.stop.is_set():
+                        return
+                    continue
+                with self.lock:
+                    if info.get('abandoned'):
+                        continue
+                    info['done'] += 1
+                    info['versions'].append(started)
+                    wave_done = bool(info.get('held_back')) and info['done'] == info['wave']
+                    complete = info['done'] == info['size'] and not info.get('held_back')
+                if wave_done:
+                    complete = self._after_wave(group)
+                if complete:
+                    try:
+                        self._score(group)
+                    except Exception as error:
+                        print(json.dumps({'event': 'group scoring failed', 'group': group, 'error': repr(error)[:300]}),
+                              flush=True)
+                        with self.lock:
+                            self.outstanding -= 1
+                            self.groups.pop(group, None)
     return FrontierCollector
 
 
@@ -231,9 +321,12 @@ def collect(args):
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
     actor = None
-    if args.actor:      # an actor already serving this policy (smokes, a shared engine): its attested sha must match
-        url = args.actor.rstrip('/')
-        wait_actor(url, sha, None, None, timeout=60)
+    endpoints = parse_actor_endpoints(args.actor, args.slots)
+    if endpoints:
+        for ep_url, _ in endpoints:
+            wait_actor(ep_url, sha, None, None, timeout=60)
+        url = endpoints[0][0]
+        total_slots = sum(count for _, count in endpoints)
         sglang = None
     else:
         command, url = grpo.actor_command(g, work, sha)
@@ -241,6 +334,8 @@ def collect(args):
             actor = subprocess.Popen(command, cwd=REPO, env=grpo.pinned_env(), stdout=handle, stderr=subprocess.STDOUT,
                                      start_new_session=True)
         wait_actor(url, sha, actor, work / 'actor.log')
+        endpoints = [(url, args.slots)]
+        total_slots = args.slots
         sglang = url.rsplit(':', 1)[0] + ':' + str(args.actor_port + 1000)
 
     def stop_actor(*_):
@@ -249,19 +344,22 @@ def collect(args):
     import atexit
     atexit.register(stop_actor)
     g.actor = url
-    (work / 'actor.json').write_text(json.dumps({'url': url, 'sglang': sglang, 'checkpoint_sha256': sha,
+    g.slots = total_slots
+    g.max_outstanding = total_slots // 2 + 8
+    (work / 'actor.json').write_text(json.dumps({'url': url, 'endpoints': endpoints, 'sglang': sglang,
+                                                 'checkpoint_sha256': sha,
                                                  'export': str(work / 'actor' / 'sglang-hf'),
                                                  'pid': actor.pid if actor else None}) + '\n')
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(g.top_p, capture=True)) + '\n')
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     collector = frontier_collector(grpo.Collector)(g, tasks, work, sha, REPO / 'ts-host',
                                                    first_group=max(existing, default=-1) + 1)
-    collector.setup(order, time.time() + args.hours * 3600)
+    collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints)
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
-         'slots': args.slots, 'actor': url})
+         'slots': total_slots, 'actor': url, 'endpoints': endpoints})
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: (stop.set(), collector.stop.set()))
-    slots = [threading.Thread(target=collector.slot, args=(i,), daemon=True) for i in range(args.slots)]
+    slots = [threading.Thread(target=collector.slot, args=(i,), daemon=True) for i in range(total_slots)]
     for thread in slots:
         thread.start()
     done, last = 0, 0.
@@ -454,6 +552,42 @@ class Cycle:
         self.mix = self.dir / 'mix'
         self.window_closed = threading.Event()
         self.window_started = False
+        from natlang_neuralese.common.execution_profile import CostTelemetry, parse_colab_hosts, resolve_profile
+        self.colab_hosts = parse_colab_hosts(getattr(args, 'colab_hosts', None), OPS / 'pop-behavior-eval' / 'config.json')
+        wait_min = float(getattr(args, 'fallback_wait_minutes', 30.0))
+        cu_hr = float(getattr(args, 'cu_per_hour', 13.0))
+        self.collect_profile = resolve_profile(getattr(args, 'collect_profile', 'dgx'), hosts=self.colab_hosts,
+                                               cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
+        self.sft_profile = resolve_profile(getattr(args, 'sft_profile', 'dgx'), hosts=self.colab_hosts,
+                                           cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
+        self.held_profile = resolve_profile(getattr(args, 'held_profile', 'pop'), hosts=self.colab_hosts,
+                                            cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
+        if getattr(self.a, 'held_samples', None) is None:
+            self.a.held_samples = self.held_profile.held_samples
+        if self.held_profile.held_series_host:
+            self.held_env['NATLANG_HELD_SERIES_HOST'] = self.held_profile.held_series_host
+        self.cost = CostTelemetry.load(self.dir / 'cycle-cost.json', getattr(args, 'name', self.dir.name))
+
+    def record_cost(self, stage, profile, wall_seconds, *, sessions=1, canonical_chain_tokens=0, note=''):
+        entry = self.cost.record_stage(stage, profile, wall_seconds, sessions=sessions,
+                                       canonical_chain_tokens=canonical_chain_tokens, note=note)
+        summary = self.cost.save(self.dir / 'cycle-cost.json')
+        self.note(stage='cost', cost_stage=stage, profile=entry.profile, wall_s=entry.wall_seconds,
+                  cu_spent=entry.cu_spent, total_cu=summary['total_cu_spent'],
+                  tokens_per_cu=summary['canonical_chain_tokens_per_cu'], note=note)
+        return summary
+
+    def choose_profile(self, preferred, stage):
+        """Select active profile for ``stage`` with 30-min unreachable fallback to DGX (lfm3opti.md §4)."""
+        from natlang_neuralese.common.execution_profile import select_stage_profile
+        import pop_rl_actor
+        active, hosts, reason = select_stage_profile(
+            preferred, reachable_fn=pop_rl_actor.host_reachable,
+            hosts=self.colab_hosts if preferred.name == 'colab_g4' else ([pop_rl_actor.POP] if preferred.name == 'pop' and pop_rl_actor.POP else ()),
+        )
+        if reason:
+            self.note(stage=stage, profile_fallback=reason, active_profile=active.name)
+        return active, hosts
 
     def gate(self):
         path = self.dir / 'stages' / 'gate.done'
@@ -617,11 +751,87 @@ class Cycle:
             os.replace(self.collect_dir, aside)
             self.note(stage='collect', moved_aside=str(aside), served=sorted(served))
 
+    def g4_held(self, name, checkpoint, hosts):
+        """Sharded held-v3 measurement across all reachable Colab G4 sessions (4 samples, own G4 held series)."""
+        out = self.held / name
+        result = out / 'result.json'
+        if result.exists() and json.loads(result.read_text()).get('complete'):
+            return out
+        if self.reuse_held(out, checkpoint):
+            return out
+        from natlang_neuralese.common.hashing import sha256_file_hex_cached
+        import grpo
+        import pop_rl_actor
+        sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
+        commit = subprocess.check_output(['git', '-C', str(self.held_pin), 'rev-parse', 'HEAD'], text=True).strip()
+        actor_py = [PY, str(self.held_pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
+        endpoints = []
+        started = time.time()
+        out.mkdir(parents=True, exist_ok=True)
+        for h in hosts:
+            try:
+                raw = subprocess.check_output(
+                    [*actor_py, 'serve-checkpoint', '--host-profile', 'colab_g4', '--host', h,
+                     '--checkpoint', str(checkpoint), '--policy-id', sha, '--commit', commit,
+                     '--kv-cache-dtype', 'fp8_e4m3', '--max-running', str(self.held_profile.sglang_max_running)],
+                    env=self.held_env, text=True, timeout=3600,
+                )
+                info = json.loads(raw.strip().splitlines()[-1])
+                endpoints.append(f'{info["endpoint"]}={self.held_profile.collect_slots}')
+            except Exception as err:
+                self.note(stage='g4 held serve failed', host=h, error=repr(err)[:300])
+        if not endpoints:
+            raise RuntimeError(f'No Colab G4 host served {sha[:12]} for held eval')
+        manifest = grpo.default_held()
+        cmd = [PY, '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--manifest', str(manifest),
+               *[x for ep in endpoints for x in ('--endpoint', ep)],
+               '--policy-id', sha, '--samples', str(self.a.held_samples),
+               '--out', str(out), '--label', f'{self.a.name}-g4-{name}', '--allow-other-engine']
+        with (out / 'driver.log').open('a') as handle:
+            subprocess.run(cmd, cwd=self.held_pin, env=self.held_env, stdout=handle, stderr=subprocess.STDOUT)
+        self.record_cost(f'held:{name}', self.held_profile, time.time() - started, sessions=len(endpoints))
+        return out
+
     def collect_stage(self):
         start, sha = self.collect_policy()
         recollect = (self.gate() or {}).get('collection') == 'recollect'
         self.set_collect_aside(sha)
         unit = f'{self.a.name}-{"recollect" if recollect else "collect"}'
+        started = time.time()
+        active_profile, hosts = self.choose_profile(self.collect_profile, 'collect')
+        if active_profile.name == 'colab_g4':
+            actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
+            endpoints = []
+            for h in hosts:
+                try:
+                    raw = subprocess.check_output(
+                        [*actor_py, 'serve-checkpoint', '--host-profile', 'colab_g4', '--host', h,
+                         '--checkpoint', str(start), '--policy-id', sha, '--commit', self.a.commit,
+                         '--kv-cache-dtype', 'fp8_e4m3', '--max-running', str(active_profile.sglang_max_running)],
+                        env=self.env, text=True, timeout=3600,
+                    )
+                    info = json.loads(raw.strip().splitlines()[-1])
+                    endpoints.append(f'{info["endpoint"]}={active_profile.collect_slots}')
+                except Exception as err:
+                    self.note(stage='collect g4 serve failed', host=h, error=repr(err)[:300])
+            if endpoints:
+                budget = max(8, round(len(endpoints) * active_profile.collect_slots * 0.15))
+                self.ledger(unit, budget, 'high',
+                            self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
+                                    '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
+                                    '--k', self.a.k, '--hours', self.a.collect_hours, '--slots', active_profile.collect_slots,
+                                    '--unit-prefix', unit,
+                                    *[x for ep in endpoints for x in ('--actor', ep)]),
+                            self.dir / 'collect.log')
+                summary = json.loads((self.collect_dir / 'collect.json').read_text())
+                self.record_cost('collect', active_profile, time.time() - started, sessions=len(endpoints))
+                if summary.get('stopped'):
+                    raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
+                self.mark('collect', profile='colab_g4', sessions=len(endpoints),
+                          **{k: v for k, v in summary.items() if k != 'run'})
+                return
+            self.note(stage='collect', profile_fallback='no Colab G4 endpoint came up; falling back to dgx')
+            active_profile = self.choose_profile('dgx', 'collect')[0] if isinstance('dgx', object) else active_profile
         budget = self.a.kv_gb + 24 + round(self.a.slots * 0.3)
         self.ledger(unit, budget, 'high',
                     self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
@@ -643,9 +853,10 @@ class Cycle:
         if self.a.fill:
             self.stop_unit(f'{self.a.name}-fill')   # its actor is gone: the fill window takes over
         summary = json.loads((self.collect_dir / 'collect.json').read_text())
+        self.record_cost('collect', 'dgx', time.time() - started)
         if summary.get('stopped'):
             raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
-        self.mark('collect', **{k: v for k, v in summary.items() if k != 'run'})
+        self.mark('collect', profile='dgx', **{k: v for k, v in summary.items() if k != 'run'})
 
     def held_schedule(self):
         """(unmeasured cycles before this one, the interval in force), from the previous verdict: an unmeasured one
@@ -1012,6 +1223,36 @@ class Cycle:
         run = self.dir / 'sft'
         unit = f'{self.a.name}-sft'
         start, start_sha, _ = self.train_policy()
+        started = time.time()
+        active_profile, hosts = self.choose_profile(self.sft_profile, 'sft')
+        canonical_tokens = 0
+        if (self.mix / 'build.json').exists():
+            try:
+                canonical_tokens = int(json.loads((self.mix / 'build.json').read_text()).get('forward_tokens') or 0)
+            except Exception:
+                pass
+        if active_profile.name == 'colab_g4' and not (run / 'checkpoint.pt').exists():
+            vals = [str(self.mix / v) for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
+            actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
+            cmd = [*actor_py, 'run-sft', '--host', hosts[0], '--run-name', self.a.name, '--work', str(run),
+                   '--chains', str(self.mix / 'chains.pkl'), '--checkpoint', str(start),
+                   '--checkpoint-sha256', start_sha, '--commit', self.a.commit,
+                   '--lr', str(self.a.lr), '--warmup', '8', '--batch-loss-tokens', '32000',
+                   '--activation-gib', str(active_profile.activation_gib),
+                   '--state-sync-minutes', str(active_profile.state_sync_minutes),
+                   *[x for v in vals for x in ('--val-chains', v)],
+                   *(['--extra', self.a.sft_extra] if self.a.sft_extra else [])]
+            with (self.dir / 'sft-colab.log').open('a') as handle:
+                rc = subprocess.run(cmd, env=self.env, stdout=handle, stderr=subprocess.STDOUT).returncode
+            self.record_cost('sft', active_profile, time.time() - started, canonical_chain_tokens=canonical_tokens,
+                             note=f'host={hosts[0]} rc={rc}')
+            if rc == 0 and (run / 'checkpoint.pt').exists():
+                sha = subprocess.check_output(['sha256sum', str(run / 'checkpoint.pt')], text=True).split()[0]
+                (run / 'sha256.txt').write_text(sha + '\n')
+                self.mark('sft', profile='colab_g4', host=hosts[0], checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
+                return
+            self.note(stage='sft', profile_fallback=f'Colab G4 SFT exited {rc}; resuming on dgx from synced learner-state')
+            started = time.time()
         if not (run / 'checkpoint.pt').exists() and not self.active(unit):
             sha = (self.mix / 'chains.sha256').read_text().split()[0]
             env = {**os.environ, 'CHAINS': str(self.mix / 'chains.pkl'), 'CHAINS_SHA256': sha, 'CKPT': start,
@@ -1020,8 +1261,9 @@ class Cycle:
             vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
             if vals:
                 env['VAL'] = str(self.mix / vals[0])
-            env['EXTRA'] = ' '.join([*(f'--val-chains {self.mix / v}' for v in vals[1:]),
-                                     '--val-every 20' if vals else '', self.a.sft_extra])
+            resume_flag = '--resume' if (run / 'learner-state' / 'learner_manifest.json').exists() else ''
+            env['EXTRA'] = ' '.join(p for p in [*(f'--val-chains {self.mix / v}' for v in vals[1:]),
+                                                '--val-every 20' if vals else '', resume_flag, self.a.sft_extra] if p)
             subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.pin)], env=env, check=True,
                            stdout=(self.dir / 'sft-launch.log').open('a'), stderr=subprocess.STDOUT)
         self.wait(unit, poll=120)
@@ -1029,11 +1271,23 @@ class Cycle:
             raise SystemExit(f'no SFT checkpoint: {run}/train.log')
         sha = subprocess.check_output(['sha256sum', str(run / 'checkpoint.pt')], text=True).split()[0]
         (run / 'sha256.txt').write_text(sha + '\n')
-        self.mark('sft', checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
+        self.record_cost('sft', 'dgx', time.time() - started, canonical_chain_tokens=canonical_tokens)
+        self.mark('sft', profile='dgx', checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
 
     def held_stage(self):
         if not self.measured():
             return self.mark('held', skipped=f'--held-every {self.a.held_every}')
+        if self.held_profile.name == 'colab_g4':
+            active, hosts = self.choose_profile(self.held_profile, 'held')
+            if active.name == 'colab_g4':
+                candidate = self.g4_held('candidate', self.dir / 'sft' / 'checkpoint.pt', hosts)
+                if not json.loads((candidate / 'result.json').read_text()).get('complete'):
+                    raise SystemExit('candidate G4 held measurement incomplete: rerun the cycle to resume it')
+                reference = self.reference()['checkpoint']
+                if reference != BASE_CKPT and not (self.held / 'start' / 'result.json').exists():
+                    self.g4_held('start', reference, hosts)
+                self.mark('held', profile='colab_g4', sessions=len(hosts))
+                return
         while self.active(f'{self.a.name}-popbase'):     # Pop serves one policy at a time
             time.sleep(300)
         deadline = time.time() + 3600 * self.a.pop_wait_hours
@@ -1041,13 +1295,15 @@ class Cycle:
             if time.time() > deadline:   # training goes on; the next cycle is measured (DECISIONS "Pop unreachable")
                 return self.mark('held', deferred='pop unreachable')
             time.sleep(300)
+        started = time.time()
         candidate = self.pop_held('candidate', self.dir / 'sft' / 'checkpoint.pt')
         if not json.loads((candidate / 'result.json').read_text()).get('complete'):
             raise SystemExit('candidate held measurement incomplete: rerun the cycle to resume it')
         reference = self.reference()['checkpoint']       # the popbase unit may have failed (Pop down at the time)
         if reference != BASE_CKPT and not (self.held / 'start' / 'result.json').exists():
             self.pop_held('start', reference)
-        self.mark('held')
+        self.record_cost('held', 'pop', time.time() - started)
+        self.mark('held', profile='pop')
 
     def held_deferred(self):
         path = self.dir / 'stages' / 'held.done'
@@ -1231,8 +1487,8 @@ def main():
     c.add_argument('--dynamic-sampling-max-spread', type=float, default=0.1,
                    help="grpo's early stop of a group whose first wave agrees (0: all k samples always)")
     c.add_argument('--actor-port', type=int, default=8470)
-    c.add_argument('--actor', help='use this running actor front (its attested policy must be --checkpoint) instead '
-                   'of launching one')
+    c.add_argument('--actor', action='append', default=[],
+                   help='running actor front URL[=SLOTS] (repeatable for sharded collection across Colab G4 sessions)')
     c.add_argument('--actor-arg', action='append', default=[])
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
@@ -1311,14 +1567,26 @@ def main():
     y.add_argument('--own-neuralese-graph-share', type=float, default=0.05,
                    help='loss share cap of the own Neuralese graph part (an aux part; duplicates of other parts train once)')
     y.add_argument('--prefer-unseen', action='append', default=[])
-    y.add_argument('--lr', default='5e-6')
+    y.add_argument('--lr', default='5e-5', help='LoRA SFT learning rate (lfm3opti.md §5 default 5e-5 for r=128)')
     y.add_argument('--sft-budget', type=int, default=100,
-                   help='SFT ledger GB (sft-v8: CUDA peak 53 GB at --sft-activation-gb 16)')
-    y.add_argument('--sft-activation-gb', type=int, default=40,
-                   help='exp0_sft --activation-gb: the SFT has the DGX to itself (fill window closed); at 16 sft-v8 spent '
-                        '3.1x its forward time in backward recomputing layers (2.8k tok/s vs ~4.8k measured idle)')
+                   help='SFT ledger GB (GB10 LoRA default 100)')
+    y.add_argument('--sft-activation-gb', type=int, default=56,
+                   help='exp0_sft --activation-gib on DGX (56 GiB LoRA; G4 uses 80 GiB via ExecutionProfile)')
     y.add_argument('--sft-extra', default='')
-    y.add_argument('--held-samples', type=int, default=2)
+    y.add_argument('--collect-profile', choices=('dgx', 'colab_g4'), default='dgx',
+                   help='execution profile for collection (colab_g4 shards across up G4 sessions; 30-min DGX fallback)')
+    y.add_argument('--sft-profile', choices=('dgx', 'colab_g4'), default='dgx',
+                   help='execution profile for SFT (colab_g4 runs remotely with 15-min state sync; 30-min DGX fallback)')
+    y.add_argument('--held-profile', choices=('pop', 'colab_g4', 'dgx'), default='pop',
+                   help='execution profile for held eval (colab_g4 shards across up sessions at 4 samples on its own series)')
+    y.add_argument('--colab-hosts', default=None,
+                   help='comma-separated Colab G4 SSH host aliases (overrides NATLANG_COLAB_HOSTS)')
+    y.add_argument('--fallback-wait-minutes', type=float, default=30.0,
+                   help='minutes to wait for unreachable remote hosts before falling back to DGX (default 30)')
+    y.add_argument('--cu-per-hour', type=float, default=13.0,
+                   help='observed Colab G4 compute-unit burn rate per session-hour for cycle-cost.json')
+    y.add_argument('--held-samples', type=int, default=None,
+                   help='samples per held task (default: 4 for colab_g4, 2 for pop/dgx)')
     y.add_argument('--success-pts', type=float, default=2.)
     y.add_argument('--fail-pts', type=float, default=3.)
     h = sub.add_parser('pop-held')

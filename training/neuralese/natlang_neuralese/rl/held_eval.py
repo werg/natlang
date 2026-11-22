@@ -308,7 +308,7 @@ def model_facing(config=None):
     return ','.join(re.findall(r"'([^']+)'", match.group(1))) if match else 'unknown'
 
 
-def series(config=None):
+def series(config=None, *, engine_host=None):
     from ..common.code_provenance import _git, repository_root
     root = repository_root()
     tree = _git(root, 'rev-parse', 'HEAD:ts-host')
@@ -321,9 +321,19 @@ def series(config=None):
     # ts-host model/prompt-states.ts) change what those calls see: a build is its own series.
     states = os.environ.get('NATLANG_NEURALESE_PROMPT_STATES')
     states = None if not states or states == 'off' else hashlib.sha256((Path(states) / 'result.json').read_bytes()).hexdigest()
-    key = hashlib.sha256(f'{tree}|{scored_by}|{variants}{"|" + states if states else ""}'.encode()).hexdigest()[:12]
+    # Remote engine host (lfm3opti.md §7): Colab G4 is its own held series distinct from Pop (default None preserves
+    # existing Pop/DGX series keys).
+    host = engine_host if engine_host is not None else (os.environ.get('NATLANG_HELD_SERIES_HOST') or None)
+    key_parts = f'{tree}|{scored_by}|{variants}'
+    if states:
+        key_parts += f'|{states}'
+    if host:
+        key_parts += f'|host={host}'
+    key = hashlib.sha256(key_parts.encode()).hexdigest()[:12]
     return {'key': key, 'ts_host_tree': tree, 'ts_host_dirty': dirty, 'scoring_sources': scoring,
-            'scoring_dirty': scoring_dirty, 'model_facing': variants, **({'prompt_states': states} if states else {})}
+            'scoring_dirty': scoring_dirty, 'model_facing': variants,
+            **({'prompt_states': states} if states else {}),
+            **({'engine_host': host} if host else {})}
 
 
 # ---- the measurement ----------------------------------------------------------------------------------------------------
@@ -823,7 +833,7 @@ def pairing_differences(first, second):
     """(series differences, engine differences) of two results: {field: [first, second]} each."""
     series_a, series_b = first.get('series') or {}, second.get('series') or {}
     series = {}
-    for key in ('ts_host_tree', 'model_facing', 'ts_host_dirty', 'scoring_dirty'):
+    for key in ('ts_host_tree', 'model_facing', 'ts_host_dirty', 'scoring_dirty', 'engine_host'):
         if series_a.get(key) != series_b.get(key):
             series[key] = [series_a.get(key), series_b.get(key)]
     scoring_a, scoring_b = series_a.get('scoring_sources') or {}, series_b.get('scoring_sources') or {}
