@@ -1084,18 +1084,19 @@ def producer_adapter_keys(interface_state):
 
 
 class WeightSync:
-    """The actor's HF export as one memory-mapped file on tmpfs: snapshot (GPU -> the mapped file, the only synchronous
-    part; the mapping is page-locked with cudaHostRegister), then in a background thread load it into SGLang in place and
-    optionally write a native checkpoint. The file is the only host copy of the weights: a separate pinned buffer that
-    each publish wrote out to the file held another 4 GiB of the unit's memory (grpo-v2-run2, 2026-11-15). The file is
-    rewritten only by ``snapshot``/``load_native``, which first wait for the publish thread (SGLang's load and the
-    checkpoint write read it there).
+    """Actor weight publisher.
 
-    The producer table (``PRODUCER_TABLE``, the export's producing input embedding of every token,
-    ``export.native_hf.producer_embeddings``: ``adapter(embed(t), producing)``) is published from the trained input
-    embedding (``producer_from_embedding``; the checkpoints served here carry no producer adapter, so the table IS the
-    embedding): kept at the export's start values it served stale rows to every Neuralese text write from step 1 on,
-    while ordinary tokens read the trained ones (found 2026-11-17, NEURALESE_PASSTHROUGH_20261117.md)."""
+    Preferred mode (``WeightSync.for_learner``, v2 §7.1): 7-step atomic merged-export publication state machine
+    without mutating the live LoRA training model:
+      1. SNAPSHOT: freeze step-k trainable factors on CPU + compute effective_policy_sha256.
+      2. EXPORT: materialize immutable merged BF16 safetensors into staging dir, verify checksums & count, atomic rename.
+      3. PAUSE: pause rollout generation (/pause_generation retract).
+      4. REFIT & INVALIDATE: /update_weights_from_disk on the immutable version dir with flush_cache=True.
+      5. BIND ALL ROUTES: /v1/neuralese/rebind-policy with export_dir so all 4 routes (incl. native fallback) reload.
+      6. ATTEST & RESUME: GET /v1/neuralese/info + attest_all_routes (+ optional sentinel check) -> /continue_generation.
+      7. ROLLBACK: on any failure in steps 2-6, restore last verified version k-1 across all routes before returning.
+
+    Legacy constructor ``WeightSync(model, export_dir, ...)`` is retained for CPU unit tests of mapped host buffers."""
 
     def __init__(self, model, export_dir, sglang_url, weights_dir, front_url=None, producer_from_embedding=True):
         import mmap
@@ -1104,6 +1105,11 @@ class WeightSync:
         self.export_dir, self.sglang_url = Path(export_dir), sglang_url
         self.weights_dir = Path(weights_dir)
         self.front_url = front_url
+        self.producer_from_embedding = producer_from_embedding
+        self.learner = None
+        self.sentinel_fn = None
+        self.pending_snapshot = None
+        self.last_good = None
         self.weights_dir.mkdir(parents=True, exist_ok=True)
         for path in self.export_dir.iterdir():
             if path.is_file() and path.name != 'model.safetensors':
@@ -1134,8 +1140,6 @@ class WeightSync:
             if missing:
                 raise ValueError(f'learner parameters absent from the export: {sorted(missing)[:5]}')
             self.header, offsets, total = safetensors_header(layout, {'format': 'pt'})
-            # every page is written once here (fixed tensors as exported, trained ones zero until the first snapshot):
-            # a GPU copy into freshly faulted pageable memory runs at 0.05-0.1 GB/s on the GB10
             zeros = bytes(64 << 20)
             with partial.open('wb') as out:
                 out.write(self.header)
@@ -1150,29 +1154,57 @@ class WeightSync:
         self.map = mmap.mmap(self.file.fileno(), 0)
         base = len(self.header)
         whole = torch.frombuffer(self.map, dtype=torch.uint8)
-        self.pinned = False      # page-locked: GPU copies run async at ~35 GB/s (pageable, after the first touch: ~33)
+        self.pinned = False
         if torch.cuda.is_available():
             try:
                 self.pinned = int(torch.cuda.cudart().cudaHostRegister(whole.data_ptr(), whole.numel(), 0).value) == 0
             except Exception:
                 pass
         self.buffer = torch.frombuffer(self.map, dtype=torch.uint8, count=total, offset=base)
-        # one tensor (its own storage) per trained weight, so that a native checkpoint saves them as separate clones did
         self.views = {name: torch.frombuffer(self.map, dtype=torch.bfloat16, count=nbytes // 2, offset=base + offset).view(shape)
                       for (name, _, shape, nbytes), offset, source in zip(layout, offsets, sources) if source is not None}
         self.sources = {name: source for (name, *_), source in zip(layout, sources) if source is not None}
         self.params = params
         self.thread = None
         self.last = {}
-        self.released = None    # the tags of a ``release`` not yet undone by ``publish``/``restore``
+        self.released = None
+
+    @classmethod
+    def for_learner(cls, learner, export_dir, sglang_url, weights_dir, front_url=None,
+                    producer_from_embedding=True, sentinel_fn=None):
+        """Create an atomic merged-export WeightSync for a shared ``Lfm3Learner``."""
+        sync = object.__new__(cls)
+        sync.learner = learner
+        sync.export_dir = Path(export_dir)
+        sync.sglang_url = sglang_url
+        sync.weights_dir = Path(weights_dir)
+        sync.front_url = front_url
+        sync.producer_from_embedding = producer_from_embedding
+        sync.sentinel_fn = sentinel_fn
+        sync.weights_dir.mkdir(parents=True, exist_ok=True)
+        sync.file = sync.map = sync.buffer = sync.views = sync.sources = sync.params = None
+        sync.pinned = False
+        sync.thread = None
+        sync.last = {}
+        sync.released = None
+        sync.pending_snapshot = None
+        sync.last_good = {'version': 0, 'dir': str(sync.export_dir), 'policy_id': None, 'weights_sha256': None}
+        return sync
 
     def snapshot(self):
         import torch
         self.wait()
+        if self.learner is not None:
+            # Step 1 (SNAPSHOT): freeze committed factors on host without mutating the live model.
+            frozen_leaves = {name: t.detach().cpu().clone() for name, t in self.learner.named_trainable_tensors().items()}
+            effective_sha = self.learner.effective_policy_sha256()
+            self.pending_snapshot = {'leaves': frozen_leaves, 'effective_policy_sha256': effective_sha}
+            return effective_sha
         for name, view in self.views.items():
             view.copy_(self.params[self.sources[name]].detach(), non_blocking=self.pinned)
         if torch.cuda.is_available():
             torch.cuda.synchronize()
+        return None
 
     def wait(self):
         if self.thread is not None:
@@ -1180,21 +1212,21 @@ class WeightSync:
             self.thread = None
 
     def close(self):
-        """Unregister the page-locked mapping (a registration outliving its mapping makes a later cudaHostRegister
-        of the reused address range fail) and drop the views; the file stays."""
+        """Unregister the page-locked mapping and drop views; the directory stays."""
         import torch
         self.wait()
-        if self.pinned:
+        if self.pinned and self.map is not None:
             torch.cuda.cudart().cudaHostUnregister(torch.frombuffer(self.map, dtype=torch.uint8).data_ptr())
             self.pinned = False
         self.views = self.buffer = None
 
     def load_native(self, path, special):
-        """Put another native checkpoint's backbone in the pinned buffer (its interface rows merged into the embedding
-        as ``exp0_sft.load_model`` does); the actor's other tables (producer embedding) stay. Refuses another interface."""
+        """Put another native checkpoint's backbone in the pinned buffer (legacy path)."""
         import torch
         from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
         self.wait()
+        if self.learner is not None:
+            raise RuntimeError('load_native is unsupported in LoRA merged-export WeightSync; export the target checkpoint directly')
         state = CheckpointPolicy.load(Path(path))
         backbone = state['backbone_state']
         embedding = backbone['model.embed_tokens.weight'].clone()
@@ -1213,20 +1245,12 @@ class WeightSync:
         del state
 
     def backbone(self):
-        """{name: host bf16 tensor} of the snapshot in native backbone naming: views of the mapped file, valid until the
-        next ``snapshot``/``load_native`` (both wait for the publish thread, where ``write_native`` reads them). Not copies:
-        cloning them put another 4 GB on the unit during every checkpoint write."""
         return {name: view for name, view in self.views.items() if self.sources[name] == name}
 
     def release(self, tags):
-        """Hand the actor's GPU memory back for the learner phase (the colocated pattern of verl/slime): retract what it is
-        running (the paused engine holds those requests and any new ones in its queues), then SGLang
-        ``release_memory_occupation`` of ``tags`` (``kv_cache``, ``weights``, ``cuda_graph``; the actor must run with
-        ``--sglang-memory-saver``). The next ``publish`` (or ``restore``) resumes the memory, reloads the weights from the
-        mapped file (released weights come back with undefined contents; the module buffers SGLang restores itself) and
-        continues generation. Returns the seconds it took."""
+        """Hand the actor's GPU memory back for the learner phase."""
         started = time.time()
-        self.wait()                       # the previous publish (its continue_generation) must not land after this
+        self.wait()
         if self.sglang_url is None or not tags:
             return 0.
         post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
@@ -1239,69 +1263,201 @@ class WeightSync:
         return time.time() - started
 
     def _resume(self):
-        """Undo ``release``: the memory back (the engine stays paused until the caller's continue_generation)."""
         if self.released:
             post(self.sglang_url + '/resume_memory_occupation', {'tags': self.released})
             self.released = None
 
+    def _active_weights_dir(self):
+        if getattr(self, 'last_good', None) and self.last_good.get('dir'):
+            return Path(self.last_good['dir'])
+        return self.weights_dir
+
     def restore(self, version):
-        """Undo ``release`` without new weights (a skipped update): resume, reload the served weights from the unchanged
-        mapped file, continue. Synchronous."""
+        """Undo ``release`` without new weights (a skipped update)."""
         self.wait()
         if self.sglang_url is None or not self.released:
             return
         self._resume()
         answer = post(self.sglang_url + '/update_weights_from_disk',
-                      {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
+                      {'model_path': str(self._active_weights_dir()), 'flush_cache': True, 'weight_version': str(version)})
         post(self.sglang_url + '/continue_generation', {})
         if not json.loads(answer).get('success', False):
             raise RuntimeError(f'actor weight reload after release failed: {answer[:400]}')
 
-    def publish(self, version, on_done, also=None, policy=None):
-        def run():
-            # An exception here used to end the thread silently: ``last`` kept the previous step's ok, so the loop went
-            # on as if the actor had been updated and attested. It is now this version's failure (the loop stops on it).
-            try:
-                body()
-            except Exception as error:
-                self.last = {'version': version, 'ok': False, 'answer': f'publish failed: {error!r}'[:400]}
-                on_done(version, False)
-
-        def body():
-            timing = {}         # the export file already holds the snapshot (the mapping)
-            t = time.time()
-            if self.sglang_url is None:   # --no-actor-sync (a smoke against a shared actor): nothing to update
-                answer, ok = 'no actor sync', True
-            else:
-              try:
-                resumed = self.released is not None
-                self._resume()                # a released actor gets its memory back first (weights reloaded below)
-                if resumed:
-                    timing['actor_resume_s'] = round(time.time() - t, 2)
-                post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
-                answer = post(self.sglang_url + '/update_weights_from_disk',
-                              {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
-                post(self.sglang_url + '/continue_generation', {})
-                ok = json.loads(answer).get('success', False)
-              except Exception as error:
-                answer, ok = repr(error)[:400], False
+    def _rollback(self, timing):
+        """Step 7 (ROLLBACK): restore last verified complete version k-1 across all routes and resume generation."""
+        prev = getattr(self, 'last_good', None)
+        if not prev or not prev.get('dir') or not Path(prev['dir']).exists():
+            if self.sglang_url is not None:
                 try:
                     post(self.sglang_url + '/continue_generation', {})
                 except Exception:
                     pass
+            return False
+        rolled = True
+        try:
+            if self.sglang_url is not None:
+                answer = post(self.sglang_url + '/update_weights_from_disk',
+                              {'model_path': str(prev['dir']), 'flush_cache': True,
+                               'weight_version': str(prev['version'])})
+                rolled = bool(json.loads(answer).get('success', False))
+            if rolled and self.front_url is not None and prev.get('policy_id') and prev.get('weights_sha256'):
+                post(self.front_url + '/v1/neuralese/rebind-policy',
+                     {'policy_id': prev['policy_id'], 'weights_sha256': prev['weights_sha256'],
+                      'version': prev['version'], 'export_dir': str(prev['dir'])})
+        except Exception as err:
+            timing['rollback_error'] = repr(err)[:300]
+            rolled = False
+        finally:
+            if self.sglang_url is not None:
+                try:
+                    post(self.sglang_url + '/continue_generation', {})
+                except Exception:
+                    pass
+        timing['rolled_back_to'] = prev['version'] if rolled else None
+        return rolled
+
+    def _prune_version_dirs(self, keep_dirs):
+        keep = {str(Path(d).resolve()) for d in keep_dirs if d}
+        for child in sorted(self.weights_dir.glob('v-*')):
+            if child.is_dir() and str(child.resolve()) not in keep:
+                shutil.rmtree(child, ignore_errors=True)
+
+    def publish(self, version, on_done, also=None, policy=None):
+        def run():
+            try:
+                if getattr(self, 'learner', None) is not None:
+                    body_atomic()
+                else:
+                    body_legacy()
+            except Exception as error:
+                self.last = {'version': version, 'ok': False, 'answer': f'publish failed: {error!r}'[:400]}
+                on_done(version, False)
+
+        def body_atomic():
+            from natlang_neuralese.train.learner_state import export_merged_hf_safetensors
+            from natlang_neuralese.serve.sglang_actor import attest_all_routes
+            timing = {'state_machine': 'v2_7step'}
+            snap = self.pending_snapshot or {'effective_policy_sha256': self.learner.effective_policy_sha256()}
+            # Step 2 (EXPORT): immutable merged BF16 safetensors into staging dir -> atomic rename.
+            t_exp = time.time()
+            version_dir = self.weights_dir / f'v-{version:05d}'
+            try:
+                exported = export_merged_hf_safetensors(
+                    self.learner, self.export_dir, version_dir,
+                    producer_from_embedding=self.producer_from_embedding,
+                )
+            except Exception as err:
+                timing['export_s'] = round(time.time() - t_exp, 2)
+                self._rollback(timing)
+                self.last = {'version': version, 'ok': False, 'answer': f'export failed: {err!r}'[:400], **timing}
+                on_done(version, False)
+                return
+            timing['export_s'] = round(time.time() - t_exp, 2)
+            timing['export_tensors'] = exported['tensor_count']
+            weights = exported['weights_sha256']
+            extra = {}
+            if also is not None:
+                t_ck = time.time()
+                try:
+                    extra = also() or {}
+                except Exception as error:
+                    extra = {'checkpoint_error': repr(error)[:400]}
+                timing.update(extra)
+                timing['checkpoint_s'] = round(time.time() - t_ck, 2)
+            policy_id = policy or extra.get('checkpoint_sha256') or snap['effective_policy_sha256'] or weights
+            ok, answer = True, None
+            if self.sglang_url is None:
+                answer = 'no actor sync'
+            else:
+                t_refit = time.time()
+                paused = False
+                try:
+                    resumed = self.released is not None
+                    self._resume()
+                    if resumed:
+                        timing['actor_resume_s'] = round(time.time() - t_refit, 2)
+                    # Step 3 (PAUSE)
+                    post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
+                    paused = True
+                    # Step 4 (REFIT & INVALIDATE)
+                    raw = post(self.sglang_url + '/update_weights_from_disk',
+                               {'model_path': str(version_dir), 'flush_cache': True, 'weight_version': str(version)})
+                    if not json.loads(raw).get('success', False):
+                        raise RuntimeError(f'update_weights_from_disk failed: {raw[:300]}')
+                    timing['actor_update_s'] = round(time.time() - t_refit, 2)
+                    # Step 5 (BIND ALL ROUTES) & Step 6 (ATTEST & RESUME)
+                    if self.front_url is not None:
+                        t_rb = time.time()
+                        post(self.front_url + '/v1/neuralese/rebind-policy',
+                             {'policy_id': policy_id, 'weights_sha256': weights, 'version': version,
+                              'export_dir': str(version_dir)})
+                        with urllib.request.urlopen(self.front_url + '/v1/neuralese/info', timeout=30) as response:
+                            info = json.loads(response.read())
+                        routes_ok, mismatches = attest_all_routes(info, policy_id, weights)
+                        if not routes_ok:
+                            raise RuntimeError(f'route attestation failed: {mismatches}')
+                        timing['rebind_s'] = round(time.time() - t_rb, 2)
+                        timing['routes_attested'] = True
+                    # Resume generation before optional sentinel probe (which queries the live engine).
+                    post(self.sglang_url + '/continue_generation', {})
+                    paused = False
+                    if self.sentinel_fn is not None:
+                        sentinel_ok, sentinel_detail = self.sentinel_fn(version_dir, policy_id)
+                        timing['sentinel'] = sentinel_detail
+                        if not sentinel_ok:
+                            raise RuntimeError(f'sentinel logprob check failed: {sentinel_detail}')
+                except Exception as error:
+                    ok, answer = False, repr(error)[:400]
+                    if not paused and self.sglang_url is not None:
+                        try:
+                            post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
+                        except Exception:
+                            pass
+                    self._rollback(timing)
+            if ok:
+                prev_dir = self.last_good['dir'] if self.last_good else None
+                self.last_good = {'version': version, 'dir': str(version_dir),
+                                  'policy_id': policy_id, 'weights_sha256': weights}
+                timing['policy_id'] = policy_id
+                timing['weights_sha256'] = weights
+                self._prune_version_dirs([version_dir, prev_dir])
+            self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
+            on_done(version, ok)
+
+        def body_legacy():
+            timing = {}
+            t = time.time()
+            if self.sglang_url is None:
+                answer, ok = 'no actor sync', True
+            else:
+                try:
+                    resumed = self.released is not None
+                    self._resume()
+                    if resumed:
+                        timing['actor_resume_s'] = round(time.time() - t, 2)
+                    post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
+                    answer = post(self.sglang_url + '/update_weights_from_disk',
+                                  {'model_path': str(self.weights_dir), 'flush_cache': True, 'weight_version': str(version)})
+                    post(self.sglang_url + '/continue_generation', {})
+                    ok = json.loads(answer).get('success', False)
+                except Exception as error:
+                    answer, ok = repr(error)[:400], False
+                    try:
+                        post(self.sglang_url + '/continue_generation', {})
+                    except Exception:
+                        pass
             timing['actor_update_s'] = round(time.time() - t, 2)
             extra = {}
             if also is not None:
                 t = time.time()
                 try:
                     extra = also() or {}
-                except Exception as error:   # the actor already serves the new weights: attest them, report the write
+                except Exception as error:
                     extra = {'checkpoint_error': repr(error)[:400]}
                 timing.update(extra)
                 timing['checkpoint_s'] = round(time.time() - t, 2)
             if ok and self.front_url is not None:
-                # the actor front attests what it now serves: the step's native checkpoint when one was written, else the
-                # served weights' digest (held_eval measure and the rollout captures read this binding)
                 t = time.time()
                 weights = hashlib.sha256(memoryview(self.buffer.numpy())).hexdigest()
                 policy_id = policy or extra.get('checkpoint_sha256') or weights
@@ -3681,102 +3837,63 @@ def train(args):
     elif not args.actor:
         actor_thread = threading.Thread(target=launch_actor, daemon=True)
         actor_thread.start()
-    # Loaded on the host, then the checkpoint's page cache is dropped before the GPU copy: on the GB10 a CUDA allocation
-    # only gets MemFree, and the 9.5 GB checkpoint's cache made the move to the GPU fail under contention (smoke 2026-11-12).
-    # BF16 on the host (the native backbone is BF16, so the FP32 masters made from it are the same values); the source
-    # checkpoint is reduced to what a pruned checkpoint needs (the native rows the merged embedding overwrote).
-    model, state, special = exp0_sft.load_model(args.checkpoint, args.base, device='cpu', dtype=torch.bfloat16)
-    original = state['backbone_state']
-    native_rows = {'embedding_rows': original['model.embed_tokens.weight'][torch.tensor(special)].clone(),
-                   'tied_head': 'lm_head.weight' in original, 'names': [n for n in original if n != 'lm_head.weight']}
-    state = {k: state[k] for k in ('schema', 'model_config', 'interface_state', 'step')}
-    del original
-    import gc
-    gc.collect()
+    # Shared LoRA+rows learner core (lfm3opti.md §5): frozen BF16 base + FP32 LoRA factors + trainable sparse rows.
+    from natlang_neuralese.train.lfm3_learner import (
+        AdapterSpec, Lfm3Learner, OOMRetryPlan, run_step_with_oom_retry,
+    )
+    from natlang_neuralese.train.learner_state import (
+        export_merged_checkpoint, load_learner_state, save_learner_state,
+    )
+    spec = AdapterSpec.for_rl(
+        rank=args.lora_rank,
+        alpha=args.lora_alpha,
+        trainable_rows=not args.no_trainable_rows,
+        gate_rank=args.gate_rank,
+    )
+    learner = Lfm3Learner.from_checkpoint(
+        args.checkpoint, args.base, spec, device='cuda',
+        fp8_base=not args.no_fp8_base, compile_layers=not args.no_compile,
+    )
+    model = learner.model
+    state = learner.checkpoint_state
+    special = learner.special_ids
+    native_rows = learner.native_rows
     drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
-    log_line(log, {'event': 'host model loaded', 'meminfo_gib': meminfo(), 'load_s': round(time.time() - t0, 1)})
-    model.to('cuda')
-    masters = {name: p.detach().clone().float() for name, p in model.named_parameters()}
-    model.to(torch.bfloat16)
-    model.gradient_checkpointing_enable()
-    model.config.use_cache = False
-    model.train()
-    lfm3_fast_train.prepare(model)
+    log_line(log, {'event': 'learner model loaded', 'meminfo_gib': meminfo(), 'load_s': round(time.time() - t0, 1),
+                   'adapter_spec': spec.to_dict(), 'fp8_base': learner.fp8_base,
+                   'trainable_params': sum(p.numel() for p in learner.trainable_parameters())})
     forward = lfm3_fast_train.hidden
-    pack_tokens = args.pack_tokens if args.pack_tokens > 0 else exp0_sft.resident_tokens(model, args.activation_gb)
-    live = dict(model.named_parameters())
-    reference = None
-    if args.kl_beta > 0:          # the start policy, BF16, frozen: a file, loaded into the policy for the reference pass
-        # The reference runs exactly the policy's training graph (train mode, parameters requiring grad, the same partial
-        # checkpointing; its outputs are detached and never backpropagated): a no_grad pass compiles other kernels, whose
-        # BF16 rounding alone put KL at 5e-4 (|dlogp| ~0.03) with identical weights (smoke 2026-11-12). It is the policy
-        # module itself with the reference weights loaded (ReferenceWeights), written now, before a resume moves them.
-        reference = ReferenceWeights(Path(args.state_dir) / 'reference-bf16.safetensors', live,
-                                     {'source_sha256': source_sha, 'base': args.base})
-    parameters = [masters[name] for name in live]
+    pack_tokens = args.pack_tokens if args.pack_tokens > 0 else exp0_sft.resident_tokens(model, args.activation_gb, parameterization='lora')
+    oom_plan = OOMRetryPlan(pack_tokens=pack_tokens, activation_gib=args.activation_gb)
+    compile_health = lfm3_fast_train.CompileHealthTracker()
 
-    # FP32 master gradients exist only while the policy pass and the optimizer need them (6.5 GB): collection and the
-    # reference pass run without them. Zeros, then the same accumulation as ever: the step's arithmetic is unchanged.
-    def allocate_grads():
-        for master in parameters:
-            master.grad = torch.zeros_like(master)
-
-    def release_grads():
-        for master in parameters:
-            master.grad = None
-    # Each BF16 gradient is added into its FP32 master gradient as soon as autograd finishes it, then freed: a full set of
-    # BF16 gradients never exists at once.
-    def into_master(master):
-        def hook(param):
-            master.grad.add_(param.grad)
-            param.grad = None
-        return hook
-    for name, p in model.named_parameters():
-        p.register_post_accumulate_grad_hook(into_master(masters[name]))
-    optimizer = torch.optim.AdamW([{'params': [p for p in parameters if p.ndim >= 2], 'weight_decay': args.weight_decay},
-                                   {'params': [p for p in parameters if p.ndim < 2], 'weight_decay': 0.}],
-                                  lr=args.lr, betas=(0.9, 0.99), eps=1e-8, fused=True)
-    special_index = torch.tensor(special, device='cuda')
-    embedding_name = next(n for n, p in live.items() if p is model.get_input_embeddings().weight)
-    embedding_master = masters[embedding_name]
-    saved_rows = embedding_master[special_index].clone()
+    ref_bundles, ref_rows = (learner.snapshot_reference() if args.kl_beta > 0 else (None, None))
+    reference_active = args.kl_beta > 0
+    parameters = learner.trainable_parameters()
+    optimizer = learner.build_optimizer(lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99), eps=1e-8)
 
     step, cursor, first_group = 0, 0, 0
-    state_path = Path(args.state_dir) / 'training-state.safetensors'
+    consumed_groups = set()
+    state_dir = Path(args.state_dir) / 'learner-state'
     branch_root = Path(args.checkpoint_dir or Path(args.state_dir) / 'checkpoints')
-    resume_path = Path(args.resume_state) if args.resume_state else state_path
-    if args.resume and not args.resume_state and not resume_path.exists() and args.branch_states:
-        # a state still on the NVMe is a link there (staged_write); one whose NVMe copy was lost is skipped
-        resume_path = max((p for p in branch_root.glob('state-step-*.safetensors') if p.exists()), default=resume_path)
-    if args.resume and resume_path.is_symlink() and not resume_path.exists():
-        raise SystemExit(f'{resume_path} links to {os.readlink(resume_path)}, which is gone (a staged NVMe copy lost before '
-                         'its move): pass --resume-state with another state rather than starting fresh')
-    if args.resume and resume_path.exists():
-        from safetensors import safe_open
-        with safe_open(str(resume_path), 'pt', device='cuda') as handle:
-            meta = handle.metadata()
-            # materialise AdamW state (zero grads) before the masters are restored: with weight decay this step moves
-            # the parameters, and it must not move the restored ones
-            allocate_grads()
-            optimizer.step()
-            release_grads()
-            for name in live:
-                masters[name].copy_(handle.get_tensor('master/' + name))
-            for name in live:
-                st = optimizer.state[masters[name]]
-                st['exp_avg'].copy_(handle.get_tensor('exp_avg/' + name))
-                st['exp_avg_sq'].copy_(handle.get_tensor('exp_avg_sq/' + name))
-                st['step'].fill_(float(meta['adam_step']))
-        step, cursor, first_group = int(meta['step']), int(meta['cursor']), int(meta['next_group'])
-        with torch.no_grad():
-            for name, p in live.items():
-                p.copy_(masters[name])
-        torch.cuda.synchronize()
-        release_host_memory()             # the load's pinned staging buffers
+    resume_dir = Path(args.resume_state) if args.resume_state else state_dir
+    if args.resume and not args.resume_state and not (resume_dir / 'learner_manifest.json').exists() and args.branch_states:
+        candidates = sorted(p for p in branch_root.glob('state-step-*') if (p / 'learner_manifest.json').exists())
+        if candidates:
+            resume_dir = candidates[-1]
+    if args.resume and (resume_dir / 'learner_manifest.json').exists():
+        resumed = load_learner_state(resume_dir, learner, optimizer=optimizer, restore_rng=True)
+        manifest = resumed['manifest']
+        step = int(manifest.get('learner_step', 0))
+        ledger = manifest.get('rl_rollout_ledger') or {}
+        cursor = int(ledger.get('cursor', 0))
+        first_group = int(ledger.get('next_group', 0))
+        consumed_groups = set(int(g) for g in (ledger.get('consumed_groups') or ()))
+        if resumed.get('ref_bundles') is not None:
+            ref_bundles, ref_rows = resumed['ref_bundles'], resumed.get('ref_rows')
+        release_host_memory()
         log_line(log, {'event': 'resumed', 'step': step, 'cursor': cursor, 'next_group': first_group,
-                       'state': str(resume_path)})
-    # New groups are numbered after the highest existing one; scored groups a stop left untrained are offered again
-    # (Collector.reuse_scored).
+                       'consumed_groups': len(consumed_groups), 'state': str(resume_dir)})
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     first_group = max([first_group, *(i + 1 for i in existing)])
 
@@ -3788,15 +3905,11 @@ def train(args):
         args.actor_export = args.actor_export or str(work / 'actor' / 'sglang-hf')
     log_line(log, {'event': 'actor ready', 'actor': args.actor, 'init_s': round(time.time() - t0, 1)})
     sglang_url = args.sglang or args.actor.rsplit(':', 1)[0] + ':' + str(int(args.actor.rsplit(':', 1)[1]) + 1000)
-    # The actor's weights live on tmpfs: the shared NVMe wrote at 60-230 MB/s under other jobs' load (2026-11-12 bench),
-    # which put 20-60 s of file write in front of every actor update.
     weights_dir = Path('/dev/shm') / f'natlang-{args.unit_prefix}-actor-weights'
-    # atexit never runs for a killed unit: a dead run's tmpfs weights (4 GB each) held RAM until removed by hand
-    # (2026-11-16: two hunt copies, 8 GB). Each run records its pid; a new run removes copies whose run is gone.
     for stale in Path('/dev/shm').glob('natlang-*-actor-weights'):
         try:
             os.kill(int((stale / 'owner.pid').read_text()), 0)
-        except ProcessLookupError:   # recorded owner is dead (a copy without owner.pid is never touched)
+        except ProcessLookupError:
             if stale != weights_dir:
                 shutil.rmtree(stale, True)
         except (OSError, ValueError):
@@ -3806,22 +3919,14 @@ def train(args):
     if not args.frozen_producer_table and producer_adapter_keys(state['interface_state']):
         raise SystemExit(f'the checkpoint has a producer adapter {producer_adapter_keys(state["interface_state"])}: '
                          'the producer table is not the embedding (use --frozen-producer-table)')
-    # The actor's memory is released during each learner phase only when this run launched it (with the memory saver);
-    # a shared actor (--actor) or a replay keeps its memory.
     release_tags = [t for t in args.actor_release_tags.split(',') if t] if (
         args.actor_release and actor_thread is not None and not args.no_actor_sync) else []
-    sync = WeightSync(model, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
-                      front_url=None if args.no_actor_sync else args.actor,
-                      producer_from_embedding=not args.frozen_producer_table)
+    sync = WeightSync.for_learner(learner, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
+                                  front_url=None if args.no_actor_sync else args.actor,
+                                  producer_from_embedding=not args.frozen_producer_table)
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
-    saver = StateSaver()
-    # AdamW moments on disk outside the optimizer step (MomentOffload; --keep-moments-resident opts out)
-    offload = None if args.keep_moments_resident else MomentOffload(work / 'adam-moments.offload')
-
-    if offload is not None:
-        # A resume loaded the moments onto the GPU: out to the file now, as after every step (see offload_loaded_moments)
-        offload_loaded_moments(offload, optimizer, masters, live)
+    last_state_save_info = None
     if args.replay:
         collector = ReplayCollector(args, work, first_group=first_group)
     else:
@@ -3843,12 +3948,18 @@ def train(args):
         from natlang_neuralese.rl.held_eval import exclusion_ids
         held = set(exclusion_ids(args.held_manifest))
         from transformers import AutoTokenizer
-        corpus_tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)   # the served vocabulary (empty think block)
+        corpus_tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)
         replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r), tokenizer=corpus_tokenizer)
                           for spec in args.replay_corpus]
     collector.version = step
-    if args.resume and not args.replay:      # a replay offers archived groups, never this run's own
+    if args.resume and not args.replay:
         reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
+        if consumed_groups:
+            # Never double-train a group already recorded in rl_rollout_ledger.
+            for g in consumed_groups:
+                d = work / 'groups' / f'g{g:06d}'
+                if d.is_dir():
+                    (d / RETIRED).touch()
         if reused or left_out:
             log_line(log, {'event': 'reused groups', 'reused': len(reused), 'left_out': left_out[:50],
                            'left_out_count': len(left_out)})
@@ -3856,7 +3967,7 @@ def train(args):
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(args.top_p, capture=True)) + '\n')
     versions_live = {'actor': step}
     probes = probe_chains(args) if args.probe_turns else []
-    think_close = None   # the reasoning-close token id: splits the logged gradient mass into reasoning and reply tokens
+    think_close = None
     second_close_stops = set()
     try:
         from tokenizers import Tokenizer
@@ -3880,8 +3991,11 @@ def train(args):
         for chain in probes:
             positions, targets = targets_of(chain)
             ids = torch.from_numpy(chain['ids'].astype(np.int64)).cuda()
-            logp = lfm3_fast_train.token_logprobs(model, ids, torch.from_numpy(positions).cuda(),
-                                                  torch.from_numpy(targets.astype(np.int64)).cuda())
+            logp = lfm3_fast_train.token_logprobs(
+                model, ids, torch.from_numpy(positions).cuda(),
+                torch.from_numpy(targets.astype(np.int64)).cuda(),
+                adapters=learner.bundles, trainable_rows=learner.trainable_rows, fp8_base=learner.fp8_base,
+            )
             total -= logp.sum().item()
             count += len(positions)
         return total / max(1, count)
@@ -3902,12 +4016,9 @@ def train(args):
     if probes:
         log_probe(step, 'learner')
         log_probe(step, 'actor')
-    strict_series = ['--strict-series'] if args.held_strict_series else []   # held_eval compare
+    strict_series = ['--strict-series'] if args.held_strict_series else []
     step0 = work / 'held' / 'step-00000'
     if (step0 / 'result.json').exists() and not args.held_baseline:
-        # A resume under another sampling law (--top-p) cannot compare with the old step 0: that result moves aside (it
-        # stays the record of its law) and the start policy is measured again below. Another held series (a pin whose
-        # harness differs) pairs with a warning (held_eval compare); --held-strict-series re-measures it as well.
         measured = json.loads((step0 / 'result.json').read_text())
         old = (measured.get('series') or {}).get('key')
         law = measured.get('sampling') or LEGACY_SAMPLING
@@ -3917,7 +4028,7 @@ def train(args):
             step0.rename(aside)
             log_line(log, {'event': 'held series changed', 'old_series': old, 'series': run['series']['key'],
                            'old_sampling': law, 'sampling': sampling_law_of(args.top_p), 'moved_to': str(aside)})
-    if step:   # a resumed run first serves its own weights
+    if step:
         sync.snapshot()
         sync.publish(step, on_published)
         sync.wait()
@@ -3933,20 +4044,15 @@ def train(args):
         else:
             log_line(log, {'event': 'behaviour probe: no start measurement (resumed); copy the start run\'s '
                                     'behaviour-start.json to compare'})
-    if (behaviour is not None and behaviour.get('end_calls') and behaviour_start_path.exists() and reference is not None
+    if (behaviour is not None and behaviour.get('end_calls') and behaviour_start_path.exists() and reference_active
             and not json.loads(behaviour_start_path.read_text()).get('end_logp')):
-        # A start measured before the probe had end-of-turn rows (a resume onto probe v2): the start policy's values from
-        # the KL reference weights (the start policy), put into the start measurement once.
-        # Telemetry never stops the run: a failure is logged and the probe file's end_start stands in.
         t = time.time()
-        reference.load_into(live)
         try:
-            end = behaviour_probe.measure_end(model, behaviour)
+            with learner.reference_view(ref_bundles, ref_rows):
+                end = behaviour_probe.measure_end(model, behaviour)
         except Exception as error:
             end = None
             log_line(log, {'event': 'behaviour probe start: end of turn not measured', 'error': repr(error)[:300]})
-        finally:
-            ReferenceWeights.restore(live, masters)
         if end is not None:
             start_record = json.loads(behaviour_start_path.read_text())
             start_record.update(end)
@@ -4010,18 +4116,23 @@ def train(args):
         directory = checkpoint_root / f'step-{step_number:05d}'
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / 'checkpoint.pt'
-        changed = write_pruned_checkpoint(state, native_rows, special, path, source_sha, sync.backbone(),
-                                          learner_step=step_number)
-        from natlang_neuralese.common.hashing import sha256_file_hex
-        sha = sha256_file_hex(path)
+        exported = export_merged_checkpoint(
+            learner, state, path, source_sha256=source_sha, learner_step=step_number,
+            special_ids=special, base_embedding_rows=native_rows['embedding_rows'],
+            tied_head=native_rows['tied_head'],
+        )
+        sha = exported['checkpoint_sha256']
         (directory / 'sha256.txt').write_text(sha + '\n')
-        (directory / 'meta.json').write_text(json.dumps({'step': step_number, 'sha256': sha, 'changed_elements': changed,
-                                                         'source_sha256': source_sha, 'code': run['code']}) + '\n')
+        (directory / 'meta.json').write_text(json.dumps({
+            'step': step_number, 'learner_step': step_number, 'source_step': int(state['step']),
+            'sha256': sha, 'effective_policy_sha256': exported['effective_policy_sha256'],
+            'source_sha256': source_sha, 'code': run['code'],
+        }) + '\n')
         checkpoints.append(directory)
         for old in checkpoints[:-2]:
             number = int(old.name.split('-')[1])
             if number not in held_steps and number > args.keep_checkpoints_until and old.exists():
-                discard(old)          # the directory and the NVMe copy of a checkpoint not yet moved
+                discard(old)
         checkpoints[:] = [c for c in checkpoints if c.exists()]
         return {'checkpoint': str(path), 'checkpoint_sha256': sha}
 
@@ -4131,14 +4242,16 @@ def train(args):
         While an evaluation runs, the newest checkpoint not yet measured is copied to Pop (``pop_rl_actor.py prefetch``;
         ``--no-pop-prefetch`` opts out), so the next one starts without its 265-520 s copy. Every complete earlier result
         of the run orders the next evaluation's episodes (``--duration-prior``, held_eval.Dispatch)."""
+        remote_profile = args.held_remote or 'pop'
         from pop_rl_actor import pop_sglang, serving_endpoint
         held_root, tool = work / 'held', [sys.executable, str(HERE / 'pop_rl_actor.py')]
-        base_out = Path(args.held_base) if args.held_base else held_root / 'step-00000-pop'
+        base_out = Path(args.held_base) if args.held_base else held_root / f'step-00000-{remote_profile}'
         python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
-        # Pop's engine settings: the KV dtype is part of the attested engine (export format), so the start policy's
+        # Remote engine settings: the KV dtype is part of the attested engine (export format), so the start policy's
         # result is kept only if it was measured with the same one and the same attested max running sequences.
-        pop_engine = ['--kv-cache-dtype', args.pop_kv_cache_dtype, '--max-running', str(args.pop_max_running)]
-        pop_format = pop_sglang(args.pop_kv_cache_dtype, args.pop_max_running)[1]
+        pop_engine = ['--host-profile', remote_profile, '--kv-cache-dtype', args.pop_kv_cache_dtype,
+                      '--max-running', str(args.pop_max_running)]
+        pop_format = pop_sglang(args.pop_kv_cache_dtype, args.pop_max_running, profile=remote_profile)[1]
 
         def base_engine_matches():
             """False when held/step-00000-pop (finished or partial) was measured on another Pop engine: it moves to
@@ -4653,14 +4766,18 @@ def train(args):
             counts = [exp0_sft.chain_loss_tokens(chains[index]) for index, _ in items]
             return ids, positions, targets, imports, lengths, counts
 
-        def run_tree(leaf, backward=True):
-            return lfm3_fast_train.run_prefix_tree(model, nodes, ids_of, leaf, tokens_of, pack_tokens, args.activation_gb,
-                                                   backward, mode=tree_mode if share_prefix_tokens > 0 else 'levels',
-                                                   batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb)
+        def run_tree(leaf, backward=True, *, adapters=None, trainable_rows=None, cur_pack=None, cur_act=None):
+            return lfm3_fast_train.run_prefix_tree(
+                model, nodes, ids_of, leaf, tokens_of,
+                cur_pack if cur_pack is not None else oom_plan.pack_tokens,
+                cur_act if cur_act is not None else oom_plan.activation_gib,
+                backward, mode=tree_mode if share_prefix_tokens > 0 else 'levels',
+                batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb,
+                adapters=adapters, trainable_rows=trainable_rows, fp8_base=learner.fp8_base,
+                parameterization='lora',
+            )
 
         refs = {}
-        # Sampled decisions: log pi(chosen) = log_softmax(s / T)[chosen], s_o the summed log-probability of option o's
-        # continuation after the exact prompt (as the actor scored it); TIS and the KL term on the chosen option as for a token.
         batches = list(decision_batches(decisions, args.decision_batch_tokens))
 
         def decision_inputs(batch):
@@ -4674,240 +4791,236 @@ def train(args):
             imports = lfm3_fast_train.passthrough_tensors(plan, 'cuda', stored)
             options = sum(counts)
 
-            def scores_of(net, tokens=False):
-                token = -exp0_sft.token_nll(net, forward(net, ids, lengths, imports), positions, targets)
+            def scores_of(net, tokens=False, *, adapters=None, trainable_rows=None):
+                h = forward(net, ids, lengths, imports, adapters=adapters, trainable_rows=trainable_rows,
+                            fp8_base=learner.fp8_base)
+                token = -exp0_sft.token_nll(net, h, positions, targets, trainable_rows=trainable_rows)
                 scores = torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
                 return (scores, token, owner) if tokens else scores
             return ids, counts, scores_of
 
-        ref_scores_of = []                # per decision batch: the start policy's option scores
-        ref_tokens_of = []                # and its per-token log-probabilities (--decision-token-kl)
-        if reference is not None:
-            # the reference pass: the policy module with the start policy's weights (ReferenceWeights), chains and
-            # decisions, before any gradient exists; then the policy's own weights back from its masters
+        ref_scores_of = []
+        ref_tokens_of = []
+        if reference_active:
+            # Reference pass via learner.reference_view: zero 3.4 GB file swap, exact same compiled graph.
             t = time.time()
-            reference.load_into(live)
-            try:
+            with learner.reference_view(ref_bundles, ref_rows) as (ref_ad, ref_r):
                 def reference_leaves(items, run):
-                    # the same batches as the policy pass below: each row's rounding is the policy's
                     ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
-                    logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets).detach()
+                    logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets,
+                                               trainable_rows=ref_r).detach()
                     for (index, _), part in zip(items, logp.split(counts)):
                         refs[index] = part
                     note_peak('reference', len(ids), len(items))
-                with torch.enable_grad():
-                    run_tree(reference_leaves, backward=False)
-                for batch in batches:
-                    ids, _, scores_of = decision_inputs(batch)
-                    exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
-                    with torch.enable_grad():
-                        ref_scores, ref_tokens, _ = scores_of(model, tokens=True)
+                with torch.no_grad():
+                    run_tree(reference_leaves, backward=False, adapters=ref_ad, trainable_rows=ref_r)
+                    for batch in batches:
+                        ids, _, scores_of = decision_inputs(batch)
+                        exp0_sft.set_checkpointing(model, len(ids), oom_plan.activation_gib, parameterization='lora')
+                        ref_scores, ref_tokens, _ = scores_of(model, tokens=True, adapters=ref_ad, trainable_rows=ref_r)
                         ref_scores_of.append(ref_scores.detach())
                         ref_tokens_of.append(ref_tokens.detach())
-                for p in live.values():
-                    p.grad = None
-            finally:
-                ReferenceWeights.restore(live, masters)
             torch.cuda.synchronize()
             phase['reference_forward'] = phase.get('reference_forward', 0.) + time.time() - t
             phase_peak('reference')
             if not args.keep_learner_cache:
-                # the reference pass's cached blocks: the FP32 gradients would stack on them
                 cache_release['reference'] = free_cuda_cache(not args.no_learner_gc)
-        allocate_grads()
         record['episodes_in_flight']['policy_start'] = collector.running
         policy_started = time.time()
 
-        def train_leaves(items, run):
+        def run_policy_and_decisions(cur_pack, cur_act):
             nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
-            ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
-            h = run(ids, lengths, imports)
-            if args.top_p < 1:
-                # Top-p: the policy is the learner's distribution on its own nucleus (a constant set that always holds
-                # the sampled token), so the policy term's log-probability is logp - log(nucleus mass); the KL term
-                # and rho keep the untruncated logp (the actor's record is untruncated too: rho is the ratio of the two
-                # truncated laws with the actor's nucleus mass taken as the learner's, |d log rho| <= -log(top_p)).
-                nll, nucleus_nll, outside = exp0_sft.token_nll_nucleus(model, h, positions, targets, args.top_p)
-                logp_rows, policy_rows = -nll, -nucleus_nll
-                sums['outside_nucleus'] += int(outside.sum())
-                sums['nucleus_log_mass'] += (logp_rows.detach() - policy_rows.detach()).sum().item()
-                if args.non_student_loss == 'full':
-                    # a target the student never sampled (teacher demonstration, the reasoning-RL teacher action, an
-                    # operator seed) is data, not a draw from the nucleus: its likelihood is the full softmax
-                    sampled = torch.from_numpy(np.concatenate([student_sampled_targets(chains[index])
-                                                               for index, _ in items])).to(nll.device)
-                    policy_rows = torch.where(sampled, policy_rows, logp_rows)
-                    sums['non_student_tokens'] += int((~sampled).sum())
-            else:
-                logp_rows = policy_rows = -exp0_sft.token_nll(model, h, positions, targets)
-            # p(</think>) at every target row for the per-term close push (``close_push``; --no-close-push opts out)
-            p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close)
-                            if args.close_push and think_close is not None else None)
-            loss = 0.
-            for k, ((index, _), logp, policy_logp) in enumerate(zip(items, logp_rows.split(counts), policy_rows.split(counts))):
-                chain = chains[index]
-                actor, row_weight = behaviour_logp(chain, logp)
-                token_scale = scales[chain['episode']][0]
-                ref = refs.pop(index, None)
-                with torch.no_grad():
-                    log_rho = logp.detach() - actor
-                    rho = log_rho.clamp(max=20).exp()
-                    # A corpus target is data, not a sampled tail: its unlikely tokens are what it teaches (no tail floor).
-                    advantage = token_advantage(chain, logp.device)
-                    weight, tail = policy_weight(rho, actor, advantage, args.rho_cap,
-                                                 None if chain.get('role') == 'replay' else args.tail_logp_floor)
-                    if row_weight is not None:
-                        weight = weight * row_weight
-                    if args.second_close == 'context' and think_close is not None:
-                        bad = malformed_close_targets(chain, advantage, think_close, second_close_stops)
-                        if bad is not None:
-                            weight = weight.masked_fill(bad.to(weight.device), 0.)
-                            sums['second_close_masked'] += int(bad.sum())
-                    # gradient mass of the policy term per token (its factor times the logit-gradient norm scale 1 - p),
-                    # split into reasoning and post-</think> tokens
-                    mass = token_scale * abs(advantage) * weight * (1 - policy_logp.detach().exp())
-                    thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
-                                                                for _, _, row in chain['segs']])).cuda()
-                    sums['mass_think'] += mass[thinking].sum().item()
-                    sums['mass_post_think'] += mass[~thinking].sum().item()
-                    sums['tail_masked'] += int(tail.sum())
-                    if p_close_rows is not None:
-                        chain_targets, chain_p_close = targets.split(counts)[k], p_close_rows.split(counts)[k]
-                        sums['close_push:' + (chain.get('role') or 'student')] += close_push(
-                            token_scale * advantage * weight, chain_targets, chain_p_close, think_close, thinking)
-                loss_terms = -(weight * advantage * policy_logp)
-                if ref is not None:
-                    d = ref - logp
-                    loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
-                    kl_stats(sums, d)
-                    if p_close_rows is not None:   # the KL term's -dLoss/dlogp: beta * d (k2), beta * (e^d - 1) (k3)
-                        pull = d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1
-                        sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
-                                                            chain_p_close, think_close, thinking)
-                loss = loss + loss_terms.sum() * token_scale
-                twin = twin_rows(chain, logp.device) if chain.get('role') == RRL_ROLE else None
-                if twin is not None:
-                    # reasoning RL's myopic objective (--reasoning-rl-objective twin-fkl): forward KL from the
-                    # privileged twin at each sampled think-block position (twin_forward_kl)
-                    t_ids, t_logp, t_scale = twin
-                    on = t_scale > 0
-                    chain_positions, chain_targets = positions.split(counts)[k], targets.split(counts)[k]
-                    fkl = twin_forward_kl(h, chain_positions[on], model.lm_head.weight, chain_targets[on], logp[on],
-                                          t_ids[on], t_logp[on])
-                    loss = loss + (t_scale[on] * fkl).sum() * token_scale
+            sums.clear()
+            teacher_log_rho.clear()
+            rho_pre_max = rho_post_max = 0.
+            forward_tokens = 0
+            step_refs = dict(refs)
+
+            def train_leaves(items, run):
+                nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
+                ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
+                h = run(ids, lengths, imports)
+                if args.top_p < 1:
+                    nll, nucleus_nll, outside = exp0_sft.token_nll_nucleus(
+                        model, h, positions, targets, args.top_p, trainable_rows=learner.trainable_rows)
+                    logp_rows, policy_rows = -nll, -nucleus_nll
+                    sums['outside_nucleus'] += int(outside.sum())
+                    sums['nucleus_log_mass'] += (logp_rows.detach() - policy_rows.detach()).sum().item()
+                    if args.non_student_loss == 'full':
+                        sampled = torch.from_numpy(np.concatenate([student_sampled_targets(chains[index])
+                                                                   for index, _ in items])).to(nll.device)
+                        policy_rows = torch.where(sampled, policy_rows, logp_rows)
+                        sums['non_student_tokens'] += int((~sampled).sum())
+                else:
+                    logp_rows = policy_rows = -exp0_sft.token_nll(
+                        model, h, positions, targets, trainable_rows=learner.trainable_rows)
+                p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close)
+                                if args.close_push and think_close is not None else None)
+                loss = 0.
+                for k, ((index, _), logp, policy_logp) in enumerate(zip(items, logp_rows.split(counts), policy_rows.split(counts))):
+                    chain = chains[index]
+                    actor, row_weight = behaviour_logp(chain, logp)
+                    token_scale = scales[chain['episode']][0]
+                    ref = step_refs.pop(index, None)
                     with torch.no_grad():
-                        sums['twin_fkl'] += fkl.detach().sum().item()
-                        sums['twin_tokens'] += int(on.sum())
-                        teacher_close = torch.where(t_ids[on] == think_close, t_logp[on].exp(),
-                                                    torch.zeros_like(t_logp[on])).sum(-1)
-                        sums['twin_close_teacher'] += teacher_close.sum().item()
+                        log_rho = logp.detach() - actor
+                        rho = log_rho.clamp(max=20).exp()
+                        advantage = token_advantage(chain, logp.device)
+                        weight, tail = policy_weight(rho, actor, advantage, args.rho_cap,
+                                                     None if chain.get('role') == 'replay' else args.tail_logp_floor)
+                        if row_weight is not None:
+                            weight = weight * row_weight
+                        if args.second_close == 'context' and think_close is not None:
+                            bad = malformed_close_targets(chain, advantage, think_close, second_close_stops)
+                            if bad is not None:
+                                weight = weight.masked_fill(bad.to(weight.device), 0.)
+                                sums['second_close_masked'] += int(bad.sum())
+                        mass = token_scale * abs(advantage) * weight * (1 - policy_logp.detach().exp())
+                        thinking = torch.from_numpy(np.concatenate([think_mask(row['sample'], think_close)
+                                                                    for _, _, row in chain['segs']])).cuda()
+                        sums['mass_think'] += mass[thinking].sum().item()
+                        sums['mass_post_think'] += mass[~thinking].sum().item()
+                        sums['tail_masked'] += int(tail.sum())
                         if p_close_rows is not None:
-                            student_close = p_close_rows.split(counts)[k][on]
-                            sums['twin_close_student'] += student_close.sum().item()
-                            # its push on the </think> logit: -dLoss/dz_close = scale (p_twin - p_policy)
-                            sums['close_push:reasoning_rl_twin'] += float(
-                                (token_scale * t_scale[on] * (teacher_close - student_close)).sum())
-                if chain.get('role') == RRL_ROLE:
-                    # the teacher actions' likelihood after the student's reasoning, and learner-actor agreement on the
-                    # term's own samples
-                    start = 0
-                    for _, length, row in chain['segs']:
-                        part = slice(start, start + length)
-                        start += length
-                        if row.get('rrl') == 'action':
-                            sums['rrl_action_logp'] += logp[part].detach().sum().item()
-                            sums['rrl_action_tokens'] += length
-                        elif row.get('rrl') == 'reasoning':
-                            sums['rrl_reasoning_abs_log_rho'] += log_rho[part].abs().sum().item()
-                            sums['rrl_reasoning_tokens'] += length
-                if chain.get('role') == 'replay':   # the corpus's learning curve: its mean target logp
-                    sums[f"replay_logp:{chain['replay_corpus']}"] += logp.detach().sum().item()
-                    sums[f"replay_tokens:{chain['replay_corpus']}"] += logp.numel()
-                sums['rho'] += rho.sum().item()
-                if chain.get('role') == 'teacher':   # JOLT+ student form: pi(a|s) / mu(a|s, guidance) of the teacher's tokens
-                    teacher_log_rho.append(log_rho.float().cpu().numpy())
-                sums['rho_capped'] += (rho > args.rho_cap).sum().item()
-                sums['abs_log_rho'] += log_rho.abs().sum().item()
-                consumer = None
-                if chain.get('imports'):    # learner-actor agreement on calls that read imported Neuralese state
-                    consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
-                                                                for _, n, row in chain['segs']])).cuda()
-                    sums['consumer_tokens'] += int(consumer.sum())
-                    sums['consumer_abs_log_rho'] += log_rho.abs()[consumer].sum().item()
-                if chain.get('role') not in RATIO_FREE_ROLES:   # engine-mismatch tokens (actor_mismatch_counts)
-                    mismatch = actor_mismatch_counts(log_rho, consumer)
-                    for key in ('below', 'above', 'below_ordinary'):
-                        sums['mismatch_' + key] += mismatch[key]
-                    sums['mismatch_min'] = min(sums.get('mismatch_min', 0.), mismatch['min'])
-                sums['logp'] += logp.detach().sum().item()
-                rho_pre_max = max(rho_pre_max, rho.max().item())
-                rho_post_max = max(rho_post_max, weight.max().item())
-            loss.backward()
-            forward_tokens += len(ids)
-            note_peak('policy', len(ids), len(items))
-            del h, logp_rows, policy_rows, loss, p_close_rows
-            if time.time() - progress_mark > 300:
-                progress_mark = time.time()
-                log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
-                               'policy_s': round(time.time() - policy_started), 'meminfo_gib': meminfo(),
-                               'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
-        record['prefix_tree'] = run_tree(train_leaves)
-        torch.cuda.synchronize()
-        phase['policy_forward_backward'] = time.time() - policy_started
+                            chain_targets, chain_p_close = targets.split(counts)[k], p_close_rows.split(counts)[k]
+                            sums['close_push:' + (chain.get('role') or 'student')] += close_push(
+                                token_scale * advantage * weight, chain_targets, chain_p_close, think_close, thinking)
+                    loss_terms = -(weight * advantage * policy_logp)
+                    if ref is not None:
+                        d = ref - logp
+                        loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
+                        kl_stats(sums, d)
+                        if p_close_rows is not None:
+                            pull = d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1
+                            sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
+                                                                chain_p_close, think_close, thinking)
+                    loss = loss + loss_terms.sum() * token_scale
+                    twin = twin_rows(chain, logp.device) if chain.get('role') == RRL_ROLE else None
+                    if twin is not None:
+                        t_ids, t_logp, t_scale = twin
+                        on = t_scale > 0
+                        chain_positions, chain_targets = positions.split(counts)[k], targets.split(counts)[k]
+                        fkl = twin_forward_kl(h, chain_positions[on], model.lm_head.weight, chain_targets[on], logp[on],
+                                              t_ids[on], t_logp[on])
+                        loss = loss + (t_scale[on] * fkl).sum() * token_scale
+                        with torch.no_grad():
+                            sums['twin_fkl'] += fkl.detach().sum().item()
+                            sums['twin_tokens'] += int(on.sum())
+                            teacher_close = torch.where(t_ids[on] == think_close, t_logp[on].exp(),
+                                                        torch.zeros_like(t_logp[on])).sum(-1)
+                            sums['twin_close_teacher'] += teacher_close.sum().item()
+                            if p_close_rows is not None:
+                                student_close = p_close_rows.split(counts)[k][on]
+                                sums['twin_close_student'] += student_close.sum().item()
+                                sums['close_push:reasoning_rl_twin'] += float(
+                                    (token_scale * t_scale[on] * (teacher_close - student_close)).sum())
+                    if chain.get('role') == RRL_ROLE:
+                        start = 0
+                        for _, length, row in chain['segs']:
+                            part = slice(start, start + length)
+                            start += length
+                            if row.get('rrl') == 'action':
+                                sums['rrl_action_logp'] += logp[part].detach().sum().item()
+                                sums['rrl_action_tokens'] += length
+                            elif row.get('rrl') == 'reasoning':
+                                sums['rrl_reasoning_abs_log_rho'] += log_rho[part].abs().sum().item()
+                                sums['rrl_reasoning_tokens'] += length
+                    if chain.get('role') == 'replay':
+                        sums[f"replay_logp:{chain['replay_corpus']}"] += logp.detach().sum().item()
+                        sums[f"replay_tokens:{chain['replay_corpus']}"] += logp.numel()
+                    sums['rho'] += rho.sum().item()
+                    if chain.get('role') == 'teacher':
+                        teacher_log_rho.append(log_rho.float().cpu().numpy())
+                    sums['rho_capped'] += (rho > args.rho_cap).sum().item()
+                    sums['abs_log_rho'] += log_rho.abs().sum().item()
+                    consumer = None
+                    if chain.get('imports'):
+                        consumer = torch.from_numpy(np.concatenate([np.full(n, bool(row.get('imports')))
+                                                                    for _, n, row in chain['segs']])).cuda()
+                        sums['consumer_tokens'] += int(consumer.sum())
+                        sums['consumer_abs_log_rho'] += log_rho.abs()[consumer].sum().item()
+                    if chain.get('role') not in RATIO_FREE_ROLES:
+                        mismatch = actor_mismatch_counts(log_rho, consumer)
+                        for key in ('below', 'above', 'below_ordinary'):
+                            sums['mismatch_' + key] += mismatch[key]
+                        sums['mismatch_min'] = min(sums.get('mismatch_min', 0.), mismatch['min'])
+                    sums['logp'] += logp.detach().sum().item()
+                    rho_pre_max = max(rho_pre_max, rho.max().item())
+                    rho_post_max = max(rho_post_max, weight.max().item())
+                loss.backward()
+                forward_tokens += len(ids)
+                note_peak('policy', len(ids), len(items))
+                del h, logp_rows, policy_rows, loss, p_close_rows
+                if time.time() - progress_mark > 300:
+                    progress_mark = time.time()
+                    log_line(log, {'event': 'learner progress', 'step': step + 1, 'leaf_tokens': forward_tokens,
+                                   'policy_s': round(time.time() - policy_started), 'meminfo_gib': meminfo(),
+                                   'swap_pages': {k: v - swap0[k] for k, v in vmstat().items()}})
+
+            prefix_info = run_tree(
+                train_leaves, adapters=learner.bundles, trainable_rows=learner.trainable_rows,
+                cur_pack=cur_pack, cur_act=cur_act,
+            )
+            torch.cuda.synchronize()
+            phase['policy_forward_backward'] = time.time() - policy_started
+            phase_peak('policy')
+            dec_records = []
+            for batch_index, batch in enumerate(batches):
+                ids, counts, scores_of = decision_inputs(batch)
+                t = time.time()
+                ref_scores = ref_scores_of[batch_index] if reference_active else None
+                exp0_sft.set_checkpointing(model, len(ids), cur_act, parameterization='lora')
+                scores, token_logp, owner = scores_of(
+                    model, tokens=True, adapters=learner.bundles, trainable_rows=learner.trainable_rows)
+                ref_tokens = ref_tokens_of[batch_index] if reference_active else None
+                terms, start = [], 0
+                for item, k in zip(batch, counts):
+                    row = item['row']
+                    logpi = torch.log_softmax(scores[start:start + k] / row['temperature'], 0)[row['chosen']]
+                    with torch.no_grad():
+                        log_rho = logpi.detach() - row['behavior_logq']
+                        rho = log_rho.clamp(max=20).exp()
+                        weight, tail = policy_weight(rho, torch.as_tensor(row['behavior_logq'], device='cuda'),
+                                                     item['advantage'], args.rho_cap, args.tail_logp_floor)
+                        decision_scale = scales[item['episode']][1]
+                        sums['mass_decision'] += (decision_scale * abs(item['advantage']) * weight
+                                                  * (1 - logpi.detach().exp())).item()
+                        sums['tail_masked_decisions'] += int(tail)
+                        actor_scores = torch.from_numpy(row['scores']).cuda()
+                        sums['decision_abs_dscore'] += (scores[start:start + k].detach() - actor_scores).abs().mean().item()
+                        dec_records.append(decision_record(
+                            item, scores[start:start + k].detach().float().cpu().numpy(), row['scores'],
+                            None if ref_scores is None else ref_scores[start:start + k].float().cpu().numpy(), log_rho.item()))
+                    term = -(weight * item['advantage'] * logpi)
+                    if ref_scores is not None:
+                        d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
+                        term = term + args.kl_beta * kl_term(d, args.kl_estimator)
+                        kl_stats(sums, d)
+                    term = term * decision_scale
+                    if ref_tokens is not None and args.decision_token_kl:
+                        chosen = owner == start + row['chosen']
+                        term = term + decision_token_kl(token_logp[chosen], ref_tokens[chosen], args.kl_beta, args.kl_estimator,
+                                                        scales[item['episode']][0])
+                        kl_stats(sums, ref_tokens[chosen] - token_logp[chosen])
+                        sums['decision_token_kl_tokens'] += int(chosen.sum())
+                    terms.append(term)
+                    sums['decision_rho'] += rho.item()
+                    sums['decision_abs_log_rho'] += log_rho.abs().item()
+                    sums['decision_logpi'] += logpi.item()
+                    rho_pre_max = max(rho_pre_max, rho.item())
+                    rho_post_max = max(rho_post_max, weight.item())
+                    start += k
+                torch.stack(terms).sum().backward()
+                forward_tokens += len(ids)
+                del scores, terms, token_logp
+                torch.cuda.synchronize()
+                phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
+            return prefix_info, dec_records
+
+        record['prefix_tree'], decision_records = run_step_with_oom_retry(run_policy_and_decisions, learner, oom_plan)
         forward_tokens = computed_tokens
         cuda_ids.clear()
         record.update(chain_tokens=chain_tokens, shared_prefix_tokens_saved=chain_tokens - computed_tokens)
-        phase_peak('policy')
-        decision_records = []
-        for batch_index, batch in enumerate(batches):
-            ids, counts, scores_of = decision_inputs(batch)
-            t = time.time()
-            ref_scores = ref_scores_of[batch_index] if reference is not None else None
-            exp0_sft.set_checkpointing(model, len(ids), args.activation_gb)
-            scores, token_logp, owner = scores_of(model, tokens=True)
-            ref_tokens = ref_tokens_of[batch_index] if reference is not None else None
-            terms, start = [], 0
-            for item, k in zip(batch, counts):
-                row = item['row']
-                logpi = torch.log_softmax(scores[start:start + k] / row['temperature'], 0)[row['chosen']]
-                with torch.no_grad():
-                    log_rho = logpi.detach() - row['behavior_logq']
-                    rho = log_rho.clamp(max=20).exp()
-                    weight, tail = policy_weight(rho, torch.as_tensor(row['behavior_logq'], device='cuda'),
-                                                 item['advantage'], args.rho_cap, args.tail_logp_floor)
-                    decision_scale = scales[item['episode']][1]
-                    sums['mass_decision'] += (decision_scale * abs(item['advantage']) * weight
-                                              * (1 - logpi.detach().exp())).item()
-                    sums['tail_masked_decisions'] += int(tail)
-                    actor_scores = torch.from_numpy(row['scores']).cuda()
-                    sums['decision_abs_dscore'] += (scores[start:start + k].detach() - actor_scores).abs().mean().item()
-                    decision_records.append(decision_record(
-                        item, scores[start:start + k].detach().float().cpu().numpy(), row['scores'],
-                        None if ref_scores is None else ref_scores[start:start + k].float().cpu().numpy(), log_rho.item()))
-                term = -(weight * item['advantage'] * logpi)
-                if ref_scores is not None:
-                    d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
-                    term = term + args.kl_beta * kl_term(d, args.kl_estimator)
-                    kl_stats(sums, d)
-                term = term * decision_scale
-                if ref_tokens is not None and args.decision_token_kl:
-                    chosen = owner == start + row['chosen']
-                    term = term + decision_token_kl(token_logp[chosen], ref_tokens[chosen], args.kl_beta, args.kl_estimator,
-                                                    scales[item['episode']][0])
-                    kl_stats(sums, ref_tokens[chosen] - token_logp[chosen])
-                    sums['decision_token_kl_tokens'] += int(chosen.sum())
-                terms.append(term)
-                sums['decision_rho'] += rho.item()
-                sums['decision_abs_log_rho'] += log_rho.abs().item()
-                sums['decision_logpi'] += logpi.item()
-                rho_pre_max = max(rho_pre_max, rho.item())
-                rho_post_max = max(rho_post_max, weight.item())
-                start += k
-            torch.stack(terms).sum().backward()
-            forward_tokens += len(ids)
-            del scores, terms, token_logp
-            torch.cuda.synchronize()
-            phase['decision_forward_backward'] = phase.get('decision_forward_backward', 0.) + time.time() - t
         if batches:
             phase_peak('decisions')
         if decision_records:
@@ -4916,61 +5029,35 @@ def train(args):
                 handle.writelines(json.dumps(r) + '\n' for r in decision_records)
         record['decision_diagnostics'] = decision_summary(decision_records)
         t = time.time()
-        saver.wait()                      # a state save in flight must finish before the masters change
-        phase['wait_state_save'] = time.time() - t
-        if offload is not None:
-            # the forward/backward's cached activation blocks go back before the moments are read in: kept, they were
-            # reused by nothing the optimizer allocates and stacked the moments on top (grpo-v4-run1 step 2: optimizer
-            # reserved 74 GB with 31.5 allocated)
-            if not args.keep_learner_cache:
-                cache_release['optimizer'] = free_cuda_cache(not args.no_learner_gc)
-            phase['moments_in'] = offload.get()   # bit-exact read back of the moments the last step wrote out
-        t = time.time()
-        embedding_master.grad[special_index] = 0
         grad_norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
         if not math.isfinite(grad_norm):
-            # a NaN/inf gradient would make every FP32 master and AdamW moment NaN, and the next state save would
-            # overwrite the only training state with it: drop this step's update, keep the weights
-            release_grads()
+            optimizer.zero_grad(set_to_none=True)
             torch.cuda.empty_cache()
-            if offload is not None:
-                offload_loaded_moments(offload, optimizer, masters, live)   # read back above for the dropped step: out again
-            sync.restore(step)            # a released actor resumes on the weights it served
+            sync.restore(step)
             collector.active_slots = args.slots
             log_line(log, {**record, 'event': 'non-finite gradient: update skipped', 'grad_norm': repr(grad_norm),
                            'loss_sums': {k: v for k, v in sums.items() if isinstance(v, float)}})
             continue
-        cosine = moment_cosine(parameters, optimizer)   # this step's gradient against the previous steps' momentum
+        fam_grads = learner.family_grad_norms()
+        cosine = moment_cosine(parameters, optimizer)
         data_scale = lr_data_scale(spread, args.lr_reference_spread)
         lr = args.lr * min(1., (step + 1) / args.warmup) * data_scale
         for g in optimizer.param_groups:
             g['lr'] = lr
         optimizer.step()
-        release_grads()
-        changed_step = changed_start = 0
-        with torch.no_grad():
-            embedding_master[special_index] = saved_rows
-            for name, p in live.items():
-                new = masters[name].to(torch.bfloat16)
-                changed_step += int((new != p).sum())
-                p.copy_(new)
-            if reference is not None:      # the start policy read back from its file, one tensor at a time (none kept)
-                changed_start = sum(int((live[name] != start_weights.to(live[name].device)).sum())
-                                    for name, start_weights in reference.tensors())
+        optimizer.zero_grad(set_to_none=True)
         torch.cuda.synchronize()
         phase['optimizer'] = time.time() - t
         phase_peak('optimizer')
-        # Hand the learner phase's cached activation blocks back for the collect phase: on unified memory PyTorch's cache is
-        # system RAM, and grpo-v2-run1 held ~56 GB of it while 32 slots collected (guard stop 2026-11-14 04:56, swap).
         cache_release['collect'] = free_cuda_cache(not args.no_learner_gc)
         if args.no_learner_gc:
             release_host_memory()
         record['cuda_reserved_collect_gib'] = round(torch.cuda.memory_reserved() / 2**30, 1)
         record['cuda_cache_release'] = cache_release
-        torch.cuda.reset_peak_memory_stats()   # the behaviour probe's peak is its own, not the optimizer's carried reserve
-        elements = sum(p.numel() for p in live.values())
-        record.update(bf16_changed_step_fraction=round(changed_step / elements, 6),
-                      bf16_changed_vs_start_fraction=round(changed_start / elements, 6) if reference is not None else None)
+        record['family_grad_norms'] = fam_grads
+        record['oom_retries'] = oom_plan.retries
+        record['effective_policy_sha256'] = learner.effective_policy_sha256()
+        torch.cuda.reset_peak_memory_stats()
         if probes:
             record['probe_learner_nll'] = round(probe_learner_nll(), 5)
         if behaviour is not None:
@@ -4983,15 +5070,16 @@ def train(args):
             if record['behaviour_shift']:
                 print(f"behaviour shift at step {step + 1}: {record['behaviour']}", flush=True)
         step += 1
+        consumed_groups.update(int(g) for g in groups)
         collector.active_slots = args.slots
         learn_ended, learn_tokens1 = time.time(), actor_generated(args.actor)
         if learn_tokens0 is not None and learn_tokens1 is not None:
             phase_totals['learn_s'] += learn_ended - learn_started
             phase_totals['learn_tokens'] += learn_tokens1 - learn_tokens0
         phase_mark.update(time=learn_ended, tokens=learn_tokens1)
-        # weight sync and checkpoints (background)
+        # 7-step atomic merged-export publication (background)
         t = time.time()
-        sync.snapshot()                   # waits for the previous publish
+        sync.snapshot()
         phase['snapshot'] = time.time() - t
         if sync.last and not sync.last.get('ok'):
             raise RuntimeError(f'actor weight update failed: {sync.last}')
@@ -4999,26 +5087,28 @@ def train(args):
         save_native = (step % args.save_every == 0 or (args.max_steps and step == args.max_steps) or held_due
                        or step <= args.keep_checkpoints_until)
         sync.publish(step, on_published, also=(lambda s=step: write_native(s)) if save_native else None)
-        branch = branch_root / f'state-step-{step:05d}.safetensors' if args.branch_states else None
+        branch = branch_root / f'state-step-{step:05d}' if args.branch_states else None
         if branch is not None or (args.state_every and step % args.state_every == 0):
-            if branch is not None:     # each step's state, the last N kept: controls branch from any of them
-                saver.wait()
-                for old in sorted(branch_root.glob('state-step-*.safetensors'))[:-(args.branch_states - 1) or None]:
-                    discard(old)      # the file, or the link and its NVMe copy while the move is pending
-            tensors = {}
-            for name in live:
-                st = optimizer.state[masters[name]]
-                tensors['master/' + name] = masters[name]
-                tensors['exp_avg/' + name] = st['exp_avg']
-                tensors['exp_avg_sq/' + name] = st['exp_avg_sq']
-            adam_step = optimizer.state[parameters[0]]['step'].item()
-            saver.save(branch or state_path, tensors, {'step': step, 'adam_step': adam_step, 'cursor': collector.cursor,
-                                             'next_group': collector.next_group, 'source_sha256': source_sha})
-        if offload is not None:
-            record['moment_offload'] = dict(offload.last) or None   # the previous step's put and this step's get
-            offload.put(moment_tensors(optimizer, masters, live), after=saver)
+            if branch is not None:
+                for old in sorted(branch_root.glob('state-step-*'))[:-(args.branch_states - 1) or None]:
+                    discard(old)
+            t_sv = time.time()
+            target_state_dir = branch or state_dir
+            save_learner_state(
+                target_state_dir, learner, optimizer=optimizer, learner_step=step,
+                source_checkpoint_id=source_sha, objective_version='natlang_grpo_v1',
+                optimizer_config={'name': 'adamw', 'lr': args.lr, 'weight_decay': args.weight_decay,
+                                  'betas': [0.9, 0.99], 'warmup': args.warmup},
+                batch_cursor={'step': step, 'cursor': collector.cursor, 'next_group': collector.next_group},
+                rl_rollout_ledger={'cursor': collector.cursor, 'next_group': collector.next_group,
+                                   'consumed_groups': sorted(consumed_groups),
+                                   'actor_version': versions_live['actor']},
+                ref_bundles=ref_bundles, ref_rows=ref_rows,
+            )
+            last_state_save_info = {'path': str(target_state_dir), 'seconds': round(time.time() - t_sv, 1)}
         learner_seconds = sum(v for k, v in phase.items()
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
+        record['compile_health'] = compile_health.record_step(learner_seconds, is_warmup=(step == 1))
         n_dec = max(1, len(decisions))
         mass_total = sums['mass_think'] + sums['mass_post_think'] + sums['mass_decision']
         elapsed = time.time() - run['started']
@@ -5071,14 +5161,13 @@ def train(args):
             actor_tokens_per_s_collect_phase=round(phase_totals['collect_tokens'] / phase_totals['collect_s']) if phase_totals['collect_s'] else None,
             learner_phase_slots=args.learner_phase_slots,
             learner_swap_pages={k: v - swap0[k] for k, v in vmstat().items()}, meminfo_learn_start_gb=mem0,
-            previous_state_save=saver.last, cuda_peak_gib=max([v['allocated'] for v in cuda_peaks.values()], default=None),
+            previous_state_save=last_state_save_info, cuda_peak_gib=max([v['allocated'] for v in cuda_peaks.values()], default=None),
             cuda_peak_by_phase_gib=cuda_peaks, cuda_peak_events=peak_events, host_pinned_gib=host_pinned_gb(),
             outstanding_groups=collector.outstanding, elapsed_s=round(elapsed))
         record.update(grad_spike(work, grad_norm))
         if record.get('grad_spike'):
             print(f"grad spike: grad_norm {grad_norm:.3g} is {record['grad_norm_vs_median']}x the run's median", flush=True)
         if not args.keep_rollouts and args.block_gc_grace >= 0:
-            # the actor's block store: keep what an outstanding group's episodes may still import (see collect_blocks)
             t = time.time()
             with collector.lock:
                 oldest = min([info['created'] for info in collector.groups.values()], default=time.time())
@@ -5093,16 +5182,13 @@ def train(args):
         if reasoning_rl is not None:
             reasoning_rl.save(rrl_ready_path)
         if save_native and held_due:
-            sync.wait()                   # the actor now serves (and attests) this step's checkpoint
+            sync.wait()
             held(step, args.held_samples)
             last_held = time.time()
-            phase_mark.update(time=time.time(), tokens=actor_generated(args.actor))   # the measurement is neither phase
+            phase_mark.update(time=time.time(), tokens=actor_generated(args.actor))
     sync.wait()
-    saver.wait()
-    if offload is not None:
-        offload.wait()
     collector.stop.set()
-    stop.set()                            # reasoning-RL workers stop before the actor goes
+    stop.set()
     log_line(log, {'event': 'stopped', 'step': step})
 
 
@@ -5376,10 +5462,14 @@ def build_parser():
     t.add_argument('--context-tokens', type=int, default=131072, help="call budget; follows the actor's served window when smaller")
     t.add_argument('--seed', type=int, default=20261112)
     t.add_argument('--seed-base', type=int, default=30_000_000)
-    t.add_argument('--lr', type=float, default=1e-5,
-                   help='check 4 (LEARNING_SANITY) learned at 1e-5; run2 at 3e-6: half of the BF16 flips reverted (8.0%% changed '
-                        'vs start after 5 steps, 16%% summed) and mean |dlogp| vs start stayed at 0.014-0.023, under the '
-                        "actor's FP8 noise (0.033)")
+    t.add_argument('--lr', type=float, default=1e-4,
+                   help='LoRA RL learning rate (lfm3opti.md §5 default 1e-4 for r=32, alpha=32)')
+    t.add_argument('--lora-rank', type=int, default=32, help='LoRA rank on all 9 LFM3 projection families (default 32)')
+    t.add_argument('--lora-alpha', type=float, default=None, help='LoRA alpha (default: equal to --lora-rank)')
+    t.add_argument('--gate-rank', type=int, default=None, help='optional attention gate_proj rank (<= 16; default frozen)')
+    t.add_argument('--no-trainable-rows', action='store_true', help='freeze Neuralese marker/override embedding rows')
+    t.add_argument('--no-fp8-base', action='store_true', help='disable Blackwell FP8 frozen-base GEMMs')
+    t.add_argument('--no-compile', action='store_true', help='disable torch.compile on fast layers')
     t.add_argument('--warmup', type=int, default=2)
     t.add_argument('--lr-reference-spread', type=int, default=12,
                    help='a step\'s LR is scaled by its groups with reward spread over this, at most 1 (lr_data_scale; '
@@ -5434,7 +5524,8 @@ def build_parser():
     t.add_argument('--keep-checkpoints-until', type=int, default=0,
                    help='save a native checkpoint after every step up to this step and never prune those (probes, '
                         'grafting, held evals of early steps); 0: off')
-    t.add_argument('--activation-gb', type=float, default=12., help='saved activations per sequence; layers beyond are recomputed')
+    t.add_argument('--activation-gb', '--activation-gib', dest='activation_gb', type=float, default=56.,
+                   help='saved activations (GiB) per sequence; layers beyond are recomputed (G4: 80, GB10 LoRA: 56)')
     t.add_argument('--max-steps', type=int, default=0)
     t.add_argument('--save-every', type=int, default=2)
     t.add_argument('--state-every', type=int, default=4)
@@ -5473,7 +5564,7 @@ def build_parser():
                    'each compared with step 0, before training starts')
     t.add_argument('--held-samples-extra', type=int, default=2)
     t.add_argument('--held-workers', type=int, default=96, help='collector slots of a held measurement on the training actor')
-    t.add_argument('--held-remote', choices=('pop',), help="measure held on Pop's GPU in parallel with training instead of "
+    t.add_argument('--held-remote', choices=('pop', 'colab_g4'), help="measure held on a remote GPU (Pop or Colab G4) in parallel with training instead of "
                    'pausing collection on the training actor (pop_held_loop)')
     t.add_argument('--held-remote-gb', type=float, default=5.,
                    help="with --held-remote: ledger budget of each evaluation's own DGX unit (its collector processes "

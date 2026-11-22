@@ -143,6 +143,9 @@ def measure_end(model, probe, pack_tokens=END_PACK_TOKENS):
     import torch
     from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     weight = model.get_output_embeddings().weight
+    sparse = getattr(model, '_lfm3_trainable_rows', None)
+    s_ids = sparse.token_ids.to(weight.device) if sparse is not None else None
+    s_rows = sparse.rows if sparse is not None else None
     out = {'end_logp': [], 'reclose_logp': []}
     batches, batch, size = [], [], 0
     for call in probe.get('end_calls') or ():
@@ -157,10 +160,11 @@ def measure_end(model, probe, pack_tokens=END_PACK_TOKENS):
     with torch.no_grad():
         for batch in batches:
             seqs = [call['prompt'] + call['reply'] for call in batch]
-            ids = torch.tensor([i for s in seqs for i in s], device='cuda')
+            ids = torch.tensor([i for s in seqs for i in s], device=weight.device)
             h = lfm3_fast_train.hidden(model, ids, [len(s) for s in seqs] if len(seqs) > 1 else None)
-            ends = torch.tensor(list(itertools.accumulate(len(s) for s in seqs)), device='cuda') - 2
-            lf = torch.nn.functional.linear(h[ends], weight).float().log_softmax(-1)
+            ends = torch.tensor(list(itertools.accumulate(len(s) for s in seqs)), device=weight.device) - 2
+            logits = lfm3_fast_train._head_logits_chunk(h[ends], weight, s_ids, s_rows)
+            lf = logits.float().log_softmax(-1)
             out['end_logp'].extend(lf[:, probe['end_id']].tolist())
             out['reclose_logp'].extend(lf[:, probe['close_id']].tolist())
     return out
@@ -168,10 +172,13 @@ def measure_end(model, probe, pack_tokens=END_PACK_TOKENS):
 
 def measure(model, probe, pack_tokens=16000, chunk=1024):
     """Per-call means over the reasoning tokens of ``probe`` (``build``'s JSON) under ``model`` (prepared for
-    ``lfm3_fast_train``): {'sampled_logp': [...], 'entropy': [...], 'close_per_1k': [...], 'close_logp': [...]}."""
+    ``lfm3_fast``): {'sampled_logp': [...], 'entropy': [...], 'close_per_1k': [...], 'close_logp': [...]}."""
     import torch
     from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     weight = model.get_output_embeddings().weight
+    sparse = getattr(model, '_lfm3_trainable_rows', None)
+    s_ids = sparse.token_ids.to(weight.device) if sparse is not None else None
+    s_rows = sparse.rows if sparse is not None else None
     close = probe['close_id']
     out = {'sampled_logp': [], 'entropy': [], 'close_per_1k': [], 'close_logp': []}
     calls = probe['calls']
@@ -188,20 +195,22 @@ def measure(model, probe, pack_tokens=16000, chunk=1024):
     with torch.no_grad():
         for batch in batches:
             seqs = [call['prompt'] + call['think'] for call in batch]
-            ids = torch.tensor([i for s in seqs for i in s], device='cuda')
+            ids = torch.tensor([i for s in seqs for i in s], device=weight.device)
             h = lfm3_fast_train.hidden(model, ids, [len(s) for s in seqs] if len(seqs) > 1 else None)
             offset = 0
             for call, seq in zip(batch, seqs):
                 start = offset + len(call['prompt']) - 1            # the hidden state that predicts think[0]
                 n = len(call['think'])
-                target = torch.tensor(call['think'], device='cuda')
+                target = torch.tensor(call['think'], device=weight.device)
                 logp, entropy, close_lp = [], [], []
                 for a in range(0, n, chunk):
-                    lf = torch.nn.functional.linear(h[start + a:start + min(n, a + chunk)], weight).float().log_softmax(-1)
+                    logits = lfm3_fast_train._head_logits_chunk(
+                        h[start + a:start + min(n, a + chunk)], weight, s_ids, s_rows)
+                    lf = logits.float().log_softmax(-1)
                     logp.append(lf.gather(1, target[a:a + chunk, None])[:, 0])
                     entropy.append(-(lf.exp() * lf).sum(-1))
                     close_lp.append(lf[:, close])
-                    del lf
+                    del lf, logits
                 logp, entropy, close_lp = torch.cat(logp), torch.cat(entropy), torch.cat(close_lp)
                 out['sampled_logp'].append(logp[:-1].mean().item())
                 out['entropy'].append(entropy[:-1].mean().item())
@@ -300,12 +309,9 @@ def extend(args):
 
 def load_probe_model(checkpoint):
     import torch
-    import exp0_sft
-    from natlang_neuralese.train import lfm3_fast as lfm3_fast_train
     from grpo import BASE
-    model, _, _ = exp0_sft.load_model(checkpoint, BASE, device='cpu', dtype=torch.bfloat16)
-    model.to('cuda').eval()
-    lfm3_fast_train.prepare(model)
+    from natlang_neuralese.train.lfm3_learner import load_effective_policy
+    model, _state, _learner = load_effective_policy(checkpoint, BASE, device='cuda', dtype=torch.bfloat16)
     return model
 
 

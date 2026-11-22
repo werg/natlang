@@ -191,12 +191,12 @@ def bench(args):
         if len(chains) >= args.chains:
             break
     chains = chains[:args.chains]
-    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base, dtype=torch.bfloat16)
-    model.gradient_checkpointing_enable()
-    model.config.use_cache = False
+    from natlang_neuralese.train.lfm3_learner import AdapterSpec, Lfm3Learner
+    learner = Lfm3Learner.from_checkpoint(args.checkpoint, args.base, AdapterSpec.for_sft(), device='cuda',
+                                          dtype=torch.bfloat16)
+    model = learner.model
     model.train()
-    lfm3_fast_train.prepare(model)
-    params = list(model.parameters())
+    params = learner.trainable_parameters()
     print(json.dumps({'chains': len(chains), 'chain_tokens': [len(c['ids']) for c in chains],
                       'producer_document_tokens': [exp0_sft.source_tokens(c) for c in chains],
                       'imports': [len(c['imports']) for c in chains]}), flush=True)

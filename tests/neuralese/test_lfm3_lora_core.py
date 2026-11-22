@@ -358,3 +358,89 @@ def test_fp8_frozen_base_gemm_agrees_with_bf16_and_propagates_adapter_grads():
                          trainable_rows=fp8.trainable_rows).mean().backward()
     assert any(leaf.b.grad is not None and leaf.b.grad.abs().sum().item() > 0
                for _, leaf in fp8.bundles[0].iter_leaves())
+
+
+def test_weight_sync_7step_atomic_publication_and_rollback(tmp_path, monkeypatch):
+    """v2 §7.1: 7-step atomic merged-export publication state machine attests all 4 routes and rolls back to k-1."""
+    import json
+    import sys
+    from safetensors.torch import save_file
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
+    import grpo
+
+    learner = _make_learner(r=4, alpha=8.0, trainable_rows=True)
+    export_dir = tmp_path / 'init-export'
+    export_dir.mkdir()
+    init_tensors = {k: v.detach().to(torch.bfloat16).cpu() for k, v in learner.model.named_parameters() if k != 'lm_head.weight'}
+    save_file(init_tensors, str(export_dir / 'model.safetensors'), metadata={'format': 'pt'})
+    (export_dir / 'config.json').write_text('{}')
+
+    calls = []
+    fail_rebind = {'on': False}
+    info_state = {'policy_id': None, 'weights_sha256': None}
+
+    def fake_post(url, body=None, timeout=600):
+        endpoint = url.rsplit('/', 1)[1]
+        calls.append((endpoint, body))
+        if endpoint == 'rebind-policy':
+            if fail_rebind['on'] and body.get('version') == 2:
+                raise RuntimeError('simulated rebind failure')
+            info_state['policy_id'] = body['policy_id']
+            info_state['weights_sha256'] = body['weights_sha256']
+            return json.dumps({'ok': True})
+        return json.dumps({'success': True})
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._data = json.dumps(payload).encode()
+        def read(self):
+            return self._data
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(url, timeout=30):
+        pid, wsha = info_state['policy_id'], info_state['weights_sha256']
+        return FakeResponse({
+            'rl_policy_binding': {'checkpoint_sha256': pid, 'served_weights_sha256': wsha},
+            'routes': {
+                'generation': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
+                'decision_scoring': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
+                'logprob_capture': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
+                'native_fallback': {'policy_id': pid, 'weights_sha256': wsha, 'attested': True},
+            },
+        })
+
+    monkeypatch.setattr(grpo, 'post', fake_post)
+    monkeypatch.setattr(grpo.urllib.request, 'urlopen', fake_urlopen)
+
+    sync = grpo.WeightSync.for_learner(
+        learner, export_dir, 'http://sglang:9000', tmp_path / 'weights', front_url='http://front:8000',
+    )
+    done = []
+    sync.snapshot()
+    sync.publish(1, lambda v, ok: done.append((v, ok)))
+    sync.wait()
+    assert done == [(1, True)]
+    assert sync.last['ok'] is True
+    assert sync.last['routes_attested'] is True
+    assert sync.last_good['version'] == 1
+    assert (tmp_path / 'weights' / 'v-00001' / 'model.safetensors').exists()
+    assert [c[0] for c in calls] == ['pause_generation', 'update_weights_from_disk', 'rebind-policy', 'continue_generation']
+
+    calls.clear()
+    fail_rebind['on'] = True
+    done.clear()
+    sync.snapshot()
+    sync.publish(2, lambda v, ok: done.append((v, ok)))
+    sync.wait()
+    assert done == [(2, False)]
+    assert sync.last['ok'] is False
+    assert sync.last['rolled_back_to'] == 1
+    assert sync.last_good['version'] == 1
+    rollback_updates = [body for ep, body in calls if ep == 'update_weights_from_disk' and body['weight_version'] == '1']
+    assert len(rollback_updates) == 1
+    assert rollback_updates[0]['model_path'].endswith('v-00001')
+    assert calls[-1][0] == 'continue_generation'
+
