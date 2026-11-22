@@ -408,7 +408,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   compilerOptions.outDir = outDir;
   compilerOptions.rootDir ??= root;
   const inFolder = (path: string) => [...layout.folders].some(folder => path.startsWith(folder + sep) || path === folder);
-  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path => !inFolder(path) &&
+  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path =>
+    (!inFolder(path) || path.endsWith('.d.ts')) &&
     !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
   const withNeutral = (specifiers: readonly string[]) => [...new Set([...specifiers, NEUTRAL_RUNTIME_SPECIFIER])];
   const bound = options.runtimeModule && { ...options.runtimeModule, specifiers: withNeutral(options.runtimeModule.specifiers) };
@@ -706,7 +707,7 @@ function walkTs(fs: ProjectFiles, root: string): string[] {
       if (SKIPPED_DIRS.has(entry) || entry.startsWith('.')) continue;
       const path = join(dir, entry);
       if (fs.isDirectory(path)) walk(path);
-      else if (/\.(ts|tsx|mts)$/.test(entry) && !entry.endsWith('.d.ts')) out.push(path);
+      else if (/\.(ts|tsx|mts)$/.test(entry)) out.push(path);
     }
   };
   walk(root);

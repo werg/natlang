@@ -11,6 +11,22 @@ import { scriptedModel } from './support/natlang.mjs';
 const RUNTIME = { url: new URL('../dist/index.js', import.meta.url).href,
   types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
 
+test('virtual builds retain ambient declarations inside callable folders for imported effects', () => {
+  const files = {
+    'main.nl': '---\nreturns: string\n---\nUse the installed specialist.\n',
+    'main/specialist.nl': '---\nreturns: string\n---\nInspect the current record.\n',
+    'main/services.d.ts': 'declare module "fixture:effects" { export function inspect(): string; }\n',
+    'helper.ts': 'import { inspect } from "fixture:effects"; export const run = () => inspect();\n',
+  };
+  const compiled = compileVirtualProject({ files }, runtimeNamespace, { adaptation: false });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.ok(Object.keys(compiled.outputs).every(path => !path.endsWith('services.js')));
+  const invalid = compileVirtualProject({ files: {
+    ...files, 'helper.ts': 'import { inspect } from "fixture:effects"; export const run: number = inspect();\n',
+  } }, runtimeNamespace, { adaptation: false });
+  assert.equal(invalid.ok, false);
+});
+
 test('virtual builds can omit adaptation inventory while keeping declarations, code and checks', () => {
   const project = { files: {
     'answer.nl': '---\nreturns: number\n---\nReturn the answer.\n',
