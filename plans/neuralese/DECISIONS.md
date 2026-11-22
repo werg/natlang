@@ -6829,3 +6829,21 @@ Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc
 - **Timing (estimated, not measured):** 1024 episodes at 16 parallel, time-sliced with the collection engine, about
   8-10 h per measurement (Pop ran 512 at 20 slots in ~3.4 h on similar memory bandwidth). A verdict therefore lands
   about one cycle late; with `--held-every 2` that is within the schedule, and the gate no longer waits for it.
+
+## 2026-11-22 13:40 sft-v10 guard; DGX disk leak from paused operator fits
+
+- **sft-v10 guard.** The LoRA/Colab implementation (07efc838c..e55a0813a) is under repair: reviews found GRPO cannot
+  start, every merged export crashes on real checkpoints, and FP8 crashes under compile and is ~10x off in logprobs.
+  sft-v9's driver launches sft-v10 on current main at its `next` stage (~01:00).
+  - The unit `sft-v10-guard` (`ops/ei/watch/sft-v10-guard.sh`) stops that driver and relaunches sft-v10 with the same
+    argv on sft-v9's own pin 0724bd764 (full-FT recipe) unless `ops/ei/lora-ready.json` names a verified commit that
+    sft-v10's commit contains.
+  - The supervisor writes that file once the learner fixer's real-GPU LoRA SFT smoke passes on main.
+- **Disk.** DGX / fell from 51 to 9 GB in about two hours.
+  - Cause: the operator soft-state fit, paused (SIGTERM) each time an `*-sft` unit ran, left its 5-7.6 GB
+    `natlang-fit-store-*` scratch behind, because its `weakref.finalize` cleanup never runs on a signal. Five stores
+    leaked, about 35 GB.
+  - Removed them and the rejected build-v3 (9.4 GB). sft-v7's finished collection actor store (24 GB) moved to
+    /mnt/external. / is back to 46 GB.
+  - Mechanism fix: `tune/build.fit_store` writes the owner pid into its store and first removes sibling stores whose
+    owner is dead. This covers every fit caller.

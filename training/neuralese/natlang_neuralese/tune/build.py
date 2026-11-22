@@ -40,6 +40,37 @@ def _cleanup_store(db, lockfile, temporary):
         temporary.cleanup()
 
 
+OWNER_FILE = 'owner.pid'
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def sweep_dead_fit_stores(scratch):
+    """Remove ``natlang-fit-store-*`` directories whose owning process is gone. A fit stopped by SIGTERM or killed never
+    runs its finalizer, and each such store is several GB (operator fits paused beside SFT units leaked 7.6 GB per
+    pause, 2026-11-22). A store without an owner file predates the marker and is left alone."""
+    import shutil
+    root = Path(scratch or tempfile.gettempdir())
+    removed = []
+    for path in root.glob('natlang-fit-store-*'):
+        try:
+            pid = int((path / OWNER_FILE).read_text().strip())
+        except (OSError, ValueError):
+            continue
+        if pid != os.getpid() and not _alive(pid):
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(str(path))
+    return removed
+
+
 def fit_store(config):
     """Disposable spill store; durable archives remain in the fit output directories.
 
@@ -51,7 +82,9 @@ def fit_store(config):
     limit = config.get('store_resident_bytes', 256 * 2**20)
     if type(limit) is not int or limit < 0:
         raise ValueError('engine.store_resident_bytes must be a nonnegative integer')
+    sweep_dead_fit_stores(config.get('store_scratch'))
     temporary = tempfile.TemporaryDirectory(prefix='natlang-fit-store-', dir=config.get('store_scratch'))
+    Path(temporary.name, OWNER_FILE).write_text(f'{os.getpid()}\n')
     try:
         store = TensorStore(temporary.name, limit)
     except BaseException:
