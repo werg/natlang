@@ -6643,3 +6643,23 @@ a long episode).
   so later held evals run with the stall fix. That is a new series: sft-v9 (measured: held every 2) re-measures its
   reference, sft-v7's candidate, in its popbase during its collection (3.5 h of Pop that would otherwise fill), so the
   gate does not wait.
+
+## 2026-11-22 02:30, uncapped operator fit (build-v3) loses to build-v2 at the same step budget; build-v2 stays served; evaluator identity fix (operator soft-state strand)
+
+- **What ran.** Two copies of the fit watcher ran at once: mine, and the supervisor's edit, which fits and evaluates on the sft-v7
+  checkpoint. Both used the unit names softop-fit-10 and softop-eval-3, so one of each ran. The fit ran plan-v3 on 5ff07638
+  (19:53-00:53, 120 steps x 8 rows, all 448 verified rows; peak CUDA 13.6 GB allocated / 15.1 GB reserved, RSS 4.0 GB). The
+  evaluation ran the supervisor's command, scoring those 5ff07638 states on the sft-v7 checkpoint. That result
+  (text 0.435, primed 0.508, trained 0.453) is moved to `eval-v3-INVALID-sftv7-checkpoint.json`. The two copies then wrote opposite `served`
+  decisions; mine (build-v3) landed last and was wrong.
+- **Evaluator bug, fixed.** `operator_soft_states.py evaluate` passed each block's own identity as the expected one, so a state fit on
+  another checkpoint was scored instead of refused. It now takes the identity from the consuming engine, and it exits at the start when
+  the build's states were fit on another checkpoint. Serving was never affected: `serve/engine.py:515` checks the execution identity.
+- **Valid comparison** (`eval-v3-base.json`: same 565 rows, same 5ff07638 base, text arm identical to `eval-final.json`):
+  trained NLL v2 0.467 vs v3 0.498 overall. Short rows: 0.482 vs 0.516, v3 - v2 +0.034 +- 0.003, v3 lower on 145/534. Long rows:
+  0.206 vs 0.201, -0.005 +- 0.001, v3 lower on 26/31. Mechanism, matching the direction: both fits had 960 row-steps, and
+  v3 spread them over 448 rows (118 long) instead of 330, so short rows got about 26% fewer updates and long rows their first.
+  Long inputs gain from being trained, as expected. The fair uncapped fit scales its steps with its rows (about 165 for 448).
+- **Served.** `served` points back at build-v2. Both builds are fit on 5ff07638, while `ops/current-policy.json` now names
+  sft-v6 (dc95f29d), so a served operator state needs a refit on whichever policy serves. `plan-v3-sftv7.json` (sft-v7
+  candidate) is written; the next fit takes all 448 rows with about 165 steps on that policy.

@@ -149,6 +149,12 @@ def evaluate(args):
     with fit_store_context(config) as store:
         engine = load_native_engine(args.checkpoint, device=args.device, dtype=getattr(torch, args.dtype), store=store)
         import_archive(engine, [build / 'artifacts'], [build / 'states'])
+        expected = {key: engine.native_identity[key] for key in
+                    ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
+        for key, record in init.items():
+            fit_on = engine.store.get_native_state(record['state']).block.checkpoint_sha256
+            if fit_on != expected['checkpoint_sha256']:
+                raise SystemExit(f'{build} was fit on checkpoint {fit_on[:12]}, not on {expected["checkpoint_sha256"][:12]} ({args.checkpoint})')
         turns = [json.loads(line) for line in Path(args.turns).read_text().splitlines() if line.strip()]
         random.Random(0).shuffle(turns)
         turns = turns[:args.rows] if args.rows else turns
@@ -164,9 +170,9 @@ def evaluate(args):
                 example = parse_graph(row['graph'], tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
                 blocks = {name: engine.store.get_native_state(spec['id']).block
                           for name, spec in (row['graph'].get('external_states') or {}).items()}
-                identity = {name: {key: getattr(block, key) for key in
-                                   ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
-                            for name, block in blocks.items()}
+                # The consuming backbone's identity, not each block's own: a state fit on another checkpoint is
+                # refused (require_native) instead of scored as if it belonged to this one.
+                identity = {name: dict(expected) for name in blocks}
                 with torch.no_grad():
                     loss, _ = graph_loss(engine.shared_model, example, checkpoint_layers=False,
                                          **({'external_blocks': blocks, 'external_identity': identity} if blocks else {}))
