@@ -17,6 +17,68 @@ def open_goal_fingerprint(goal):
     return len(encoded), hashlib.sha256(encoded).hexdigest()
 
 
+def verify_entry(interaction, root, *, partial=False):
+    """Bind application inputs to the actual invocation, including historical routers."""
+    entry = interaction.get('entry')
+    if entry is None:
+        entry = {'program': 'skills/open-user-goal/runUserGoal.nl', 'callable': 'runUserGoal',
+                 'arguments': {'goal': interaction['goal']}}
+    if (not isinstance(entry, dict) or not isinstance(entry.get('program'), str) or
+            not entry['program'].endswith(('.nl', '.ts')) or entry['program'].startswith('/') or
+            '..' in Path(entry['program']).parts or not entry.get('callable') or
+            interaction.get('program') != entry['program'] or not isinstance(entry.get('arguments'), dict)):
+        raise ValueError('invalid application entry attestation')
+    inputs = root.get('inputs') or {}
+    arguments = entry['arguments']
+    if (root.get('definition', {}).get('name') != entry['callable'] or
+            not partial and root.get('outcome') != 'done' or set(inputs) != set(arguments)):
+        raise ValueError('open goal does not match the actual root invocation')
+    for name, value in arguments.items():
+        size, digest = open_goal_fingerprint(value)
+        ref = inputs.get(name) or {}
+        if ref.get('complete') is not True or ref.get('bytes') != size or ref.get('hash') != digest:
+            raise ValueError('open goal application input differs from the actual root invocation')
+
+
+def verified_training_scope(verification, records, root):
+    """Admit independently attested invocations while retaining the complete original graph."""
+    scope = verification.get('training_scope')
+    if scope is None:
+        if verification['status'] != 'passed':
+            raise ValueError('partial live verification needs an explicit training scope')
+        return None
+    if (verification['status'] != 'partial' or not isinstance(scope, dict) or
+            scope.get('schema') != 'natlang.training-scope/1'):
+        raise ValueError('invalid partial live training scope')
+    original = json.loads(bound_file(scope['original_outcome'], root).read_text())
+    if original.get('passed') is not False:
+        raise ValueError('partial recovery must preserve the original failed outcome')
+    selected = {}
+    for invocation in scope.get('invocations') or []:
+        call_id = invocation.get('call_id')
+        checks = invocation.get('checks')
+        evidence = invocation.get('evidence')
+        if (call_id not in records or call_id in selected or records[call_id].get('outcome') != 'done' or
+                not isinstance(checks, dict) or not checks or any(value is not True for value in checks.values()) or
+                not isinstance(evidence, list) or not evidence):
+            raise ValueError('recovered invocation lacks independent successful outcome evidence')
+        for binding in evidence:
+            if binding.get('kind') not in {'workspace', 'cdp'}:
+                raise ValueError('recovered invocation needs workspace or CDP evidence')
+            bound_file(binding, root)
+        ordinals = invocation.get('ordinals')
+        if ordinals is not None:
+            exchanges = records[call_id].get('model_turns') or []
+            if (not isinstance(ordinals, list) or not ordinals or len(set(ordinals)) != len(ordinals) or
+                    any(type(index) is not int or index < 0 or index >= len(exchanges) or
+                        exchanges[index].get('kind') != 'generation' for index in ordinals)):
+                raise ValueError('recovered invocation has invalid generation ordinals')
+        selected[call_id] = None if ordinals is None else set(ordinals)
+    if not selected:
+        raise ValueError('partial live training scope is empty')
+    return selected
+
+
 def bound_file(binding, root):
     path = Path(binding['path'])
     if not path.is_absolute():
@@ -148,7 +210,7 @@ def load_episode(path):
             verification.get('task_id') != spec['id'] or verification.get('run_id') != world['run_id'] or
             verification.get('split', spec['split']) != spec['split'] or
             verification.get('world') != world or
-            verification.get('status') != 'passed'):
+            verification.get('status') not in {'passed', 'partial'}):
         raise ValueError('live task verification does not attest this actual task/run')
     checks = verification.get('checks')
     if not isinstance(checks, dict) or not checks or any(v is not True for v in checks.values()):
@@ -194,6 +256,7 @@ def load_episode(path):
         details.append((binding, detail))
     if seen != set(scopes):
         raise ValueError('workflow call coverage incomplete')
+    training_scope = verified_training_scope(verification, records, path.parent)
     roots = {call_id for call_id, record in records.items() if record['parent_call_id'] is None}
     attested_roots = verification.get('root_call_ids')
     if (not isinstance(attested_roots, list) or not attested_roots or
@@ -205,16 +268,10 @@ def load_episode(path):
     if interaction is not None:
         if (not isinstance(interaction, dict) or interaction.get('kind') != 'open-user-goal' or
                 not isinstance(interaction.get('goal'), str) or not interaction['goal'].strip() or
-                interaction.get('program') != 'skills/open-user-goal/runUserGoal.nl' or len(roots) != 1):
+                not isinstance(interaction.get('program'), str) or len(roots) != 1):
             raise ValueError('invalid open user goal attestation')
         root = records[attested_roots[0]]
-        inputs = root.get('inputs') or {}
-        goal_size, goal_digest = open_goal_fingerprint(interaction['goal'])
-        ref = inputs.get('goal') or {}
-        if (root.get('definition', {}).get('name') != 'runUserGoal' or root.get('outcome') != 'done' or
-                set(inputs) != {'goal'} or ref.get('complete') is not True or
-                ref.get('bytes') != goal_size or ref.get('hash') != goal_digest):
-            raise ValueError('open goal does not match the actual root invocation')
+        verify_entry(interaction, root, partial=training_scope is not None)
         verify_observed_child_inventory(records)
     ancestry = {}
     for call_id in records:
@@ -281,7 +338,9 @@ def load_episode(path):
             if calls:
                 target['tool_calls'] = calls
             if interaction is not None:
-                denial = ('executor did not complete' if not selected_executor else
+                denial = ('invocation lacks independent outcome evidence' if training_scope is not None and call_id not in training_scope else
+                          'decision lacks independent outcome evidence' if training_scope is not None and training_scope[call_id] is not None and index not in training_scope[call_id] else
+                          'executor did not complete' if not selected_executor else
                           'decision contains a failed action' if index in exclusions[call_id] else
                           'decision contains an action without execution evidence'
                           if any(call['id'] not in successful_actions for call in original_calls) else
@@ -294,6 +353,10 @@ def load_episode(path):
                      'raw_calls': calls}, denial))
                 if denial is None:
                     models.add(gateway['model'])
+                continue
+            if training_scope is not None and call_id not in training_scope:
+                continue
+            if training_scope is not None and training_scope[call_id] is not None and index not in training_scope[call_id]:
                 continue
             if index in exclusions[call_id]:
                 continue  # failed action remains raw evidence and later zero-weight history, never a target
@@ -322,6 +385,7 @@ def load_episode(path):
                            'source_manifest': source, 'verification': spec['verification']},
             'outcome': {'accepted': True, 'status': verification['status'], 'world': world, 'checks': checks,
                         'root_call_ids': attested_roots,
+                        **({'training_scope': verification['training_scope']} if training_scope is not None else {}),
                         'invocation_ledger': observed_graph(details, ancestry, scopes, exclusions)},
             'trajectory': decisions,
         }

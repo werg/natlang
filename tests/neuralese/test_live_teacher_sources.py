@@ -321,3 +321,178 @@ def test_failed_action_needs_exact_original_generation_attribution(tmp_path, mut
     rewrite(tmp_path, spec, detail, verification)
     with pytest.raises(ValueError, match='failed live action'):
         live.load_episode(path)
+
+
+@pytest.mark.parametrize('mutation', [None, 'argument', 'callable', 'program', 'missing-input'])
+def test_application_entry_binds_native_function_and_all_typed_inputs(tmp_path, mutation):
+    path, spec, detail, verification = fixture(tmp_path)
+    interaction = open_goal(detail, spec, verification)
+    arguments = {'approval': {'revision': 'approved-2'}, 'draft': 'current draft'}
+    entry = {'program': 'skills/documents/reconcileDraft.nl', 'callable': 'reconcileDraft', 'arguments': arguments}
+    interaction.update(program=entry['program'], entry=entry)
+    verification['interaction'] = copy.deepcopy(interaction)
+    detail['record']['definition']['name'] = 'reconcileDraft'
+    detail['record']['inputs'] = {
+        name: dict(zip(('bytes', 'hash'), live.open_goal_fingerprint(value)), complete=True)
+        for name, value in arguments.items()}
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    if mutation == 'argument':
+        detail['record']['inputs']['approval']['hash'] = '0' * 64
+    elif mutation == 'callable':
+        detail['record']['definition']['name'] = 'runUserGoal'
+    elif mutation == 'program':
+        entry['program'] = '../outside.nl'
+        verification['interaction'] = copy.deepcopy(interaction)
+    elif mutation == 'missing-input':
+        del detail['record']['inputs']['draft']
+    rewrite(tmp_path, spec, detail, verification)
+    if mutation:
+        with pytest.raises(ValueError, match='entry|invocation|input'):
+            live.load_episode(path)
+    else:
+        episode = live.load_episode(path)
+        assert episode['task']['interaction']['entry'] == entry
+        assert episode['turns'][0]['function'] == 'reconcileDraft'
+
+
+def partial_fixture(root):
+    path, spec, _, verification = tree_fixture(root)
+    original = artifact(root, 'original-outcome.json', {'passed': False, 'checks': {'final_answer': False}})
+    detail = json.loads((root / 'call.json').read_text())
+    open_goal(detail, spec, verification)
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    spec['calls'][0] = artifact(root, 'call.json', detail)
+    child = json.loads((root / 'child.json').read_text())
+    child['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    spec['calls'][1] = artifact(root, 'child.json', child)
+    verification.update(status='partial', training_scope={
+        'schema': 'natlang.training-scope/1', 'original_outcome': original,
+        'invocations': [{'call_id': 'agent-child', 'checks': {'written_draft': True},
+                         'evidence': copy.deepcopy(verification['evidence'])}]})
+    spec['verification'] = artifact(root, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    return path, spec, verification
+
+
+def test_partial_success_keeps_original_graph_and_excludes_unsupported_parent(tmp_path):
+    path, _, _ = partial_fixture(tmp_path)
+    episode = live.load_episode(path)
+    assert len(episode['call_tree']) == 4
+    assert [turn['invocation_id'] for turn in episode['turns']] == ['agent-child']
+    ir = episode['trajectory_ir']
+    assert ir['outcome']['status'] == 'partial'
+    assert ir['trajectory'][0]['training_admission'] == {
+        'approved': False, 'reason': 'invocation lacks independent outcome evidence'}
+    assert json.loads((tmp_path / 'original-outcome.json').read_text())['passed'] is False
+
+
+@pytest.mark.parametrize('mutation', ['empty', 'unknown', 'failed', 'check', 'no-evidence', 'foreign-evidence', 'original'])
+def test_partial_success_requires_independent_scoped_evidence(tmp_path, mutation):
+    path, spec, verification = partial_fixture(tmp_path)
+    scope = verification['training_scope']
+    selected = scope['invocations'][0]
+    if mutation == 'empty':
+        scope['invocations'] = []
+    elif mutation == 'unknown':
+        selected['call_id'] = 'uncaptured'
+    elif mutation == 'failed':
+        selected['call_id'] = 'failed-child'
+    elif mutation == 'check':
+        selected['checks']['written_draft'] = False
+    elif mutation == 'no-evidence':
+        selected['evidence'] = []
+    elif mutation == 'foreign-evidence':
+        selected['evidence'][0]['sha256'] = '0' * 64
+    else:
+        scope['original_outcome'] = artifact(tmp_path, 'different-outcome.json', {'passed': True})
+    spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    with pytest.raises(ValueError, match='scope|outcome|artifact|recovery'):
+        live.load_episode(path)
+
+
+def test_partial_scope_can_recover_actions_without_supervising_wrong_final_status(tmp_path):
+    path, spec, verification = partial_fixture(tmp_path)
+    detail = json.loads((tmp_path / 'child.json').read_text())
+    later = copy.deepcopy(detail['record']['model_turns'][0])
+    later['reply']['raw_calls'][0]['id'] = 'later-report'
+    later['reply']['raw_response']['vibestudio']['response']['content'][0]['id'] = 'later-report'
+    detail['record']['model_turns'].append(later)
+    detail['events'].append({'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'later-report'})
+    spec['calls'][1] = artifact(tmp_path, 'child.json', detail)
+    verification['training_scope']['invocations'][0]['ordinals'] = [0]
+    spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    episode = live.load_episode(path)
+    assert len(episode['turns']) == 1
+    excluded = [row for row in episode['trajectory_ir']['trajectory']
+                if row['invocation_id'] == 'agent-child' and not row['training_admission']['approved']]
+    assert any(row['training_admission']['reason'] == 'decision lacks independent outcome evidence' for row in excluded)
+    assert len(episode['trajectory_ir']['outcome']['invocation_ledger']) == 4
+
+
+def test_structural_coverage_counts_actual_learned_functions(tmp_path):
+    from recheck_live_trajectories import structural_coverage
+    path, _, _ = partial_fixture(tmp_path)
+    metrics = structural_coverage([path, tmp_path / 'missing.json'])
+    assert metrics['episodes'] == 1
+    assert metrics['learned_functions'] == {'recoverAndWrite': 1}
+    assert metrics['learned_invocation_depths'] == {1: 1}
+    assert metrics['learned_invocation_children'] == {0: 1}
+    assert len(metrics['unreadable_manifests']) == 1
+
+
+def test_offline_recovery_binds_independent_checks_and_preserves_original(tmp_path, monkeypatch):
+    import recheck_live_trajectories as recovery
+    root = tmp_path / 'source'
+    root.mkdir()
+    path, spec, detail, verification = fixture(root)
+    interaction = open_goal(detail, spec, verification)
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    proof = {'goal': interaction['goal'], 'checks': {'draft_contents': True, 'reported_status': False}}
+    packet = {'test': {'name': 'draft'}, 'result': {'passed': False}, 'execution': {
+        'diagnostics': {'openGoalVerification': proof, 'natlangTeacher': {
+            'programPath': interaction['program'], 'calls': [detail], 'rootCallIds': ['call-one']}}}}
+    source = artifact(root, 'original.json', packet)
+    pins = {'repositories': {'natlang': {'git_commit': 'a' * 40, 'dirty': False}},
+            'instance': 'owned-instance', 'run_id': 'run'}
+    artifact(root, 'pins.json', pins)
+    catalog = {'scenario': 'draft', 'taskId': 'live-draft', 'family': 'draft', 'split': 'train',
+               'sourceGroups': ['drafts']}
+    artifact(root, 'catalog.jsonl', catalog)
+    assessment = {'schema': 'natlang.live-reassessment/1', 'task_id': 'live-draft',
+                  'original_sha256': source['sha256'], 'rationale': 'The independent state proves the draft contents.',
+                  'invocations': [{'call_id': 'call-one', 'checks': ['draft_contents'], 'ordinals': [0]}]}
+    artifact(root, 'assessment.json', assessment)
+    monkeypatch.setattr(recovery, 'held_closure', lambda _: {})
+    monkeypatch.setattr(recovery, 'held_hit', lambda *_: False)
+    out = tmp_path / 'recovered'
+    result = recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
+                              root / 'catalog.jsonl', root / 'held.json', out)
+    assert result['decisions'] == 1
+    assert json.loads((out / 'original.json').read_text()) == packet
+    assert live.load_episode(out / 'manifest.json')['trajectory_ir']['outcome']['status'] == 'partial'
+    assessment['invocations'][0]['checks'] = ['reported_status']
+    artifact(root, 'assessment.json', assessment)
+    with pytest.raises(ValueError, match='failed independent'):
+        recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
+                         root / 'catalog.jsonl', root / 'held.json', tmp_path / 'bad-recovery')
+
+
+def test_rejection_inventory_keeps_all_failed_calls_visible(tmp_path):
+    import recheck_live_trajectories as recovery
+    path, spec, detail, verification = fixture(tmp_path)
+    packet = {'test': {'name': 'failed-task'}, 'result': {'passed': False}, 'execution': {'diagnostics': {
+        'natlangTeacher': {'calls': [detail]},
+        'openGoalVerification': {'goal': 'Create a draft', 'checks': {'draft_contents': True, 'final_report': False}}}}}
+    original = tmp_path / 'packet.json'
+    original.write_text(json.dumps(packet))
+    catalog = tmp_path / 'catalog.jsonl'
+    catalog.write_text(json.dumps({'scenario': 'failed-task', 'taskId': 'draft', 'split': 'train'}) + '\n')
+    audit = recovery.audit_captures([original], catalog)
+    assert audit['count'] == 1
+    assert audit['captures'][0]['passing_checks'] == ['draft_contents']
+    assert audit['captures'][0]['failed_checks'] == ['final_report']
+    assert audit['observed_functions'] == {'createDraft': 1}
+    assert audit['captures'][0]['status'] == 'requires-independent-reassessment'
+    assert json.loads(original.read_text()) == packet
