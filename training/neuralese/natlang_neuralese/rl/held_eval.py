@@ -321,9 +321,11 @@ def series(config=None, *, engine_host=None):
     # ts-host model/prompt-states.ts) change what those calls see: a build is its own series.
     states = os.environ.get('NATLANG_NEURALESE_PROMPT_STATES')
     states = None if not states or states == 'off' else hashlib.sha256((Path(states) / 'result.json').read_bytes()).hexdigest()
-    # Remote engine host (lfm3opti.md §7): Colab G4 is its own held series distinct from Pop (default None preserves
-    # existing Pop/DGX series keys).
+    # The engine host (async-train §1: the DGX held series) is part of the key: a series measured on one machine never
+    # pairs with another's (``compare`` refuses it, also for results that predate the field: ``engine_host_of``). Pop,
+    # the legacy series, keeps its keys (None); the DGX series sets NATLANG_HELD_SERIES_HOST=dgx.
     host = engine_host if engine_host is not None else (os.environ.get('NATLANG_HELD_SERIES_HOST') or None)
+    host = None if host == 'pop' else host
     key_parts = f'{tree}|{scored_by}|{variants}'
     if states:
         key_parts += f'|{states}'
@@ -829,6 +831,27 @@ def _rate_change(a, b, tasks, *, resamples, seed=0):
 PAIRING_ENGINE_FIELDS = ('engine', 'dtype', 'kv_cache_dtype', 'speculative')
 
 
+# The machine behind an attested actor export format (serve_native_checkpoint --actor-export-format; the DGX serves the
+# default ``sglang-hf-...`` export). A result without ``series.engine_host`` (every result before the DGX series) is
+# placed by its engine.
+EXPORT_FORMAT_HOSTS = (('sglang-pop-', 'pop'), ('native-pop-', 'pop'), ('sglang-colab-g4-', 'colab_g4'),
+                       ('sglang-hf-', 'dgx'))
+
+
+def engine_host_of(result):
+    """The machine a result was measured on: its series' ``engine_host``, else the host of its attested export format
+    (Pop for ``sglang-pop-*``, the DGX for the default ``sglang-hf-*``), else None (not attested)."""
+    host = (result.get('series') or {}).get('engine_host')
+    if host:
+        return host
+    engine = result_engine(result) or {}
+    parts = engine.get('engine_parts') if isinstance(engine, dict) else None
+    formats = [((p.get('engine') or {}).get('export_format')) for p in parts] if parts else [engine.get('export_format')]
+    hosts = {next((h for prefix, h in EXPORT_FORMAT_HOSTS if str(f).startswith(prefix)), None) for f in formats if f}
+    hosts.discard(None)
+    return hosts.pop() if len(hosts) == 1 else (','.join(sorted(hosts)) if hosts else None)
+
+
 def pairing_differences(first, second):
     """(series differences, engine differences) of two results: {field: [first, second]} each."""
     series_a, series_b = first.get('series') or {}, second.get('series') or {}
@@ -883,6 +906,10 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
         refused['engine_parts'] = [pairing_engine(engines[0]), pairing_engine(engines[1])]
     if refused:
         raise ValueError('results served by different engine settings are not paired: ' + json.dumps(refused))
+    hosts = engine_host_of(first), engine_host_of(second)
+    if None not in hosts and hosts[0] != hosts[1]:
+        raise ValueError(f'results measured on different engine hosts ({hosts[0]} and {hosts[1]}) are different held '
+                         'series and are not paired; measure both policies on one host')
     if strict_series and (series_differences or first['series']['key'] != second['series']['key']):
         raise ValueError('results of different scoring series are not paired (--strict-series): '
                          + json.dumps(series_differences))

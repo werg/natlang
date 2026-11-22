@@ -14,10 +14,15 @@ distribution (DECISIONS 2026-11-20 "expert iteration"; owner-approved). A cycle:
             tier solved (rate >= ``--solved``), sometimes, never. ``sft_sources build --frontier`` keeps per task the
             cheapest verified source: own successes where any exist (a solved task keeps ``--anchor-per-task``), teacher
             trajectories (student-filled reasoning first, ``filled_reasoning.py``) only where none does.
-  cycle     the driver: pin -> Pop held of the base and the start policy (in the background) -> select -> collect (with
+  cycle     the driver: pin -> held of the start policy (in the background) -> select -> collect (with
             filled-reasoning generation on the same actor) -> frontier -> teacher frontier campaign -> extract, replay,
-            filled build, frontier build -> Ambient SFT (exp0_sft default) -> Pop held of the candidate -> verdict, each
+            filled build, frontier build -> Ambient SFT (exp0_sft default) -> held of the candidate -> verdict, each
             stage resumable (DIR/stages/<name>.done) and pinned (one commit for actor, harness, scorer, learner and eval).
+            The held series (``--held-profile``, async-train §1) is the DGX's by default: the pinned held engine (SGLang,
+            vendor projection, FP8 KV, BF16 weights) in a ledger unit, 4 samples per task, every DGX collection yielding
+            slots while it runs; ``pop`` keeps the legacy Pop series. Results of two hosts never pair.
+            Collection and SFT may run on Colab G4 sessions (``--collect-profile``/``--sft-profile colab_g4``; DGX
+            fallback after ``--fallback-wait-minutes``), charged in DIR/cycle-cost.json from each session's start to stop.
             Pipelined (DECISIONS 2026-11-21 "pipelined cycles"; ``--no-pipeline`` opts out): when the SFT checkpoint
             exists the driver launches the next cycle from it (``--speculative-after`` this cycle), which selects and
             collects while Pop judges the candidate; its gate stage, after the collection, reads this cycle's verdict
@@ -31,6 +36,7 @@ distribution (DECISIONS 2026-11-20 "expert iteration"; owner-approved). A cycle:
     expert_iteration.py collect  --work W --checkpoint C --tasks TASKS.json [--k 4] [--hours 6] [--slots 128]
     expert_iteration.py frontier --out F.json --collect W [--collect W2 ...] --policy SHA
     expert_iteration.py cycle    --dir DIR --start CKPT --commit SHA [...]
+    expert_iteration.py dgx-held --out DIR --checkpoint C --policy-id SHA --held-pin PIN --label L --unit U
 """
 from __future__ import annotations
 
@@ -62,6 +68,16 @@ BASE_SHA = '5ff07638bbedba7c8ec506f763ce5fb7511c7755ce8c045ef764bca00ddc1d6a'
 PY = str(REPO / '.venv-neuralese/bin/python')
 LEDGER = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py')]
 FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
+# ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
+# collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
+COLLECTOR_SLOT_GB = 0.3
+# DGX held series (async-train §1): a held measurement's claim file here makes every DGX collection shrink to
+# HELD_PRIORITY_SHARE of its slots while it runs (held episodes take priority over collection)
+HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
+HELD_PRIORITY_SHARE = 0.25
+HELD_PRIORITY_STALE = 300     # seconds without a heartbeat after which a claim is ignored
+HELD_SLOTS = 64               # collector slots of a DGX held measurement (the pinned engine runs 128)
+HELD_ACTOR_GB = 40            # held_eval.ACTOR_BUDGET_GB: the pinned engine's --sglang-kv-gb 16 + 24
 
 
 def log(record):
@@ -155,7 +171,48 @@ def select(args):
     log({'event': 'selected', **report})
 
 
+# ---- held priority (pure, tested) ------------------------------------------------------------------------------------
+def held_priority_claims(directory, now=None, alive=None):
+    """Live held-measurement claims in ``directory`` (``<unit>.json`` with ``pid``, refreshed by a heartbeat): a claim
+    whose process is gone or whose heartbeat is older than HELD_PRIORITY_STALE is ignored."""
+    now = time.time() if now is None else now
+    alive = alive or _pid_alive
+    out = []
+    for path in sorted(Path(directory).glob('*.json')):
+        try:
+            claim = json.loads(path.read_text())
+            fresh = now - path.stat().st_mtime < HELD_PRIORITY_STALE
+        except (OSError, ValueError):
+            continue
+        if fresh and alive(claim.get('pid')):
+            out.append(claim)
+    return out
+
+
+def priority_slots(slots, claims, share=HELD_PRIORITY_SHARE):
+    """A collection's active slots: all of them, or ``share`` of them (at least 1) while a held measurement runs."""
+    return slots if not claims or share >= 1 else max(1, int(round(slots * share)))
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 # ---- collect ---------------------------------------------------------------------------------------------------------
+def endpoint_alive(url, sha, timeout=10):
+    """Whether the actor front at ``url`` answers and still serves policy ``sha``."""
+    try:
+        with urllib.request.urlopen(url + '/v1/neuralese/info', timeout=timeout) as response:
+            info = json.loads(response.read())
+        return (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == sha
+    except (OSError, ValueError):
+        return False
+
+
 def parse_actor_endpoints(raw_actors, default_slots):
     """Parse repeatable ``--actor URL[=SLOTS]`` specs into ``[(url, slots), ...]``."""
     if not raw_actors:
@@ -176,27 +233,45 @@ def parse_actor_endpoints(raw_actors, default_slots):
 
 
 def endpoint_for_slot(endpoints, slot_index):
-    """Assign slot ``slot_index`` to one actor endpoint proportional to each endpoint's slot weight."""
+    """The endpoint of slot ``slot_index``: each endpoint gets as many slots as it serves; None for a slot beyond the
+    endpoints' combined capacity (that slot idles, rather than overloading a live endpoint after another died)."""
     expanded = [url for url, count in endpoints for _ in range(max(1, int(count)))]
-    return expanded[slot_index % len(expanded)]
+    return expanded[slot_index] if slot_index < len(expanded) else None
 
 
 def frontier_collector(base):
     class FrontierCollector(base):
         """grpo's Collector over a fixed task order: one group of ``--group`` samples per task, in order, no new group
-        after the deadline; supports sharding across multiple actor endpoints (e.g. multiple Colab G4 sessions)."""
+        after the deadline. Shards across several actor endpoints (Colab G4 sessions): an endpoint that stops answering
+        or serving the policy is dropped, its in-flight episodes are abandoned (their groups never scored: an episode
+        against a dead actor is no verdict on the task) and its slots idle until it serves again. A live DGX held
+        measurement (``priority_dir``) shrinks the active slots to ``priority_share``."""
 
-        def setup(self, order, deadline, endpoints=None):
+        def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
             self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
                                                                  getattr(self.args, 'slots', 1))]
+            self.dead, self.dead_checked = set(), {}
+            self.priority_dir, self.priority_share, self.priority_read = priority_dir, priority_share, 0.
+            self.full_slots = sum(count for _, count in self.endpoints)
             self._learnable()
+
+        def _priority(self):
+            """At most every 30 s: the active slots under live held claims (``priority_slots``)."""
+            if not self.priority_dir or time.time() - self.priority_read < 30:
+                return
+            self.priority_read = time.time()
+            active = priority_slots(self.full_slots, held_priority_claims(self.priority_dir), self.priority_share)
+            if active != self.active_slots:
+                print(json.dumps({'event': 'held priority', 'active_slots': active, 'slots': self.full_slots}), flush=True)
+                self.active_slots = active
 
         def _pick(self):
             return self.by_id[self.order.popleft()]
 
         def _take(self):
+            self._priority()
             if self.paused.is_set():
                 return None
             with self.lock:
@@ -207,15 +282,34 @@ def frontier_collector(base):
 
         def finished(self):
             with self.lock:
-                return not self.pending and self.outstanding == 0 and (not self.order or time.time() >= self.deadline)
+                done = not self.pending and self.outstanding == 0 and (not self.order or time.time() >= self.deadline)
+            return done or self.all_dead()
+
+        def all_dead(self):
+            return len(self.endpoints) > 1 and len(self.dead) == len(self.endpoints) and self.outstanding == 0
+
+        def live_endpoints(self):
+            for url in list(self.dead):      # a dropped endpoint is retried every 2 minutes
+                if time.time() - self.dead_checked.get(url, 0) > 120:
+                    self.dead_checked[url] = time.time()
+                    if endpoint_alive(url, self.policy_sha):
+                        self.dead.discard(url)
+                        print(json.dumps({'event': 'endpoint back', 'endpoint': url}), flush=True)
+            return [(url, count) for url, count in self.endpoints if url not in self.dead]
+
+        def mark_dead(self, url):
+            if url not in self.dead:
+                self.dead.add(url)
+                self.dead_checked[url] = time.time()
+                print(json.dumps({'event': 'endpoint dropped', 'endpoint': url}), flush=True)
 
         def slot(self, index=0):
             if len(self.endpoints) <= 1:
                 return super().slot(index)
-            actor_url = endpoint_for_slot(self.endpoints, index)
             sampling = self.work / 'sampling-config.json'
             while not self.stop.is_set():
-                if index >= self.active_slots:
+                actor_url = endpoint_for_slot(self.live_endpoints(), index)
+                if index >= self.active_slots or actor_url is None:
                     time.sleep(2)
                     continue
                 item = self._take()
@@ -253,6 +347,15 @@ def frontier_collector(base):
                     self._abandon(group, key, process.returncode)
                     if self.stop.is_set():
                         return
+                    continue
+                # an episode that ran against an actor which no longer answers (or serves another policy) is no verdict
+                if actor_url in self.dead or not endpoint_alive(actor_url, self.policy_sha):
+                    self.mark_dead(actor_url)
+                    task = info.get('task_id')
+                    self._abandon(group, key, process.returncode)
+                    with self.lock:      # the task runs again on a live endpoint
+                        if task in self.by_id and task not in self.order and not self.stop.is_set():
+                            self.order.appendleft(task)
                     continue
                 with self.lock:
                     if info.get('abandoned'):
@@ -323,12 +426,15 @@ def collect(args):
         handle.write(json.dumps(run, default=str) + '\n')
     actor = None
     endpoints = parse_actor_endpoints(args.actor, args.slots)
-    if endpoints:
+    if endpoints:     # remote actors (Colab G4): served and stopped by the cycle (pop_rl_actor serve-checkpoint)
         for ep_url, _ in endpoints:
             wait_actor(ep_url, sha, None, None, timeout=60)
         url = endpoints[0][0]
         total_slots = sum(count for _, count in endpoints)
         sglang = None
+        # Neuralese consumer state: each episode runs on one endpoint (producer and consumer calls on one actor's
+        # store, fetched over its HTTP front); the SFT build reads states through their producer documents in the
+        # episode records (pass-through), never from a store, so no remote store is needed after the collection.
     else:
         command, url = grpo.actor_command(g, work, sha)
         with (work / 'actor.log').open('a') as handle:
@@ -348,8 +454,8 @@ def collect(args):
     g.slots = total_slots
     g.max_outstanding = total_slots // 2 + 8
     (work / 'actor.json').write_text(json.dumps({'url': url, 'endpoints': endpoints, 'sglang': sglang,
-                                                 'checkpoint_sha256': sha,
-                                                 'export': str(work / 'actor' / 'sglang-hf'),
+                                                 'checkpoint_sha256': sha, 'remote': actor is None,
+                                                 'export': str(work / 'actor' / 'sglang-hf') if actor else None,
                                                  'pid': actor.pid if actor else None}) + '\n')
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(g.top_p, capture=True)) + '\n')
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
@@ -357,7 +463,9 @@ def collect(args):
                                                    first_group=max(existing, default=-1) + 1)
     g.neuralese_variants, g.neuralese_variant_share = args.neuralese_variants, args.neuralese_variant_share
     collector.variants = grpo.load_variants(g, tasks, work)
-    collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints)
+    collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints,
+                    priority_dir=None if args.no_held_priority else Path(args.held_priority_dir),
+                    priority_share=args.held_priority_share)
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
          'slots': total_slots, 'actor': url, 'endpoints': endpoints})
     stop = threading.Event()
@@ -383,10 +491,10 @@ def collect(args):
     summary = {'event': 'collect end', 'groups_done_this_run': done, 'tasks_scored': len(rates),
                'tasks_with_success': sum(1 for s, _ in rates.values() if s), 'episodes': sum(n for _, n in rates.values()),
                'successes': sum(s for s, _ in rates.values()), 'tasks_left': len(collector.order),
-               'stopped': stop.is_set()}
+               'stopped': stop.is_set() or collector.all_dead(), 'endpoints_dropped': sorted(collector.dead)}
     (work / 'collect.json').write_text(json.dumps({**summary, 'run': run}, indent=1, default=str) + '\n')
     log(summary)
-    if not stop.is_set():
+    if not summary['stopped']:
         record_collection(work)
 
 
@@ -471,16 +579,19 @@ def lineage_builds(mix, trained_before):
 
 
 def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous, prefer_unseen, fallback_prefer_unseen,
-                    extra_seed_work=(), since_held=0):
+                    extra_seed_work=(), since_held=0, held_pin=None, held_series_host=None):
     """The next pipelined cycle's ``cycle`` arguments: this cycle's (``argv`` after ``cycle``) with its own flags
-    replaced, speculative after ``previous``, the extra seed WORKs added."""
+    replaced, speculative after ``previous``, the extra seed WORKs added. ``held_pin``/``held_series_host``: the held
+    series this cycle measured on (its harness pin and engine host), carried as such; without them a ``--held-pin`` in
+    ``argv`` is carried unchanged."""
+    own = OWN_FLAGS + (('--held-pin', '--held-series-host') if held_pin else ())
     out, skip = [], False
     for arg in argv:
         if skip:
             skip = False
             continue
         flag = arg.split('=', 1)[0]
-        if flag in OWN_FLAGS:
+        if flag in own:
             skip = '=' not in arg
             continue
         out.append(arg)
@@ -491,32 +602,44 @@ def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous
             *[x for b in fallback_prefer_unseen for x in ('--fallback-prefer-unseen', str(b))]]
     if since_held:
         out += ['--since-held', str(since_held)]
+    if held_pin:
+        out += ['--held-pin', str(held_pin), '--held-series-host', held_series_host or 'pop']
     return out
 
 
-def reusable_held(results, policy, samples, series_key):
-    """The first complete held result of ``policy`` at ``samples`` per task in one scoring series (a measurement an
-    earlier cycle made on the same series: pairing rules unchanged, Pop spared 3.5 h)."""
+def result_host(result):
+    """The machine a held result was measured on (``held_eval.engine_host_of``: its series' engine host, else its
+    attested export format); a result attesting nothing reads as Pop, where every earlier cycle measured."""
+    from natlang_neuralese.rl.held_eval import engine_host_of
+    return engine_host_of(result) or 'pop'
+
+
+def reusable_held(results, policy, samples, series_key, host='pop'):
+    """The first complete held result of ``policy`` at ``samples`` per task in one scoring series measured on ``host``
+    (a measurement an earlier cycle made on the same series: pairing rules unchanged, the eval spared 3 h). The host
+    is checked apart from the key: a pin that predates host keys gives Pop and DGX results one key."""
     for path in results:
         try:
             r = json.loads(Path(path).read_text())
         except (OSError, json.JSONDecodeError):
             continue
         if (r.get('complete') and r.get('policy_id') == policy and r.get('samples_per_task') == samples
-                and (r.get('series') or {}).get('key') == series_key):
+                and (r.get('series') or {}).get('key') == series_key and result_host(r) == host):
             return Path(path)
     return None
 
 
-def latest_base(results, samples):
-    """The newest complete held result of the base at ``samples`` per task, in any scoring series."""
+def latest_base(results, samples, host='pop'):
+    """The newest complete held result of the base at ``samples`` per task measured on ``host``, in any scoring series
+    of that host (a Pop base never pairs with a DGX candidate)."""
     found = []
     for path in results:
         try:
             r = json.loads(Path(path).read_text())
         except (OSError, json.JSONDecodeError):
             continue
-        if r.get('complete') and r.get('policy_id') == BASE_SHA and r.get('samples_per_task') == samples:
+        if (r.get('complete') and r.get('policy_id') == BASE_SHA and r.get('samples_per_task') == samples
+                and result_host(r) == host):
             found.append((Path(path).stat().st_mtime, Path(path).parent))
     return max(found)[1] if found else None
 
@@ -545,49 +668,69 @@ class Cycle:
                                             subprocess.check_output(['sha256sum', args.start], text=True).split()[0])
         self.env = {**os.environ, 'NATLANG_REPO': str(self.pin), 'HF_HUB_OFFLINE': '1', 'OMP_NUM_THREADS': '2',
                     'MKL_NUM_THREADS': '1', 'PYTHONPATH': f'{self.pin}/training/neuralese:{self.pin}'}
-        # held eval's harness (--held-pin, carried to the next cycle): one scoring series across cycles, so the start is
-        # the previous candidate's measurement and each cycle costs Pop one candidate held (DECISIONS 2026-11-22)
-        self.held_pin = Path(getattr(args, 'held_pin', None) or self.pin)
+        from natlang_neuralese.common.execution_profile import CostTelemetry, parse_colab_hosts, resolve_profile
+        self.colab_hosts = parse_colab_hosts(getattr(args, 'colab_hosts', None), OPS / 'pop-behavior-eval' / 'config.json')
+        wait_min = float(getattr(args, 'fallback_wait_minutes', 30.0))
+        cu_hr = float(getattr(args, 'cu_per_hour', 13.0))
+        self.collect_profile = resolve_profile(getattr(args, 'collect_profile', None) or 'dgx', hosts=self.colab_hosts,
+                                               cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
+        self.sft_profile = resolve_profile(getattr(args, 'sft_profile', None) or 'dgx', hosts=self.colab_hosts,
+                                           cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
+        # the held series (async-train §1): the DGX (default) or Pop (legacy); no other machine has one
+        self.held_profile = resolve_profile(getattr(args, 'held_profile', None) or 'dgx')
+        if self.held_profile.name not in ('dgx', 'pop'):
+            raise SystemExit(f'held evals run on the DGX or Pop, not {self.held_profile.name} (async-train §1)')
+        self.held_host = self.held_profile.held_series_host or 'pop'
+        # held eval's harness (--held-pin, carried to the next cycle with --held-series-host): one scoring series across
+        # cycles, so the start is the previous candidate's measurement and each cycle costs one candidate held
+        # (DECISIONS 2026-11-22). A carried pin of another host's series is not this series: a cycle that moves the
+        # held series (sft-v10: Pop -> DGX) starts it on its own pin.
+        carried = getattr(args, 'held_pin', None)
+        if carried and (getattr(args, 'held_series_host', None) or 'pop') != self.held_host:
+            carried = None
+        self.held_pin = Path(carried or self.pin)
         self.held_env = {**self.env, 'NATLANG_REPO': str(self.held_pin),
                          'PYTHONPATH': f'{self.held_pin}/training/neuralese:{self.held_pin}'}
+        if self.held_profile.held_series_host:
+            self.held_env['NATLANG_HELD_SERIES_HOST'] = self.held_profile.held_series_host
+        if getattr(self.a, 'held_samples', None) is None:
+            self.a.held_samples = self.held_profile.held_samples
         self.collect_dir, self.held = self.dir / 'collect', self.dir / 'held'
         self.work = Path(args.sft_work)
         self.mix = self.dir / 'mix'
         self.window_closed = threading.Event()
         self.window_started = False
-        from natlang_neuralese.common.execution_profile import CostTelemetry, parse_colab_hosts, resolve_profile
-        self.colab_hosts = parse_colab_hosts(getattr(args, 'colab_hosts', None), OPS / 'pop-behavior-eval' / 'config.json')
-        wait_min = float(getattr(args, 'fallback_wait_minutes', 30.0))
-        cu_hr = float(getattr(args, 'cu_per_hour', 13.0))
-        self.collect_profile = resolve_profile(getattr(args, 'collect_profile', 'dgx'), hosts=self.colab_hosts,
-                                               cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
-        self.sft_profile = resolve_profile(getattr(args, 'sft_profile', 'dgx'), hosts=self.colab_hosts,
-                                           cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
-        self.held_profile = resolve_profile(getattr(args, 'held_profile', 'pop'), hosts=self.colab_hosts,
-                                            cu_per_hour=cu_hr, fallback_wait_minutes=wait_min)
-        if getattr(self.a, 'held_samples', None) is None:
-            self.a.held_samples = self.held_profile.held_samples
-        if self.held_profile.held_series_host:
-            self.held_env['NATLANG_HELD_SERIES_HOST'] = self.held_profile.held_series_host
         self.cost = CostTelemetry.load(self.dir / 'cycle-cost.json', getattr(args, 'name', self.dir.name))
 
-    def record_cost(self, stage, profile, wall_seconds, *, sessions=1, canonical_chain_tokens=0, note=''):
+    def record_cost(self, stage, profile, wall_seconds, *, sessions=1, canonical_chain_tokens=0, note='',
+                    session_host=None):
         entry = self.cost.record_stage(stage, profile, wall_seconds, sessions=sessions,
-                                       canonical_chain_tokens=canonical_chain_tokens, note=note)
+                                       canonical_chain_tokens=canonical_chain_tokens, note=note, session_host=session_host)
         summary = self.cost.save(self.dir / 'cycle-cost.json')
         self.note(stage='cost', cost_stage=stage, profile=entry.profile, wall_s=entry.wall_seconds,
                   cu_spent=entry.cu_spent, total_cu=summary['total_cu_spent'],
-                  tokens_per_cu=summary['canonical_chain_tokens_per_cu'], note=note)
+                  tokens_per_cu=summary['canonical_chain_tokens_per_cu'], note=entry.note)
         return summary
 
+    def session(self, host, profile, opened):
+        """Charge a remote session from its start (``opened``) to its stop (``opened`` False): Colab bills the time
+        a session runs, busy or idle, so the cycle charges every actor and learner it starts until it stops them."""
+        if opened:
+            self.cost.open_session(host, profile)
+        else:
+            self.cost.close_session(host)
+        self.cost.save(self.dir / 'cycle-cost.json')
+
     def choose_profile(self, preferred, stage):
-        """Select active profile for ``stage`` with 30-min unreachable fallback to DGX (lfm3opti.md §4)."""
-        from natlang_neuralese.common.execution_profile import select_stage_profile
+        """(active profile, hosts) for ``stage``: a remote profile waits up to its fallback time for a reachable host,
+        then falls back to the DGX (lfm3opti.md §4). ``preferred`` is a profile or its name."""
+        from natlang_neuralese.common.execution_profile import resolve_profile, select_stage_profile
         import pop_rl_actor
-        active, hosts, reason = select_stage_profile(
-            preferred, reachable_fn=pop_rl_actor.host_reachable,
-            hosts=self.colab_hosts if preferred.name == 'colab_g4' else ([pop_rl_actor.POP] if preferred.name == 'pop' and pop_rl_actor.POP else ()),
-        )
+        if isinstance(preferred, str):
+            preferred = resolve_profile(preferred, hosts=self.colab_hosts)
+        hosts = (self.colab_hosts if preferred.name == 'colab_g4' else
+                 [pop_rl_actor.POP] if preferred.name == 'pop' and pop_rl_actor.POP else ())
+        active, hosts, reason = select_stage_profile(preferred, reachable_fn=pop_rl_actor.host_reachable, hosts=hosts)
         if reason:
             self.note(stage=stage, profile_fallback=reason, active_profile=active.name)
         return active, hosts
@@ -667,6 +810,54 @@ class Cycle:
             raise SystemExit(f'pin failed: {self.dir}/pin.log')
         self.mark('pin', pin=str(self.pin))
 
+    def measure_held(self, name, checkpoint):
+        """One held-v3 measurement of ``checkpoint`` into DIR/held/NAME on this cycle's held series."""
+        return self.dgx_held(name, checkpoint) if self.held_host == 'dgx' else self.pop_held(name, checkpoint)
+
+    def held_result_ok(self, out):
+        """Whether ``out`` holds a complete result of this cycle's held host; a result of another host (a Pop start
+        beside a DGX candidate) moves aside to ``<name>-<host>-<time>`` so it is re-measured on this series."""
+        path = out / 'result.json'
+        if not path.exists():
+            if (out / 'run.json').exists() and result_host(json.loads((out / 'run.json').read_text())) != self.held_host:
+                self.set_held_aside(out)
+            return False
+        r = json.loads(path.read_text())
+        if result_host(r) != self.held_host:
+            self.set_held_aside(out, result_host(r))
+            return False
+        return bool(r.get('complete'))
+
+    def set_held_aside(self, out, host='other'):
+        aside = out.with_name(f'{out.name}-{host}-{int(time.time())}')
+        os.replace(out, aside)
+        self.note(stage='held', moved_aside=str(aside), reason=f'measured on {host}, the series is {self.held_host}')
+
+    def dgx_held(self, name, checkpoint):
+        """One held-v3 measurement on the DGX held series (async-train §1): ``dgx-held`` as a ledger unit (the pinned
+        held engine as its child: SGLang, vendor projection, FP8 KV, BF16 weights, attested against the held manifest's
+        engine.json; ``held_eval measure`` with ``--held-samples`` per task), resumable. Preempted (the SFT outranks
+        it), it is relaunched and resumes its episodes."""
+        out = self.held / name
+        if self.held_result_ok(out) or self.reuse_held(out, checkpoint):
+            return out
+        from natlang_neuralese.common.hashing import sha256_file_hex_cached
+        sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
+        out.mkdir(parents=True, exist_ok=True)
+        unit = f'{self.a.name}-held-{name}'
+        budget = HELD_ACTOR_GB + round(self.a.held_slots * COLLECTOR_SLOT_GB) + 2
+        command = [PY, str(Path(__file__).resolve()), 'dgx-held', '--out', out, '--checkpoint', checkpoint,
+                   '--policy-id', sha, '--samples', self.a.held_samples, '--slots', self.a.held_slots,
+                   '--held-pin', self.held_pin, '--label', f'{self.a.name}-{name}', '--unit', unit]
+        started = time.time()
+        for attempt in range(20):
+            self.ledger(unit, budget, 'medium', list(map(str, command)), out / 'driver.log', repo=self.held_pin)
+            if self.held_result_ok(out):
+                break
+            time.sleep(180)         # a preempted unit is requeued by the ledger: join it, else relaunch
+        self.record_cost(f'held:{name}', 'dgx', time.time() - started)
+        return out
+
     def pop_held(self, name, checkpoint):
         """One held-v3 measurement on Pop (ops/grpo-v4/pop-held.sh: the pinned harness, 2 samples)."""
         out = self.held / name
@@ -685,8 +876,8 @@ class Cycle:
         return out
 
     def reuse_held(self, out, checkpoint):
-        """Copy an earlier cycle's complete Pop measurement of this policy in this pin's scoring series into ``out``
-        (``--no-held-reuse`` opts out)."""
+        """Copy an earlier cycle's complete measurement of this policy in this pin's scoring series on this cycle's
+        held host into ``out`` (``--no-held-reuse`` opts out)."""
         if getattr(self.a, 'no_held_reuse', False):
             return False
         from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -699,7 +890,7 @@ class Cycle:
             return False
         mine = (out / 'result.json').resolve()
         found = reusable_held([p for p in sorted(OPS.glob('ei/*/held/*/result.json')) if p.resolve() != mine],
-                              policy, self.a.held_samples, key)
+                              policy, self.a.held_samples, key, host=self.held_host)
         if not found:
             return False
         out.mkdir(parents=True, exist_ok=True)
@@ -708,9 +899,13 @@ class Cycle:
         self.note(stage='held reuse', out=str(out), source=str(found), series=key)
         return True
 
+    def base_unit(self):
+        return f'{self.a.name}-popbase' if self.held_host == 'pop' else f'{self.a.name}-heldbase'
+
     def popbase_stage(self):
-        """Base and start policy on Pop, in the background (Pop is idle while the DGX collects and trains)."""
-        unit = f'{self.a.name}-popbase'
+        """The start policy (and the base on request) on the held series, in the background: on Pop while the DGX
+        collects and trains; on the DGX as ledger units beside the collection (held episodes have priority)."""
+        unit = self.base_unit()
         if not self.active(unit):
             subprocess.run(['systemd-run', '--user', '--unit', unit, '--collect', '--setenv', f'PATH={os.environ["PATH"]}',
                             *[f'--setenv={k}={self.held_env[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH')],
@@ -718,10 +913,12 @@ class Cycle:
                             # the driver's own code (held scheduling); the held pin's harness measures
                             *map(str, (PY, Path(__file__).resolve(), 'pop-held', '--dir', self.dir, '--pin', self.held_pin,
                                        '--start', self.a.start, '--held-samples', self.a.held_samples,
+                                       '--held-profile', self.held_profile.name, '--held-slots',
+                                       getattr(self.a, 'held_slots', HELD_SLOTS), '--name', self.a.name,
                                        *(('--held-base',) if getattr(self.a, 'held_base', False) else ()),
                                        *(('--after', self.a.speculative_after) if self.speculative else ())))],
                            check=True)
-        self.note(stage='popbase', started=unit)
+        self.note(stage='popbase', started=unit, host=self.held_host)
 
     def select_stage(self):
         groups = [str(OPS / 'grpo-v*' / '*' / 'groups' / 'g*'), str(OPS / 'ei' / '*' / 'collect' / 'groups' / 'g*')]
@@ -754,46 +951,42 @@ class Cycle:
             os.replace(self.collect_dir, aside)
             self.note(stage='collect', moved_aside=str(aside), served=sorted(served))
 
-    def g4_held(self, name, checkpoint, hosts):
-        """Sharded held-v3 measurement across all reachable Colab G4 sessions (4 samples, own G4 held series)."""
-        out = self.held / name
-        result = out / 'result.json'
-        if result.exists() and json.loads(result.read_text()).get('complete'):
-            return out
-        if self.reuse_held(out, checkpoint):
-            return out
-        from natlang_neuralese.common.hashing import sha256_file_hex_cached
-        import grpo
-        import pop_rl_actor
-        sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
-        commit = subprocess.check_output(['git', '-C', str(self.held_pin), 'rev-parse', 'HEAD'], text=True).strip()
-        actor_py = [PY, str(self.held_pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
-        endpoints = []
-        started = time.time()
-        out.mkdir(parents=True, exist_ok=True)
-        for h in hosts:
+    def collect_command(self, unit, start, sha, slots, endpoints=()):
+        """``expert_iteration.py collect`` for this cycle (one builder for the DGX actor and remote endpoints): the
+        task order, k, hours, Neuralese variants, slots; the DGX actor's engine flags, or ``--actor`` endpoints."""
+        actor = ([x for ep in endpoints for x in ('--actor', ep)] if endpoints else
+                 ['--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
+                  '--actor-arg=--sglang-max-running', f'--actor-arg={self.max_running()}'])
+        return self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
+                       '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
+                       '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(), '--slots', slots,
+                       '--unit-prefix', unit, *actor)
+
+    def serve_colab(self, hosts, start, sha, profile):
+        """Serve the collected policy on each reachable Colab G4 session (``pop_rl_actor serve-checkpoint
+        --host-profile colab_g4``); [(host, 'URL=SLOTS')] of those that attest it, each charged from its start."""
+        served = []
+        actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
+        for host in hosts:
+            self.session(host, profile, True)
             try:
                 raw = subprocess.check_output(
-                    [*actor_py, 'serve-checkpoint', '--host-profile', 'colab_g4', '--host', h,
-                     '--checkpoint', str(checkpoint), '--policy-id', sha, '--commit', commit,
-                     '--kv-cache-dtype', 'fp8_e4m3', '--max-running', str(self.held_profile.sglang_max_running)],
-                    env=self.held_env, text=True, timeout=3600,
-                )
+                    [*actor_py, 'serve-checkpoint', '--host-profile', 'colab_g4', '--host', host,
+                     '--checkpoint', str(start), '--policy-id', sha, '--commit', self.a.commit,
+                     '--kv-cache-dtype', 'fp8_e4m3'], env=self.env, text=True, timeout=3600)
                 info = json.loads(raw.strip().splitlines()[-1])
-                endpoints.append(f'{info["endpoint"]}={self.held_profile.collect_slots}')
+                served.append((host, f'{info["endpoint"]}={profile.collect_slots}'))
             except Exception as err:
-                self.note(stage='g4 held serve failed', host=h, error=repr(err)[:300])
-        if not endpoints:
-            raise RuntimeError(f'No Colab G4 host served {sha[:12]} for held eval')
-        manifest = grpo.default_held()
-        cmd = [PY, '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--manifest', str(manifest),
-               *[x for ep in endpoints for x in ('--endpoint', ep)],
-               '--policy-id', sha, '--samples', str(self.a.held_samples),
-               '--out', str(out), '--label', f'{self.a.name}-g4-{name}', '--allow-other-engine']
-        with (out / 'driver.log').open('a') as handle:
-            subprocess.run(cmd, cwd=self.held_pin, env=self.held_env, stdout=handle, stderr=subprocess.STDOUT)
-        self.record_cost(f'held:{name}', self.held_profile, time.time() - started, sessions=len(endpoints))
-        return out
+                self.note(stage='collect g4 serve failed', host=host, error=repr(err)[:300])
+                self.stop_colab(host)
+        return served
+
+    def stop_colab(self, host):
+        """Stop this cycle's actor on a Colab session and end its charge."""
+        actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
+        subprocess.run([*actor_py, 'stop', '--host-profile', 'colab_g4', '--host', host], env=self.env,
+                       stdout=(self.dir / 'colab-stop.log').open('a'), stderr=subprocess.STDOUT, timeout=600)
+        self.session(host, 'colab_g4', False)
 
     def collect_stage(self):
         start, sha = self.collect_policy()
@@ -801,65 +994,43 @@ class Cycle:
         self.set_collect_aside(sha)
         unit = f'{self.a.name}-{"recollect" if recollect else "collect"}'
         started = time.time()
-        active_profile, hosts = self.choose_profile(self.collect_profile, 'collect')
-        if active_profile.name == 'colab_g4':
-            actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
-            endpoints = []
-            for h in hosts:
-                try:
-                    raw = subprocess.check_output(
-                        [*actor_py, 'serve-checkpoint', '--host-profile', 'colab_g4', '--host', h,
-                         '--checkpoint', str(start), '--policy-id', sha, '--commit', self.a.commit,
-                         '--kv-cache-dtype', 'fp8_e4m3', '--max-running', str(active_profile.sglang_max_running)],
-                        env=self.env, text=True, timeout=3600,
-                    )
-                    info = json.loads(raw.strip().splitlines()[-1])
-                    endpoints.append(f'{info["endpoint"]}={active_profile.collect_slots}')
-                except Exception as err:
-                    self.note(stage='collect g4 serve failed', host=h, error=repr(err)[:300])
-            if endpoints:
-                budget = max(8, round(len(endpoints) * active_profile.collect_slots * 0.15))
-                self.ledger(unit, budget, 'high',
-                            self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
-                                    '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
-                                    '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(), '--slots', active_profile.collect_slots,
-                                    '--unit-prefix', unit,
-                                    *[x for ep in endpoints for x in ('--actor', ep)]),
-                            self.dir / 'collect.log')
-                summary = json.loads((self.collect_dir / 'collect.json').read_text())
-                self.record_cost('collect', active_profile, time.time() - started, sessions=len(endpoints))
-                if summary.get('stopped'):
-                    raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
-                self.mark('collect', profile='colab_g4', sessions=len(endpoints),
-                          **{k: v for k, v in summary.items() if k != 'run'})
-                return
+        profile, hosts = self.choose_profile(self.collect_profile, 'collect')
+        served = self.serve_colab(hosts, start, sha, profile) if profile.name == 'colab_g4' else []
+        if profile.name == 'colab_g4' and not served:
             self.note(stage='collect', profile_fallback='no Colab G4 endpoint came up; falling back to dgx')
-            active_profile = self.choose_profile('dgx', 'collect')[0] if isinstance('dgx', object) else active_profile
-        budget = self.a.kv_gb + 24 + round(self.a.slots * 0.3)
-        self.ledger(unit, budget, 'high',
-                    self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
-                            '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
-                            '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(), '--slots', self.a.slots,
-                            '--unit-prefix', unit, '--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
-                            '--actor-arg=--sglang-max-running', f'--actor-arg={self.max_running()}'),
-                    self.dir / 'collect.log', detach=True)
-        if self.a.fill:
-            self.fill_alongside(unit, sha)
-        time.sleep(20)
-        while self.active(unit):
-            if self.speculative and not self.gate() and self.recollect_due():
-                self.stop_unit(unit)          # the candidate failed held: its collection is not data (gate recollects)
-                self.stop_unit(f'{self.a.name}-fill')
-                self.note(stage='collect', stopped='previous candidate failed held: recollect at the gate')
-                return
-            time.sleep(60)
-        if self.a.fill:
+        try:
+            if served:
+                endpoints = [ep for _, ep in served]
+                slots = len(endpoints) * profile.collect_slots
+                budget = max(8, round(slots * COLLECTOR_SLOT_GB) + 4)
+                self.ledger(unit, budget, 'high', self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
+                            self.dir / 'collect.log', detach=True)
+            else:
+                budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
+                self.ledger(unit, budget, 'high', self.collect_command(unit, start, sha, self.a.slots),
+                            self.dir / 'collect.log', detach=True)
+                if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
+                    self.fill_alongside(unit, sha)
+            time.sleep(20)
+            while self.active(unit):
+                if self.speculative and not self.gate() and self.recollect_due():
+                    self.stop_unit(unit)          # the candidate failed held: its collection is not data (gate recollects)
+                    self.stop_unit(f'{self.a.name}-fill')
+                    self.note(stage='collect', stopped='previous candidate failed held: recollect at the gate')
+                    return
+                time.sleep(60)
+        finally:
+            for host, _ in served:
+                self.stop_colab(host)
+        if self.a.fill and not served:
             self.stop_unit(f'{self.a.name}-fill')   # its actor is gone: the fill window takes over
         summary = json.loads((self.collect_dir / 'collect.json').read_text())
-        self.record_cost('collect', 'dgx', time.time() - started)
+        name = 'colab_g4' if served else 'dgx'
+        self.record_cost('collect', name, time.time() - started, sessions=max(1, len(served)),
+                         session_host=','.join(h for h, _ in served) or None)
         if summary.get('stopped'):
             raise SystemExit('collection stopped before its end: rerun the cycle to resume it')
-        self.mark('collect', profile='dgx', **{k: v for k, v in summary.items() if k != 'run'})
+        self.mark('collect', profile=name, sessions=len(served), **{k: v for k, v in summary.items() if k != 'run'})
 
     def held_schedule(self):
         """(unmeasured cycles before this one, the interval in force), from the previous verdict: an unmeasured one
@@ -1231,53 +1402,65 @@ class Cycle:
         self.mark('build', chains_sha256=sha, episodes=build['episodes'], tasks=build['tasks'],
                   forward_tokens=build['forward_tokens'], parts=build['mix']['parts'])
 
+    def sft_env(self, run, unit, start, start_sha, activation_gb, extra=''):
+        """launch-sft.sh's environment for this cycle's SFT (one recipe for the DGX run and the Colab one, whose
+        preflight runs launch-sft.sh with PREFLIGHT_ONLY=1 and whose learner runs the recorded exp0_sft arguments)."""
+        sha = (self.mix / 'chains.sha256').read_text().split()[0]
+        env = {**os.environ, 'CHAINS': str(self.mix / 'chains.pkl'), 'CHAINS_SHA256': sha, 'CKPT': start,
+               'SHA': start_sha, 'WORK': str(run), 'UNIT': unit, 'LR': self.a.lr, 'WARMUP': '8',
+               'BLT': '32000', 'ACT': str(activation_gb), 'BUDGET': str(self.a.sft_budget)}
+        vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
+        if vals:
+            env['VAL'] = str(self.mix / vals[0])
+        env['EXTRA'] = ' '.join(p for p in [*(f'--val-chains {self.mix / v}' for v in vals[1:]),
+                                            '--val-every 20' if vals else '', extra, self.a.sft_extra] if p)
+        return env
+
+    def colab_sft(self, run, unit, start, start_sha, host, profile):
+        """The SFT on a Colab G4 session: the DGX preflight (launch-sft.sh PREFLIGHT_ONLY=1: input identity, held
+        exclusion, the exp0_sft arguments in WORK/launch.json), then ``pop_rl_actor run-sft`` runs exactly those
+        arguments there and pulls the verified checkpoint. Returns True when WORK/checkpoint.pt arrived."""
+        env = {**self.sft_env(run, unit, start, start_sha, profile.activation_gib), 'PREFLIGHT_ONLY': '1'}
+        subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.pin)], env=env, check=True,
+                       stdout=(self.dir / 'sft-launch.log').open('a'), stderr=subprocess.STDOUT)
+        cmd = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py'), 'run-sft', '--host', host,
+               '--run-name', self.a.name, '--work', str(run), '--launch-json', str(run / 'launch.json'),
+               '--commit', self.a.commit, '--state-sync-minutes', str(profile.state_sync_minutes)]
+        self.session(host, profile, True)
+        try:
+            with (self.dir / 'sft-colab.log').open('a') as handle:
+                rc = subprocess.run(cmd, env=self.env, stdout=handle, stderr=subprocess.STDOUT).returncode
+        finally:
+            self.session(host, profile, False)
+        return rc == 0 and (run / 'checkpoint.pt').exists()
+
     def sft_stage(self):
         run = self.dir / 'sft'
         unit = f'{self.a.name}-sft'
         start, start_sha, _ = self.train_policy()
         started = time.time()
-        active_profile, hosts = self.choose_profile(self.sft_profile, 'sft')
+        profile, hosts = self.choose_profile(self.sft_profile, 'sft')
         canonical_tokens = 0
         if (self.mix / 'build.json').exists():
             try:
                 canonical_tokens = int(json.loads((self.mix / 'build.json').read_text()).get('forward_tokens') or 0)
             except Exception:
                 pass
-        if active_profile.name == 'colab_g4' and not (run / 'checkpoint.pt').exists():
-            vals = [str(self.mix / v) for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
-            actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
-            cmd = [*actor_py, 'run-sft', '--host', hosts[0], '--run-name', self.a.name, '--work', str(run),
-                   '--chains', str(self.mix / 'chains.pkl'), '--checkpoint', str(start),
-                   '--checkpoint-sha256', start_sha, '--commit', self.a.commit,
-                   '--lr', str(self.a.lr), '--warmup', '8', '--batch-loss-tokens', '32000',
-                   '--activation-gib', str(active_profile.activation_gib),
-                   '--state-sync-minutes', str(active_profile.state_sync_minutes),
-                   *[x for v in vals for x in ('--val-chains', v)],
-                   *(['--extra', self.a.sft_extra] if self.a.sft_extra else [])]
-            with (self.dir / 'sft-colab.log').open('a') as handle:
-                rc = subprocess.run(cmd, env=self.env, stdout=handle, stderr=subprocess.STDOUT).returncode
-            self.record_cost('sft', active_profile, time.time() - started, canonical_chain_tokens=canonical_tokens,
-                             note=f'host={hosts[0]} rc={rc}')
-            if rc == 0 and (run / 'checkpoint.pt').exists():
+        if profile.name == 'colab_g4' and not (run / 'checkpoint.pt').exists() and not self.active(unit):
+            if self.colab_sft(run, unit, start, start_sha, hosts[0], profile):
                 sha = subprocess.check_output(['sha256sum', str(run / 'checkpoint.pt')], text=True).split()[0]
                 (run / 'sha256.txt').write_text(sha + '\n')
+                self.record_cost('sft', profile, time.time() - started, canonical_chain_tokens=canonical_tokens,
+                                 note=f'host={hosts[0]}', session_host=hosts[0])
                 self.mark('sft', profile='colab_g4', host=hosts[0], checkpoint=str(run / 'checkpoint.pt'), sha256=sha)
                 return
-            self.note(stage='sft', profile_fallback=f'Colab G4 SFT exited {rc}; resuming on dgx from synced learner-state')
+            self.note(stage='sft', profile_fallback='Colab G4 SFT failed; resuming on dgx from the synced learner state')
             started = time.time()
         if not (run / 'checkpoint.pt').exists() and not self.active(unit):
-            sha = (self.mix / 'chains.sha256').read_text().split()[0]
-            env = {**os.environ, 'CHAINS': str(self.mix / 'chains.pkl'), 'CHAINS_SHA256': sha, 'CKPT': start,
-                   'SHA': start_sha, 'WORK': str(run), 'UNIT': unit, 'LR': self.a.lr, 'WARMUP': '8',
-                   'BLT': '32000', 'ACT': str(self.a.sft_activation_gb), 'BUDGET': str(self.a.sft_budget)}
-            vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
-            if vals:
-                env['VAL'] = str(self.mix / vals[0])
             resume_flag = '--resume' if (run / 'learner-state' / 'learner_manifest.json').exists() else ''
-            env['EXTRA'] = ' '.join(p for p in [*(f'--val-chains {self.mix / v}' for v in vals[1:]),
-                                                '--val-every 20' if vals else '', resume_flag, self.a.sft_extra] if p)
-            subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.pin)], env=env, check=True,
-                           stdout=(self.dir / 'sft-launch.log').open('a'), stderr=subprocess.STDOUT)
+            subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.pin)],
+                           env=self.sft_env(run, unit, start, start_sha, self.a.sft_activation_gb, resume_flag),
+                           check=True, stdout=(self.dir / 'sft-launch.log').open('a'), stderr=subprocess.STDOUT)
         self.wait(unit, poll=120)
         if not (run / 'checkpoint.pt').exists():
             raise SystemExit(f'no SFT checkpoint: {run}/train.log')
@@ -1289,33 +1472,24 @@ class Cycle:
     def held_stage(self):
         if not self.measured():
             return self.mark('held', skipped=f'--held-every {self.a.held_every}')
-        if self.held_profile.name == 'colab_g4':
-            active, hosts = self.choose_profile(self.held_profile, 'held')
-            if active.name == 'colab_g4':
-                candidate = self.g4_held('candidate', self.dir / 'sft' / 'checkpoint.pt', hosts)
-                if not json.loads((candidate / 'result.json').read_text()).get('complete'):
-                    raise SystemExit('candidate G4 held measurement incomplete: rerun the cycle to resume it')
-                reference = self.reference()['checkpoint']
-                if reference != BASE_CKPT and not (self.held / 'start' / 'result.json').exists():
-                    self.g4_held('start', reference, hosts)
-                self.mark('held', profile='colab_g4', sessions=len(hosts))
-                return
-        while self.active(f'{self.a.name}-popbase'):     # Pop serves one policy at a time
-            time.sleep(300)
-        deadline = time.time() + 3600 * self.a.pop_wait_hours
-        while not pop_reachable():
-            if time.time() > deadline:   # training goes on; the next cycle is measured (DECISIONS "Pop unreachable")
-                return self.mark('held', deferred='pop unreachable')
-            time.sleep(300)
+        while self.active(self.base_unit()):     # one held measurement at a time (Pop serves one policy; the DGX one
+            time.sleep(300)                       # held actor beside the collection)
+        if self.held_host == 'pop':
+            deadline = time.time() + 3600 * self.a.pop_wait_hours
+            while not pop_reachable():
+                if time.time() > deadline:   # training goes on; the next cycle is measured (DECISIONS "Pop unreachable")
+                    return self.mark('held', deferred='pop unreachable')
+                time.sleep(300)
         started = time.time()
-        candidate = self.pop_held('candidate', self.dir / 'sft' / 'checkpoint.pt')
+        candidate = self.measure_held('candidate', self.dir / 'sft' / 'checkpoint.pt')
         if not json.loads((candidate / 'result.json').read_text()).get('complete'):
             raise SystemExit('candidate held measurement incomplete: rerun the cycle to resume it')
-        reference = self.reference()['checkpoint']       # the popbase unit may have failed (Pop down at the time)
-        if reference != BASE_CKPT and not (self.held / 'start' / 'result.json').exists():
-            self.pop_held('start', reference)
-        self.record_cost('held', 'pop', time.time() - started)
-        self.mark('held', profile='pop')
+        reference = self.reference()['checkpoint']       # the base unit may have failed (Pop down at the time)
+        if reference != BASE_CKPT and not self.held_result_ok(self.held / 'start'):
+            self.measure_held('start', reference)        # the reference on this series when no result exists
+        if self.held_host == 'pop':
+            self.record_cost('held', 'pop', time.time() - started)
+        self.mark('held', profile=self.held_host, samples=self.a.held_samples)
 
     def held_deferred(self):
         path = self.dir / 'stages' / 'held.done'
@@ -1345,7 +1519,8 @@ class Cycle:
         vs_start = self.compare(start, candidate, self.dir / 'compare-vs-start.json')
         base_series = 'same'
         if not (base / 'result.json').exists():     # not measured on this pin (--held-base): the latest other series
-            base, base_series = latest_base(OPS.glob('ei/*/held/base/result.json'), self.a.held_samples), 'other'
+            base, base_series = latest_base(OPS.glob('ei/*/held/base/result.json'), self.a.held_samples,
+                                            self.held_host), 'other'
         vs_base = self.compare(base, candidate, self.dir / 'compare-vs-base.json') if base else None
         d, p = vs_start['primary']['delta'], vs_start['primary']['permutation_p']
         ran_out = vs_start.get('ran_out_rate_delta') or 0
@@ -1392,7 +1567,8 @@ class Cycle:
                                start=start, start_sha=(self.dir / 'sft' / 'sha256.txt').read_text().strip(),
                                commit=commit, previous=self.dir, prefer_unseen=lineage_builds(self.mix, self.train_policy()[2]),
                                fallback_prefer_unseen=self.train_policy()[2], extra_seed_work=self.a.next_seed_work,
-                               since_held=0 if self.measured() else self.held_schedule()[0] + 1)
+                               since_held=0 if self.measured() else self.held_schedule()[0] + 1,
+                               held_pin=self.held_pin, held_series_host=self.held_host)
         (self.dir.parent / name).mkdir(parents=True, exist_ok=True)
         unit = f'{name}-drive-{int(time.time())}'
         subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', '2', '--priority', 'medium', '--wait', '36000',
@@ -1443,26 +1619,85 @@ def _quote(text):
 
 
 def pop_held(args):
-    """Background unit of ``cycle``: the start policy on Pop. The base only when it is the start, with ``--held-base``,
-    or when an earlier cycle measured it in this series: the verdict needs the start; vs-base is a reference that the
-    latest other series' base gives (DECISIONS 2026-11-22 "held base"), and re-measuring it on every pin cost Pop 3.3 h."""
+    """Background unit of ``cycle``: the start policy on the cycle's held series (``--held-profile``: Pop, the legacy
+    default of this subcommand, or the DGX). The base only when it is the start, with ``--held-base``, or when an
+    earlier cycle measured it in this series: the verdict needs the start; vs-base is a reference that the latest base
+    of the same host gives (DECISIONS 2026-11-22 "held base"), and re-measuring it on every pin cost 3.3 h."""
     a = argparse.Namespace(dir=args.dir, pin=args.pin, start=args.start, start_sha=BASE_SHA, commit='x' * 40,
-                           held_samples=args.held_samples, sft_work='/dev/null', no_held_reuse=args.no_held_reuse)
+                           held_samples=args.held_samples, sft_work='/dev/null', no_held_reuse=args.no_held_reuse,
+                           held_profile=args.held_profile, held_slots=args.held_slots,
+                           name=args.name or Path(args.dir).name)
     c = Cycle(a)
     c.pin = Path(args.pin)
     start = args.start
-    if args.after:        # a speculative cycle: Pop is busy with the previous candidate, whose verdict names the start
+    if args.after:        # a speculative cycle: the held series is busy with the previous candidate, whose verdict names the start
         verdict = Path(args.after) / 'verdict.json'
         while not verdict.exists():
             time.sleep(300)
         v = json.loads(verdict.read_text())
         start = (v.get('reference') or {}).get('checkpoint') or v['next_start']    # the last measured policy
     if start != BASE_CKPT:
-        c.pop_held('start', start)
+        c.measure_held('start', start)
     if start == BASE_CKPT or args.held_base:
-        c.pop_held('base', BASE_CKPT)
+        c.measure_held('base', BASE_CKPT)
     else:
         c.reuse_held(c.held / 'base', BASE_CKPT)
+
+
+def dgx_held(args):
+    """One DGX held measurement, run inside its ledger unit (``Cycle.dgx_held``): claim held priority (every DGX
+    collection yields slots to it), serve the policy with the pinned held engine (``engine.json`` serve_args beside the
+    held manifest: SGLang, vendor projection, FP8 KV, BF16 weights) from the held pin, run ``held_eval measure``
+    (the engine attested against the pin, the training sampling law and episode budget) and stop the actor."""
+    import grpo
+    from natlang_neuralese.rl.held_eval import BASE_SNAPSHOT, _free_port, pinned_engine
+    out, pin = Path(args.out), Path(args.held_pin)
+    manifest = Path(args.manifest or grpo.default_held())
+    env = {**os.environ, 'NATLANG_REPO': str(pin), 'PYTHONPATH': f'{pin}/training/neuralese:{pin}',
+           'NATLANG_HELD_SERIES_HOST': 'dgx', 'HF_HUB_OFFLINE': '1', 'OMP_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1'}
+    HELD_PRIORITY_DIR.mkdir(parents=True, exist_ok=True)
+    claim = HELD_PRIORITY_DIR / f'{args.unit}.json'
+    claim.write_text(json.dumps({'pid': os.getpid(), 'unit': args.unit, 'policy': args.policy_id, 'out': str(out),
+                                 'slots': args.slots, 'started': time.time()}) + '\n')
+    beat = threading.Event()
+
+    def heartbeat():
+        while not beat.wait(60):
+            os.utime(claim)
+    threading.Thread(target=heartbeat, daemon=True).start()
+    port = _free_port()
+    store = out / 'actor'
+    store.mkdir(parents=True, exist_ok=True)
+    serve = [PY, str(pin / 'scripts/neuralese_data/serve_native_checkpoint.py'), '--store-dir', str(store),
+             '--checkpoint', str(args.checkpoint), '--checkpoint-sha256', args.policy_id, '--base', str(BASE_SNAPSHOT),
+             '--port', str(port), '--prompt-rendering', 'full', *pinned_engine(manifest)['serve_args'],
+             '--hf-export-dir', str(store / 'sglang-hf')]
+    url = f'http://127.0.0.1:{port}'
+    actor = None
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    try:
+        with (out / 'actor.log').open('a') as handle:
+            actor = subprocess.Popen(serve, cwd=pin, env=env, stdout=handle, stderr=subprocess.STDOUT,
+                                     start_new_session=True)
+        wait_actor(url, args.policy_id, actor, out / 'actor.log')
+        log({'event': 'held actor up', 'endpoint': url, 'policy': args.policy_id})
+        rc = subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--manifest', str(manifest),
+                             '--endpoint', f'{url}={args.slots}', '--policy-id', args.policy_id, '--top-p', '0.95',
+                             '--samples', str(args.samples), '--out', str(out), '--label', args.label,
+                             '--max-model-requests', '40'], cwd=pin, env=env).returncode
+        log({'event': 'held measured', 'returncode': rc, 'out': str(out)})
+        return rc
+    finally:
+        beat.set()
+        claim.unlink(missing_ok=True)
+        if actor is not None and actor.poll() is None:
+            os.killpg(actor.pid, signal.SIGTERM)
+            try:
+                actor.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                os.killpg(actor.pid, signal.SIGKILL)
+        import shutil
+        shutil.rmtree(store / 'sglang-hf', ignore_errors=True)    # the export (3.4 GB) is rebuilt from the checkpoint
 
 
 def cycle(args):
@@ -1506,6 +1741,11 @@ def main():
     c.add_argument('--neuralese-variant-share', type=float, default=0.5)
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
+    c.add_argument('--held-priority-dir', default=str(HELD_PRIORITY_DIR),
+                   help='live DGX held measurements claim files here; the collection yields slots to them')
+    c.add_argument('--held-priority-share', type=float, default=HELD_PRIORITY_SHARE,
+                   help='share of the slots the collection keeps while a held measurement runs (1: no priority)')
+    c.add_argument('--no-held-priority', action='store_true')
     f = sub.add_parser('frontier')
     f.add_argument('--out', required=True)
     f.add_argument('--collect', action='append', required=True)
@@ -1596,8 +1836,11 @@ def main():
                    help='execution profile for collection (colab_g4 shards across up G4 sessions; 30-min DGX fallback)')
     y.add_argument('--sft-profile', choices=('dgx', 'colab_g4'), default='dgx',
                    help='execution profile for SFT (colab_g4 runs remotely with 15-min state sync; 30-min DGX fallback)')
-    y.add_argument('--held-profile', choices=('pop', 'colab_g4', 'dgx'), default='pop',
-                   help='execution profile for held eval (colab_g4 shards across up sessions at 4 samples on its own series)')
+    y.add_argument('--held-profile', choices=('dgx', 'pop'), default='dgx',
+                   help='the held series (async-train §1): dgx (default: the pinned held engine on the DGX, BF16 weights, '
+                        '4 samples, held episodes before collection) or pop (legacy, 2 samples)')
+    y.add_argument('--held-series-host', help="the host of --held-pin's series (set by the pipeline; absent: pop)")
+    y.add_argument('--held-slots', type=int, default=HELD_SLOTS, help='collector slots of a DGX held measurement')
     y.add_argument('--colab-hosts', default=None,
                    help='comma-separated Colab G4 SSH host aliases (overrides NATLANG_COLAB_HOSTS)')
     y.add_argument('--fallback-wait-minutes', type=float, default=30.0,
@@ -1605,7 +1848,7 @@ def main():
     y.add_argument('--cu-per-hour', type=float, default=13.0,
                    help='observed Colab G4 compute-unit burn rate per session-hour for cycle-cost.json')
     y.add_argument('--held-samples', type=int, default=None,
-                   help='samples per held task (default: 4 for colab_g4, 2 for pop/dgx)')
+                   help='samples per held task (default: the held profile\'s, 4 on the DGX, 2 on Pop)')
     y.add_argument('--success-pts', type=float, default=2.)
     y.add_argument('--fail-pts', type=float, default=3.)
     h = sub.add_parser('pop-held')
@@ -1616,8 +1859,24 @@ def main():
     h.add_argument('--after', help='previous cycle DIR: wait for its verdict; its next_start is the start')
     h.add_argument('--no-held-reuse', action='store_true')
     h.add_argument('--held-base', action='store_true')
+    h.add_argument('--held-profile', choices=('pop', 'dgx'), default='pop')
+    h.add_argument('--held-slots', type=int, default=HELD_SLOTS)
+    h.add_argument('--name', help='the cycle name (unit prefix; default: DIR name)')
+    d = sub.add_parser('dgx-held', help='one DGX held measurement inside its ledger unit (Cycle.dgx_held)')
+    d.add_argument('--out', required=True)
+    d.add_argument('--checkpoint', required=True)
+    d.add_argument('--policy-id', required=True)
+    d.add_argument('--samples', type=int, default=4)
+    d.add_argument('--slots', type=int, default=HELD_SLOTS)
+    d.add_argument('--held-pin', required=True)
+    d.add_argument('--manifest', help='default: grpo.default_held() (held-v3)')
+    d.add_argument('--label', required=True)
+    d.add_argument('--unit', required=True, help='the ledger unit (names the held priority claim)')
     args = parser.parse_args()
-    {'select': select, 'collect': collect, 'frontier': frontier, 'cycle': cycle, 'pop-held': pop_held}[args.command](args)
+    rc = {'select': select, 'collect': collect, 'frontier': frontier, 'cycle': cycle, 'pop-held': pop_held,
+          'dgx-held': dgx_held}[args.command](args)
+    if rc:
+        sys.exit(rc)
 
 
 if __name__ == '__main__':

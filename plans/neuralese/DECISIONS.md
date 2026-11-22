@@ -6768,3 +6768,42 @@ Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc
   the held exclusion and the train split. Variant successes reach the mix through the groups' cases.jsonl.
 - They enter at the next cycle the pipeline launches (sft-v10); sft-v9's collection, which started at 11:17, keeps its
   settings. AGENTS.md's off-by-default list is updated.
+
+## 2026-11-22 15:00 DGX held series by default; Colab G4 profile defects fixed (review of 51bca61b4/e55a0813a)
+
+- **Held series on the DGX** (async-train §1), default from sft-v10 (`cycle --held-profile dgx`; `pop` keeps the
+  legacy series; there is no Colab held series, its path is removed). One measurement is one ledger unit
+  (`expert_iteration.py dgx-held`, medium priority, resumable: the SFT may preempt it and it resumes): the pinned held
+  engine as its child (`ops/held-v3/engine.json` serve_args: SGLang, vendor projection, FP8 KV, BF16 weights;
+  `held_eval measure` attests it without `--allow-other-engine`), 4 samples per task, the training sampling law
+  (top-p 0.95, 40 calls), 64 collector slots (40 + 19 + 2 GB). While it runs, every DGX collection shrinks to 25% of
+  its slots (`OPS/ei/held-priority/<unit>.json` claims with a heartbeat; `collect --held-priority-share`,
+  `--no-held-priority`).
+- **Series never mix.** `series()` keys carry `engine_host=dgx` (Pop keeps its legacy keys). `held_eval.compare`
+  refuses results of two hosts, placing results without the field by their attested export format (`sglang-pop-*`
+  Pop, `sglang-hf-*` DGX). `reusable_held` and `latest_base` match the host besides the key (an old pin gives Pop and
+  DGX one key). A held result of another host in a cycle's `held/` moves aside and is re-measured. The reference is
+  re-measured on the DGX series when none exists. vs-base uses the latest DGX base (none yet: vs_base is None until
+  a cycle runs with `--held-base`).
+- **The carried `--held-pin` belongs to a host** (`--held-series-host`, carried with it). sft-v10 arrives with sft-v9's
+  Pop pin (pin-5b58) and no host, so it starts the DGX series on its own pin and hands that pin on. Checked on
+  sft-v9's real argv: the old in-memory `next_cycle_argv` output parses with the new parser, and the Cycle comes out
+  dgx/dgx/dgx with 4 samples. sft-v9's own held stage (old code in its driver) is unaffected.
+- **Colab G4 fixes** (none live yet: no session exists): the SFT checkpoint is pulled to `.pull`, size and sha256
+  checked against the VM, then renamed (a truncated pull was adopted before); the Colab SFT runs exactly the DGX
+  recipe, `launch-sft.sh PREFLIGHT_ONLY=1` (input identity, held exclusion) then the recorded `exp0_sft_args` with
+  paths mapped (it lacked `--epochs 1`, `--val-every` and the preflight); `choose_profile` takes names (a string
+  crashed the driver); the admission shim keeps claims in a file and holds its lock only while it reads and writes
+  them (it held the lock for the child's life, so a nohup'd actor blocked every later command), and the learner
+  (59 GiB) and a capped MPS actor (24 GB KV, 64 running, 34 GiB) are admitted together; the G4 learner activation is
+  44 GiB to fit beside that actor; Colab actors are stopped by recorded process group (not `pkill -f`) when the collect
+  stage ends, and sessions are charged from start to stop (`CostTelemetry.open_session`/`close_session`).
+- **Sharded collection:** an endpoint that stops answering or serving the policy is dropped; its in-flight episodes are
+  abandoned (never scored), the task goes back to the front of the order, and its slots idle until it returns (checked
+  every 2 min). Both collection paths use one command builder (Neuralese variants included), wait the same way
+  (speculative recollect stop included), and budget 0.3 GB per collector slot.
+- **Bootstrap:** `pgrep -x tailscaled` (the `-f` form matched its own shell, the daemon never started); the auth key is
+  passed as `--auth-key=file:` and every logged command and error is redacted; the env is the DGX's (shared
+  requirements over Colab's torch, the repository on PYTHONPATH via `natlang-env.sh`; `pip install -e
+  training/neuralese` failed); the SGLang fork at `sglang-fork.json`'s commit in its own venv (was upstream
+  `sglang[all]`); Node 24 when the image's is < 22.13; the MPS daemon.

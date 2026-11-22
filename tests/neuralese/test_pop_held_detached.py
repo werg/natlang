@@ -157,3 +157,13 @@ def test_start_and_serve_checkpoint_claim_one_admissible_pop_budget(monkeypatch)
     assert pop_rl_actor.pop_sglang_budget_gb() == '9.0'
     for path in (pop_rl_actor.start, pop_rl_actor.serve_checkpoint):
         assert 'pop_sglang_budget_gb()' in inspect.getsource(path)
+
+
+def test_held_eval_job_refuses_the_superseded_colab_series(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    spec, out = _spec(tmp_path)
+    spec['host_profile'] = 'colab_g4'
+    (tmp_path / 'spec.json').write_text(json.dumps(spec))
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', lambda *a, **k: pytest.fail('nothing runs'))
+    assert pop_rl_actor.held_eval_job(SimpleNamespace(spec=str(tmp_path / 'spec.json'))) == 1
+    assert 'superseded by the DGX series' in (tmp_path / 'held-pop.log').read_text()

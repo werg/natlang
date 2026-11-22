@@ -94,6 +94,9 @@ POP_MAX_RUNNING = 20
 POP_MEM_FRACTION = 0.77
 
 
+from natlang_neuralese.common.execution_profile import (  # noqa: E402
+    G4_ACTOR_ALONE, G4_ACTOR_BESIDE_LEARNER, G4_VRAM_GIB)
+
 COLAB_ROOT = os.environ.get('NATLANG_COLAB_ROOT', '/content/natlang-work')
 COLAB_SGLANG_EXPORT_FORMAT = 'sglang-colab-g4-bf16-vendor-projection'
 COLAB_MAX_RUNNING = 128
@@ -164,6 +167,33 @@ def sync_from_remote(remote_path, local_path, host, *, attempts=None, stall_seco
     copy_resumable(f'{host}:{remote_path}', str(local_path), attempts=attempts, stall_seconds=stall_seconds)
 
 
+def remote_identity(host, remote_path):
+    """(size in bytes, sha256) of a file on ``host``."""
+    out = ssh_host(host, f'stat -c %s {shlex.quote(remote_path)} && sha256sum {shlex.quote(remote_path)}', timeout=1800)
+    lines = out.split()
+    return int(lines[0]), lines[1]
+
+
+def pull_verified(remote_path, local_path, host, *, attempts=5):
+    """Copy a finished artifact (an SFT ``checkpoint.pt``) from ``host`` to ``local_path`` only whole: rsync into
+    ``<local>.pull`` (resumable across attempts), check its size and sha256 against the remote file, then rename it
+    into place. A failed or truncated copy never appears under the final name (a partial ``checkpoint.pt`` was once
+    adopted as the cycle's SFT result). Returns the sha256."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    local_path = Path(local_path)
+    temp = local_path.with_name(local_path.name + '.pull')
+    size, sha = remote_identity(host, remote_path)
+    sync_from_remote(remote_path, temp, host, attempts=attempts)
+    got_size = temp.stat().st_size
+    got_sha = sha256_file_hex(temp) if got_size == size else None
+    if got_size != size or got_sha != sha:
+        temp.unlink(missing_ok=True)
+        raise RuntimeError(f'{host}:{remote_path} arrived as {got_size} bytes (sha {got_sha}), the remote file is '
+                           f'{size} bytes (sha {sha}); the copy was discarded')
+    os.replace(temp, local_path)
+    return sha
+
+
 def colab_state_path(host):
     safe = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in str(host))
     return ROOT / f'colab-actor-{safe}.json'
@@ -187,8 +217,11 @@ def host_config(profile='pop', *, host=None):
             'max_running': COLAB_MAX_RUNNING,
             'mem_fraction': COLAB_MEM_FRACTION,
             'admission': f'{COLAB_ROOT}/natlang/scripts/colab/admission.py',
-            'vram_gib': 84.0,
-            'host_ram_gib': 24.0,
+            # the fork's venv (scripts/colab/bootstrap.py installs training/neuralese/sglang-fork.json's commit there)
+            'sglang_python': f'{COLAB_ROOT}/sglang-natlang-venv/bin/python',
+            'env': f'{COLAB_ROOT}/natlang-env.sh',
+            'vram_gib': G4_ACTOR_ALONE['vram_gib'],
+            'host_ram_gib': G4_ACTOR_ALONE['host_ram_gib'],
         }
     return {
         'profile': 'pop',
@@ -710,164 +743,190 @@ def prune_pop_newest(pattern, keep, protect=()):
 
 
 def stop_colab_g4(host):
-    """Stop any running natlang SGLang actor on a Colab G4 VM."""
+    """Stop the natlang SGLang actor this DGX started on a Colab G4 VM: its admission process group, by the PID the
+    launch recorded (never by pattern: a ``pkill -f`` over ssh matches the remote shell running it)."""
     state_file = colab_state_path(host)
-    state = read_json(state_file)
-    ssh_host(host, "pkill -f 'serve_native_checkpoint.py' || true", check=False, timeout=60)
-    if state_file.exists():
-        state_file.unlink(missing_ok=True)
-    log(event='Colab G4 actor stopped', host=host, previous=(state or {}).get('policy_id'))
+    state = read_json(state_file) or {}
+    pid = state.get('pid')
+    if pid:
+        ssh_host(host, f'kill -TERM -- -{int(pid)} 2>/dev/null; for i in $(seq 30); do kill -0 {int(pid)} 2>/dev/null '
+                       f'|| exit 0; sleep 2; done; kill -KILL -- -{int(pid)} 2>/dev/null; true', check=False, timeout=120)
+    state_file.unlink(missing_ok=True)
+    log(event='Colab G4 actor stopped', host=host, pid=pid, previous=state.get('policy_id'))
+    return state
+
+
+def colab_serve_command(cfg, *, checkpoint, sha, port, work, beside_learner, kv_cache_dtype):
+    """(serve argv, admission claim) of a Colab G4 SGLang actor: alone it takes the GPU (mem fraction 0.88, 128
+    running); beside the SFT learner under MPS (async-train §1) it is capped at 24 GB KV and 64 running and claims only
+    that share, so the learner's admission still fits."""
+    sizing = G4_ACTOR_BESIDE_LEARNER if beside_learner else G4_ACTOR_ALONE
+    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab_g4')
+    memory = (['--sglang-kv-gb', str(sizing['kv_gb'])] if sizing['kv_gb'] else
+              ['--sglang-mem-fraction', str(sglang['mem_fraction'])])
+    if sizing['kv_gb']:
+        sglang = {**{k: v for k, v in sglang.items() if k != 'mem_fraction'}, 'kv_gb': sizing['kv_gb']}
+    serve = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/serve_native_checkpoint.py',
+             '--store-dir', f'{work}/store', '--checkpoint', checkpoint, '--checkpoint-sha256', sha,
+             '--base', cfg['base'], '--host', '0.0.0.0', '--port', str(port), '--prompt-rendering', 'full',
+             '--engine', 'sglang', '--sglang-python', cfg['sglang_python'], '--sglang-projection', 'vendor',
+             '--sglang-kv-cache-dtype', sglang['kv_cache_dtype'], '--sglang-max-running', str(sglang['max_running']),
+             *memory, '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
+    return serve, {'vram_gib': sizing['vram_gib'], 'host_ram_gib': sizing['host_ram_gib']}, sglang, sglang_format
 
 
 def serve_colab_g4(args):
-    """Serve a merged BF16 checkpoint on a Colab G4 VM under scripts/colab/admission.py and attest all 4 routes."""
+    """Serve a merged BF16 checkpoint on a Colab G4 VM under scripts/colab/admission.py (a VRAM/host-RAM claim that
+    lasts while the actor runs) and wait until it attests the checkpoint."""
     cfg = host_config('colab_g4', host=getattr(args, 'host', None))
     host = cfg['host']
     if not host:
         raise RuntimeError('set --host, NATLANG_COLAB_HOSTS, or "colab_hosts" in ' + str(ROOT / 'config.json'))
     sha, commit = args.policy_id, args.commit
-    max_running = args.max_running if getattr(args, 'max_running', None) else COLAB_MAX_RUNNING
-    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, max_running, profile='colab_g4')
+    remote_ckpt = f'{cfg["checkpoints"]}/{sha}.pt'
+    remote_work = f'{cfg["work_root"]}/actor-{sha[:12]}'
+    serve_cmd, claim, sglang, sglang_format = colab_serve_command(
+        cfg, checkpoint=remote_ckpt, sha=sha, port=args.port, work=remote_work,
+        beside_learner=bool(getattr(args, 'beside_learner', False)), kv_cache_dtype=args.kv_cache_dtype)
     state_file = colab_state_path(host)
     previous = read_json(state_file)
     if (previous and previous.get('policy_id') == sha and previous.get('code') == commit
             and previous.get('sglang') == sglang and attested(previous['endpoint'], sha)):
         log(event='Colab G4 actor already serves the checkpoint', host=host, endpoint=previous['endpoint'])
         return previous
-    stop_colab_g4(host)
+    if previous:
+        stop_colab_g4(host)
     started = time.time()
     bind_ip = args.bind_host or host_address(host)
     endpoint = f'http://{bind_ip}:{args.port}'
-    remote_ckpt = f'{cfg["checkpoints"]}/{sha}.pt'
-    remote_work = f'{cfg["work_root"]}/actor-{sha[:12]}'
     ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_work]))
-    # Copy checkpoint to Colab local SSD scratch if absent
     if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
         sync_to_remote(args.checkpoint, f'{remote_ckpt}.partial', host)
+        if remote_identity(host, f'{remote_ckpt}.partial')[1] != sha:
+            raise RuntimeError(f'the checkpoint copied to {host} does not hash to {sha}')
         ssh_host(host, shlex.join(['mv', f'{remote_ckpt}.partial', remote_ckpt]))
     copied = time.time()
-    # Checkout pinned commit on Colab repo
     ssh_host(host, f'git -C {shlex.quote(cfg["repo"])} fetch -q origin && '
-                   f'git -C {shlex.quote(cfg["repo"])} checkout -f {shlex.quote(commit)}', timeout=300)
-    serve_cmd = [
-        cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/serve_native_checkpoint.py',
-        '--store-dir', f'{remote_work}/store',
-        '--checkpoint', remote_ckpt, '--checkpoint-sha256', sha,
-        '--base', cfg['base'], '--host', '0.0.0.0', '--port', str(args.port),
-        '--prompt-rendering', 'full', '--engine', 'sglang',
-        '--sglang-kv-cache-dtype', sglang['kv_cache_dtype'],
-        '--sglang-max-running', str(sglang['max_running']),
-        '--sglang-mem-fraction', str(sglang['mem_fraction']),
-        '--hf-export-dir', f'{remote_work}/sglang-hf',
-        '--actor-export-format', sglang_format,
-    ]
-    admitted = [
-        cfg['python'], cfg['admission'], 'run',
-        '--vram-gib', str(cfg['vram_gib']), '--host-ram-gib', str(cfg['host_ram_gib']),
-        '--wait', '300', '--workdir', cfg['repo'], '--', *serve_cmd,
-    ]
-    launch = f'nohup env NATLANG_REPO={shlex.quote(cfg["repo"])} PYTHONPATH={shlex.quote(cfg["repo"] + "/training/neuralese:" + cfg["repo"])} ' \
-             f'{shlex.join(admitted)} > {shlex.quote(remote_work + "/actor.log")} 2>&1 < /dev/null &'
-    ssh_host(host, launch, timeout=60)
+                   f'git -C {shlex.quote(cfg["repo"])} checkout -q -f {shlex.quote(commit)}', timeout=300)
+    admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(claim['vram_gib']),
+                '--host-ram-gib', str(claim['host_ram_gib']), '--label', f'actor-{sha[:12]}', '--wait', '300',
+                '--workdir', cfg['repo'], '--', *serve_cmd]
+    # setsid: the admission process leads its own group (stop_colab_g4 signals it); its PID is the launch's output
+    pid = ssh_host(host, f'. {shlex.quote(cfg["env"])} && setsid nohup {shlex.join(admitted)} '
+                         f'> {shlex.quote(remote_work + "/actor.log")} 2>&1 < /dev/null & echo $!', timeout=60).strip()
     result = {'endpoint': endpoint, 'host': host, 'profile': 'colab_g4', 'policy_id': sha, 'work': remote_work,
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'export_format': sglang_format,
-              'copy_seconds': round(copied - started, 1)}
+              'pid': int(pid.splitlines()[-1]), 'claim': claim, 'copy_seconds': round(copied - started, 1),
+              'started': started}
     write_json(state_file, result)
     deadline = time.monotonic() + args.ready_seconds
     while time.monotonic() < deadline:
-        info = attested(endpoint, sha)
-        if info:
+        if attested(endpoint, sha):
             result['ready_seconds'] = round(time.time() - started, 1)
             write_json(state_file, result)
             log(event='Colab G4 actor ready', **result)
             return result
         time.sleep(5)
+    stop_colab_g4(host)
     raise RuntimeError(f'Colab G4 actor on {host} did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
 
 
+def remap_sft_args(argv, mapping):
+    """``exp0_sft`` arguments (the DGX recipe, ``launch.json`` ``exp0_sft_args``) with the values of path flags
+    replaced through ``mapping`` (local path -> remote path); every --chains/--checkpoint/--base/--out-dir/--val-chains
+    value must be mapped (a DGX path on the remote would fail late or read the wrong file)."""
+    out, path_flags = list(argv), ('--chains', '--checkpoint', '--base', '--out-dir', '--val-chains')
+    for i, arg in enumerate(out[:-1]):
+        if arg in path_flags:
+            if out[i + 1] not in mapping:
+                raise ValueError(f'{arg} {out[i + 1]} has no remote copy')
+            out[i + 1] = mapping[out[i + 1]]
+    return out
+
+
 def run_remote_sft(args):
-    """Run exp0_sft.py on a Colab G4 VM with 15-minute learner-state sync back to DGX (Colab disk is scratch)."""
+    """Run the DGX SFT recipe on a Colab G4 VM: exactly the ``exp0_sft`` arguments the DGX preflight
+    (``ops/grpo-v4/launch-sft.sh`` with PREFLIGHT_ONLY=1: input identity, held exclusion; ``--launch-json``) recorded,
+    with paths mapped to the VM's copies, plus ``--resume`` and the learner-state saves the DGX pulls every
+    ``--state-sync-minutes``. The finished checkpoint arrives verified (``pull_verified``) or not at all."""
     import threading
     cfg = host_config('colab_g4', host=args.host)
     host = cfg['host']
     if not host:
         raise RuntimeError('run-sft requires --host or NATLANG_COLAB_HOSTS')
+    launch = json.loads(Path(args.launch_json).read_text())
+    recipe = shlex.split(launch['exp0_sft_args'])
     local_work = Path(args.work).resolve()
     local_work.mkdir(parents=True, exist_ok=True)
     remote_run = f'{cfg["work_root"]}/sft-{args.run_name}'
-    remote_chains = f'{remote_run}/chains.pkl'
-    remote_ckpt = f'{cfg["checkpoints"]}/{args.checkpoint_sha256}.pt' if args.checkpoint_sha256 else f'{remote_run}/start.pt'
     ssh_host(host, shlex.join(['mkdir', '-p', cfg['checkpoints'], remote_run, f'{remote_run}/learner-state']))
     if args.commit:
         ssh_host(host, f'git -C {shlex.quote(cfg["repo"])} fetch -q origin && '
-                       f'git -C {shlex.quote(cfg["repo"])} checkout -f {shlex.quote(args.commit)}', timeout=300)
-    # Stage immutable chains and start checkpoint onto Colab local SSD
-    sync_to_remote(args.chains, remote_chains, host)
+                       f'git -C {shlex.quote(cfg["repo"])} checkout -q -f {shlex.quote(args.commit)}', timeout=300)
+    value = lambda flag: recipe[recipe.index(flag) + 1]
+    mapping = {value('--base'): cfg['base'], value('--out-dir'): remote_run}
+    chains_remote = f'{remote_run}/chains.pkl'
+    sync_to_remote(value('--chains'), chains_remote, host)
+    if remote_identity(host, chains_remote)[1] != launch['chains_sha256']:
+        raise RuntimeError(f'the chains copied to {host} do not hash to {launch["chains_sha256"]}')
+    mapping[value('--chains')] = chains_remote
+    start_sha = launch['start_checkpoint_sha256']
+    remote_ckpt = f'{cfg["checkpoints"]}/{start_sha}.pt'
     if not ssh_host(host, shlex.join(['test', '-f', remote_ckpt]) + ' && echo ok', check=False).strip():
-        sync_to_remote(args.checkpoint, f'{remote_ckpt}.partial', host)
+        sync_to_remote(value('--checkpoint'), f'{remote_ckpt}.partial', host)
+        if remote_identity(host, f'{remote_ckpt}.partial')[1] != start_sha:
+            raise RuntimeError(f'the start checkpoint copied to {host} does not hash to {start_sha}')
         ssh_host(host, shlex.join(['mv', f'{remote_ckpt}.partial', remote_ckpt]))
-    # Push any existing DGX learner-state for exact resume across Colab preemption!
-    local_state = local_work / 'learner-state'
-    if (local_state / 'learner_manifest.json').exists():
-        sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
-    val_remote = []
-    for idx, vpath in enumerate(args.val_chains or ()):
-        rv = f'{remote_run}/val-{idx}.pkl'
+    mapping[value('--checkpoint')] = remote_ckpt
+    vals = [recipe[i + 1] for i, a in enumerate(recipe[:-1]) if a == '--val-chains']
+    for idx, vpath in enumerate(vals):
+        rv = f'{remote_run}/val-{idx}-{Path(vpath).name}'
         sync_to_remote(vpath, rv, host)
-        val_remote.append(rv)
-
+        mapping[vpath] = rv
+    local_state = local_work / 'learner-state'
+    if (local_state / 'learner_manifest.json').exists():     # exact resume across a preemption (DGX holds the state)
+        sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
+    sft_cmd = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', *remap_sft_args(recipe, mapping),
+               *([] if '--resume' in recipe else ['--resume']), '--state-save-minutes', str(args.state_sync_minutes)]
+    admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(args.vram_gib), '--host-ram-gib',
+                str(args.host_ram_gib), '--label', f'sft-{args.run_name}', '--wait', '600', '--workdir', cfg['repo'],
+                '--', *sft_cmd]
     stop_sync = threading.Event()
     sync_interval = max(60.0, float(args.state_sync_minutes) * 60.0)
+
+    def pull_state(attempts):
+        sync_from_remote(f'{remote_run}/learner-state/', f'{local_state}/', host, attempts=attempts)
+        sync_from_remote(f'{remote_run}/train.jsonl', str(local_work / 'train.jsonl'), host, attempts=1)
 
     def sync_loop():
         while not stop_sync.wait(sync_interval):
             try:
-                sync_from_remote(f'{remote_run}/learner-state/', f'{local_state}/', host, attempts=2)
-                sync_from_remote(f'{remote_run}/train.jsonl', str(local_work / 'train.jsonl'), host, attempts=1)
+                pull_state(2)
             except Exception as err:
                 log(event='Colab SFT state sync warning', host=host, error=repr(err)[:200])
 
     sync_thread = threading.Thread(target=sync_loop, daemon=True)
     sync_thread.start()
-    sft_cmd = [
-        cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/exp0_sft.py', 'train',
-        '--chains', remote_chains, '--checkpoint', remote_ckpt, '--base', cfg['base'],
-        '--out-dir', remote_run, '--state-dir', f'{remote_run}/learner-state',
-        '--state-save-minutes', str(args.state_sync_minutes),
-        '--activation-gib', str(args.activation_gib), '--lr', str(args.lr),
-        '--batch-loss-tokens', str(args.batch_loss_tokens), '--warmup', str(args.warmup),
-        '--resume',
-        *[x for rv in val_remote for x in ('--val-chains', rv)],
-        *(shlex.split(args.extra) if args.extra else []),
-    ]
-    admitted = [
-        cfg['python'], cfg['admission'], 'run',
-        '--vram-gib', '88', '--host-ram-gib', '40', '--wait', '600', '--workdir', cfg['repo'], '--', *sft_cmd,
-    ]
-    env_prefix = f'NATLANG_REPO={shlex.quote(cfg["repo"])} PYTHONPATH={shlex.quote(cfg["repo"] + "/training/neuralese:" + cfg["repo"])}'
-    started = time.time()
-    rc = 1
+    started, rc = time.time(), 1
     try:
-        proc = subprocess.run(
-            ['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', host,
-             f'{env_prefix} {shlex.join(admitted)}'],
-            timeout=24 * 3600,
-        )
-        rc = proc.returncode
+        rc = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', host,
+                             f'. {shlex.quote(cfg["env"])} && {shlex.join(admitted)}'], timeout=24 * 3600).returncode
     finally:
         stop_sync.set()
         sync_thread.join(timeout=30)
-        # Always pull back the latest learner-state and logs so DGX can resume if Colab preempted!
-        for src, dst in ((f'{remote_run}/learner-state/', f'{local_state}/'),
-                         (f'{remote_run}/train.jsonl', str(local_work / 'train.jsonl'))):
-            try:
-                sync_from_remote(src, dst, host, attempts=3)
-            except Exception as err:
-                log(event='Colab SFT post-run pull warning', src=src, error=repr(err)[:200])
-        if rc == 0:
-            sync_from_remote(f'{remote_run}/checkpoint.pt', str(local_work / 'checkpoint.pt'), host, attempts=5)
+        try:      # the latest learner state, so the DGX can resume a preempted run
+            pull_state(3)
+        except Exception as err:
+            log(event='Colab SFT post-run pull warning', error=repr(err)[:200])
+    sha = None
+    if rc == 0:
+        try:
+            sha = pull_verified(f'{remote_run}/checkpoint.pt', local_work / 'checkpoint.pt', host)
+        except Exception as err:
+            rc = 1
+            log(event='Colab SFT checkpoint pull failed', host=host, error=repr(err)[:300])
     log(event='Colab G4 SFT finished', host=host, returncode=rc, seconds=round(time.time() - started, 1),
-        checkpoint_present=(local_work / 'checkpoint.pt').exists())
+        checkpoint_sha256=sha)
     return rc
 
 
@@ -954,42 +1013,28 @@ def complete(result_path):
 
 
 def held_eval_job(args):
-    """One held evaluation on Pop or sharded Colab G4 session(s) from ``--spec``."""
+    """One held evaluation on Pop from ``--spec`` (grpo ``--held-remote pop``). The Colab G4 held series is superseded
+    (async-train §1: the held series runs on the DGX), so a spec naming another host profile is refused."""
     spec = json.loads(Path(args.spec).read_text())
     started, code, serving = time.time(), 1, None
     signal.signal(signal.SIGTERM, lambda *_: None)
     profile = str(spec.get('host_profile') or 'pop').lower().replace('-', '_')
     env = {**os.environ, 'NATLANG_REPO': str(REPO), 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
-    if profile == 'colab_g4':
-        env['NATLANG_HELD_SERIES_HOST'] = 'colab_g4'
     python = [sys.executable, '-m', 'natlang_neuralese.rl.held_eval']
     with open(spec['log'], 'a') as handle:
         try:
-            endpoints = []
-            if profile == 'colab_g4':
-                hosts = spec.get('hosts') or reachable_hosts('colab_g4')
-                for h in hosts:
-                    ep = serving_endpoint(spec['policy'], spec['format'], profile='colab_g4', host=h)
-                    if ep is None:
-                        subprocess.run([sys.executable, str(Path(__file__).resolve()), *spec['serve'],
-                                        '--host-profile', 'colab_g4', '--host', h],
-                                       cwd=REPO, env=env, stdout=handle, stderr=subprocess.STDOUT, timeout=4 * 3600)
-                        ep = serving_endpoint(spec['policy'], spec['format'], profile='colab_g4', host=h)
-                    if ep is not None:
-                        endpoints.append(f'{ep}={spec["slots"]}')
-            else:
+            if profile != 'pop':
+                raise RuntimeError(f'held evaluations run on Pop or the DGX, not {profile}: the Colab G4 held series is '
+                                   'superseded by the DGX series (plans/neuralese/async-train.md §1)')
+            endpoint = serving_endpoint(spec['policy'], spec['format'])
+            if endpoint is None:
+                subprocess.run([sys.executable, str(Path(__file__).resolve()), *spec['serve']], cwd=REPO, env=env,
+                               stdout=handle, stderr=subprocess.STDOUT, timeout=4 * 3600)
                 endpoint = serving_endpoint(spec['policy'], spec['format'])
-                if endpoint is None:
-                    subprocess.run([sys.executable, str(Path(__file__).resolve()), *spec['serve']], cwd=REPO, env=env,
-                                   stdout=handle, stderr=subprocess.STDOUT, timeout=4 * 3600)
-                    endpoint = serving_endpoint(spec['policy'], spec['format'])
-                if endpoint is not None:
-                    endpoints.append(f'{endpoint}={spec["slots"]}')
-            if not endpoints:
-                raise RuntimeError(f'{profile} does not serve {spec["policy"][:12]}')
+            if endpoint is None:
+                raise RuntimeError(f'Pop does not serve {spec["policy"][:12]}')
             serving = time.time() - started
-            ep_flags = [item for ep in endpoints for item in ('--endpoint', ep)]
-            code = subprocess.run([*python, 'measure', *spec['measure'], *ep_flags],
+            code = subprocess.run([*python, 'measure', *spec['measure'], '--endpoint', f'{endpoint}={spec["slots"]}'],
                                   cwd=REPO, env=env, stdout=handle, stderr=subprocess.STDOUT).returncode
             compare = spec.get('compare')
             if compare:
@@ -1041,7 +1086,10 @@ def main(argv=None):
         sub.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='pop')
         sub.add_argument('--host', help='explicit SSH host alias (default: Pop or first Colab G4 host)')
         sub.add_argument('--kv-cache-dtype', choices=('fp8_e4m3', 'auto'), default=POP_KV_CACHE_DTYPE)
-        sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING)
+        sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='Pop running cap (a Colab actor '
+                         'runs 128 alone, 64 with --beside-learner)')
+        sub.add_argument('--beside-learner', action='store_true',
+                         help='Colab G4: cap the actor (24 GB KV, 64 running) to share the GPU with the SFT learner')
     c.add_argument('--checkpoint', required=True)
     c.add_argument('--policy-id', required=True)
     c.add_argument('--commit', required=True)
@@ -1056,21 +1104,17 @@ def main(argv=None):
     f.add_argument('--step', type=int, default=0)
     h = commands.add_parser('held-eval')
     h.add_argument('--spec', required=True)
-    rs = commands.add_parser('run-sft', help='run exp0_sft.py on a Colab G4 VM with periodic state sync back to DGX')
+    rs = commands.add_parser('run-sft', help='run the DGX SFT recipe on a Colab G4 VM with periodic state sync back')
     rs.add_argument('--host', required=True)
     rs.add_argument('--run-name', required=True)
     rs.add_argument('--work', required=True, help='local DGX work directory (receives learner-state and checkpoint.pt)')
-    rs.add_argument('--chains', required=True)
-    rs.add_argument('--checkpoint', required=True)
-    rs.add_argument('--checkpoint-sha256')
+    rs.add_argument('--launch-json', required=True,
+                    help="the DGX preflight's launch.json (launch-sft.sh PREFLIGHT_ONLY=1): its exp0_sft_args run")
     rs.add_argument('--commit')
-    rs.add_argument('--lr', default='5e-5')
-    rs.add_argument('--warmup', type=int, default=8)
-    rs.add_argument('--batch-loss-tokens', type=int, default=32000)
-    rs.add_argument('--activation-gib', type=float, default=80.0)
     rs.add_argument('--state-sync-minutes', type=float, default=15.0)
-    rs.add_argument('--val-chains', action='append', default=[])
-    rs.add_argument('--extra', default='')
+    rs.add_argument('--vram-gib', type=float, default=G4_VRAM_GIB - G4_ACTOR_BESIDE_LEARNER['vram_gib'] - 1.0,
+                    help='admission claim (default: the GPU less a capped actor beside it)')
+    rs.add_argument('--host-ram-gib', type=float, default=40.0)
     rc = commands.add_parser('reachable', help='list reachable remote hosts for a profile')
     rc.add_argument('--host-profile', choices=('pop', 'colab_g4'), default='colab_g4')
     rc.add_argument('--hosts', help='comma-separated SSH host aliases')

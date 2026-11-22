@@ -1,11 +1,19 @@
-"""Execution profiles, unreachable-host DGX fallback, and cost telemetry (plans/neuralese/lfm3opti.md).
+"""Execution profiles, unreachable-host DGX fallback, and cost telemetry (plans/neuralese/lfm3opti.md,
+plans/neuralese/async-train.md).
 
 Three profiles are supported:
-- ``dgx``: local DGX GB10 unified-memory machine (128 GiB combined, managed via memory_ledger.py).
-- ``colab_g4``: Colab G4 VM with discrete RTX PRO 6000 Blackwell (96 GB VRAM, ~1.8 TB/s, ~13 CU/h).
-- ``pop``: Pop laptop with discrete RTX 4060 (8 GB VRAM, 15 GiB host RAM).
+- ``dgx``: local DGX GB10 unified-memory machine (128 GiB combined, managed via memory_ledger.py). It runs the held
+  series (async-train §1: SGLang, vendor projection, FP8 KV, BF16 weights, 4 samples per task, attested by the held
+  manifest's engine.json), so the series never depends on a Colab session or on Pop.
+- ``colab_g4``: Colab G4 VM with discrete RTX PRO 6000 Blackwell (96 GB VRAM, ~1.8 TB/s, ~13 CU/h): learner and
+  collection actors. It has no held series (async-train §1 supersedes lfm3opti §4's G4 series).
+- ``pop``: Pop laptop with discrete RTX 4060 (8 GB VRAM, 15 GiB host RAM): the legacy held series (2 samples).
 
 Colab L4 (~300 GB/s bandwidth, same as GB10) is explicitly excluded per lfm3opti.md §1.
+
+Cost: Colab bills a session from its start to its stop, busy or idle, so ``CostTelemetry`` charges sessions
+(``open_session``/``close_session``, an open one up to now); stage entries attribute wall time to stages, and a stage
+entry covered by a session adds no compute units of its own.
 """
 from __future__ import annotations
 
@@ -22,6 +30,11 @@ EXCLUDED_PROFILES = frozenset({'l4', 'colab_l4', 'colab-l4'})
 DEFAULT_FALLBACK_WAIT_MINUTES = 30.0
 DEFAULT_COLAB_STATE_SYNC_MINUTES = 15.0
 DEFAULT_G4_CU_PER_HOUR = 13.0
+# A G4 actor that shares the GPU with the SFT learner under MPS (async-train §1): KV capped at 24 GB, 64 running; its
+# admission claim (weights 3.4 GB, KV, CUDA graphs and allocator slack). The learner claims the rest of the VRAM.
+G4_ACTOR_BESIDE_LEARNER = {'kv_gb': 24, 'max_running': 64, 'vram_gib': 34.0, 'host_ram_gib': 24.0}
+G4_ACTOR_ALONE = {'kv_gb': None, 'max_running': 128, 'vram_gib': 84.0, 'host_ram_gib': 24.0}
+G4_VRAM_GIB = 94.0           # what nvidia-smi reports usable on the 96 GB card, before the admission reserve
 
 
 @dataclass(frozen=True)
@@ -67,12 +80,12 @@ BUILTIN_PROFILES: dict[str, ExecutionProfile] = {
         sglang_mem_fraction=None,
         sglang_export_format='sglang-dgx-gb10-bf16-vendor-projection-kv-fp8_e4m3',
         collect_slots=128,
-        held_samples=2,
+        held_samples=4,
         cu_per_hour=0.0,
         fallback_profile=None,
         fallback_wait_minutes=0.0,
         state_sync_minutes=0.0,
-        held_series_host=None,
+        held_series_host='dgx',
     ),
     'colab_g4': ExecutionProfile(
         name='colab_g4',
@@ -80,19 +93,21 @@ BUILTIN_PROFILES: dict[str, ExecutionProfile] = {
         vram_budget_gib=92.0,
         host_ram_budget_gib=150.0,
         combined_budget_gib=None,
-        activation_gib=80.0,
+        # the learner's share beside a capped MPS actor (G4_ACTOR_BESIDE_LEARNER): 94 - 34 - 1 reserve = 59 GiB, of
+        # which activations take 44 and the rest weights, LoRA state and allocator slack
+        activation_gib=44.0,
         sglang_kv_cache_dtype='fp8_e4m3',
         sglang_max_running=128,
         sglang_mem_fraction=0.88,
         sglang_export_format='sglang-colab-g4-bf16-vendor-projection-kv-fp8_e4m3',
         collect_slots=128,
-        held_samples=4,
+        held_samples=0,               # no G4 held series (async-train §1): held runs on the DGX
         cu_per_hour=DEFAULT_G4_CU_PER_HOUR,
         fallback_profile='dgx',
         fallback_wait_minutes=DEFAULT_FALLBACK_WAIT_MINUTES,
         state_sync_minutes=DEFAULT_COLAB_STATE_SYNC_MINUTES,
         scratch_dir='/content/natlang-work',
-        held_series_host='colab_g4',
+        held_series_host=None,
     ),
     'pop': ExecutionProfile(
         name='pop',
@@ -222,11 +237,53 @@ class StageCostEntry:
 
 
 @dataclass
+class SessionCostEntry:
+    """One remote session (a Colab G4 actor or learner) charged from its start to its stop, idle time included."""
+    host: str
+    profile: str
+    started: float
+    stopped: float | None = None
+    cu_per_hour: float = 0.0
+    note: str = ''
+
+    def seconds(self, now: float | None = None) -> float:
+        end = self.stopped if self.stopped is not None else (time.time() if now is None else now)
+        return max(0.0, end - self.started)
+
+    def cu(self, now: float | None = None) -> float:
+        return self.cu_per_hour * self.seconds(now) / 3600.0
+
+
+@dataclass
 class CostTelemetry:
-    """Per-cycle cost & efficiency telemetry (lfm3opti.md §6 & v2 §6.4)."""
+    """Per-cycle cost & efficiency telemetry (lfm3opti.md §6 & v2 §6.4): remote sessions are charged from start to
+    stop (``open_session``/``close_session``); a stage entry with ``session_host`` is attribution only."""
 
     cycle_name: str
     entries: list[StageCostEntry] = field(default_factory=list)
+    sessions: list[SessionCostEntry] = field(default_factory=list)
+
+    def open_session(self, host: str, profile: str | ExecutionProfile, *, at: float | None = None,
+                     cu_per_hour: float | None = None, note: str = '') -> SessionCostEntry:
+        """Start charging ``host`` (idempotent: an open session of the host is kept)."""
+        for entry in self.sessions:
+            if entry.host == host and entry.stopped is None:
+                return entry
+        name = profile.name if isinstance(profile, ExecutionProfile) else str(profile)
+        rate = float(cu_per_hour) if cu_per_hour is not None else (
+            profile.cu_per_hour if isinstance(profile, ExecutionProfile)
+            else BUILTIN_PROFILES.get(name, BUILTIN_PROFILES['dgx']).cu_per_hour)
+        entry = SessionCostEntry(host=host, profile=name, started=time.time() if at is None else float(at),
+                                 cu_per_hour=round(rate, 4), note=note)
+        self.sessions.append(entry)
+        return entry
+
+    def close_session(self, host: str, *, at: float | None = None) -> SessionCostEntry | None:
+        for entry in self.sessions:
+            if entry.host == host and entry.stopped is None:
+                entry.stopped = time.time() if at is None else float(at)
+                return entry
+        return None
 
     def record_stage(
         self,
@@ -238,6 +295,7 @@ class CostTelemetry:
         canonical_chain_tokens: int = 0,
         cu_per_hour: float | None = None,
         note: str = '',
+        session_host: str | None = None,
     ) -> StageCostEntry:
         prof_name = profile.name if isinstance(profile, ExecutionProfile) else str(profile)
         rate = (
@@ -247,6 +305,9 @@ class CostTelemetry:
                   else BUILTIN_PROFILES.get(prof_name, BUILTIN_PROFILES['dgx']).cu_per_hour)
         )
         cu = rate * (max(0.0, float(wall_seconds)) / 3600.0) * max(1, int(sessions))
+        if session_host:     # the session charges this time (start to stop): the stage is attribution only
+            cu = 0.0
+            note = (note + ' ' if note else '') + f'charged by session {session_host}'
         entry = StageCostEntry(
             stage=stage,
             profile=prof_name,
@@ -260,8 +321,9 @@ class CostTelemetry:
         self.entries.append(entry)
         return entry
 
-    def summary(self) -> dict:
-        total_cu = sum(e.cu_spent for e in self.entries)
+    def summary(self, now: float | None = None) -> dict:
+        session_cu = sum(e.cu(now) for e in self.sessions)
+        total_cu = sum(e.cu_spent for e in self.entries) + session_cu
         total_wall = sum(e.wall_seconds for e in self.entries)
         total_tokens = sum(e.canonical_chain_tokens for e in self.entries)
         by_stage: dict[str, dict] = {}
@@ -283,7 +345,11 @@ class CostTelemetry:
             'canonical_chain_tokens_per_cu': None if tokens_per_cu is None else round(tokens_per_cu, 1),
             'cu_per_million_units': None if cu_per_m_units is None else round(cu_per_m_units, 4),
             'by_stage': by_stage,
+            'session_cu_spent': round(session_cu, 4),
+            'open_sessions': [e.host for e in self.sessions if e.stopped is None],
             'entries': [asdict(e) for e in self.entries],
+            'sessions': [{**asdict(e), 'seconds': round(e.seconds(now), 1), 'cu_spent': round(e.cu(now), 4)}
+                         for e in self.sessions],
         }
 
     def save(self, path: str | Path) -> dict:
@@ -299,7 +365,10 @@ class CostTelemetry:
         try:
             raw = json.loads(p.read_text())
             entries = [StageCostEntry(**item) for item in raw.get('entries') or ()]
-            return cls(cycle_name=raw.get('cycle') or cycle_name, entries=entries)
+            fields = set(SessionCostEntry.__dataclass_fields__)
+            sessions = [SessionCostEntry(**{k: v for k, v in item.items() if k in fields})
+                        for item in raw.get('sessions') or ()]
+            return cls(cycle_name=raw.get('cycle') or cycle_name, entries=entries, sessions=sessions)
         except Exception:
             return cls(cycle_name=cycle_name)
 
@@ -312,6 +381,10 @@ __all__ = [
     'DEFAULT_G4_CU_PER_HOUR',
     'EXCLUDED_PROFILES',
     'ExecutionProfile',
+    'G4_ACTOR_ALONE',
+    'G4_ACTOR_BESIDE_LEARNER',
+    'G4_VRAM_GIB',
+    'SessionCostEntry',
     'StageCostEntry',
     'parse_colab_hosts',
     'resolve_profile',
