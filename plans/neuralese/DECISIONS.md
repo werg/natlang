@@ -6757,3 +6757,14 @@ Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc
 - **Strand 4 (Speed & atomic publication, §6):** Resident activations (`--activation-gib 56` DGX / `80` G4), Blackwell attention/conv configs + token-length buckets (`NATLANG_COMPILE_BUCKETS=0` opt-out) + `CompileHealthTracker`, Blackwell `torch._scaled_mm` FP8 frozen-base GEMMs (`NATLANG_FP8_BASE=0` opt-out), and GRPO's 7-step atomic merged-export publication state machine with `k-1` rollback (`WeightSync.for_learner`).
 - **Strand 1 (Colab G4 machine, §1/§2/§4/§6/§7):** Added `common/execution_profile.py` (`dgx`, `colab_g4`, `pop`, rejecting L4; 30-min unreachable DGX fallback; `CostTelemetry`), `scripts/colab/bootstrap.py` (Tailscale userspace + sshd + venv/torchao/sglang + ts-host + base fetch + hardware probe) and `scripts/colab/admission.py` (separate VRAM + host RAM admission), generalized `pop_rl_actor.py` across Pop and Colab G4 (`run-sft` with 15-min state sync back to DGX, multi-host sharded `held-eval`), added `engine_host` to `held_eval.series()` (G4 held series at 4 samples), and wired sharded collection/held/remote SFT + `cycle-cost.json` in `expert_iteration.py`.
 
+
+## 2026-11-22 13:40 Neuralese variants in expert iteration
+
+- Neuralese-declaring task variants (1,381 replay-qualified rows in 47 families; on in grpo-v5-run1) were never wired
+  into expert-iteration collection. Its collector inherits grpo's variant swap, but `collect` never loaded the file.
+  The SFT mix carried Neuralese only as aux chains (neuralese-graph 5%, own-neuralese-graph 5%).
+- They are data and cheap, so they are now on by default: `cycle --neuralese-variants` defaults to the registry file
+  and share 0.5, and `--no-neuralese-variants` opts out. `collect` loads them with `grpo.load_variants`, which applies
+  the held exclusion and the train split. Variant successes reach the mix through the groups' cases.jsonl.
+- They enter at the next cycle the pipeline launches (sft-v10); sft-v9's collection, which started at 11:17, keeps its
+  settings. AGENTS.md's off-by-default list is updated.

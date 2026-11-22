@@ -97,6 +97,9 @@ A round turns a pool snapshot into a published policy.
 - **Dedup ledger.** `round.json` records the episode ids each round's mix holds, and `learner_state` records the
   rounds trained. A resumed learner never retrains a round. A rebuilt mix keeps prefer-unseen over the lineage's
   rounds.
+- **Neuralese-declaring task variants run in collection** (`--neuralese-variants`, registry
+  natlang-rl-neuralese-variants-20261113: 1,381 variants in 47 families). A selected task that has a variant runs as it
+  in half of its groups. Successes enter the pool as own successes, and the held closure is checked per variant.
 - **Collection actors use FP8 weights.**
   - SGLang FP8 weights on the DGX and G4 collection actors. The conv states and the LM head stay BF16.
   - LFM3's KV is small: 11 attention layers × 4 KV heads × 128, i.e. 1 KB per token per layer in FP8. At 128 running

@@ -355,6 +355,8 @@ def collect(args):
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
     collector = frontier_collector(grpo.Collector)(g, tasks, work, sha, REPO / 'ts-host',
                                                    first_group=max(existing, default=-1) + 1)
+    g.neuralese_variants, g.neuralese_variant_share = args.neuralese_variants, args.neuralese_variant_share
+    collector.variants = grpo.load_variants(g, tasks, work)
     collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints)
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
          'slots': total_slots, 'actor': url, 'endpoints': endpoints})
@@ -820,7 +822,7 @@ class Cycle:
                 self.ledger(unit, budget, 'high',
                             self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
                                     '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
-                                    '--k', self.a.k, '--hours', self.a.collect_hours, '--slots', active_profile.collect_slots,
+                                    '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(), '--slots', active_profile.collect_slots,
                                     '--unit-prefix', unit,
                                     *[x for ep in endpoints for x in ('--actor', ep)]),
                             self.dir / 'collect.log')
@@ -837,7 +839,7 @@ class Cycle:
         self.ledger(unit, budget, 'high',
                     self.py('expert_iteration.py', 'collect', '--work', self.collect_dir, '--checkpoint', start,
                             '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
-                            '--k', self.a.k, '--hours', self.a.collect_hours, '--slots', self.a.slots,
+                            '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(), '--slots', self.a.slots,
                             '--unit-prefix', unit, '--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
                             '--actor-arg=--sglang-max-running', f'--actor-arg={self.max_running()}'),
                     self.dir / 'collect.log', detach=True)
@@ -1034,6 +1036,15 @@ class Cycle:
             if self.active(unit):
                 self.stop_unit(unit)
                 self.note(stage='fill window', stopped=unit)
+
+    def variant_args(self):
+        """collect's Neuralese-declaring task variants (grpo ``--neuralese-variants``; DECISIONS 2026-11-22 "Neuralese
+        variants in expert iteration"): a selected task with a variant runs as it in ``--neuralese-variant-share`` of
+        its groups. ``--no-neuralese-variants`` opts out."""
+        if getattr(self.a, 'no_neuralese_variants', False) or not self.a.neuralese_variants:
+            return []
+        return ['--neuralese-variants', self.a.neuralese_variants, '--neuralese-variant-share',
+                self.a.neuralese_variant_share]
 
     def fill_repo(self):
         return Path(getattr(self.a, 'fill_repo', None) or self.pin)
@@ -1491,6 +1502,8 @@ def main():
     c.add_argument('--actor', action='append', default=[],
                    help='running actor front URL[=SLOTS] (repeatable for sharded collection across Colab G4 sessions)')
     c.add_argument('--actor-arg', action='append', default=[])
+    c.add_argument('--neuralese-variants', help="grpo's --neuralese-variants cases.jsonl (default: none)")
+    c.add_argument('--neuralese-variant-share', type=float, default=0.5)
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
     f = sub.add_parser('frontier')
@@ -1511,6 +1524,11 @@ def main():
     y.add_argument('--seed-work', action='append', default=[], help='earlier sft_sources WORKs: verdicts and extractions')
     y.add_argument('--select-args', default='', help='more select flags (e.g. "--limit 3000")')
     y.add_argument('--k', type=int, default=4)
+    y.add_argument('--neuralese-variants', default=str(REPO / 'runs/natlang-rl-neuralese-variants-20261113/cases.jsonl'),
+                   help='Neuralese-declaring variants of pool tasks (registry natlang-rl-neuralese-variants-20261113, '
+                   '1,381 rows) that collection runs in --neuralese-variant-share of a task\'s groups')
+    y.add_argument('--neuralese-variant-share', type=float, default=0.5)
+    y.add_argument('--no-neuralese-variants', action='store_true')
     y.add_argument('--collect-hours', type=float, default=6.)
     y.add_argument('--slots', type=int, default=128)
     y.add_argument('--kv-gb', type=int, default=12)

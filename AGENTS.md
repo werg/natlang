@@ -186,10 +186,10 @@ authoritative.
   (`scripts/rl_tasks/measure_repetition.py`, `simulate_selection.py`); never pad scarce behaviours by repetition.
 - **Breadth from more natlang domains** (chat and writing included) rather than anchor KL or broad mixing; forgetting
   general ability outside natlang is acceptable.
-- **Additions are bundled by expected merit**, not entered one at a time. Off by default today: Neuralese-declaring task variants
-  (`--neuralese-variants`), whole-graph Neuralese gradients and use bonus, the JOLT+ teacher and privileged twin,
+- **Additions are bundled by expected merit**, not entered one at a time. Neuralese-declaring task variants (`--neuralese-variants`, 1,381 rows) run in expert-iteration
+  collection by default (half of a task's groups, 2026-11-22). Off by default today: whole-graph Neuralese gradients and use bonus, the JOLT+ teacher and privileged twin,
   memetic guidance programs, interleaved SFT and QAT. Turn one on in the next run when it is likely to raise held
-  task success (Neuralese task variants are cheap: they are data); leave it off when it is not.
+  task success; leave it off when it is not.
 - **Never upweight a few tokens without per-token evidence**, and check an update's direction against its gradient
   before blaming the objective (a boundary weight of 32 and stale Muon momentum each once dominated updates).
 

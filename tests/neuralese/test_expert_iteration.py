@@ -558,3 +558,14 @@ def test_sft_gets_the_activation_memory_flag(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):           # no checkpoint written by the stubbed launch
         cycle.sft_stage()
     assert seen[0]['ACT'] == '24' and seen[0]['BUDGET'] == '100'
+
+
+def test_collection_runs_neuralese_variants_by_default_and_opts_out(tmp_path):
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    flags = cycle.variant_args()
+    assert flags[0] == '--neuralese-variants' and flags[1].endswith('natlang-rl-neuralese-variants-20261113/cases.jsonl')
+    assert float(flags[3]) == 0.5
+    assert ei.Cycle(_cycle_args([*argv, '--no-neuralese-variants'])).variant_args() == []
+
