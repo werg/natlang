@@ -20,3 +20,24 @@ Application functions own judgment and return application values. Callable folde
 Each existing domain function and composite becomes a public callable with its existing typed return. Specialist lambdas and TypeScript remain colocated below it. Explicit services enforce outside-world scope. The task descriptor is exact plumbing that binds the entry and initial inputs, never instructions encoding a teacher trajectory. The outcome verifier reads state and retained source evidence. Source identity, held separation and immutable receipts remain exact plumbing.
 
 Migration proceeds across the entire task registry. Existing task identities and source-group splits stay intact. Old captures retain original source identities. Reassessment produces an additional attestation and exposes successful subtrees only where evidence supports them. Diversity measurements count observed functions, depth, branching and domain compositions rather than imposed routes.
+
+
+## Implemented migration and evidence
+
+All 2,327 catalog tasks retain their original identities and goals and resolve to
+application entries. The declared entry registry is 116 kinds across 27 compiler
+roots; the complete catalog uses 114 entry programs. Native typed results replace
+the model-visible universal report. The verifier's remaining historical envelope
+is an internal adapter only. Existing traces retain their actual original entry.
+
+Shared provider mechanisms permit authorized rereads, extra discovery and
+concurrent identical requests. Outcome and scope checks remain independently
+attested; none requires the model to follow a particular child-call tree.
+Optional incorrect root returns are retained as observations and removed from
+supervision. Partial recovery admits only explicitly evidence-bound original
+ordinals, including independently valid actions in later-failed invocations.
+
+Runtime authority review: ambient .d.ts inclusion only changes compiler type
+roots. ProgramLoader still narrows explicit service bindings; NativeSession still
+filters services per actual frame scope. No engine, serving or learner protocol
+change is needed because all consume ordinary typed calls and trajectory IR.

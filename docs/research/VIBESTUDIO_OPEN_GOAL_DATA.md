@@ -977,3 +977,37 @@ contains 1,740 accepted outcomes, 1,284 training selectors, and 1,271
 local training selectors. It preserves the 08:00 selector snapshot in
 full. The managed collector preflight for this pin is queued behind the
 same Pop held evaluation. [Corrected commit pins](vibestudio-open-goal-pop-pins-composed-2324-framing.tsv)
+
+
+## Semantic application entries (2026-11-23)
+
+The full 2,327-task catalog now binds typed application functions, not a universal
+`runUserGoal` router or `UserGoalReport`. All original goal hashes, task identities,
+source groups and splits are preserved (1,748 train; 579 test). The shared library
+declares 116 entry kinds across 27 program roots; this catalog uses 114 entry
+programs. Existing specialist lambdas, callable-folder scopes and cross-domain
+composites remain available. An entry descriptor binds the actual named inputs,
+exact JavaScript JSON bytes, callable and application result type.
+
+Outcome checks verify the requested effects and required returned values against
+workspace evidence. They no longer require incidental tool order, exact read
+counts or generic final reports. Scope protection, claimed source evidence and
+application-required answers remain checked. Additional authorized exploration,
+retries and concurrent identical reads are permitted. Known incorrect optional
+root returns remain in the raw trace but are excluded from supervised targets;
+a completion mixing a valid action and an incorrect return is retained without
+inventing a safe token boundary.
+
+Historical captures retain their original program identity. Reassessment adds
+immutable evidence; it never rewrites the original outcome or labels partial
+work as task success. The first recovered cohort contains ten captures and 42
+independently checked decisions. Its additive receipt is
+`recovered-independent-decisions-20261122/receipt-v2.json` in the DGX campaign
+archive. Native trajectory IR remains the training representation. The existing
+live ingester and student reasoning fill consume admitted IR; raw teacher
+reasoning is not a student target.
+
+Compiler checks passed all 116 entry signatures. Focused validation passed 120
+Host tests, 32 system-testing tests, 30 shared-library/provider tests and 61
+capture-loader tests. Release assembly and live cutover are separate operational
+steps; these source checks do not claim all catalog tasks have succeeded live.
