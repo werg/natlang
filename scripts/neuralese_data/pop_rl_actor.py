@@ -1229,6 +1229,37 @@ def run_detached(host, cfg, remote_run, command, *, poll_seconds=30, away_second
             return 1
 
 
+def pull_learner_state(host, remote_run, local_state, *, attempts=3):
+    """Copy the learner state of ``remote_run`` to ``local_state`` as one save, never a mix of two: the learner
+    rotates whole directories (``save_learner_state``: stage -> root), and an rsync of the live directory across a
+    rotation pulled files of two saves ("file has vanished", 2026-11-22). A hardlink snapshot whose source directory
+    kept its inode throughout holds one save; it arrives beside ``local_state`` and replaces it whole. Returns False
+    when the learner has saved nothing yet."""
+    q = shlex.quote
+    root, snap = f'{remote_run}/learner-state', f'{remote_run}/learner-state.snap'
+    out = ssh_host(host, f'for i in 1 2 3 4 5 6 7 8 9 10; do a=$(stat -c %i {q(root)} 2>/dev/null || echo none); '
+                         f'rm -rf {q(snap)}; if [ "$a" != none ] && cp -al {q(root)} {q(snap)} 2>/dev/null && '
+                         f'[ "$(stat -c %i {q(root)} 2>/dev/null)" = "$a" ]; then '
+                         f'test -f {q(snap + "/learner_manifest.json")} && echo ok || echo empty; exit 0; fi; sleep 3; '
+                         f'done; echo busy', timeout=120).strip()
+    if out == 'empty':
+        return False
+    if out != 'ok':
+        raise RuntimeError(f'{host}: no consistent snapshot of {root} ({out})')
+    local_state = Path(local_state)
+    staged, old = local_state.with_name(local_state.name + '.pull'), local_state.with_name(local_state.name + '.old')
+    shutil.rmtree(staged, ignore_errors=True)
+    sync_from_remote(f'{snap}/', f'{staged}/', host, attempts=attempts)
+    if not (staged / 'learner_manifest.json').is_file():
+        raise RuntimeError(f'the learner state pulled from {host} has no manifest')
+    shutil.rmtree(old, ignore_errors=True)
+    if local_state.exists():
+        os.replace(local_state, old)
+    os.replace(staged, local_state)
+    shutil.rmtree(old, ignore_errors=True)
+    return True
+
+
 def restore_colab_actor(record):
     """Serve again the Colab actor ``run-sft`` stopped for a learner it did not fit beside (its recorded serve
     arguments); a failure is logged, never raised (the round's factors are already home)."""
@@ -1327,9 +1358,11 @@ def run_remote_sft(args):
                 '--', *sft_cmd]
     stop_sync = threading.Event()
     sync_interval = max(60.0, float(args.state_sync_minutes) * 60.0)
+    pulling = threading.Lock()      # one pull at a time (a 2 GB state takes ~8 min at 4.8 MB/s)
 
     def pull_state(attempts):
-        sync_from_remote(f'{remote_run}/learner-state/', f'{local_state}/', host, attempts=attempts)
+        with pulling:
+            pull_learner_state(host, remote_run, local_state, attempts=attempts)
         for name, local_name in (('train.jsonl', 'train.jsonl'), ('learner.log', 'train.log')):
             try:      # the logs follow the state; one not written yet (a learner that failed at start) is no error
                 sync_from_remote(f'{remote_run}/{name}', str(local_work / local_name), host, attempts=1)
@@ -1354,8 +1387,14 @@ def run_remote_sft(args):
     finally:
         stop_sync.set()
         sync_thread.join(timeout=30)
-        try:      # the latest learner state, so the DGX can resume a preempted run
-            pull_state(3)
+        # the latest learner state, so the DGX can resume a failed or preempted run; a finished round needs only its
+        # factors (the state's one use is a resume), so the 2 GB state no longer delays them
+        try:
+            if rc != 0:
+                pull_state(3)
+            else:     # the logs only (no lock: an in-flight periodic state pull must not hold up the factors)
+                for name, local_name in (('train.jsonl', 'train.jsonl'), ('learner.log', 'train.log')):
+                    sync_from_remote(f'{remote_run}/{name}', str(local_work / local_name), host, attempts=2)
         except Exception as err:
             log(event='Colab SFT post-run pull warning', error=repr(err)[:200])
     trained = time.time()

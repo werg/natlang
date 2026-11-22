@@ -768,3 +768,36 @@ def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remo
     events.clear()
     pop_rl_actor.write_json(pop_rl_actor.colab_state_path('g4'), {**record, 'beside_learner': True})
     assert pop_rl_actor.run_remote_sft(args) == 0 and events == []
+
+
+def test_learner_state_arrives_as_one_save_or_not_at_all(tmp_path, monkeypatch):
+    """An rsync of the live learner-state directory across the learner's rotation (stage -> root) pulled files of
+    two saves. The pull copies a hardlink snapshot taken while the directory kept its inode, into a staging directory
+    that replaces the local state whole; a learner that has saved nothing leaves the local state as it was."""
+    local = tmp_path / 'learner-state'
+    local.mkdir()
+    (local / 'learner_manifest.json').write_text('old')
+    (local / 'stale.pt').write_text('old')
+    replies, sent = ['ok'], []
+
+    def ssh_host(host, command, **kw):
+        sent.append(command)
+        return replies.pop(0) + '\n'
+
+    def sync_from(remote_path, local_path, host, **kw):
+        dest = Path(local_path)
+        dest.mkdir(parents=True)
+        (dest / 'learner_manifest.json').write_text('new')
+        (dest / 'adapter_factors_fp32.safetensors').write_text('new')
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'sync_from_remote', sync_from)
+    assert pop_rl_actor.pull_learner_state('g4', '/r', local) is True
+    assert sorted(p.name for p in local.iterdir()) == ['adapter_factors_fp32.safetensors', 'learner_manifest.json']
+    assert (local / 'learner_manifest.json').read_text() == 'new' and not list(tmp_path.glob('learner-state.*'))
+    assert 'cp -al /r/learner-state /r/learner-state.snap' in sent[0] and 'stat -c %i /r/learner-state' in sent[0]
+    replies[:] = ['empty']
+    assert pop_rl_actor.pull_learner_state('g4', '/r', local) is False and (local / 'learner_manifest.json').exists()
+    replies[:] = ['busy']
+    with pytest.raises(RuntimeError, match='consistent snapshot'):
+        pop_rl_actor.pull_learner_state('g4', '/r', local)
+    assert (local / 'learner_manifest.json').read_text() == 'new'
