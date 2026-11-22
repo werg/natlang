@@ -6898,3 +6898,27 @@ collection actor (shared GPU, so absolute speeds are low; ratios come from inter
   forward tok/s cumulative incl. compile under contention (sft-v8 full FT alone: 3.17k). checkpoint.pt loaded by the
   native engine and exported as SGLang serves it vs the learner's effective policy: mean 0.025 nats (p99 0.20) on 5.7k
   val tokens, inside the BF16 envelope. Run in /home/werg/data/fixa-sft/smoke2.
+
+## 2026-11-22 14:55 First Colab production: A100 fill for sft-v10's mix
+
+- **Bootstrap fixes found on the real VM** (Python 3.13 image, x86_64, no cargo, private fork repo):
+  - venv via uv, because the image has no ensurepip;
+  - uv from PATH;
+  - the fork's Rust extensions skipped (`SGLANG_BUILD_RUST_EXTS=none`; the single-engine actor does not use them);
+  - the private fork shipped from the DGX as `git archive <pinned commit>` with a `.natlang-archive` marker the
+    bootstrap checks.
+  - Bootstrap then completes in ~7 min.
+- **Access.**
+  - `~/.ssh/config` host `colab-g4` uses `colab ssh --proxy-mode -s g4a`, multiplexed (ControlMaster), because the
+    runtime allows one connection.
+  - The master is the unit `colab-g4a-tunnel` (Restart=always), carrying the forwards DGX:19731 → VM SGLang 9570 and
+    DGX:18731 → VM front 8570.
+- **Production use.**
+  - The VM serves sft-v9's collection policy 66422fcf (pin 0724bd764, the DGX fill actor's flags, KV 40 GB, 128
+    running).
+  - `colab-g4a-fill` (ledger, 3.5 GB) runs `filled_reasoning generate` against it at 128 in flight, into the shared
+    fill directory, so it feeds sft-v10's mix.
+  - Measured: 127 running, 85% GPU, ~4.4k gen tok/s, against the DGX collection actor's ~1.7k at 159 running beside
+    other work.
+- **Next for the VM.** It serves each new collection policy when a cycle starts; the A100 takes the SFT once the remote
+  SFT path runs in production (sft-v10's SFT stays on the DGX: the LoRA path's first production run is watched there).

@@ -266,7 +266,10 @@ def bootstrap(
     #    PYTHONPATH (natlang-env.sh), not installed (training/neuralese is not a package)
     pip = str(venv_dir / 'bin' / 'pip')
     if dry_run or not (venv_dir / 'bin' / 'python').exists():
-        _run([sys.executable, '-m', 'venv', '--system-site-packages', str(venv_dir)], dry_run=dry_run)
+        # Colab's interpreter ships without ensurepip (python3 -m venv fails there): uv builds the venv with pip seeded
+        _run([sys.executable, '-m', 'pip', 'install', '-q', 'uv'], dry_run=dry_run)
+        _run([sys.executable, '-m', 'uv', 'venv', '-q', '--seed', '--system-site-packages', '-p', sys.executable,
+              str(venv_dir)], dry_run=dry_run)
     _run([pip, 'install', '-q', '--upgrade', 'pip', 'uv'], dry_run=dry_run)
     _run([pip, 'install', '-q', '-r', str(repo_dir / 'training/neuralese/docker/requirements.txt'),
           'huggingface_hub', 'numpy'], dry_run=dry_run)
@@ -275,17 +278,26 @@ def bootstrap(
     # a dry run reads the pin of the checkout it runs from (nothing is cloned)
     fork = json.loads(((Path(__file__).resolve().parents[2] if dry_run else repo_dir)
                        / 'training/neuralese/sglang-fork.json').read_text())
-    if not dry_run and (sglang_dir / '.git').is_dir():
-        _run(['git', '-C', str(sglang_dir), 'fetch', '-q', 'origin'], dry_run=dry_run)
+    shipped = sglang_dir / '.natlang-archive'   # the fork repository is private: the DGX ships `git archive COMMIT`
+    if not dry_run and shipped.exists():
+        if shipped.read_text().strip() != fork['commit']:
+            raise RuntimeError(f'shipped SGLang fork is {shipped.read_text().strip()}, the pin wants {fork["commit"]}')
     else:
-        _run(['git', 'clone', '-q', fork['repository'], str(sglang_dir)], dry_run=dry_run)
-    _run(['git', '-C', str(sglang_dir), 'checkout', '-q', '-f', fork['commit']], dry_run=dry_run)
-    uv = str(venv_dir / 'bin' / 'uv')
+        if not dry_run and (sglang_dir / '.git').is_dir():
+            _run(['git', '-C', str(sglang_dir), 'fetch', '-q', 'origin'], dry_run=dry_run)
+        else:
+            _run(['git', 'clone', '-q', fork['repository'], str(sglang_dir)], dry_run=dry_run)
+        _run(['git', '-C', str(sglang_dir), 'checkout', '-q', '-f', fork['commit']], dry_run=dry_run)
+    # uv's binary: the venv's own, else the one on PATH (Colab installs it system-wide, outside the venv)
+    import shutil
+    uv = [next((str(p) for p in (venv_dir / 'bin' / 'uv',) if p.exists()), None) or shutil.which('uv') or 'uv']
     if dry_run or not (sglang_venv / 'bin' / 'python').exists():
-        _run([uv, 'venv', '-q', '-p', '3.12', str(sglang_venv)], dry_run=dry_run)
+        _run([*uv, 'venv', '-q', '-p', '3.12', str(sglang_venv)], dry_run=dry_run)
+    # the fork's Rust extensions (router, gateway) are not used by the single-engine actor and Colab has no cargo
+    os.environ.setdefault('SGLANG_BUILD_RUST_EXTS', 'none')
     pins = [f'{name.replace("_", "-")}=={version}' for name, version in (fork.get('dependency_pins') or {}).items()
             if not name.startswith('changed') and re.match(r'^[\d.]+$', str(version))]
-    _run([uv, 'pip', 'install', '-q', '-p', str(sglang_venv / 'bin' / 'python'), '-e', str(sglang_dir / 'python'), *pins,
+    _run([*uv, 'pip', 'install', '-q', '-p', str(sglang_venv / 'bin' / 'python'), '-e', str(sglang_dir / 'python'), *pins,
           '--extra-index-url', 'https://download.pytorch.org/whl/cu130', '--index-strategy', 'unsafe-best-match'],
          dry_run=dry_run)
 
