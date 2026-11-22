@@ -947,8 +947,15 @@ def train(args):
     out_dir.mkdir(parents=True, exist_ok=True)
     state_dir = Path(args.state_dir) if args.state_dir else out_dir / 'learner-state'
     trainer_state = None
+    trained_rounds: list[str] = []
+    round_id = getattr(args, 'round_id', None)
     if args.resume and (state_dir / 'learner_manifest.json').is_file():
         restored = load_learner_state(state_dir, learner, optimizer, verify_base_sha=source_sha)
+        trained_rounds = list(restored.get('trained_rounds') or ())
+        if round_id and round_id in trained_rounds:
+            print(json.dumps({'event': 'round already trained (dedup ledger)', 'round_id': round_id,
+                              'trained_rounds': trained_rounds}), flush=True)
+            return
         start_step = int((restored.get('batch_cursor') or {}).get('next_step', restored['manifest']['learner_step']))
         if restored['ref_bundles'] or restored['ref_rows'] is not None:
             ref_bundles, ref_rows = restored['ref_bundles'], restored['ref_rows']
@@ -1010,9 +1017,12 @@ def train(args):
         torch.cuda.reset_peak_memory_stats()
         return now
 
-    def save_state_now(next_step_idx: int):
+    def save_state_now(next_step_idx: int, *, mark_round_done: bool = False):
         nonlocal last_state_save
         t_save = time.time()
+        rounds_now = list(trained_rounds)
+        if mark_round_done and round_id and round_id not in rounds_now:
+            rounds_now.append(round_id)
         save_learner_state(
             state_dir, learner, optimizer, learner_step=next_step_idx,
             source_checkpoint_id=str(args.checkpoint), source_step=int(state['step']),
@@ -1023,6 +1033,7 @@ def train(args):
                            'temperature': args.ambient_temperature},
             data_manifest_sha256=chains_sha,
             batch_cursor={'next_step': next_step_idx, 'total_steps': total},
+            trained_rounds=rounds_now,
             ref_bundles=ref_bundles, ref_rows=ref_rows,
             trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best,
                            'schedule': {'total': total, 'steps': len(steps)}},
@@ -1123,7 +1134,7 @@ def train(args):
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
-    save_state_now(completed_step)
+    save_state_now(completed_step, mark_round_done=(not args.max_steps))
     if args.max_steps and not args.checkpoint_at_max_steps:
         return
     out_path = out_dir / 'checkpoint.pt'
@@ -1134,6 +1145,16 @@ def train(args):
                 leaf.copy_(best['leaves'][name].to(device=leaf.device, dtype=leaf.dtype))
         export_step = best['step']
         print(json.dumps({'kept_best_val': {'loss': best['loss'], 'step': best['step']}}), flush=True)
+    factors_dir = getattr(args, 'export_factors_dir', None)
+    if factors_dir:
+        from natlang_neuralese.train.learner_state import export_adapter_factors
+        f_exported = export_adapter_factors(
+            learner, factors_dir, base_checkpoint_sha256=source_sha, learner_step=export_step,
+            round_id=round_id, source_checkpoint_id=str(args.checkpoint), objective_version='sft_ambient_v1',
+        )
+        print(json.dumps({'adapter_factors': f_exported}), flush=True)
+        if getattr(args, 'factors_only', False):
+            return
     exported = export_merged_checkpoint(learner, state, out_path, source_sha256=source_sha,
                                         learner_step=export_step, special_ids=special)
     print(json.dumps({'checkpoint': str(out_path), **exported}), flush=True)
@@ -1232,6 +1253,9 @@ def main():
     p.add_argument('--state-dir', help='resumable learner state directory (default OUT_DIR/learner-state)')
     p.add_argument('--state-save-minutes', type=float, default=15.,
                    help='save resumable learner state atomically every N minutes (default 15 for Colab preemption safety; 0: end only)')
+    p.add_argument('--round-id', help='async-train round identifier recorded in learner_state dedup ledger')
+    p.add_argument('--export-factors-dir', help='write FP32 LoRA factors + trainable rows + policy_manifest.json (WAN shipping)')
+    p.add_argument('--factors-only', action='store_true', help='with --export-factors-dir: skip local 3.4 GB merged checkpoint.pt write (DGX merges)')
     p.add_argument('--max-steps', type=int, default=0, help='stop after this many optimizer steps without writing a checkpoint')
     p.add_argument('--share-prefix-tokens', type=int, default=256,
                    help='compute a prefix that several of a step\'s chains share (system prompt, task prompt, earlier calls) '
