@@ -1,11 +1,14 @@
 # Open user goals for Vibestudio teacher data
 
 An open goal is the user's request and the initial Vibestudio workspace. The
-Natlang root receives the request as a single string. Installed capability
-definitions and authorized service interfaces stay visible. The harness keeps
+task selects an application-specific typed Natlang entry and named inputs.
+Installed capability definitions, specialist lambdas and authorized service
+interfaces stay visible. The harness keeps
 expected outcomes, target selection, source coordinates, and evaluation checks
-private. The teacher supplies the actions that connect the initial state to the
-goal.
+private. The teacher chooses actions and function calls that connect the initial
+state to the goal. The native trajectory IR records that execution; a universal
+final report is not part of the application contract. The dated sections below
+retain historical release evidence; the semantic application migration is current.
 
 The rollout for each case records the root and every observed child invocation,
 including attempts that failed and the resulting state. Admission requires
@@ -1009,5 +1012,5 @@ reasoning is not a student target.
 
 Compiler checks passed all 116 entry signatures. Focused validation passed 120
 Host tests, 32 system-testing tests, 30 shared-library/provider tests and 61
-capture-loader tests. Release assembly and live cutover are separate operational
+capture-loader tests (122 across loader, ingestion and SFT after integration fixes). Release assembly and live cutover are separate operational
 steps; these source checks do not claim all catalog tasks have succeeded live.
