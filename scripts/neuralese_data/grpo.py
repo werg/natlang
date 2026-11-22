@@ -60,7 +60,9 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   rest never start (``wave_plan``, ``PassRatePrior``, ``Collector._after_wave``) and the slots go to other groups.
 * self-distillation: ``--sd-weight`` replays the run's own rare verified successes; ``--sd-teacher-weight`` adds verified
   teacher-pool successes of tasks in the pass band or all-fail as a ratio-free term (``TeacherDemos``).
-* reasoning RL against fixed teacher actions (``--reasoning-rl-weight``, default on; 0 opts out): a walk along
+* reasoning RL against fixed teacher actions (``--reasoning-rl-weight``, off by default since 2026-11-22, async-train
+  §8: its default objective is the privileged twin's KL term, which the plan keeps off because JOLT+ guided successes
+  already carry that signal as SFT targets and GRPO groups; 1.0 opts in): a walk along
   teacher trajectories (JOLT+ teacher successes, ``TeacherDemos``) samples the student's own think blocks before each
   teacher action and carries the best forward as history. Each block trains token by token on the forward KL from the
   policy's privileged twin, which sees the teacher action (``--reasoning-rl-objective twin-fkl``, default since
@@ -269,30 +271,70 @@ def check_pin(work, commit, unpinned):
     return str(REPO)
 
 
-COMPACT_GROUP_SCHEMA = 'natlang.compact-scored-group/1'
+COMPACT_GROUP_SCHEMA = 'natlang.compact-scored-group/2'   # /1 dropped every sampled token
+
+
+def parse_extra_actor(piece, default_slots=1):
+    """One ``--extra-actor URL[=SLOTS][@HOST]`` spec -> ``{'front', 'slots', 'host', 'sglang'}``: ``HOST`` is the ssh
+    host of a remote actor (Colab G4, Pop; its SGLang server listens on its own loopback, port + 1000), none for an
+    actor on this machine (SGLang on the front's host, port + 1000)."""
+    from urllib.parse import urlparse
+    piece = piece.strip()
+    host = None
+    head, at, tail = piece.rpartition('@')
+    if at and '/' not in tail:
+        piece, host = head, tail
+    count = default_slots
+    url, eq, value = piece.rpartition('=')
+    if eq:
+        piece, count = url, int(value)
+    front = piece.rstrip('/')
+    parsed = urlparse(front)
+    port = (parsed.port or 80) + 1000
+    sglang = f'http://127.0.0.1:{port}' if host else f'{parsed.scheme}://{parsed.hostname}:{port}'
+    return {'front': front, 'slots': max(1, int(count)), 'host': host, 'sglang': sglang}
+
+
+def parse_extra_actors(extra_actors=(), default_slots=1):
+    return [parse_extra_actor(piece, default_slots) for raw in extra_actors or () for piece in str(raw).split(',')
+            if piece.strip()]
 
 
 def parse_actor_specs(primary_actor, extra_actors=(), default_slots=1):
-    """Parse primary ``--actor`` plus repeatable ``--extra-actor URL[=SLOTS]`` specs into ``[(url, slots), ...]``
+    """Parse primary ``--actor`` plus repeatable ``--extra-actor URL[=SLOTS][@HOST]`` specs into ``[(url, slots), ...]``
     (async-train §7.1: multi-actor GRPO collection across DGX + Colab G4 BF16 actors)."""
-    specs = []
-    if extra_actors:
-        for raw in extra_actors:
-            for piece in str(raw).split(','):
-                piece = piece.strip()
-                if not piece:
-                    continue
-                if '=' in piece:
-                    url, _, count = piece.rpartition('=')
-                    specs.append((url.rstrip('/'), max(1, int(count))))
-                else:
-                    specs.append((piece.rstrip('/'), max(1, int(default_slots))))
+    specs = [(actor['front'], actor['slots']) for actor in parse_extra_actors(extra_actors, default_slots)]
     if primary_actor:
         primary = str(primary_actor).rstrip('/')
         extra_slots = sum(c for _, c in specs)
         primary_slots = max(1, int(default_slots) - extra_slots) if specs else max(1, int(default_slots))
         specs.insert(0, (primary, primary_slots))
     return specs
+
+
+def extra_actor_start_versions(extra_actors, start_sha, step, info=None):
+    """Each ``--extra-actor``'s version before its first publication: 0 for an actor attested on the start policy at a
+    fresh start; otherwise unknown (a resume, another policy, unreachable): far behind, so its slots idle until the
+    step's publication lands there (``Collector.actor_lagging``)."""
+    def read(front):
+        with urllib.request.urlopen(front + '/v1/neuralese/info', timeout=60) as response:
+            return json.loads(response.read())
+    versions = {}
+    for actor in extra_actors:
+        served = None
+        try:
+            served = ((info or read)(actor['front']).get('rl_policy_binding') or {}).get('checkpoint_sha256')
+        except (OSError, ValueError):
+            pass
+        versions[actor['front']] = 0 if step == 0 and served == start_sha else -(10 ** 9)
+    return versions
+
+
+def rho_stale(role, stale):
+    """A chain's ``rho_by_staleness`` bucket: its episode's staleness for the students' own episodes; None for a JOLT+
+    teacher attempt, which trains in student form without its guidance, so its ratio measures no actor drift (replay,
+    SD and reasoning-RL chains carry none either)."""
+    return None if role == 'teacher' else stale
 
 
 def rho_by_staleness_summary(buckets):
@@ -313,79 +355,70 @@ def rho_by_staleness_summary(buckets):
     return out or None
 
 
-def pack_scored_group(group_dir, out_path):
-    """Pack a scored GRPO group directory into a compact zstd-compressed payload (~8 bytes/completion token: int32
-    token ids, float32 sampled logprobs, rewards, decisions, policy versions; omits raw text/logs; async-train §7.1)."""
+def packed_block_ids(episodes):
+    """Every Neuralese state id the learner may read from the actor's store for these lowered episodes: each call's
+    ``imports`` and the imports inside its producer documents (``sources``)."""
+    ids = set()
+    for episode in episodes:
+        for row in [*episode.get('rows', ()), *episode.get('decisions', ())]:
+            ids.update(block for _, block in row.get('imports') or ())
+            for document in (row.get('sources') or {}).values():
+                ids.update(block for _, block in document.get('imports') or ())
+    return sorted(ids)
+
+
+def pack_scored_group(collector, group, out_path):
+    """Pack one scored group as exactly what the learner reads (async-train §7.1: scored groups ship from the DGX
+    collectors to a remote learner): ``load_group``'s output (task id, lowered episodes with their int32 prompt and
+    sampled ids, float32 actor log-probabilities, decisions, rewards with graded/memetic parts, roles; unscored,
+    truncated and leaked JOLT+ attempts already dropped and guidance stripped, as on the DGX learner), the group's
+    versions, the lowering's counters, and the bytes of every stored Neuralese state those calls import. Lossless:
+    ``unpack_scored_group`` returns the same structures, byte for byte."""
     import pickle
     import zstandard as zstd
-    group_dir, out_path = Path(group_dir), Path(out_path)
+    out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    cases_text = (group_dir / 'cases.jsonl').read_text() if (group_dir / 'cases.jsonl').exists() else ''
-    rewards_text = (group_dir / 'rewards.jsonl').read_text() if (group_dir / 'rewards.jsonl').exists() else ''
-    versions = json.loads((group_dir / 'versions.json').read_text()) if (group_dir / 'versions.json').exists() else []
-    episodes = []
-    rollouts_path = group_dir / 'rollouts.jsonl'
-    if rollouts_path.exists():
-        for line in rollouts_path.open():
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            compact_turns = []
-            for turn in row.get('turns') or ():
-                cap = turn.get('capture') or turn.get('exact') or {}
-                p_ids = cap.get('prompt_ids') or cap.get('prompt_token_ids') or []
-                s_ids = cap.get('sample_ids') or cap.get('completion_token_ids') or []
-                s_lp = cap.get('sample_logprobs') or cap.get('logprobs') or []
-                entry = {
-                    'prompt_ids': np.asarray(p_ids, dtype=np.int32),
-                    'sample_ids': np.asarray(s_ids, dtype=np.int32),
-                    'sample_logprobs': np.asarray(s_lp, dtype=np.float32),
-                }
-                if turn.get('decision') is not None:
-                    entry['decision'] = turn['decision']
-                compact_turns.append(entry)
-            episodes.append({
-                'sample': row.get('sample'),
-                'task_id': row.get('task_id'),
-                'outcome': row.get('outcome'),
-                'reward': row.get('reward'),
-                'jolt_role': row.get('jolt_role', 'student'),
-                'policy_sha256': (row.get('policy') or {}).get('checkpoint_sha256'),
-                'turns': compact_turns,
-            })
-    payload = {
-        'schema': COMPACT_GROUP_SCHEMA,
-        'group_name': group_dir.name,
-        'cases_jsonl': cases_text,
-        'rewards_jsonl': rewards_text,
-        'versions': versions,
-        'episodes': episodes,
-    }
+    stats = collections.Counter()
+    generated, read = collector.generated, collector.episodes
+    task_id, episodes, versions = load_group(collector, group, stats)
+    states = getattr(collector, 'states', None)
+    blocks = {}
+    for block in packed_block_ids(episodes):
+        path = states.path(block) if states is not None else None
+        if path is not None and path.exists():
+            blocks[block] = path.read_bytes()
+    payload = {'schema': COMPACT_GROUP_SCHEMA, 'group': group, 'task_id': task_id, 'versions': list(versions),
+               'episodes': episodes, 'stats': dict(stats), 'generated': collector.generated - generated,
+               'episodes_read': collector.episodes - read, 'blocks': blocks}
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
     compressed = zstd.ZstdCompressor(level=3).compress(raw)
     tmp = out_path.with_name(out_path.name + '.partial')
     tmp.write_bytes(compressed)
     os.replace(tmp, out_path)
-    return {'path': str(out_path), 'bytes': len(compressed), 'raw_bytes': len(raw), 'episodes': len(episodes)}
+    return {'path': str(out_path), 'bytes': len(compressed), 'raw_bytes': len(raw), 'episodes': len(episodes),
+            'blocks': len(blocks)}
 
 
-def unpack_scored_group(archive_path, dest_dir):
-    """Unpack a ``pack_scored_group`` archive into ``dest_dir`` and return its payload dict."""
+def unpack_scored_group(archive_path, store_dir=None):
+    """The payload of a ``pack_scored_group`` archive; its Neuralese states are written into ``store_dir`` (the
+    receiving learner's ``--actor-store``: ``blocks/<id[5:7]>/<id>.safetensors``, as ``NativeStates`` reads them)."""
     import pickle
     import zstandard as zstd
-    dest_dir = Path(dest_dir)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    raw = zstd.ZstdDecompressor().decompress(Path(archive_path).read_bytes())
-    payload = pickle.loads(raw)
+    payload = pickle.loads(zstd.ZstdDecompressor().decompress(Path(archive_path).read_bytes()))
     if payload.get('schema') != COMPACT_GROUP_SCHEMA:
         raise ValueError(f'{archive_path}: unexpected compact group schema {payload.get("schema")!r}')
-    if payload.get('cases_jsonl'):
-        (dest_dir / 'cases.jsonl').write_text(payload['cases_jsonl'])
-    if payload.get('rewards_jsonl'):
-        (dest_dir / 'rewards.jsonl').write_text(payload['rewards_jsonl'])
-    (dest_dir / 'versions.json').write_text(json.dumps(payload.get('versions') or []) + '\n')
-    with (dest_dir / 'compact-episodes.pkl').open('wb') as handle:
-        pickle.dump(payload['episodes'], handle, protocol=pickle.HIGHEST_PROTOCOL)
+    if payload['blocks'] and store_dir is None:
+        raise ValueError(f'{archive_path} carries {len(payload["blocks"])} Neuralese states: give the store to write them to')
+    if store_dir is not None:
+        from lower_rollout_turns import NativeStates
+        states = NativeStates(store_dir)
+        for block, data in payload['blocks'].items():
+            path = states.path(block)
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                partial = path.with_name(path.name + '.partial')
+                partial.write_bytes(data)
+                os.replace(partial, path)
     return payload
 
 
@@ -405,6 +438,9 @@ class Collector:
         self.outstanding = 0                        # groups created and not yet handed to the learner
         self.next_group, self.cursor = first_group, cursor
         self.version = 0                            # the policy version the actor serves now
+        # the version each extra actor (``--extra-actor``) serves: set by its own publication (``WeightSync``); an
+        # actor whose publication failed keeps its last version and its slots idle once it lags past --max-staleness
+        self.actor_versions = {}
         self.by_id = {row['id']: row for row in tasks}
         self.walk = ExploreWalk(tasks, getattr(args, 'explore_wrapper_share', 1.), getattr(args, 'explore_held_weight', 1.))
         if work is not None:
@@ -643,6 +679,14 @@ class Collector:
         expanded = [url for url, count in endpoints for _ in range(max(1, int(count)))]
         return expanded[index % len(expanded)]
 
+    def served_version(self, url):
+        """The policy version ``url`` serves now: the primary actor's is ``version``, an extra actor's its own."""
+        return self.actor_versions.get(url, self.version) if url != self.args.actor else self.version
+
+    def actor_lagging(self, url):
+        """An extra actor more than --max-staleness versions behind (its publication failed): start nothing there."""
+        return self.version - self.served_version(url) > getattr(self.args, 'max_staleness', 2)
+
     def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
@@ -659,10 +703,15 @@ class Collector:
             workers.mkdir(exist_ok=True)
             key = entry['key']
             actor_url = self.endpoint_for_slot(index)
+            if self.actor_lagging(actor_url):
+                with self.lock:
+                    self.pending.appendleft(item)
+                time.sleep(5)
+                continue
             entry = {**entry, 'rl_endpoint': actor_url}
             queue_file, journal = workers / f'{key}.queue.jsonl', workers / f'{key}.journal.jsonl'
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
-            started = self.version
+            started = self.served_version(actor_url)     # the version this episode's actor serves at its start
             command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file), str(journal),
                        '--runtime', str(self.runtime), '--server', actor_url,
                        '--chat-completions-url', actor_url + '/v1/chat/completions', '--model-id', 'natlang-rl',
@@ -1257,10 +1306,13 @@ class WeightSync:
 
     def __init__(self, learner, export_dir, sglang_url, weights_dir, *, front_url=None, producer_from_embedding=True,
                  base_sha256=None, start_policy=None, interface_ids=((), ()), tied=True, sentinel_ids=None,
-                 sentinel_tolerance=SENTINEL_TOLERANCE):
+                 sentinel_tolerance=SENTINEL_TOLERANCE, extra_actors=(), on_actor=None):
         import mmap
         import torch
         self.learner, self.export_dir, self.sglang_url = learner, Path(export_dir), sglang_url
+        # ``--extra-actor`` actors (``parse_extra_actor``): every version the primary actor serves is published to each
+        # of them too, attested on all its routes; ``on_actor(front, version)`` reports the version each one serves
+        self.extra_actors, self.on_actor = [dict(a) for a in extra_actors], on_actor
         self.weights_dir, self.front_url = Path(weights_dir), front_url
         self.producer_from_embedding, self.base_sha256 = producer_from_embedding, base_sha256
         self.marker_ids, self.override_ids = (tuple(int(i) for i in ids) for ids in interface_ids)
@@ -1483,29 +1535,32 @@ class WeightSync:
         if not json.loads(answer).get('success', False):
             raise RuntimeError(f'actor weight reload after release failed: {answer[:400]}')
 
-    def _info(self):
-        with urllib.request.urlopen(self.front_url + '/v1/neuralese/info', timeout=60) as response:
+    def _info(self, front_url=None):
+        with urllib.request.urlopen((front_url or self.front_url) + '/v1/neuralese/info', timeout=60) as response:
             return json.loads(response.read())
 
-    def _bind(self, target, timing):
-        """Serve ``target`` ({dir, version, policy_id, weights_sha256, tensor_identity}) on every route and check the
-        measured attestation. Leaves SGLang generating."""
+    def _bind(self, target, timing, sglang_url=None, front_url=None):
+        """Serve ``target`` ({dir, version, policy_id, weights_sha256, tensor_identity}) on every route of the primary
+        actor (or of the actor at ``sglang_url``/``front_url`` on this machine) and check the measured attestation.
+        Leaves SGLang generating."""
         from natlang_neuralese.serve.sglang_actor import attest_all_routes
+        sglang_url = sglang_url or self.sglang_url
+        front_url = front_url or self.front_url
         t = time.time()
-        post(self.sglang_url + '/pause_generation', {'mode': 'retract'})
+        post(sglang_url + '/pause_generation', {'mode': 'retract'})
         try:
-            raw = post(self.sglang_url + '/update_weights_from_disk',
+            raw = post(sglang_url + '/update_weights_from_disk',
                        {'model_path': str(target['dir']), 'flush_cache': True, 'weight_version': str(target['version'])})
             if not json.loads(raw).get('success', False):
                 raise RuntimeError(f'update_weights_from_disk failed: {raw[:300]}')
             timing['actor_update_s'] = round(time.time() - t, 2)
-            if self.front_url is not None:
+            if front_url is not None:
                 t = time.time()
-                post(self.front_url + '/v1/neuralese/rebind-policy',
+                post(front_url + '/v1/neuralese/rebind-policy',
                      {'policy_id': target['policy_id'], 'weights_sha256': target['weights_sha256'],
                       'tensor_identity': target['tensor_identity'], 'version': target['version'],
                       'export_dir': str(target['dir'])})
-                ok, mismatches = attest_all_routes(self._info(), {
+                ok, mismatches = attest_all_routes(self._info(front_url), {
                     'policy_id': target['policy_id'], 'version': target['version'], 'model_path': str(target['dir']),
                     'weights_sha256': target['weights_sha256'], 'tensor_identity': target['tensor_identity']})
                 if not ok:
@@ -1513,7 +1568,37 @@ class WeightSync:
                 timing['rebind_s'] = round(time.time() - t, 2)
                 timing['routes_attested'] = True
         finally:
-            post(self.sglang_url + '/continue_generation', {})
+            post(sglang_url + '/continue_generation', {})
+
+    def _publish_extra(self, target, timing):
+        """Publish the version the primary actor now serves to every ``--extra-actor``: one on this machine reloads the
+        slot directory itself (``_bind``), a remote one gets the export copied to its host and rebinds there
+        (``pop_rl_actor.rebind_actor``: update_weights_from_disk, rebind-policy, attest_all_routes). An actor that fails
+        keeps its last version (``on_actor`` is told nothing new) and the run goes on."""
+        report = {}
+        for actor in self.extra_actors:
+            t, entry = time.time(), {}
+            try:
+                if actor.get('host'):
+                    import pop_rl_actor
+                    rebind = pop_rl_actor.rebind_actor(
+                        front_url=actor['front'], sglang_url=actor['sglang'], policy_id=target['policy_id'],
+                        version=target['version'], weights_sha256=target['weights_sha256'],
+                        tensor_identity=target['tensor_identity'], export_dir=str(target['dir']), host=actor['host'],
+                        host_profile=actor.get('profile', 'colab_g4'))
+                    entry['export_dir'] = rebind.get('export_dir')
+                else:
+                    self._bind(target, entry, sglang_url=actor['sglang'], front_url=actor['front'])
+                actor['version'] = target['version']
+                entry.update(ok=True)
+                if self.on_actor is not None:
+                    self.on_actor(actor['front'], target['version'])
+            except Exception as error:
+                entry.update(ok=False, error=repr(error)[:400], serving=actor.get('version'))
+            entry['seconds'] = round(time.time() - t, 2)
+            report[actor['front']] = entry
+        if report:
+            timing['extra_actors'] = report
 
     def _sentinel(self, learner_logp, timing):
         """SGLang's (and a resident native engine's) sentinel log-probabilities against the learner's and each other."""
@@ -1565,6 +1650,12 @@ class WeightSync:
                 ok, answer = False, f'publish failed: {error!r}'[:600]
             self.last = {'version': version, 'ok': ok, 'answer': None if ok else answer, **timing}
             on_done(version, ok)
+            if ok and self.extra_actors and self.publishing is not None:
+                # the primary serves the version (episodes there are stamped with it from now on); then every extra
+                # actor, each stamped with its own version as it lands (``on_actor``)
+                extra = {}
+                self._publish_extra(self.publishing, extra)
+                self.last.update(extra)
 
         def body(timing):
             t = time.time()
@@ -3913,12 +4004,15 @@ def train(args):
         sentinel_ids = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json')).encode(
             SENTINEL_TEXT, add_special_tokens=False).ids
     config = state['model_config']
+    extra_actors = parse_extra_actors(args.extra_actor, args.slots)
     sync = WeightSync(learner, args.actor_export, None if args.no_actor_sync else sglang_url, weights_dir,
                       front_url=None if args.no_actor_sync else args.actor,
                       producer_from_embedding=not args.frozen_producer_table, base_sha256=source_sha,
                       start_policy={'policy_id': source_sha, 'version': 0},
                       interface_ids=(config['marker_ids'], config.get('token_override_ids') or ()),
-                      tied=native_rows['tied_head'], sentinel_ids=sentinel_ids)
+                      tied=native_rows['tied_head'], sentinel_ids=sentinel_ids,
+                      extra_actors=() if args.no_actor_sync else extra_actors,
+                      on_actor=lambda front, version: collector.actor_versions.__setitem__(front, version))
     atexit.register(shutil.rmtree, weights_dir, True)
     drop_cache([Path(args.actor_export) / 'model.safetensors'])
     last_state_save_info = None
@@ -3947,6 +4041,9 @@ def train(args):
         replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r), tokenizer=corpus_tokenizer)
                           for spec in args.replay_corpus]
     collector.version = step
+    if extra_actors and not args.replay:
+        collector.actor_versions.update(extra_actor_start_versions(extra_actors, source_sha, step))
+        log_line(log, {'event': 'extra actors', 'actors': extra_actors, 'versions': collector.actor_versions})
     if args.resume and not args.replay:
         reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
         if consumed_groups:
@@ -4555,7 +4652,9 @@ def train(args):
                     chain['advantage'] = advantage
                     chain['episode'] = key
                     chain['role'] = episode.get('role', 'student')
-                    chain['stale'] = stale
+                    # rho per staleness (``rho_by_staleness``) covers the students' own sampled episodes only: a
+                    # JOLT+ teacher attempt trains in student form without its guidance, so its ratio is no actor drift
+                    chain['stale'] = rho_stale(chain['role'], stale)
                     chains.append(chain)
                 for d in episode['decisions']:
                     # every option is scored as its own copy of the prompt, so a decision is one forward of K prompts:
@@ -5362,8 +5461,12 @@ def build_parser():
                    help='sft_sources WORK whose extracted, replayed teacher successes are the demonstrations (repeatable; '
                         'default: the registry role grpo-sd-teacher)')
     t.add_argument('--reasoning-rl-weight', type=float, default=0.0,
-                   help='reasoning RL against fixed teacher actions (ReasoningRL): default 0.0 (off; async-train §8: '
-                        'JOLT+ replaces the privileged twin by default; pass 1.0 to opt back in)')
+                   help='reasoning RL against fixed teacher actions (ReasoningRL): a search along teacher trajectory '
+                        'segments samples the student\'s own think blocks; this scales their training term, the forward '
+                        'KL from the privileged twin (the policy given the teacher action; --reasoning-rl-objective '
+                        'twin-fkl, the default) or their group-normalized return (sequence). Default 0: off, the '
+                        'privileged twin\'s KL term that async-train §8 keeps off (JOLT+ guided successes carry its '
+                        'signal); 1.0 opts in')
     t.add_argument('--reasoning-rl-action-weight', type=float, default=0.05,
                    help='the teacher action after each closed sampled think block as a ratio-free cross-entropy (0: the '
                         'reasoning term alone)')

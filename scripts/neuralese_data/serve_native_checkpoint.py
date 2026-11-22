@@ -112,7 +112,10 @@ def main() -> None:
                              'per context token; the learner recomputes logprobs and corrects the gap with TIS')
     parser.add_argument('--sglang-weight-dtype', default='bfloat16', choices=('bfloat16', 'fp8'),
                         help='SGLang linear weight precision (async-train §3): bfloat16 (default, required for held eval '
-                             'and GRPO) or fp8 (SFT collection actors only; conv states and lm_head stay BF16)')
+                             'and GRPO) or fp8 (SFT collection actors only: online FP8 projections, per-channel scales; '
+                             'conv states and the tied embedding/LM head stay BF16). Served as BF16, with a '
+                             'sglang_weight_dtype_fallback event, on GPUs below sm_89 (A100) or a fork without '
+                             'NATLANG_FP8_WEIGHTS')
     parser.add_argument('--sglang-mamba-strategy', default='extra_buffer', choices=('extra_buffer', 'no_buffer'),
                         help='radix cache for the conv/recurrent state: extra_buffer also keeps the state every track '
                              'interval, so a prompt can reuse a prefix that ends inside an earlier sequence (Pop, FP8 KV, '
@@ -394,10 +397,46 @@ def attest_sglang_source(python, fork, pythonpath=''):
               # natlang_capture writes / natlang_import reads native-state files of the store's format (path handoff)
               'native_state_files': params.is_file() and 'NATLANG_NATIVE_STATE_FILES = True' in params.read_text(),
               # LFM3 serves n-gram speculative chains with exact rollback and the natlang records of the verify pass
-              'speculative_ngram': params.is_file() and 'NATLANG_SPECULATIVE_NGRAM = True' in params.read_text()}
+              'speculative_ngram': params.is_file() and 'NATLANG_SPECULATIVE_NGRAM = True' in params.read_text(),
+              # online FP8 weights run in LFM3's natlang projection paths and reload in place (collection profile)
+              'fp8_weights': lfm3.is_file() and 'NATLANG_FP8_WEIGHTS = True' in lfm3.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
+
+
+FP8_MIN_CAPABILITY = (8, 9)   # FP8 tensor-core GEMM: Ada (sm_89), Hopper, Blackwell (GB10 sm_121); not A100 (sm_80)
+
+
+def gpu_capability(device_index=0):
+    """(major, minor) of the serving GPU, or None when it cannot be read."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return tuple(torch.cuda.get_device_capability(device_index))
+    except Exception:
+        pass
+    try:
+        import subprocess
+        done = subprocess.run(['nvidia-smi', '--query-gpu=compute_cap', '--format=csv,noheader'], text=True,
+                              capture_output=True, timeout=30)
+        major, minor = done.stdout.split()[device_index].split('.')
+        return int(major), int(minor)
+    except Exception:
+        return None
+
+
+def serving_weight_dtype(requested, source, capability):
+    """(weight dtype the actor serves, reason when it is not the requested one). FP8 weights (the collection profile,
+    async-train §3) need FP8 GEMM hardware (sm_89+) and a fork whose LFM3 natlang projections run them
+    (``NATLANG_FP8_WEIGHTS``); otherwise the actor serves BF16 and says so."""
+    if requested != 'fp8':
+        return requested, None
+    if not source.get('fp8_weights'):
+        return 'bfloat16', 'the SGLang fork has no NATLANG_FP8_WEIGHTS (FP8 LFM3 natlang projections)'
+    if capability is None or tuple(capability) < FP8_MIN_CAPABILITY:
+        return 'bfloat16', f'GPU capability {capability} has no FP8 GEMM (needs sm_89+)'
+    return 'fp8', None
 
 
 def kv_layout(export_dir, args, source):
@@ -509,7 +548,10 @@ def launch_sglang(engine, args, checkpoint, release=None):
                    if args.sglang_spec_draft > 0 and source.get('speculative_ngram') else None)
     swa = (['--swa-full-tokens-ratio', str(args.sglang_swa_ratio)] if layout == 'hybrid-swa'
            else ['--disable-hybrid-swa-memory'] if args.sglang_full_kv else [])
-    weight_dtype = getattr(args, 'sglang_weight_dtype', 'bfloat16')
+    weight_dtype, why = serving_weight_dtype(getattr(args, 'sglang_weight_dtype', 'bfloat16'), source, gpu_capability())
+    if why:
+        print(json.dumps({'event': 'sglang_weight_dtype_fallback', 'requested': args.sglang_weight_dtype,
+                          'serving': weight_dtype, 'reason': why}), flush=True)
     command = [python, '-m', 'sglang.launch_server', '--model-path', str(export_dir), '--host', '127.0.0.1',
                '--port', str(port), '--dtype', 'bfloat16', '--mem-fraction-static', f'{fraction:.4f}',
                *(['--quantization', 'fp8'] if weight_dtype == 'fp8' else []),

@@ -344,26 +344,20 @@ def test_grpo_rho_by_staleness_compact_group_and_defaults(tmp_path):
     specs = grpo.parse_actor_specs('http://dgx:8460', ['http://g4a:18531=32', 'http://g4b:18531=32'], default_slots=96)
     assert specs == [('http://dgx:8460', 32), ('http://g4a:18531', 32), ('http://g4b:18531', 32)]
 
-    # Compact scored-group pack / unpack round-trip
-    gdir = tmp_path / 'g000001'
-    gdir.mkdir()
-    (gdir / 'cases.jsonl').write_text(json.dumps({'id': 'task-1'}) + '\n')
-    (gdir / 'rewards.jsonl').write_text(json.dumps({'task_id': 'task-1', 'reward': 1.0}) + '\n')
-    (gdir / 'versions.json').write_text(json.dumps([3, 3]) + '\n')
-    (gdir / 'rollouts.jsonl').write_text(json.dumps({
-        'sample': 0, 'task_id': 'task-1', 'outcome': 'success', 'reward': {'quality': 1.0},
-        'policy': {'checkpoint_sha256': 'f' * 64},
-        'turns': [{'capture': {'prompt_ids': [1, 2, 3], 'sample_ids': [4, 5], 'sample_logprobs': [-0.2, -0.3]}}],
-    }) + '\n')
-    archive = tmp_path / 'g000001.compact.zst'
-    meta = grpo.pack_scored_group(gdir, archive)
-    assert archive.is_file() and meta['episodes'] == 1
-    out_dir = tmp_path / 'unpacked'
-    unpacked = grpo.unpack_scored_group(archive, out_dir)
-    assert unpacked['versions'] == [3, 3]
-    ep = unpacked['episodes'][0]
-    assert np.array_equal(ep['turns'][0]['sample_ids'], np.asarray([4, 5], dtype=np.int32))
-    assert np.allclose(ep['turns'][0]['sample_logprobs'], np.asarray([-0.2, -0.3], dtype=np.float32))
+
+def test_fp8_collection_weights_need_fp8_hardware_and_the_forks_fp8_projections():
+    import serve_native_checkpoint as serve
+    fork = {'fp8_weights': True}
+    assert serve.serving_weight_dtype('bfloat16', fork, (12, 1)) == ('bfloat16', None)
+    assert serve.serving_weight_dtype('fp8', fork, (12, 1)) == ('fp8', None)          # GB10
+    assert serve.serving_weight_dtype('fp8', fork, (8, 9)) == ('fp8', None)           # Pop's RTX 4060
+    dtype, why = serve.serving_weight_dtype('fp8', fork, (8, 0))                      # Colab A100: no FP8 GEMM
+    assert dtype == 'bfloat16' and 'sm_89' in why
+    dtype, why = serve.serving_weight_dtype('fp8', {}, (12, 1))                       # a fork without FP8 projections
+    assert dtype == 'bfloat16' and 'NATLANG_FP8_WEIGHTS' in why
+    assert serve.serving_weight_dtype('fp8', fork, None)[0] == 'bfloat16'
+
+    # the compact scored-group exchange and the extra actors' publication: tests/neuralese/test_grpo_exchange.py
 
 
 # ---- §2 / §4 / §7.4: Async round blob-first commit, DGX takeover record, and SFT <-> GRPO PhaseController ------------

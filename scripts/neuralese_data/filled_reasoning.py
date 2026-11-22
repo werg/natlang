@@ -1121,12 +1121,12 @@ def audit(args):
     seen = set()
     rng = random.Random(args.seed)
     for work in works:
-        for episode, record in verified_episodes(work, funnel, sources={'teacher', 'rl-own'}):
+        for episode, record in verified_episodes(work, funnel, sources={'teacher', 'rl-own', 'jolt-guided'}):
             if episode['key'] in seen:
                 continue
             seen.add(episode['key'])
             teacher = episode.get('teacher') or {}
-            model = 'student' if episode['source'] == 'rl-own' else (teacher.get('model_id') or 'unknown')
+            model = 'student' if episode['source'] in ('rl-own', 'jolt-guided') else (teacher.get('model_id') or 'unknown')
             row = stats[model]
             row['episodes'] += 1
             row['providers'][teacher.get('provider') or ('student' if model == 'student' else 'unknown')] += 1

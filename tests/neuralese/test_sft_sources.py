@@ -1,4 +1,6 @@
 """SFT source builder (scripts/neuralese_data/sft_sources.py): replay matching, near-duplicates, held closure."""
+import collections
+import random
 import json
 import sys
 from pathlib import Path
@@ -854,3 +856,75 @@ def test_replay_surfaces_and_kept_episodes_read_by_workers_equal_the_serial_read
     serial = list(s.all_episodes(work, 1, keep=s.has_native_state))
     assert serial == list(s.all_episodes(work, 3, keep=s.has_native_state))
     assert [e['n'] for e in serial] == [i for i in range(80) if i % 4 == 0]   # k0..k9 again at 80..89: first wins
+
+
+def _student_candidates():
+    own = [{'key': f'own{i}', 'source': 'rl-own', 'task_id': 'a', 'family': 'f'} for i in range(3)]
+    guided = [{'key': f'g{t}{i}', 'source': 'jolt-guided', 'task_id': t, 'family': 'small', 'guided': True}
+              for t in ('a', 'b') for i in range(3)]
+    return own + guided
+
+
+def test_own_and_guided_successes_share_one_task_cap_own_first():
+    funnel = collections.defaultdict(collections.Counter)
+    pool, _, _ = s.student_selection(_student_candidates(), random.Random(0), funnel, lambda task: 2, 1.0,
+                                     lambda c: False, 1.0)
+    by_task = collections.defaultdict(list)
+    for c in pool:
+        by_task[c['task_id']].append(c['source'])
+    assert sorted(by_task['a']) == ['rl-own', 'rl-own']            # one cap of 2 for both tiers, own taken first
+    assert len(by_task['b']) == 2 and funnel['jolt-guided']['over_task_cap'] == 4
+
+
+def test_the_family_share_is_measured_on_the_joint_student_pool():
+    # 3 own episodes of family f, 3 guided of family small: a 0.5 share of the joint pool (6) keeps 3 small ones,
+    # where a separate guided pool (3) would have kept 1
+    candidates = [c for c in _student_candidates() if c['task_id'] == 'b' or c['source'] == 'rl-own']
+    pool, _, _ = s.student_selection(candidates, random.Random(0), collections.defaultdict(collections.Counter),
+                                     lambda task: 9, 0.5, lambda c: False, 1.0)
+    assert sum(c['source'] == 'jolt-guided' for c in pool) == 3
+
+
+def test_frontier_guided_only_tasks_keep_their_teacher_data_until_guided_enters():
+    funnel = collections.defaultdict(collections.Counter)
+    tiers = {'a': 'sometimes', 'b': 'never'}
+    pool, own_tasks, guided_tasks = s.student_selection(_student_candidates(), random.Random(0), funnel,
+                                                        lambda task: 2, 1.0, lambda c: False, 1.0, tiers=tiers)
+    assert own_tasks == {'a'} and guided_tasks == {'b'}
+    assert funnel['jolt-guided']['frontier_own_success'] == 3         # task a: its unguided successes train instead
+    teacher = [{'task_id': 'b', 'key': 't1'}, {'task_id': 'c', 'key': 't2'}]
+    replaced, trains = s.settle_deferred(teacher, {'a', 'b'}, lambda c: c['task_id'])
+    assert [c['key'] for c in replaced] == ['t1'] and [c['key'] for c in trains] == ['t2']
+    replaced, trains = s.settle_deferred(teacher, {'a'}, lambda c: c['task_id'])   # b's guided cut by the own share
+    assert not replaced and len(trains) == 2
+
+
+def test_guided_replays_get_the_actors_context():
+    assert s.replay_context_tokens('jolt-guided') == s.replay_context_tokens('rl-own') == 131072
+    assert s.replay_context_tokens('teacher') == 65536
+
+
+def test_extract_pass_rates_count_student_samples_only_and_policies_come_from_each_call(tmp_path):
+    import types
+    run, archive = tmp_path / 'run', tmp_path / 'archive'
+    group = run / 'groups' / 'g000001'
+    group.mkdir(parents=True)
+    archive.mkdir()
+    (group / 'cases.jsonl').write_text(json.dumps({'id': 't', 'family': 'f', 'split': 'train'}) + '\n')
+    (group / 'score.json').write_text('{}')
+    turn = lambda policy: {'messages': [{'role': 'user', 'content': 'q'}], 'target': {'role': 'assistant', 'content': 'a'},
+                           'invocation_id': 'root', 'sampling': {'prompt': [{'kind': 'tokens', 'token_ids': [1]}],
+                                                                 'samples': [{'token_id': 5, 'logp': -0.1}],
+                                                                 'policy': {'checkpoint_sha256': policy}}}
+    rows = [{'task_id': 't', 'sample': 0, 'outcome': 'wrong_result', 'reward': {'quality': 0.0},
+             'policy': {'checkpoint_sha256': 'p2'}, 'turns': [turn('p2')]},
+            {'task_id': 't', 'sample': 1, 'outcome': 'task_success', 'reward': {'quality': 1.0},
+             'policy': {'checkpoint_sha256': 'p2'}, 'turns': [turn('p1'), turn('p2')]}]
+    rows += [{'task_id': 't', 'sample': 8 + i, 'outcome': 'task_success', 'reward': {'quality': 1.0},
+              'jolt_role': 'teacher', 'turns': [turn('p2')]} for i in range(2)]
+    (group / 'rollouts.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    work = tmp_path / 'work'
+    s.extract(types.SimpleNamespace(work=str(work), rl=[f'{run}:{archive}'], teacher=[], out_name='episodes'))
+    assert json.loads((work / 'rl-group-rates.json').read_text())['t'] == {'successes': 1, 'scored': 2}
+    own = [json.loads(line) for line in s.zstd_lines(work / 'episodes.jsonl.zst') if '"rl-own"' in line]
+    assert own[0]['policies'] == ['p1', 'p2']                          # an episode straddling a rebind
