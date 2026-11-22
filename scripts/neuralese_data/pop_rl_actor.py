@@ -1127,8 +1127,10 @@ def serve_colab(args):
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', str(claim['vram_gib']),
                 '--host-ram-gib', str(claim['host_ram_gib']), '--label', f'actor-{sha[:12]}', '--wait', '300',
                 '--workdir', cfg['repo'], '--', *serve_cmd]
-    # setsid: the admission process leads its own group (stop_colab signals it); its PID is the launch's output
-    pid = ssh_host(host, f'. {shlex.quote(cfg["env"])} && setsid nohup {shlex.join(admitted)} '
+    # setsid: the admission process leads its own group (stop_colab signals it); its PID is the launch's output.
+    # Separate statements: `. env && setsid ... &` backgrounded the whole list in a subshell that held the SSH channel
+    # (the launch timed out) and `$!` named that subshell, whose group stop_colab could not signal
+    pid = ssh_host(host, f'. {shlex.quote(cfg["env"])} || exit 1; setsid nohup {shlex.join(admitted)} '
                          f'> {shlex.quote(remote_work + "/actor.log")} 2>&1 < /dev/null & echo $!', timeout=60).strip()
     # the serve's own arguments too: run-sft stops an actor the learner does not fit beside and serves it again after
     result = {'endpoint': endpoint, 'host': host, 'profile': 'colab', 'policy_id': sha, 'work': remote_work,

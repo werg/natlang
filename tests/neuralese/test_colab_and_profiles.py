@@ -801,3 +801,29 @@ def test_learner_state_arrives_as_one_save_or_not_at_all(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match='consistent snapshot'):
         pop_rl_actor.pull_learner_state('g4', '/r', local)
     assert (local / 'learner_manifest.json').read_text() == 'new'
+
+
+def test_serve_colab_launches_the_actor_as_its_own_statement_and_records_its_serve(tmp_path, monkeypatch):
+    """`. env && setsid nohup ... & echo $!` backgrounded the and-list in a subshell: the launch held the SSH channel
+    until its 60 s timeout and `$!` named the subshell, whose group stop_colab could not signal. The record carries the
+    serve's arguments (run-sft serves a yielded actor again from them)."""
+    sent = []
+
+    def ssh_host(host, command, **kw):
+        sent.append(command)
+        return '4242\n' if 'setsid nohup' in command else ''
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: dict(A100))
+    monkeypatch.setattr(pop_rl_actor, 'ensure_remote_checkpoint', lambda *a: 'present')
+    monkeypatch.setattr(pop_rl_actor, 'colab_checkout', lambda *a: None)
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind=None: 'http://127.0.0.1:18731')
+    monkeypatch.setattr(pop_rl_actor, 'attested', lambda endpoint, sha, adapters=None: True)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    args = types.SimpleNamespace(host='g4', policy_id='p' * 64, commit='c' * 40, port=8570, bind_host=None,
+                                 kv_cache_dtype='fp8_e4m3', weight_dtype='bfloat16', beside_learner=False,
+                                 checkpoint='/dgx/ckpt.pt', ready_seconds=60)
+    result = pop_rl_actor.serve_colab(args)
+    (launch,) = [c for c in sent if 'setsid nohup' in c]
+    assert '&& setsid' not in launch and launch.rstrip().endswith('& echo $!') and result['pid'] == 4242
+    assert result['serve_args']['port'] == 8570 and result['serve_args']['checkpoint'] == '/dgx/ckpt.pt'
