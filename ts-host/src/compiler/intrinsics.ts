@@ -125,13 +125,31 @@ interface Iteration<T> {
   withLimit(limit: { maxSteps?: number; deadlineMs?: number }): Iteration<T>;
 }
 
-/** An immutable, content-addressed folder context to which a natural-language function can be rebound with \`fn.in(context)\`. */
-interface Context {
+/**
+ * An immutable, content-addressed folder value (\`Context\` of the runtime package): executable nodes loaded from files
+ * and data entries. \`fn.in(context)\` rebinds a natural-language function to one. Packages export it as \`Context\`; in eval
+ * and global scope it is \`NatlangContext\`, so a program type named \`Context\` does not collide with it.
+ */
+interface NatlangContext {
   readonly id: string;
+  /** Executable nodes (\`.nl\` functions and TypeScript modules loaded from files), by name. */
   readonly items: Readonly<Record<string, unknown>>;
-  with(entries: Record<string, unknown>): Context;
-  without(...names: string[]): Context;
-  merge(other: Context): Context;
+  /** Data entries, by name or slash-separated path. */
+  readonly data: Readonly<Record<string, unknown>>;
+  /** Executable node and data entry names, sorted. */
+  readonly names: string[];
+  /** Entries added or replaced; an executable node must come from files and keep the signature of the one it replaces. */
+  with(entries: Record<string, unknown>): NatlangContext;
+  /** Data entries removed (executable nodes are removed with \`pick\`). */
+  without(...keys: string[]): NatlangContext;
+  /** An executable node replaced by an edited definition with the same signature. */
+  edit(name: string, text: string): NatlangContext;
+  /** The sub-context of the named entries or data path prefixes. */
+  pick(...names: string[]): NatlangContext;
+  /** The union of two contexts; an entry present in both must be the same. */
+  union(other: NatlangContext): NatlangContext;
+  /** Whether \`other\` is reachable through this context's data entries. */
+  contains(other: NatlangContext): boolean;
 }
 
 /** Methods every compiled natlang callable provides. */
@@ -140,7 +158,7 @@ interface NatlangCallableMethods<A extends unknown[], R> {
   /** The same function on another of the runtime's models (the name \`model:\` frontmatter takes); a new function. */
   on(options: { model: string }): NatlangFunction<A, R>;
   /** The same function bound to another context, structurally checked against its context interface; a new function. */
-  in(context: Context): NatlangFunction<A, R>;
+  in(context: NatlangContext): NatlangFunction<A, R>;
 }
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
@@ -152,14 +170,14 @@ type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R extends C
 type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFunction<A, R> & {
   with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
   on(options: { model: string }): InlineNatlangFunction<A, R>;
-  in(context: Context): InlineNatlangFunction<A, R>;
+  in(context: NatlangContext): InlineNatlangFunction<A, R>;
 };
 
 /** An nl function without a type argument; the compiler infers its signature from its uses. */
 type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
   on(options: { model: string }): NatlangUntypedFunction;
-  in(context: Context): NatlangUntypedFunction;
+  in(context: NatlangContext): NatlangUntypedFunction;
 };
 type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? InlineNatlangFunction<A, Awaited<R>> : InlineNatlangFunction<any[], F>;
@@ -183,9 +201,13 @@ interface FolderIteration<S> {
 interface Folder {
   readonly path: string;
   readonly name: string;
+  readonly relativePath: string;
+  readonly parent: Folder | null;
   file(path: string): FileHandle;
   dir(path: string): Folder;
+  entry(path: string): Folder | FileHandle;
   exists(): Promise<boolean>;
+  stat(): Promise<{ path: string; kind: "file" | "folder"; bytes: number; digest: string | null }>;
   entries(pattern?: string): Promise<(Folder | FileHandle)[]>;
   files(pattern?: string): Promise<FileHandle[]>;
   folders(pattern?: string): Promise<Folder[]>;
@@ -202,10 +224,15 @@ interface Folder {
 interface FileHandle {
   readonly path: string;
   readonly name: string;
+  readonly relativePath: string;
+  readonly parent: Folder | null;
   exists(): Promise<boolean>;
+  stat(): Promise<{ path: string; kind: "file" | "folder"; bytes: number; digest: string | null }>;
   readText(startLine?: number, endLine?: number): Promise<string>;
-  readJson(): Promise<unknown>;
+  readBytes(): Promise<Uint8Array>;
+  readJson<T = unknown>(): Promise<T>;
   writeText(content: string): Promise<void>;
+  writeBytes(content: Uint8Array): Promise<void>;
   writeJson(value: unknown): Promise<void>;
   editText(find: string, replaceWith: string, fuzzy?: boolean): Promise<unknown>;
   remove(): Promise<void>;
@@ -294,6 +321,7 @@ export declare function pluggable<A extends unknown[], R>(implementations: Plugg
 
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +
+  '/** The runtime package\'s context value (\`NatlangContext\` in eval scope). */\nexport type Context = NatlangContext;\n' +
   FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ') + PLUGGABLE_MODULE_DTS;
 
 export const INTRINSICS_FILE = '/__natlang__/intrinsics.d.ts';

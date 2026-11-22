@@ -617,5 +617,17 @@ function mergeIntersection(members: Type[], resolve: (type: Type) => Type): Type
     return { kind: 'dict', element: parts.length === 1 ? (parts[0] as never as { element: Type }).element :
       { kind: 'intersection', members: parts.map(part => (part as { element: Type }).element) } };
   if (parts.every(part => JSON.stringify(part) === JSON.stringify(parts[0]))) return parts[0]!;
+  // A refinement is its base plus predicates (TypeScript: \`T & brand\`), so \`Is<T, "a"> & T\` is \`Is<T, "a">\` and
+  // \`Is<T, "a"> & Is<T, "b">\` holds both predicates: members with one base intersect to that base with every predicate.
+  const chains = parts.map(part => {
+    const predicates: string[] = [];
+    let base = part;
+    while (base.kind === 'refined') { predicates.push(base.predicate); base = resolve(base.base); }
+    return { base, predicates };
+  });
+  if (chains.some(chain => chain.predicates.length) && chains.every(chain => JSON.stringify(chain.base) === JSON.stringify(chains[0]!.base))) {
+    const predicates = [...new Set(chains.flatMap(chain => chain.predicates))];
+    return predicates.reduce<Type>((type, predicate) => ({ kind: 'refined', base: type, predicate }), chains[0]!.base);
+  }
   throw new TypeSyntaxError(`${members.map(formatType).join(' & ')} intersects types that are not all objects; intersect record types, or write one record with the fields you need`);
 }

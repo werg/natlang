@@ -46,22 +46,23 @@ test('failed evals do not persist new helpers or replace an earlier helper', asy
   assert.equal(missing.kind, 'error'); assert.match(missing.text, /fresh is not defined/);
 });
 
-test('helpers that refer to eval-local functions stay eval-local with an explicit explanation', async () => {
-  const { session } = open({ type: '(value: number) => number', instructions: 'Return a score.', args: { value: 3 } });
+test('a helper that calls another helper of the same eval persists with it', async () => {
+  const { lam, session } = open({ type: '(value: number) => number', instructions: 'Return a score.', args: { value: 3 } });
   const declared = await session.applyAsync('eval', { code:
     'const step = (n: number) => n + 1; function revise(n: number) { return step(n); } revise(value);' });
   assert.equal(declared.kind, 'ok', declared.text);
-  assert.match(declared.text, /revise is available only in this eval because it refers to eval-local function step/);
-  const missing = await session.applyAsync('eval', { code: 'return revise(value);' });
-  assert.equal(missing.kind, 'error'); assert.match(missing.text, /revise is not defined/);
+  assert.doesNotMatch(declared.text, /available only in this eval/);
+  assert.equal((await session.applyAsync('eval', { code: 'return revise(value);' })).kind, 'ok');
+  assert.equal(lam.return, 4);
 });
 
-test('helper free names include transient references in parameter defaults', async () => {
-  const { session } = open({ type: '(value: number) => number', instructions: 'Return a score.', args: { value: 3 } });
+test('helper free names include helper references in parameter defaults', async () => {
+  const { lam, session } = open({ type: '(value: number) => number', instructions: 'Return a score.', args: { value: 3 } });
   const declared = await session.applyAsync('eval', { code:
     'const step = (n: number) => n + 1; function revise(n: number = step(value)) { return n; } revise();' });
   assert.equal(declared.kind, 'ok', declared.text);
-  assert.match(declared.text, /revise is available only in this eval because it refers to eval-local function step/);
+  assert.equal((await session.applyAsync('eval', { code: 'return revise();' })).kind, 'ok');
+  assert.equal(lam.return, 4);
 });
 
 test('nested shadowing does not hide a real helper dependency on the outer saved scope', async () => {
