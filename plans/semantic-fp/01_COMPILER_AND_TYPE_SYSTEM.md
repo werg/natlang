@@ -1,151 +1,160 @@
-# WS1: Compiler & Type-System Fixes and Leaps
+# WS1: Language — types, higher-order semantic functions, modules, recursion, contracts, malleable code
 
-**Parent:** [Campaign Index](README.md)  
-**Goal:** Close every type-system parity bug between `.nl`, inline `nl`, and TypeScript, then lift the five structural ceilings that currently prevent true typed semantic functional programming: lack of generics, second-class higher-order lambdas, directory-tree-bound modules, banned `.nl` structural recursion, and unary-only refinements.
+**Parent:** [Campaign index](README.md). **v2** (2026-11-23): claims re-verified against main 0f87d11a4. The
+corrections are marked *(v2 fact)*. Sizes are agent-days (1 = one agent session of ~6-8 h).
 
----
+**Goal.** Make the language able to express what semantic FP needs, without workarounds: generic semantic combinators
+over hard and soft (`Neuralese<T>`) values, functions that take and return semantic lambdas with checked signatures,
+cross-package semantic libraries, structural recursion in `.nl`, contracts that relate a result to its inputs, and
+programs whose code the model may change, through a transaction that exact checks guard.
 
-## 1. Mechanism Inventory
+## 1. Mechanism inventory (every component the WS1 items touch)
 
-| Mechanism | Components implementing / consuming it | Scope in WS1 |
+| Mechanism | Components implementing or consuming it | In scope |
 |---|---|---|
-| Structural type grammar & validation | `ts-host/src/native/types.ts`, `native/values.ts`, `native/agent.ts` (`schemaOf`), `compiler/targets.ts`, `compiler/intrinsics.ts`, `compiler/eval-check.ts` | Full parity across all 6 files |
-| Inline `nl` planning & lowering | `compiler/inline.ts`, `compiler/holes.ts`, `compiler/lower.ts`, `runtime/lowered.ts`, `runtime/callable.ts` | Full parity (Node + Browser compiled projects + `eval`) |
-| Named `.nl` & callable-folder loading | `runtime/loader.ts`, `runtime/modules.ts`, `runtime/contexts.ts`, `compiler/project.ts` (`.d.nl.ts` emit) | Full parity (`NodeSourceFiles`, browser virtual files, `loadVirtualNatlang`) |
-| Recursion & loop termination checks | `runtime/kernel.ts`, `runtime/context.ts`, `compiler/policy.ts` | Full parity across `.nl`, callable-folder `.ts`, and `eval` |
-| Refinement & trust checking | `native/refinement.ts`, `native/untrusted.ts`, `compiler/refined-slots.ts`, `compiler/inline.ts`, `runtime/kernel.ts` | Full parity (frontmatter, inline `nl`, `eval`, services) |
-| Model serving engines (llama-server, wllama, Python native, SGLang) | Not applicable for type-checker/loader changes — engines receive rendered prompt/tool JSON schemas from `agent.ts` (`schemaOf` and `formatType`). Verified via `ts-host/src/native/agent.ts:1264` and `docs/ENGINE_PARITY.md`. | No wire-protocol change required in WS1 |
-| Training collectors & verifiers | `scripts/rl_tasks/verify.mjs`, `structure_smoke.mjs`, `sources/authored.py` | Update `authored.py` & `authored_checks.py` for new frontmatter keys (`uses:` map, `measure:`, `ensures:`, `mutable:`) |
+| Type grammar, validation, schema | `native/types.ts`, `native/values.ts`, `native/agent.ts` (`schemaOf`, `formatType`), `native/representation.ts`, `compiler/targets.ts`, `compiler/intrinsics.ts`, `compiler/eval-check.ts` | all |
+| Inline `nl` planning and lowering | `compiler/inline.ts`, `compiler/holes.ts`, `compiler/lower.ts`, `runtime/lowered.ts`, `runtime/callable.ts`, `runtime/surface.ts` | all (Node, browser, compiled projects, eval) |
+| `.nl` loading, `uses:`, imports | `runtime/loader.ts`, `runtime/modules.ts`, `runtime/contexts.ts`, `runtime/virtual-project.ts` (`loadVirtualCallables`), `compiler/project.ts` (`.d.nl.ts` emit) | all |
+| Recursion and termination | `runtime/kernel.ts:526-545`, `runtime/context.ts:13` (`MAX_AD_HOC_NL_DEPTH`), `:223-264` (`guard`/`descend`), `runtime/hooks.ts:22`, `compiler/policy.ts`, `runtime/iterate.ts` | all |
+| Refinement and trust | `native/refinement.ts:79-97`, `native/untrusted.ts`, `compiler/refined-slots.ts`, `compiler/inline.ts`, `runtime/kernel.ts` | all |
+| Code edits in a call | `native/agent.ts:1276` (offer), `native/runtime.ts:1438-1445` (`codeEditsDenied`, `codeEditable`), `:2089-2114` (edit path), `adaptation/program-view.ts` (`ProgramView` revisions), `runtime/loader.ts:150` (`withhold:`), `improvement/adoption.ts` (adopt/rollback) | all |
+| Model-facing text that describes these | `native/prompt.ts` (`TOOLS_PROMPT`: "functions may not call themselves recursively"; `FUNCTION_TOOLS_PROMPT`), `native/runtime.ts:270` (`read_code` builtin docs), `native/system-prompts.ts` piece registry | each item updates its sentence in the same commit and records it in `plans/MODEL_FACING_CHANGES.md` |
+| Python renderers of the same prompt | `tests/neuralese/test_serving_prompt_rendering.py`, `scripts/neuralese_data/sft_sources.py` (renders recorded prompts; they carry the prompt as data) | prompt text changes need no Python edit because renderers replay the recorded system message. The test pins that and must stay green. |
+| Serving engines | Type and loader changes reach engines only as rendered prompt text and tool JSON schemas (`agent.ts` `schemaOf`). Tuple `prefixItems` (L1) is a schema change: guided decoding on every engine must accept it. | L1 checks grammar-constrained decoding of `prefixItems` on llama-server/wllama (GBNF from JSON schema), Python native (`serve/native_guidance.py`) and SGLang (xgrammar). A gap goes into `docs/ENGINE_PARITY.md` with its blocker. |
+| Training consumers | `scripts/rl_tasks/sources/authored.py`, `authored_checks.py`, `verify.mjs`, `structure_smoke.mjs` | new frontmatter keys (`ensures:`, `measure:`, `recursive:`, `generic:` forms, `protect:`) parse in authored-task checks |
+| Docs | `spec/SPEC.md`, `spec/ERRORS.md`, `spec/ext/refinements.md`, `spec/ext/neuralese.md`, `skills/natlang-authoring/references/{language,refinements}.md` | same push as each feature (AGENTS.md "Teach in errors": every new error has recovery advice in the skill) |
 
----
+## 2. Done (Wave 0, 2026-11-22, `ts-host/test/semantic-fp-fixes.test.mjs`)
 
-## 2. Phase 1A — First-Principles Fixes
+- `Is<T, P>`, nested `Is`, `Untrusted<Is<T, P>>` and record intersections in inline `nl` (`compiler/targets.ts:166-202`).
+- `.in(context)` typed on `NatlangCallableMethods`, `InlineNatlangFunction`, `NatlangUntypedFunction`.
+- `Folder.apply/propose/iterateOn` accept crisp reducers; `moveTo` takes `string | Folder | FileHandle`.
+- APPROACH_PROMPT's helper-persistence sentence matches `scope-compiler.ts`. *(v2 fact: APPROACH_PROMPT is not sent
+  at runtime. It is used only by `teacher/cli.ts --approach-guide` and the piece registry, so this fix changed
+  teacher prompts, not executor prompts.)*
+- `crisp.mjs`'s `while` replaced.
 
-Items 1A.1 and 1A.2 were shipped directly on 2026-11-22 (`ts-host/test/semantic-fp-fixes.test.mjs`); items 1A.3 and 1A.4 remain queued for Wave 1.
+A separate agent is reviewing this Wave-0 code. Its findings land as fixes, not as a plan change.
 
-### 1A.1 ✅ DONE: Fix `Is<T, P>`, `Untrusted<Is<T, P>>`, and Object Intersections in Inline `nl`
-- **Shipped (2026-11-22):** `ts-host/src/compiler/targets.ts`, `ts-host/src/compiler/project.ts`, `ts-host/src/compiler/refined-slots.ts`, tested in `ts-host/test/semantic-fp-fixes.test.mjs`. Unwraps `__natlangRefinement` (including nested `Is`) and `__natlangUntrusted`, merges record intersections `A & B`, rejects non-record intersections, and reports inline `refinedSlots` using `natlang` target + merged aliases.
+## 3. Work items
 
-### 1A.2 ✅ DONE: Expose `.in(context)` and Fix `Folder` Types in `intrinsics.ts` & `surface.ts`
-- **Shipped (2026-11-22):** `ts-host/src/compiler/intrinsics.ts`, `ts-host/src/runtime/surface.ts`, `ts-host/src/native/scoped-fs.ts`, tested in `ts-host/test/semantic-fp-fixes.test.mjs`. Adds `Context` + `.in(context)` on `NatlangCallableMethods` / `InlineNatlangFunction` / `NatlangUntypedFunction`, introduces `FolderReducer` accepting crisp TS `(folder, ...args) => R | Promise<R>` reducers, and aligns `moveTo` with `string | Folder | FileHandle`.
+### L1. Tuples, `Record<LiteralUnion, V>`, `Partial/Required/Pick/Omit` (2 days, no deps)
+- Defect: `compiler/targets.ts` flattens `[A, B]` to `(A | B)[]`; `native/types.ts` has no tuple node, so
+  `natlang:neuralese`'s `zip` (`Promise<N<[A, B]>>`, `compiler/project.ts:212`) has no faithful type. `Record<K, V>`
+  rejects literal-union keys.
+- Build: `{ kind: 'tuple', elements }` through parser, `formatType`, `fitsType`, `values.ts` `coerce`, `schemaOf`
+  (`prefixItems`, `minItems`/`maxItems`), `targets.ts`; literal-key records desugar in `TypeEnv.resolve`; the four
+  utility types resolve over record types.
+- Tests: `ts-host/test/types-extended.test.mjs` (parse, fit, coerce, schema, `zip` round trip). Engine check as in
+  the inventory.
 
-### 1A.3 Add Tuple Types, `Record<LiteralUnion, V>`, and Core Utility Types
-- **Defect:** `compiler/targets.ts:173-179` flattens `[A, B]` tuples into `(A | B)[]`; `native/types.ts` lacks a tuple AST node (breaking `natlang:neuralese`'s `zip` which declares `Promise<N<[A, B]>>` at `compiler/project.ts:212`). `Record<K, V>` rejects literal union keys (`native/types.ts:219-224`), and `.nl` frontmatter lacks `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, `Required<T>`.
-- **Fix:**
-  1. Add `{ kind: 'tuple'; elements: Type[] }` to `native/types.ts`, parser (`[T1, T2]`), `formatType`, `fitsType`, `values.ts` (`coerce` checking fixed length + per-position types), `agent.ts` (`schemaOf` emitting JSON Schema `prefixItems` + `minItems`/`maxItems`), and `compiler/targets.ts`.
-  2. Allow `Record<LiteralUnion, V>` (desugared during `TypeEnv.resolve` into a record with one required field per literal member).
-  3. Support `Partial<T>`, `Required<T>`, `Pick<T, K>`, `Omit<T, K>` in `native/types.ts` `TypeEnv.resolve` over resolved record types.
-- **Targeted tests:** `ts-host/test/types-extended.test.mjs` (parsing, `fitsType`, `coerce`, JSON schema emission, `zip` round-trip).
+### L2. Static `iteration-unbounded`; `untrusted-instruction` in eval (1 day, no deps)
+- `compiler/policy.ts`: an `.iterateOn(...).until(tsPredicate)` chain without `withMeasure`/`withLimit` is reported
+  at `natlang check` (runtime check stays).
+- `compiler/eval-check.ts`: interpolating a known `Untrusted<T>` binding into eval-snippet `nl` text is
+  `untrusted-instruction`. Today only compiled sources get it (`spec/ext/refinements.md:92-93`).
+- Tests: `ts-host/test/policy.test.mjs`, `untrusted.test.mjs`.
 
-### 1A.4 Move `iteration-unbounded` and `eval` `untrusted-instruction` Checks Earlier
-- **Defect 1:** `iteration-unbounded` (`SPEC.md:550-551`) only fires at runtime after the initial predicate fails, not during `natlang check`.
-- **Defect 2:** `spec/ext/refinements.md:92-93` notes that `eval` one-shot `nl("... ${x}")` interpolations bypass `untrusted-instruction`.
-- **Fix:**
-  1. In `compiler/policy.ts`, statically inspect `.iterateOn(...)` chains whose `.until(...)` argument is a TS arrow/function without `.withMeasure(...)` or `.withLimit({ maxSteps })` and report `iteration-unbounded` at `natlang check` time (keeping the runtime check as defense-in-depth).
-  2. In `compiler/eval-check.ts`, run the `untrusted-instruction` interpolation check on `eval` snippets using the scope's known `Untrusted<T>` bindings.
-- **Targeted tests:** `ts-host/test/policy.test.mjs` and `ts-host/test/untrusted.test.mjs`.
+### L3. Malleable code through a transaction (3 days, no deps). Replaces v1's "edit_code opt-in"
+*(v2 fact)* `edit_code` is not offered to every function. It is offered when the call has its own codebase (companion
+folder or `uses:` attachments) and edits are not denied (`native/runtime.ts:1444`). Evaluation, self-play, improvement
+and teacher runs already pass `codeEdits: 'deny'`. Frontmatter `withhold: [edit_code, diff_code]` exists. Edits do
+not touch disk: they become revisions in the run's `ProgramView` (`adaptation/program-view.ts`). The stale comment at
+`native/runtime.ts:1990` ("offered to every call") is wrong and is fixed here.
 
----
+**Decision: keep `edit_code` on by default and make its edits transactional.** Malleability is the thesis: a program
+that can repair its own helpers is the product. The real defect is not that edits exist. It is that (a) a stuck model
+can edit the thing that judges it, and (b) a good edit dies with the run, because nothing proposes it for adoption.
+v1's opt-in would remove the capability from every program to stop (a), and would do nothing about (b).
 
-## 3. Phase 1B — Ambitious Semantic-FP Language Leaps (Wave 1–2)
+Build:
+1. **Protected items.** A verifier cannot be a helper. Anything that judges the call is not editable in it: items
+   named by `ensures:` checks (L7), items listed in frontmatter `protect: [path, ...]`, `types.ts`, and every
+   service. Editing one is rejected with a one-sentence teaching error, e.g. "`checks/citations.ts` decides whether
+   this call succeeded, so it cannot be edited here; fix the code that produces the value it rejects." (AGENTS.md:
+   teach in errors). Skill item 5's existing rule ("make the outside world a service") stays the primary guidance.
+2. **Run-scoped revisions are proposals.** Each successful call that committed revisions records them in its call
+   record (`code_revisions: [{ source, originalHash, patchedHash, patch }]`; trace event already carries the hashes,
+   `native/runtime.ts:2114`).
+3. **Adoption is a Folder transaction.** `natlang improve adopt-call CALL_ID [--into DIR]` builds a `Folder`
+   proposal from the call's revisions. It runs `natlang check` and `natlang test` on the proposal snapshot and
+   `accept`s only if both pass and no protected item changed. Otherwise it reports the failing check. It reuses
+   `improvement/adoption.ts` (adopt/rollback). The dashboard's trace page shows "adopt this fix". This is the same
+   transaction `natlang improve DIR` (WS8 N4) uses: one implementation.
+4. Opt-outs stay as they are (`codeEdits: 'deny'`, `withhold:`). The default stays `allow`.
+- Model-facing: `FUNCTION_TOOLS_PROMPT`'s "Use edit_code to fix it when that tool is offered" is unchanged; the
+  protected-item error is new text, recorded in MODEL_FACING_CHANGES.
+- Tests: `ts-host/test/code-edits.test.mjs` (protected rejection, revision record, adopt-call accept and reject,
+  rollback byte-identical); `conformance/programs/17-reopen-refine.yaml` stays green unchanged.
 
-### 1B.1 Opt-In `edit_code` (Read-Only Callable Codebases by Default)
-- **Problem:** Offering `edit_code` by default on every `.nl` function with a companion folder (`native/agent.ts:1275-1279`) causes stuck models to rewrite their own helpers/verifiers (`skills/natlang-authoring/references/language.md:75`), forcing authors to move pure TypeScript logic out into opaque host services.
-- **Design:**
-  - Add frontmatter key `mutable: true` (default `false`) to `.nl` files and `codeEdits: 'deny' | 'allow'` runtime option (changing default from `'allow'` to `'deny'` unless `mutable: true` is declared).
-  - Read-only `read_code` remains always on so models freely explore rich codebases.
-  - Self-modification remains first-class through explicit `mutable: true` or transactional `Folder` reducers (`folder.propose` / `folder.accept`).
-- **Opt-out:** Runtime option `codeEdits: 'allow'` or env `NATLANG_LEGACY_EDIT_CODE=1`.
-- **Spec & test updates:** Update `spec/SPEC.md` ("Model surface"), `loader.ts`, `agent.ts`, `conformance/programs/17-reopen-refine.yaml` (add `mutable: true`), and `ts-host/test/code-edits.test.mjs`.
+### L4. Higher-order semantic functions with checked signatures (3 days, no deps)
+- *(v2 fact)* `nl-not-called` (`compiler/inline.ts:370-376`) rejects an arrow whose body is a bare `nl` tag only when
+  that arrow is passed as a call argument (`items.map(item => nl\`…\`)`). A factory in a variable declaration is
+  already accepted. `:381-389` rejects `await nl\`…\`` unless saved to a callable-typed variable.
+  `native/values.ts:200-202` accepts any `typeof raw === 'function'` for a lambda type.
+- Build:
+  1. Allow an uncalled `nl` in return position, in a property typed as a function, and as an argument to a parameter
+     whose type is callable. Keep the error for an uncalled `nl` used as a value nobody can call.
+  2. Tag every natlang callable (inline, named `.nl`, callable-folder TS export) with its runtime `Type` under a
+     non-enumerable `NATLANG_SIGNATURE`. In `values.ts`, check `fitsType(signature, wanted)`
+     (contravariant params, covariant result). Wrap an untagged JS function in a boundary proxy that coerces its
+     arguments and result at each call.
+  3. `fn.partial(bound)` on natlang callables, preserving `.iterateOn`, `.in`, `.on` and the narrowed signature.
+  4. A `.nl` with a lambda `returns:` is told to finish with `eval({ code: "return nl<…>`…`;", finish: true })`.
+     That sentence goes in its call notes, not the system prompt.
+- Tests: `ts-host/test/higher-order.test.mjs`.
 
-### 1B.2 First-Class Higher-Order Semantic Functions, Factories & Currying
-- **Problem:** Writing a function that accepts a semantic policy lambda or compiles prose into a typed semantic closure (`compileRule(doc: string) => Promise<(x: Event) => Promise<Action>>`) hits three walls:
-  1. `compiler/inline.ts:369-390` rejects factory arrows returning uncalled `nl` (`nl-not-called`).
-  2. `native/values.ts:200-203` checks `wanted.kind === 'lambda'` with only `typeof raw === 'function'`, ignoring arity and parameter/return types.
-  3. Named `.nl` functions have no `.partial(...)` currying helper, and `return_result` cannot return a function directly (only `eval { finish: true }`).
-- **Design:**
-  1. **Relax `nl-not-called`:** Permit an uncalled `nl` tag whenever it is in return position of a function/arrow, an object/array literal property typed as a function, or passed to a higher-order parameter expecting a callable (`compiler/inline.ts`). Keep `nl-not-called` only for bare expression statements (`nl\`...\`;`).
-  2. **Typed callable wrappers at runtime:** Tag compiled inline `nl`, named `.nl`, and TS callable exports with their runtime `Type` (`{ kind: 'lambda', params, returns }`) via a non-enumerable symbol `NATLANG_SIGNATURE`. In `values.ts:200`, when a value carries `NATLANG_SIGNATURE`, verify `fitsType(gotSig, wanted, env)` contravariantly! For plain JS functions without metadata, wrap them in a **boundary-checking proxy** that validates incoming arguments and outgoing returns against `wanted` at call time.
-  3. **`.partial(...boundArgs)` on `.nl` callables:** Add `fn.partial(boundRecord)` (or positional partial binding) to `NatlangCallableMethods` (`runtime/callable.ts`, `compiler/intrinsics.ts`), preserving `.iterateOn`, `.in`, `.on`, and the narrowed runtime signature.
-  4. **Clear `eval` guidance for returning functions:** When a `.nl` function declares a lambda return type (`returns: (e: Event) => Decision`), `agent.ts` tells the call to build and return the function via `eval({ code: "return nl<...>`...`;", finish: true })` (omitting `value` schema confusion on `return_result`).
-- **Targeted tests:** `ts-host/test/higher-order.test.mjs` — passing inline `nl` into a `.nl` function, returning a compiled `nl` closure from a `.nl` function and calling it from host TS, contravariant signature rejection, and `.partial(...)`.
+### L5. Generics, polymorphic over hard and soft values (4 days, after L4)
+- *(v2 fact)* `compiler/targets.ts:127` rejects type parameters. `native/representation.ts:26-43` allows exactly one
+  `generic:` parameter constrained to `T | Neuralese<T>`.
+- Build: frontmatter `generic: { T: unknown, K: string, S: 'X | Neuralese<X>' }`. Call sites are monomorphised from
+  the TS checker's resolved signature, and the call record carries the instantiation. Generic TS wrappers around
+  inline `nl` get `typeOf<T>()` injected at monomorphic call sites. The model always sees concrete types. The existing
+  `R: T | Neuralese<T>` form becomes one case of the general rule, with the same diagnostics.
+- This is what lets `@natlang/std` combinators (WS3) carry `Neuralese<S>` state (WS8 N3) with one signature.
+- Opt-out `--no-generic-nl` during rollout; removed once WS3's combinators depend on it (owner: no undecided modes).
+- Tests: `ts-host/test/generic-nl.test.mjs` (instantiation, constraint violation, nested generics, `S | Neuralese<S>`
+  instantiated both ways, call-record provenance).
 
-### 1B.3 Parametric Polymorphism (Monomorphized Generics) for `.nl` and Inline `nl`
-- **Problem:** `compiler/targets.ts:127` rejects all TypeScript `TypeParameter`s and `loader.ts:272-282` restricts `generic:` to `R: T | Neuralese<T>`. Authors cannot write `@natlang/std` combinators (`semanticFilter<T>`, `semanticMerge<T>`, `semanticReduce<S, A>`).
-- **Design:**
-  - Extend frontmatter `generic:` to declare arbitrary bounded or unbounded type parameters:
-    ```yaml
-    generic:
-      T: unknown
-      K: string
-    args:
-      items: T[]
-      rubric: Record<K, string>
-    returns: Record<K, T[]>
-    ```
-  - **Call-site monomorphization (compile-time):** Just as `checkGenericResults` already instantiates `R: T | Neuralese<T>` per call site (`compiler/neuralese.ts`), resolve concrete type arguments `T`, `K` from TypeScript's call-site inference (`checker.getResolvedSignature(call)`), substitute them into a monomorphized `TargetDescriptor`, and pass `{ typeArgs: { T: 'Ticket', K: '"bug" | "feature"' } }` to `invokeDefinition`.
-  - **Generic TS wrapper functions around inline `nl`:** Allow a generic TS helper like `export async function semanticFilter<T>(items: T[], criterion: string): Promise<T[]>` when `nl` is either passed an explicit runtime type descriptor (auto-injected by the compiler at monomorphic call sites via a compiler intrinsic `typeOf<T>()`) or when `T` is concrete at the lowered call site!
-  - **Zero extra model burden:** At execution time, the model sees the concrete instantiated types (`Ticket[]`, `Record<"bug" | "feature", Ticket[]>`), never unresolved type variables.
-- **Opt-out:** `--no-generic-nl` compiler flag during rollout.
-- **Targeted tests:** `ts-host/test/generic-nl.test.mjs` covering monomorphic instantiation, constraint violations, nested generic types, and call-record provenance (recording instantiated signature alongside definition ID).
+### L6. Modules: aliased and cross-package `uses:`, shared imports, compact declarations (3 days, no deps)
+- *(v2 fact)* `uses:` takes package-root-relative paths (`harness/cut`, `runtime/loader.ts:290-292`), attaches each
+  under its basename (collisions refused, `:346-348`), and is package-local. The import restriction is in
+  `runtime/modules.ts:264-271` ("only items in this callable folder can be imported").
+- Build: map form `uses: { git: "@natlang/lib-git/inspect", rubric: "./shared/rubric" }` (the list form stays the same
+  thing with basename keys). Relative and package specifiers resolve through `natlang.json` package exports, which is
+  how `@natlang/std` ships (WS3). The loader builds the whole call graph and refuses a cycle with its path unless L7's
+  structural recursion admits it. Callable-folder `.ts` may import package-relative modules and natlang package
+  exports under the same loop policy. `.d.nl.ts` emits `import type` references instead of one inlined intersection
+  (`compiler/project.ts:160-193`).
+- Tests: `ts-host/test/uses-modules.test.mjs`.
 
-### 1B.4 Real Acyclic Module System (`uses:` v2)
-- **Problem:** Companion folders force every shared helper into brittle basename-only package-local `uses:` lists (`loader.ts:290-292, 341-373`); callable-folder `.ts` cannot use `uses:` (`modules.ts:256-258`); npm semantic libraries are impossible; `.d.nl.ts` explodes into 10 KB single-line intersections (`project.ts:160-193`).
-- **Design:**
-  1. **Aliased & package-scoped `uses:` map** (backward-compatible with existing list form):
-     ```yaml
-     uses:
-       git: "@natlang/lib-git/inspect"
-       rubric: "./shared/rubric"
-       verify: "../checks/citations"
-     ```
-     - Relative paths (`./`, `../`) resolve from the `.nl` file within the package (or workspace).
-     - Bare package specifiers (`@scope/pkg/item` or `pkg/item`) resolve via standard Node/package `exports` + `natlang.json` manifest of the dependency package.
-     - Explicit alias keys eliminate basename collisions.
-  2. **Acyclic DAG guarantee preserved statically:** The loader builds the complete module call graph across companion folders + `uses:` (both `.nl` and `.ts` modules) and rejects any cycle (unless allowed by structural recursion in 1B.5) with the exact cycle path.
-  3. **Callable-folder `.ts` imports:** Permit relative imports within the package (`../shared/util.js`, `./sibling.nl`) and `@scope/pkg` natlang exports in callable-folder `.ts`, subject to the same static DAG + finite-iteration policy (`modules.ts`).
-  4. **Clean `.d.nl.ts` emit (`project.ts:160-193`):** Emit `import type` references to child declarations instead of inlining the entire transitive tree into one giant intersection type.
-- **Opt-out:** Existing list `uses: [a/b]` continues working identically.
-- **Targeted tests:** `ts-host/test/uses-modules.test.mjs` (aliases, relative paths, cross-package npm `.nl` import, cycle detection, callable-folder `.ts` shared imports, compact `.d.nl.ts` snapshot).
+### L7. Structural recursion in `.nl`; `ensures:` contracts (4 days, no deps; two agents in parallel)
+- **Recursion.** *(v2 fact)* `runtime/kernel.ts:545` refuses any re-entry of a call identity. TS already has a
+  structural-descent guard (`runtime/context.ts:223-264`). Build: frontmatter `recursive: structural` or
+  `measure: <expr>`. Re-entry is admitted when an argument strictly descends or the measure strictly decreases, and the
+  same guard is reused. The function's own name is bound in its eval scope. `TOOLS_PROMPT`'s "functions may not call
+  themselves recursively" becomes true-to-semantics: "a function may call itself only on a smaller argument". That is
+  a model-facing fact fix recorded in MODEL_FACING_CHANGES. `MAX_AD_HOC_NL_DEPTH` stays 5 for ad hoc inline calls
+  (`runtime/context.ts:13`). v1 proposed a size-shrink heuristic, which is a premature limit dressed as a feature.
+  This item drops it. Tests: `ts-host/test/nl-recursion.test.mjs`.
+- **`ensures:`.** *(v2 fact)* the refinement judge sees only `value` and `predicate` (`native/refinement.ts:79-97`).
+  Build: frontmatter `ensures: [{ check: "<TS expr over result and args>", message }, { predicate: "<NL>", against:
+  [args] }]`. Crisp checks run first (read-only scope). Semantic predicates run as a `readout: decision` judge whose
+  user message carries `{ value, context }` with `Untrusted<T>` fencing kept. Failures re-enter the existing repair
+  budget. Items named by a `check:` are protected (L3). `refine(value, predicate, { context })` gets the same
+  context path. Tests: `ts-host/test/relational-refinements.test.mjs`.
 
-### 1B.5 Structural Semantic Recursion for `.nl` Functions
-- **Problem:** `runtime/kernel.ts:543-545` unconditionally rejects any `.nl` re-entry, even when the recursive call is on a strictly smaller subtree/slice/integer — forcing authors to manually defunctionalize tree walks and divide-and-conquer into giant `iterateOn` state machines.
-- **Design:**
-  1. Add optional frontmatter key `recursive: structural` (or `measure: <expr>`, e.g., `measure: node.depth` or `measure: items.length`). Without it, `.nl` functions remain strictly non-recursive by default (preserving existing guarantees and error messages).
-  2. In `runtime/kernel.ts:543-545`, when `definition.recursive` is enabled, reuse `runtime/context.ts:223-258`'s exact structural-descent checker across the active `.nl` call chain: each self-call must strictly decrease along the same parameter (`part` reachable via property/element, shorter array/string, smaller non-negative integer) or strictly decrease the declared nonnegative integer `measure`. Non-decreasing or repeated arguments throw `NatlangRecursionError`.
-  3. Expose the function's own name in its eval scope when `recursive` is declared so eval code can invoke `await self(child)` directly (including concurrently across disjoint children with `Promise.all(node.children.map(c => summarize(c)))`!).
-  4. Replace the fixed `MAX_AD_HOC_NL_DEPTH = 5` (`kernel.ts:524-529`) with a soft descent rule for ad-hoc `nl` (allow deeper nesting when total serialized input size strictly shrinks by ≥ 25%, capped at a safety ceiling of 16; keep 5 as fallback when inputs do not shrink).
-- **Opt-out:** `NATLANG_ALLOW_NL_RECURSION=0` runtime switch.
-- **Targeted tests:** `ts-host/test/nl-recursion.test.mjs` (recursive tree summarizer, parallel divide-and-conquer, rejection of equal/growing argument, measure exhaustion, mutual cycle still rejected unless measured).
+### L8. `Neuralese<T>` is first class in the surface authors touch (2 days, after L5)
+*(v2 fact)* `Neuralese<T, D>` is already a first-class, specified type (`spec/ext/neuralese.md` 0.5-draft: opacity
+rules, conversions, dialects, `view`, `read`, combinators with laws). The gap is reach, not definition: 0 `.nl` files
+use it, no std combinator accepts it, and the generic form is a special case. Build: L5 generalises the generic form.
+`skills/natlang-authoring/references/language.md` gets a Neuralese section. `natlang check` hints at a
+`Neuralese<string>` `view` when a callable passes the same large string to more than N child calls in one eval. The
+hint is telemetry-derived and no limit is imposed. Tests in `generic-nl.test.mjs` and `neuralese` conformance.
 
-### 1B.6 Relational / Dependent Refinements & `ensures:` Postconditions
-- **Problem:** `native/refinement.ts:94-97` shows the judge only the isolated field value (`renderForJudge(value)`), making relational invariants (`quote: Is<string, "verbatim substring of source">`) impossible to check even though `skills/natlang-authoring/references/refinements.md:8` teaches them.
-- **Design:**
-  1. **Frontmatter `ensures:` contracts** on `.nl` functions (both crisp TS expressions and natural-language predicates with access to `result` and all parameters):
-     ```yaml
-     args:
-       source: Untrusted<string>
-       question: string
-     returns: CitedAnswer
-     ensures:
-       - check: "result.quotes.every(q => source.includes(q))"
-         message: "Every quote must be a verbatim substring of source."
-       - predicate: "result.answer is supported solely by result.quotes and answers question"
-         against: [question, source]
-     ```
-  2. **Contextual `Is<T, P>` resolution:** When `Is<T, P>` appears inside a return type or `refine(value, predicate, { context })`, allow passing `{ context }` bindings to `refinement.ts` so the judge sees `{ value, context }` cleanly separated (with `Untrusted<T>` fencing preserved!).
-  3. **Execution & repair loop:** `ensures:` checks run after structural type-checking at `return_result` / `eval { finish: true }`:
-     - Crisp `check:` runs first (0 tokens, deterministic, constrained TS expression evaluated in a read-only scope holding `result` + args).
-     - Semantic `predicate:` runs via cached `readout: decision` judge (or crisp override from `refinements.ts`).
-     - Failures feed the exact `message` / predicate back to the model inside the existing repair budget (`maxFailureRepairs`), throwing `RefinementCallError` if exhausted.
-- **Opt-out:** `refinements.ensures: 'off'` in `natlang.json`.
-- **Targeted tests:** `ts-host/test/relational-refinements.test.mjs` (crisp `ensures`, semantic `ensures` with `against:`, repair loop recovery, `Untrusted<T>` fencing inside judge prompt, caching key includes context hash).
-
----
-
-## 4. Acceptance Gates for WS1
-
-- `npm test` in `ts-host` passes 100%, including all 7 new targeted test suites above.
-- Browser bundle build + `npm run test:browser` pass with identical diagnostics and runtime semantics.
-- `spec/SPEC.md`, `spec/ERRORS.md`, `spec/ext/refinements.md`, and `spec/ext/directory-reducers.md` are updated in the same pushes as each feature lands.
-- Zero regressions on existing `conformance/programs/` and `applications/` test suites.
+## 4. Acceptance for WS1
+- `npm test` and `npm run test:browser` in `ts-host` pass, including each item's targeted suite. Browser and Node give
+  identical diagnostics.
+- `spec/SPEC.md`, `spec/ERRORS.md`, the extensions and the skill references are updated in the same push as each item.
+  Every new error code has a one-sentence fix in the skill's error table.
+- `conformance/programs/` and existing application tests stay green.

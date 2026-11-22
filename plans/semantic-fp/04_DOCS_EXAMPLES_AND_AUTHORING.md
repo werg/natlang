@@ -1,99 +1,299 @@
-# WS4: Front-Door Reset — Docs, Examples, Playground, `natlang init`, Skills & Corpus Quarantine
+# WS4: The front door teaches the ambitious paradigm now, by example and by errors
 
-**Parent:** [Campaign Index](README.md)  
-**Analysis:** [00_AUDIT_AND_ANALYSIS.md](00_AUDIT_AND_ANALYSIS.md)  
-**Goal:** Replace the timid *"TS + ticket classifier"* front door with an unmistakable, inspiring, practical presentation of **typed semantic functional programming** across every entry point a human or coding agent touches — and quarantine bulk legacy prose corpora so coding agents stop copying anti-patterns.
+**Parent:** [Campaign index](README.md). **v2** (2026-11-23). v1 scheduled the front door for "Wave 1-3" and its
+corpus "quarantine". In v2 the front door ships in Wave A with exact content (below). The legacy corpora are migrated
+or deleted (WS7).
 
----
+Consumers are people and coding agents writing natlang programs. What they read: `natlang init` and the `AGENTS.md` it
+writes, `skills/natlang-authoring` and `skills/natlang-integration`, `README.md`, `website/`, the playground, and the
+CLI's errors. Each surface must carry the same stance, shown in working code:
 
-## 1. Mechanism Inventory
+> Hand natlang the repeat agentic work you would give a frontier agent loop. Types, data and exact steps are
+> TypeScript. Every judgment is a small typed natural-language function, which a local 1.7B model runs, scored and
+> calibrated when the answer is finite. The program checks its own results. It escalates only the cases it is unsure
+> of, compiles its repeated paths to plain code, and improves itself from its own runs.
 
-| Surface | Files | Current Defect | Target State |
+**Rules for every surface.** (1) Show the paradigm in a runnable example before explaining it. (2) Never show a wrong
+form (AGENTS.md "Teach in errors, not prompts"; owner point 9). A skill or AGENTS.md is a prompt to the coding agent
+that reads it. v1's ❌/✅ anti-pattern gallery is dropped. Wrong forms are taught by `natlang check` and the idiom
+reviewer at the moment they are written. (3) Every command and API named exists at the time the text ships. A
+construct still being built (std combinators, `--idiom`, `profile`) enters the text in the same push that ships it.
+(4) The front-door text is also the teacher prompt for WS5's idiomatic-program demonstrations, so users and the
+training data learn the same thing.
+
+## 1. Inventory
+
+| Surface | File | Today (verified 2026-11-23) | v2 item |
 |---|---|---|---|
-| Project scaffolder (`natlang init`) | `ts-host/src/package/authoring.ts` | Scaffolds 1-file 3-label billing classifier (`answer.nl`), teaches narrow classifier mental model in generated `AGENTS.md`. | Default 3-file semantic-FP starter + `--template` gallery (`fp-pipeline`, `decision-router`, `folder-agent`, `classifier`); rewritten `AGENTS.md`. |
-| Top-level `README.md` | `README.md` | Good 8-line `triage` snippet undermined by immediate pivot to `answer.nl` 3-label classifier; hides JIT specialization, `.in()`, `Is<T,P>`, semantic libraries. | Radical manifesto opening + crisp "before/after" (brittle script vs frontier agent vs compiled 1.7B semantic-FP program). |
-| Illustrated Website | `website/index.html`, `website/app.js` | Anchored on `classify.nl` / `is_urgent.nl` and Ch. IX's narrow "decisions vs exact work" dichotomy; missing `.in()`, higher-order composition, `Folder` branching. | Keep 9-plate visual language; upgrade hero & Ch. IX; add interactive exhibits for Higher-Order Composition, `.in()` Context Rebinding, and Transactional `Folder` Branching. |
-| Browser Playground | `ts-host/playground/examples/{crisp,natural,interfaces,builders}.mjs`, `examples.mjs` | 21/38 pure-TS LeetCode puzzles; 13 archaic pre-v0.5 single-shot prompts (`"Write X to return"`); 0 modern v0.5 features. | 12-example **Semantic FP Progression** running live in browser (`wllama`) + Node; archive LeetCode exercises out of the default gallery. |
-| Authoring Skills | `skills/natlang-authoring/{SKILL.md,references/*.md,assets/review/}` | Steers agents to minimize `.nl` to narrow leaves; omits `.in()`, `pluggable`, `Folder` branching, `@natlang/std`, JIT specialization, anti-pattern gallery. | Rewritten around Semantic Functional Architecture, `@natlang/std`, `natlang check --idiom`, progressive compilation, and explicit Do/Don't contrast pairs. |
-| Bulk Legacy Corpora | `codebases/design_briefs/` (1,390 `.nl`), 11 Astra apps in `applications/` (321 `.nl`) | 83% of repo `.nl` files embody `.nl`-only prose-interpreter anti-patterns and dominate agent grep/discovery. | Quarantine / clearly label with archival manifests and curated `applications/README.md` + `examples/README.md` indexes without breaking training/test scripts. |
+| `natlang init` | `ts-host/src/package/authoring.ts:26-125`; CLI `cli/commands.ts:984-994` (takes no flags) | one `answer.nl` 3-label billing classifier with `readout: decision` (chosen because it ran in 18.7 s instead of 136 s on local LFM3); generated AGENTS.md says "Exact work ... belongs in TypeScript; judgment belongs in instructions" and "Number the steps of a multi-step instruction" | F1 |
+| Generated `AGENTS.md`/`CLAUDE.md` | same file, `agentGuide()` L79-125 | loop, exit codes, model setup, six writing bullets | F1 (§3) |
+| `natlang new` stub | `createFunction` L131-140 (dashboard only) | "Number the steps if there are several" | F1 |
+| Authoring skill | `skills/natlang-authoring/SKILL.md` (14 KB) + `references/{language,patterns,refinements,verification,tuning,adaptation,fusion}.md` + `assets/review/` | L8-11 "the author puts the algorithm ... in the source"; L90-93 "Most applications are ordinary code with a few `nl` decisions where meaning matters"; no `.in`, `pluggable`, Folder transactions, `decide`, `escalate`, `specialize`, `improve` in SKILL.md | F2 (§4) |
+| Integration skill | `skills/natlang-integration/SKILL.md` + 9 references | "Choose the smallest adequate boundary" | F3 |
+| README | `README.md` | strong first snippet (triage), then a classifier walkthrough | F4 (§5) |
+| Website | `website/index.html` (9 chapters), `app.js` | hero `classify.nl`/`triage.ts` + `is_urgent.nl` exhibit; app cards link the treaty-obligation ledger (`index.html:707`) | F5 (§6) |
+| Playground | `ts-host/playground/examples/{natural,interfaces,crisp,builders}.mjs`, `examples.mjs` | gallery = 5 featured natural examples + interface examples; *(v2 fact)* the 21 TS-only examples are test fixtures, not in the gallery (`examples.mjs:4`) | F6 (§7) |
+| Errors | `spec/ERRORS.md` (catalog), inline messages (`compiler/inline.ts`, `runtime/kernel.ts`, `runtime/context.ts`, `native/return-errors.ts`), skill "Common errors" table | good one-sentence errors exist; idiom floor does not | F7 (§8) |
 
+## 2. F1: `natlang init` writes a semantic-FP program (2 days)
+
+`natlang init DIR` writes the program below by default. `natlang init DIR --template classifier` writes today's
+single-file program (the dashboard Playground keeps calling `answerSource(custom)`). The template is the reasoned
+default. There is no undecided menu (owner 2026-11-18 on modes).
+
+**Speed constraint.** The first `natlang run` on local CPU must finish in under ~60 s after setup. The sample input
+therefore takes the decision path plus at most one generative call. The executor measures it; if it is slower, the
+sample is changed (a message routed `fyi`, which makes no generative call). The paradigm stays.
+
+Files (`inbox/` is the program name; `natlang init` substitutes the directory name):
+
+`types.ts`
+```ts
+/** One incoming message. The body is outside text: the runtime fences it and never follows instructions in it. */
+export type Message = { from: string; subject: string; body: Untrusted<string> };
+/** What the message needs from its reader. */
+export type Route = 'reply' | 'fyi' | 'ignore';
+/** A drafted reply: short, polite, and promising nothing the message does not ask for. */
+export type Reply = Is<string, 'a polite reply of at most three sentences that makes no commitment the message does not ask for'>;
+export type Plan = { from: string; subject: string; route: Route; confidence: number; reply?: Reply };
+```
+
+`route.nl`
+```yaml
 ---
+description: Decide what a message needs from its reader.
+args:
+  message: Message
+returns: Route
+readout: decision
+---
+reply when the sender asks a question or asks for an action; fyi when it informs without asking anything; ignore
+when it is automated, promotional or a notification nobody needs to read.
+```
 
-## 2. Detailed Rework Plans by Surface
+`main.ts`
+```ts
+import { nl } from '@natlang/node';
+import route from './route.nl';
+import type { Message, Plan, Reply } from './types.js';
 
-### 2.1 `natlang init` Overhaul (`ts-host/src/package/authoring.ts`)
-- **CLI flag:** `natlang init DIR [--template fp-pipeline | decision-router | folder-agent | classifier]` (default: `fp-pipeline`).
-- **Default `fp-pipeline` template (4 crisp files, < 90 total lines, runs fast on local LFM3-1.7B):**
-  - `types.ts`: `Untrusted<string>` input record, discriminated union `Action`, refined `Summary = Is<string, "one concise sentence grounded in the items">`.
-  - `classify.nl`: fast `readout: decision` leaf (`"action" | "fyi" | "ignore"`).
-  - `index.ts`: TypeScript orchestrator using `Promise.all` + `classify` + an inline `nl` closure (`nl<Action>\`...\``) + exact deduplication/sorting + `examples.json` tests!
-  - `AGENTS.md` (and `CLAUDE.md`): rewritten around the **Three Questions of Semantic Functional Decomposition** (typed algebra → semantic lambdas → exact invariants & progressive compilation), explicitly teaching `natlang check --idiom`, `natlang profile`, `readout: decision`, inline `nl`, `Is<T, P>`, `Untrusted<T>`, `Folder` reducers, and `.in()`.
-- Keep `--template classifier` for minimal 1-file quickstarts (and preserve existing `natlang setup` warm-prefix priming for both templates).
+/** Plan the reader's inbox: route every message, draft replies for the ones that need one. */
+export async function plan(messages: Message[]): Promise<Plan[]> {
+  // Independent judgments run together; each is one scored decision on the local model.
+  const decisions = await Promise.all(messages.map(message => route.decide(message)));
+  const draft = nl<Reply>`Draft a reply to message for its reader.`;
+  return Promise.all(messages.map(async (message, i) => {
+    const { value, confidence } = decisions[i]!;
+    const plan: Plan = { from: message.from, subject: message.subject, route: value, confidence };
+    if (value === 'reply') plan.reply = await draft(message);
+    return plan;
+  }));
+}
+```
+The executor checks whether `route.decide(message)` or a runtime `decide(route, message)` is the host-code form that
+exists today. It writes whichever does. If neither exists in host code, adding one host-callable form of `decide` is
+part of F1 (one implementation: the eval builtin's `runtime.decide`).
 
-### 2.2 `README.md` Manifesto Rewrite
-1. **Opening thesis:** Lead directly with the real promise: *"Write flexible, malleable, well-typed semantic programs that automate repeat agentic work on small, fast, local models."*
-2. **Concrete 20-line hero example:** Show a real repeat-agentic-work snippet (e.g., PR/inbox triage + structured action synthesis + exact invariant check + `iterateOn` repair) demonstrating:
-   - inline `nl` lambda with lexical capture & typed-hole inference,
-   - `readout: decision` + `escalate({ floor: 0.85, fallback: 'frontier' })`,
-   - `Untrusted<T>` + `Is<T, P>` / `ensures:`,
-   - exact TypeScript verification & aggregation,
-   - one-command `natlang profile` + `natlang compile` (JIT specialization + tuning).
-3. **Why Semantic FP beats both extremes:** Crisp 3-column comparison table (Hand-Coded Scripts vs. Frontier Agent Loops vs. Compiled Natlang Programs on 1.7B).
-4. **Curated tour of real apps:** Link directly to the curated flagship applications (`examples/triage`, `examples/review`, `applications/notebook`, `applications/helpdesk`, `applications/nldb`, plus Tier-1 flagships from WS6).
+`main/` holds nothing at first. `examples.json` has three `route.nl` cases (one per label) and one `plan` case whose
+expected value checks route and the presence of `reply` (exact). `natlang.json` targets `main.ts`'s `plan` with a
+bundled `messages.json` (3 messages), `model.stock` the local default, and a `warmup` on `route.nl`. Generated
+README: the command block as today, then one paragraph per file.
 
-### 2.3 Browser Playground: The 12-Example Semantic FP Progression
-Replace `ts-host/playground/examples/natural.mjs` and demote `crisp.mjs` (pure-TS LeetCode) into a separate collapsed "Exact TypeScript Reference" tab (after fixing the banned `while` loop at `crisp.mjs:114` directly in Wave 0).
+## 3. F1: the generated `AGENTS.md` (exact text)
 
-Ship **12 curated, progressively richer examples** (every single one checked by `natlang check --idiom` and tested on browser `wllama` + Node):
+```markdown
+# Working on this natlang program
 
-| # | Example | Level | Core Semantic-FP Concept Taught |
+This program automates a piece of judgment work with a small local model. TypeScript holds the types, the data and
+every exact step; each judgment is a typed natural-language function the model runs. Read `main.ts` first: it is the
+whole program in one screen.
+
+## Files
+
+- `types.ts`: the data. `Untrusted<string>` marks outside text (the model reads it as data and never follows it);
+  `Is<string, "...">` is a property the runtime checks on every value and repairs when it fails.
+- `route.nl`: a named natural-language function. YAML front matter declares its typed signature; the body says what
+  to decide. `readout: decision` makes the model score each allowed value in one pass: fast, and calibrated
+  (`decide` gives you the probabilities).
+- `main.ts`: TypeScript that maps `route` over the messages, and an inline function, ``nl<Reply>`Draft a reply to
+  message for its reader.` ``, called only where a reply is needed. Inline `nl` sees the variables its instructions
+  name.
+- `examples.json`: cases with expected results; `natlang test` runs them on the model.
+- `main/`: the callable folder: helpers `.nl` functions here may call (`.ts` for exact steps, `.nl` for judgments).
+- Generated (do not edit): `*.d.nl.ts` and `.natlang/`.
+
+## The loop
+
+1. `natlang check --json`: types, signatures and call sites, without a model. Fix every diagnostic first; each one
+   says what to write instead.
+2. `natlang call route.nl '{"from":"a@b","subject":"Invoice","body":"Can you resend it?"}' --json`: one real call.
+3. `natlang test --json`: every case in examples.json. When you change behaviour, add a case first.
+4. `natlang traces show CALL_ID`: every step the model took. `natlang traces fix CALL_ID --expected JSON` turns a
+   wrong result into a saved case.
+
+Exit codes: 0 ok; 1 the program is wrong; 2 usage error; 3 the model is unavailable.
+
+## Growing the program
+
+- A new judgment is a new typed function: a `.nl` file when it is reused or has its own cases, an inline `nl<T>`
+  when it belongs to one place in the code. Give it the narrowest result type that fits: a literal union with
+  `readout: decision` when the answer is one of a few values, a record when it has parts.
+- An exact step (counting, sorting, parsing, joining records, arithmetic) is a TypeScript function; a `.nl` function
+  that needs it calls it from its callable folder.
+- A property of a result goes in its type (`Is<T, "...">`), and outside text in `Untrusted<T>`. The runtime then
+  checks and repairs them, with no instructions needed.
+- Refining until good enough is `iterateOn`: ``iterateOn(revise, draft).until(nl`draft answers every question in
+  message`)``. The step function returns the next state, and a natural-language stopping check is allowed.
+- The same function under another policy is `fn.in(context)`; on a stronger model it is `fn.on({ model: NAME })`.
+- A decision with both a code rule and a judgment uses `pluggable({ crisp, nl }, setting)`. In `shadow` mode both
+  run, and their disagreements are recorded.
+- Repeated inputs compile to code: `natlang specialize` turns a function's recorded calls into checked crisp cases
+  that answer without the model, and hands everything else to the model.
+- The program improves from its runs: `natlang tune` trains the local model on this program's own examples, and
+  `natlang improve` searches for better instructions against them.
+
+## The model
+
+On exit code 3, ask the user before running `natlang setup --yes` (a one-time 1.8 GB download), or use a hosted
+model: `--provider ID` (`natlang models`) or `NATLANG_SERVER=URL NATLANG_MODEL=ID`. `natlang doctor --json` reports
+the setup.
+
+The natlang-authoring skill (`natlang skills install`) has the full language: composition, transactions over
+folders, Neuralese values, recursion and decisions.
+```
+
+The executor verifies every command and API in this text against the CLI and `@natlang/node` before shipping, and
+drops or rewrites any line that does not hold. Example: if `natlang improve` still requires a `CASE.json` when F1
+ships, that line says what it does today, until WS8 N4 lands. `createFunction`'s stub drops "Number the steps if
+there are several" and becomes: "Say what to decide or produce from `text`. Keep exact steps in a TypeScript
+helper this function calls."
+
+## 4. F2: the authoring skill (3 days)
+
+`SKILL.md` keeps its working loop, "A named function", "How a call executes" and "Common errors". It replaces the
+opening and "Design the program":
+
+**Opening (replaces L8-11).**
+> Natlang is TypeScript with natural-language functions: typed functions whose bodies are instructions a model
+> carries out, checked like any other code. Use it to automate repeat agentic work on a small local model: the
+> program's types, data and exact steps are TypeScript, each judgment is a small typed function, and the runtime
+> makes finite judgments calibrated decisions, compiles repeated paths to code and checks every result against its
+> type.
+
+**"Design the program" (replaces L88-121), eight items:**
+1. **Write the types first.** Records and literal unions in `types.ts`, with `Untrusted<T>` on every value that comes
+   from outside and `Is<T, "...">` on every property you would otherwise ask for in a sentence.
+2. **Exact steps are TypeScript.** Arithmetic, parsing, sorting, joining, counting, record assembly, I/O: functions in
+   the callable folder or the host. A `.nl` function calls them.
+3. **Each judgment is one typed function.** Inline `nl<T>` in the code that needs it, or a `.nl` file when it is
+   reused or tested on its own. When the instructions are several steps of judgment, number them and name the data
+   each step uses. Children get distinct sub-questions and the inputs they need.
+4. **Finite answers are decisions.** `readout: decision` on a literal-union or boolean result: one scored pass, and
+   `decide` returns the probabilities. Gate actions on confidence, and escalate the unsure cases with
+   `fn.on({ model })`.
+5. **Compose.** Map a judgment over a collection with `Promise.all`. Pass semantic functions as arguments. Rebind a
+   function's context with `fn.in(context)`. Use `pluggable({ crisp, nl })` where a rule and a judgment compete.
+6. **Iterate structurally.** `iterateOn(step, state).until(check)`, where the check can be code or `nl`; recursion
+   only on a smaller argument; `for...of` and array methods. There are no while loops.
+7. **Change files and code through transactions.** `folder.propose(reducer)`, check `proposal.folder`, then
+   `folder.accept(proposal)`. A verifier is a service, never a helper the model can edit.
+8. **Close the loop.** `examples.json` holds the cases. `natlang specialize` compiles hot paths to crisp cases,
+   `natlang tune` adapts the local model, and `natlang improve` searches instructions against the cases.
+
+Deleted sentences: "Most applications are ordinary code with a few `nl` decisions where meaning matters"; "the author
+(you) puts the algorithm ... and the interpreter only has to take the next step"; "Port an algorithm as its steps
+over named data". The last one is replaced by item 3's narrower wording: numbered steps for judgment, TypeScript for
+mechanism.
+
+**New `references/composition.md`** (outline, ~6 KB): passing and returning semantic functions; `nl.with` vs
+capture-by-mention; `.in(context)` and `Context.of`; `pluggable` modes and the shadow trace; `fn.on` and escalation;
+`Folder` `propose`/`accept`/`snapshot`/`branch`/`select` and `folder.iterateOn`; `iterateOn` with a natural-language
+check and a measure. Each section is one runnable example from `examples/` or a flagship (WS6), with no wrong form.
+`references/patterns.md` is rewritten around `examples/triage`, `examples/review`, `applications/notebook`,
+`applications/helpdesk`, `applications/nldb` and the flagships. Its Astra-derived paragraphs go (WS7 deletes or
+migrates their source). `references/language.md` gains `Neuralese<T>` (WS1 L8) and recursion (`recursive:`, when L7
+lands). The skill's error table gains every new code from WS1-WS3, each with its one-sentence fix.
+
+`assets/review/` stays the bundled example. It already shows `Untrusted`, a decision leaf and an exact TS aggregate.
+
+## 5. F4: README opening (exact text for the first screen)
+
+```markdown
+# natlang
+
+natlang lets you automate work you would hand to an AI agent with a program you own, running on a small local
+model. TypeScript holds the types, the data and every exact step; each judgment is a typed natural-language
+function. Finite judgments are scored decisions with probabilities, outside text is fenced by its type, results are
+checked against their declared properties, repeated paths compile to plain code, and the program improves from its
+own runs.
+```
+followed by the existing `triage` snippet extended by three lines: `readout: decision` on `classify.nl`, a
+confidence gate with `fn.on({ model })` for unsure tickets, and an `Is<string, ...>` summary type. Then "Get started"
+as today, with "Your first program" walking through the F1 template instead of the classifier. The "Using natlang"
+reading list leads with the curated programs (`examples/triage`, `examples/review`, `applications/notebook`,
+`applications/helpdesk`, `applications/nldb`, then the WS6 flagships as they land).
+
+## 6. F5: website (2 days)
+
+Keep the nine-chapter design. Change content only:
+- Hero: the F1 `main.ts` + `route.nl` pair replaces `classify.nl`/`triage.ts`. The `is_urgent.nl` code / prose /
+  shadow exhibit stays (it already shows `pluggable`).
+- Ch. III "Closures in English": add a `.in(context)` exhibit (one function, two policies).
+- Ch. V "Termination": add `iterateOn(...).until(nl\`...\`)` and folder `propose`/`accept`.
+- Ch. VII "A JIT for English": becomes the ladder: decision readout → crisp cases (`specialize`) → escalation →
+  `tune` → `improve`.
+- Ch. VIII "Neuralese": add `view` and a soft-state `semanticReduce` once WS8 N3 lands.
+- Ch. IX "Policy & mechanism": rewrite around the eight design items of §4.
+- App cards (`index.html:702-707`): remove "a treaty-obligation ledger" (WS7) and link the flagships.
+
+## 7. F6: playground progression (3 days; examples land as their constructs do)
+
+The gallery becomes an ordered progression; each example runs in the page (wllama) and in Node and is checked by
+`natlang check` (and `--idiom` once I2 exists):
+
+| # | Example | Construct | Available |
 |---|---|---|---|
-| 1 | **Calibrated Triage Gate** | Starter | `readout: decision` + `decide()` probability vector & confidence floor |
-| 2 | **Inline Semantic Closure** | Starter | Inline `` nl`...` `` capturing local TS policy & threshold live + typed-hole inference |
-| 3 | **Safe External Text & Semantic Types** | Starter | `Untrusted<T>` fencing + `Is<T, P>` / `ensures:` automatic repair loop |
-| 4 | **Parallel Semantic Map + Exact Tally** | Core | `Promise.all` over typed semantic lambdas + exact TS aggregation & invariants |
-| 5 | **Adaptive Convergence (`iterateOn`)** | Core | `iterateOn` with a **natural-language stopping predicate** + progress review |
-| 6 | **Hybrid Logic Engine (`nlprolog` mini)** | Core | Mixed `.nl` + `.ts` callable folder: semantic rule matching + exact fixed-point engine |
-| 7 | **Semantic Join & Pairwise Rank** | Core | `@natlang/std` `semanticMatch` & `semanticRank` (pairwise `readout: decision` + exact Copeland score) |
-| 8 | **Higher-Order Policy Compiler** | Advanced | `.nl` function returning a typed semantic lambda `(event) => Promise<Action>` from plain-English rules |
-| 9 | **Swappable Lenses (`.in(context)`)** | Advanced | Same semantic program bound to two different `Context` lenses (`security` vs `clarity`) |
-| 10 | **Crisp / NL / Shadow (`pluggable`)** | Advanced | Switching between fast regex/code and `.nl` behind one typed contract with live disagreement telemetry |
-| 11 | **Transactional Workspace (`Folder`)** | Advanced | `folder.propose` → exact invariant check → `folder.accept` (or clean rollback) |
-| 12 | **JIT Specialization & `Neuralese<T>`** | Advanced | Watching `natlang specialize` turn hot semantic paths into 0-token crisp cases + `Neuralese<T>` producer→consumer handoff |
+| 1 | Inbox planner (the F1 template) | decision readout, inline `nl`, `Untrusted`, `Is` | now |
+| 2 | Calibrated gate | `decide` probabilities, confidence floor, `fn.on` | now |
+| 3 | Map and tally | `Promise.all` over typed judgments + exact aggregation | now (rewrite of `support-triage`) |
+| 4 | Refine until it holds | `iterateOn` with an `nl` stopping check | now |
+| 5 | Two lenses | `.in(context)` | now (Wave-0 types) |
+| 6 | Rule or judgment | `pluggable` shadow with disagreement trace | now (from `is_urgent`) |
+| 7 | Safe edit | `folder.propose` → check → `accept` | now |
+| 8 | Compiled cases | `specialize` on recorded calls; crisp hits shown | now |
+| 9 | Semantic join and rank | `semanticMatch`, `semanticRank` | with WS3 S1 |
+| 10 | Policy compiler | `compileRule` returns a lambda | with WS1 L4 + S3 |
+| 11 | Soft summary | `view`, `semanticReduce(..., { carry: 'neuralese' })` | with WS8 N3 |
+| 12 | Structured decision | record `readout: decision` | with WS2 R3 |
 
-### 2.4 Website (`website/index.html` & `website/app.js`)
-Keep the acclaimed 9-plate editorial design, and upgrade the content so it teaches Semantic FP rather than ticket classification:
-- **Hero:** Swap the billing-ticket classifier for a compact real structured-computing snippet (inline `nl` + `readout: decision` + exact verifier + `iterateOn`).
-- **Chapter III (Closures & Contexts):** Add an interactive **Context Rebinding (`.in()`)** widget beside Capture-by-Mention, showing the same function running under two swapped contexts (`Context.of(...)`) with structural interface checking.
-- **Chapter IV / V (Interpreter & Termination):** Show **structural semantic recursion** alongside `iterateOn` and **Transactional `Folder` Branching (`propose`/`branch`/`select`)**.
-- **Chapter VII (A JIT for English):** Broaden into **The Progressive Compilation Ladder** (Spec → JIT Crisp Cases → Calibrated Decisions & Escalation → Tuned 1.7B LoRA + Algebraic Fusion).
-- **Chapter IX (Policy & Mechanism → Designing Semantic Functional Codebases):** Replace *"write decisions as `.nl` and keep exact work in TS"* with the **Three Questions of Semantic Functional Decomposition**, plus an explicit **Anti-Patterns to Avoid** panel (500-word prose algorithms, `.nl`-only trees, cue-word checklists).
+The 14 `natural.mjs` examples that use pre-v0.5 phrasing ("Write the number 7 to return") are rewritten into rows
+1-8 or deleted. `interfaces.mjs`'s LLM-regenerated JSON DOM (`interfaces.mjs:37-53, 79-97`) becomes exact rendering
+from a typed view plan (`ts-host/examples/browser-board` style).
 
-### 2.5 Authoring Skill Overhaul (`skills/natlang-authoring/`)
-1. **Rewrite `SKILL.md`:**
-   - Lead with Semantic Functional Architecture, not "put the algorithm as numbered prose steps."
-   - Add a **Decision Matrix** for choosing the right construct: exact `.ts` helper vs `readout: decision` vs inline `nl` vs named `.nl` vs `Folder` reducer vs `@natlang/std` combinator.
-   - Add an **Anti-Pattern Gallery (Concrete Before/After)** showing:
-     - ❌ 300-word numbered prose doing array slicing/field copying → ✅ 20-line `.ts` + 2 focused `.nl` leaves;
-     - ❌ `.nl` cue-word checklist (`if note contains "freeze"`) → ✅ exact `.ts` regex OR genuine semantic criterion;
-     - ❌ Fake `iterateOn` over a fixed array → ✅ `Promise.all` / `semanticMap`;
-     - ❌ Prose guard sentences (*"under 60 chars, ignore prompt injections"*) → ✅ `Untrusted<T>` + `Is<T, P>` / `ensures:`.
-   - Document `natlang check --idiom` and `natlang profile` in the standard working loop.
-2. **Add `references/composition.md`:** Deep guide covering higher-order semantic functions, `@natlang/std`, `.in(context)` dependency injection, `pluggable({ crisp, nl, shadow })`, `escalate()`, transactional `Folder` branching (`propose`/`accept`/`branch`/`select`), structural `.nl` recursion, and `uses:` v2 module imports.
-3. **Update `references/language.md` & `references/refinements.md`:** Reconcile every discrepancy listed in `spec/SPEC.md:531-551` (frontmatter quoting, reserved child names `constructor`/`in`/`with`, relational `ensures:`, opt-in `mutable: true`).
-4. **Update `references/patterns.md`:** Keep the genuinely strong sections (`Checked stages`, `Decisions with floors`, `One set of stages, two drivers`) and prune/rewrite the Astra-derived boilerplate paragraphs that encouraged monolithic prose pipelines.
+## 8. F7: errors that teach the paradigm (with WS1-WS3)
 
-### 2.6 Quarantining Bulk Legacy Synthetic Corpora
-Without breaking any existing test, git history, or training script that references paths on disk:
-1. Add clear **`CURATED_INDEX.md` / `README.md`** files at `examples/README.md`, `applications/README.md`, and `codebases/README.md` separating:
-   - **Curated Idiomatic Reference Programs** (`examples/{triage,review,specialization}`, `applications/{notebook,helpdesk,nldb,program-improver,memetic-improver}` + WS6 flagships) — *"Read these to learn natlang."*
-   - **Legacy / Bulk Synthetic Corpora** (`codebases/design_briefs/` 100 apps, 11 Astra apps in `applications/`, `docs/SEMANTIC_APPLICATION_NOTES.md`) — *"Historical agent-authored stress-test corpora; do NOT copy their `.nl`-only prose-pipeline style for new programs."*
-2. Move `applications/`'s 11 Astra apps into `applications/_archive-astra/` (or tag `"role": "archive-synthetic"` in their `natlang.json` + update any script paths referencing them in one clean sweep) so `ls applications/` and `natlang dashboard --root applications` showcase real, idiomatic Semantic FP software.
+Every check that detects a non-idiomatic form says the idiomatic one in one sentence. New messages, written out:
+- `idiom-decision-readout`: "`{fn}` returns one of {n} values: add `readout: decision` to score them in one pass, or
+  keep the tool loop if it must call helpers first."
+- `idiom-fixed-cursor-iterate`: "This `iterateOn` steps through a fixed list one item at a time: map the step over
+  the list with `Promise.all`, and keep `iterateOn` for steps that depend on the previous state."
+- `idiom-code-in-prose`: "`{file}` describes code (`{token}`) in its instructions: write that step as a TypeScript
+  helper in `{folder}/` and call it from the function."
+- protected edit (WS1 L3): "`{path}` decides whether this call succeeded, so it cannot be edited here; fix the code
+  that produces the value it rejects."
+- recursion (WS1 L7): the existing "called itself without a smaller argument" message stays, and gains "declare
+  `recursive: structural` to allow descent on part of an argument" when the definition lacks it.
 
----
+## 9. F3: integration skill (1 day)
+"Choose the smallest adequate boundary" becomes "Choose the boundary": the same five steps, plus one paragraph on
+when the whole workflow should be a natlang program (it decides things repeatedly, and its results can be checked),
+with `applications/helpdesk` as the example of a host application whose policies are natlang functions.
 
-## 3. Acceptance Gates for WS4
-
-- Every single example in `examples/`, `natlang init` templates, and the 12-example Playground gallery passes `natlang check --idiom` with **0 errors and 0 warnings**.
-- Browser playground smoke test executes all 12 new examples cleanly in `wllama`.
-- Blind agent-authoring evaluation: give 5 fresh coding-agent prompts (*"Build a natlang program for X"*) armed only with the new `natlang init` `AGENTS.md` + `skills/natlang-authoring/`; verify ≥ 4/5 naturally produce idiomatic mixed `.ts` + inline `nl` / `readout: decision` / `Is<T, P>` / `@natlang/std` programs passing `natlang check --idiom`.
+## 10. Acceptance for WS4
+- F1, F2, F4 ship in Wave A. `natlang init` + `natlang check` + `natlang test` pass on local LFM3, and the first run
+  is under ~60 s on DGX CPU.
+- Blind authoring check, run once per front-door release: 5 fresh coding agents, each given only a new `natlang init`
+  directory, the installed skills, and one prompt ("Build a natlang program that ..."; inbox, PR review, schema
+  mapping, ticket routing, document QA). It passes when ≥ 4 of 5 programs have `.ts` exact steps, typed `.nl` or
+  inline judgments, at least one `readout: decision`, and `Untrusted` on outside text, pass `natlang check`, and raise
+  no idiom-floor warning. The 5 programs and their scores are committed to `ops/semantic-fp/front-door-checks/`.
