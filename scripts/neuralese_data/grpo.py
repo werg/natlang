@@ -5109,8 +5109,8 @@ def train(args):
             t_fe = time.time()
             fe_dir = Path(args.export_factors_dir) / f'step-{step:05d}'
             fe_info = export_adapter_factors(
-                fe_dir, learner, base_checkpoint_sha256=source_sha, learner_step=step,
-                policy_id=record['effective_policy_sha256'], round_id=f'grpo-step-{step:05d}',
+                learner, fe_dir, base_checkpoint_sha256=source_sha, learner_step=step,
+                round_id=f'grpo-step-{step:05d}', objective_version='natlang_grpo_v1',
             )
             record['factor_export'] = {
                 'dir': str(fe_dir), 'sha256': fe_info['adapter_factors_sha256'],

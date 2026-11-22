@@ -156,14 +156,17 @@ actually in flight; fix a stale list in the same cycle.
 
 # Current approach (revisable; each item stands on its rationale)
 
-**State.** The method is **expert iteration** (owner-approved 2026-11-20; DECISIONS "expert iteration"): one loop in
-which every source feeds a per-task pool of verified trajectories in the student's own distribution (own best-of-k
-successes first, teacher trajectories with student-filled reasoning where it cannot solve the task, never teacher
-reasoning or empty think blocks as targets), weighted by the student's measured pass rate per task, trained by Ambient
-SFT and gated by held-v3 on Pop; its new failures feed the teacher campaign. `scripts/neuralese_data/expert_iteration.py`
-drives the cycles (sft-v7 is the first). GRPO is the polish phase once SFT gains flatten, not the engine. The start
-policy is the best held-measured checkpoint (`ops/current-policy.json`); the latest DECISIONS.md entries are
-authoritative.
+**State.** The method is **async expert iteration** (`plans/neuralese/async-train.md` v2; owner-approved 2026-11-20):
+standing collection (DGX + Colab G4 MPS FP8-weight actors, JOLT+ on by default, Neuralese-declaring task variants on at
+0.5 share), standing fill, and standing teacher campaigns continuously feed one per-task pool (`own > jolt-guided >
+teacher` with student-filled reasoning, never teacher reasoning or empty think blocks as targets). Back-to-back LoRA
+SFT rounds (`expert_iteration.py async-drive` / `cycle`) run on Colab G4 beside a capped MPS actor with DGX lookahead
+building round `n+1`, shipping ~0.5 GB FP32 factors back for DGX CPU FP32 merge (`merge_factors_to_checkpoint`),
+multi-engine publication (`publish_merged_policy`), and atomic in-place 4-route rebind of all standing actors. Held-v3
+runs on the DGX BF16 4-sample series (`dgx-held`, preemptible, collection yields slots while it runs; Pop is legacy).
+Two consecutive neutral measured rounds switch to/from the BF16 GRPO polish phase (`PhaseController`), keeping GRPO
+successes in the pool. The start policy is the best held-measured checkpoint (`ops/current-policy.json`); the latest
+DECISIONS.md entries are authoritative.
 
 - **Standard tooling, minimal crisp code** (an HF training loop with `lfm3_fast_train`, the SGLang server). Earlier
   controllers, custody schemas and transitions consumed the effort and confounded measurements. Build infrastructure
@@ -187,7 +190,7 @@ authoritative.
 - **Breadth from more natlang domains** (chat and writing included) rather than anchor KL or broad mixing; forgetting
   general ability outside natlang is acceptable.
 - **Additions are bundled by expected merit**, not entered one at a time. Neuralese-declaring task variants (`--neuralese-variants`, 1,381 rows) run in expert-iteration
-  collection by default (half of a task's groups, 2026-11-22). Off by default today: whole-graph Neuralese gradients and use bonus, the JOLT+ teacher and privileged twin,
+  collection by default (half of a task's groups, 2026-11-22), and JOLT+ guided attempts (`--teacher-attempts 2`, leak-checked into the `jolt-guided` pool tier) run by default in collection and GRPO (opt-out `0`). Off by default today: whole-graph Neuralese gradients and use bonus, the privileged twin (`--reasoning-rl-weight 0.0`, opt-in `1.0`),
   memetic guidance programs, interleaved SFT and QAT. Turn one on in the next run when it is likely to raise held
   task success; leave it off when it is not.
 - **Never upweight a few tokens without per-token evidence**, and check an update's direction against its gradient
@@ -263,14 +266,16 @@ authoritative.
 
 # Machines
 
-- **DGX (GB10, 128 GB unified memory)** is the durable coordinator, data store and local trainer/actor. **Colab G4**
-  (RTX PRO 6000 Blackwell, 96 GB discrete VRAM, ~1.8 TB/s, ~13 CU/h; bootstrapped via `scripts/colab/bootstrap.py` over
-  Tailscale userspace networking, admitted via `scripts/colab/admission.py` with separate VRAM/host-RAM checks) runs
-  high-throughput LoRA SFT (15-min learner-state sync back to DGX; Colab disk is scratch), sharded collection, and
-  sharded 4-sample held evals on its own held series (`ExecutionProfile` `colab_g4`, with automatic 30-min unreachable
-  fallback to DGX; L4 is excluded). **Pop** (RTX 4060 8 GB, 14 GB host RAM) runs held evals and forward-only probes
-  when idle. The DGX drives both Colab G4 and Pop over ssh via the unified remote-actor module (`pop_rl_actor.py`).
-  DGX and Pop use `/home/werg/natlang` as the canonical checkout.
+- **DGX (GB10, 128 GB unified memory)** is the durable coordinator, data store, full-time FP8 collector, DGX BF16
+  4-sample held-eval host (`dgx-held`), and 30-min fallback trainer (resuming from synced `learner-state/` and recording
+  `profile_changes` in `round.json`). **Colab G4** (RTX PRO 6000 Blackwell, 96 GB discrete VRAM, ~1.8 TB/s, ~13 CU/h;
+  bootstrapped via `scripts/colab/bootstrap.py` over proxy-mode SSH / Tailscale, admitted via `scripts/colab/admission.py`
+  with separate VRAM/host-RAM checks) runs back-to-back LoRA SFT rounds (`--factors-only`, 15-min learner-state sync back
+  to DGX, ~0.5 GB FP32 factor ship-back) alongside a capped MPS FP8 collection actor (`G4_ACTOR_BESIDE_LEARNER`: 24 GB KV,
+  64 running), or full-GPU collection/GRPO when extra sessions are up (L4 is excluded). **Pop** (RTX 4060 8 GB, 14 GB
+  host RAM) runs legacy held evals, fills, and forward-only probes when idle. The DGX drives Colab G4 and Pop over ssh
+  via `pop_rl_actor.py` (including `rebind` for in-place 4-route updates). DGX and Pop use `/home/werg/natlang` as the
+  canonical checkout.
 - **Memory ledger.** On the DGX every build, test and probe runs through
   `scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`. Units are asynchronous: wait and read the
   log. Priority is `--priority high` for training/GPU runs, `low` for data generation and check-main, and the default

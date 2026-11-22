@@ -586,7 +586,7 @@ def test_extract_takes_teacher_successes_in_student_form(tmp_path):
     s.extract(types.SimpleNamespace(work=str(work), rl=[f'{run}:{archive}'], teacher=[], out_name='episodes'))
     episodes = [json.loads(line) for line in s.zstd_lines(work / 'episodes.jsonl.zst')]
     student, teacher = episodes
-    assert 'role' not in student and teacher['role'] == 'teacher' and teacher['source'] == 'rl-own'
+    assert 'role' not in student and teacher['role'] == 'teacher' and teacher['source'] == 'jolt-guided'
     assert [t['invocation_id'] for t in teacher['turns']] == ['root']           # the writer's call is gone
     assert teacher['turns'][0]['exact']['prompt_ids'] == [1, 2]                  # the guidance turn is gone
     census = json.loads((work / 'episodes-extract.json').read_text())['sources']

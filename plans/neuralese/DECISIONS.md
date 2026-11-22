@@ -6922,3 +6922,38 @@ collection actor (shared GPU, so absolute speeds are low; ratios come from inter
     other work.
 - **Next for the VM.** It serves each new collection policy when a cycle starts; the A100 takes the SFT once the remote
   SFT path runs in production (sft-v10's SFT stays on the DGX: the LoRA path's first production run is watched there).
+
+## 2026-11-22 15:20 Async expert iteration implementation (`plans/neuralese/async-train.md` v2)
+
+Implemented the full `async-train.md` v2 architecture across 4 commits (building on the DGX held-series, Neuralese
+variants, 4-route attestation, and Colab G4 bootstrap/sizing commits already on `main`):
+
+- **FP32 LoRA factor export/merge, dedup ledger & multi-engine publication (§2, §4, §5; `222af966e`):**
+  - `learner_state.py`: `export_adapter_factors` (blob-first `adapter_factors_fp32.safetensors` + `policy_manifest.json`,
+    ~0.5 GB at `r=128`, ~130 MB at `r=32`), pure CPU DGX `merge_factors_to_checkpoint` (`bf16(fp32(W0) + s*BA)` +
+    trainable Neuralese rows, fail-closed base & factor SHA-256 checks), and `trained_rounds` / `trained_episode_ids`
+    dedup ledger persisted in `save_learner_state` / `load_learner_state`.
+  - `export/native_hf.py`: `publish_merged_policy` (SGLang HF export, optional GGUF export, optional `ops/current-policy.json`).
+  - `exp0_sft.py`: `--round-id`, `--export-factors-dir`, `--factors-only` (skips already-trained rounds on `--resume`).
+- **FP8 collection actors, Colab G4 MPS, remote in-place rebind & factor-shipping SFT (§1, §3, §5, §7.1; `1a5cae217`):**
+  - `serve_native_checkpoint.py` & `sglang_actor.py`: `--sglang-weight-dtype {bfloat16,fp8}` (linear weights FP8 for
+    collection actors, conv states & `lm_head` stay BF16, attested as `-w-fp8` + `dtype='fp8'` so held BF16 results never
+    pair with FP8 collection actors).
+  - `pop_rl_actor.py`: `ensure_colab_mps`, `weight_dtype` on `pop_sglang`/`colab_serve_command`/`serve-checkpoint`,
+    `rebind_actor` / `pop_rl_actor.py rebind` (local DGX or remote G4 with remote factor-merge, full pause ->
+    `update_weights_from_disk` -> `/v1/neuralese/rebind-policy` -> `attest_all_routes` -> continue), and `run-sft
+    --round-id --factors-only` with `pending-upload.json` resilience on transfer failure.
+- **JOLT+ `jolt-guided` tier, adjacent-policy own priority, GRPO `rho_by_staleness` & compact group transport (§3, §7, §8):**
+  - `sft_sources.py`: `jolt-guided` tier (`own > jolt-guided > teacher`, `--guided train` default, opt-out `exclude`),
+    `own_policy_tier` giving `{current, previous}` and rebind-straddling own episodes top priority, `admitted_episode_keys`
+    in `build.json`.
+  - `grpo.py`: `rho_by_staleness` telemetry in `train.jsonl`, JOLT+ default on (`--teacher-attempts 2`, opt-out `0`),
+    privileged twin default off (`--reasoning-rl-weight 0.0`, opt-in `1.0`), `pack_scored_group`/`unpack_scored_group`
+    compact zstd transport (~8 bytes/token), repeatable `--extra-actor URL[=SLOTS]`, and `--export-factors-dir`.
+- **Async round driver & SFT <-> GRPO phase switching (§2, §4, §7.4):**
+  - `expert_iteration.py`: FP8 collection weights (`--collect-weight-dtype fp8`, opt-out `bfloat16`; held stays BF16) and
+    JOLT+ (`--teacher-attempts 2`) wired into `collect`/`cycle`, `frontier --previous-policy --allow-adjacent-policies`,
+    blob-first `write_round_manifest` + `record_profile_change`, `PhaseController` (switches SFT <-> GRPO after 2
+    consecutive neutral measured rounds/evals; rolls back and flags bug hunt on failure), and `AsyncRoundDriver`
+    (`expert_iteration.py async-drive`).
+  - Targeted tests in `tests/neuralese/test_async_train.py`.
