@@ -1872,9 +1872,11 @@ def main():
     y.add_argument('--prefer-unseen', action='append', default=[])
     y.add_argument('--lr', default='5e-5', help='LoRA SFT learning rate (lfm3opti.md §5 default 5e-5 for r=128)')
     y.add_argument('--sft-budget', type=int, default=100,
-                   help='SFT ledger GB (GB10 LoRA default 100)')
+                   help='SFT ledger GB (GB10 LoRA default 100: the 56 GiB activation default peaks ~85 GB, measured model '
+                        '2026-11-22: CUDA 5.2 GiB + 1.2 x --activation-gib, host ~6-15 GB; leaves >= 15 GB DGX headroom)')
     y.add_argument('--sft-activation-gb', type=int, default=56,
-                   help='exp0_sft --activation-gib on DGX (56 GiB LoRA; G4 uses 80 GiB via ExecutionProfile)')
+                   help='exp0_sft --activation-gib on DGX (56 GiB LoRA: ~19.6k-token packs unrecomputed at the measured 127 '
+                        'KB/token/layer; G4 via ExecutionProfile)')
     y.add_argument('--sft-extra', default='')
     y.add_argument('--collect-profile', choices=('dgx', 'colab_g4'), default='dgx',
                    help='execution profile for collection (colab_g4 shards across up G4 sessions; 30-min DGX fallback)')

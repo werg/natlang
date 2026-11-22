@@ -6863,3 +6863,38 @@ Implemented the full `plans/neuralese/lfm3opti.md` v3 plan across commits `07efc
   SSH_AUTHORIZED_KEY are given; with neither, it relies on colab ssh.
 - **First production use.** The VM serves sft-v9's collection policy (sft-v8 candidate 66422fcf) for filled-reasoning
   draws, as Pop fill did, so it is never idle. Per the owner, the monitored production run is its own smoke test.
+
+## 2026-11-22 14:00 LoRA core fixes (review of 12918a70a/eee8c4603/c9932d915/e55a0813a): FP8 off, memory table, export, smoke
+
+Commits 3e5144bb1, fe647b297, 0b278b97e, ae67f8054, b30d41bf9 (+ this). All measured on the GB10 beside sft-v9's
+collection actor (shared GPU, so absolute speeds are low; ratios come from interleaved A/B).
+
+- **FP8 frozen base: default OFF** (`NATLANG_FP8_BASE=1` / `fp8_base=True` opt in). Rewritten as `torch.library` ops
+  (weights quantized once, per output channel; per-token activation and output-gradient scales; row-wise
+  `_scaled_mm` works on sm_121, BF16 output only). It compiles now (the Dynamo `lift_tracked_freevar` crash is gone) and
+  packing no longer couples documents (alone == packed bitwise). Accuracy still fails the bar: on the sft-v8 checkpoint,
+  6 x 2048 tokens, B = 0: BF16-vs-FP32 mean 0.043 nats (p99 0.23), FP8-vs-BF16 mean 0.272 (p99 1.65, max 6.5); LoRA
+  gradient cosine FP8 vs BF16 0.97 (rel L2 0.24). E4M3's 3 mantissa bits, not the scaling, set the error; nothing in
+  reach today meets the BF16-vs-FP32 envelope.
+- **Base GEMM keeps its FP32 accumulator** under lora+rows (`natlang::frozen_linear_f32`), the BF16 low-rank delta is
+  added in FP32 and rounded once; B = 0 equals the bare base exactly. Interleaved compiled fwd+bwd, 4096 tokens, no
+  recompute: full FT 2449 tok/s, LoRA (this) 2237, LoRA as shipped before (BF16 base, FP32 add) 1498. BF16
+  reduced-precision split-K reductions are off in `prepare`.
+- **Activation table** (lora+rows, r = 128, compiled): 127 KB/token/layer of peak (saved 105), eager 150 (saved 127);
+  was 34-38. 56 GiB now plans ~19.6k-token packs instead of ~70k. Smoke at 16 GiB: CUDA peak 22-25.7 GiB (fixed 5.2 +
+  ~1.2 x budget), cgroup peak 35 GB. EI defaults kept (--sft-activation-gb 56, --sft-budget 100): predicted ~85 GB.
+  Not measured at 56 (no 100 GB was admissible today): the first sft-v10 steps' `cuda_peak_by_phase_gb` confirm it.
+- **Packing (item 10): not a leak.** A 256-token document packed with B1 vs with B2 (same length) is bitwise identical,
+  old commit bfc5a7a7d (full model) and now. Alone vs packed differs by 0.055-0.063 nats mean, the same at bfc5a7a7d
+  and now, and exactly 0 under FP8 (whose GEMM rows do not depend on M): BF16 GEMMs choose shape-dependent algorithms,
+  and the differing roundings grow through 24 layers to the BF16 noise floor (BF16-vs-FP32 0.043).
+- Fixed: merged export with real tied interfaces (`output_rows = None`), learner API (`checkpoint_state`,
+  `special_ids`, `native_rows`, `fp8_base`, `parameterization='lora'`), a `reference_view` that switches the model (None
+  = bare base, never live), `linear_nll` default rows, OOM retry (cleanup outside except, plan persisted,
+  `choose_retained_gib(0)` = 1 GiB), SFT resume keeps `--keep-best-val`'s best and the `--hours` schedule,
+  passthrough_check's FP32 reference. Tests rewritten to fail on each bug; 12 mutants run, all killed.
+- **Smoke** (exp0_sft train, EI's flags, sft-v8 checkpoint and mix, 10 steps, ACT 16): loss 0.28-0.48 (one TM step,
+  tm_kl 7e-4), val-own 0.5748 -> 0.5796, val-teacher 0.3568 -> 0.3626 (the mix is the one sft-v8 trained on), 1.45k
+  forward tok/s cumulative incl. compile under contention (sft-v8 full FT alone: 3.17k). checkpoint.pt loaded by the
+  native engine and exported as SGLang serves it vs the learner's effective policy: mean 0.025 nats (p99 0.20) on 5.7k
+  val tokens, inside the BF16 envelope. Run in /home/werg/data/fixa-sft/smoke2.
