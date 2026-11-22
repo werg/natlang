@@ -1203,9 +1203,16 @@ def prefix_levels(nodes):
 
 def run_prefix_tree(model, nodes, ids_of, leaf, tokens, pack_tokens, activation_gb=None, backward=True,
                     mode='levels', batch_tokens=None, retained_gb=None, *,
-                    adapters=None, trainable_rows=None, fp8_base=None):
+                    adapters=None, trainable_rows=None, fp8_base=None, parameterization=None):
     """Compute a ``prefix_tree``'s sequences packed, each shared prefix once, with exact gradients.
-    Reports retained and leaf memory budgets in GiB (``retained_gib``, ``leaf_gib``, ``retained_limit_gib``)."""
+    Reports retained and leaf memory budgets in GiB (``retained_gib``, ``leaf_gib``, ``retained_limit_gib``).
+    ``parameterization`` ('lora' / 'lora+rows' / 'full'), when given, must be the prepared model's: the memory plan
+    uses the model's own activation table entry."""
+    if parameterization is not None:
+        prepared = (getattr(model, '_lfm3_fast', None) or {}).get('parameterization')
+        if prepared is not None and parameterization_key(parameterization) != prepared:
+            raise ValueError(f'run_prefix_tree: parameterization {parameterization!r} but the model is prepared '
+                             f'as {prepared!r}')
     if mode == 'levels' and retained_gb is not None and retained_gb < 0:
         retained_gb = choose_retained_gib(model, nodes, tokens, pack_tokens, activation_gb)
     if mode == 'levels' and retained_gb and nodes:

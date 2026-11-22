@@ -457,6 +457,16 @@ def test_learner_api_used_by_the_trainers():
     assert lfm3_fast.resident_tokens(model, 1.0, parameterization='full') != lfm3_fast.resident_tokens(model, 1.0)
     with pytest.raises(ValueError):
         lfm3_fast.resident_tokens(model, 1.0, parameterization='lora-typo')
+    seqs = [np.array([1, 2, 3, 4], dtype=np.int64), np.array([1, 2, 5], dtype=np.int64)]
+    seen = []
+    with torch.no_grad():
+        lfm3_fast.run_prefix_tree(model, lfm3_fast.prefix_tree(seqs, [0, 0], 0), lambda i, a, b: torch.from_numpy(seqs[i][a:b]),
+                                  lambda items, run: seen.append(run(torch.cat([torch.from_numpy(seqs[i][st:]) for i, st in items]),
+                                                                    [len(seqs[i]) - st for i, st in items], None).shape[0]),
+                                  lambda i, st: len(seqs[i]) - st, 16, parameterization='lora', backward=False)
+    assert sum(seen) == 7
+    with pytest.raises(ValueError):
+        lfm3_fast.run_prefix_tree(model, [], None, None, None, 16, parameterization='full')
     assert lfm3_fast.choose_retained_gib(model, [{'start': 0, 'index': 0}], lambda i, s: 10, 16, 0.0) == lfm3_fast.PREFIX_RETAINED_MIN_GIB
     assert lfm3_fast.choose_retained_gib(model, [{'start': 0, 'index': 0}], lambda i, s: 10, 16, None) == lfm3_fast.PREFIX_RETAINED_GIB
 
