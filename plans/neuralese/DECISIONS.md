@@ -7121,3 +7121,26 @@ the default with tests that fail on each (mutants checked).
   requests and n-gram speculation on an FP8 actor (code paths act on embeddings, K/V and conv inputs only, unexercised
   live); the extra-actor publication against a real remote actor; a GRPO learner consuming packed groups (no remote
   learner flow exists yet: the exchange is lossless but unused).
+
+## 2026-11-22 21:10 async-drive replaces sft-v10 (coordinator)
+
+- **The lineage is unmeasured since sft-v7.** sft-v7 was neutral against sft-v6 (-0.2 pts, p 1.0, adopted as a
+  neutral by sft-v8's gate); sft-v8 skipped held (`--held-every 2`); sft-v9 runs 0724bd764, whose held is on Pop
+  (offline). Three SFT rounds have trained on an unmeasured base.
+- **Change:** sft-v9's next cycle (sft-v10) is stopped at launch, and `async-drive` (aei1, pin bd0217420) starts from
+  sft-v9's candidate instead (`ops/ei/watch/sft-v10-guard.sh`). New `--reference`: an unmeasured start is judged
+  against the last held-adopted policy, here sft-v7 (9ebc8799), and a rollback returns to it. Settings:
+  - every round measured on the DGX series until a success (`--held-every 1`);
+  - `--snapshot-min-hours 6`, the cycles' 6 h of new-policy collection per round;
+  - DGX learner;
+  - collection with FP8 weights and JOLT+ (main's defaults);
+  - Neuralese variants;
+  - fill into `filled-reasoning-20261120`.
+- **Fix (bd0217420).** A DGX SFT round now stops the standing DGX collection first. Both are high-priority claims
+  (74 GB beside a ~100 GB learner on 128 GB), and the ledger never preempts one for the other, so the round would have
+  waited out the collection's 72 h horizon. Remote actors keep collecting.
+- **The Colab A100 keeps filling** on sft-v8's export, under a keeper unit (`colab-g4a-fill-keep`) that relaunches it
+  when the ledger preempts it. The A100 becomes the round learner (`--sft-profile colab`) once its VM checkout runs the
+  driver's commit.
+- **Success:** aei1's first measured round is at least neutral against sft-v7 with no rise in ran-out above 2 pts.
+  **Failure:** below the declared failure threshold with p < 0.05; the driver halts for the bug hunt.
