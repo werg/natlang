@@ -71,6 +71,11 @@ FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill p
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
 COLLECTOR_SLOT_GB = 0.3
+# Collection defaults (async-train §3 FP8 collection weights, §8 JOLT+ guided attempts): BF16 weights and no guided
+# attempts until the FP8 SGLang weight path and JOLT+ custody work in production; the strand that lands them flips
+# these two values (every collection path, cycle and async driver, reads them).
+COLLECT_WEIGHT_DTYPE = 'bfloat16'
+TEACHER_ATTEMPTS = 0
 # DGX held series (async-train §1): a held measurement's claim file here makes every DGX collection shrink to
 # HELD_PRIORITY_SHARE of its slots while it runs (held episodes take priority over collection)
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
@@ -426,10 +431,10 @@ def collect(args):
     sha = args.checkpoint_sha256 or sha256_file_hex_cached(Path(args.checkpoint))
     order = json.loads(Path(args.tasks).read_text())
     actor_args = list(args.actor_arg)
-    collect_w_dtype = getattr(args, 'collect_weight_dtype', 'fp8')
+    collect_w_dtype = getattr(args, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
     if collect_w_dtype == 'fp8' and not any('--sglang-weight-dtype' in a for a in actor_args):
         actor_args += ['--sglang-weight-dtype', 'fp8']
-    teacher_attempts = int(getattr(args, 'teacher_attempts', 2))
+    teacher_attempts = int(getattr(args, 'teacher_attempts', TEACHER_ATTEMPTS))
     teacher_max_succ = int(getattr(args, 'teacher_max_successes', 0))
     g = grpo.build_parser().parse_args([
         'train', '--work', str(work), '--checkpoint', args.checkpoint, '--checkpoint-sha256', sha,
@@ -992,8 +997,8 @@ class Cycle:
         """``expert_iteration.py collect`` for this cycle (one builder for the DGX actor and remote endpoints): the
         task order, k, hours, Neuralese variants, JOLT+ attempts, FP8 collection weights, slots; the DGX actor's
         engine flags, or ``--actor`` endpoints."""
-        collect_w_dtype = getattr(self.a, 'collect_weight_dtype', 'fp8')
-        teacher_attempts = int(getattr(self.a, 'teacher_attempts', 2))
+        collect_w_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
+        teacher_attempts = int(getattr(self.a, 'teacher_attempts', TEACHER_ATTEMPTS))
         actor = ([x for ep in endpoints for x in ('--actor', ep)] if endpoints else
                  ['--actor-arg=--sglang-kv-gb', f'--actor-arg={self.a.kv_gb}',
                   '--actor-arg=--sglang-max-running', f'--actor-arg={self.max_running()}'])
@@ -1007,7 +1012,7 @@ class Cycle:
         """Serve the collected policy on each reachable Colab G4 session (``pop_rl_actor serve-checkpoint
         --host-profile colab_g4``); [(host, 'URL=SLOTS')] of those that attest it, each charged from its start."""
         served = []
-        collect_w_dtype = getattr(self.a, 'collect_weight_dtype', 'fp8')
+        collect_w_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
         actor_py = [PY, str(self.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py')]
         for host in hosts:
             self.session(host, profile, True)
@@ -2151,10 +2156,10 @@ def main():
     c.add_argument('--actor-arg', action='append', default=[])
     c.add_argument('--neuralese-variants', help="grpo's --neuralese-variants cases.jsonl (default: none)")
     c.add_argument('--neuralese-variant-share', type=float, default=0.5)
-    c.add_argument('--collect-weight-dtype', choices=('fp8', 'bfloat16'), default='fp8',
-                   help='SGLang linear weight dtype for collection actors (async-train §3: default fp8; bfloat16 opts out)')
-    c.add_argument('--teacher-attempts', type=int, default=2,
-                   help='JOLT+ guided attempts for failing groups (async-train §8: default 2; 0 opts out)')
+    c.add_argument('--collect-weight-dtype', choices=('fp8', 'bfloat16'), default=COLLECT_WEIGHT_DTYPE,
+                   help='SGLang linear weight dtype for collection actors (default COLLECT_WEIGHT_DTYPE)')
+    c.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS,
+                   help='JOLT+ guided attempts for failing groups (default TEACHER_ATTEMPTS; 0: none)')
     c.add_argument('--teacher-max-successes', type=int, default=0)
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
@@ -2190,10 +2195,10 @@ def main():
     y.add_argument('--neuralese-variant-share', type=float, default=0.5)
     y.add_argument('--no-neuralese-variants', action='store_true')
     y.add_argument('--collect-hours', type=float, default=6.)
-    y.add_argument('--collect-weight-dtype', choices=('fp8', 'bfloat16'), default='fp8',
-                   help='SGLang linear weight dtype for collection actors (async-train §3: default fp8; held stays bfloat16)')
-    y.add_argument('--teacher-attempts', type=int, default=2,
-                   help='JOLT+ guided attempts for failing groups in collection (async-train §8: default 2; 0 opts out)')
+    y.add_argument('--collect-weight-dtype', choices=('fp8', 'bfloat16'), default=COLLECT_WEIGHT_DTYPE,
+                   help='SGLang linear weight dtype for collection actors (default COLLECT_WEIGHT_DTYPE; held stays bfloat16)')
+    y.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS,
+                   help='JOLT+ guided attempts for failing groups in collection (default TEACHER_ATTEMPTS; 0: none)')
     y.add_argument('--slots', type=int, default=128)
     y.add_argument('--kv-gb', type=int, default=12)
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
@@ -2318,7 +2323,7 @@ def main():
     ad.add_argument('--lr', default='5e-5')
     ad.add_argument('--teacher-budget', type=int, default=180_000_000)
     ad.add_argument('--own-share', type=float, default=0.35)
-    ad.add_argument('--teacher-attempts', type=int, default=2)
+    ad.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS)
     ad.add_argument('--grpo-steps', type=int, default=20)
     ad.add_argument('--held-every', type=int, default=2)
     ad.add_argument('--held-every-max', type=int, default=8)

@@ -426,3 +426,17 @@ def test_async_round_manifest_takeover_and_phase_controller(tmp_path):
     assert ctrl.state['current_policy']['sha256'] == '4' * 64
     assert ctrl.state['held_every'] == 1
     assert ctrl.state['bug_hunt_required'] is True
+
+
+def test_collection_defaults_bf16_weights_and_no_guided_attempts_until_flipped(tmp_path, monkeypatch):
+    """Until FP8 collection weights and JOLT+ custody work in production, every collection path (the cycle's collect
+    command, ``collect``'s and ``async-drive``'s parsers) serves BF16 weights and runs no guided attempts."""
+    import expert_iteration as ei
+    assert ei.COLLECT_WEIGHT_DTYPE == 'bfloat16' and ei.TEACHER_ATTEMPTS == 0
+    c = ei.Cycle.__new__(ei.Cycle)
+    c.a = SimpleNamespace(kv_gb=12, slots=8, fill=None, k=4, collect_hours=1., no_neuralese_variants=True,
+                          neuralese_variants=None)
+    c.pin, c.collect_dir, c.dir = tmp_path, tmp_path / 'collect', tmp_path
+    argv = c.collect_command('u', 'ckpt', 'sha', 8)
+    assert argv[argv.index('--collect-weight-dtype') + 1] == 'bfloat16'
+    assert argv[argv.index('--teacher-attempts') + 1] == '0'
