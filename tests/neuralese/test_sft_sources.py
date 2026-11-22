@@ -964,3 +964,17 @@ def test_extract_pass_rates_count_student_samples_only_and_policies_come_from_ea
     assert json.loads((work / 'rl-group-rates.json').read_text())['t'] == {'successes': 1, 'scored': 2}
     own = [json.loads(line) for line in s.zstd_lines(work / 'episodes.jsonl.zst') if '"rl-own"' in line]
     assert own[0]['policies'] == ['p1', 'p2']                          # an episode straddling a rebind
+
+
+def test_unfilled_live_teacher_episodes_train_only_through_their_filled_unit():
+    """In a build with filled reasoning (``replaces=teacher``) an observed-live teacher episode no filled unit replaced
+    is left out (its action would train after an empty or teacher think block); other teacher chains and the filled
+    units stay; without a filled part (a Vibestudio-only build) they train as before."""
+    chains = [{'part': 'teacher', 'round': 'live:vibestudio:a:1'}, {'part': 'teacher', 'round': 'live:vibestudio:a:1'},
+              {'part': 'teacher', 'round': 'teacher:pool:t:0'}, {'part': 'filled', 'round': 'filled:live:vibestudio:b:2'}]
+    filled = [s.parse_aux('filled=/f.pkl,share=all,replaces=teacher')]
+    kept, n = s.drop_unfilled_live(chains, 'auto', filled)
+    assert n == 1 and [c['round'] for c in kept] == ['teacher:pool:t:0', 'filled:live:vibestudio:b:2']
+    assert s.drop_unfilled_live(chains, 'auto', [s.parse_aux('live=/l.pkl')]) == (chains, 0)
+    assert s.drop_unfilled_live(chains, 'train', filled) == (chains, 0)
+    assert s.drop_unfilled_live(chains, 'drop', [])[1] == 1

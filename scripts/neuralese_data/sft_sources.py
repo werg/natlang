@@ -2007,6 +2007,19 @@ def mark_open_goal(chains, goal, turns):
             chain['open_goal_depth'] = depths[invocation]
 
 
+def drop_unfilled_live(chains, mode, aux_parts):
+    """(chains, episodes dropped): ``mode`` drop leaves out the observed-live teacher episodes (rounds ``live:...``,
+    a live campaign's: no usable teacher reasoning) that no filled-reasoning unit replaced, so they train only with the
+    student's filled reasoning, never after an empty or teacher think block; ``auto`` drops when a ``replaces=teacher``
+    part is in the build (an expert-iteration round), else trains them (``train``) like other teacher episodes."""
+    if mode == 'auto':
+        mode = 'drop' if any(part.get('replaces') == 'teacher' for part in aux_parts) else 'train'
+    if mode != 'drop':
+        return chains, 0
+    unfilled = {str(c.get('round')) for c in chains if c.get('part') == 'teacher' and str(c.get('round')).startswith('live:')}
+    return [c for c in chains if not (c.get('part') == 'teacher' and str(c.get('round')) in unfilled)], len(unfilled)
+
+
 def mix_report(chains, aux_report, open_goal_scope=None):
     """Per part (source or aux name): chains, forward and weighted target tokens and their shares; loss concentration
     over tasks (top 10 tasks, top 1% of tasks, the largest task); the open-goal exposure over ``open_goal_scope``'s
@@ -2522,7 +2535,9 @@ def build(args):
             if 'replaced_episodes' in r:
                 r['replaced_episodes'] = len(r['replaced_episodes'])
         all_chains[:] = kept
-
+    all_chains[:], unfilled = drop_unfilled_live(all_chains, getattr(args, 'unfilled_live_teacher', 'auto'), aux_parts)
+    if unfilled:
+        funnel['teacher']['unfilled_live_dropped'] += unfilled
     chains = all_chains
     open_goal_scope = getattr(args, 'open_goal_scope', None) or 'all'
     mix = mix_report(chains, aux_report, open_goal_scope)
@@ -3008,6 +3023,11 @@ def main():
                    help='chains the open-goal minimum is measured over: vibestudio (default: the Vibestudio tasks\' '
                         'chains, so a mixed expert-iteration build holds its open goals to the contract against the '
                         'historical Vibestudio assignments, not against every other part) or all (every chain)')
+    b.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default='auto',
+                   help='observed-live teacher episodes without a filled reasoning unit (--aux ...,replaces=teacher): '
+                        'drop (they train only with the student\'s filled reasoning), train (their actions after the '
+                        'teacher\'s think block as context, like other teacher episodes) or auto (default: drop when '
+                        'a replaces=teacher part is given, else train)')
     b.add_argument('--open-goals-only', action='store_true',
                    help='assemble only independently verified open user goal trajectories')
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))

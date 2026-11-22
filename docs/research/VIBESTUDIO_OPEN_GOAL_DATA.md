@@ -79,11 +79,23 @@ The mixed smoke imported all six trajectories and rejected publication at
 episodes remain registered as `vibestudio-live-workflow-seed-20261118-v3`.
 
 The minimum applies both to distinct admitted goals divided by all
-training trajectories and to the weighted target tokens from their
-admitted chains divided by all weighted target tokens. Multiple attempts
-of one goal count once in the first numerator. An open-goal episode whose
-targets cannot all be rendered is excluded. Historical assignments and
-auxiliary data are included in the denominator when selected.
+Vibestudio training trajectories and to the weighted target tokens from
+their admitted chains divided by all Vibestudio weighted target tokens
+(chains of `vibestudio:` tasks, `--open-goal-scope vibestudio`, the
+default). Multiple attempts of one goal count once in the first
+numerator. An open-goal episode whose targets cannot all be rendered is
+excluded. Historical assignments, in the build or as auxiliary parts, are
+in the denominator. A mixed expert-iteration build's other parts are not:
+its open goals are held to the contract against the other Vibestudio data
+only. `--open-goal-scope all` measures every chain, as before. Filled
+reasoning chains that replace an open-goal episode carry its fingerprint.
+
+The live Luna campaign enters expert iteration through
+`scripts/neuralese_data/live_campaign_ingest.py poll`, which turns each
+committed campaign directory (its `exported.json` written) into extractions
+of one growing WORK. Pass that WORK to `expert_iteration.py async-drive
+--live-work`. Each round links its extractions, builds against its catalog
+copy (`live-holdout-registry.jsonl`), and fills its episodes first.
 The chain bundle retains each admitted goal's fingerprint and the required
 share. The learner checks the planned optimizer schedule after applying its
 context masks and any step limit, before loading model weights.
