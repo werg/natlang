@@ -515,6 +515,29 @@ def test_prefer_unseen_keeps_untrained_episodes_under_every_cap_and_changes_noth
     assert s.trained_in([]) == (frozenset(), frozenset())
 
 
+def test_prefer_unseen_family_scope_keeps_family_turns_and_global_scope_hands_them_to_fresh_families():
+    small = [{'task_id': f'a{i}', 'family': 'A', 'key': f'a{i}'} for i in range(5)]           # all trained
+    mixed = [{'task_id': f'c{i}', 'family': 'C', 'key': f'c{i}'} for i in range(6)]           # c0-c2 trained
+    large = [{'task_id': f'b{i}', 'family': 'B', 'key': f'b{i}'} for i in range(50)]          # fresh
+    second = [{'task_id': 'b0', 'family': 'B', 'key': 'b0-second'}, {'task_id': 'a0', 'family': 'A', 'key': 'a0-new'}]
+    pool = small + mixed + large + second
+    trained = frozenset([c['key'] for c in small] + ['c0', 'c1', 'c2', 'b0'])
+    key = lambda c: c['key']
+    order = s.breadth_first(pool, key, trained, 'global')
+    assert sum(c['family'] == 'A' for c in order[:49]) == 1       # every fresh episode first: A waits behind B's tail
+    order = s.breadth_first(pool, key, trained, 'family')
+    first = order[:15]
+    assert sum(c['family'] == 'A' for c in first) == 5            # A keeps its turns with what the start learned
+    assert first[0]['key'] == 'a0-new'                            # untrained episodes first within a task ...
+    assert [c['key'] for c in order if c['family'] == 'C'][:3] == ['c3', 'c4', 'c5']   # ... and within a family's turn
+    assert order.index(next(c for c in order if c['key'] == 'b0-second')) < order.index(
+        next(c for c in order if c['key'] == 'b0'))
+    plain = s.breadth_first(pool, key, frozenset(), 'family')
+    assert plain == s.breadth_first(pool, key, frozenset(), 'global')   # nothing trained: the scopes agree
+    with pytest.raises(ValueError):
+        s.breadth_first(pool, key, trained, 'other')
+
+
 def test_task_constructs_names_held_constructs_and_wrappers():
     neuralese = {'semantics': {'root': 'main.nl', 'files': {
         'main.nl': '---\nargs: text: string\nreturns: string\n---\nUse helper.',

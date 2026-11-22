@@ -245,6 +245,12 @@ def test_next_cycle_argv_replaces_this_cycles_own_flags_and_adds_seed_works():
     assert parsed.no_teacher_campaign and parsed.fill == '/fill' and parsed.k == 4 and not parsed.no_pipeline
 
 
+def test_lineage_builds_carry_what_the_start_trained_into_the_next_cycles_prefer_unseen():
+    assert ei.lineage_builds('/v7/mix', ['/v6/mix']) == ['/v7/mix', '/v6/mix']
+    assert ei.lineage_builds('/v7/mix', ['/v6/mix', '/v7/mix', '/v6/mix']) == ['/v7/mix', '/v6/mix']
+    assert ei.lineage_builds('/v7/mix', []) == ['/v7/mix']
+
+
 def _cycle_args(argv):
     import sys
     captured = []

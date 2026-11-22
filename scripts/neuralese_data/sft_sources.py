@@ -1491,6 +1491,49 @@ def trained_in(builds):
     return frozenset(keys), frozenset(tasks)
 
 
+PREFER_UNSEEN_SCOPES = ('family', 'global')
+
+
+def breadth_first(pool, key, trained_keys=frozenset(), scope='family'):
+    """A pool in selection order: every task's first episode before any task's second, and within a round the
+    families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key`` orders
+    within a family's turn: held constructs first, then low base pass rates.
+
+    ``trained_keys`` (``--prefer-unseen``): within each task its untrained episodes come first. ``scope`` 'family'
+    (default) keeps the families' turns: in each family's turn its untrained tasks come before the tasks an earlier
+    build trained, so a family whose fresh supply is gone still takes its turns with episodes the start already learned
+    (a second epoch) instead of handing its share to the families that still have fresh ones. 'global' (the sft-v7
+    rule) puts every untrained episode before any trained one: sft-v7's teacher budget then went to the unseen tail of
+    the pool, 20 generator families of ~289 tasks each (74% of its teacher episodes in 25 families, 0.2% auth tasks
+    against sft-v6's 23%), while auth carried sft-v6's held gain (DECISIONS 2026-11-22 sft-v7 no gain)."""
+    if scope not in PREFER_UNSEEN_SCOPES:
+        raise ValueError(f'prefer-unseen scope {scope!r} not in {PREFER_UNSEEN_SCOPES}')
+    rank, seen = {}, collections.Counter()
+    if scope == 'global':
+        for c in pool:
+            old = c['key'] in trained_keys
+            rank[c['key']] = (old, seen[(old, c['task_id'])])
+            seen[(old, c['task_id'])] += 1
+        ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
+    else:
+        by_task = collections.defaultdict(list)
+        for c in pool:
+            by_task[c['task_id']].append(c)
+        old_task = {}
+        for task_id, members in by_task.items():
+            members.sort(key=lambda c: c['key'] in trained_keys)    # stable: untrained first within the task
+            for index, c in enumerate(members):
+                rank[c['key']] = (index,)
+            old_task[task_id] = members[0]['key'] in trained_keys   # the task offers nothing fresh
+        ordered = sorted(pool, key=lambda c: (rank[c['key']], c['key'] in trained_keys and old_task[c['task_id']],
+                                              key(c)))
+    turn, taken = {}, collections.Counter()
+    for c in ordered:
+        turn[c['key']] = taken[(rank[c['key']], c['family'])]
+        taken[(rank[c['key']], c['family'])] += 1
+    return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
+
+
 def round_robin(members, rng, order):
     """A task's episodes taking turns by producer (source and teacher model), the producers in `order`: a cap keeps
     different producers' solutions before a second one of any producer (no single teacher fills a task)."""
@@ -2119,22 +2162,11 @@ def build(args):
     episode_sizes = EpisodeSizes(work / 'sizes.jsonl', renderer, treatment.render, args.teacher_lead_in,
                                  args.backend_workarounds, args.own_empty_think)
 
-    def breadth_first(pool, key):
-        """A pool in selection order: every task's first episode before any task's second, and within a round the
-        families taking turns (a budget that ends mid-round trims the large families, not the small ones); ``key``
-        orders within a family's turn: held constructs first, then low base pass rates. With ``--prefer-unseen`` every
-        untrained episode comes before any episode an earlier build trained (each part breadth-first)."""
-        rank, seen = {}, collections.Counter()
-        for c in pool:
-            old = c['key'] in trained_keys
-            rank[c['key']] = (old, seen[(old, c['task_id'])])
-            seen[(old, c['task_id'])] += 1
-        ordered = sorted(pool, key=lambda c: (rank[c['key']], key(c)))
-        turn, taken = {}, collections.Counter()
-        for c in ordered:
-            turn[c['key']] = taken[(rank[c['key']], c['family'])]
-            taken[(rank[c['key']], c['family'])] += 1
-        return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
+    unseen_scope = getattr(args, 'prefer_unseen_scope', 'family')
+
+    def ordered_pool(pool, key):
+        """``breadth_first`` under this build's ``--prefer-unseen`` builds and ``--prefer-unseen-scope``."""
+        return breadth_first(pool, key, trained_keys, unseen_scope)
 
     def priority(c):
         p = base_rate(c['task_id'])
@@ -2146,7 +2178,7 @@ def build(args):
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
     left_over = collections.defaultdict(list)    # candidates a budget or share left out: validation sets
     teacher_forward = 0
-    ordered = breadth_first(teacher_pool, priority)
+    ordered = ordered_pool(teacher_pool, priority)
     ahead.walk(ordered)
     for c in ordered:
         if args.teacher_forward_budget:
@@ -2318,7 +2350,7 @@ def build(args):
     #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``)
     own_budget = args.own_loss_share * total_tokens if args.own_loss_share else None
     own_tokens = 0
-    ordered = breadth_first(own_pool, priority)
+    ordered = ordered_pool(own_pool, priority)
     ahead.walk(ordered)
     for c in ordered:
         if own_budget is not None and own_tokens >= 0.99 * own_budget:     # full: the rest is left over unmeasured
@@ -2422,7 +2454,8 @@ def build(args):
                    if frontier else None, 'teacher_lead_in': args.teacher_lead_in,
                    'exclude_run': args.exclude_run, 'guided': args.guided,
                    'prefer_unseen': {'builds': list(getattr(args, 'prefer_unseen', None) or []),
-                                     'episodes': len(trained_keys), 'tasks': len(trained_before)},
+                                     'episodes': len(trained_keys), 'tasks': len(trained_before),
+                                     'scope': unseen_scope},
                    'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
                    'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
@@ -2873,6 +2906,11 @@ def main():
                    help='an earlier build the start checkpoint already trained (its OUT dir): its episodes go after '
                         'every untrained one at each cap and budget, and its tasks stay out of validation (for SFT from '
                         'a checkpoint descended from that build; repeatable)')
+    b.add_argument('--prefer-unseen-scope', choices=PREFER_UNSEEN_SCOPES, default='family',
+                   help='family (default): each family takes its breadth-first turns, untrained tasks first within '
+                        'its turn, then tasks an earlier build trained (a second epoch where a family has nothing '
+                        'fresh); global: every untrained episode before any trained one (sft-v7: the budget went to '
+                        'the unseen tail of 20 generator families; DECISIONS 2026-11-22)')
     b.add_argument('--val-episodes', type=int, default=40,
                    help='left-over own and teacher successes on untrained tasks written as OUT/val-{own,teacher}.pkl')
     b.add_argument('--aux', action='append', default=[],

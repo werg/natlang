@@ -6528,3 +6528,104 @@ only the user's tab, as with the memory bound. function-effects.ts already bound
 29/41/53); folder python has its 30 s watchdog (folder-python.ts:106/143); folder bash refuses open loops and caps
 loop iterations (folder-shell.ts:188/347). Pinned runtimes (b17d5fd8527d and the running sft-v8 pin) have none of
 this until their next pin; the failover needs only the new run_bonsai_queue.py and a dying server.
+
+## 2026-11-22 02:45, why sft-v7 gave no held gain: its teacher budget went to the pool's unseen tail; prefer-unseen is now per family (sft-v7 diagnosis strand)
+
+**Observed.** sft-v7 (from sft-v6) vs sft-v6 on held-v3, 2 samples, pin b17d5fd8: -0.2 pts, p 1.0, CI [-4.5, +3.7];
+tasks up 43, down 43; ran-out +1.76 pts; 9 timeouts vs 0.
+- **The ran-out rise is the timeouts:** budget exhaustion is 60 vs 60, and `ran_out_rate` counts the 9 unresolved
+  episodes.
+- **7 of the 9 timeouts are a harness stall** (02:30 entry, 32fdbad51): one model eval blocked shared collector s000
+  and froze 7 co-hosted episodes, 4 of which the start had solved. Without those 7 pairs the result is +0.6 pts, with
+  ran-out +0.4.
+- So sft-v7 is flat against sft-v6, where +2 to +5 was expected.
+- **Episodes got shorter at equal success:**
+
+  | metric | sft-v6 | sft-v7 |
+  |---|---|---|
+  | tokens per success | 10.8k | 8.9k |
+  | calls per success | 10.9 | 9.3 |
+  | reasoning per call, median | 1,637 ch | 1,410 ch |
+  | calls under 200 ch | 15.9% | 18.2% |
+
+  The base was at 1,899 ch.
+
+**Where sft-v6's gain sits and what sft-v7 trained** (held family groups, delta in pts):
+
+| family group | held eps | v6 - base | v7 - v6 | v6 teacher eps | v7 teacher eps |
+|---|---|---|---|---|---|
+| auth | 194 | +12.4 | -3.6 | 22.8% | 0.2% |
+| codebase | 98 | +10.2 | +2.0 | 12.1% | 26.1% |
+| ext other | 110 | +2.7 | 0.0 | 44.2% | 39.1% |
+| bgkit | 32 | 0.0 | -12.5 | 3.4% | 17.3% |
+| composed-Neuralese | 24 | -4.2 | 0.0 | 2.8% | 13.8% |
+
+- sft-v7's teacher episodes cover 167 families against sft-v6's 368. 20 families have about 289 tasks each, and the
+  top 25 families hold 74% of the episodes (sft-v6: 17%, at most 53 tasks a family). sft-v6 and sft-v7 share 7 tasks.
+- Teacher calls zero-weighted as text-backend detours: 44% (29,972 of 67,606) against 14% for sft-v6. Weighted teacher
+  target is 3.03M tokens against 4.26M, on the same 180M forward tokens.
+
+**Mechanism.** `--prefer-unseen` ordered every untrained episode before any trained one across the whole pool (the
+`breadth_first` rank's first key).
+- sft-v6 had used up the fresh teacher episodes of the small families: auth has 2,370 episodes over 2,367 tasks, about
+  one per task.
+- The fixed 180M budget was therefore filled by the unseen tail of a few generator families: bgkit, composed-Neuralese
+  and codebase. Their text-backend teacher runs are mostly masked detours.
+- The families where sft-v6's gain sits got no data.
+- Predicted: about 0 gain where the tail families add nothing new. A small decay on auth, where 38% of held-v3 sits,
+  for lack of reinforcement while the policy drifts elsewhere. Observed: flat overall, auth -3.6. Bgkit's -12.5 is on
+  32 episodes and is not readable.
+- The validation losses agree. Teacher NLL fell 0.404 -> 0.327. NLL on held-out own successes, mostly sft-v6's own
+  from this collection, rose 0.571 -> 0.575. The update moved toward the tail teachers' actions, not toward more of the
+  student's own successful behaviour.
+
+**Changed (default on, opt-out, tests).**
+- `sft_sources build --prefer-unseen-scope family` (default; `global` is the sft-v7 rule): untrained episodes still
+  come first within each task and within each family's breadth-first turn, but every family keeps its turns. A family
+  with no fresh episodes takes its turns with episodes the start already trained, a second epoch.
+- The ordering is now a module-level `breadth_first`. With nothing trained, both scopes give the same order (test).
+- **Rebuilt on sft-v7's exact inputs** (`ops/ei/sft-v7/mix-familyscope`, unit `sftsrc-familyscope-v7-1`):
+
+  | | sft-v7 build | family scope |
+  |---|---|---|
+  | teacher families | 167 | 366 |
+  | largest family | 289 tasks | 62 tasks |
+  | top-25 share | 74% | 20% |
+  | auth | 0.2% | 22.1% |
+  | detour calls | 30.0k | 11.4k |
+  | weighted teacher tokens | 3.03M | 3.89M (+29%) |
+
+  3,978 of its 7,648 teacher episodes are second epochs of sft-v6's. Loss shares are unchanged (teacher 0.48, own
+  0.34). It has 35,618 chains.
+- `expert_iteration` next-cycle launch: `--prefer-unseen` is the lineage (`lineage_builds`: this mix plus every build
+  its start trained). Before, it was this mix alone, so a cycle training sft-v7's candidate would have treated sft-v6's
+  build as unseen.
+- Tests: `test_prefer_unseen_family_scope_...`, `test_lineage_builds_...`; 90 passed (test_sft_sources and
+  test_expert_iteration).
+
+**For sft-v8 (supervisor).**
+- sft-v8's build runs `--data-repo ops/ei/pin-2946f13981cd`, which predates this commit. The new default enters only
+  if the driver restarts with `--data-repo` (and `--fill-repo`) at a pin of this commit or later. Both are own flags,
+  and stages resume.
+- If sft-v7's candidate is adopted, sft-v8's `--prefer-unseen` should also name `/home/werg/natlang/runs/sft-mix-20261120-v2`.
+- The verdict 'neutral, not adopted' rests on the 7 stalled pairs: -0.2 and ran-out +1.76 with them, +0.6 and +0.4
+  without. Under the neutral rule (point estimate > 0, ran-out <= +2) the corrected result adopts. Re-measuring the 7
+  rows on Pop would settle it.
+
+**Dragnet** (checked, with evidence):
+- Masking: teacher think through `</think>` and lead-in are context (`serve/targets.non_student_context`). Detours are
+  zero weight (`rendered_row`). Own replies train in full. Context masks: 16 second-close rows, as in sft-v6.
+- Rendering: the mix was rendered at the held pin b17d5fd8, own rows from exact replays.
+- Loss weighting: own share 0.34 over 235 episodes (about 26x a teacher episode's weight each). 105 of the 235 are
+  on-policy (sft-v6) and 130 come from older GRPO policies. Top 1% of tasks hold 0.278 of the loss.
+- LR and steps: the same schedule as sft-v6 (peak 4.98e-6, cosine to 5e-7, 187 steps). Grad norm median 1.48 against
+  clip 1.0, so most steps clip in both runs.
+- Ambient TM: 46 of 187 steps toward the start, tm_kl median 0.008 (sft-v6: 0.08 toward the base). This damps
+  movement both ways; it predicts no direction.
+- Eval: same code, series, engine and manifest; the timeouts are the harness stall.
+
+**Not checked:** token-level identity between training renders and held prompts; whether a second epoch on sft-v6's
+teacher episodes helps more than fresh tail episodes (first principles: it restores the family balance that produced
+sft-v6's gain; the next held eval judges it); per-task held effects beyond family groups (2 samples, noise ~±8 pts per
+family); the 2 timeouts that are not the stall (s7-task-228-01 is the blocking eval's own episode; s7-task-251-01 was
+a long episode).

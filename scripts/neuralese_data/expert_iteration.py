@@ -357,6 +357,17 @@ OWN_FLAGS = ('--dir', '--name', '--start', '--start-sha', '--commit', '--pin', '
              '--data-repo', '--since-held')
 
 
+def lineage_builds(mix, trained_before):
+    """The --prefer-unseen builds of a cycle that trains this cycle's candidate: its own mix and every build its start
+    had already trained (``train_policy()[2]``), without repeats. Only ``[mix]`` made sft-v7's own start data (sft-v6's
+    build) look unseen to a cycle training sft-v7's candidate."""
+    out = []
+    for build in [mix, *trained_before]:
+        if str(build) not in map(str, out):
+            out.append(build)
+    return out
+
+
 def next_cycle_argv(argv, *, directory, name, start, start_sha, commit, previous, prefer_unseen, fallback_prefer_unseen,
                     extra_seed_work=(), since_held=0):
     """The next pipelined cycle's ``cycle`` arguments: this cycle's (``argv`` after ``cycle``) with its own flags
@@ -1094,7 +1105,7 @@ class Cycle:
         start = self.dir / 'sft' / 'checkpoint.pt'
         argv = next_cycle_argv(sys.argv[sys.argv.index('cycle') + 1:], directory=self.dir.parent / name, name=name,
                                start=start, start_sha=(self.dir / 'sft' / 'sha256.txt').read_text().strip(),
-                               commit=commit, previous=self.dir, prefer_unseen=[self.mix],
+                               commit=commit, previous=self.dir, prefer_unseen=lineage_builds(self.mix, self.train_policy()[2]),
                                fallback_prefer_unseen=self.train_policy()[2], extra_seed_work=self.a.next_seed_work,
                                since_held=0 if self.measured() else self.held_schedule()[0] + 1)
         (self.dir.parent / name).mkdir(parents=True, exist_ok=True)
