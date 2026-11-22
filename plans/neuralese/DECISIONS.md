@@ -6629,3 +6629,17 @@ teacher episodes helps more than fresh tail episodes (first principles: it resto
 sft-v6's gain; the next held eval judges it); per-task held effects beyond family groups (2 samples, noise ~±8 pts per
 family); the 2 timeouts that are not the stall (s7-task-228-01 is the blocking eval's own episode; s7-task-251-01 was
 a long episode).
+
+## 2026-11-22 02:15 sft-v7 adopted after the stall correction; sft-v8 on the family-scope build
+
+- sft-v7's verdict was neutral and not adopted (-0.2 pts, ran-out +1.76). The diagnosis (DECISIONS "sft-v7 no-gain
+  diagnosis") found 7 of the 9 candidate timeouts were a harness stall (one never-ending model-written eval froze
+  shared collector s000; fixed 32fdbad51), not the policy; without those pairs +0.6 pts, ran-out +0.4, which the
+  neutral rule adopts. `ops/ei/sft-v7/verdict.json` now adopts the candidate (`corrected` records why; the original
+  is `verdict-original.json`); the pointer stays sft-v6 (no success). sft-v8's collection was drawn from that
+  candidate, so it trains on-policy.
+- sft-v8 restarted with `--data-repo`/`--fill-repo` at pin-5b58f9444689 (`--prefer-unseen-scope family`, the stall
+  fix) and `--prefer-unseen` naming sft-v6's build too (runs/sft-mix-20261120-v2), and `--held-pin` at the same pin
+  so later held evals run with the stall fix. That is a new series: sft-v9 (measured: held every 2) re-measures its
+  reference, sft-v7's candidate, in its popbase during its collection (3.5 h of Pop that would otherwise fill), so the
+  gate does not wait.
