@@ -7197,3 +7197,57 @@ publication had races, an unbounded host-memory cost and no working rollback. Fi
   at exit and on SIGTERM, and sweeps dead owners' slot sets when it starts. The operator fits' spill stores
   (`tune/build.fit_store`) use the same helper and now also go on SIGTERM. /dev/shm has no other user in the training
   stack: the only other match, `run_status.py`, reads disk usage.
+
+## 2026-11-22 22:00 The Colab A100 is aei1's round learner; run-sft fixes from its first real run
+
+- **Change.** aei1 trains its rounds on the Colab A100 (`--sft-profile colab --colab-hosts colab-g4`, pin c8917c475d98;
+  `ops/ei/watch/sft-v10-guard.sh`, restarted as `sft-v10-guard2` because a running bash keeps reading the replaced
+  file). The DGX then collects through the round instead of yielding to a ~7 h DGX SFT (bd0217420). The DGX takes the
+  round over after 30 min without a session, from the synced learner state.
+- **Placement on the A100: alternate, not share.** The learner runs alone (77 GiB, activation 58 GiB, ~20k resident
+  tokens) and the actor runs alone between rounds (70 GiB, 128 running). `run-sft` stops a recorded actor served
+  alone and serves it again after the round. The fill keeper relaunches its client only while the actor answers.
+  Why: rounds are at least 6 h apart (`--snapshot-min-hours 6`) and train ~2 h on the A100, so the actor decodes for
+  most of each round's interval either way. The round gates the next policy, and it runs at the full box rather than
+  at activation 33 GiB beside a KV-20 GiB / 53-running actor under MPS.
+- **Real run** (`ops/ei/colab/smoke-r1`: sft-v9's real mix and sft-v8's real checkpoint, recipe from the DGX
+  preflight, `--max-steps 6`):
+  - A100 steps 4-6, compile warm: 8.6-9.4 s for 135-591k chain tokens (112-174k computed).
+  - Step 1 took 173 s (compile). The first Ambient step took 79 s (+70 s teacher compile).
+  - DGX sft-v9 on the same mix: 36.8 s/step mean. A 720-step round is ~2-2.5 h on the A100, against ~7.4 h on the DGX.
+  - Link: 2.4 MB/s up, 4.8 down.
+  - Chains 1.5 GB: 53 s with zstd (~10 min raw).
+  - Factors back: 515 MB in 110 s.
+  - Learner state: 2.2 GB, ~8 min per pull.
+  - VM preparation: 29 s (70 s when ts-host is rebuilt).
+  - The start policy, 3.46 GB, would take ~20-24 min to ship. The VM merges it from the previous round's factors
+    in 42 s instead.
+  - The DGX merge of the same factors gave sha 155e06b9, bit-equal to the VM's (x86 torch 2.14 vs aarch64 torch 2.11).
+    torch.save names its archive after the file, so the VM writes the merge as `checkpoint.pt` and checks it against
+    the published sha before renaming.
+- **Fixes, each with a test** (1793a7043, fb59e78bd, c8917c475):
+  - verified VM checkout; ts-host rebuilt when its tree changes;
+  - the old factor rebind wrote `CHECKPOINTS/<sha>.pt` unverified, and its bytes cannot hash to that name;
+  - rsync `-z`;
+  - the learner runs detached under setsid with pid and rc files. The old foreground learner died with a dropped
+    `colab ssh` link. A later call waits for a learner that is still running and never reruns one that finished;
+  - the chains read is recorded on the DGX registry. The VM has no registry, so its exp0_sft refused the sha-verified
+    copy;
+  - the launch `rm && setsid ... &` backgrounded a subshell that held the channel open;
+  - the learner state arrives as one save. It is a hardlink snapshot whose directory kept its inode. An rsync of the
+    live directory across the learner's rotation mixed two saves ("file has vanished");
+  - one state pull at a time;
+  - a finished round pulls its factors before any 2 GB state;
+  - `published.json` records `factors_dir`.
+- **Pending, queued:**
+  - the first DGX `publish-round` (merge plus SGLang and GGUF exports) of the smoke factors, unit
+    `aei-smoke-r1-publish`, 24 GB, admitted once sft-v9's SFT frees memory;
+  - `ensure_remote_checkpoint` of that publication on the VM ('merged' expected).
+- **Not checked:**
+  - a full-length A100 round: s/step past step 6, new length buckets compiling, peak memory at activation 58;
+  - a takeover from a Colab-synced state;
+  - the actor restore inside a real round;
+  - whether the A100 actor wants `--sglang-overlap-schedule` (the DGX fill actor uses it; `colab_serve_command` does
+    not pass it).
+- **Incident.** The `colab-g4a-tunnel` master dropped at ~21:48. The proxy then answered every reconnect with HTTP 429
+  ("another colab ssh is connected") while no DGX process held a connection.

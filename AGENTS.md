@@ -280,12 +280,14 @@ DECISIONS.md entries are authoritative.
   no FP8, `scripts/colab/bootstrap.py` at `/content/natlang-work`, `scripts/colab/admission.py` claims VRAM and host
   RAM; learner and actor claims come from the session's `colab-ready.json` hardware, `execution_profile.colab_layout`)
   run LoRA SFT (`pop_rl_actor run-sft`:
-  the DGX recipe from `launch.json`, learner state pulled every 15 min, an async round's FP32 factors pulled back
-  blob-first) and SGLang actors for collection and fills. A session is reached as `ssh colab-g4` (OpenSSH
+  the DGX recipe from `launch.json` on the VM checkout at the driver's commit, the start policy merged on the VM from
+  the previous round's factors, the learner detached from the SSH link, learner state pulled every 15 min as one
+  save, an async round's FP32 factors pulled back blob-first; an actor served alone yields the GPU for the round and
+  is served again) and SGLang actors for collection and fills. A session is reached as `ssh colab-g4` (OpenSSH
   ProxyCommand `colab --auth=adc ssh --proxy-mode`; no Tailscale) and admits **one** SSH connection: every command,
   rsync and port forward multiplexes over the ControlMaster the `colab-g4a-tunnel` unit holds; a VM port P is reached at
   DGX `127.0.0.1:P+10161` (`pop_rl_actor.remote_endpoint`, `ssh -O forward`), e.g. 8570 -> 18731 (front), 9570 -> 19731
-  (SGLang); transfers run at a few MB/s. **Pop** (RTX 4060 8 GB, 14 GB host RAM) runs the legacy held series, fills and
+  (SGLang); transfers run at 2.4 MB/s up and 4.8 down, zstd-compressed. **Pop** (RTX 4060 8 GB, 14 GB host RAM) runs the legacy held series, fills and
   forward-only probes when idle. The DGX drives Colab and Pop over ssh through `pop_rl_actor.py` (serve, `rebind`:
   in-place weight update with factors merged on the remote host and 4-route attestation, stop). DGX and Pop use
   `/home/werg/natlang` as the canonical checkout.

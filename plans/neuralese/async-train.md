@@ -32,6 +32,10 @@ here. **Date:** 2026-11-22.
      With today's numbers, ~6 DGX-hours of collection and ~3-5 DGX-hours of training per cycle, the balance point puts
      roughly two thirds of the G4 on learning and one third on decoding.
    - So the G4 runs the **learner and an actor concurrently** (MPS), and the DGX collects and evaluates full-time.
+   - **The A100-80GB session alternates instead** (DECISIONS 2026-11-22 22:00): a round's learner runs alone (77 GiB,
+     activation 58) and the actor alone (70 GiB, 128 running) between rounds; `run-sft` stops the session's actor for
+     the round and serves it again. Rounds are >= 6 h apart (`--snapshot-min-hours`) and train ~2 h, so the actor
+     decodes most of the time either way, and the round, which gates the next policy, runs at the full box.
 3. **No cloud bucket.** The DGX is reachable through Tailscale (Pop already uses it; Colab joins it), and the DGX is
    the durable store. A bucket would add credentials, cost and a third copy for no new property.
 4. **Continuous rounds replace discrete cycles.** `expert_iteration.py` cycles (6 h collect, then teacher, build, SFT
@@ -58,10 +62,11 @@ A round turns a pool snapshot into a published policy.
 1. **Snapshot and build (DGX).** Freeze the pool at the round's cutoff, compute the frontier from the measured pass
    rates, and build the mix (`sft_sources build`, family-scope prefer-unseen, Ambient settings).
    - The build for round n+1 runs while round n trains, so the G4 never waits for data.
-2. **Ship the mix (DGX to G4).** Resumable rsync over Tailscale, ~1 GB of chains. Commit order: blobs, checksums, then
+2. **Ship the mix (DGX to G4).** Resumable rsync (zstd on the wire: a 1.5 GB chains.pkl crosses in 53 s), ~1 GB of chains. Commit order: blobs, checksums, then
    `round.json`.
 3. **Train (G4).**
-   - LoRA SFT on the merged start policy of the previous round: r=128 on all 9 projection families plus the Neuralese
+   - LoRA SFT on the merged start policy of the previous round (merged on the G4 from its base and that round's factors,
+     byte-equal to the DGX publication, checked by sha; shipped only when it is not): r=128 on all 9 projection families plus the Neuralese
      rows, FP8 base GEMMs and resident activations.
    - Learner state goes to the DGX every 15 minutes.
    - Expected ~1 h per round.
