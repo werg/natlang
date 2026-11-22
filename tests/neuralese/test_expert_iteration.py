@@ -541,3 +541,20 @@ def test_unreachable_pop_defers_the_held_eval_and_the_next_cycle_is_measured(tmp
     v = json.loads((cycle.dir / 'verdict.json').read_text())
     assert v['verdict'] == 'unmeasured' and v['adopt'] and v['deferred'] == 'pop unreachable'
     assert v['since_held'] == 1 and v['held_every'] == 2      # the next cycle: since 1 + 1 >= 2, measured
+
+
+def test_sft_gets_the_activation_memory_flag(tmp_path, monkeypatch):
+    argv = ['--dir', str(tmp_path / 'sft-v9'), '--name', 'sft-v9', '--start', '/v8.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    args = _cycle_args(argv)
+    assert args.sft_activation_gb == 40 and args.sft_budget == 100
+    cycle = ei.Cycle(_cycle_args([*argv, '--sft-activation-gb', '24']))
+    (cycle.mix).mkdir(parents=True)
+    (cycle.mix / 'chains.sha256').write_text('abc\n')
+    seen = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: seen.append(kw['env']))
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei.Cycle, 'wait', lambda self, unit, poll=60: None)
+    with pytest.raises(SystemExit):           # no checkpoint written by the stubbed launch
+        cycle.sft_stage()
+    assert seen[0]['ACT'] == '24' and seen[0]['BUDGET'] == '100'

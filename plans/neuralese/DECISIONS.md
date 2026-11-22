@@ -6684,3 +6684,12 @@ a long episode).
   the reference itself when the popbase unit left none (Pop down at popbase time). Held measurement on the DGX was
   not chosen: results pair only within one engine, so it would cost two DGX evals (reference and candidate) of
   training time; deferring matches "fewer evals, more training".
+
+## 2026-11-22 09:00 SFT activation memory 16 -> 40 GB from sft-v9
+
+- sft-v8's SFT (362 steps, ~7.3 h vs sft-v7's 4.5 h for 188) runs alone on the DGX at 2.8-3.0k forward tok/s, against
+  ~4.8k measured idle (2026-11-12 kernel strand) and the 5.5k its launch estimate assumed. Its phase seconds: backward
+  3.1x forward (8389 vs 2720 s by step 195), i.e. layers beyond `--activation-gb 16` recomputed; CUDA peak 53 GB of an
+  80 GB ledger budget, the fill window closed. More saved activations is the standard memory-for-speed trade, so
+  expert_iteration's SFT now runs `--sft-activation-gb 40` with `--sft-budget 100` (peak expected <= ~77 GB; read the
+  first steps' `cuda_peak_gb`). sft-v8 keeps its settings (3.3 h left; not worth a resume).

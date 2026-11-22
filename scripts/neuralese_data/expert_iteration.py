@@ -1016,7 +1016,7 @@ class Cycle:
             sha = (self.mix / 'chains.sha256').read_text().split()[0]
             env = {**os.environ, 'CHAINS': str(self.mix / 'chains.pkl'), 'CHAINS_SHA256': sha, 'CKPT': start,
                    'SHA': start_sha, 'WORK': str(run), 'UNIT': unit, 'LR': self.a.lr, 'WARMUP': '8',
-                   'BLT': '32000', 'ACT': '16', 'BUDGET': str(self.a.sft_budget)}
+                   'BLT': '32000', 'ACT': str(self.a.sft_activation_gb), 'BUDGET': str(self.a.sft_budget)}
             vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (self.mix / v).exists()]
             if vals:
                 env['VAL'] = str(self.mix / vals[0])
@@ -1312,7 +1312,11 @@ def main():
                    help='loss share cap of the own Neuralese graph part (an aux part; duplicates of other parts train once)')
     y.add_argument('--prefer-unseen', action='append', default=[])
     y.add_argument('--lr', default='5e-6')
-    y.add_argument('--sft-budget', type=int, default=80)
+    y.add_argument('--sft-budget', type=int, default=100,
+                   help='SFT ledger GB (sft-v8: CUDA peak 53 GB at --sft-activation-gb 16)')
+    y.add_argument('--sft-activation-gb', type=int, default=40,
+                   help='exp0_sft --activation-gb: the SFT has the DGX to itself (fill window closed); at 16 sft-v8 spent '
+                        '3.1x its forward time in backward recomputing layers (2.8k tok/s vs ~4.8k measured idle)')
     y.add_argument('--sft-extra', default='')
     y.add_argument('--held-samples', type=int, default=2)
     y.add_argument('--success-pts', type=float, default=2.)
