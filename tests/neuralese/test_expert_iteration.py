@@ -519,3 +519,25 @@ def test_pop_serves_stop_earlier_pop_fills(monkeypatch):
     calls.clear()
     pop_rl_actor.stop_pop_actors()
     assert any(a[:3] == ['systemctl', '--user', 'stop'] for a in calls)
+
+
+def test_unreachable_pop_defers_the_held_eval_and_the_next_cycle_is_measured(tmp_path, monkeypatch):
+    previous = tmp_path / 'sft-v8'
+    previous.mkdir()
+    (previous / 'verdict.json').write_text(json.dumps({'verdict': 'unmeasured', 'adopt': True, 'since_held': 0,
+                                                       'held_every': 2, 'next_start': '/v8.pt'}))
+    argv = ['--dir', str(tmp_path / 'sft-v9'), '--name', 'sft-v9', '--start', '/v8.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin'), '--speculative-after', str(previous),
+            '--pop-wait-hours', '0']
+    cycle = ei.Cycle(_cycle_args(argv))
+    (cycle.dir / 'stages').mkdir(parents=True, exist_ok=True)
+    assert cycle.measured()
+    monkeypatch.setattr(ei, 'pop_reachable', lambda: False)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei.Cycle, 'pop_held', lambda *a: pytest.fail('measured with Pop down'))
+    cycle.held_stage()
+    assert cycle.held_deferred()
+    cycle.verdict_stage()
+    v = json.loads((cycle.dir / 'verdict.json').read_text())
+    assert v['verdict'] == 'unmeasured' and v['adopt'] and v['deferred'] == 'pop unreachable'
+    assert v['since_held'] == 1 and v['held_every'] == 2      # the next cycle: since 1 + 1 >= 2, measured

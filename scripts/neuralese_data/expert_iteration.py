@@ -1036,10 +1036,22 @@ class Cycle:
             return self.mark('held', skipped=f'--held-every {self.a.held_every}')
         while self.active(f'{self.a.name}-popbase'):     # Pop serves one policy at a time
             time.sleep(300)
+        deadline = time.time() + 3600 * self.a.pop_wait_hours
+        while not pop_reachable():
+            if time.time() > deadline:   # training goes on; the next cycle is measured (DECISIONS "Pop unreachable")
+                return self.mark('held', deferred='pop unreachable')
+            time.sleep(300)
         candidate = self.pop_held('candidate', self.dir / 'sft' / 'checkpoint.pt')
         if not json.loads((candidate / 'result.json').read_text()).get('complete'):
             raise SystemExit('candidate held measurement incomplete: rerun the cycle to resume it')
+        reference = self.reference()['checkpoint']       # the popbase unit may have failed (Pop down at the time)
+        if reference != BASE_CKPT and not (self.held / 'start' / 'result.json').exists():
+            self.pop_held('start', reference)
         self.mark('held')
+
+    def held_deferred(self):
+        path = self.dir / 'stages' / 'held.done'
+        return path.exists() and bool(json.loads(path.read_text()).get('deferred'))
 
     def compare(self, a, b, out):
         subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(a / 'result.json'),
@@ -1051,9 +1063,9 @@ class Cycle:
         """The declared criteria (DECISIONS): vs the start policy measured on this pin, and vs the base."""
         train_start = self.train_policy()[0]
         candidate_ckpt = str(self.dir / 'sft' / 'checkpoint.pt')
-        if not self.measured():
+        if not self.measured() or self.held_deferred():
             result = {'verdict': 'unmeasured', 'adopt': True, 'vs_start': {}, 'next_start': candidate_ckpt,
-                      'reference': self.reference()}
+                      'reference': self.reference(), **({'deferred': 'pop unreachable'} if self.held_deferred() else {})}
             result['since_held'], result['held_every'] = self.held_schedule()
             (self.dir / 'verdict.json').write_text(json.dumps(result, indent=1) + '\n')
             return self.mark('verdict', **result)
@@ -1146,6 +1158,15 @@ class Cycle:
             stage()
             if name == 'collect' and not self.done('collect') and not self.speculative:
                 raise SystemExit('collection did not finish: rerun the cycle to resume it')
+
+
+def pop_reachable():
+    import pop_rl_actor
+    try:
+        return subprocess.run(['ssh', '-o', 'ConnectTimeout=20', '-o', 'BatchMode=yes', pop_rl_actor.POP, 'true'],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
 
 
 def _quote(text):
@@ -1248,6 +1269,9 @@ def main():
     y.add_argument('--no-pop-fill', action='store_true',
                    help='leave Pop idle between held evals (default: it serves the collected policy for fills)')
     y.add_argument('--pop-fill-running', type=int, default=32, help="Pop fill server's running requests")
+    y.add_argument('--pop-wait-hours', type=float, default=1.0,
+                   help='a measured cycle waits this long for an unreachable Pop, then is adopted unmeasured (deferred) '
+                   'and the next cycle is measured')
     y.add_argument('--pop-fill-stop-at-data', action='store_true',
                    help='stop the Pop fill at the data stage (default: it draws on through build and SFT for the next '
                    "cycle's mix until a Pop serve stops it)")

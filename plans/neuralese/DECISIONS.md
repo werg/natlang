@@ -6672,3 +6672,15 @@ a long episode).
   (`--pop-fill-stop-at-data` opts out); every Pop serve stops it first (`pop_rl_actor.stop_pop_fills` in `start` and
   `stop_pop_actors`, and in expert_iteration's held measurement and Pop fill, whose held pin may predate it), so no fill
   draws from a policy it did not start on. sft-v8's Pop fill restarted by hand on 9ebc for the rest of its build/SFT.
+
+## 2026-11-22 08:20 Pop unreachable: held evals defer, training goes on
+
+- Pop dropped off the tailnet at ~05:59 (tailscale "offline, last seen 04:59Z"; ssh, ping and its SGLang port time
+  out from the DGX; the owner cannot reach it either and has no physical access today). sft-v8's Pop fill had drawn
+  ~490 fills since 04:50; stopped. sft-v8 is unmeasured, so nothing waits on Pop yet, but sft-v9 is measured and its
+  missing verdict would have parked sft-v10 at its gate after its collection.
+- A measured cycle now waits `--pop-wait-hours` (1) for an unreachable Pop, then is adopted unmeasured with
+  `deferred: "pop unreachable"`; `since_held` counts on, so the next cycle is measured. The held stage also measures
+  the reference itself when the popbase unit left none (Pop down at popbase time). Held measurement on the DGX was
+  not chosen: results pair only within one engine, so it would cost two DGX evals (reference and candidate) of
+  training time; deferring matches "fewer evals, more training".
