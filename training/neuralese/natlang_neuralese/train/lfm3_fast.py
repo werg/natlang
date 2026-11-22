@@ -21,7 +21,7 @@ Blackwell optimizations (`lfm3opti.md` §6):
 - Causal-conv launch configuration adapts to GPU SM count (`causal_conv_launch_config`).
 - Optional token-length bucketing (`TOKEN_BUCKETS`, `bucket_tokens`, opt-out `NATLANG_COMPILE_BUCKETS=0`) and compile
   health tracking (`CompileHealthTracker`: compile seconds, recompile counts, graph breaks).
-- Optional FP8 frozen-base GEMMs (`fp8_base=True`, opt-out `NATLANG_FP8_BASE=0`) on Blackwell tensor cores.
+- Optional FP8 frozen-base GEMMs (`fp8_base=True` or `NATLANG_FP8_BASE=1`; default off: DECISIONS "LoRA core fixes").
 
 The vendored HF sources are hash-pinned (`third_party/lfm3`), so everything here reads instances, never patches files.
 """
@@ -34,7 +34,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
-from ..model.native_adapters import factored_linear, fp8_base_supported
+from ..model.native_adapters import factored_linear, fp8_base_default
 
 LOGIT_CHUNK = 4096
 
@@ -160,6 +160,16 @@ def _varlen_gqa():
 _GQA = _varlen_gqa()
 
 
+def _dense_attend(q, k, v, mask, scale):
+    """The CPU reference attention under an explicit bool mask; grouped-query heads repeated explicitly (the same
+    arithmetic as ``enable_gqa``, which torch.compile cannot pass a symbolic head count to)."""
+    groups = q.shape[1] // k.shape[1]
+    k, v = k.repeat_interleave(groups, dim=1), v.repeat_interleave(groups, dim=1)
+    out = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
+                                         attn_mask=mask, scale=scale)
+    return out[0].transpose(0, 1)
+
+
 def _attend(q, k, v, docs, window, tree_mask=None):
     """Causal attention within each document, keys at most ``window`` positions back (-1: unbounded). (T, H, D) -> same.
     ``tree_mask`` (a flattened prefix tree, ``tree_masks``): each query sees its own path instead, a flex-attention
@@ -171,9 +181,7 @@ def _attend(q, k, v, docs, window, tree_mask=None):
             out = flex_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
                                  block_mask=tree_mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
             return out[0].transpose(0, 1)
-        out = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
-                                             attn_mask=tree_mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
-        return out[0].transpose(0, 1)
+        return _dense_attend(q, k, v, tree_mask, scale)
     cu, max_len, doc, pos = docs
     if q.is_cuda:
         from torch.nn.attention.varlen import varlen_attn
@@ -183,9 +191,7 @@ def _attend(q, k, v, docs, window, tree_mask=None):
     mask = (doc[:, None] == doc[None, :]) & (i[None, :] <= i[:, None])
     if window >= 0:
         mask &= i[:, None] - i[None, :] <= window
-    out = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
-                                         attn_mask=mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
-    return out[0].transpose(0, 1)
+    return _dense_attend(q, k, v, mask, scale)
 
 
 def _passed(t, source, frozen):
@@ -201,7 +207,7 @@ def _ffn(x, ffn_norm, w1, w3, w2, post_ffn_norm, eps,
          w1_a=None, w1_b=None, w1_s: float = 1.0,
          w3_a=None, w3_b=None, w3_s: float = 1.0,
          w2_a=None, w2_b=None, w2_s: float = 1.0,
-         fp8_base: bool = False):
+         fp8_base='bf16'):
     f = _rms(x, ffn_norm, eps)
     gate = factored_linear(f, w1, w1_a, w1_b, w1_s, fp8_base=fp8_base)
     up = factored_linear(f, w3, w3_a, w3_b, w3_s, fp8_base=fp8_base)
@@ -218,7 +224,7 @@ def conv_layer(x, pos, operator_norm, in_proj, conv_weight, out_proj, post_opera
                w1_a=None, w1_b=None, w1_s: float = 1.0,
                w3_a=None, w3_b=None, w3_s: float = 1.0,
                w2_a=None, w2_b=None, w2_s: float = 1.0,
-               fp8_base: bool = False,
+               fp8_base='bf16',
                import_rows=None, import_bx=None,
                pass_rows=None, pass_source=None, pass_frozen=None, pred=None):
     """`Lfm3DecoderLayer` with `Lfm3ShortConv` on (T, D): depthwise width-7 causal conv with adapter-aware projections."""
@@ -260,7 +266,7 @@ def attention_layer(x, cos, sin, cu, max_len: int, doc, pos, operator_norm, wq, 
                     w1_a=None, w1_b=None, w1_s: float = 1.0,
                     w3_a=None, w3_b=None, w3_s: float = 1.0,
                     w2_a=None, w2_b=None, w2_s: float = 1.0,
-                    fp8_base: bool = False,
+                    fp8_base='bf16',
                     import_rows=None, import_k=None, import_v=None, pass_rows=None, pass_source=None,
                     pass_frozen=None, tree_mask=None):
     """`Lfm3DecoderLayer` with `Lfm3Attention` on (T, D): QK-norm, fp32 RoPE, flash attention, sigmoid head gate,
@@ -296,9 +302,7 @@ def _attend_past(q, k, v, docs, window):
     mask = (q_doc[:, None] == k_doc[None, :]) & (k_pos[None, :] <= q_pos[:, None])
     if window >= 0:
         mask &= q_pos[:, None] - k_pos[None, :] <= window
-    out = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None], v.transpose(0, 1)[None],
-                                         attn_mask=mask, scale=scale, enable_gqa=q.shape[1] != k.shape[1])
-    return out[0].transpose(0, 1)
+    return _dense_attend(q, k, v, mask, scale)
 
 
 def conv_layer_past(x, src_bx, past_index, joined_order, own_rows, operator_norm, in_proj, conv_weight, out_proj,
@@ -308,7 +312,7 @@ def conv_layer_past(x, src_bx, past_index, joined_order, own_rows, operator_norm
                     w1_a=None, w1_b=None, w1_s: float = 1.0,
                     w3_a=None, w3_b=None, w3_s: float = 1.0,
                     w2_a=None, w2_b=None, w2_s: float = 1.0,
-                    fp8_base: bool = False):
+                    fp8_base='bf16'):
     """``conv_layer`` for packed documents that continue computed histories (``Past``) with explicit flat LoRA leaves."""
     taps = conv_weight.shape[-1]
     h = _rms(x, operator_norm, eps)
@@ -341,7 +345,7 @@ def attention_layer_past(x, cos, sin, src_k, src_v, past_index, key_order, cu_q,
                          w1_a=None, w1_b=None, w1_s: float = 1.0,
                          w3_a=None, w3_b=None, w3_s: float = 1.0,
                          w2_a=None, w2_b=None, w2_s: float = 1.0,
-                         fp8_base: bool = False):
+                         fp8_base='bf16'):
     """``attention_layer`` for packed documents that continue computed histories with explicit flat LoRA leaves."""
     length = x.shape[0]
     h = _rms(x, operator_norm, eps)
@@ -385,26 +389,30 @@ def _leaf_triple(leaf):
     return (None, None, 1.0) if leaf is None else (leaf.a, leaf.b, float(leaf.scale))
 
 
-def _bundle_args(kind: str, bundle, fp8_base: bool) -> tuple:
+def _bundle_args(kind: str, bundle, fp8_base) -> tuple:
     """Flatten a ``LayerAdapterBundle`` (or None) into explicit positional leaf arguments for compiled/checkpointed layers."""
     if bundle is None:
         if kind == 'conv':
-            return (None, None, 1.0) * 5 + (bool(fp8_base),)
-        return (None, None, 1.0) * 8 + (bool(fp8_base),)
+            return (None, None, 1.0) * 5 + (fp8_base,)
+        return (None, None, 1.0) * 8 + (fp8_base,)
     if kind == 'conv':
         return (*_leaf_triple(bundle.in_proj), *_leaf_triple(bundle.out_proj),
                 *_leaf_triple(bundle.w1), *_leaf_triple(bundle.w3), *_leaf_triple(bundle.w2),
-                bool(fp8_base))
+                fp8_base)
     return (*_leaf_triple(bundle.q_proj), *_leaf_triple(bundle.k_proj), *_leaf_triple(bundle.v_proj),
             *_leaf_triple(bundle.o_proj), *_leaf_triple(getattr(bundle, 'gate_proj', None)),
             *_leaf_triple(bundle.w1), *_leaf_triple(bundle.w3), *_leaf_triple(bundle.w2),
-            bool(fp8_base))
+            fp8_base)
 
 
 def _resolve_adapters(model, adapters):
-    if adapters is not None:
-        return None if len(adapters) == 0 else adapters
-    return getattr(model, '_lfm3_adapters', None)
+    """Explicit ``adapters`` win; ``()`` means the bare base; ``None`` means the model's current adapters (which
+    ``Lfm3Learner.reference_view`` swaps for the reference while it is active)."""
+    if adapters is None:
+        adapters = getattr(model, '_lfm3_adapters', None)
+    if adapters is None or len(adapters) == 0:
+        return None
+    return adapters
 
 
 def _resolve_trainable_rows(model, trainable_rows):
@@ -416,10 +424,14 @@ def _resolve_trainable_rows(model, trainable_rows):
 
 
 def _resolve_fp8(model, fp8_base):
-    if fp8_base is not None:
-        return bool(fp8_base)
-    fast = getattr(model, '_lfm3_fast', None)
-    return bool(fast and fast.get('fp8_base', False))
+    """The frozen-base GEMM mode passed to every ``factored_linear`` (``native_adapters.BASE_MODES``): ``'fp8'`` when FP8
+    is on (explicit ``fp8_base`` or the prepared default); ``'f32acc'`` for a ``lora+rows`` model, so the bare base (a
+    reference view) and B = 0 factors round the same FP32 accumulator once and agree exactly; else ``'bf16'``."""
+    fast = getattr(model, '_lfm3_fast', None) or {}
+    use = bool(fp8_base) if fp8_base is not None else bool(fast.get('fp8_base', False))
+    if use:
+        return 'fp8'
+    return 'f32acc' if fast.get('parameterization') == 'lora+rows' else 'bf16'
 
 
 def _apply_trainable_embed_rows(x: torch.Tensor, ids: torch.Tensor, trainable_rows) -> torch.Tensor:
@@ -468,11 +480,14 @@ def prepare(model, compile_layers=True, *, fp8_base: bool | None = None, paramet
     for layer in model.model.layers:
         _layer_call(layer, False)                       # refuse unsupported configurations now
     device = model.model.embed_tokens.weight.device
-    use_fp8 = fp8_base_supported(device) if fp8_base is None else bool(fp8_base)
+    use_fp8 = fp8_base_default(device) if fp8_base is None else bool(fp8_base)
     # Only enable FP8 frozen-base GEMMs when the base backbone is actually frozen (LoRA) or explicitly requested.
     if fp8_base is None and any(p.requires_grad for p in model.model.layers.parameters()):
         use_fp8 = False
-    param_mode = parameterization or ('lora+rows' if getattr(model, '_lfm3_adapters', None) is not None else 'full')
+    param_mode = canonical_parameterization(parameterization) or (
+        'lora+rows' if getattr(model, '_lfm3_adapters', None) is not None else 'full')
+    import weakref
+    model.lm_head.weight._lfm3_owner = weakref.ref(model)     # linear_nll's default trainable rows (_head_rows)
     model._lfm3_fast = {
         'compile': bool(compile_layers),
         'fp8_base': bool(use_fp8),
@@ -961,7 +976,7 @@ def activation_bytes_per_token_layer(model=None, *, parameterization: str | None
         parameterization = fast.get('parameterization') or (
             'lora+rows' if getattr(model, '_lfm3_adapters', None) is not None else 'full'
         )
-    parameterization = parameterization or 'lora+rows'
+    parameterization = canonical_parameterization(parameterization) or 'lora+rows'
     if device_arch is None and model is not None:
         try:
             device_arch = _device_arch(model.model.embed_tokens.weight.device)
@@ -985,16 +1000,28 @@ def activation_bytes_per_token_layer(model=None, *, parameterization: str | None
     return total / len(layers)
 
 
-def resident_tokens(model, activation_gib):
+PARAMETERIZATION_ALIASES = {'lora': 'lora+rows', 'lora+rows': 'lora+rows', 'full': 'full'}
+
+
+def canonical_parameterization(parameterization: str | None) -> str | None:
+    """``'lora'`` (the name callers use) and ``'lora+rows'`` (the table key) are one parameterization."""
+    if parameterization is None:
+        return None
+    if parameterization not in PARAMETERIZATION_ALIASES:
+        raise ValueError(f'unknown parameterization {parameterization!r}: one of {sorted(PARAMETERIZATION_ALIASES)}')
+    return PARAMETERIZATION_ALIASES[parameterization]
+
+
+def resident_tokens(model, activation_gib, *, parameterization: str | None = None):
     """The longest sequence whose saved activations fit ``activation_gib`` (GiB) with no layer recomputed."""
-    per_layer = activation_bytes_per_token_layer(model)
-    return int(activation_gib * 2**30 // (per_layer * len(model.model.layers)))
+    per_layer = activation_bytes_per_token_layer(model, parameterization=parameterization)
+    return int(max(0., activation_gib) * 2**30 // (per_layer * len(model.model.layers)))
 
 
-def set_checkpointing(model, tokens, activation_gib):
+def set_checkpointing(model, tokens, activation_gib, *, parameterization: str | None = None):
     """Recompute (gradient-checkpoint) only as many layers as keep saved activations of ``tokens`` under ``activation_gib``."""
     layers = model.model.layers
-    per_layer = activation_bytes_per_token_layer(model)
+    per_layer = activation_bytes_per_token_layer(model, parameterization=parameterization)
     count = recomputed_layers(len(layers), tokens, activation_gib, bytes_per_token_layer=per_layer)
     for index, layer in enumerate(layers):
         layer.gradient_checkpointing = index >= len(layers) - count
@@ -1312,12 +1339,20 @@ def levels_plan(model, nodes, tokens, pack_tokens, activation_gib):
 
 PREFIX_RETAINED_GIB = 8.
 PREFIX_RETAINED_GB = PREFIX_RETAINED_GIB
+# The retained-prefix bound under a zero activation budget (full recompute, e.g. the OOM retry's first fallback): a
+# zero budget must shrink what the prefixes keep, never fall back to the 8 GiB no-budget default.
+PREFIX_RETAINED_MIN_GIB = 1.
 RETAINED_SHARES = (1 / 32, 1 / 16, 1 / 8, 1 / 6, 1 / 4, 1 / 3, 1 / 2, 2 / 3)
 
 
 def choose_retained_gib(model, nodes, tokens, pack_tokens, activation_gib):
-    """The ``retained_gib`` (``run_prefix_tree``, levels) with the least estimated compute under ``activation_gib``."""
-    if activation_gib is None or activation_gib <= 0 or not nodes:
+    """The ``retained_gib`` (``run_prefix_tree``, levels) with the least estimated compute under ``activation_gib``
+    (None: no budget, the 8 GiB default; <= 0: full recompute, ``PREFIX_RETAINED_MIN_GIB``)."""
+    if activation_gib is None:
+        return PREFIX_RETAINED_GIB
+    if activation_gib <= 0:
+        return PREFIX_RETAINED_MIN_GIB
+    if not nodes:
         return PREFIX_RETAINED_GIB
     best = None
     for share in sorted(RETAINED_SHARES, reverse=True):
@@ -1418,10 +1453,24 @@ class _LinearNLL(torch.autograd.Function):
         return dh, None if dw is None else dw.to(weight.dtype), None, None, None, ds
 
 
+def _head_rows(weight, trainable_rows):
+    """The trainable rows a head ``weight`` scores with: explicit rows win, ``False`` means none, ``None`` means the
+    rows of the prepared model that owns ``weight`` (``prepare`` tags the head), like ``hidden`` resolves its rows, so
+    a caller that omits ``trainable_rows=`` never scores the live policy's head with the start rows."""
+    if trainable_rows is False:
+        return None
+    if trainable_rows is not None:
+        return trainable_rows
+    owner = getattr(weight, '_lfm3_owner', None)
+    model = owner() if owner is not None else None
+    return None if model is None else getattr(model, '_lfm3_trainable_rows', None)
+
+
 def linear_nll(h, weight, target, chunk=LOGIT_CHUNK, *, trainable_rows=None):
     """fp32 NLL per row of ``target`` (int64) from hidden rows ``h`` (N, D) and the tied head ``weight`` (V, D).
-    When ``trainable_rows`` is supplied, splices its FP32 rows into the head and accumulates gradients directly into them
-    without touching the frozen head weights."""
+    ``trainable_rows`` (``_head_rows``: default the owning model's rows, ``False`` none) splices FP32 rows into the head
+    and accumulates gradients directly into them without touching the frozen head weights."""
+    trainable_rows = _head_rows(weight, trainable_rows)
     s_ids = trainable_rows.token_ids.to(h.device) if trainable_rows is not None else None
     s_rows = trainable_rows.rows if trainable_rows is not None else None
     return _LinearNLL.apply(h, weight, target, chunk, s_ids, s_rows)
@@ -1551,6 +1600,7 @@ def linear_nll_nucleus(h, weight, target, top_p, chunk=NUCLEUS_CHUNK, top_k=NUCL
     """(nll, nucleus nll, outside): ``linear_nll`` and the NLL of ``target`` under the row's top-p nucleus."""
     if not 0. < top_p < 1.:
         raise ValueError(f'top_p must be in (0, 1) for the nucleus NLL, got {top_p} (use linear_nll at 1)')
+    trainable_rows = _head_rows(weight, trainable_rows)
     s_ids = trainable_rows.token_ids.to(h.device) if trainable_rows is not None else None
     s_rows = trainable_rows.rows if trainable_rows is not None else None
     return _LinearNLLNucleus.apply(h, weight, target, chunk, float(top_p), int(top_k), s_ids, s_rows)
@@ -1560,7 +1610,7 @@ def linear_nll_nucleus(h, weight, target, top_p, chunk=NUCLEUS_CHUNK, top_k=NUCL
 def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHUNK, imports=None, top_p=1.0, *,
                    adapters=None, trainable_rows=None, fp8_base=None):
     """Log-probabilities (fp32) of ``targets`` predicted at rows ``positions`` of the packed ``ids``."""
-    resolved_rows = _resolve_trainable_rows(model, trainable_rows)
+    resolved_rows = _resolve_trainable_rows(model, trainable_rows) or False
     h = hidden(model, ids, lengths, imports, adapters=adapters, trainable_rows=trainable_rows, fp8_base=fp8_base)
     if top_p >= 1.:
         return -linear_nll(h[positions], model.lm_head.weight, targets, chunk, trainable_rows=resolved_rows)

@@ -99,8 +99,12 @@ def save_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.O
                        rl_rollout_ledger: dict | None = None,
                        ref_bundles: tuple[LayerAdapterBundle, ...] | None = None,
                        ref_rows: TrainableRows | None = None,
-                       keep_previous: bool = True, extra_meta: dict | None = None) -> Path:
-    """Atomically save resumable LoRA+rows learner state into ``state_dir`` (staging dir -> atomic manifest commit)."""
+                       keep_previous: bool = True, extra_meta: dict | None = None,
+                       trainer_state: dict | None = None) -> Path:
+    """Atomically save resumable LoRA+rows learner state into ``state_dir`` (staging dir -> atomic manifest commit).
+
+    ``trainer_state``: the trainer's own resume state (any ``torch.save``-able dict: e.g. exp0_sft's OOM plan, replanned
+    schedule and kept-best leaves), returned by ``load_learner_state`` as ``trainer_state``."""
     root = Path(state_dir)
     root.parent.mkdir(parents=True, exist_ok=True)
     stage = root.parent / f'.{root.name}.staging-{uuid.uuid4().hex[:10]}'
@@ -122,6 +126,9 @@ def save_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.O
 
         if optimizer is not None:
             torch.save(optimizer.state_dict(), stage / 'optimizer_state.pt')
+
+        if trainer_state is not None:
+            torch.save(trainer_state, stage / 'trainer_state.pt')
 
         torch.save({
             'rng': capture_rng_state(),
@@ -233,8 +240,13 @@ def load_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.O
         if restore_rng and 'rng' in cursors:
             restore_rng_state(cursors['rng'])
 
+    trainer_state = None
+    if (root / 'trainer_state.pt').is_file():
+        trainer_state = torch.load(root / 'trainer_state.pt', map_location='cpu', weights_only=False)
+
     return {
         'manifest': manifest,
+        'trainer_state': trainer_state,
         'ref_bundles': ref_bundles,
         'ref_rows': ref_rows,
         'batch_cursor': cursors.get('batch_cursor', manifest.get('batch_cursor')),

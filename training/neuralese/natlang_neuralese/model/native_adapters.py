@@ -297,14 +297,8 @@ _FP8_E4M3_MAX = 448.0
 
 
 def fp8_base_supported(device=None) -> bool:
-    """Whether Blackwell FP8 frozen-base GEMMs are enabled and supported on ``device``.
-
-    Enabled by default on Blackwell (compute capability >= 12.0: G4 sm_120 and GB10 sm_121).
-    ``NATLANG_FP8_BASE=0`` opts out.
-    """
-    import os
-    if os.environ.get('NATLANG_FP8_BASE', '1') == '0':
-        return False
+    """Whether ``device`` runs the row-wise scaled FP8 E4M3 GEMMs of ``fp8_frozen_linear`` (Blackwell, compute capability
+    >= 12.0: G4 sm_120 and GB10 sm_121; row-wise ``torch._scaled_mm`` with BF16 output)."""
     if not torch.cuda.is_available() or not hasattr(torch, '_scaled_mm'):
         return False
     try:
@@ -317,93 +311,177 @@ def fp8_base_supported(device=None) -> bool:
         return False
 
 
-def _quantize_fp8_e4m3(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Per-tensor dynamic FP8 E4M3 quantization for Blackwell ``torch._scaled_mm``."""
-    scale = (x.abs().amax().float().clamp(min=1e-12) / _FP8_E4M3_MAX).reshape(1)
-    q = (x.float() / scale).clamp(-_FP8_E4M3_MAX, _FP8_E4M3_MAX).to(torch.float8_e4m3fn)
+def fp8_base_default(device=None) -> bool:
+    """The FP8 frozen-base default: OFF. Opt in with ``NATLANG_FP8_BASE=1`` (or ``fp8_base=True``).
+
+    Measured 2026-11-22 on the GB10 (DECISIONS "LoRA core fixes"): E4M3 carries 3 mantissa bits, so even with per-token
+    activation/gradient scales and per-channel weight scales the 1.7B model's FP8-vs-BF16 log-probabilities differ by
+    far more than the BF16-vs-FP32 envelope the plan requires (lfm3opti.md §6 item 3). The BF16 base is the default
+    until an FP8 recipe meets that bar."""
+    import os
+    return os.environ.get('NATLANG_FP8_BASE', '0') == '1' and fp8_base_supported(device)
+
+
+# Frozen weights are quantized once: (data_ptr, shape, stride, version) -> (W q (N, K), per-row scale (1, N) for the
+# forward; W^T q (K, N), per-row scale (1, K) for the input gradient). Looked up inside the custom ops, which Dynamo
+# treats as opaque, so the cache never enters a traced graph.
+_FP8_WEIGHTS: dict = {}
+
+
+def _rowwise_fp8(x2d: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-row E4M3 quantization: one scale per token (activations, output gradients) or per output channel
+    (weights). (M, K) -> (q (M, K) float8_e4m3fn, scale (M, 1) fp32)."""
+    scale = x2d.abs().amax(dim=-1, keepdim=True).float().clamp(min=1e-12) / _FP8_E4M3_MAX
+    q = (x2d.float() / scale).clamp(-_FP8_E4M3_MAX, _FP8_E4M3_MAX).to(torch.float8_e4m3fn)
     return q, scale
 
 
-def _scaled_mm_padded(a_2d: torch.Tensor, b_col_major: torch.Tensor, scale_a: torch.Tensor,
-                      scale_b: torch.Tensor, out_dtype: torch.dtype) -> torch.Tensor:
-    """``torch._scaled_mm`` with automatic row padding to a multiple of 16 for arbitrary token lengths."""
-    rows = a_2d.shape[0]
+def fp8_weight(weight: torch.Tensor):
+    """The cached per-channel FP8 quantization of a frozen base ``weight`` (computed once per weight)."""
+    key = (weight.data_ptr(), tuple(weight.shape), tuple(weight.stride()), weight._version, weight.device)
+    hit = _FP8_WEIGHTS.get(key)
+    if hit is None:
+        with torch.no_grad():
+            w = weight.detach()
+            wq, ws = _rowwise_fp8(w.contiguous())                 # (N, K), (N, 1): per output channel
+            wtq, wts = _rowwise_fp8(w.t().contiguous())           # (K, N), (K, 1): per input channel
+        hit = _FP8_WEIGHTS[key] = (wq, ws.reshape(1, -1).contiguous(), wtq, wts.reshape(1, -1).contiguous())
+    return hit
+
+
+def clear_fp8_weights() -> None:
+    _FP8_WEIGHTS.clear()
+
+
+def _scaled_mm_rows(a_q, a_scale, b_q_rowmajor, b_scale_row, out_dtype):
+    """``a (M, K) @ b (N, K)^T`` with row-wise scales, rows padded to a multiple of 16 (``_scaled_mm`` alignment)."""
+    rows = a_q.shape[0]
     pad = (-rows) % 16
     if pad:
-        a_in = torch.nn.functional.pad(a_2d, (0, 0, 0, pad))
-        return torch._scaled_mm(a_in, b_col_major, scale_a=scale_a, scale_b=scale_b, out_dtype=out_dtype)[:rows]
-    return torch._scaled_mm(a_2d, b_col_major, scale_a=scale_a, scale_b=scale_b, out_dtype=out_dtype)
+        a_q = torch.nn.functional.pad(a_q.view(torch.uint8), (0, 0, 0, pad)).view(torch.float8_e4m3fn)
+        a_scale = torch.nn.functional.pad(a_scale, (0, 0, 0, pad), value=1.)
+    out = torch._scaled_mm(a_q, b_q_rowmajor.t(), scale_a=a_scale, scale_b=b_scale_row, out_dtype=out_dtype)
+    return out[:rows] if pad else out
 
 
-class _FP8FrozenBaseLinear(torch.autograd.Function):
-    """Frozen-base linear projection using FP8 E4M3 tensor cores for forward (W0 x) and input-gradient (dY W0).
+@torch.library.custom_op('natlang::fp8_frozen_linear', mutates_args=())
+def _fp8_frozen_linear_op(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    wq, ws, _wtq, _wts = fp8_weight(weight)
+    x2d = x.reshape(-1, x.shape[-1])
+    xq, xs = _rowwise_fp8(x2d)
+    return _scaled_mm_rows(xq, xs, wq, ws, x.dtype).reshape(*x.shape[:-1], weight.shape[0])
 
-    The base weight W0 is frozen (no weight gradient); adapters, trainable rows, loss and optimizer stay in BF16/FP32.
-    """
 
-    @staticmethod
-    def forward(ctx, x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None):
-        orig_shape = x.shape[:-1]
-        in_features = x.shape[-1]
-        out_features = weight.shape[0]
-        x2d = x.reshape(-1, in_features).contiguous()
-        xq, xs = _quantize_fp8_e4m3(x2d)
-        wq, ws = _quantize_fp8_e4m3(weight.contiguous())
-        out = _scaled_mm_padded(xq, wq.t(), xs, ws, x.dtype)
-        if bias is not None:
-            out = out + bias.to(out.dtype)
-        ctx.save_for_backward(weight)
-        ctx.orig_shape = orig_shape
-        ctx.in_features = in_features
-        ctx.out_features = out_features
-        ctx.x_dtype = x.dtype
-        return out.reshape(*orig_shape, out_features)
+@_fp8_frozen_linear_op.register_fake
+def _(x, weight):
+    return x.new_empty((*x.shape[:-1], weight.shape[0]))
 
-    @staticmethod
-    def backward(ctx, grad_out: torch.Tensor):
-        (weight,) = ctx.saved_tensors
-        need_x, need_w, need_b = ctx.needs_input_grad
-        dx = dw = db = None
-        g2d = grad_out.reshape(-1, ctx.out_features).contiguous()
-        if need_x:
-            gq, gs = _quantize_fp8_e4m3(g2d)
-            # weight is (N, K); we need g2d (M, N) @ weight (N, K) -> b_col_major must be (N, K) column-major,
-            # which is weight.t().contiguous().t() where weight.t().contiguous() is (K, N) row-major.
-            wt_q, ws = _quantize_fp8_e4m3(weight.t().contiguous())
-            dx = _scaled_mm_padded(gq, wt_q.t(), gs, ws, ctx.x_dtype).reshape(*ctx.orig_shape, ctx.in_features)
-        if need_w:
-            raise RuntimeError('_FP8FrozenBaseLinear requires frozen base weight (weight.requires_grad must be False)')
-        if need_b:
-            db = g2d.float().sum(dim=0).to(grad_out.dtype)
-        return dx, dw, db
+
+@torch.library.custom_op('natlang::fp8_frozen_linear_dx', mutates_args=())
+def _fp8_frozen_linear_dx_op(grad: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    _wq, _ws, wtq, wts = fp8_weight(weight)
+    g2d = grad.reshape(-1, grad.shape[-1])
+    gq, gs = _rowwise_fp8(g2d)                                  # per token: packed documents stay independent
+    return _scaled_mm_rows(gq, gs, wtq, wts, grad.dtype).reshape(*grad.shape[:-1], weight.shape[1])
+
+
+@_fp8_frozen_linear_dx_op.register_fake
+def _(grad, weight):
+    return grad.new_empty((*grad.shape[:-1], weight.shape[1]))
+
+
+def _fp8_setup(ctx, inputs, output):
+    ctx.save_for_backward(inputs[1])
+
+
+def _fp8_backward(ctx, grad):
+    (weight,) = ctx.saved_tensors
+    return _fp8_frozen_linear_dx_op(grad.to(weight.dtype).contiguous(), weight), None
+
+
+torch.library.register_autograd('natlang::fp8_frozen_linear', _fp8_backward, setup_context=_fp8_setup)
 
 
 def fp8_frozen_linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
-    """Apply frozen base linear projection in FP8 E4M3 on Blackwell tensor cores when eligible, else ``F.linear``."""
-    if (x.is_cuda and weight.is_cuda and x.dtype in (torch.bfloat16, torch.float16)
-            and weight.dtype == x.dtype and not weight.requires_grad
-            and weight.shape[0] % 16 == 0 and weight.shape[1] % 16 == 0
+    """Frozen base projection ``x W^T`` in FP8 E4M3 (per-token activation and output-gradient scales, per-channel weight
+    scales, the weight quantized once; a compile-safe ``torch.library`` op) when eligible, else ``F.linear``. The weight
+    gets no gradient: only frozen bases take this path."""
+    if (x.is_cuda and weight.is_cuda and x.dtype == torch.bfloat16 and weight.dtype == x.dtype
+            and not weight.requires_grad and weight.shape[0] % 16 == 0 and weight.shape[1] % 16 == 0
             and fp8_base_supported(x.device)):
-        return _FP8FrozenBaseLinear.apply(x, weight, bias)
+        out = _fp8_frozen_linear_op(x, weight)
+        return out if bias is None else out + bias.to(out.dtype)
     return torch.nn.functional.linear(x, weight, bias)
+
+
+@torch.library.custom_op('natlang::frozen_linear_f32', mutates_args=())
+def _frozen_linear_f32_op(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    x2d = x.reshape(-1, x.shape[-1])
+    if x.is_cuda and x.dtype in (torch.bfloat16, torch.float16):
+        out = torch.mm(x2d, weight.t(), out_dtype=torch.float32)     # tensor cores, FP32 accumulator kept
+    else:
+        out = torch.mm(x2d.float(), weight.float().t())
+    return out.reshape(*x.shape[:-1], weight.shape[0])
+
+
+@_frozen_linear_f32_op.register_fake
+def _(x, weight):
+    return x.new_empty((*x.shape[:-1], weight.shape[0]), dtype=torch.float32)
+
+
+def _f32_setup(ctx, inputs, output):
+    ctx.save_for_backward(inputs[1])
+    ctx.x_dtype = inputs[0].dtype
+
+
+def _f32_backward(ctx, grad):
+    (weight,) = ctx.saved_tensors
+    # the input gradient in the compute dtype, as F.linear's backward of a BF16 output computes it
+    dx = torch.nn.functional.linear(grad.to(ctx.x_dtype), weight.t().to(ctx.x_dtype))
+    return dx, None
+
+
+torch.library.register_autograd('natlang::frozen_linear_f32', _f32_backward, setup_context=_f32_setup)
+
+
+# Frozen-base GEMM modes of ``factored_linear`` (``fp8_base`` takes a bool or one of these): 'bf16' (F.linear, BF16
+# output), 'f32acc' (FP32 accumulator kept, rounded once after the low-rank delta; the lora+rows default), 'fp8'.
+BASE_MODES = ('bf16', 'f32acc', 'fp8')
 
 
 def factored_linear(x: torch.Tensor, base_w: torch.Tensor, lora_a: torch.Tensor | None = None,
                     lora_b: torch.Tensor | None = None, scale: float = 1.0, bias: torch.Tensor | None = None,
-                    *, fp8_base: bool = False, adapter_dtype: torch.dtype | None = None) -> torch.Tensor:
+                    *, fp8_base=False, adapter_dtype: torch.dtype | None = None) -> torch.Tensor:
     """Pure factored linear projection ``y = W0 x + s * B (A x)`` with canonical unscaled FP32 leaves ``A, B``.
 
     - ``scale`` (``alpha / rank``) is applied once as a Python float; leaves remain unscaled so multi-backward prefix
       trees never cache derived non-leaf tensors.
-    - By default the low-rank branch runs in the input's tensor-core dtype (BF16 on CUDA) with FP32 residual
-      accumulation into the output, rounded once. Set ``adapter_dtype=torch.float32`` (or ``NATLANG_LORA_FP32_BRANCH=1``)
-      for the strict FP32 low-rank reference branch inside ``autocast(enabled=False)``.
-    - Base GEMMs optionally run in FP8 E4M3 (``fp8_base=True``) when the base weight is frozen on Blackwell.
+    - Without factors (or with ``A, B`` None) the base projection is ``F.linear`` in the input dtype, as before.
+    - With factors and a frozen base, ``W0 x`` keeps its FP32 accumulator (``natlang::frozen_linear_f32``), the low-rank
+      branch runs in the input's tensor-core dtype (BF16 on CUDA) and the two are added in FP32 and rounded once. A base
+      weight that trains (full fine-tuning) keeps ``F.linear``. ``adapter_dtype=torch.float32`` (or
+      ``NATLANG_LORA_FP32_BRANCH=1``) runs the strict FP32 low-rank reference branch.
+    - ``fp8_base=True`` runs the frozen base GEMM in FP8 (``fp8_frozen_linear``; BF16 output, then the FP32 add).
     """
     import os
-    out = fp8_frozen_linear(x, base_w, bias) if fp8_base else torch.nn.functional.linear(x, base_w, bias)
-    if lora_a is None or lora_b is None:
+    mode = 'fp8' if fp8_base is True else 'bf16' if fp8_base is False or fp8_base is None else fp8_base
+    if mode not in BASE_MODES:
+        raise ValueError(f'factored_linear base mode {fp8_base!r}: one of {BASE_MODES} or a bool')
+    factored = lora_a is not None and lora_b is not None
+    f32acc = (mode == 'f32acc' or factored) and not base_w.requires_grad and x.dtype != torch.float32
+    if mode == 'fp8':
+        out = fp8_frozen_linear(x, base_w, bias)
+    elif f32acc:
+        out = _frozen_linear_f32_op(x, base_w)
+        if bias is not None:
+            out = out + bias.float()
+        if not factored:
+            return out.to(x.dtype)
+    else:
+        out = torch.nn.functional.linear(x, base_w, bias)
+    if not factored:
         return out
+    out = out.float()
     branch_dtype = adapter_dtype
     if branch_dtype is None:
         if x.dtype == torch.float32 or os.environ.get('NATLANG_LORA_FP32_BRANCH') == '1':
@@ -416,10 +494,10 @@ def factored_linear(x: torch.Tensor, base_w: torch.Tensor, lora_a: torch.Tensor 
                 torch.nn.functional.linear(x.float(), lora_a.float()),
                 lora_b.float(),
             )
-            return (out.float() + float(scale) * low).to(out.dtype)
+            return (out + float(scale) * low).to(x.dtype)
     h_low = torch.nn.functional.linear(x.to(branch_dtype), lora_a.to(branch_dtype))
     delta = torch.nn.functional.linear(h_low, lora_b.to(branch_dtype))
-    return (out.float() + float(scale) * delta.float()).to(out.dtype)
+    return (out + float(scale) * delta.float()).to(x.dtype)
 
 
 class FactoredLoRALinear(nn.Module):

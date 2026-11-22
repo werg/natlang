@@ -741,7 +741,7 @@ def ambient_teacher_rows_lora(learner: Lfm3Learner, chains, ref_bundles, ref_row
         lfm3_fast_train.run_prefix_tree(
             model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
             backward=False, mode=mode if share_prefix_tokens > 0 else 'levels',
-            batch_tokens=tree_batch_tokens, retained_gb=retained_gb, **ref_kw,
+            batch_tokens=tree_batch_tokens, retained_gb=retained_gb, **ref_kw.kwargs,
         )
     learner.zero_grad(set_to_none=True)
     return rows
@@ -934,7 +934,7 @@ def train(args):
         seed=args.seed, base_weights_sha256=source_sha,
     )
     model, state = learner.model, learner.state
-    special = learner.trainable_rows.token_ids.tolist() if learner.trainable_rows is not None else []
+    special = learner.special_ids
     model.train()
     forward = lfm3_fast_train.hidden
     pack_tokens = args.pack_tokens if args.pack_tokens >= 0 else resident_tokens(model, args.activation_gb)
@@ -946,11 +946,18 @@ def train(args):
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     state_dir = Path(args.state_dir) if args.state_dir else out_dir / 'learner-state'
+    trainer_state = None
     if args.resume and (state_dir / 'learner_manifest.json').is_file():
         restored = load_learner_state(state_dir, learner, optimizer, verify_base_sha=source_sha)
         start_step = int((restored.get('batch_cursor') or {}).get('next_step', restored['manifest']['learner_step']))
         if restored['ref_bundles'] or restored['ref_rows'] is not None:
             ref_bundles, ref_rows = restored['ref_bundles'], restored['ref_rows']
+        trainer_state = restored.get('trainer_state') or {}
+        # the --hours replan cut the schedule: the resume trains the same cut schedule with the same cosine
+        schedule = trainer_state.get('schedule')
+        if schedule:
+            total = int(schedule['total'])
+            del steps[int(schedule['steps']):]
         print(json.dumps({'resumed_from': str(state_dir), 'start_step': start_step,
                           'effective_policy_sha256': learner.effective_policy_sha256(source_sha)}), flush=True)
 
@@ -981,6 +988,10 @@ def train(args):
     compile_health = lfm3_fast_train.CompileHealthTracker()
     oom_plan = OOMRetryPlan(pack_tokens=pack_tokens or 1, activation_gib=float(args.activation_gb))
     best = None
+    if trainer_state:
+        if trainer_state.get('oom_plan'):
+            oom_plan = OOMRetryPlan.from_dict(trainer_state['oom_plan'])   # a shrunk plan stays shrunk
+        best = trainer_state.get('best')                                   # --keep-best-val's earlier best
     if args.keep_best_val and start_step == 0:
         if not val_sets or f'val_loss:{args.keep_best_val}' not in record:
             raise SystemExit(f'--keep-best-val {args.keep_best_val}: no such --val-chains set')
@@ -1007,6 +1018,8 @@ def train(args):
             data_manifest_sha256=chains_sha,
             batch_cursor={'next_step': next_step_idx, 'total_steps': total},
             ref_bundles=ref_bundles, ref_rows=ref_rows,
+            trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best,
+                           'schedule': {'total': total, 'steps': len(steps)}},
         )
         last_state_save = time.time()
         phase['state_save'] += last_state_save - t_save

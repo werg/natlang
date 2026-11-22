@@ -102,7 +102,7 @@ def capture(args):
     blocks = {k: s for k, s in blocks.items() if k in needed or len(needed) < args.blocks and not needed.add(k)}
     print(json.dumps({'blocks': len(blocks), 'consumers': len(consumers),
                       'document_tokens': [len(s['ids']) for s in blocks.values()]}), flush=True)
-    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base)
+    model, _, _ = exp0_sft.load_model(args.checkpoint, args.base, dtype=torch.float32)   # the FP32 reference first
     model.eval()
     fp32 = {b: layer_states(model, torch.as_tensor(s['ids'], dtype=torch.long, device='cuda')) for b, s in blocks.items()}
     model.to(torch.bfloat16)

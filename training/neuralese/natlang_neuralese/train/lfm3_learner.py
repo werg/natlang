@@ -169,6 +169,26 @@ class EffectivePolicySpec:
     effective_policy_sha256: str
 
 
+class ReferenceView(tuple):
+    """``(adapters, trainable_rows)`` of an active ``Lfm3Learner.reference_view``: ``adapters`` is ``()`` (bare base) or
+    a snapshot bundle tuple, ``trainable_rows`` is ``False`` (start rows) or a ``TrainableRows`` snapshot."""
+
+    def __new__(cls, adapters, trainable_rows):
+        return super().__new__(cls, (adapters, trainable_rows))
+
+    @property
+    def adapters(self):
+        return self[0]
+
+    @property
+    def trainable_rows(self):
+        return self[1]
+
+    @property
+    def kwargs(self) -> dict:
+        return {'adapters': self[0], 'trainable_rows': self[1]}
+
+
 DEFAULT_SFT_LR = 5e-5
 DEFAULT_RL_LR = 1e-4
 
@@ -247,6 +267,7 @@ class Lfm3Learner:
         self.base_weights_sha256 = base_weights_sha256
         self.model._lfm3_adapters = self.bundles
         self.model._lfm3_trainable_rows = self.trainable_rows
+        self._special_ids: tuple[int, ...] = ()
         lfm3_fast.prepare(self.model, compile_layers=compile_layers, fp8_base=fp8_base, parameterization='lora+rows')
         self.model.config.use_cache = False
 
@@ -290,9 +311,11 @@ class Lfm3Learner:
                 marker_ids=tuple(int(i) for i in marker_ids),
                 override_ids=tuple(int(i) for i in override_ids),
             )
-        return cls(model, spec, tuple(bundles), target_map, trainable_rows=t_rows, state=state,
-                   base_checkpoint_path=base_checkpoint_path, base_weights_sha256=base_weights_sha256,
-                   compile_layers=compile_layers, fp8_base=fp8_base)
+        learner = cls(model, spec, tuple(bundles), target_map, trainable_rows=t_rows, state=state,
+                      base_checkpoint_path=base_checkpoint_path, base_weights_sha256=base_weights_sha256,
+                      compile_layers=compile_layers, fp8_base=fp8_base)
+        learner._special_ids = tuple(dict.fromkeys(int(i) for i in special_ids))
+        return learner
 
     @classmethod
     def from_checkpoint(cls, checkpoint, base, spec: AdapterSpec, *, device='cuda', dtype=torch.bfloat16,
@@ -312,6 +335,34 @@ class Lfm3Learner:
     @property
     def fp8_enabled(self) -> bool:
         return bool((getattr(self.model, '_lfm3_fast', None) or {}).get('fp8_base', False))
+
+    @property
+    def fp8_base(self) -> bool:
+        """Whether the frozen base GEMMs run in FP8 (the value to pass as ``fp8_base=`` to ``lfm3_fast``)."""
+        return self.fp8_enabled
+
+    @property
+    def checkpoint_state(self) -> dict | None:
+        """The source native checkpoint (``CheckpointPolicy.load`` layout, legacy ``training`` dict dropped)."""
+        return self.state
+
+    @property
+    def special_ids(self) -> list[int]:
+        """The Neuralese marker then token-override ids (the source checkpoint's interface rows), in checkpoint order."""
+        return list(self._special_ids)
+
+    @property
+    def native_rows(self) -> dict:
+        """What a pruned native checkpoint needs from the source (``grpo.write_pruned_checkpoint``): the source backbone's
+        own embedding rows at ``special_ids`` (the interface rows live in ``interface_state``), whether the head is
+        tied, and the backbone tensor names."""
+        original = (self.state or {}).get('backbone_state') or {}
+        if 'model.embed_tokens.weight' not in original:
+            raise ValueError('native_rows: the learner has no source backbone_state')
+        ids = torch.tensor(self.special_ids, dtype=torch.long)
+        return {'embedding_rows': original['model.embed_tokens.weight'][ids].clone(),
+                'tied_head': 'lm_head.weight' in original,
+                'names': [n for n in original if n != 'lm_head.weight']}
 
     def named_trainable_tensors(self) -> dict[str, torch.Tensor]:
         """Deterministic mapping of every FP32 trainable leaf tensor (factors + trainable Neuralese rows)."""
@@ -408,10 +459,29 @@ class Lfm3Learner:
         return ref_bundles, ref_rows
 
     @contextlib.contextmanager
-    def reference_view(self, ref_bundles: tuple[LayerAdapterBundle, ...] = (),
+    def reference_view(self, ref_bundles: tuple[LayerAdapterBundle, ...] | None = (),
                        ref_rows: TrainableRows | None = None):
-        """Yield ``(adapters, trainable_rows)`` kwargs for a reference forward without mutating live leaves."""
-        yield {'adapters': ref_bundles, 'trainable_rows': False if ref_rows is None else ref_rows}
+        """Make the model compute the reference policy for the duration of the block, without touching live leaves.
+
+        ``ref_bundles``: a ``snapshot_reference`` adapter tuple; ``()`` or ``None`` both mean the bare base (B = 0).
+        ``ref_rows``: a ``TrainableRows`` snapshot; ``None`` means the start rows (the ones merged into the frozen
+        embedding at load). ``None`` never means the live policy.
+
+        While active, ``model._lfm3_adapters`` / ``model._lfm3_trainable_rows`` are the reference's, so every
+        ``lfm3_fast`` call that omits ``adapters=`` / ``trainable_rows=`` (``hidden``, ``run_prefix_tree``,
+        ``linear_nll``, ``token_logprobs``, probes) runs the reference. Yields a ``ReferenceView`` named tuple
+        ``(adapters, trainable_rows)`` holding the explicit values (``()`` for the bare base, ``False`` for no rows)
+        that may also be passed explicitly; ``view.kwargs`` is the same as a dict. Restores the live policy on exit,
+        also on error."""
+        adapters = () if not ref_bundles else tuple(ref_bundles)
+        rows = False if ref_rows is None else ref_rows
+        saved = (self.model._lfm3_adapters, self.model._lfm3_trainable_rows)
+        self.model._lfm3_adapters = adapters
+        self.model._lfm3_trainable_rows = None if rows is False else rows
+        try:
+            yield ReferenceView(adapters, rows)
+        finally:
+            self.model._lfm3_adapters, self.model._lfm3_trainable_rows = saved
 
     def effective_policy_sha256(self, base_sha256: str | None = None) -> str:
         """Deterministic SHA-256 of base digest + adapter spec + sorted FP32 factor tensors + trainable rows."""
@@ -446,18 +516,17 @@ class Lfm3Learner:
             embed = backbone['model.embed_tokens.weight'].clone()
             embed[self.trainable_rows.token_ids.to(device=device)] = rows_cpu
             backbone['model.embed_tokens.weight'] = embed.contiguous()
-            if self.trainable_rows.marker_ids and 'input_rows' in interface:
-                m_idx = torch.tensor([id_to_pos[i] for i in self.trainable_rows.marker_ids], dtype=torch.long)
-                updated_markers = rows_cpu.index_select(0, m_idx).contiguous()
-                interface['input_rows'] = updated_markers.to(interface['input_rows'].dtype)
-                if 'output_rows' in interface:
-                    interface['output_rows'] = updated_markers.to(interface['output_rows'].dtype)
-            if self.trainable_rows.override_ids and 'extra_input_rows' in interface:
-                o_idx = torch.tensor([id_to_pos[i] for i in self.trainable_rows.override_ids], dtype=torch.long)
-                updated_overrides = rows_cpu.index_select(0, o_idx).contiguous()
-                interface['extra_input_rows'] = updated_overrides.to(interface['extra_input_rows'].dtype)
-                if 'extra_output_rows' in interface:
-                    interface['extra_output_rows'] = updated_overrides.to(interface['extra_output_rows'].dtype)
+            # Tied checkpoints hold ``output_rows = None`` / ``extra_output_rows = None`` (the head reuses the input
+            # rows): only present tensors are updated, and None stays None.
+            for ids, field, out_field in ((self.trainable_rows.marker_ids, 'input_rows', 'output_rows'),
+                                          (self.trainable_rows.override_ids, 'extra_input_rows', 'extra_output_rows')):
+                if not ids or interface.get(field) is None:
+                    continue
+                index = torch.tensor([id_to_pos[i] for i in ids], dtype=torch.long)
+                updated = rows_cpu.index_select(0, index).contiguous()
+                interface[field] = updated.to(interface[field].dtype)
+                if interface.get(out_field) is not None:
+                    interface[out_field] = updated.to(interface[out_field].dtype)
         return backbone, interface
 
 
@@ -486,48 +555,64 @@ def restore_rng_state(state: dict) -> None:
 
 @dataclass
 class OOMRetryPlan:
-    """Mutable physical execution plan reduced deterministically on ``torch.OutOfMemoryError`` (v2 §6.2)."""
+    """Mutable physical execution plan reduced deterministically on ``torch.OutOfMemoryError`` (v2 §6.2).
+
+    The plan is persistent: once shrunk it stays shrunk for the rest of the run, and trainers save ``to_dict()`` in
+    their learner state and restore it with ``from_dict`` so a resume runs the same physical plan (no second OOM)."""
     pack_tokens: int
     activation_gib: float
     min_pack_tokens: int = 1
     retries: int = 0
 
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
 
-def run_step_with_oom_retry(step_fn, learner: Lfm3Learner, plan: OOMRetryPlan, *, max_retries: int = 8):
-    """Execute one optimizer step body with deterministic OOM recovery:
+    @classmethod
+    def from_dict(cls, data: dict) -> 'OOMRetryPlan':
+        return cls(pack_tokens=int(data['pack_tokens']), activation_gib=float(data['activation_gib']),
+                   min_pack_tokens=int(data.get('min_pack_tokens', 1)), retries=int(data.get('retries', 0)))
+
+
+def run_step_with_oom_retry(step_fn, learner: Lfm3Learner, plan: OOMRetryPlan, *, max_retries: int = 8,
+                            on_retry=None):
+    """Execute one optimizer step body ``step_fn(pack_tokens, activation_gib)`` with deterministic OOM recovery:
     1. Snapshot RNG state.
-    2. On OOM: clear gradients and CUDA cache, restore RNG, first drop ``activation_gib`` to 0 (full checkpointing),
-       then halve ``pack_tokens`` down to ``min_pack_tokens`` (single chain), and retry the exact same batch.
+    2. On OOM: leave the ``except`` block first (its traceback holds the failed graph's frames and tensors), then clear
+       the trainable gradients, collect, empty the CUDA cache and restore the RNG; first lower ``activation_gib``
+       (halve, then 0 = full checkpointing), then halve ``pack_tokens`` down to ``min_pack_tokens`` (single chain), and
+       retry the exact same batch. ``on_retry(plan, attempt, error_text)`` is called before each retry.
     3. Hard abort with structured diagnostics if a single chain OOMs at full checkpointing.
     """
     entry_rng = capture_rng_state()
     attempt = 0
     while True:
+        error_text = None
         try:
             return step_fn(plan.pack_tokens, plan.activation_gib)
         except torch.OutOfMemoryError as error:
-            attempt += 1
-            plan.retries += 1
-            learner.zero_grad(set_to_none=True)
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            restore_rng_state(entry_rng)
-            if attempt > max_retries:
-                raise RuntimeError(json.dumps({
-                    'event': 'oom_hard_abort', 'attempts': attempt, 'pack_tokens': plan.pack_tokens,
-                    'activation_gib': plan.activation_gib, 'error': str(error)[:400],
-                })) from error
-            if plan.activation_gib > 0.0:
-                plan.activation_gib = 0.0 if plan.activation_gib <= 4.0 else plan.activation_gib * 0.5
-            elif plan.pack_tokens > plan.min_pack_tokens:
-                plan.pack_tokens = max(plan.min_pack_tokens, plan.pack_tokens // 2)
-            else:
-                raise RuntimeError(json.dumps({
-                    'event': 'oom_single_chain_full_checkpoint_abort', 'attempts': attempt,
-                    'pack_tokens': plan.pack_tokens, 'activation_gib': plan.activation_gib,
-                    'error': str(error)[:400],
-                })) from error
+            error_text = str(error)[:400]
+        # outside the except clause: the exception, its traceback and the frames holding the graph are released here
+        attempt += 1
+        plan.retries += 1
+        learner.zero_grad(set_to_none=True)
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        restore_rng_state(entry_rng)
+        if attempt > max_retries:
+            raise RuntimeError(json.dumps({
+                'event': 'oom_hard_abort', 'attempts': attempt, 'pack_tokens': plan.pack_tokens,
+                'activation_gib': plan.activation_gib, 'error': error_text}))
+        if plan.activation_gib > 0.0:
+            plan.activation_gib = 0.0 if plan.activation_gib <= 4.0 else plan.activation_gib * 0.5
+        elif plan.pack_tokens > plan.min_pack_tokens:
+            plan.pack_tokens = max(plan.min_pack_tokens, plan.pack_tokens // 2)
+        else:
+            raise RuntimeError(json.dumps({
+                'event': 'oom_single_chain_full_checkpoint_abort', 'attempts': attempt,
+                'pack_tokens': plan.pack_tokens, 'activation_gib': plan.activation_gib, 'error': error_text}))
+        if on_retry is not None:
+            on_retry(plan, attempt, error_text)
 
 
 def load_effective_policy(path, base, *, device='cuda', dtype=torch.bfloat16, compile_layers: bool = True,
