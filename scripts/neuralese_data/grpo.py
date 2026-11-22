@@ -20,9 +20,11 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   actor's stored state, ``lfm3_fast_train.import_tensors``). The producer's own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k2(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
   sampling against the actor's own sampling logprobs), ``A`` the group-normalized episode reward on every call of the
-  episode, the reference the start policy (B = 0: the base with its start rows, ``reference_snapshot``). Each trained episode weighs the same: its terms are averaged over its units
-  (sampled tokens; a sampled decision counts as one average call of its episode), then over the step's episodes
-  (``--loss-norm token``: one sum over all tokens). A tail token the actor sampled below ``--tail-logp-floor`` gets no
+  episode, the reference the start policy (B = 0: the base with its start rows, ``reference_snapshot``). ``--loss-norm
+  token`` (default): one sum over the step's units over their number (units: sampled tokens; a sampled decision counts
+  as one average call of its episode, at most 8 tokens); ``episode``: each trained episode weighs the same, its terms
+  averaged over its units. The step's LR scales with its groups with reward spread, each counted by the units it trains
+  (``lr_data_scale``, ``spread_data``). A tail token the actor sampled below ``--tail-logp-floor`` gets no
   policy term in an episode with a positive advantage. Sampling is top-p (``--top-p``, ``common.sampling.RL_TOP_P``): the
   policy term's ``logp`` is the sampled token's log-probability under the learner's own nucleus
   (``lfm3_fast_train.linear_nll_nucleus``; the sampled token always in the set), while ``rho`` and the KL term use the
@@ -1896,28 +1898,41 @@ def decision_summary(records):
     return summary
 
 
+def decision_forward_key(row):
+    """What the learner's forward of a decision depends on: its exact prompt, options and imported state. Sibling
+    episodes of a group often sample the same decision (the 2026-11-22 bench: 16 decisions, 2 distinct)."""
+    return (np.asarray(row['prompt'], np.int64).tobytes(),
+            tuple(np.asarray(o, np.int64).tobytes() for o in row['options']),
+            repr(sorted((int(start), str(block)) for start, block in row.get('imports') or ())))
+
+
 def decision_batches(items, max_tokens):
     """Pack sampled decisions (``lower_rollout_turns.decision_turns`` rows with their advantage) into forward batches: each
-    option is one document (exact prompt + option continuation), so a decision of K options is K packed documents."""
-    batches, batch, size = [], [], 0
+    option is one document (exact prompt + option continuation), so a decision of K options is K packed documents. A
+    batch is a list of forwards, each the list of the step's decisions with one ``decision_forward_key``: they are scored
+    once and each keeps its own loss term (exact; it saves the repeated forwards)."""
+    forwards = {}
     for item in items:
-        n = decision_tokens(item['row'])
+        forwards.setdefault(decision_forward_key(item['row']), []).append(item)
+    batches, batch, size = [], [], 0
+    for same in forwards.values():
+        n = decision_tokens(same[0]['row'])
         if batch and size + n > max_tokens:
             batches.append(batch)
             batch, size = [], 0
-        batch.append(item)
+        batch.append(same)
         size += n
     return batches + ([batch] if batch else [])
 
 
 def decision_tensors(batch, device):
-    """(ids, lengths, positions, targets, option index per target, options per decision, imported state spans
-    [(packed row start, key)], their producer documents {key: document}) of a decision batch."""
+    """(ids, lengths, positions, targets, option index per target, options per forward, imported state spans
+    [(packed row start, key)], their producer documents {key: document}) of a decision batch (``decision_batches``)."""
     import torch
     ids, lengths, positions, targets, owner, counts, offset, option, imports = [], [], [], [], [], [], 0, 0, []
     sources = {}
-    for item in batch:
-        row = item['row']
+    for same in batch:
+        row = same[0]['row']
         counts.append(len(row['options']))
         for continuation in row['options']:
             prompt = len(row['prompt'])
@@ -3163,15 +3178,21 @@ def decision_unit(tokens, calls, mode, cap=8.):
     return min(unit, cap) if cap else unit
 
 
+def episode_unit_counts(episodes, decision_weight, decision_cap=8.):
+    """``episodes`` {key: (trained tokens, trained calls, trained decisions)} -> {key: (the episode's loss units, the units
+    of each of its decisions)}: its tokens plus its decisions times ``decision_unit``."""
+    return {key: (tokens + decisions * decision_unit(tokens, calls, decision_weight, decision_cap),
+                  decision_unit(tokens, calls, decision_weight, decision_cap))
+            for key, (tokens, calls, decisions) in episodes.items()}
+
+
 def loss_scales(episodes, norm, decision_weight, decision_cap=8.):
     """Per-episode loss scale factors: ``episodes`` {key: (trained tokens, trained calls, trained decisions)} ->
     {key: (factor of each token term, factor of each decision term)}. An episode's units are its tokens plus its
     decisions times ``decision_unit``. ``episode``: every episode with units weighs 1 / episodes and its terms share
     that weight by units (A_i times the mean over its units, averaged over episodes; a chain's factor is
     1 / (episode units * episodes), so accumulating chain by chain is exact). ``token``: one factor 1 / all units."""
-    units = {key: (tokens + decisions * decision_unit(tokens, calls, decision_weight, decision_cap),
-                   decision_unit(tokens, calls, decision_weight, decision_cap))
-             for key, (tokens, calls, decisions) in episodes.items()}
+    units = episode_unit_counts(episodes, decision_weight, decision_cap)
     trained = sum(1 for total, _ in units.values() if total > 0)
     total_units = sum(total for total, _ in units.values())
     scales = {}
@@ -3220,14 +3241,21 @@ def decision_token_kl(token_logp, ref_logp, beta, estimator, token_scale):
     return beta * kl_term(ref_logp - token_logp, estimator).sum() * token_scale
 
 
-def kl_stats(sums, d):
+def kl_stats(sums, d, prefix=''):
     """Telemetry of one batch of ``d`` (ref - policy logp): the k3 KL estimate, the k2 mean the loss trains (d^2 / 2),
     the largest single-token k3 term (k3 = e^d - d - 1 grows exponentially in d: one token where the policy sits 14
     nats below the start policy adds e^14 = 1.2M and alone made grpo-v4-run2 step 13's kl_mean 1.14 while |d| stayed
     at 0.058; ``kl_k3_max_share`` says how much of the k3 sum one token is), |d|, its max, the most positive d (policy
-    below the reference) and the units past 5 nats."""
+    below the reference) and the units past 5 nats. ``kl_n`` counts the values: the logged means divide by it, not by the
+    step's loss units, because a sampled decision adds its option-softmax d and one d per chosen-option token for its
+    one unit (the 2026-11-22 LoRA bench's step-6 kl_mean of 860 was ~170 values over 24 units). ``prefix`` also sums
+    k2 and the count under ``<prefix>kl_k2`` / ``<prefix>kl_n`` (``decision_``: the decision-level option-softmax KL)."""
     d = d.detach()
     k3 = d.exp() - d - 1
+    if prefix:
+        sums[prefix + 'kl_k2'] += (0.5 * d * d).sum().item()
+        sums[prefix + 'kl_n'] += d.numel()
+    sums['kl_n'] += d.numel()
     sums['kl'] += k3.sum().item()
     sums['kl_k2'] += (0.5 * d * d).sum().item()
     if d.numel():
@@ -3520,10 +3548,38 @@ def lr_data_scale(groups_with_spread, reference):
     """The step's LR factor: groups with reward spread over ``reference``, at most 1. AdamW's step size does not shrink with
     the data behind a gradient, so a step on few informative groups moves the policy as far as a full one along a
     gradient that mostly reflects those few episodes: grpo-v2-run1's step 3 (2 groups with spread, a stop) took a full
-    step, and the KL to the start policy jumped after it (DECISIONS 2026-11-14). ``reference`` 0: always 1."""
+    step, and the KL to the start policy jumped after it (DECISIONS 2026-11-14). ``groups_with_spread`` may be fractional
+    (``spread_data``: a group counts by the loss units it trains). The factor scales the gradient before the clip too
+    (``scale_and_clip``, opt-out ``--no-data-scaled-gradient``): AdamW's moments carry a step's gradient into the next
+    steps, so an LR factor alone does not shrink a small step's total push. ``reference`` 0: always 1."""
     if not reference:
         return 1.
     return min(1., groups_with_spread / reference)
+
+
+def scale_and_clip(parameters, scale, clip):
+    """(pre-clip norm of the step's mean-loss gradient, norm after ``scale`` and before the clip): multiplies every
+    gradient by ``scale`` (the step's data factor, ``lr_data_scale``), then clips to ``clip``."""
+    import torch
+    parameters = [p for p in parameters if p.grad is not None]
+    norm = torch.nn.utils.clip_grad_norm_(parameters, math.inf).item()
+    if scale != 1. and math.isfinite(norm):
+        for p in parameters:
+            p.grad.mul_(scale)
+    return norm, torch.nn.utils.clip_grad_norm_(parameters, clip).item()
+
+
+def spread_data(group_units, reference_units):
+    """The step's groups with reward spread, each counted by the loss units it trains (``group_units``: one total per
+    such group, ``episode_unit_counts``) over ``reference_units``, at most 1; ``reference_units`` 0: each counts 1.
+    lr_data_scale's measure of the data behind a step. Under ``--loss-norm token`` a step's loss is the mean over its
+    own units, so a step of a few groups of sampled decisions (1 unit each, ~8-24 a group) puts a whole AdamW step on a
+    handful of distinct choices that a mixed step weighs 1/10,000 each: the 2026-11-22 LoRA bench's decision-only steps
+    had grad_norm 65 and 23 against 0.2-0.3, moved those decisions' option scores 2-3 nats in one step at LR 8e-6 and,
+    through the moments, ~7.5 nats by step 6 (DECISIONS 2026-11-22 23:30)."""
+    if not reference_units:
+        return float(len(group_units))
+    return sum(min(1., units / reference_units) for units in group_units)
 
 
 def grad_spike(work, grad_norm, factor=5., min_steps=1):
@@ -4603,6 +4659,7 @@ def train(args):
         chains, decisions, rewards, spread, dropped_stale, staleness, task_rewards = [], [], [], 0, 0, [], []
         episode_units = {}   # trained episode -> [sampled tokens, calls, decisions] (loss_scales)
         episode_advantage = {}
+        spread_keys = []     # per group with spread: its trained episodes' keys (spread_data)
         memetic_groups = []
         for group in groups:
             try:
@@ -4637,6 +4694,7 @@ def train(args):
             if advantages is None:
                 continue
             spread += 1
+            spread_keys.append([])
             for index, (episode, advantage) in enumerate(zip(episodes, advantages)):
                 if advantage is None:
                     continue
@@ -4646,6 +4704,7 @@ def train(args):
                 kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
                 stats['calls_too_long_dropped'] += len(episode['rows']) - sum(len(c['segs']) for c in kept)
                 key = len(episode_units)
+                spread_keys[-1].append(key)
                 episode_advantage[key] = advantage
                 episode_units[key] = [sum(n for c in kept for _, n, _ in c['segs']), sum(len(c['segs']) for c in kept), 0]
                 for chain in kept:
@@ -4738,11 +4797,13 @@ def train(args):
         if args.advantage_control != 'none':
             control_advantages([*chains, *decisions], episode_advantage, args.advantage_control,
                                random.Random(args.seed + step))
-        # Loss normalization (loss_scales): by default every trained episode weighs the same and a sampled decision (one
-        # categorical action) counts as one call of its episode. `units` only normalizes the logged token means.
+        # Loss normalization (loss_scales; --loss-norm token by default: one sum over the step's units / its units, a
+        # sampled decision counting decision_unit units). spread_data counts each group with spread by its units.
         loss_tokens = sum(length for c in chains for _, length, _ in c['segs'])
-        units = loss_tokens + len(decisions)
         scales = loss_scales(episode_units, args.loss_norm, args.decision_weight, args.decision_unit_cap)
+        unit_counts = episode_unit_counts(episode_units, args.decision_weight, args.decision_unit_cap)
+        step_data = spread_data([sum(unit_counts[k][0] for k in keys) for keys in spread_keys],
+                                args.lr_reference_group_units)
         episodes_trained = sum(1 for token_scale, decision_scale in scales.values() if token_scale or decision_scale)
         phase['lower'] = time.time() - t
         # The decoded imported states of the step's calls (lowering read them for their token ids) are not held through
@@ -4752,6 +4813,7 @@ def train(args):
                                 for layer in block.layers for t in layer.values() if hasattr(t, 'numel')) / 2**20
         collector.states.cache.clear()
         record = {'step': step + 1, 'groups': len(groups), 'groups_with_spread': spread,
+                  'spread_data': round(step_data, 4),
                   'advantage_control': args.advantage_control if args.advantage_control != 'none' else None,
                   'replay_groups': [min(groups), max(groups)] if args.replay and groups else None,
                   'spread_fraction': round(spread / max(1, len(groups)), 3), 'dropped_stale_groups': dropped_stale,
@@ -5087,8 +5149,10 @@ def train(args):
                 scores, token_logp, owner = scores_of(
                     model, tokens=True, adapters=learner.bundles, trainable_rows=learner.trainable_rows)
                 ref_tokens = ref_tokens_of[batch_index] if reference_active else None
-                terms, start = [], 0
-                for item, k in zip(batch, counts):
+                terms = []
+                offsets = np.cumsum([0] + counts[:-1]).tolist()
+                # every decision of a forward (decision_batches) reads that forward's option scores
+                for item, k, start in ((item, k, start) for same, k, start in zip(batch, counts, offsets) for item in same):
                     row = item['row']
                     logpi = torch.log_softmax(scores[start:start + k] / row['temperature'], 0)[row['chosen']]
                     with torch.no_grad():
@@ -5109,13 +5173,13 @@ def train(args):
                     if ref_scores is not None:
                         d = torch.log_softmax(ref_scores[start:start + k] / row['temperature'], 0)[row['chosen']] - logpi
                         term = term + args.kl_beta * kl_term(d, args.kl_estimator)
-                        kl_stats(sums, d)
+                        kl_stats(sums, d, 'decision_')
                     term = term * decision_scale
                     if ref_tokens is not None and args.decision_token_kl:
                         chosen = owner == start + row['chosen']
                         term = term + decision_token_kl(token_logp[chosen], ref_tokens[chosen], args.kl_beta, args.kl_estimator,
                                                         scales[item['episode']][0])
-                        kl_stats(sums, ref_tokens[chosen] - token_logp[chosen])
+                        kl_stats(sums, ref_tokens[chosen] - token_logp[chosen], 'decision_token_')
                         sums['decision_token_kl_tokens'] += int(chosen.sum())
                     terms.append(term)
                     sums['decision_rho'] += rho.item()
@@ -5123,7 +5187,6 @@ def train(args):
                     sums['decision_logpi'] += logpi.item()
                     rho_pre_max = max(rho_pre_max, rho.item())
                     rho_post_max = max(rho_post_max, weight.item())
-                    start += k
                 torch.stack(terms).sum().backward()
                 forward_tokens += len(ids)
                 del scores, terms, token_logp
@@ -5143,7 +5206,14 @@ def train(args):
                 handle.writelines(json.dumps(r) + '\n' for r in decision_records)
         record['decision_diagnostics'] = decision_summary(decision_records)
         t = time.time()
-        grad_norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
+        data_scale = lr_data_scale(step_data, args.lr_reference_spread)
+        # The data factor scales the gradient too, before the clip: AdamW's moments carry a step's gradient into the next
+        # ones at their own LR, so an LR factor alone let a decision-only step's clipped gradient (norm 1 against 0.2-0.3)
+        # keep pushing its few decisions through the following chain steps (bench 2026-11-22: their option scores kept
+        # moving while their share of those steps' gradient was 1e-4). grad_norm stays the norm of the step's mean loss.
+        grad_norm, grad_norm_applied = scale_and_clip(parameters, data_scale if args.data_scaled_gradient else 1.,
+                                                      args.clip)
+        record['grad_norm_applied'] = round(grad_norm_applied, 5)
         if not math.isfinite(grad_norm):
             optimizer.zero_grad(set_to_none=True)
             torch.cuda.empty_cache()
@@ -5154,7 +5224,6 @@ def train(args):
             continue
         fam_grads = learner.family_grad_norms()
         cosine = moment_cosine(parameters, optimizer)
-        data_scale = lr_data_scale(spread, args.lr_reference_spread)
         lr = args.lr * min(1., (step + 1) / args.warmup) * data_scale
         for g in optimizer.param_groups:
             g['lr'] = lr
@@ -5239,16 +5308,20 @@ def train(args):
                               if k in ('reference_forward', 'policy_forward_backward', 'decision_forward_backward', 'optimizer'))
         record['compile_health'] = compile_health.record_step(learner_seconds, is_warmup=(step == 1))
         n_dec = max(1, len(decisions))
+        kl_n = max(1, sums['kl_n'])
         mass_total = sums['mass_think'] + sums['mass_post_think'] + sums['mass_decision']
         elapsed = time.time() - run['started']
         record.update(
             loss_tokens=loss_tokens, forward_tokens=forward_tokens, lr=lr, lr_data_scale=round(data_scale, 4),
             grad_norm=round(grad_norm, 4),
-            kl_mean=round(sums['kl'] / units, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / units, 6),
+            kl_mean=round(sums['kl'] / kl_n, 7), ref_abs_dlogp_mean=round(sums['ref_abs_dlogp'] / kl_n, 6),
+            decision_kl_k2_mean=round(sums['decision_kl_k2'] / sums['decision_kl_n'], 7) if sums['decision_kl_n'] else None,
+            decision_token_kl_k2_mean=round(sums['decision_token_kl_k2'] / sums['decision_token_kl_n'], 7)
+            if sums['decision_token_kl_n'] else None,
             second_close_masked=int(sums['second_close_masked']), decision_token_kl_tokens=int(sums['decision_token_kl_tokens']),
             close_push={key.split(':', 1)[1]: round(1e6 * value, 3) for key, value in sums.items()
                         if key.startswith('close_push:')} or None,
-            kl_k2_mean=round(sums['kl_k2'] / units, 7), kl_k3_max_share=round(sums['kl_k3_max'] / sums['kl'], 4) if sums['kl'] > 0 else None,
+            kl_k2_mean=round(sums['kl_k2'] / kl_n, 7), kl_k3_max_share=round(sums['kl_k3_max'] / sums['kl'], 4) if sums['kl'] > 0 else None,
             ref_dlogp_pos_max=round(sums['ref_dlogp_pos_max'], 3),
             ref_dlogp_max=round(sums['ref_dlogp_max'], 3), ref_dlogp_over_5=sums['ref_dlogp_over_5'], kl_estimator=args.kl_estimator,
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
@@ -5608,6 +5681,14 @@ def build_parser():
     t.add_argument('--lr-reference-spread', type=int, default=12,
                    help='a step\'s LR is scaled by its groups with reward spread over this, at most 1 (lr_data_scale; '
                         'grpo-v2-run1 step 3 trained 2 such groups at full LR); 0: off')
+    t.add_argument('--no-data-scaled-gradient', dest='data_scaled_gradient', action='store_false',
+                   help='apply lr_data_scale to the LR only, not also to the gradient before the clip (AdamW moments then '
+                        'carry a small step\'s full-size gradient into the next steps)')
+    t.add_argument('--lr-reference-group-units', type=float, default=4096.,
+                   help='for that LR scale a group with spread counts by the loss units it trains over this, at most 1 '
+                        '(spread_data: tokens plus decision units; a group of 8 sampled decisions is ~8 units, so a step '
+                        'of decision groups alone no longer takes a whole AdamW step, LoRA bench 2026-11-22); 0: each '
+                        'group with spread counts 1')
     t.add_argument('--weight-decay', type=float, default=0.)
     t.add_argument('--clip', type=float, default=1.0)
     t.add_argument('--kl-beta', type=float, default=0.02)

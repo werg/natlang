@@ -250,6 +250,36 @@ def test_k2_kl_gradient_stays_linear_on_tail_tokens():
     assert sums['kl_k2'] == pytest.approx(sum(.5 * x * x for x in (0., 10.5, -.2, .1)), rel=1e-5)
     assert sums['kl_k3_max'] == pytest.approx(math.exp(10.5) - 11.5, rel=1e-5)   # one token is ~all of the k3 sum
     assert sums['kl_k3_max'] / sums['kl'] > .99 and sums['ref_dlogp_pos_max'] == pytest.approx(10.5)
+    assert sums['kl_n'] == 4                               # the logged means divide by the values, not the loss units
+
+
+def test_decision_kl_telemetry_counts_its_values_not_its_one_unit():
+    """A sampled decision adds its option-softmax d and one d per chosen-option token but is one loss unit; dividing the
+    sums by units made the 2026-11-22 bench's step-6 kl_mean 860 (~170 values over 24 units)."""
+    import torch
+    sums = collections.Counter()
+    grpo.kl_stats(sums, torch.tensor(2.), 'decision_')                              # the option softmax
+    grpo.kl_stats(sums, torch.tensor([0., 1., 3.]), 'decision_token_')              # </think> "x" <|im_end|>
+    assert sums['kl_n'] == 4 and sums['decision_kl_n'] == 1 and sums['decision_token_kl_n'] == 3
+    assert sums['decision_kl_k2'] == pytest.approx(2.) and sums['decision_token_kl_k2'] == pytest.approx(5.)
+    assert sums['kl_k2'] / sums['kl_n'] == pytest.approx(7 / 4)
+
+
+def test_identical_sampled_decisions_share_one_forward():
+    """Sibling episodes often sample the same decision; each keeps its own term but the options are scored once."""
+    def row(prompt, chosen, imports=()):
+        return {'prompt': np.array(prompt, np.int32), 'options': [np.array([5, 6], np.int32), np.array([5, 7], np.int32)],
+                'chosen': chosen, 'imports': list(imports)}
+    items = [{'row': row([1, 2], 0), 'advantage': 1.}, {'row': row([1, 2], 1), 'advantage': -1.},
+             {'row': row([1, 3], 0), 'advantage': 1.}, {'row': row([1, 2], 0, [(1, 'b')]), 'advantage': 1.},
+             {'row': row([1, 2], 0), 'advantage': 1.}]
+    batches = grpo.decision_batches(items, 1 << 20)
+    assert len(batches) == 1 and [len(same) for same in batches[0]] == [3, 1, 1]
+    assert batches[0][0] == [items[0], items[1], items[4]]
+    ids, lengths, positions, targets, owner, counts, spans, _ = grpo.decision_tensors(batches[0], 'cpu')
+    assert counts == [2, 2, 2] and len(lengths) == 6 and spans == [(17, 'b'), (21, 'b')]
+    # a batch never splits a forward; the token budget packs forwards
+    assert [[len(same) for same in b] for b in grpo.decision_batches(items, 8)] == [[3], [1], [1]]
 
 
 def test_close_push_reads_the_close_probability_from_the_target_logp_and_is_zero_on_policy():
@@ -498,6 +528,38 @@ def test_a_decision_counts_at_most_the_cap_in_token_units():
 def test_lr_scales_with_the_groups_that_carry_signal():
     assert grpo.lr_data_scale(2, 12) == pytest.approx(1 / 6)    # grpo-v2-run1 step 3: 2 groups with spread
     assert grpo.lr_data_scale(18, 12) == 1. and grpo.lr_data_scale(2, 0) == 1.
+
+
+def test_a_step_of_decision_groups_alone_does_not_take_a_whole_adamw_step():
+    """2026-11-22 LoRA bench step 1: 2 groups with spread, 16 sampled decisions and no token call. Each group counted 1,
+    so the step took 2/12 of a full step on 2 distinct decisions (grad_norm 65 against 0.2-0.3 on chain steps; option
+    scores moved 2-3 nats). A group counts by the loss units it trains."""
+    episodes = {k: (0, 0, 1) for k in range(16)}                  # (tokens, calls, decisions): decision-only episodes
+    units = grpo.episode_unit_counts(episodes, 'call')
+    groups = [sum(units[k][0] for k in range(8)), sum(units[k][0] for k in range(8, 16))]
+    assert groups == [8., 8.]
+    data = grpo.spread_data(groups, 4096)
+    assert data == pytest.approx(16 / 4096)
+    assert grpo.lr_data_scale(data, 12) == pytest.approx(16 / 4096 / 12)   # was lr_data_scale(2, 12) = 1/6
+    # chain groups at or above the reference count whole; reference 0 restores one per group
+    assert grpo.spread_data([5000., 2048., 8.], 4096) == pytest.approx(1 + .5 + 8 / 4096)
+    assert grpo.spread_data([5000., 2048., 8.], 0) == 3.
+    # the units are loss_scales' own: a decision in an episode with token calls counts decision_unit
+    assert grpo.episode_unit_counts({0: (6000, 6, 2)}, 'call')[0] == (6016., 8.)
+
+
+def test_the_data_factor_scales_the_gradient_before_the_clip():
+    """With the LR factor alone a small step's clipped full-size gradient entered AdamW's moments and kept pushing at the
+    next steps' LR; scaled first, the moments carry it at its data's size."""
+    import torch
+    a, b = torch.zeros(3, requires_grad=True), torch.zeros(4, requires_grad=True)
+    a.grad, b.grad = torch.full((3,), 30.), torch.full((4,), 40.)          # norm sqrt(2700 + 6400)
+    norm, applied = grpo.scale_and_clip([a, b], 1e-3, 1.)
+    assert norm == pytest.approx(math.sqrt(9100.)) and applied == pytest.approx(math.sqrt(9100.) * 1e-3)
+    assert a.grad.tolist() == pytest.approx([.03] * 3)                      # under the clip: only scaled
+    norm, applied = grpo.scale_and_clip([a, b], 1., 0.05)
+    assert applied == pytest.approx(math.sqrt(9100.) * 1e-3)
+    assert float(torch.cat([a.grad, b.grad]).norm()) == pytest.approx(.05, rel=1e-4)
 
 
 def test_call_subsampling_keeps_dropped_calls_as_context():
