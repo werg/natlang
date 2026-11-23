@@ -1,6 +1,6 @@
 # Recovered Vibe Studio data handoff
 
-Observed 2026-11-23 02:07 UTC. **Export, independent native materialization, registry registration, and archive publication are complete.** Extraction into the standing teacher work directory, student reasoning fills, and learner exposure are separate; the first two remain queued on the DGX. No new Luna trajectory was generated for these recoveries.
+Updated 2026-11-23 05:48 UTC. **Export, independent native materialization, registry registration, archive publication and extraction of all 14 earlier trajectories/105 decisions are complete.** Student reasoning fill is active. Learner exposure remains a separate claim. No new Luna trajectory was generated for these recoveries.
 
 Durable archive: `/mnt/external/natlang-vibestudio-full-luna-campaign-yci2LB1N` on DGX. Every cohort below retains the complete original call graph, original failed outcomes, native evidence and selected original decisions.
 
@@ -23,9 +23,9 @@ Standard registry promotion ran on Tick via `data_registry.py promote`, includin
 
 Targeted checks passed: 63 loader tests; extraction/replay and held-reservation regression coverage; actual archived presentation/public-brief/native-read assessor positives and forged evidence negatives; native materialization of the real completed and partial captures. The full campaign's old failed raw captures remain retained. The merge repair also parsed all 1,195 tracked Python files without syntax errors.
 
-## Live handoff and pending work
+## Original handoff submission and subsequent execution
 
-DGX code pin: `/mnt/external/natlang-vibestudio-full-luna-campaign-yci2LB1N/archive-code-72e57a32a45f`, created by ordinary git fetch/worktree. `archive-code-current`, `archive-code-revision-current`, and Tick's campaign `remote-code`/`remote-code-revision` point to it. The standing archive watcher `vibe-semantic-live-archive-watcher-20261123` is active and uses this pin. Future collector completion bookkeeping uses the newer `10836b152` driver; its export format is unchanged.
+Original DGX code pin: `/mnt/external/natlang-vibestudio-full-luna-campaign-yci2LB1N/archive-code-72e57a32a45f`, created by ordinary git fetch/worktree. `archive-code-current`, `archive-code-revision-current`, and Tick's campaign `remote-code`/`remote-code-revision` point to it. The standing archive watcher `vibe-semantic-live-archive-watcher-20261123` is active and uses this pin. Future collector completion bookkeeping uses the newer `10836b152` driver; its export format is unchanged.
 
 Administrative receipts in the archive:
 
@@ -37,7 +37,7 @@ Administrative receipts in the archive:
 - `semantic-fill-consumer-config.json` / `semantic-fill-consumer-ready.json`: preserved filler arguments, endpoints and checkpoint identity; replacement source pin and submitted unit.
 - `recovered-outcomes-20261123-ready.json`: written only after standing-work ingestion actually executes; its absence is not an export failure.
 
-At the observation time the following jobs are **ledger-waiting, not executed**, with the required 15 GiB reserve. DGX ledger headroom was 3.3 GiB; no job from this strand held an active claim:
+At the original 02:07 observation the following jobs were **ledger-waiting, not executed**, with the required 15 GiB reserve. DGX ledger headroom was 3.3 GiB; no job from this strand held an active claim:
 
 | Job | Purpose | Budget GiB |
 | --- | --- | ---: |
@@ -49,3 +49,9 @@ At the observation time the following jobs are **ledger-waiting, not executed**,
 | `vibe-recovered-ingest-finalize-20261123` | Confirm cohort extraction and write the actual ingestion receipt | 1.5 |
 
 The old incompatible filler was stopped before publication; its replacement preserves every argument except source code. Current SFT, actor, checkpoint, optimizer and RNG were untouched. The obsolete DGX producer was cancelled so Tick is the single producer of these exports. Ordinary archive retries respect the shared cohort `.export.lock` and committed marker. The superseded Tick 72e driver was removed with the official pin helper after checking for active process references; raw captures and produced training data remain intact.
+
+## Execution update
+
+`recovered-outcomes-20261123-ready.json` now exists: all three earlier cohorts were extracted, all 14 rows retained, no drops. The standing ingester also extracted wave 0032 (three rows, 55 decisions). The compatible student-fill supervisor and archive polling consumer are active; no learner-exposure claim follows from that. The additional Tendril completed-outcome recovery contains one row/39 decisions with zero native materialization rejections and is published under `recovered-completed-wave0032-20261123`.
+
+The current archive exporter source is `archive-code-d29451b84`, while ingestion and student fill retain compatible `archive-code-72e57a32a45f`. Current collection uses Python driver `23c5ac1cb` and frozen release pins. Current execution catalog bytes are stored separately under archive `catalog-bindings/`; the original registered goals and held-reservation bytes remain immutable.

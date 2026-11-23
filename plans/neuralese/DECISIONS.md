@@ -8186,3 +8186,14 @@ the native engine on the A100 and GB10 (scripts in the session scratchpad; per-t
   next fork release (ENGINE_PARITY). Not checked: CUDA graphs (decode only; scoring prefills run eager), overlap
   scheduler (the diagnostic server ran without it, as the Colab actor), FP8 weights (`--quantization fp8`, the DGX
   collection profile), mixed adapters in a batch, GB10 FlashInfer kernels for SGLang (all SGLang numbers are A100).
+
+
+### 2026-11-23 — Vibe Studio semantic cutover: actual collection and evidence-flow fixes
+
+The full 2,327-task corpus is bound to application-specific hierarchical Natlang functions (116 public entry kinds), with original goals, IDs, groups and splits retained. The universal prompt/report entry and route-shape admission are removed. Runtime checkpoints, capture/provider durability and native trajectory-IR ingestion cover actual dynamic Vibe Studio execution; all historical Sol and failed raw data are retained. New generation remains Luna-only.
+
+Actual prepared v8 Workerd execution produced three completed trajectories/55 decisions in wave0032. An exact-one-probe Tendril checker was false despite two valid current owned probes; additive reassessment recovered another complete trajectory/39 decisions, preserving the original failed capture. The eval-handoff intent lambda lacked the confirmed observation/review it was asked to judge; Base20dc0f094 passes that typed evidence through and checks native identity/current authority at the boundary. Actual API/skill/adventure incorrect outcomes remain failures, not weakened checks.
+
+The broader audit removes readonly one-shot/order limits and preserves independently issued same-revision evidence across Base, System Testing, Personal, Spectrolite, News, Examples, System and Google. User-requested ordering/counts, pagination cycle safety, approval, ownership and native revision/CAS remain. Successor checkouts remain separate from frozen v8; new sources enter through a new prepared release at a graceful wave boundary. Actual wave0033 completed model work with38 completed captures among64, all other attempts retained, while its whole-state checksum archival proceeds.
+
+Published recovered/new cohorts currently hold18 trajectories/199 eligible decisions (6 completed goals/134 decisions plus12 partials/65 decisions). Independent native materialization rejected zero rows. The standing DGX ingester actually extracted the earlier14/105 and wave0032's3/55 with no drops; student reasoning fill is active on its compatible pin. Registry admission, extraction, student fill and learner exposure stay separate. Existing training is untouched. See VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md and VIBESTUDIO_RECOVERED_DATA_HANDOFF_20261123.md for exact pins, receipts and phase status.

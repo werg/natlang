@@ -6,10 +6,10 @@ The complete corpus now uses ordinary application functions in the shared hierar
 
 - All 2,327 original task IDs, goals, source groups and train/test splits are retained: 1,748 train, 579 test.
 - 116 public entry kinds across 27 compiler roots; the catalog uses 114 program paths. All 116 production signatures compiled against the final shared library (28.6 s, 447 MiB peak).
-- Host `7381d0d0dc3821f6bb684ba0e26ab22d4dd3760a`: generic-router removal, outcome checks, actual confined CDP capability and Workerd inspector dialect, interrupted-run storage and native capture archive.
-- Base runtime `4f597c47dafe20fea765c1d695256552df93a6cd`; Base main `647c472918ffae2764339bdb9702d23f00e6d18d` adds the final integration test without runtime changes.
+- Host `4312b0f5948400f0dac592f4f0d79ecb784fa68a`: generic-router removal, outcome checks, actual confined CDP capability and Workerd inspector dialect, interrupted-run storage and native capture archive.
+- The running v8 release uses Base `5d51661adc3a70727ca6618c2bf21caa3d7c754a`, which fixes post-retirement wake publication and persists lifecycle completion across reactivation. The successor integrates typed confirmed-eval evidence (`20dc0f094`) and the complete repeated-observation audit.
 - System `485ac66`, System Testing `fa60b75`, Personal `a08aba1`, and the other exact template revisions are recorded in the campaign release pins.
-- All five runtime vendors use clean Core `3b30c78820b04d0d4120fb89a2297a5e98023c06`. Collector/exporter `d29451b84` adds observed graph metrics; Python-only `54249f4ec` adds lossless opaque-state packing without changing Core or those vendors.
+- All five runtime vendors use clean Core `3b30c78820b04d0d4120fb89a2297a5e98023c06`. Collector/exporter `d29451b84` adds observed graph metrics; Python-only `54249f4ec` adds lossless opaque-state packing; the running driver `23c5ac1cb` additionally unifies infrastructure retry/hold classification. Neither changes Core or those vendors.
 
 ## Six migration steps
 
@@ -39,3 +39,15 @@ Opaque stopped-instance state now transfers as a lossless gzip tar with per-memb
 ## Operational state
 
 The final release and live cutover are recorded in the campaign candidate pins and wave receipts under `/home/werg/data/vibestudio-open-goal-live/full-luna-campaign-yci2LB1N`. The durable DGX archive is `/mnt/external/natlang-vibestudio-full-luna-campaign-yci2LB1N`; its final exporter source is `archive-code-d29451b84`. Recovered data publication is complete. Student fill/ingestion and learner exposure are separate phases: do not infer training exposure from registry registration or a queued ledger unit. See `VIBESTUDIO_RECOVERED_DATA_HANDOFF_20261123.md` for the original recovery publication evidence.
+
+## Actual live results, 2026-11-23
+
+Prepared v8 release `e45ddbd0a041a71a7a9d60debe2b91bf6c986990710858fb10ef0035dc54f322` contains 155 artifacts. Actual managed Workerd collection wave 0032 retained all eight attempts with no capture errors. Three completed goals contributed 55 eligible decisions. Their graphs contained 42 invocations, maximum depth six and maximum branching eight. The five failed goals also retain their full 93-invocation graphs and 150 completed gateway turns. These counts describe execution, not required routes.
+
+The Tendril checker incorrectly required exactly one projection probe. Two identical current owned native probes satisfied the actual goal; an additive reassessment recovered its 39 decisions without rerunning inference or altering the original failed capture. A second defect was a lossy eval-handoff interface: the intent lambda was asked to judge confirmation without receiving the confirmed result. Its replacement carries the actual observation and review, with exact identity and current-authority checks at the native boundary. The API readiness and skill/adventure failures were actual missing or incorrect outcomes, not a reason to weaken their checks.
+
+The new three-goal cohort and Tendril recovery passed independent native materialization with zero rejected rows and were published in the registry. Together with the earlier recovery, the published cohorts now contain 18 trajectories and 199 eligible decisions: six completed goals/134 decisions and twelve partial trajectories/65 decisions. All original Sol data and failed raw runs remain retained. Admission does not claim SFT exposure.
+
+The standing DGX ingester actually extracted all earlier 14 trajectories/105 decisions and the three new trajectories/55 decisions, with no dropped rows. Student reasoning fill is active on its compatible pinned source. The archive exporter uses `archive-code-d29451b84`; the ingester/filler intentionally retain compatible `archive-code-72e57a32a45f`. Versioned execution catalog bindings supplement the original immutable goal registry rather than overwriting it.
+
+Full eight-worker collection continued into 64-case wave 0033 while the remaining observation and evidence-retention fixes were tested in separate successor checkouts. A graceful stop-after-wave requests the v9 cutover; it does not cancel running calls. The active v8 release, pins and source links remain frozen until the controller finishes and archives the wave. The successor build has its own source-link root and output. No duplicate collector is admitted.
