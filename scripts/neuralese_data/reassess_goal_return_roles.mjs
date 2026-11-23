@@ -18,6 +18,30 @@ export function reassessGoalReturnRoles(packet){
  const effects=native.calls.flatMap(call=>call.record.effects??[]);
  const witnessed=(service,method,args,result)=>effects.some(effect=>effect.service===service&&effect.method===method&&bindingMatches(effect.args,args)&&bindingMatches(effect.result,result));
  const failed=Object.entries(prior.checks).filter(([,value])=>value!==true).map(([name])=>name);
+ if(prior.preparedContentProject){
+  const state=prior.preparedContentProject,report=native.report;
+  const nativeNames=['exactOwnedSourceDiscovery','genuineEvidenceDisposition','exactScopedAuthorization','exactArtifactOrReadOnlyHold','protectedPrivateBoundary'];
+  if(!same(Object.keys(prior.checks).sort(),[...nativeNames,'correctOutcomeReport'].sort())||
+     !same(failed,['correctOutcomeReport'])||state.expectedOutcome!=='draft'||
+     prior.goal!==packet.test?.prompt||prior.goal!==native.entry?.arguments?.goal||
+     native.entry?.callable!=='prepareContentProject'||prior.contextId!==state.contextId||prior.caseId!==state.caseId||
+     report.final?.outcome!=='review-needed'||report.final?.event!==null||report.decision?.action!=='draft'||
+     state.actual?.clean!==false||state.actual.workingHead?.kind!=='application'||
+     state.actual.mainEventId!==state.before?.mainEventId||!same(state.actual.committed,state.before?.committed)||
+     state.artifact?.passed!==true||!same(state.artifact.semanticReviewInput?.actual?.state,state.actual.workingHead)||
+     !same(report.final.candidate,report.draft?.snapshot)||report.draft?.review?.ready!==false||
+     !report.draft.review.unsupportedClaims?.length||typeof report.explanation!=='string'||!report.explanation.trim())
+    throw Error('prepared project lacks an independently completed private draft with an honest review hold');
+  for(const row of state.journal??[])if(!witnessed(row.service,row.method,row.args,row.result))
+    throw Error('prepared project journal differs from exact original native effects');
+  if(!['contentProjectSources.observe','contentProjectScope.confirm','contentProjectDraft.prepare','contentProjectDraft.write'].every(key=>
+     state.journal?.some(row=>row.service+'.'+row.method===key))||state.journal.some(row=>row.service==='contentProjectCommit'))
+    throw Error('prepared project lacks its native draft authorization and write witnesses');
+  return {checks:Object.fromEntries(nativeNames.map(name=>[name,true])),
+   outcomeDimensions:{effects:{passed:true,checks:Object.fromEntries(nativeNames.map(name=>[name,true]))},
+    returnedValue:{required:false,passed:false,checks:{correctOutcomeReport:false}}},
+   rationale:'The requested private draft is retained and independently read back under exact source authorization, with main and committed state unchanged. The final value honestly flags a malformed citation for further local review. Its review-needed disposition is not a failed project effect and remains intact as application data; no return target is excluded or fabricated.'};
+ }
  let repaired,incidental;
  if(prior.caseId.startsWith('desktop-readiness-')){
   repaired='exactDesktopClientSource';
@@ -67,11 +91,12 @@ async function main(){
  if(!task||task.split!=='train')throw Error('requires catalogued training task');
  const result=reassessGoalReturnRoles(packet),out=resolve(args.out);await mkdir(out,{recursive:false});
  const store=async(name,value)=>{await writeFile(join(out,name),value);return {path:name,sha256:sha(value)}};
- const relative='skills/system-testing/open-goal-'+(packet.test.name.includes('desktop-readiness')?'desktop-readiness':'intent-discovery')+'-managed.ts';
+ const relative='skills/system-testing/open-goal-'+(packet.execution?.diagnostics?.openGoalVerification?.preparedContentProject?'prepared-content-project':packet.test.name.includes('desktop-readiness')?'desktop-readiness':'intent-discovery')+'-managed.ts';
  const original=execFileSync('git',['-C',args['checker-root'],'show',`${pins.repositories['system-testing'].git_commit}:${relative}`]);
  const corrected=await readFile(join(args['checker-root'],relative));
  const checkerSources=[await store('original-checker.ts',original),await store('corrected-checker.ts',corrected),await store('assessor.mjs',await readFile(fileURLToPath(import.meta.url)))];
  if(relative.includes('intent-discovery'))checkerSources.push(await store('intent-capability-evidence.ts',await readFile(join(args['checker-root'],'skills/system-testing/intent-capability-evidence.ts'))));
+ if(relative.includes('prepared-content-project'))checkerSources.push(await store('prepared-content-project-outcome.ts',await readFile(join(args['checker-root'],'skills/system-testing/prepared-content-project-outcome.ts'))));
  const diagnostic=packet.execution.diagnostics,prior=diagnostic.openGoalVerification,native=diagnostic.natlangTeacher;
  const proof={schema:'natlang.live-outcome-reassessment/1',task_id:task.taskId,original_sha256:sha(raw),goal:prior.goal,entry:native.entry,actualResult:native.report,passed:true,...result,
   checker_sources:checkerSources,evidence:[await store('native-witnesses.json',JSON.stringify({originalChecks:prior.checks,prior,actualResult:native.report,effects:native.calls.flatMap(call=>call.record.effects??[])}))]};
