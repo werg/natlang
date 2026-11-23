@@ -28,6 +28,7 @@ const entries = JSON.parse(
 const known = new Set(Object.keys(entries));
 const sources = new Map();
 const checks = [];
+const guards = [];
 function walk(dir) {
   return fs
     .readdirSync(dir, { withFileTypes: true })
@@ -57,6 +58,26 @@ for (const root of roots)
       return [];
     }
     function visit(n) {
+      if (ts.isIfStatement(n)) {
+        const statements=ts.isBlock(n.thenStatement)?n.thenStatement.statements:[n.thenStatement];
+        const rejection=statements.filter(statement=>ts.isThrowStatement(statement) ||
+          ts.isReturnStatement(statement) && /["'](?:blocked|held|unavailable|state-changed|interrupted|denied)["']/.test(statement.getText(ast)));
+        if(rejection.length) {
+          const expression=n.expression.getText(ast);
+          let enclosing=n.parent,handler=null;
+          while(enclosing) {
+            if((ts.isMethodDeclaration(enclosing)||ts.isFunctionDeclaration(enclosing)||ts.isVariableDeclaration(enclosing)||ts.isPropertyAssignment(enclosing)) && enclosing.name) {
+              handler=enclosing.name.getText(ast);break;
+            }
+            enclosing=enclosing.parent;
+          }
+          guards.push({file:path.relative(r,file),line:ast.getLineAndCharacterOfPosition(n.getStart(ast)).line+1,
+            handler,condition:expression,rejections:rejection.map(statement=>statement.getText(ast)),
+            candidates:{route:/discovered|listed|searched|\.at\(-1\)|latest|previous.*read|read.*before/i.test(expression),
+              nativeAuthority:/owned|context|assigned|scope|basis|revision|digest|permitted|complete/i.test(expression)},
+            review:'Extracted service admission condition; semantic review required, never an admission policy'});
+        }
+      }
       if (
         (ts.isPropertyAssignment(n) || ts.isPropertySignature(n)) &&
         n.name.getText(ast).replace(/[\"']/g, "") === "kind"
@@ -137,6 +158,8 @@ const result = {
   generatedAt: new Date().toISOString(),
   domainCount: known.size,
   checkCount: checks.length,
+  guardCount: guards.length,
+  guards,
   domains,
   sources: Object.fromEntries(
     [...sources].map(([file, value]) => [path.relative(r, file), value]),
@@ -144,24 +167,7 @@ const result = {
   checks,
 };
 fs.writeFileSync(args[1], JSON.stringify(result, null, 2) + "\n");
-console.log(
-  JSON.stringify(
-    {
-      domainCount: known.size,
-      checkCount: checks.length,
-      undeclared: Object.entries(domains)
-        .filter(([k, v]) => !v.declarations.length)
-        .map(([k]) => k),
-      routeCandidates: checks
-        .filter((x) => x.candidates.route)
-        .map((x) => ({
-          file: x.file,
-          line: x.line,
-          name: x.name,
-          expression: x.expression,
-        })),
-    },
-    null,
-    2,
-  ),
-);
+console.log(JSON.stringify({domainCount:known.size,checkCount:checks.length,guardCount:guards.length,
+ undeclared:Object.entries(domains).filter(([,value])=>!value.declarations.length).map(([kind])=>kind),
+ routeCandidateCount:checks.filter(row=>row.candidates.route).length,
+ guardRouteCandidateCount:guards.filter(row=>row.candidates.route).length}));
