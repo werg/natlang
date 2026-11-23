@@ -49,7 +49,11 @@ def inventory(roots, held, live_training, model):
             task = episode['task']
             row.update(model=episode['teacher']['model_id'], decisions=len(episode['turns']),
                        invocations=len(episode['call_tree']), groups=task['source_groups'], source_ids=task['source_ids'])
-            verified_runs.add(row['run_id'])
+            outcome = (episode.get('trajectory_ir') or {}).get('outcome') or {}
+            completed = outcome.get('task_completed', outcome.get('status', 'passed') == 'passed') is True
+            row['task_completed'] = completed
+            if completed:
+                verified_runs.add(row['run_id'])
             interaction = task.get('interaction')
             if held_hit(task['id'], task['source_ids'], task['source_groups'], held):
                 row['status'] = 'held-overlap'
@@ -62,14 +66,15 @@ def inventory(roots, held, live_training, model):
             identity = row.get('goal_sha256', task['id'])
             if row['model'] != model:
                 row['status'] = 'other-teacher'
-            elif identity in goals:
+            elif completed and identity in goals:
                 row['status'] = 'duplicate-goal'
             elif not dataset or dataset.get('admission') == data_registry.INVENTORY:
                 row['status'] = 'awaiting-data-registration'
             else:
-                row['status'] = 'ready-for-extraction'
+                row['status'] = ('ready-for-extraction' if completed else 'ready-for-partial-extraction')
                 row['dataset'] = dataset['id']
-                goals.add(identity)
+                if completed and episode['turns']:
+                    goals.add(identity)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             row.update(status='invalid-or-unregistered', error=str(exc))
 

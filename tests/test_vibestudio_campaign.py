@@ -318,3 +318,37 @@ def test_export_counts_separate_completed_goals_partial_decisions_and_evidence_o
     assert registered[0]['rows'] == 3
     assert registered[0]['extra']['trajectory_counts'] == {key: result[key] for key in
         ('completed_goals', 'partial_trajectories', 'supervised_decisions', 'evidence_only')}
+
+
+def test_partial_training_capture_cannot_seed_a_completed_campaign_goal(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import pytest
+    partial = tmp_path / 'partial.json'
+    vibestudio_campaign.publish(tmp_path / 'reused.json', {'goal': str(partial)})
+    monkeypatch.setattr(vibestudio_campaign, 'campaign_scope', lambda *a: (set(), set(), {'goal': {'taskId': 'goal'}}))
+    monkeypatch.setattr(vibestudio_campaign, 'attempt_context', lambda *a: ('epoch', {}, {}))
+    monkeypatch.setattr(vibestudio_campaign, 'verified_episode', lambda *a: {
+        'task_id': 'goal', 'trajectory_ir': {'outcome': {'status': 'partial', 'task_completed': False}}})
+    with pytest.raises(ValueError, match='partial training evidence cannot complete'):
+        vibestudio_campaign.drive(SimpleNamespace(root=tmp_path, held=tmp_path/'held', seed=[]))
+    assert not (tmp_path / 'status.json').exists()
+
+
+def test_inventory_partial_does_not_reserve_the_later_completed_goal(tmp_path, monkeypatch):
+    import json
+    import inventory_live_teacher as inventory
+    paths = [tmp_path / name / 'manifest.json' for name in ('a-partial', 'b-completed')]
+    for path in paths:
+        path.parent.mkdir()
+        path.write_text(json.dumps({'schema': 'natlang.live-teacher-task/1', 'id': 'goal', 'family': 'domain', 'split': 'train'}))
+    task = {'id': 'goal', 'source_ids': ['goal'], 'source_groups': ['group'], 'interaction': {'goal': {'request': 'save'}}}
+    monkeypatch.setattr(inventory, 'load_episode', lambda path: {
+        'task': task, 'teacher': {'model_id': 'luna'}, 'turns': [1], 'call_tree': [],
+        'trajectory_ir': {'outcome': {'task_completed': path == paths[1]}}})
+    monkeypatch.setattr(inventory.data_registry, 'load', lambda: type('Registry', (), {
+        'find': lambda self, path: {'id': 'dataset', 'admission': 'train'}})())
+    monkeypatch.setattr(inventory, 'held_hit', lambda *a: False)
+    monkeypatch.setattr(inventory, 'require_registered_open_goal', lambda *a: None)
+    result = inventory.inventory([tmp_path], set(), {}, 'luna')
+    assert [row['status'] for row in result['manifests']] == ['ready-for-partial-extraction', 'ready-for-extraction']
+    assert [row['task_completed'] for row in result['manifests']] == [False, True]

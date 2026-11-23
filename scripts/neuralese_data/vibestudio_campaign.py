@@ -389,6 +389,8 @@ def drive(args):
     paths = list(map(Path, read(saved_seeds).values())) if saved_seeds.exists() else []
     for path in [*paths, *args.seed]:
         episode = verified_episode(path, held, training)
+        if episode['trajectory_ir']['outcome'].get('task_completed') is not True:
+            raise ValueError('partial training evidence cannot complete a campaign goal')
         seeds[by_id[episode['task_id']]] = str(path.resolve())
     publish(saved_seeds, seeds)
     waves = root / 'waves'
