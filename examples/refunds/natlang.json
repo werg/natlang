@@ -1,0 +1,63 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "natlang-refunds-example",
+  "version": "0.1.0",
+  "description": "Settle refund requests for several shops: a pluggable eligibility rule, a calibrated verdict under each shop's policy with escalation, refined replies, and a transactional case ledger.",
+  "include": [
+    "README.md",
+    "desk.ts",
+    "eligible.nl",
+    "examples.json",
+    "ledger.ts",
+    "main.ts",
+    "package.json",
+    "policies",
+    "reply.ts",
+    "requests.json",
+    "rules.ts",
+    "tsconfig.json",
+    "types.ts",
+    "verdict.nl"
+  ],
+  "targets": {
+    "desk": {
+      "entry": "main.ts",
+      "description": "Settle refund requests (a JSON file of them, or the bundled requests.json) and record them in the desk's ledger.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "A JSON file with a list of requests, relative to the working directory. Leave it out for the bundled requests.json."
+        },
+        {
+          "name": "eligibility",
+          "type": "\"crisp\" | \"nl\" | \"shadow\"",
+          "description": "Which eligibility implementation serves: the crisp 30-day window (default), the judgment, or both with disagreements traced."
+        }
+      ]
+    }
+  },
+  "model": {
+    "stock": "lfm3-1.7b-q8_0"
+  },
+  "warmup": [
+    {
+      "name": "sealed and recent",
+      "function": "eligible.nl",
+      "inputs": {
+        "request": {
+          "id": "r1",
+          "order": {
+            "id": "o-311",
+            "shop": "outdoor",
+            "total": 120,
+            "days_since_delivery": 12,
+            "opened": false
+          },
+          "text": "The tent is still sealed in its box; I ordered the wrong size. Can I get my money back?"
+        }
+      }
+    }
+  ]
+}

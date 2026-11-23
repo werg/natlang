@@ -7525,3 +7525,37 @@ call's arguments, and what `natlang.json` declares.
 Still open: an alias in `types.ts` that the natlang type grammar cannot parse breaks every `.nl` in that folder, with the
 error on the `.nl`. Five env builders parse every alias eagerly (`kernel.ts:297`, `lowered.ts:270`, `values.ts:281`,
 `refined-slots.ts:40`, `nz-file.ts:215`).
+
+## 2026-11-23 B4: the authoring skill and README teach the paradigm from quoted, tested programs
+
+Semantic-FP B4 (WS4 F2 + F4, and F3's paragraph). Shipped on main:
+- **SKILL.md**: WS4 §4's opening and the eight "Design the program" items replace the old opening and design list;
+  the three listed sentences are gone ("Port an algorithm as its steps" became item 3's narrower wording). The
+  working-loop table is B3's (the inbox template).
+- **New `references/composition.md`**: mapped judgments, inline captures and `nl.with`, `decide` floors with
+  `fn.on` escalation, `.in(context)`, `pluggable` shadow, `iterateOn(...).until(nl...)` and measures, folder
+  `propose`/check/`accept`, `Is`/`Untrusted`, Neuralese between stages (prose: fusion and generic results only; no
+  app uses them yet), and the ladder decision -> specialize -> escalation -> tune -> improve.
+- **`references/patterns.md`** rewritten around triage, refunds, review, notebook, helpdesk and nldb; the
+  Astra-derived paragraphs (semantic directory reducer item boundary, record-union arms, semantic pipelines over
+  source records; commits e133fabcc/115fc18c8/f15cda636) are dropped.
+- **Decision: code in a skill is quoted, never written for the page.** Each block carries `<!-- from: PATH -->`, and
+  `ts-host/test/authoring-examples.test.mjs` fails when a block is not that file's code. The same test builds and
+  runs the programs with a scripted model (decisions scored through `driver.decide`).
+- **New `examples/refunds`** (the program composition.md quotes): one `verdict.nl` bound per shop with
+  `Context.empty().with({ policy })`, `decide` with a 0.8 floor and `.on({ model: 'teacher' })`, a pluggable 30-day
+  window vs `eligible.nl`, a reply revised until an `nl` check holds, a ledger written through `folder.propose`.
+- **`examples/triage`** now shows what README's first screen promises: `readout: decision` on both functions,
+  `decide` with escalation of tickets below 0.8, and an `Is<string, ...>` summary. classify.nl lost its "report an
+  error" sentence (a decision readout has no error path). `native-triage.test.mjs` is folded into the new test;
+  `prompt-layout.test.mjs` keeps its tool-loop fixture inline. The website's classify.nl plate is synced.
+- **README** first screen is WS4 §5's text plus the triage snippet; "Using natlang" leads with the curated programs.
+  "Your first program" and SKILL.md's working-loop row are B3's text (the inbox template), left uncommitted by its
+  17b4520ef and committed here with B4 so the front door matches what `natlang init` writes.
+- **Integration skill**: "Choose the boundary" with the whole-workflow paragraph (helpdesk).
+Found while doing it (not fixed here): `Record<Verdict, number>` in `types.ts` fails the natlang type parser with a
+raw "Record keys must be string"; `Folder.propose`/`apply` infer `R = unknown` when the reducer's folder parameter is
+annotated `FolderHandle` (plain tsc against dist, so the dist declaration, not the natlang compiler), so ledger.ts
+writes `propose<[], Ledger>`; a target argument whose type contains `Untrusted` is refused ("Request types cannot be
+passed"); a decision readout on an endpoint without scoring (the Colab front) falls back to generation, and LFM3 then
+thinks and fails `decision-generation-invalid`.

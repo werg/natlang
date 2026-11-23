@@ -9,7 +9,7 @@ Build an application in which natlang makes the judgments and ordinary TypeScrip
 
 Start by locating the installed `@natlang/node` / `@natlang/browser` version or the checkout and any existing embedding. Reuse its runtime and model lifecycle. Repository paths in the references are lookup hints relative to a natlang checkout.
 
-## Choose the smallest adequate boundary
+## Choose the boundary
 
 Read [hosts and model drivers](references/hosts.md) for the runtime, compilation, services, and model transport; [frontend applications](references/frontend.md) for browser models, event loops, and generated interfaces; [terminal applications](references/terminal.md) for CLIs, packages, sessions, and event streams; [effects and recovery](references/recovery.md) for native objects, concurrency, and durability; [call records and compilations](references/records.md) for the machine's record of calls, opting values out of it, and compiled cases. Read [refinements](references/refinements.md) for `Is<T, P>` settings, crisp checkers, the `refinement-*` error codes and their recovery. Read [fused pipelines](references/fusion.md) for the `fusion` setting, the qualification certificate and the `fusion_*` trace events. Read [native Neuralese state](references/native-state.md) for native model servers, `Neuralese<T>` values and student prompt rendering. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
 
@@ -18,6 +18,13 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 3. Create one runtime per application (`createNatlangRuntime({ model, services })`) and run natlang work inside `runtime.run(...)`. Callbacks from uncompiled code (DOM events, timers, libraries) use `runtime.bind(fn)`.
 4. Define event ordering and commit points with ordinary code or `EventLoop` (`KeyedEventLoop` for one loop per user or document). Persist operation identities and observations for effects that must not repeat.
 5. Test the actual engine and transport, success and partial failure. Make general fixes in the shared runtime, not as app-local workarounds.
+
+When the workflow decides things repeatedly and its results can be checked, make the whole workflow a natlang
+program rather than a host with a few calls in it: the host keeps the state machine, the stores, the timers and the
+effects, and every policy is a natural-language function with typed results, behind a `pluggable` setting where an
+exact rule competes with it. `applications/helpdesk` is such a host: per-ticket `KeyedEventLoop`s commit crisply, and
+triage, missing details, the draft reply, the response deadline, the queue order and the escalation plan are `.nl`
+functions ([composition](../natlang-authoring/references/composition.md) shows the forms).
 
 ## Operational commitments
 

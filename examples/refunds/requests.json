@@ -1,0 +1,8 @@
+[
+  { "id": "r1", "order": { "id": "o-311", "shop": "outdoor", "total": 120, "days_since_delivery": 12, "opened": false },
+    "text": "The tent is still sealed in its box; I ordered the wrong size. Can I get my money back?" },
+  { "id": "r2", "order": { "id": "o-457", "shop": "outdoor", "total": 80, "days_since_delivery": 9, "opened": true },
+    "text": "I used the stove once and it works, but it is too heavy for me. What can you refund?" },
+  { "id": "r3", "order": { "id": "b-102", "shop": "books", "total": 25, "days_since_delivery": 40, "opened": true },
+    "text": "The book arrived with its cover torn off. I only noticed now. Will you refund it?" }
+]

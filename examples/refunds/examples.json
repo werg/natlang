@@ -1,0 +1,23 @@
+[
+  {
+    "name": "sealed and recent: eligible",
+    "function": "eligible.nl",
+    "inputs": { "request": { "id": "r1", "order": { "id": "o-311", "shop": "outdoor", "total": 120, "days_since_delivery": 12, "opened": false },
+      "text": "The tent is still sealed in its box; I ordered the wrong size. Can I get my money back?" } },
+    "expected": true
+  },
+  {
+    "name": "damaged on arrival: eligible after 30 days",
+    "function": "eligible.nl",
+    "inputs": { "request": { "id": "r3", "order": { "id": "b-102", "shop": "books", "total": 25, "days_since_delivery": 40, "opened": true },
+      "text": "The book arrived with its cover torn off. I only noticed now. Will you refund it?" } },
+    "expected": true
+  },
+  {
+    "name": "opened and late: not eligible",
+    "function": "eligible.nl",
+    "inputs": { "request": { "id": "r4", "order": { "id": "o-501", "shop": "outdoor", "total": 60, "days_since_delivery": 75, "opened": true },
+      "text": "I have used these boots all season and want to return them." } },
+    "expected": false
+  }
+]
