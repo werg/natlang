@@ -64,6 +64,12 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 
 ## Operations
 
+- **Constrained-decoding rollout (9ab63c622, SGLang fork 17e3458c2e):**
+  - The DGX checkout `/home/werg/sglang-natlang` moved to 17e3458c2e on 2026-11-23 17:10 (xgrammar 0.2.7 in its venv).
+  - Read round 2's collection throughput, and set `NATLANG_TOOL_GRAMMAR=0` if it drops.
+  - Move the Colab VM's checkout at the next actor rebind.
+  - Install xgrammar in Pop's serving env between held measurements.
+  - Owner: coordinator.
 - **Round builds read archived teacher pools file by file from the external HDD:** `/mnt/external/dgx-ops-archive-20261118/teacher-gen-20261115/pool-*`. r0001's build spent about 2 h in I/O wait there. Index the pools once onto NVMe, or pack them as one sequential file per pool, before r0002's prepare. Owner: coordinator, after the r0001 build.
 - **Both disks are below their floors (2026-11-23 16:18; `/` 38G, external 48G).** Run a cold-data pass on `/mnt/external`: write the path list first, never touch other sessions' archives, and run it after the r0001 build so it doesn't compete for the HDD. Owner: coordinator.
 - **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.
