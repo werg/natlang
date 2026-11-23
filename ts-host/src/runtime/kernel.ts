@@ -706,10 +706,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (attempt?.strict && !handoff) { capture?.discard(); task.discardGraphCall(callId, frame.parentCallId); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'agent'), event.phase === 'requested' ?
-    runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
-    graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
-      [{ node: invocationNodeId(callId), port: 'caller' }])));
+  const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => {
+    const captured = { ...event, exact, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) };
+    if(event.phase === 'requested') runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event });
+    else graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },[{ node: invocationNodeId(callId), port: 'caller' }]);
+    return capture?.effect(captured,'agent');
+  });
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
   const nativeReader = !!(task.runtime.options.neuralese?.nativeStateConsumer ||
@@ -900,7 +902,7 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
         representation: definition.representation } : {}) };
     const parentTrace = traceFor(frame.parentCallId);
     const view = task.programView;
-    const capture = new CallCapture(store, settings, { callId, parentCallId: frame.parentCallId ?? null,
+    const capture = new CallCapture(store, settings, { checkpoints: task.runtime.options.recording?.checkpoints, callId, parentCallId: frame.parentCallId ?? null,
       parentActionIndex: parentTrace ? parentTrace.events.filter(event => event.kind === 'action').length : null,
       taskId: task.id, programId: view.program?.id ?? null, buildHash: view.program?.buildHash ?? null,
       programRoot: task.runtime.options.programRoot ?? null, definition: identity,

@@ -12,6 +12,7 @@ import { interpreter, lambda } from './support/natlang.mjs';
 test('a standalone run is recorded in the store, and its exact host captures can be rebuilt from the record', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-teacher-store-'));
   const store = CallStore.open(root);
+  store.writeSettings({minFreeBytes:0});
   try {
     const capture = { definitionSources: ['price.nl'], inputArguments: ['id', 'absent'], captureOutput: true, captureAllOutputs: true, maxBytes: 1_048_576 };
     const runtime = interpreter({ calls: store, runId: 'teacher-run-1', modelId: 'scripted-teacher', manifest: { definition_source: 'price.nl' },

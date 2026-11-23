@@ -123,6 +123,10 @@
       "additionalProperties": false,
       "description": "What the runtime records of this program's calls: definitions (a source glob such as auth/*.nl) or arguments (functionName.argument) recorded by type only.",
       "properties": {
+        "checkpoints": {
+          "type": "boolean",
+          "description": "Persist exact unfinished call observations (default true)."
+        },
         "exclude": {
           "type": "array",
           "items": {

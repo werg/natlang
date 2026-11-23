@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang, CallStore, caseHashes } from '../dist/index.js';
 
-const freshStore = () => CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-calls-')));
+const freshStore = () => { const store=CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-calls-'))); store.writeSettings({minFreeBytes:0}); return store; };
 const done = store => { const root = store.root; store.close(); rmSync(root, { recursive: true, force: true }); };
 
 /** A model that plays `calls` in order and records every request it was sent. */

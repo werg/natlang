@@ -69,6 +69,7 @@ const variants = [
     open() {
       const root = mkdtempSync(join(tmpdir(), 'natlang-store-contract-'));
       const store = openCallStore(root);
+      store.writeSettings({minFreeBytes:0});
       return { store, root, cleanup() { try { store.close(); } catch { /* closed */ } rmSync(root, { recursive: true, force: true }); },
         /** Make an open row belong to a writer that no longer exists. */
         orphan(callId) {

@@ -290,6 +290,8 @@ export class CallStore {
       const link = this.db.prepare('INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, ?)');
       link.run(record.call_id, recordHash, 'record');
       if (eventsHash) link.run(record.call_id, eventsHash, 'events');
+      this.db.prepare("DELETE FROM annotations WHERE call_id = ? AND kind = 'call-checkpoint'").run(record.call_id);
+      this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'capture'").run(record.call_id);
       const referenced = [definition.instructions, ...Object.values(record.inputs), ...Object.values(record.captures), record.output,
         ...record.capture_writes.map(write => write.after), ...record.effects.flatMap(effect => [effect.args, effect.result]),
         ...(record.folder?.changes.map(change => change.after) ?? [])].flatMap(refHashes);
@@ -311,6 +313,20 @@ export class CallStore {
   }
   /** Work (blob candidates and call rows) of one eviction pass after a write. */
   static AUTO_EVICTION_WORK = 1024;
+
+  /** Save an unfinished call's actual inputs and effects without a fabricated completion. */
+  checkpoint(callId: string, state: Record<string,unknown>, blobs: ReadonlyMap<string,string>, events?: string): void {
+    if(state.call_id !== callId) throw new Error('call checkpoint identity differs');
+    this.inWrite(() => {
+      const row=this.db.prepare('SELECT outcome FROM calls WHERE call_id = ?').get(callId) as {outcome:string}|undefined;
+      if(!row || row.outcome !== 'running') return;
+      const link=this.db.prepare("INSERT OR IGNORE INTO call_blobs(call_id,hash,kind) VALUES (?,?,'capture')");
+      for(const [hash,text] of blobs){this.putBlob(text,hash);link.run(callId,hash);}
+      this.db.prepare("DELETE FROM annotations WHERE call_id = ? AND kind = 'call-checkpoint'").run(callId);
+      this.annotate(callId,'call-checkpoint',state,'natlang-call-capture',false);
+      if(events !== undefined) this.progressInWrite(callId,events);
+    });
+  }
 
   /** A row for a call that has started, so running calls show in listings; `record` replaces it when the call ends. */
   begin(row: { callId: string; parentCallId: string | null; parentActionIndex: number | null; taskId: string; programId: string | null;
@@ -341,15 +357,17 @@ export class CallStore {
    * collected at once, and the new blob is linked in the transaction that stores it, so eviction never sees it unlinked.
    */
   progress(callId: string, events: string): void {
-    this.inWrite(() => {
+    this.inWrite(() => this.progressInWrite(callId,events));
+    this.keepBound();
+  }
+  private progressInWrite(callId: string,events: string): void {
+      if(!this.db.prepare("SELECT 1 AS present FROM calls WHERE call_id = ? AND outcome IN ('running','interrupted')").get(callId)) return;
       const hash = this.putBlob(events);
       const old = this.db.prepare("SELECT hash FROM call_blobs WHERE call_id = ? AND kind = 'events' AND hash != ?").all(callId, hash) as { hash: string }[];
       this.db.prepare("UPDATE calls SET events_hash = ? WHERE call_id = ? AND outcome IN ('running', 'interrupted')").run(hash, callId);
       this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events' AND hash != ?").run(callId, hash);
       this.db.prepare("INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, 'events')").run(callId, hash);
       this.collectHashes(old.map(row => row.hash));
-    });
-    this.keepBound();
   }
   /** Blob files the current write transaction created, removed again if it rolls back. */
   private created: string[] | null = null;

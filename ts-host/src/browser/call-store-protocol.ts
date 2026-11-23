@@ -14,7 +14,8 @@ export type QueryMethod = typeof QUERY_METHODS[number];
 
 export type ToWorker =
   | { op: 'open'; id: number; name: string; mode?: string }
-  | { op: 'write'; method: 'record' | 'begin' | 'progress' | 'caseServed' | 'enqueue' | 'annotate'; args: unknown[] }
+  | { op: 'write'; method: 'record' | 'begin' | 'progress' | 'discard' | 'caseServed' | 'enqueue' | 'annotate'; args: unknown[] }
+  | { op: 'checkpoint'; id: number; args: Parameters<CallStore['checkpoint']> }
   | { op: 'statistics'; action: 'write' | 'reset'; key?: string; value?: SiteStatistics; prefix?: string }
   | { op: 'query'; id: number; method: QueryMethod; args: unknown[] }
   | { op: 'close'; id: number };

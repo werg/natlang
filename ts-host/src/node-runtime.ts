@@ -46,7 +46,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
     const recording: { capture?: CallCapture } = {};
     super({ ...options, environment: options.environment ?? new TypeScriptEnvironment({ mode: 'fresh' }),
       frame, hooks: options.hooks ?? kernelHooks, services: options.services ?? frame.task.services,
-      observeEffect: event => { options.observeEffect?.(event); recording.capture?.effect(event, 'agent'); } });
+      observeEffect: event => { options.observeEffect?.(event); return recording.capture?.effect(event, 'agent'); } });
     this.recording = recording;
     this.rootOptions = options;
     // A runtime given a frame runs inside a task that records its own calls.

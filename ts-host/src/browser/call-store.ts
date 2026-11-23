@@ -1,6 +1,6 @@
 /**
  * The page's side of the browser call store (call-store-worker.ts). It is a `CallStoreLike` for the runtime: writes go
- * to the worker in order and never wait; settings, the compilations version and the current compilations are kept here
+ * to the worker in order; exact checkpoints await commit acknowledgement. Ordinary writes never wait; settings, the compilations version and the current compilations are kept here
  * from the worker's snapshots, so dispatch reads them synchronously. `query` reads anything else of the store.
  */
 import type { CallStoreLike } from '../calls/recorder.js';
@@ -96,6 +96,10 @@ export class BrowserCallStore implements CallStoreLike {
   record(record: CallRecord, blobs: ReadonlyMap<string, string>, events?: string): void {
     this.post({ op: 'write', method: 'record', args: [record, blobs, events] });
   }
+  checkpoint(callId:string,state:Record<string,unknown>,blobs:ReadonlyMap<string,string>,events?:string): Promise<void> {
+    return this.request({op:'checkpoint',args:[callId,state,blobs,events]}).then(()=>undefined);
+  }
+  discard(callId:string):void {this.post({op:'write',method:'discard',args:[callId]});}
   begin(row: Parameters<CallStore['begin']>[0]): void { this.post({ op: 'write', method: 'begin', args: [row] }); }
   progress(callId: string, events: string): void { this.post({ op: 'write', method: 'progress', args: [callId, events] }); }
   caseServed(caseHash: string, callId: string, handedOff: boolean): void {

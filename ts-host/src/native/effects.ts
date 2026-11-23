@@ -50,7 +50,7 @@ function argumentsKey(method: string, args: unknown[]): string | undefined {
  * per property access; the original receiver is preserved.
  */
 export function recordingServices<T extends Record<string, unknown>>(services: T,
-  emit: (event: EffectEvent) => void): T {
+  emit: (event: EffectEvent) => unknown): T {
   const preview = (value: unknown): unknown => {
     try {
       const text = JSON.stringify(value);
@@ -85,11 +85,11 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
         if (key !== undefined && results!.has(key)) {
           const earlier = results!.get(key);
           if (earlier && typeof (earlier as PromiseLike<unknown>).then === 'function')
-            return Promise.resolve(earlier).then(resolved => {
-              emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
+            return Promise.resolve(earlier).then(async resolved => {
+              await emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
                 exact: { result: resolved, async: true } });
               return resolved;
-            }, error => { emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq }); throw error; });
+            }, async error => { await emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq, exact:{async:true} }); throw error; });
           emit({ phase: 'completed', service: label, method: property, result: preview(earlier), seq,
             exact: { result: earlier, async: false } });
           return earlier;
@@ -102,9 +102,9 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
             results!.set(key, result);
           }
           if (result && typeof (result as PromiseLike<unknown>).then === 'function')
-            return Promise.resolve(result).then(resolved => { emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
+            return Promise.resolve(result).then(async resolved => { await emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
               exact: { result: resolved, async: true } }); return resolved; },
-              error => { emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq }); throw error; });
+              async error => { await emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq, exact:{async:true} }); throw error; });
           emit({ phase: 'completed', service: label, method: property, result: preview(result), seq, exact: { result, async: false } });
           return result;
         } catch (error) {

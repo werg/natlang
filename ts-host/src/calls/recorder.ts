@@ -14,6 +14,9 @@ import type { ItemRecord } from '../runtime/loader.js';
 /** What the runtime needs of a call store. `CallStore` (Node) implements it; tests may pass their own. */
 export interface CallStoreLike {
   settings(): CallStoreSettings;
+  /** Exact evidence of an unfinished call; a durable store may acknowledge it asynchronously. */
+  checkpointRequired?: boolean;
+  checkpoint?(callId: string, state: Record<string, unknown>, blobs: ReadonlyMap<string,string>, events?: string): void | Promise<void>;
   record(record: CallRecord, blobs: ReadonlyMap<string, string>, events?: string): void;
   /** Note that a call started (shown as running until its record arrives). */
   begin?(row: Parameters<import('./store.js').CallStore['begin']>[0]): void;
@@ -99,6 +102,7 @@ export class CallCapture {
     callId: string; parentCallId: string | null; parentActionIndex: number | null; taskId: string; programId: string | null;
     /** A root run's logical name (several runs share it; each has its own call ID). */
     runLabel?: string | null;
+    checkpoints?: boolean;
     buildHash: string | null; programRoot: string | null; definition: DefinitionIdentity;
     model: { id: string | null; revision: string | null }; exclude?: readonly string[] }) {
     this.executor = { kind: 'agent', model_id: base.model.id, model_revision: base.model.revision };
@@ -113,6 +117,8 @@ export class CallCapture {
         ...(this.base.runLabel ? { runLabel: this.base.runLabel } : {}),
         definition: { id: definition.id, name: definition.name, source: definition.source, key: definition.key, interface: definition.interface,
           site: definition.site }, modelId: this.base.model.id, startedAt: this.startedAt, auditOf: this.auditOf });
+      this.announced = true;
+      this.backgroundCheckpoint();
     } catch (error) { reportStoreFailure(this.store, error); }
   }
 
@@ -123,8 +129,38 @@ export class CallCapture {
   }
 
   private watcher?: ReturnType<typeof setInterval>;
+  private checkpointOrdinal = 0;
+  private announced = false;
+  private eventSource?: () => readonly Record<string,unknown>[];
+  /** The last exact observation, explicitly not a completed record. */
+  checkpoint(): void | Promise<void> {
+    if (!this.announced || this.base.checkpoints === false || !this.store.checkpoint) return;
+    const state = {version:'natlang.call-checkpoint/1',ordinal:this.checkpointOrdinal++,
+      call_id:this.base.callId,parent_call_id:this.base.parentCallId,parent_action_index:this.base.parentActionIndex,
+      task_id:this.base.taskId,program_id:this.base.programId,program_root:this.base.programRoot,
+      definition:this.base.definition,executor:{...this.executor},started_at:this.startedAt,
+      inputs:{...this.inputs},captures:{...this.captures},effects:this.completedEffects(),
+      capture_writes:[...this.captureWrites],pending_effects:this.pending.map(row=>({...row}))};
+    const events=this.eventSource?.();
+    try {
+      const persisted=this.store.checkpoint(this.base.callId,state,new Map(this.blobs),
+        events?.length ? events.map(event=>JSON.stringify(event)).join('\n')+'\n' : undefined);
+      if(persisted) return persisted.catch(error=>{
+        if(this.store.checkpointRequired) throw error;
+        reportStoreFailure(this.store,error);
+      });
+    } catch(error){
+      if(this.store.checkpointRequired) throw error;
+      reportStoreFailure(this.store,error);
+    }
+  }
+  private backgroundCheckpoint(): void {
+    try { const pending=this.checkpoint(); if(pending) void pending.catch(error=>reportStoreFailure(this.store,error)); }
+    catch(error){reportStoreFailure(this.store,error);}
+  }
   /** While the call runs, write its trace events so far every `intervalMs`, so a long call can be inspected live. */
   watch(events: () => readonly Record<string, unknown>[], intervalMs = 30_000): void {
+    this.eventSource = events;
     if (!this.store.progress) return;
     let written = 0;
     this.watcher = setInterval(() => {
@@ -153,6 +189,7 @@ export class CallCapture {
       [name, this.ref(value, excluded(this.base.exclude, definition, name))]));
     const visible = Object.fromEntries(Object.entries(this.hostInputs).filter(([name]) => !excluded(this.base.exclude, definition, name)));
     try { this.features = inputFeatures(visible); } catch { this.features = {}; }
+    this.backgroundCheckpoint();
   }
 
   /**
@@ -184,9 +221,10 @@ export class CallCapture {
 
   /** One recording-services event (`native/effects.ts`), with its exact arguments and result. */
   effect(event: { phase: 'requested' | 'completed' | 'failed'; service: string; method: string; exact?: { args?: unknown[]; result?: unknown; async?: boolean };
-    error?: string; seq?: number; graph_order?: number }, by: 'agent' | 'crisp' = 'agent'): void {
+    error?: string; seq?: number; graph_order?: number }, by: 'agent' | 'crisp' = 'agent'): void | Promise<void> {
     if (event.phase === 'requested') {
       this.pending.push({ service: event.service, method: event.method, args: this.ref(event.exact?.args ?? []), by, order: this.order++, seq: event.seq, graph_order: event.graph_order });
+      this.backgroundCheckpoint();
       return;
     }
     const index = event.seq !== undefined ? this.pending.findIndex(item => item.seq === event.seq) :
@@ -196,6 +234,8 @@ export class CallCapture {
     const { seq: _seq, ...effect } = started as Pending;
     this.effects.push({ ...effect, ...(event.phase === 'completed' ? { result: this.ref(event.exact?.result) } : { error: event.error ?? 'failed' }),
       ...(event.exact?.async !== undefined ? { async: event.exact.async } : {}) });
+    if (event.exact?.async) return this.checkpoint();
+    this.backgroundCheckpoint();
   }
 
   /** Effects that completed so far, in the order they started. */
