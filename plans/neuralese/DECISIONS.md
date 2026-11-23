@@ -9846,3 +9846,47 @@ brief: `/mnt/external/natlang-rl-authoring/hfb/AUTHOR_TASK.md`; per-worker assig
   - B worlds sized at about 28 requests per correct pass, which may be tight if children take several turns;
   - a second blind solver;
   - whether collection on a `writes:` runtime treats these tasks the same (they declare no `writes:`).
+
+## 2026-11-24 00:00 Hand-back follow-up: two learners trained r0001 at once after a driver restart mid-push; fixed
+
+**What happened.** At 22:36 the aei1 driver (pin bdf4c8721) decided to move r0001 to the A100 and began the push.
+At 22:41:33 another session's wrapper (`resume-semantic-reader-owner.py`) stopped that driver mid-push and exec'd a
+new one with the same argv and controller code from a600149b3 (97e82bcd5, which contains bdf4c8721). Within 2 s the
+new driver ran the Colab path: preflight `aei1-r0001-sft-preflight-1795470095` at 22:41:35, then `run-sft`, which
+pushed DGX state step 336 and started the A100 learner. The DGX unit `aei1-r0001-sft` kept running the whole time:
+its journal has no state change between 16:50 and the coordinator's stop at 23:05. Both learners trained r0001 up to
+DGX step 353. There was no `handback_check` note, no `handback.json` and no profile change.
+
+**Path.** `train_sft` entered `colab_sft` only when `Cycle.present('aei1-r0001-sft')` was False. That check is
+`systemctl --user is-active` or ledger ownership, and both name the unit. So at 22:41:34 both answered "not present"
+for a unit that was active and held a ledger claim. I did not find why. Ruled out:
+- the code differs: no `expert_iteration.py` diff between bdf4c8721 and 97e82bcd5;
+- the environment: the new driver's environment has `XDG_RUNTIME_DIR` and the bus;
+- the context: the same check in a ledger unit with that pin and environment returns True for an active unit today;
+- errors: no systemctl errors in the driver's journal;
+- a reload or state change of the SFT unit in the journal.
+
+Not checked: the systemd user manager's answers at 22:41:34 (not logged); the ledger state file at that moment
+(rewritten since).
+
+**Fix: the DGX learner is found by its process, not only by its unit's name.**
+- `pop_rl_actor.local_learners(work)`: live `exp0_sft.py` processes whose `--out-dir` is the round's `sft/`, from
+  /proc.
+- The driver (`dgx_sft_running` = unit present, ledger-held or a learner process):
+  - `train_sft` enters the Colab path only when that is False, and never launches a second DGX learner.
+  - `colab_sft` re-checks before every `run-sft` and returns to join the DGX learner, whatever `round.json`'s
+    profile says.
+  - After the wait ends while a learner process still lives, the driver keeps joining it (note
+    `dgx_learner_without_unit`) and keeps checking the hand-back.
+  - The hand-back's stop waits for the process to be gone too.
+- `run-sft` refuses (SystemExit) at its start and again before the actor yields, the sync thread starts (its pulls
+  replace the local `learner-state`) or the VM learner starts, if a DGX learner trains its `--work`.
+- So the only way a round with a DGX learner reaches a session is the verified hand-back: push verified, unit
+  stopped, process gone, then `run-sft`.
+
+Tests (`tests/neuralese/test_async_train.py`):
+- The exact sequence: driver 1 killed mid-push leaves the learner, `round.json` and `handback.json` untouched; driver 2
+  sees no unit, joins the live learner process (a real process found through /proc), and `run-sft` runs exactly once,
+  after the push and the stop, with the learner dead.
+- `colab_sft` and `run-sft` refuse beside a learner.
+- Against the old `train_sft`, driver 2 takes the Colab path without joining.
