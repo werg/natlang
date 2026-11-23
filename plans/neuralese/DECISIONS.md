@@ -9216,3 +9216,48 @@ over the tunnel attested all routes in 30 s and rewrote the actor record (`rebou
   - Colab: the first DGX -> Drive upload of a 3.4 GB checkpoint is still uplink-bound (about 630 s against the
     tunnel's 968 s). Every later VM pulls it inside Google's network, and VM-written learner state never crosses the
     tunnel. The before/after is measured once the scope exists.
+
+
+## 2026-11-23 17:30 Memetic groups under collection load: programs whose runs fit, nested runs take slots (e083ad5e5, 17d837704)
+
+The coordinator's round-1 health report (`ops/ei/aei1/r0001/health.json`) flagged 7 `memetic_improve` tasks without
+episodes after the staged layout (c64d250b2) entered at the 14:26 relaunch on `pin-96a02bd4abe1`.
+
+- **None of them ran the staged layout.** The 7 groups (g000138, g000145, g000216, g000281, g000401, g000605,
+  g000672) were all created before 14:18 on pin d29451b846ca (their `memetic-spec.json` has no `layout`): five ran out
+  the 7200 s clock in preparation (previous entry), and g000605/g000672 were not admitted (every support sample passed;
+  under the old layout the 4 supervisors then fail at `load`: `job:uncoded-error`, `finish:incomplete`). After 14:26
+  the relaunched collection (`--hours 72`, share 0.02, ~140 new groups) drew one memetic group, g000832, at 16:49:06
+  (`layout: staged`); at 16:49:54 the driver's round-1 SFT took over the DGX (`takeover: dgx`, Colab unfit) and stopped
+  the collection, which abandoned g000832's preparation stage (`group abandoned`, `memetic-prepare`, -15) 71 s in.
+  `memverify-dgx3` had been SIGTERMed at 14:42 and again at 16:50, before its first group.
+- **What would still have failed under real load** (aei1, 128 slots, measured over its 3,137 finished episodes):
+  ordinary episodes of the memetic families run median 1,156 s, p90 5,234 s; 44% exceed the staged nested clock of
+  1,440 s (55% of all episodes exceed 900 s). A memetic program whose runs do not fit leaves its nested evaluations
+  truncated, and the runs that finish are the short ones. And nested runs counted against no slot: aei1 serves 160
+  running for 128 slots, and two memetic groups add 30-50 nested streams.
+- **Fix (default, e083ad5e5):** (1) a memetic group only for a program whose family's ordinary episodes finish within
+  its nested clock (`memetic_workspace.fits`: at least 8 measured, the 0.9 quantile <= `nested_case_seconds`;
+  `--memetic-fit-quantile`, 0 opts out). The collector measures them from its own finished groups and seeds from the
+  sibling collections of its WORK (the async driver's earlier collections; `--memetic-seed-collection`); on aei1's
+  measurements 16 families qualify at once and more as families are measured. (2) Memetic nested runs in flight take
+  collector slots (`_nested_slots`, counted every 20 s from the evaluations' journals), so the actor serves about
+  `--slots` episodes (`--no-memetic-nested-slots` opts out). expert_iteration collect/cycle/async-drive pass both.
+- **Verified:** on the Colab L4 actor front (sft-v9 e15b20a86f1c, 128 running, sharing it with the
+  `colab-g4a-fill-backlog-after-v9` fill), a `grpo.Collector` on the VM (pin of e083ad5e5, 16 slots, staged layout,
+  fit 0.9 with aei1's family seconds, nested slots on) with two production memetic rows (support 4, query 6,
+  evaluations 2) beside ordinary episodes of their worlds (the driver made no new ordinary groups after 12 were
+  outstanding, so the second half ran beside the fill only). Both groups were fully scored, every nested run resolved
+  (scored = rollouts in all 21 evaluations; the longest evaluation 523 s of the 1440 s clock):
+  - g000000 `ext_reasoning-gym_family_relationships` (family p90 295 s): prepared in 108 s (support 0.625, admitted),
+    4 of 4 episodes `memetic_scored` (rewards 0.81, 0, 0, 0.76), group 3182 s from creation to score; anchor 0.833
+    (no change 0.833, default 0.833).
+  - g000001 `curriculum_contract_diagnosis` (p90 325 s): prepared in 204 s (support 0.875), 3 `memetic_scored`
+    (0.64, 0.89, 0.70) and 1 scored 0 at the 64-request budget, group 3582 s; anchor 0.917.
+  No commit beat its anchor (no memetic success yet). Supervisors used 1375-2297 s of their 7200 s.
+- **Found and fixed in the run (17d837704):** two of g000000's four commits were refused as leaks (reward 0) for
+  naming "mother", a query answer that is also a support answer and a word of every puzzle input. `leaked_answers` now
+  ignores an answer that occurs in what the supervisor is shown anyway (`shown_text`: program files, support inputs);
+  a copied answer the supervisor could not have read is still refused.
+- **Left:** a round boundary that stops the standing collection abandons every group in flight, memetic ones (up to
+  ~2.4 h) most often; families never measured on the actor get no memetic group until they are.
