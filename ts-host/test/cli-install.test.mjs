@@ -46,7 +46,7 @@ test('install.sh installs the packed CLI, which creates, checks and runs a progr
     assert.match(installed.out, /natlang is installed/);
     const natlang = (args, cwd = home) => run(join(prefix, 'bin', 'natlang'), args, { cwd, env });
     const program = join(home, 'my-program');
-    for (const [args, cwd] of [[['init', program]], [['check'], program]]) {
+    for (const [args, cwd] of [[['init', program, '--template', 'classifier']], [['check'], program]]) {
       const result = await natlang(args, cwd); assert.equal(result.code, 0, `${args.join(' ')}: ${result.err}`);
     }
     const called = await natlang(['call', 'answer.nl', 'I was charged twice'], program);

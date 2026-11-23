@@ -20,9 +20,9 @@ Choose the model before the session and keep it for every participant in a round
 or an OpenAI-compatible endpoint, configured on the Models page) tests the language, CLI and dashboard without
 model latency dominating the session. The managed local model is a separate track: on a CPU-only machine its
 first call can take minutes (a 1.8 GB download, then a prompt of several thousand tokens to prefill), so time
-it on the participant's hardware and report it apart from the authoring tasks. A new program's `answer.nl`
-uses `readout: decision`, so the model scores its labels instead of writing an answer: keep it for the timed first
-run (it took about 19 s instead of 136 s on the local LFM3 1.7B). A participant's own function that writes free text
+it on the participant's hardware and report it apart from the authoring tasks. A new program's `route.nl`
+uses `readout: decision`, so the model scores its routes instead of writing an answer, and the bundled messages need
+no drafted reply: keep them for the timed first run. A participant's own function that writes free text
 or code takes as long as the model needs on that hardware; time it with a hosted model unless the local track is the
 subject.
 
@@ -35,7 +35,8 @@ Give these tasks in order:
 
 1. Install natlang (the clean install above), then `natlang init` and `natlang run` in the empty directory. Record installation/download time
    separately from execution and time to the first visible result.
-2. Run the program on their own input (`natlang call answer.nl "..."`). Ask where they expect input paths to resolve.
+2. Run the program on their own input (`natlang call route.nl '{"from":...,"subject":...,"body":...}'`, or
+   `natlang run . -- '[...]'` for a list of messages). Ask where they expect input paths to resolve.
 3. Create a small classifier and change its behavior. Record time to their first
    successful edit, unexpected files/concepts, and whether they discover `dev`.
 4. Save an input and expected result, change the instructions, and verify that
@@ -48,7 +49,7 @@ Give these tasks in order:
 Many participants will build with a coding agent rather than by hand. Run the same five tasks with the
 participant directing Claude Code or Codex in an empty workspace, after `natlang skills install`. The agent
 works without a terminal of its own, so every step must succeed non-interactively: `natlang init`, the
-`AGENTS.md` it writes (`CLAUDE.md` imports it), `natlang check --json`, `natlang call answer.nl "..." --json`,
+`AGENTS.md` it writes (`CLAUDE.md` imports it), `natlang check --json`, `natlang call route.nl '{...}' --json`,
 `natlang test --json`, `natlang traces show CALL_ID` (the ID `natlang call` prints on stderr), `natlang traces fix
 CALL_ID --expected JSON`, and the missing-model error (exit code 3, naming `natlang setup --yes` or a hosted model).
 Exit codes: 0 success, 1 the program is wrong, 2 usage error, 3 model or runtime unavailable. Record, in addition to the table below: the agent's first command, every command it got wrong

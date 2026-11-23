@@ -34,7 +34,7 @@ const BOOLEAN = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--v
   '--manifest']);
 const VALUED = new Set(['--progress', '--target', '--export', '--profile', '--provider', '--model', '--escalate', '--workspace', '--state',
   '--traces', '--store', '--adaptation', '--inputs', '--trace', '--returns', '--files', '--jobs', '--out', '--fusion-planner', '--program',
-  '--native', '--device', '--port', '--gguf', '--dir', '--host', '--root']);
+  '--native', '--device', '--port', '--gguf', '--dir', '--host', '--root', '--template']);
 
 const unknownOption = (name: string, known: Iterable<string>, command?: string) => {
   const near = closestName(name, known);

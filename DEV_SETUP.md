@@ -59,7 +59,7 @@ natlang dashboard --root examples --open
 ```
 
 For a new program, run `natlang init my-program`, enter that directory, then
-`natlang dev`. Edit `answer.nl` (or the sample input, the default in `natlang.json`); source and input changes rerun
+`natlang dev`. Edit `route.nl`, `main.ts` or the sample input `messages.json`; source and input changes rerun
 the program, while generated build files do not. `natlang test` runs the saved
 input/expected-output examples in `examples.json`. These tests contact the
 selected model; `natlang check` does not.

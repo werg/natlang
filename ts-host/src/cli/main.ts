@@ -169,12 +169,15 @@ the program (or an adaptation artifact) on one split, optimize searches instruct
 export const HELP_TOPICS: Record<string, string> = {
   advanced: `Other natlang commands:\n${tables([['', ADVANCED]])}\n\nnatlang help COMMAND shows a command's options.`,
   init: `Create a program without downloading or starting a model:
-  natlang init [DIRECTORY]                   Default: my-program; existing files are never overwritten.
+  natlang init [DIRECTORY] [--template inbox|classifier]
+                                             Default: my-program; existing files are never overwritten.
 
-The program is answer.nl (a natural-language function), natlang.json (its run target,
-whose input argument defaults to the sample text), examples.json (saved tests), a
-README and AGENTS.md for coding agents. cd into it and run natlang run, or
-natlang call answer.nl "text"; natlang dev reruns after edits; natlang test checks examples.json.`,
+The default (inbox) program plans an inbox: types.ts holds the data (outside text is Untrusted<string>,
+a checked property is Is<string, "...">), route.nl is a typed decision (readout: decision), and
+main.ts maps it over the messages with decide(route, message) and drafts replies with an inline
+nl<Reply>. examples.json holds route.nl cases, messages.json the sample input, natlang.json the run
+target, and AGENTS.md the guide for coding agents. cd into it: natlang check, natlang run, natlang test.
+--template classifier writes the one-function program: answer.nl, a three-label classifier.`,
   skills: `Agent skills for writing natlang programs:
   natlang skills [list] [--json]              Where the natlang-authoring and natlang-integration skills are.
   natlang skills install [--claude] [--codex] [--dir DIR] [--json]
@@ -205,7 +208,7 @@ Generated declarations, .natlang, dist and node_modules do not trigger reruns.`,
   test: `Run saved model examples:
   natlang test [DIRECTORY] [--json] [--profile NAME] [--provider ID] [--model ID] [--yes]
 
-examples.json is an array of { name?, function: "answer.nl", inputs: {...}, expected: VALUE }.
+examples.json is an array of { name?, function: "route.nl", inputs: {...}, expected: VALUE }.
 Expected values are compared exactly, including object fields and array order.
 These are real model calls; run natlang check for a model-free source check.
 --json prints one report: { ok, passed, failed, seconds, results: [{ name, ok, call_id, expected,

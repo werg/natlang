@@ -2,34 +2,42 @@
   "schema": "natlang.package/v2",
   "name": "hello",
   "version": "0.1.0",
-  "description": "My first natlang program.",
+  "description": "Plan an inbox: route every message, draft the replies it needs.",
   "include": [
-    "answer",
-    "answer.nl",
     "examples.json",
+    "main.ts",
+    "messages.json",
+    "natlang.d",
     "package.json",
-    "README.md"
+    "README.md",
+    "route",
+    "route.nl",
+    "tsconfig.json",
+    "types.ts"
   ],
   "targets": {
     "main": {
-      "entry": "answer.nl",
-      "description": "Run answer.nl on the sample input, or supply your own text.",
+      "entry": "main.ts",
+      "description": "Plan the bundled messages.json, or messages you give as JSON.",
       "arguments": [
         {
-          "name": "message",
-          "type": "string",
-          "description": "Text to process; leave blank for the sample.",
-          "default": "I was charged twice for my subscription."
+          "name": "messages",
+          "type": "Message[]",
+          "description": "Messages to plan, as JSON; leave blank for messages.json."
         }
       ]
     }
   },
   "warmup": [
     {
-      "name": "sample input",
-      "function": "answer.nl",
+      "name": "one message",
+      "function": "route.nl",
       "inputs": {
-        "message": "I was charged twice for my subscription."
+        "message": {
+          "from": "lee@example.com",
+          "subject": "New designer",
+          "body": "Hi team, Maria joins us on Monday as our new designer."
+        }
       }
     }
   ]

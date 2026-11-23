@@ -218,9 +218,13 @@ class Parser {
     if (PRIMS.has(token.value)) return { kind: 'prim', name: token.value as Extract<Type, { kind: 'prim' }>['name'] };
     if (token.value === 'Record') {
       const [key, value] = this.args(2);
-      if (key?.kind !== 'prim' || key.name !== 'string')
-        throw new TypeSyntaxError('Record keys must be string');
-      return { kind: 'dict', element: value! };
+      // Record<'a' | 'b', T> is the record with exactly those fields, as in TypeScript. Record<string, T>, and a key
+      // named by an alias (Record<Kind, T>, resolved only later), is a dictionary from string keys.
+      const keys = key?.kind === 'lit' ? [key] : key?.kind === 'union' ? key.members : undefined;
+      if (keys?.length && keys.every(item => item.kind === 'lit' && typeof item.value === 'string'))
+        return { kind: 'record', fields: keys.map(item => ({ name: String((item as { value: string }).value), type: value!, optional: false })) };
+      if (key?.kind === 'name' || (key?.kind === 'prim' && key.name === 'string')) return { kind: 'dict', element: value! };
+      throw new TypeSyntaxError('Record keys are strings: write Record<string, T>, a union of string literals, or a type name for one');
     }
     if (token.value === 'NativeAdapter') return NATIVE_ADAPTER_TYPE;
     if (token.value === 'NativeTensor') return NATIVE_TENSOR_TYPE;

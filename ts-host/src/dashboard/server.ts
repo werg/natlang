@@ -344,7 +344,8 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     for (const key of ['instruction', 'input', 'returns', 'profile']) if (input[key] !== undefined && typeof input[key] !== 'string') throw new HttpError(400, `${key} must be text`);
     const path = inside(name);
     if (existsSync(path) && (!statSync(path).isDirectory() || readdirSync(path).length)) throw new HttpError(409, 'That directory already contains files. Choose a new name.');
-    const directory = createProgram(path, { instruction: input.instruction as string | undefined, input: input.input as string | undefined, returns: input.returns as string | undefined, profile: input.profile as string | undefined });
+    // The dashboard's program page and Playground edit one text-input function: they create the classifier program.
+    const directory = createProgram(path, { template: 'classifier', instruction: input.instruction as string | undefined, input: input.input as string | undefined, returns: input.returns as string | undefined, profile: input.profile as string | undefined });
     return { directory: relative(root, directory) };
   });
   route('GET', '/api/programs/model', (_request, _params, query) => {

@@ -1,0 +1,17 @@
+[
+  {
+    "from": "lee@example.com",
+    "subject": "New designer",
+    "body": "Hi team, Maria joins us on Monday as our new designer."
+  },
+  {
+    "from": "deals@shop.example",
+    "subject": "50% off this weekend only",
+    "body": "Our biggest sale of the year starts now. Click to shop."
+  },
+  {
+    "from": "finance@example.com",
+    "subject": "Q3 report published",
+    "body": "The Q3 report is now on the wiki."
+  }
+]
