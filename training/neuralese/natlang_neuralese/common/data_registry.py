@@ -292,7 +292,11 @@ def snapshot(identity: str, path, include=None, exclude=()) -> dict:
         base, include = base.parent, [base.name]
     files = []
     for p in _walk(base, include, exclude):
-        files.append({'path': str(p.relative_to(base)), **file_digest(p)})
+        try:
+            digest = file_digest(p)
+        except FileNotFoundError:
+            continue   # removed after the walk listed it (a live directory's transient file): it is not part of the snapshot
+        files.append({'path': str(p.relative_to(base)), **digest})
     return {'schema': SNAPSHOT_SCHEMA, 'id': identity, 'owner': machine(), 'path': portable(base),
             'files': files, 'bytes': sum(f['bytes'] for f in files)}
 

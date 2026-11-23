@@ -363,3 +363,19 @@ def test_an_inventory_of_a_run_directory_does_not_shadow_literal_include_dataset
     assert reg.find(step)['id'] == reg._find_full(step)['id'] == 'held-step'
     assert reg.find(step / 'result.json')['id'] == 'held-step'
     assert reg.find(run / 'other.jsonl')['id'] == 'archive-grpo-v4'
+
+
+def test_snapshot_skips_a_file_removed_after_the_walk(roots, monkeypatch):
+    d = roots / 'data_nvme' / 'live'
+    d.mkdir(parents=True)
+    (d / 'kept.json').write_text('{}')
+    (d / 'gone.partial.json').write_text('{}')
+    walk = dr._walk
+
+    def racing_walk(*args):
+        listed = walk(*args)
+        (d / 'gone.partial.json').unlink()   # a live writer renames its partial file away mid-snapshot
+        return listed
+
+    monkeypatch.setattr(dr, '_walk', racing_walk)
+    assert [f['path'] for f in dr.snapshot('live-x', d)['files']] == ['kept.json']
