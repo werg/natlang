@@ -50,7 +50,9 @@ CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'n
                         'effect_state',
                         # semantic-FP constructs (plans/semantic-fp/05 §3; authored_checks.py checks each one statically)
                         'inline_nl', 'nl_with_context', 'library_discovery', 'nl_convergence', 'higher_order',
-                        'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract'})
+                        'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract',
+                        # @natlang/std combinators (ts-host/src/std; B13)
+                        'semantic_merge', 'semantic_repair', 'fixed_point', 'propose_and_verify', 'branch_and_select'})
 # The curriculum technique flags a correct trajectory must show (ts-host/src/teacher/curriculum.ts `inline`, `named`,
 # `iterate`, `edits`). A construct that the reference solution needs sets its flag to `required` by default; the task's
 # own `requires` object overrides or adds flags.

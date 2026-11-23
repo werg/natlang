@@ -61,8 +61,7 @@ function isPlainJson(value: unknown, depth = 0): boolean {
   if (typeof value === 'number') return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(item => isPlainJson(item, depth + 1));
   if (typeof value !== 'object') return false;
-  const proto = Object.getPrototypeOf(value);
-  return (proto === Object.prototype || proto === null) && Object.values(value).every(item => isPlainJson(item, depth + 1));
+  return isPlainRecord(value) && Object.values(value).every(item => isPlainJson(item, depth + 1));
 }
 
 const SELF_CALL_ADVICE = 'Do what its instructions ask here. For a judgment, decide it yourself from the inputs and return the answer with ' +
@@ -529,7 +528,7 @@ function stagedText(value: Value, liveIdentity?: (value: object) => number, untr
 /** A deep-frozen copy of portable data; live values and handles are kept by reference. */
 function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
   const copy = (item: unknown): unknown => Array.isArray(item) ? Object.freeze(item.map(copy)) :
-    item && typeof item === 'object' && !isLive(item) && !isHandle(item) && Object.getPrototypeOf(item) === Object.prototype ?
+    item && typeof item === 'object' && !isLive(item) && !isHandle(item) && isPlainRecord(item) ?
       Object.freeze(Object.fromEntries(Object.entries(item).map(([key, child]) => [key, copy(child)]))) : item;
   return copy(value) as Record<string, unknown>;
 }

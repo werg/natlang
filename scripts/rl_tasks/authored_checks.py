@@ -285,6 +285,12 @@ SEMANTIC_FP_CHECKS = {
     'folder_transaction': (r'\.propose\(', 'both', 'folder_transaction: nothing calls folder.propose(...)'),
     'untrusted_contract': (r'\bUntrusted<', 'program', 'untrusted_contract: no argument or type is Untrusted<T>'),
     'refinement_contract': (r'\bIs<|^ensures:', 'program', 'refinement_contract: no Is<T, P> type or ensures: contract'),
+    # @natlang/std combinators: the program imports the combinator from the standard library and calls it.
+    **{construct: (rf'@natlang/(?:node|browser)/std[\s\S]*\b{name}\(|\b{name}\([\s\S]*@natlang/(?:node|browser)/std', 'program',
+                   f'{construct}: no program file imports {name} from @natlang/node/std and calls it')
+       for construct, name in (('semantic_merge', 'semanticMerge'), ('semantic_repair', 'semanticRepair'),
+                               ('fixed_point', 'fixedPoint'), ('propose_and_verify', 'proposeAndVerify'),
+                               ('branch_and_select', 'branchAndSelect'))},
 }
 
 

@@ -11,6 +11,7 @@ import type { NatlangFunction } from '../runtime/surface.js';
 import { combine as shippedCombine, compatible as shippedCompatible, intentOf as shippedIntentOf, settled as shippedSettled,
   type Edit, type Intent } from './judgments.js';
 import { StdSpan, stdError } from './trace.js';
+import { isPlainObject } from '../runtime/plain-object.js';
 
 /** What an exact check found wrong with a value: one sentence per problem, none when the value passes. */
 export type Problems = readonly string[];
@@ -162,8 +163,7 @@ export type Unresolved = MergeConflict & {
 };
 export type Merge<T> = { value: T; merged: Merged[]; unresolved: Unresolved[] };
 
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' &&
-  !Array.isArray(value) && [Object.prototype, null].includes(Object.getPrototypeOf(value));
+const isRecord = isPlainObject;
 const kindOf = (value: unknown) => value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
 
 /**

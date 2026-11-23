@@ -157,3 +157,24 @@ test('numeric: the value or any accepted reading, record name by name, tolerance
   assert.equal(half.score, 0.5);
   assert.equal(verifyCandidate({ value: { owed: 30, refunded: 12.5, extra: 1 }, oracle }).ok, false);
 });
+
+test('merge: compatible fields keep both edits, conflicts listed exactly, base kept where unresolved', async () => {
+  const { verifyCandidate } = await load('merge.mjs');
+  const oracle = { shape: 'by_item', items: {
+    m1: { fields: { hours: { includes: [['sunday'], ['10', 'ten']], excludes: ['closed'] }, price: { equals: [12] } }, unresolved: ['price'] },
+    m2: { fields: { 'venue.room': { equals: ['B2'] } }, unresolved: [], unresolved_optional: ['note'] } } };
+  const good = { m1: { value: { hours: 'Mon-Sat 9-5, Sunday 10-2', price: '12' }, unresolved: [['price']] },
+    m2: { value: { venue: { room: 'b2' } }, unresolved: ['note'] } };
+  assert.equal(verifyCandidate({ value: good, oracle }).ok, true);
+  assert.equal(verifyCandidate({ value: { ...good, m2: { value: { venue: { room: 'B2' } }, unresolved: [] } }, oracle }).ok, true);
+  const dropped = verifyCandidate({ value: { ...good, m1: { value: { hours: 'Sunday 10-2', price: 12 }, unresolved: ['price', 'hours'] } }, oracle });
+  assert.equal(dropped.ok, false);
+  assert.ok(dropped.issues.some(issue => issue.includes('not a conflict hours')));
+  assert.equal(verifyCandidate({ value: { ...good, m1: { value: { hours: 'Sunday 10-2, closed Mondays', price: 12 }, unresolved: ['price'] } }, oracle }).ok, false);
+  const missing = verifyCandidate({ value: { ...good, m1: { value: { hours: 'Sunday 10-2', price: 15 }, unresolved: [] } }, oracle });
+  assert.equal(missing.ok, false);
+  assert.ok(Math.abs(missing.score - 3 / 5) < 1e-9);
+  assert.equal(verifyCandidate({ value: { ...good, m3: good.m2 }, oracle }).ok, false);
+  const single = { shape: 'single', items: { only: oracle.items.m2 } };
+  assert.equal(verifyCandidate({ value: good.m2, oracle: single }).ok, true);
+});

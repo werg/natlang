@@ -1,6 +1,7 @@
 /** Folder-owned iteration: every successful step publishes source and state together. */
 import type { FolderHandle, FolderSnapshot } from '../native/scoped-fs.js';
 import { Iteration, type IterationEvent, type ProgressJudgeFunction } from './iterate.js';
+import { isPlainObject } from './plain-object.js';
 
 export type FolderIterationResult<S> = Readonly<{ folder: FolderSnapshot; state: S }>;
 function immutableState<S>(value: S): S {
@@ -10,7 +11,7 @@ function immutableState<S>(value: S): S {
   const copies = new Map<object, unknown>();
   const copy = (item: unknown): unknown => {
     if (item === null || typeof item !== 'object') return item;
-    const plain = Array.isArray(item) || Object.getPrototypeOf(item) === Object.prototype || Object.getPrototypeOf(item) === null;
+    const plain = Array.isArray(item) || isPlainObject(item);
     if (!plain) return item;
     if (copies.has(item)) return copies.get(item);
     const target: Record<string | symbol, unknown> | unknown[] = Array.isArray(item) ? [] : Object.create(Object.getPrototypeOf(item));

@@ -7,6 +7,7 @@
  */
 import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
+import { isPlainObject } from '../runtime/plain-object.js';
 
 /** Leaf values of the inputs by value, with the path that reaches each (the shortest when a value repeats). */
 export function inputLeaves(inputs: Record<string, unknown>): Map<string, string> {
@@ -22,7 +23,7 @@ export function inputLeaves(inputs: Record<string, unknown>): Map<string, string
       return;
     }
     if (Array.isArray(value)) { value.slice(0, 50).forEach((item, index) => visit(item, `${path}[${index}]`, depth + 1)); return; }
-    if (value && typeof value === 'object' && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null))
+    if (isPlainObject(value))
       for (const [key, item] of Object.entries(value).slice(0, 100))
         visit(item, /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`, depth + 1);
   };

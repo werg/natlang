@@ -28,6 +28,7 @@ async def __natlang_run(source, namespace):
         return {'__natlang_timeout__': True}
     return namespace.pop('__natlang_result__', None)
 `;
+import { isPlainObject } from '../runtime/plain-object.js';
 
 let singleton: Promise<any> | undefined;
 let currentHost: PythonHost | undefined;
@@ -64,7 +65,7 @@ function fromPython(value: any): unknown {
   }
   if (Array.isArray(value)) return value.map(fromPython);
   if (value instanceof Map) return Object.fromEntries([...value].map(([key, item]) => [String(key), fromPython(item)]));
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
+  if (isPlainObject(value))
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, fromPython(item)]));
   return value;
 }

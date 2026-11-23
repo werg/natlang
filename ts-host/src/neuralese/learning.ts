@@ -32,6 +32,7 @@ import { nativeGraphGradient, nativeRecordedGraphGradient, nativeStateOptimizerS
   nativeRecordedGraphGradients, nativeDerivativeProgramGradient, type NativeGraphRow, type NativeOptimizerSpec, type NativeGradientTarget,
   type NativeRecordedGradientTarget } from './native-learning-client.js';
 import { nativeModelIdentityEqual, type NativeModelIdentity, type NativeTensorArtifact, type NativeTensorValue } from '../native/neuralese-store.js';
+import { isPlainObject } from '../runtime/plain-object.js';
 
 type Json = Record<string, unknown>;
 
@@ -470,7 +471,7 @@ export function stopGradient<T>(v: T): T {
   const copy = (value: unknown): unknown => {
     if (isNeuraleseRef(value)) { const ref = neuraleseRef(value.$neuralese.type, value.$neuralese.id,true,value.$neuralese.source_occurrence,value.$neuralese.teacher_text === true); stopped.add(ref); return ref; }
     if (Array.isArray(value)) return value.map(copy);
-    if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
+    if (isPlainObject(value))
       return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, copy(item)]));
     return value;
   };
@@ -486,7 +487,7 @@ function softLeaves(a: unknown): NeuraleseRef[] {
       return;
     }
     if (Array.isArray(value)) value.forEach(visit);
-    else if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) Object.values(value).forEach(visit);
+    else if (isPlainObject(value)) Object.values(value).forEach(visit);
   };
   visit(a);
   return out;
@@ -496,7 +497,7 @@ function softLeaves(a: unknown): NeuraleseRef[] {
 function mapLeaves(a: unknown, replace: (ref: NeuraleseRef) => unknown): unknown {
   if (isNeuraleseRef(a)) return replace(a);
   if (Array.isArray(a)) return a.map(item => mapLeaves(item, replace));
-  if (a && typeof a === 'object' && Object.getPrototypeOf(a) === Object.prototype)
+  if (isPlainObject(a))
     return Object.fromEntries(Object.entries(a).map(([key, item]) => [key, mapLeaves(item, replace)]));
   return a;
 }
@@ -511,7 +512,7 @@ function nativeLearningLeaves(value: unknown): NativeLearningRef[] {
       return;
     }
     if (Array.isArray(item)) item.forEach(visit);
-    else if (item && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype)
+    else if (isPlainObject(item))
       Object.values(item).forEach(visit);
   };
   visit(value); return out;
@@ -535,7 +536,7 @@ function mapNativeLearningLeaves(value: unknown, replace: (ref: NativeLearningRe
   if (isNativeAdapterRef(value)) return replace(value);
   if (isNeuraleseRef(value) && isNativeStateId(value.$neuralese.id)) return replace(value);
   if (Array.isArray(value)) return value.map(item => mapNativeLearningLeaves(item, replace));
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
+  if (isPlainObject(value))
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapNativeLearningLeaves(item, replace)]));
   return value;
 }
@@ -1061,7 +1062,7 @@ export function createLearning(explicit?: LearningService, options: { library?: 
           const id = isNativeAdapterRef(value) ? value.$nativeAdapter.id : value.$neuralese.id;
           await archiveNativeArtifactFrom(remote, active.store!, id);
         } else if (Array.isArray(value)) await Promise.all(value.map(visit));
-        else if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
+        else if (isPlainObject(value))
           await Promise.all(Object.values(value).map(visit));
       };
       for (const entry of Object.values(entries)) await visit(entry.value);

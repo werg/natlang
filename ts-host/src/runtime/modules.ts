@@ -468,7 +468,7 @@ export async function moduleInstanceAsync(platform: Platform, record: ModuleReco
         if (specifier === 'natlang:services') return selectedServicesModule(current);
         if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
         if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier))
-          return {__esModule:true, ...surface};
+          return {__esModule:true, ...surface, Context: (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')]};
         if (specifier.startsWith('.') || specifier.startsWith('/'))
           throw new NatlangSourceError(current.source, `cannot import ${JSON.stringify(specifier)}: initialize a declared sibling import first`);
         if (!platform.packageLoader) throw new NatlangSourceError(current.source, `package imports are unavailable here: ${specifier}`);

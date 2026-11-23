@@ -16,6 +16,7 @@ import { writtenReturnResult } from '../native/pseudo-call.js';
 import { stagedResultBody } from '../native/staged-result.js';
 import { authenticateNativeXmlTurn } from '../model/native-xml-custody.js';
 import { materializeObservedWorkspace, OBSERVED_WORKSPACE_EXECUTION } from './observed-workspace.js';
+import { isPlainObject } from '../runtime/plain-object.js';
 
 // The materializer reads two explicitly identified source dialects: exact
 // historical receipts remain reusable, and current collectors emit native
@@ -909,7 +910,7 @@ function typedJsonBody(value: unknown, active = new Set<object>()): string | und
       return values.some(item => item === undefined) ? undefined : `[${values.join(',')}]`;
     } finally { active.delete(value); }
   }
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+  if (isPlainObject(value)) {
     if (active.has(value)) return undefined;
     active.add(value);
     try {

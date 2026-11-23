@@ -9,6 +9,11 @@ import { compileVirtualProject, loadVirtualCallables, loadVirtualNatlang, type C
 import { projectEntry } from './app/playground.js';
 import type { NatlangCallable } from './runtime/callable.js';
 import * as lowered from './runtime/lowered.js';
+// Every platform entry serves the standard library to the programs it runs: callable-folder modules import
+// `@natlang/<platform>/std` as this runtime's own instance (its tasks, frames and traces), whichever module loaded the
+// platform (the package entry, the collector, a test). Without it the import fell through to the package loader and
+// ran a second copy of the runtime with no active task.
+import './std/index.js';
 import type { NatlangRecord } from './runtime/loader.js';
 
 export function platformDefaults(defaultPlatform: () => Platform) {
