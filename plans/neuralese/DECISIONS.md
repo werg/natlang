@@ -9294,3 +9294,11 @@ their unused free replies.
   action entry has a receipt and a reasoning capture.
 - Also run: `test_rl_episode_graph`, `test_native_rl_replay` and `test_native_invocation_actors` (47 passed together
   with the new file).
+
+## 2026-11-23 18:30 Async prepare never rewrites a running data script; held-v4 reference result
+
+**Data script race.** The 17:27 driver restart rewrote `r0002/data.sh` while the earlier driver's `aei1-r0002-data` unit was executing it. sh reads its script by byte offset, so it resumed mid-line in the new file (`data.sh: 6: es.py: not found`) and the data stage failed at 18:04.
+
+The fix: prepare no longer rewrites `data.sh` while its data unit is present (running or queued), and writes it atomically (temporary file plus `os.replace`), so a running shell keeps the old inode. A test covers it. The 1c177e3fc per-step markers introduced the rewrite path.
+
+**held-v4 reference.** sft-v6 (dc95f29d) on held-v4 (manifest c09720e1, 252 tasks), measured on Pop at 2 samples per task: 241 of 500 scored episodes pass (48.2%), with 3 timeouts. The run was resumed once after a collector preemption. This is the semantic-FP baseline; later policies are measured on the round cadence (every third round, or when held-v3 is significant or the health report flags a semantic-FP construct).

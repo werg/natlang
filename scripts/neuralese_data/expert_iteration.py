@@ -2623,8 +2623,13 @@ class AsyncRoundDriver:
         step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
-        if not (round_dir / 'stages' / 'data.done').exists():
-            script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+        # Never rewrite data.sh beneath a data unit that may be executing it (sh reads its script by offset: a
+        # rewritten file resumes mid-line), and replace it atomically so a running shell keeps the old inode.
+        if not (round_dir / 'stages' / 'data.done').exists() and \
+                not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+            os.replace(tmp, script)
         step('data', 12, ['/bin/sh', str(script)])
         step('build', 24, build)
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
