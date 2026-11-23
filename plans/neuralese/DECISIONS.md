@@ -8567,3 +8567,37 @@ Production sources: Hostc160/Base64b/SST780e/Corevendorse6f; readerb30ee9240 (in
 
 
 Continuation: wave0035 finished its nine cases in402s, retaining every capture; three actual infrastructure failures triggered the standard boundary hold (source-read bootstrap twice, Workerd reset once). This qualification is not declared complete: library prompt/capability decomposition and fixture idempotent recovery are under investigation alongside the shared registry glob-lookup defect. The live ingester was found reading an unrelated acquired-agent archive solely to register one capture/** path. Shared metadata-derived ownership is being fixed rather than relaxing registration. Readers received BE2 I/O while keeping low reclaimable memory priority.
+
+## 2026-11-23 13:45 Memory ledger: conservative backfill (no head-of-line starvation, no blocked small jobs)
+
+- **Observation:** on 2026-11-23 a 32 GB medium held measurement (`heldv4-measure-v2-sft-v6`) sat at the queue head
+  for 4 h behind aei1's 74 GB collection; the 1 GB `natlang-storage-sweep-run` (class service, `--no-resumable`)
+  failed 12 times in 12 h on its 1500 s wait while disk fell below its floor (at 12:53 it was refused with 7.9 GiB free
+  for a 1+1 GiB need); 1.5 GB `--no-resumable` drain units waited over an hour.
+- **Cause (two halves of one rule):** backfill behind a blocked head was allowed for any *resumable* job and for no
+  other. (1) Non-resumable jobs and services, however small, could never backfill. (2) Resumable jobs of the head's own
+  priority backfilled without limit, and the head cannot preempt them (preemption takes strictly lower priority only),
+  so the stream of 2-17 GB medium jobs took each GB the head was waiting for: a 4 h starvation, not FIFO.
+- **Rule (`memory_ledger.may_backfill`, default on):** a job behind the head may start when it fits by real headroom
+  and cannot delay the head: `spare` (its start still leaves the head's whole budget + reserve free), or, while the head
+  is blocked even with preemption (`head_blocked`), `reclaimable` (resumable and strictly lower priority: the head
+  takes the room back by preemption, as before) or `lent` (its budget fits within a quarter of the head's remaining
+  shortfall, i.e. its need minus everything it could obtain by preemption as if nothing had been lent, minus the
+  budgets already lent behind it). Without per-job runtimes (the ledger has none) a size cap is the sound simple form
+  of conservative backfill: the shortfall falls only as the units the head waits on end, so lending shrinks to zero as
+  the head nears its start, finished backfills never re-open the allowance, and the head's extra wait is bounded by at
+  most a quarter of its original shortfall having to free on top (a simulated never-ending stream of same-priority
+  2 GiB jobs delays a 40 GiB head by <= 4 polls; the old rule never admitted it). Priorities and preemption semantics
+  are unchanged; a high head is protected by the same cap.
+- **Opt-out:** `NATLANG_LEDGER_BACKFILL=legacy` (in the environment of `run` and of the guard) restores the old rule.
+- **Visibility:** claims record `backfilled_behind` and `backfill` (`spare|reclaimable|lent`, `legacy` for older
+  claims); `status` lists `backfilled`, `backfill_mode`, and for a blocked head `lent_gb` and
+  `backfill_allowance_gb`; `admitted`/`relaunched` events carry both fields.
+- **Live pickup:** new `run` calls of `/home/werg/natlang/scripts/memory_ledger.py` use it at once; the guard (requeued
+  relaunches) was restarted; `run` waiters launched from pinned or archived copies of the script keep the old rule
+  until they end. Tests: `tests/test_memory_ledger.py` (lent/large/spare/reclaimable fixtures, guard relaunch within
+  the allowance, run + status, starvation simulation under both modes).
+- **Storage sweep:** `natlang-storage-sweep-run` is now `--resumable` (it is a rerunnable deletion pass): as a low
+  job behind a medium/high head it backfills as `reclaimable` whenever 1+1 GiB fits, instead of only within a lent
+  allowance (at 13:29 the allowance was used up by legacy same-priority backfills behind `aei1-r0001-build`). Unit file
+  updated in `scripts/systemd/` and `~/.config/systemd/user/`; admitted at 13:30 as `reclaimable`.
