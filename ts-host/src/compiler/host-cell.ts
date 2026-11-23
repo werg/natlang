@@ -93,7 +93,7 @@ export function lowerHostCell(source: string, options: HostCellOptions): HostCel
   const cellFile = `${CELL_DIRECTORY}/cell${options.jsx ? '.tsx' : '.ts'}`;
   const ambient = `${options.ambientDeclarations}\n${servicesDeclarations(options.services)}\n`;
   const build = (text: string) => {
-    const host = createNatlangCompilerHost({ options: CELL_COMPILER_OPTIONS, files: NO_FILES, libs: options.libs,
+    const host = createNatlangCompilerHost({ options: CELL_COMPILER_OPTIONS, files: NO_FILES, libs: options.libs, desugarNl: false,
       virtual: new Map([[AMBIENT_FILE, ambient], [cellFile, text]]) });
     const program = ts.createProgram({ rootNames: [INTRINSICS_FILE, AMBIENT_FILE, cellFile], options: CELL_COMPILER_OPTIONS, host });
     return { program, cell: program.getSourceFile(cellFile)!, checker: program.getTypeChecker() };
@@ -127,7 +127,8 @@ export function lowerHostCell(source: string, options: HostCellOptions): HostCel
     if (edits.length) { text = applyNlCallEdits(source, edits); ({ program, cell, checker } = build(text)); }
   }
 
-  const analysis = analyzeInlineLambdas(program, [cell], { displayPath: () => display, sourceRevision: options.revision ?? hexDigest(source),
+  // The revision is of the cell as compiled, so nl(`...`) and the tag form it reads as are the same function.
+  const analysis = analyzeInlineLambdas(program, [cell], { displayPath: () => display, sourceRevision: options.revision ?? hexDigest(text),
     recursiveTypes: true, allowShadowing: true, topLevelAwait: true });
   const diagnostics = [...analysis.diagnostics];
   let context: string | undefined;

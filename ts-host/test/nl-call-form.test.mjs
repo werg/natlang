@@ -31,7 +31,14 @@ test('the rewrite keeps positions, and instructions built at run time are report
   assert.equal(desugarNlCalls(written).length, written.length);
   assert.equal(desugarNlCalls(written), 'const a = await nl`Is ${x} big?`(), b = nl<boolean>`Is x big?`();');
   const output = await run('const q = "Add one to n.";\nconst answer: number = await nl(q);\nanswer', 3);
-  assert.match(output, /nl is a template tag, not a function taking a string/);
+  assert.match(output, /nl takes its instructions written in place, not as text built at run time/);
+});
+
+test('nl(instructions, ...values), the plain function-call idiom, is the function applied to the values', async () => {
+  const written = 'const v = await nl<boolean>(`Is item big?`, item), w = nl("Is x big?",  x, y);';
+  assert.equal(desugarNlCalls(written).length, written.length);
+  assert.equal(desugarNlCalls(written), 'const v = await nl<boolean>`Is item big?`(  item), w = nl`Is x big?`(   x, y);');
+  assert.match(await run('const answer: number = await nl<number>(`Add one to x.`, n);\nanswer', 3), /^3\b/);
 });
 
 test('nl called on its instructions and then on arguments makes the function and applies it', async () => {

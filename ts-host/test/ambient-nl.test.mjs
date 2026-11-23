@@ -88,3 +88,25 @@ test('an erased declaration may describe only the builtin capture factory', asyn
   const noncallable=analyze('declare const nl: number;'+call);
   assert.equal(noncallable.plans.length,0);assert.ok(noncallable.diagnostics.some(item=>item.code==='nl-shadowed'));
 });
+
+test('nl called on literal instructions compiles exactly as the tag form it reads as (every program the compiler host builds)', () => {
+  const shape = plan => ({ definitionId: plan.definitionId, instructions: plan.instructions, strings: plan.strings,
+    parameters: plan.parameters, returns: plan.returns, captures: plan.captures,
+    interpolations: plan.interpolations.map(item => item.expression), sourceSpan: plan.sourceSpan });
+  const body = form => `export async function judge(note: string, level: number): Promise<boolean> { return await ${form}; }`;
+  const tag = analyze(body('nl<boolean>`Judge note at ${level}.`  (note)'));
+  assert.deepEqual(tag.diagnostics, []);
+  for (const form of ['nl<boolean>(`Judge note at ${level}.` (note))', 'nl<boolean>(`Judge note at ${level}.`)(note)',
+    'nl<boolean>(`Judge note at ${level}.`, note)']) {
+    const result = analyze(body(form));
+    assert.deepEqual(result.diagnostics, [], form);
+    const [a, b] = [shape(result.plans[0]), shape(tag.plans[0])];
+    assert.deepEqual({ ...a, definitionId: undefined }, { ...b, definitionId: undefined }, form);
+  }
+  // the exact text the parenthesized form reads as is the same function, identity included
+  const same = analyze(body('nl<boolean>(`Judge note at ${level}.`)(note)'));
+  assert.deepEqual(shape(same.plans[0]), shape(analyze(body('nl<boolean>`Judge note at ${level}.`  (note)')).plans[0]));
+  // a run-time string and nl as a value stay errors
+  assert.equal(analyze(body('nl<boolean>(String(level))(note)')).diagnostics[0].code, 'nl-not-tag');
+  assert.equal(analyze('export const f = nl;').diagnostics[0].code, 'nl-not-tag');
+});

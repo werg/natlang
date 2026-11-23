@@ -292,10 +292,10 @@ test('calling the executing call by name says it is the call being executed', as
 });
 
 
-test('nl called as a function is shown its own call in the tag form', async () => {
+test('nl called on its template with the arguments inside the parentheses runs as the tag form', async () => {
   const { results } = await script([['eval', { code: 'const v = await nl<boolean>(`Decide whether name is short.`(name));' }],
     ['return_result', { status: 'success', value: 'hi' }]]);
-  assert.match(results[0], /nl-not-tag: nl is a template tag, not a function taking a string: put the template right after nl and the arguments after it, as in nl<boolean>`Decide whether name is short\.`\(name\)\./);
+  assert.doesNotMatch(results[0], /nl-not-tag/);
 });
 
 test('read_code of a bare service member shows the service declaration, calling only functions functions', async () => {

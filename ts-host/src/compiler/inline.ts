@@ -942,8 +942,12 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       const rewritten = only && ts.isCallExpression(only) && isTemplate(only.expression) ?
         `nl${typeArgs}${only.expression.getText(file)}(${only.arguments.map(arg => arg.getText(file)).join(', ')})` :
         only && isTemplate(only) ? `nl${typeArgs}${only.getText(file)}(...)` : undefined;
+      const built = parent.arguments.length > 0 && !isTemplate(parent.arguments[0]!) && !ts.isStringLiteral(parent.arguments[0]!) &&
+        !ts.isCallExpression(parent.arguments[0]!);
       report(parent, 'nl-not-tag', rewritten && rewritten.length <= 240 ?
         `nl is a template tag, not a function taking a string: put the template right after nl and the arguments after it, as in ${rewritten}. read_code("nl") shows more.` :
+        built ? 'nl takes its instructions written in place, not as text built at run time: write them as a template right after nl, ' +
+          'with the changing values in ${...} or passed as arguments, for example await nl<{ amount: number }>`Read the amount paid on receipt.`(receipt).' :
         `nl is a template tag, not a function taking a string: ${TAG_FORM}`);
     }
     else report(node, 'nl-not-tag', `nl is a template tag with no value of its own to inspect or pass around: ${TAG_FORM}`);

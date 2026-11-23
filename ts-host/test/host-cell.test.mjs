@@ -120,7 +120,18 @@ test('the one-shot call form is the call it reads as, and only for the built-in 
   const built = lower('const text = "Is it " + "big?";\nawait nl(text);');
   assert.equal(built.diagnostics[0].code, 'nl-not-tag');
   assert.deepEqual([built.diagnostics[0].line, built.diagnostics[0].column], [2, 7]);
-  assert.match(built.diagnostics[0].message, /nl is a template tag/);
+  assert.match(built.diagnostics[0].message, /nl takes its instructions written in place, not as text built at run time/);
+});
+
+test('nl(instructions, ...values) is the function the instructions make, called on the values', () => {
+  const source = 'const ok: boolean = await nl(`Decide whether note is polite.`, scope.note);\nconst tone = await nl<string>("Name the tone of note.",  scope.note, 2);\nreturn [ok, tone];';
+  const result = lower(source);
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.plans.length, 2);
+  assert.equal(result.plans[0].instructions, 'Decide whether note is polite.');
+  assert.equal(result.plans[1].instructions, 'Name the tone of note.');
+  assert.equal(lines(result.code), lines(source));
+  assert.match(result.code, /\(\s*scope\.note\);/);
 });
 
 test('declared types drive inference: scope contents come from the values', () => {
