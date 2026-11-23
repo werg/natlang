@@ -266,7 +266,7 @@ once per matching file and prints path<TAB>result. --filter prints matching inpu
 
 Aggregates recorded calls from the call store (filtered to DIR when given): call count,
 p50 latency, average tokens, compiled share, decision confidence p10/p50, escalation rate
-(from decision_escalate events), failure classes, and the nextOptimization recommendation.
+(the escalation notes escalate leaves on local calls), failure classes, and the nextOptimization recommendation.
 --policy nl or shadow also asks the natural-language policy, on the model of --profile (default: the configured one).`,
   compilations: COMPILATIONS,
   specialize: COMPILATIONS,
