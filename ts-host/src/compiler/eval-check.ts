@@ -11,7 +11,7 @@ import { formatTypeScript, parseTypeCached } from '../native/types.js';
 import { NEURALESE_LITERAL_INTRINSIC, type GenericInstantiation, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
 import { ITERATE_ON_SIGNATURE, RESERVED_CALLABLE_PROPERTIES } from './intrinsics.js';
 
-export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
+export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean; rest?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
   children: EvalImport[];
   /** A representation-generic result: `returns` is its crisp instance, `constraint` what a call may instantiate it as. */
@@ -53,7 +53,7 @@ const GLOBAL_TYPES = new Set(['Date', 'Map', 'Set', 'WeakMap', 'WeakSet', 'RegEx
   'ArrayBuffer', 'Folder', 'FileHandle', 'IterationTrajectory']);
 
 function importType(item: EvalImport, known: ReadonlySet<string>): string {
-  const params = item.params.map(parameter => `${parameter.name}${parameter.optional ? '?' : ''}: ${typeScriptText(parameter.type, known)}`);
+  const params = item.params.map(parameter => `${parameter.rest ? '...' : ''}${parameter.name}${parameter.optional ? '?' : ''}: ${typeScriptText(parameter.type, known)}`);
   const returns = typeScriptText(item.returns, known);
   const children = item.children.map(child => `readonly ${child.name}: ${importType(child, known)}`);
   const members = children.length ? ` & { ${children.join('; ')} }` : '';

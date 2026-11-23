@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import * as core from '../dist/index.js';
 import {workerdPlatform} from '../dist/core/workerd.js';
 const files={
- 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
+ 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export async function restful(prefix:string,...values:number[]):Promise<string>{return prefix+values.join(",")+":"+await describe(values.length);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
  'describe.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe the number.',
 };
 function setup(platform=core.nodePlatform(),recording){
@@ -44,6 +44,32 @@ for(const mode of ['node','workerd'])test(`actual ${mode} TS optional input stay
   assert.equal(child.parent_call_id,root.call_id);
   assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
  }finally{env.close();}
+});
+for(const mode of ['node','workerd'])test(`actual ${mode} TS rest captures every trailing value and keeps child lineage`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const env=setup(platform);try{
+  assert.equal(await env.rt.run(()=>env.module.restful('p:',1,2,3)),'p:1,2,3:seven');
+  const folder=core.loadVirtualCallables(files,'','/reference',platform);
+  assert.equal(await env.rt.run(()=>folder.entry.restful('empty:')),'empty::seven');
+  const rows=env.store.calls().map(row=>env.store.call(row.call_id));
+  const roots=rows.filter(row=>row.parent_call_id===null);assert.equal(roots.length,2);
+  for(const root of roots){
+   assert.equal(root.definition.params[1].name,'values');assert.equal(root.definition.params[1].rest,true);
+   const prefix=env.store.value(root.inputs.prefix);
+   assert.deepEqual(env.store.value(root.inputs.values),prefix==='p:'?[1,2,3]:[]);
+   const child=rows.find(row=>row.parent_call_id===root.call_id);assert.equal(child.definition.name,'describe');
+   assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
+  }
+ }finally{env.close();}
+});
+test('NL eval sees the actual rest signature of a TS helper',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'native-rest-scope-')),store=core.CallStore.open(dir);
+ store.writeSettings({minFreeBytes:0,specialization:'off'});
+ const platform=core.nodePlatform(),rt=core.createNatlangRuntime({platform,calls:store,model:async()=>({calls:[['eval',{code:'return helper.join("p:",1,2,3);',finish:true}]]})});
+ const program={'main.nl':'---\nargs: {}\nreturns: string\n---\nJoin the supplied values using helper.',
+ 'helper.ts':'export function join(prefix:string,...values:number[]):string{return prefix+values.join(",");}'};
+ try{const main=core.loadVirtualNatlang(program,'main.nl','/reference',platform);assert.equal(await rt.run(()=>main()),'p:1,2,3');}
+ finally{rt.close();store.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('native entry preserves synchronous return and failure semantics',async()=>{
  const env=setup();try{

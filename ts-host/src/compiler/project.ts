@@ -178,13 +178,13 @@ function itemType(record: ItemRecord, known: ReadonlySet<string>, references?: R
   if (record.kind === 'module') {
     const exports = Object.entries(record.exports).filter(([name]) => name !== 'default').map(([name, spec]) =>
       spec.kind === 'function' ? `readonly ${name}: (${Object.entries(spec.args).map(([raw, type]) =>
-        `${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${typeScriptText(type, known)}`).join(', ')}) => ` +
+        `${spec.rest===raw?'...':''}${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${typeScriptText(type, known)}`).join(', ')}) => ` +
         `${spec.async ? `Promise<${typeScriptText(spec.returns, known)}>` : typeScriptText(spec.returns, known)}` :
         `readonly ${name}: ${spec.type ? typeScriptText(spec.type, known) : 'unknown'}`);
     const main = record.exports.default;
     const body = `{ ${[...exports, ...children].join('; ')} }`;
     if (main?.kind !== 'function') return body;
-    const params = Object.entries(main.args).map(([raw, type]) => `${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${typeScriptText(type, known)}`);
+    const params = Object.entries(main.args).map(([raw, type]) => `${main.rest===raw?'...':''}${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${typeScriptText(type, known)}`);
     return `((${params.join(', ')}) => ${main.async ? `Promise<${typeScriptText(main.returns, known)}>` : typeScriptText(main.returns, known)}) & ${body}`;
   }
   const params = Object.entries(record.args).map(([raw, type]) => `${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${typeScriptText(type, known)}`);

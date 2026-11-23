@@ -135,7 +135,7 @@ function signatureOf(record: ItemRecord): string {
   if (record.kind === 'natlang') return canonicalJson({ kind: 'natlang', subtype: record.subtype, args: record.args, returns: record.returns,
     ...(record.generic ? { generic: record.generic.constraint } : {}), ...(record.declaredParameters ? { declaredParameters: true } : {}) });
   if (record.kind === 'module') return canonicalJson({ kind: 'module', exports: Object.fromEntries(Object.entries(record.exports)
-    .map(([name, spec]) => [name, spec.kind === 'function' ? { args: spec.args, returns: spec.returns, async: spec.async } : { type: spec.type ?? null }])) });
+    .map(([name, spec]) => [name, spec.kind === 'function' ? { args: spec.args, returns: spec.returns, async: spec.async, ...(spec.rest?{rest:spec.rest}:{}) } : { type: spec.type ?? null }])) });
   return canonicalJson({ kind: 'namespace', items: Object.fromEntries(Object.entries(record.codebase).map(([name, child]) => [name, signatureOf(child)])) });
 }
 

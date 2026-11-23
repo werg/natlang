@@ -32,11 +32,11 @@ function importOf(name: string, record: ItemRecord, session: NativeSession): Eva
   if (record.kind === 'module') {
     const exports = Object.entries(record.exports).filter(([key, spec]) => key !== 'default' && spec.kind === 'function')
       .map(([key, spec]) => ({ name: key, params: Object.entries(spec.kind === 'function' ? spec.args : {}).map(([raw, type]) =>
-        ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?') })), returns: spec.kind === 'function' ? describe(spec.returns) : 'null',
+        ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?'), ...(spec.kind==='function'&&spec.rest===raw?{rest:true}:{}) })), returns: spec.kind === 'function' ? describe(spec.returns) : 'null',
         async: spec.kind === 'function' && spec.async, kind: 'TypeScript' as const, children: [] }));
     const main = record.exports.default;
     if (main?.kind === 'function') return { name, params: Object.entries(main.args).map(([raw, type]) =>
-      ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?') })), returns: describe(main.returns), async: main.async,
+      ({ name: raw.replace(/\?$/, ''), type: describe(type), optional: raw.endsWith('?'), ...(main.rest===raw?{rest:true}:{}) })), returns: describe(main.returns), async: main.async,
       kind: 'TypeScript', children: [...exports, ...children] };
     return { name, params: [], returns: 'null', async: false, kind: 'module', children: [...exports, ...children] };
   }

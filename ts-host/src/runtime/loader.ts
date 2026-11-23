@@ -38,7 +38,7 @@ export type SourceFiles = {
 };
 
 export type ExportRecord =
-  | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean; doc?: string }
+  | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean; doc?: string; rest?: string }
   | { kind: 'value'; type?: string };
 
 export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
@@ -842,11 +842,13 @@ function attachTypeSources(record: ModuleRecord, path: string, files: SourceFile
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string,
     allowUntyped = false, compiled = false): ExportRecord {
   const args: Record<string, string> = {};
+  let rest: string | undefined;
   for (const parameter of node.parameters) {
-    if (!compiled && (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped) || parameter.dotDotDotToken))
+    if (!compiled && (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped)))
       throw new NatlangSourceError(path, `${label}: parameters need names and explicit types`);
     const name = ts.isIdentifier(parameter.name) ? parameter.name.text : `arg${node.parameters.indexOf(parameter)}`;
     args[name + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : 'unknown';
+    if (parameter.dotDotDotToken) rest = name;
   }
   if (!node.type && !allowUntyped && !compiled) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
   let returns = node.type ? node.type.getText(file) : 'unknown';
@@ -855,7 +857,7 @@ function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.So
   if (promised) returns = node.type!.typeArguments![0]!.getText(file);
   const isAsync = promised || !!ts.getModifiers(node as ts.FunctionDeclaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
   const doc = docComment(node);
-  return { kind: 'function', args, returns, async: isAsync, ...(doc ? { doc } : {}) };
+  return { kind: 'function', args, returns, async: isAsync, ...(doc ? { doc } : {}), ...(rest ? { rest } : {}) };
 }
 
 /** The text of a function's JSDoc comment, on one line; for a function expression, its variable statement's. */
