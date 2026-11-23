@@ -13,3 +13,9 @@ Inventory before change:
 - Learner/extraction/held/collector observe native call effects via this shared recorder; no new effect schema is introduced. All five Vibe runtime vendors must be updated before the native passthrough conversions are activated.
 
 Regression coverage must use actual native execution and CallStore: hidden model service + explicit TS import, nested and concurrent calls, receiver identity, exact argument/result bytes, and async durability acknowledgements and required persistence errors before imported results return. No paid inference is needed. Natural-language policy stays natural-language; exact native I/O is crisp.
+
+## Receiver parity and completed checks
+
+The same service-wrapper inventory also found private getters executing with proxy receivers and frozen targets violating proxy invariants. `native/effects.ts` reads getters with their original receiver; `native/refinement.ts` uses a shell proxy, preserves original method receivers and unchecked method metadata/synchronous behavior, and retains configured async refinement checks. Actual capture/incremental/refinement tests passed 20/20. Existing `calls:false` disables call recording; empty service refinement declarations disable that checking layer. Required capture persistence remains enforced at the imported TS call site.
+
+Stable vendor successor `e6f63390365a998f145d59e9d8fce5a7a770ca0b` contains the same fixes on Core3b. All five canonical Vibe vendors and the executable eval audit reproduce byte for byte: 279 pinned file hashes checked. Staged Workerd5/5 and eval5/5 actual execution tests passed, including private getters through both wrappers. Base vendor source64b18f649832bca350ab6f1eee28e0938d18f4af; System2736afa64ad75bb05ab8df5ee68b0dc60b780900.
