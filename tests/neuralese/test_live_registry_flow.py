@@ -49,6 +49,12 @@ def test_fill_discovers_published_work_while_owner_and_code_stay_behind(tmp_path
     assert fr.default_works(owner, owner_ref) == [str(work)]
     assert git(pin, 'rev-parse', 'HEAD') == frozen == git(owner, 'rev-parse', 'HEAD')
     assert (owner / 'README').read_text() == 'foreign scheduler work in progress'
+    args = SimpleNamespace(registry_ref=None)
+    assert fr.generation_registry_ref(args, owner) == published
+    git(owner, 'update-ref', 'refs/remotes/origin/main', frozen)
+    assert fr.generation_registry_ref(args, owner) == frozen
+    assert fr.generation_registry_ref(SimpleNamespace(registry_ref=published), owner) == published
+    assert fr.generation_registry_ref(args, None) is None
 
 
 @pytest.mark.parametrize('prefer,rescan,explicit,live', [([], 0, None, False),

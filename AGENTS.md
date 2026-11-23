@@ -354,7 +354,10 @@ DECISIONS.md entries are authoritative.
   exact paths in a script first, then delete and verify. Keep the active lineage and its parents, the latest verified
   recovery state, active diagnostic parents (e.g. a hunt's branch states), the episodes an experiment trains on,
   reusable source/training data and held data. Before deleting, check live process references, current recipes and
-  checkpoint history. When unsure, move to `/mnt/external` instead of deleting. Deduplicate exact copies, and never
+  checkpoint history. Do not move unwanted bloat to the DGX or `/mnt/external`: delete redundant diagnostics,
+  reproducible exports and obsolete working copies after checking their consumers. Retain only data with an actual
+  training, evaluation or active recovery use, and the minimal metadata those consumers need. Preserve original
+  collected trajectories, including the earlier Sol captures. Deduplicate exact copies, and never
   hardlink mutable files. Keep latency-critical data (scorer DBs, training inputs, active checkpoints) on NVMe.
 - Engineering findings and incident history: `plans/neuralese/ENGINEERING_FINDINGS.md`. Read the relevant section before
   changing that code.

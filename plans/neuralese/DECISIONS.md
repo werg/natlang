@@ -9897,3 +9897,19 @@ Tests (`tests/neuralese/test_async_train.py`):
   after the push and the stop, with the learner dead.
 - `colab_sft` and `run-sft` refuse beside a learner.
 - Against the old `train_sft`, driver 2 takes the Colab path without joining.
+
+## 2026-11-23: live registry refresh and useful-data retention
+
+Standing teacher fills must follow newly published data, rather than retain their startup registry OID.
+Inventory: `filled_reasoning.generate` owns the standing rescan; `expert_iteration.Cycle.fill_command`
+constructs that process; `live_campaign_ingest.ingest_once`, fill builds and mix builds already resolve
+publication per invocation. The collector and serving engines do not select these dataset snapshots;
+this change is to data admission, not inference. Static pinned reads and an explicit `--registry-ref`
+remain fixed. Each live rescan now resolves a published OID, admits its inputs and records lineage before
+queuing episodes; its event records that OID. The controller no longer supplies a startup OID to a
+standing fill. This enters the next data-reader pin without rebinding the learner or inference runtime.
+
+Owner requested deletion of unwanted DGX bloat, not relocation. Deleted roughly 2.76 GB of redundant
+bootstrap/audit/export copies; original captures and registered training inputs remain. Storage guidance
+now retains actual training/evaluation/recovery inputs and minimal consumed metadata, rather than
+archiving uncertain diagnostics. Original earlier Sol captures remain protected; generation stays Luna-only.

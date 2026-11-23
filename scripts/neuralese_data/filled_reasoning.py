@@ -205,6 +205,13 @@ def generation_registry_repo(args):
     return None
 
 
+def generation_registry_ref(args, registry_repo):
+    """Resolve a fresh published snapshot per live batch; explicit snapshots stay fixed."""
+    explicit = getattr(args, 'registry_ref', None)
+    return (data_registry.registry_owner_ref(registry_repo)
+            if explicit is None and registry_repo is not None else explicit)
+
+
 def teacher_episodes(works, held_manifest, funnel, drifted=True, skip_mismatched_live=True):
     """[{key, work, name, task_id, teacher}] of every verified teacher success of WORKs (first WORK wins a key), held
     closure excluded (``TeacherDemos``' selection without the per-task cap: every episode is data). A replayed episode
@@ -778,9 +785,7 @@ def generate(args):
     out.mkdir(parents=True, exist_ok=True)
     prefer_works = [str(w) for w in getattr(args, 'prefer_work', None) or ()]
     registry_repo = generation_registry_repo(args)
-    registry_ref = getattr(args, 'registry_ref', None)
-    if registry_ref is None and registry_repo is not None:
-        registry_ref = data_registry.registry_owner_ref(registry_repo)
+    registry_ref = generation_registry_ref(args, registry_repo)
     selection = registry_options(registry_repo, ref=registry_ref)
     works = list(dict.fromkeys([*prefer_works, *(args.work or
                   (default_works(registry_repo, registry_ref) if registry_repo is not None else default_works()))]))
@@ -861,14 +866,23 @@ def generate(args):
     def rescan():
         """Every ``--rescan-minutes``: the ``--prefer-work`` WORKs' new episodes (a standing ingester extends them)
         go to the front of the queue; the generation then runs until it is stopped."""
+        nonlocal registry_ref
         while True:
             time.sleep(60 * args.rescan_minutes)
             try:
+                selected_ref = generation_registry_ref(args, registry_repo)
+                data_registry.consume([*prefer_works, held], run=f'filled-reasoning:{out}',
+                                      how='standing teacher episode rescan',
+                                      **registry_options(registry_repo, ref=selected_ref))
                 found = teacher_episodes(prefer_works, held, collections.defaultdict(collections.Counter),
                                          drifted=args.admit_drifted == 'on',
                                          skip_mismatched_live=args.live_mismatch == 'skip')
+                record_fills(out, works, held,
+                             **registry_options(registry_repo, ref=selected_ref, writer=True))
+                registry_ref = selected_ref
                 added = queue.add_first(ordered(found, prefer_works, rates, args.seed))
-                event = {'event': 'rescan', 'works': prefer_works, 'episodes': len(found), 'added': added}
+                event = {'event': 'rescan', 'works': prefer_works, 'registry_ref': selected_ref,
+                         'episodes': len(found), 'added': added}
             except Exception as error:      # a WORK caught mid-extraction: the next rescan reads it again
                 event = {'event': 'rescan failed', 'error': repr(error)[:400]}
             with write_lock:

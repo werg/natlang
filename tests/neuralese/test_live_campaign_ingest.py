@@ -120,6 +120,7 @@ def test_rounds_link_the_live_works_build_against_their_registry_and_fill_them_f
     assert works[0] == str(live) and fill[fill.index('--prefer-work') + 1] == str(live)
     assert fill[fill.index('--rescan-minutes') + 1] == '30'
     assert fill[fill.index('--registry-repo') + 1] == str(d.c.live_data_owner())
+    assert '--registry-ref' not in fill  # standing generation follows later publications
     assert build[build.index('--registry-repo') + 1] == str(d.c.live_data_owner())
     (tmp_path / 'other').mkdir()
     (tmp_path / 'other' / ing.REGISTRY).write_text('{"different": 1}\n')

@@ -1562,7 +1562,7 @@ class Cycle:
                            *[x for w in live for x in ('--prefer-work', w)],
                            *(('--rescan-minutes', 30) if live else ()),
                            *(('--registry-repo', owner) if owner is not None else ()),
-                           *(('--registry-ref', ref) if ref is not None else ()),
+                           # Standing fills resolve publication again at each rescan.
                            *(('--prefer-rates', rates) if rates.exists() else ())])]
 
     def stop_unit(self, unit):
