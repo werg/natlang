@@ -25,6 +25,9 @@ natlang test examples/triage                                  # the saved exampl
 - **main.ts**: the `triage` target in natlang.json. Wraps incoming ticket strings with `untrusted(...)` and calls `triage`.
 - **natlang.json**: the package: its files, the `triage` target and its arguments, the model, and warm-up calls.
 - **examples.json**: saved inputs with expected results for `natlang test`.
+- **bench/**: the benchmark pack (plans/semantic-fp/06 §4): `fixtures.json` (148 one-ticket units with gold label and
+  urgency, train/held split by split group), `verify.py`, `tune_examples.py` and `bench.json` (the frontier arm's prose
+  prompt). `scripts/semantic_fp/bench.py` runs the four arms on the held split; results are in `bench/results/`.
 
 ## Why the summary uses `semanticRepair`
 

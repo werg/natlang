@@ -32,8 +32,11 @@ waiting queue (higher first, then earlier; only the head is admitted), (2) the k
 medium 600, low 900: user units cannot go below the user manager's own 100, and with no systemd-oomd the kernel is the
 instant safety net), (3) the guard's victim order under pressure (lowest priority first; a unit over its own budget
 goes first), and (4) preemption: when the head of the queue does not fit, the guard gracefully stops the lowest-priority
-resumable units until it does. Others backfill behind a head only while it is blocked even with preemption, and a
-backfilled unit is not preempted for that same head within BACKFILL_HOLD (no backfill/preemption livelock). Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
+resumable units until it does. Others backfill behind the head only when that cannot delay it (conservative backfill,
+may_backfill): its start leaves the head's whole need free, or, while the head is blocked even with preemption, the
+head may preempt it (resumable, lower priority) or it fits within a quarter of the head's remaining shortfall
+(NATLANG_LEDGER_BACKFILL=legacy: any resumable job behind a blocked head). A backfilled unit is not preempted for that
+same head within BACKFILL_HOLD (no backfill/preemption livelock); `status` marks backfilled claims. Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
 stopped resumable unit (preemption or pressure, not an over-budget stop) re-enters the queue with the spec it was
 launched from and the guard relaunches it when room returns. `status` lists claims with priority, budget, use and
 reservation, and the queue with the units that would be preempted for each entry and the non-preemptible units blocking it (`blocked_by`). A stopped unit's docker containers (named by the command, `run --container`, a `docker run --name` client in its cgroup, or the unit name) are stopped by name too, and a requeued unit is not relaunched while one still runs. The guard's kill threshold is still
@@ -75,6 +78,9 @@ REQUEUE_DELAY_MAX = 3600  # a unit stopped again soon after its relaunch waits t
 REQUEUE_SETTLED = 1800  # a relaunched unit that ran this long starts its backoff over
 # A unit backfilled behind a waiting head is not preempted for that same head for this long (see backfill_hold).
 BACKFILL_HOLD = RAMP_SECONDS
+# Conservative backfill (may_backfill): a job the queue head cannot preempt may borrow at most this share of the
+# head's remaining shortfall.
+BACKFILL_SHARE = 0.25
 UNREACHABLE_WARN_SECONDS = 600  # the guard repeats a high head's 'cannot fit' event at most this often
 # A guard stop gives the victim its declared grace (``run --stop-seconds``) to write its full checkpoint (latents and
 # optimizer: ~4 min for Mellum's 47 GB state), and kills at once only below this emergency level (under the floor).
@@ -559,11 +565,67 @@ def waiting_order(state, now=None):
     return sorted(entries, key=lambda item: (-PRIORITIES[item[1]['priority']], item[1]['since'], item[0]))
 
 
+def conservative_backfill():
+    """Backfill mode: conservative (default) or the pre-2026-11-23 rule with NATLANG_LEDGER_BACKFILL=legacy."""
+    return os.environ.get('NATLANG_LEDGER_BACKFILL', 'conservative') != 'legacy'
+
+
+def reclaimable_by(claim, wanted):
+    """Whether the head ``wanted`` can take this claim's room back by preemption: resumable, strictly lower priority."""
+    return resumable(claim) and priority_of(claim) < PRIORITIES[wanted['priority']]
+
+
+def lent_to_backfill(live, head, wanted):
+    """Running units backfilled behind ``head`` that it cannot preempt: memory lent out of the head's future room."""
+    return {u: c for u, c in live.items() if c.get('backfilled_behind') == head and not reclaimable_by(c, wanted)}
+
+
+def backfill_allowance(live, free, head, wanted):
+    """Bytes that may still be lent to non-reclaimable backfills behind a blocked head: BACKFILL_SHARE of the head's
+    own shortfall (its need minus what it could get by preempting everything below it, as if nothing had been lent),
+    minus the budgets already lent. The shortfall shrinks as the units the head waits on end, so lending stops as the
+    head nears its start and ends altogether when the lent units alone keep it out; finished backfills raise free
+    memory but never the allowance. A stream of small jobs therefore cannot starve the head (2026-11-23: a 32 GB
+    medium held measurement waited 4 h at the head while same-priority 2-17 GB jobs took each freed GB)."""
+    need = wanted['budget'] + wanted['reserve']
+    lent = lent_to_backfill(live, head, wanted)
+    obtainable = free + sum(c['used'] + outstanding(c) for c in live.values() if reclaimable_by(c, wanted))
+    shortfall = need - obtainable - sum(c['used'] + outstanding(c) for c in lent.values())
+    return int(BACKFILL_SHARE * max(0, shortfall)) - sum(c['budget'] for c in lent.values())
+
+
+def may_backfill(live, free, head, wanted, entry, cuda_free=None):
+    """How a waiting job behind the queue head ``head`` (``wanted``) may start now, or None. ``entry`` has its budget,
+    reserve, priority, resumable and optional cuda_budget. Conservative backfill (standard batch-scheduler practice,
+    without runtime estimates, which the ledger does not have): a backfill must fit by real headroom and must not
+    delay the head, which holds when
+      spare        its start leaves the head's whole need (budget + reserve) free on top of its own; or, while the head
+                   is blocked (head_blocked: it cannot fit even with preemption),
+      reclaimable  the head can preempt it (resumable and strictly lower priority) when room returns; or
+      lent         its budget fits within backfill_allowance, a quarter of the head's remaining shortfall.
+    Same-priority, service and --no-resumable jobs backfill only as spare or lent. NATLANG_LEDGER_BACKFILL=legacy
+    restores the earlier rule (any resumable job behind a blocked head, which starved same-priority heads)."""
+    if not (fits(free, entry['budget'], entry['reserve']) and cuda_fits_entry(entry, cuda_free)):
+        return None
+    if not conservative_backfill():
+        return 'legacy' if entry.get('resumable') and head_blocked(live, free, wanted, head, cuda_free) else None
+    head_cuda = wanted.get('cuda_budget') or wanted.get('spec', {}).get('cuda_budget') or 0
+    if fits(free - wanted['budget'] - wanted['reserve'], entry['budget'], entry['reserve']) and \
+            cuda_fits_entry(entry, None if cuda_free is None else cuda_free - head_cuda):
+        return 'spare'
+    if not head_blocked(live, free, wanted, head, cuda_free):
+        return None
+    if entry.get('resumable') and PRIORITIES[entry['priority']] < PRIORITIES[wanted['priority']]:
+        return 'reclaimable'
+    if entry['budget'] <= backfill_allowance(live, free, head, wanted):
+        return 'lent'
+    return None
+
+
 def may_start(order, unit, can_backfill, fit):
-    """Whether a waiting job may start now. The head starts when it fits. Others backfill when they fit by real headroom
-    and are resumable (so they are preemptible if the head needs the room): a big waiting head must not starve the queue
-    behind it (2026-10-12: a 1 GB watcher waited behind a 75 GB high job while 17 GB was free). ``can_backfill`` also
-    requires the head to be blocked (head_blocked), so a backfill never takes room the head is about to get."""
+    """Whether a waiting job may start now. The head starts when it fits. Others backfill when ``can_backfill``
+    (may_backfill): a big waiting head must not starve the queue behind it (2026-10-12: a 1 GB watcher waited behind
+    a 75 GB high job while 17 GB was free), and a backfill must never take room the head is about to get."""
     return fit and (order[0][0] == unit or can_backfill)
 
 
@@ -829,11 +891,12 @@ def run(args):
             order = waiting_order(state, now)
             head = order[0][0]
             # The head of the priority queue starts when it fits (the guard preempts lower units for it when real
-            # headroom is short); others backfill when they fit and are resumable.
-            backfill = (args.resumable if args.resumable is not None else args.cls != 'service') \
-                and head != unit and head_blocked(live, free, order[0][1], head, cuda_free)
+            # headroom is short); others backfill when that cannot delay the head (may_backfill).
+            resumable_job = args.resumable if args.resumable is not None else args.cls != 'service'
+            backfill = None if head == unit else may_backfill(
+                live, free, head, order[0][1], dict(waiting[unit], resumable=resumable_job), cuda_free)
             cuda_fits = cuda_fits_entry(waiting[unit], cuda_free)
-            if may_start(order, unit, backfill, fits(free, budget, reserve) and cuda_fits):
+            if may_start(order, unit, bool(backfill), fits(free, budget, reserve) and cuda_fits):
                 spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
                         'cuda_budget': cuda_budget,
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
@@ -843,10 +906,11 @@ def run(args):
                         'containers': args.container}
                 state['claims'][unit] = claim_for(spec)
                 if head != unit:
-                    state['claims'][unit]['backfilled_behind'] = head
+                    state['claims'][unit].update(backfilled_behind=head, backfill=backfill)
                 waiting.pop(unit, None)
                 state['events'].append({'time': now, 'event': 'admitted', 'unit': unit, 'budget': budget,
-                                        'free': free, 'priority': priority})
+                                        'free': free, 'priority': priority,
+                                        **({'backfilled_behind': head, 'backfill': backfill} if head != unit else {})})
                 break
             blockers = blocked_by(live, {'priority': priority}) + ('' if head == unit else f' (queue head: {head})')
             # A rejected immediate request must never be visible to the guard:
@@ -938,7 +1002,14 @@ def status(args):
                       'resumable': resumable(c), 'gpu': bool(c.get('gpu')),
                       **({'cuda_budget_gb': round(c['cuda_budget'] / GIB, 1)} if c.get('cuda_budget') else {}),
                       **({'fixed_claim': True} if fixed_claim(c) else {}),
+                      **({'backfilled_behind': c['backfilled_behind'], 'backfill': c.get('backfill') or 'legacy'}
+                         if c.get('backfilled_behind') else {}),
                       'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
+        head_lending = {}
+        if queue and conservative_backfill() and head_blocked(live, free, queue[0][1], queue[0][0], cuda_free):
+            name, wait = queue[0]
+            head_lending = {'lent_gb': round(sum(c['budget'] for c in lent_to_backfill(live, name, wait).values()) / GIB, 1),
+                            'backfill_allowance_gb': round(max(0, backfill_allowance(live, free, name, wait)) / GIB, 1)}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
                       'orphans_gb': {str(pid): round(size / GIB, 1) for pid, size in orphans(live, gpu).items()},
                       **({'driver_cuda_free_gb': round(driver_cuda_free / GIB, 1),
@@ -952,8 +1023,11 @@ def status(args):
                                       if w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget') else {}),
                                    'would_preempt': plans[name],
                                    'blocked_by': non_preemptible(live, w),
-                                   **({'cannot_fit': why} if (why := unreachable(live, free, w)) else {})}
-                                  for n, (name, w) in enumerate(queue)]}, indent=2))
+                                   **({'cannot_fit': why} if (why := unreachable(live, free, w)) else {}),
+                                   **(head_lending if n == 0 else {})}
+                                  for n, (name, w) in enumerate(queue)],
+                      'backfill_mode': 'conservative' if conservative_backfill() else 'legacy',
+                      'backfilled': sorted(u for u, c in live.items() if c.get('backfilled_behind'))}, indent=2))
 
 
 def cancel(args):
@@ -1311,11 +1385,13 @@ def guard(args):
                 if not unit and (not fits(free, wanted['budget'], wanted['reserve']) or
                                  not cuda_fits_entry(wanted, cuda_free)):
                     # Nothing to preempt for the head (or its blockers are protected): relaunch the first requeued unit
-                    # behind it that fits now instead of leaving the room idle.
+                    # behind it that may backfill now instead of leaving the room idle.
                     for name, entry in queue[1:]:
-                        if (entry.get('requeued') and time.time() >= entry['not_before']
-                                and fits(free, entry['budget'], entry['reserve'])
-                                and cuda_fits_entry(entry, cuda_free)):
+                        if not (entry.get('requeued') and time.time() >= entry['not_before']):
+                            continue
+                        kind = may_backfill(all_live, free, head, wanted,
+                                            dict(entry, resumable=entry.get('spec', {}).get('resumable', True)), cuda_free)
+                        if kind:
                             backfill = (name, entry)
                             break
                 if not unit and plan_launch(state, head, wanted, backfill, free, cuda_free):
@@ -1325,9 +1401,10 @@ def guard(args):
                     if wanted.get('delay'):
                         state['claims'][head]['requeue_delay'] = wanted['delay']
                     if backfill:
-                        state['claims'][head]['backfilled_behind'] = behind
+                        state['claims'][head].update(backfilled_behind=behind, backfill=kind)
                     state['waiting'].pop(head)
-                    state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free})
+                    state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free,
+                                            **({'backfilled_behind': behind, 'backfill': kind} if backfill else {})})
                     to_launch = wanted['spec']
             command = state['claims'].get(unit, {}).get('command') if unit else None
             state_claim_containers = state['claims'].get(unit, {}).get('spec', {}).get('containers', ()) if unit else ()

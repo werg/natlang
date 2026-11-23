@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.bench/1",
+  "app": "triage",
+  "target": "triage",
+  "fixtures": "fixtures.json",
+  "verifier": "verify.py",
+  "services": [],
+  "frontier": {
+    "system": "You are a support operations agent. You triage support tickets and report on them. When you are done, call submit_report exactly once with the report.",
+    "user": "Triage these support tickets (a JSON list):\n{tickets}\n\nWhat to do:\n1. Give every ticket exactly one label: billing, technical or spam. What belongs in each label: {rubric}\n2. For every ticket that is not spam, decide whether it is urgent, that is, whether it needs attention within the hour. A ticket is urgent when many customers are affected right now, money is being lost, or security is at risk. Requests, suggestions and cosmetic problems are not urgent. Spam is never urgent.\n3. Report: `urgent` is the number of urgent tickets; `by_label` maps each label that occurs to the number of tickets with it; `summary` is one paragraph of at most 60 words saying what is going wrong across the urgent tickets, the most severe problem first, or exactly \"Nothing urgent today.\" when no ticket is urgent.",
+    "arguments": {"tickets": "json", "rubric": "text"},
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "submit_report",
+          "description": "Submit the triage report. Call it once, at the end.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "urgent": {"type": "integer", "description": "How many tickets are urgent."},
+              "by_label": {"type": "object", "additionalProperties": {"type": "integer"}, "description": "Label -> number of tickets with that label."},
+              "summary": {"type": "string", "description": "One paragraph about the urgent tickets, most severe first, or \"Nothing urgent today.\"."}
+            },
+            "required": ["urgent", "by_label", "summary"]
+          }
+        }
+      }
+    ],
+    "submit": "submit_report"
+  }
+}

@@ -432,6 +432,10 @@ def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, 
         item = str(item)
         if item in reg.datasets:
             ds = reg.datasets[item]
+            if ds.get('admission') == INVENTORY:
+                missing.append(item)
+                refs.append({'id': item, 'unregistered': True, 'inventory_only': True})
+                continue
             refs.append({'id': item, 'manifest_sha256': ds.get('manifest_sha256')})
             continue
         p = Path(item)
@@ -463,8 +467,15 @@ def require_registered(paths) -> None:
     if os.environ.get(ALLOW_ENV) == '1':
         return
     reg = load()
-    missing = [str(p) for p in paths if p is not None and str(p) not in reg.datasets and
-               (reg.find(Path(p)) or {'admission': INVENTORY}).get('admission') == INVENTORY]
+    missing = []
+    for path in paths:
+        if path is None:
+            continue
+        ds = reg.datasets.get(str(path))
+        if ds is None:
+            ds = reg.find(Path(path))
+        if ds is None or ds.get('admission') == INVENTORY:
+            missing.append(str(path))
     if missing:
         raise UnregisteredData('not in the data registry: ' + ', '.join(missing))
 
@@ -565,57 +576,71 @@ class Registry:
         return sorted(self.datasets.items(), key=lambda item: item[1].get('admission') == INVENTORY)
 
     def _lexical(self):
-        """(key -> dataset id of datasets whose includes are literal, glob bases): the registry's own paths, no
-        filesystem call (``find``'s fast path)."""
+        """Declared literal/recursive prefixes, first-wildcard rules, and exact dataset roots. No directory I/O."""
         if getattr(self, '_lexical_index', None) is None:
-            keys, bases, roots = {}, [], {}
-            for ident, ds in self._by_admission():
+            keys, patterns, roots = {}, [], {}
+            self._lexical_order = {}
+            for order, (ident, ds) in enumerate(self._by_admission()):
+                self._lexical_order[ident] = order
                 try:
                     p = absolute(ds['path'])
                 except (ValueError, KeyError):
                     continue
                 include = ds.get('include') or []
-                if ds.get('include_manifest') or any(c in part for pattern in include for c in '*?[' for part in [pattern]):
+                if ds.get('include_manifest'):
+                    include = [f'{d}/*' if d != '.' else '*' for d in ds.get('include_prefixes') or ['.']]
+                own_root = os.path.normpath(str(p))
+                for pattern in include or ['']:
+                    parts = Path(pattern).parts
                     fixed = []
-                    for pattern in include or ['']:
-                        for part in Path(pattern).parts:
-                            if any(c in part for c in '*?['):
-                                break
-                            fixed.append(part)
-                        bases.append(os.path.normpath(str(p.joinpath(*fixed) if fixed else p)))
-                        fixed = []
-                    roots.setdefault(os.path.normpath(str(p)), ident)   # the dataset's own directory names it
-                    continue
-                for target in ([p / pattern for pattern in include] if include else [p]):
-                    keys.setdefault(os.path.normpath(str(target)), ident)
-                if include and os.path.normpath(str(p)) not in {os.path.normpath(str(p / x)) for x in include}:
-                    # as in ``_paths``: the directory of a dataset with literal includes names it too, so an ancestor's
-                    # inventory entry (a run directory archived whole) does not shadow its held-eval step directories
-                    roots.setdefault(os.path.normpath(str(p)), ident)
-            self._lexical_index = keys, bases, roots
+                    for part in parts:
+                        if any(c in part for c in '*?['):
+                            break
+                        fixed.append(part)
+                    base = os.path.normpath(str(p.joinpath(*fixed)))
+                    if len(fixed) < len(parts) and parts[len(fixed)] != '**':
+                        patterns.append((base, parts[len(fixed)], ident))
+                    else:
+                        keys.setdefault(base, ident)
+                if include:
+                    roots.setdefault(own_root, ident)
+            self._lexical_index = keys, patterns, roots
         return self._lexical_index
 
     def find(self, path) -> dict | None:
-        """The dataset whose directory (or file) contains PATH: longest path wins; checked on the given and the
-        resolved path, so a ``runs/`` link and its target find the same entry. Fast path first: a dataset with literal
-        includes naming PATH or an ancestor, when no glob dataset's base lies between that match and PATH (no
-        filesystem call; building the full index lists and resolves every dataset directory, minutes under HDD load)."""
+        """Find the deepest declared owner without enumerating unrelated glob datasets.
+
+        Includes have the same prefix semantics as ``_paths``: the first wildcard names owned directory members;
+        ``**`` owns its fixed prefix. Only the requested member needs an existence check, not a directory listing.
+        Alias-only paths still use the resolving full-index fallback when the declared spelling has no owner.
+        """
+        if os.environ.get('NATLANG_REGISTRY_SCOPED_GLOBS') == '0':
+            return self._find_full(path)
         given = os.path.normpath(os.path.abspath(str(path)))
-        keys, bases, roots = self._lexical()
-        if given in roots and (given not in keys or self.datasets[keys[given]].get('admission') == INVENTORY):
-            return self.datasets[roots[given]]
+        keys, patterns, roots = self._lexical()
+        matches = []
         probe = given
         while True:
             if probe in keys:
-                between = [b for b in bases if (b + os.sep).startswith(probe + os.sep) and
-                           (given + os.sep).startswith(b + os.sep)]
-                if not between:
-                    return self.datasets[keys[probe]]
+                matches.append((probe, keys[probe]))
                 break
             parent = os.path.dirname(probe)
             if parent == probe:
                 break
             probe = parent
+        for base, wildcard, ident in patterns:
+            if given == base or not _under(given, base):
+                continue
+            member = os.path.relpath(given, base).split(os.sep, 1)[0]
+            target = os.path.join(base, member)
+            if fnmatch.fnmatch(member, wildcard) and os.path.lexists(target):
+                matches.append((target, ident))
+        best = min(matches, key=lambda item: (-len(item[0]), self._lexical_order[item[1]])) if matches else None
+        if given in roots and (best is None or best[0] != given or
+                               self.datasets[best[1]].get('admission') == INVENTORY):
+            return self.datasets[roots[given]]
+        if best is not None:
+            return self.datasets[best[1]]
         return self._find_full(path)
 
     def _temp_view(self, temp):

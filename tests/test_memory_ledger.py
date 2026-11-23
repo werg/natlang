@@ -1297,3 +1297,166 @@ def test_stop_grace_follows_the_family_s_own_recent_write_rate():
     # a family without writes of its own falls back to the all-writer median
     assert ledger.grace_seconds('natlang-unknown-210556.service', {}, {'natlang-unknown': 1e9}, rates) == \
         ledger.GRACE_SLACK + ledger.GRACE_MARGIN * 1e9 / rates[None]
+
+
+# Conservative backfill (2026-11-23: a 32 GB medium head waited 4 h while same-priority jobs took each freed GB; the
+# 1 GB storage sweep, a --no-resumable service, failed 12 times on its wait timeout behind it).
+HELD_HEAD = {'priority': 'medium', 'budget': 32 * GIB, 'reserve': 8 * GIB}
+
+
+def backfill_fixture():
+    """A high non-resumable collection holds the machine: the medium head (40 GiB need) cannot fit even with
+    preemption, 10 GiB are free, its shortfall is 30 GiB and a quarter of that (7.5 GiB) may be lent."""
+    return {'collect.service': dict(running('experiment', 74, 74, priority='high'), resumable=False)}
+
+
+def job(budget, priority='medium', resumable=True, reserve=1):
+    return {'budget': int(budget * GIB), 'reserve': int(reserve * GIB), 'priority': priority, 'resumable': resumable}
+
+
+def test_a_small_unit_backfills_behind_a_blocked_head_and_a_large_one_does_not(monkeypatch):
+    monkeypatch.delenv('NATLANG_LEDGER_BACKFILL', raising=False)
+    live = backfill_fixture()
+    assert ledger.head_blocked(live, 10 * GIB, HELD_HEAD, 'held.service')
+    sweep = job(1, priority='low', resumable=False)  # the storage sweep: a non-resumable low service
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, sweep) == 'lent'
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(6)) == 'lent'  # same priority, small
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(8)) is None  # beyond a quarter of 30
+    assert ledger.may_backfill(live, 30 * GIB, 'held.service', HELD_HEAD, job(17, reserve=4)) is None  # 17 > 25/4
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(10)) is None  # does not fit at all
+    # a lower-priority resumable job the head can preempt later may take what fits, whatever its size
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(8, priority='low')) == 'reclaimable'
+
+
+def test_lending_is_bounded_by_what_is_already_lent_and_shrinks_as_the_head_nears_its_start(monkeypatch):
+    monkeypatch.delenv('NATLANG_LEDGER_BACKFILL', raising=False)
+    live = backfill_fixture()
+    live['bench.service'] = dict(running('experiment', 6, 6, priority='medium'), backfilled_behind='held.service')
+    # 4 GiB free with the 6 GiB backfill running: the head's own shortfall is still 30, 7.5 - 6 = 1.5 may be lent
+    assert ledger.backfill_allowance(live, 4 * GIB, 'held.service', HELD_HEAD) == int(1.5 * GIB)
+    assert ledger.may_backfill(live, 4 * GIB, 'held.service', HELD_HEAD, job(1, resumable=False)) == 'lent'
+    assert ledger.may_backfill(live, 4 * GIB, 'held.service', HELD_HEAD, job(2)) is None
+    # a reclaimable backfill (low, resumable) is not lent: the head takes it back by preemption
+    live['render.service'] = dict(running('collection', 6, 6, priority='low'), backfilled_behind='held.service')
+    assert set(ledger.lent_to_backfill(live, 'held.service', HELD_HEAD)) == {'bench.service'}
+    del live['render.service']
+    # the collection shrinks: 30 GiB free, the head's own shortfall is 4 GiB and 6 are lent: nothing more is lent,
+    # although a 1 GiB job fits easily
+    live['collect.service'] = dict(running('experiment', 54, 54, priority='high'), resumable=False)
+    assert ledger.backfill_allowance(live, 30 * GIB, 'held.service', HELD_HEAD) < 0
+    assert ledger.may_backfill(live, 30 * GIB, 'held.service', HELD_HEAD, job(1, resumable=False)) is None
+    # a different head has its own allowance: the bench was lent against the old one
+    assert ledger.lent_to_backfill(live, 'other.service', HELD_HEAD) == {}
+
+
+def test_a_head_that_fits_is_admitted_and_only_spare_room_backfills(monkeypatch):
+    monkeypatch.delenv('NATLANG_LEDGER_BACKFILL', raising=False)
+    live = backfill_fixture()
+    order = [('held.service', HELD_HEAD), ('small.service', job(1))]
+    assert ledger.may_start(order, 'held.service', False, ledger.fits(44 * GIB, 32 * GIB, 8 * GIB))
+    # with 44 GiB free the head fits: a 1 GiB job leaves its 40 GiB need, a 6 GiB job would not
+    assert ledger.may_backfill(live, 44 * GIB, 'held.service', HELD_HEAD, job(1)) == 'spare'
+    assert ledger.may_backfill(live, 44 * GIB, 'held.service', HELD_HEAD, job(6)) is None
+    # a head the guard can make fit by preempting a low unit is not blocked: no lending into its room
+    live['render.service'] = running('collection', 30, 30, priority='low')
+    assert not ledger.head_blocked(live, 10 * GIB, HELD_HEAD, 'held.service')
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(1, resumable=False)) is None
+
+
+def test_legacy_backfill_restores_the_earlier_rule(monkeypatch):
+    monkeypatch.setenv('NATLANG_LEDGER_BACKFILL', 'legacy')
+    live = backfill_fixture()
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(8)) == 'legacy'  # same priority, any size
+    assert ledger.may_backfill(live, 10 * GIB, 'held.service', HELD_HEAD, job(1, resumable=False)) is None
+    assert ledger.may_backfill(live, 44 * GIB, 'held.service', HELD_HEAD, job(1)) is None  # head fits: no spare path
+
+
+@pytest.mark.parametrize('mode,starves', [('conservative', False), ('legacy', True)])
+def test_a_stream_of_same_priority_jobs_does_not_starve_the_head(monkeypatch, mode, starves):
+    # The blocker shrinks by 2 GiB per poll and a new 2 GiB same-priority resumable job asks each poll; admitted jobs
+    # never end (the worst case). Without backfill the head (40 GiB need) fits once the blocker is down to 60 GiB
+    # (poll 15). Conservative backfill lends at most a quarter of the initial 30 GiB shortfall, so the head starts
+    # within ceil(7.5 / 2) = 4 polls of that; the earlier rule admitted every job and the head never started.
+    monkeypatch.setenv('NATLANG_LEDGER_BACKFILL', mode)
+    for head_priority in ('medium', 'high'):
+        head = dict(HELD_HEAD, priority=head_priority)
+        live, admitted_at = {}, None
+        for step in range(60):
+            blocker = max(0, 90 - 2 * step)
+            live['collect.service'] = dict(running('experiment', blocker, blocker, priority='high'), resumable=False)
+            free = 100 * GIB - sum(c['used'] for c in live.values())
+            if ledger.fits(free, head['budget'], head['reserve']):
+                admitted_at = step
+                break
+            if ledger.may_backfill(live, free, 'held.service', head, job(2, priority=head_priority)):
+                live[f'job{step}.service'] = dict(running('experiment', 2, 2, priority=head_priority),
+                                                  backfilled_behind='held.service')
+        backfills = len(live) - 1
+        if starves:
+            assert admitted_at is None
+        else:
+            assert 1 <= backfills <= 3 and admitted_at is not None and admitted_at <= 15 + 4, (backfills, admitted_at)
+
+
+def test_run_admits_a_non_resumable_service_behind_a_blocked_head_and_status_shows_it(monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv('NATLANG_LEDGER_BACKFILL', raising=False)
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 10 * GIB)
+    monkeypatch.setattr(ledger, 'cuda_free_bytes', lambda: None)
+    monkeypatch.setattr(ledger, 'orphans', lambda live, gpu: {})
+    usage = {'collect.service': 74 * GIB, 'sweep.service': 0}
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False:
+                        usage.get(unit))
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    now = ledger.time.time()
+    with ledger.ledger() as state:
+        state['claims']['collect.service'] = dict(running('experiment', 74, 74, priority='high'), resumable=False,
+                                                  command=['collect'])
+        state['waiting'] = {'held.service': dict(HELD_HEAD, since=now - 3600, seen=now)}
+
+    def args(unit, budget, priority, resumable, cls='experiment'):
+        return type('A', (), {'cuda_budget_gb': None, 'budget_gb': budget, 'reserve_gb': 1, 'unit': unit,
+                              'priority': priority, 'cls': cls, 'wait': 0, 'resumable': resumable,
+                              'host_max_gb': None, 'oom_policy': 'stop', 'workdir': '.', 'env': [],
+                              'stop_seconds': None, 'command': ['x'], 'hold_budget': False, 'container': []})()
+    with pytest.raises(SystemExit):  # a large same-priority job would delay the head
+        ledger.run(args('big', 8, 'medium', True))
+    ledger.run(args('sweep', 1, 'low', False, cls='service'))
+    assert launched == ['sweep.service']
+    capsys.readouterr()
+    ledger.status(type('A', (), {})())
+    report = ledger.json.loads(capsys.readouterr().out)
+    assert report['backfill_mode'] == 'conservative' and report['backfilled'] == ['sweep.service']
+    assert report['claims']['sweep.service']['backfilled_behind'] == 'held.service'
+    assert report['claims']['sweep.service']['backfill'] == 'lent'
+    head = report['waiting'][0]
+    assert head['unit'] == 'held.service' and head['lent_gb'] == 1.0 and head['backfill_allowance_gb'] == 6.5  # 7.5 - 1
+
+
+def test_the_guard_relaunches_a_requeued_same_priority_unit_only_within_the_heads_allowance(monkeypatch, tmp_path):
+    monkeypatch.delenv('NATLANG_LEDGER_BACKFILL', raising=False)
+    available, usage = [10 * GIB], {'collect.service': 74 * GIB}
+    calls = guard_env(monkeypatch, tmp_path, available, usage)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('inactive', ''))
+    now = ledger.time.time()
+
+    def requeued(unit, budget):
+        spec = {'unit': unit, 'budget': budget * GIB, 'cls': 'experiment', 'command': ['x'], 'priority': 'medium',
+                'resumable': True, 'reserve': GIB, 'reserve_explicit': True}
+        return {'priority': 'medium', 'since': now, 'requeued': True, 'not_before': now - 1, 'budget': budget * GIB,
+                'reserve': GIB, 'spec': spec}
+    with ledger.ledger() as state:
+        state['claims']['collect.service'] = dict(running('experiment', 74, 74, priority='high'), resumable=False)
+        state['waiting'] = {'held.service': dict(HELD_HEAD, since=now - 3600, seen=now),
+                            'big.service': requeued('big.service', 8), 'small.service': requeued('small.service', 4)}
+    ledger.guard(type('A', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 0, 'once': True})())
+    assert launched == ['small.service'] and calls == []  # 10 GiB free, allowance 7.5: big is skipped
+    with ledger.ledger() as state:
+        assert state['claims']['small.service']['backfill'] == 'lent'
+        assert state['events'][-1]['backfilled_behind'] == 'held.service'

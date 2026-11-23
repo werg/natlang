@@ -1,6 +1,7 @@
 from pathlib import Path
 import subprocess
 import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'neuralese_data'))
 
@@ -133,7 +134,8 @@ def test_default_attempt_epoch_is_verified_release_sha_with_exact_provenance(mon
     assert vibestudio_campaign.attempt_context(args, catalog)[0] == 'intentional-rerun'
 
 
-def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, tmp_path):
+@pytest.mark.parametrize("teacher_timeout", [3_600_000, 600_000])
+def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, tmp_path, teacher_timeout):
     from types import SimpleNamespace
     cases = {name: {'taskId': name, 'workspace': 'system', 'family': 'settings'} for name in ['retry', 'done']}
     waves = tmp_path / 'waves'
@@ -163,15 +165,19 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
         assert command[:4] == ['pnpm', '--silent', 'natlang:teacher', '--model']
         assert kwargs['env'] == {'PINNED': 'yes'}
         assert command.count('--case') == 1 and command[-1] == 'retry'
+        assert command[command.index('--test-timeout-ms') + 1] == str(teacher_timeout)
+        assert command[command.index('--concurrency') + 1] == '3'
         Path(command[command.index('--out') + 1]).mkdir()
         return SimpleNamespace(returncode=0)
     monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', collect)
     args = SimpleNamespace(root=tmp_path, held=tmp_path / 'held', seed=[], host=tmp_path, archive=tmp_path / 'archive',
-        review_model=None, attempts=2, max_waves=1, wave_size=6, concurrency=3, reserve_disk_gib=8)
+        review_model=None, attempts=2, max_waves=1, wave_size=6, concurrency=3, reserve_disk_gib=8,
+        teacher_timeout_ms=teacher_timeout)
     vibestudio_campaign.drive(args)
     plan = vibestudio_campaign.read(jobs / '0003.json')
     assert plan == {'cases': ['retry'], 'attempt_epoch': 'new-release', 'provenance': provenance}
     execution = vibestudio_campaign.read(waves / '0003-execution.json')
+    assert execution['teacher_timeout_ms'] == teacher_timeout
     assert archived == [{'plan': plan, 'execution': execution}]
     status = vibestudio_campaign.read(tmp_path / 'status.json')
     assert status['cases']['retry']['attempts'] == 1
@@ -293,8 +299,8 @@ def test_raw_capture_records_teacher_start_evidence_without_rewriting_it(tmp_pat
                 'diagnostics': {'natlangTeacher': {'rootCallIds': roots, 'calls': []}}}}, stream)
         original = raw.read_bytes()
         outcome = vibestudio_campaign.outcomes(capture, ['example'], None, {}, {'example': {}})['example']
-        assert outcome['teacher_started'] is bool(roots)
-        assert bool(vibestudio_campaign.infrastructure_failure(outcome, {})) is not bool(roots)
+        assert outcome['teacher_started'] is (True if roots else None)
+        assert not vibestudio_campaign.infrastructure_failure(outcome, {})
         assert raw.read_bytes() == original
 
 
@@ -422,3 +428,40 @@ def test_recorded_teacher_failure_is_not_capture_corruption(tmp_path):
     result['capture_errors'].append({'message': 'ENOSPC writing model exchange'})
     assert vibestudio_campaign.infrastructure_failure(result, {})
     assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 1)
+
+
+def test_missing_teacher_wrapper_means_unknown_start_not_unexecuted(tmp_path):
+    import gzip
+    import json
+    capture = tmp_path / 'st_case'
+    capture.mkdir()
+    raw = capture / 'trajectory-example-full.json.gz'
+    with gzip.open(raw, 'wt') as stream:
+        json.dump({'result': {'passed': False, 'reason': 'Owned operation cancelled at the diagnostic deadline'},
+                   'execution': {'diagnostics': {}}}, stream)
+    original = raw.read_bytes()
+    outcome = vibestudio_campaign.outcomes(tmp_path, ['example'], None, {}, {'example': {}})['example']
+    assert outcome['teacher_started'] is None
+    assert outcome['status'] == 'test-failed'
+    assert raw.read_bytes() == original
+
+
+def test_cohort_exports_are_resumable_for_ledger_backfill(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    (tmp_path / 'waves').mkdir()
+    args = SimpleNamespace(root=tmp_path, archive_host='dgx', archive_repo=Path('/repo'),
+        archive=Path('/archive'), archive_held=Path('/held.json'), defer_export=False)
+    monkeypatch.setattr(vibestudio_campaign, 'transfer', lambda *_: None)
+    commands, probes = [], []
+    def run(command, **_):
+        commands.append(command)
+        if command[0] == 'ssh' and command[-1].startswith('test -f '):
+            probes.append(command)
+            return SimpleNamespace(returncode=1 if len(probes) == 1 else 0)
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', run)
+    vibestudio_campaign.remote_archive(args, Path('/archive/0001'), {'goal': {'status': 'verified'}}, tmp_path/'capture')
+    launched = next(command[-1] for command in commands if command[0] == 'ssh' and 'memory_ledger.py' in command[-1])
+    assert '--resumable' in launched
+    assert '--no-resumable' not in launched
+    assert '--budget-gb 1.5' in launched and '--reserve-gb 15' in launched
