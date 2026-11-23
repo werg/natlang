@@ -15,14 +15,17 @@ test('example library is diverse, self-contained, and valid for the browser load
   assert.ok(examples.length >= 10);
   assert.ok(examples.every(item => item.modelRequired), 'the public gallery should demonstrate natlang');
   assert.equal(new Set(examples.map(item => item.id)).size, examples.length);
-  assert.ok(exampleCategories.includes('Composed agents'));
+  assert.ok(exampleCategories.includes('Semantic FP'));
+  // A project needs a model when it has a .nl file or an inline nl template (the playground's projectUsesModel).
+  const usesModel = item => Object.keys(item.files).some(path => path.endsWith('.nl')) ||
+    Object.values(item.files).some(source => /(?<![\w$])nl(?:<[^`]*>)?\s*`/.test(source));
   for (const item of examples) {
     assert.ok(item.description && item.concepts.length && item.level && item.category, item.id);
-    assert.equal(item.modelRequired, item.root.endsWith('.nl'), item.id);
+    assert.equal(item.modelRequired, usesModel(item), item.id);
     const project = newPlaygroundProject(item.name, item.root, item.files, item.inputs, item.expected);
     // Idiom-floor warnings are counted for the corpus migration (plans/semantic-fp/07); errors fail.
     assert.deepEqual(validatePlaygroundProject(project).filter(diagnostic => diagnostic.severity === 'error'), [], item.id);
-    if (item.category === 'Composed agents') assert.ok(Object.keys(item.files).length > 1, item.id);
+    if (item.category === 'Semantic FP') assert.ok(Object.keys(item.files).length > 1, item.id);
   }
 });
 
