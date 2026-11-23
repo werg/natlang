@@ -45,15 +45,18 @@ def authored_split(world, author):
 
 
 GENERATOR = 'natlang.rl-authored-tasks/1'
+# semantic-FP constructs (plans/semantic-fp/05 §3; authored_checks.py checks each one statically) and the
+# @natlang/std combinators (ts-host/src/std; B13); collection_health.py marks flags on them (held-v4 trigger)
+SEMANTIC_FP_CONSTRUCTS = frozenset({'inline_nl', 'nl_with_context', 'library_discovery', 'nl_convergence', 'higher_order',
+                                    'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract',
+                                    'ensures_contract', 'structural_recursion',
+                                    'semantic_merge', 'semantic_repair', 'fixed_point', 'propose_and_verify',
+                                    'branch_and_select', 'semantic_map', 'semantic_filter', 'semantic_partition',
+                                    'semantic_reduce', 'semantic_match', 'semantic_rank', 'escalate', 'with_context',
+                                    'compile_rule'})
 CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'neuralese_fan_in', 'iterate',
                         'iterate_neuralese', 'folder_reducer', 'decision_readout', 'skills', 'multi_operation_codebase',
-                        'effect_state',
-                        # semantic-FP constructs (plans/semantic-fp/05 §3; authored_checks.py checks each one statically)
-                        'inline_nl', 'nl_with_context', 'library_discovery', 'nl_convergence', 'higher_order',
-                        'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract',
-                        'ensures_contract', 'structural_recursion',
-                        # @natlang/std combinators (ts-host/src/std; B13)
-                        'semantic_merge', 'semantic_repair', 'fixed_point', 'propose_and_verify', 'branch_and_select'})
+                        'effect_state'}) | SEMANTIC_FP_CONSTRUCTS
 # The curriculum technique flags a correct trajectory must show (ts-host/src/teacher/curriculum.ts `inline`, `named`,
 # `iterate`, `edits`). A construct that the reference solution needs sets its flag to `required` by default; the task's
 # own `requires` object overrides or adds flags.

@@ -1,7 +1,7 @@
 ---
 description: Does this ticket need attention within the hour?
 args:
-  ticket: string
+  ticket: Untrusted<string>
 returns: boolean
 readout: decision
 ---

@@ -8,6 +8,7 @@
  * itself: only a `divergent` verdict does.
  */
 import { FolderSnapshot } from '../native/scoped-fs.js';
+import { isNeuraleseRef } from '../native/neuralese.js';
 import { hexDigest } from '../native/hash.js';
 import { isLive, liveId } from '../native/values.js';
 import { currentFrame, runInFrame } from './context.js';
@@ -90,6 +91,7 @@ export function stableHash(value: unknown): string {
   const seen = new WeakSet<object>();
   const canonical = (item: unknown): unknown => {
     if (item === null || typeof item !== 'object') return typeof item === 'function' ? `live:${liveId(item)}` : item;
+    if (isNeuraleseRef(item)) return `neuralese:${item.$neuralese.id}`;
     if (item instanceof FolderSnapshot) return `source:${item.digest}`;
     if (isLive(item)) return `live:${liveId(item)}`;
     if (seen.has(item)) return '[cycle]';

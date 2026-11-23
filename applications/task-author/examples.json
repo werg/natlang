@@ -1,0 +1,18 @@
+{
+  "isSemantic": [
+    {
+      "inputs": {
+        "task": {
+          "id": "t1",
+          "split_group": "sfp:pr:1",
+          "constructs": ["ensures_contract", "escalate"],
+          "oracle": "verifier",
+          "verifier": "proper_score.mjs",
+          "prompt": "Review PR diffs against security invariants and escalate uncertain block risks.",
+          "files": { "natlang.json": "{}", "review.ts": "export {};" }
+        }
+      },
+      "expected": true
+    }
+  ]
+}

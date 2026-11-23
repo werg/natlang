@@ -249,12 +249,36 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
       }
       return wrapBrands(inner, predicates, untrusted);
     }
-    if (checker.isArrayType(candidate) || checker.isTupleType(candidate)) {
-      const elements = checker.isArrayType(candidate) ? [checker.getTypeArguments(candidate as ts.TypeReference)[0]!] :
-        checker.getTypeArguments(candidate as ts.TypeReference);
-      const converted = [...new Set(elements.map(element => convert(element, depth + 1)))];
-      if (!converted.length) throw new TargetError('an empty tuple is not a useful target');
-      return `(${converted.join(' | ')})[]`;
+    if (checker.isArrayType(candidate)) {
+      const element = convert(checker.getTypeArguments(candidate as ts.TypeReference)[0]!, depth + 1);
+      return `(${element})[]`;
+    }
+    if (checker.isTupleType(candidate)) {
+      const tupleTarget = (candidate as ts.TupleTypeReference).target;
+      const elementFlags = tupleTarget.elementFlags ?? [];
+      const elements = checker.getTypeArguments(candidate as ts.TypeReference);
+      const hasVariadic = elementFlags.some(flag => (flag & (ts.ElementFlags.Rest | ts.ElementFlags.Variadic)) !== 0);
+      if (hasVariadic) {
+        const converted = [...new Set(elements.map(element => convert(element, depth + 1)))];
+        if (!converted.length) return '[]';
+        return `(${converted.join(' | ')})[]`;
+      }
+      if (!elements.length) return '[]';
+      const parts = elements.map((element, index) => {
+        const isOptional = !!(elementFlags[index] && (elementFlags[index]! & ts.ElementFlags.Optional));
+        let inner: string;
+        if (isOptional && element.isUnion()) {
+          const nonUndefined = element.types.filter(t => !(t.flags & ts.TypeFlags.Undefined));
+          if (nonUndefined.length === 1) inner = convert(nonUndefined[0]!, depth + 1);
+          else if (nonUndefined.length > 1) inner = unionText(nonUndefined, depth);
+          else inner = convert(element, depth + 1);
+        } else {
+          inner = convert(element, depth + 1);
+        }
+        if (!isOptional) return inner;
+        return (inner.includes(' | ') || inner.includes(' & ') || inner.includes('=>') ? `(${inner})` : inner) + '?';
+      });
+      return `[${parts.join(', ')}]`;
     }
     if (flags & ts.TypeFlags.Object || flags & ts.TypeFlags.NonPrimitive) {
       const host = hostOf(candidate);

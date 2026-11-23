@@ -1,0 +1,47 @@
+[
+  {
+    "name": "independent parameter and logging additions are compatible",
+    "function": "intentsCompatible.nl",
+    "inputs": {
+      "hunk": {
+        "path": "src/fetch.ts",
+        "startLine": 1,
+        "endLine": 3,
+        "base": "export function fetchUser(id: string) {\n  return db.find(id);\n}",
+        "left": "export function fetchUser(id: string, timeoutMs = 5000) {\n  return db.find(id, { timeoutMs });\n}",
+        "right": "export function fetchUser(id: string) {\n  logger.debug('fetchUser', id);\n  return db.find(id);\n}"
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "contradictory default auth policies are incompatible",
+    "function": "intentsCompatible.nl",
+    "inputs": {
+      "hunk": {
+        "path": "src/auth.ts",
+        "startLine": 1,
+        "endLine": 1,
+        "base": "export const DEFAULT_POLICY = 'prompt';",
+        "left": "export const DEFAULT_POLICY = 'deny';",
+        "right": "export const DEFAULT_POLICY = 'allow';"
+      }
+    },
+    "expected": false
+  },
+  {
+    "name": "incompatible retry timeout choices are incompatible",
+    "function": "intentsCompatible.nl",
+    "inputs": {
+      "hunk": {
+        "path": "src/client.ts",
+        "startLine": 4,
+        "endLine": 4,
+        "base": "export const RETRY_MODE = 'linear';",
+        "left": "export const RETRY_MODE = 'none';",
+        "right": "export const RETRY_MODE = 'exponential-infinite';"
+      }
+    },
+    "expected": false
+  }
+]

@@ -114,3 +114,19 @@ def test_settle_deletes_a_program_whose_measured_original_never_passes(tmp_path)
     decisions = mc.settle([row('1a', 'design-brief:001', 0), row('1b', 'design-brief:001', 0)],
                           [row('1a', 'design-brief:001', 4), row('1b', 'design-brief:001', 4)], tmp_path / 'proposals')
     assert decisions[0]['decision'] == 'delete' and decisions[0]['keepBy'] == 'floor'
+
+
+def test_program_tasks_keep_accepted_unreserved_exact_and_verifier_cases_with_their_split():
+    case = lambda cid, program, oracle='exact': {'id': cid, 'split': 'train', 'semantics': {'root': 'a.nl'},
+                                                 'equivalence': {'program': program, 'oracle': oracle, 'split': 'dev', 'source_sha256': 's'}}
+    cases = [case('a', 'design-brief:001'), case('v', 'design-brief:001', 'verifier'),
+             case('b', 'design-brief:001', 'judged'), case('c', 'design-brief:002'),
+             case('d', 'design-brief:003')]
+    decisions = [{'program': 'design-brief:001', 'decision': 'accept'}, {'program': 'design-brief:002', 'decision': 'give-up'},
+                 {'program': 'design-brief:003', 'decision': 'accept'}]
+    import tempfile
+    with tempfile.TemporaryDirectory() as out:
+        rows = mc.program_tasks(cases, decisions, out, reserved={'design-brief:003'})
+    assert [r['id'] for r in rows] == ['a:sfp-migrated', 'v:sfp-migrated']
+    assert rows[0]['split'] == 'dev' and 'equivalence' not in rows[0] and rows[0]['semantic_fp_migration']['original_id'] == 'a'
+    assert rows[1]['semantic_fp_migration']['original_id'] == 'v'

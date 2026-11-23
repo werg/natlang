@@ -55,12 +55,13 @@ template literal.
 ## Decisions: probabilities, floors, escalation
 
 A function with `readout: decision` and a finite result (a literal union, `boolean`, a record whose fields are all
-finite, or a union of such records) is scored instead of written: the model rates every allowed value. `decide(fn,
-...args)` (from `@natlang/node`, and the same name in eval) calls it and returns `{ value, probabilities, confidence,
-scored }`, plus `fields` for a record (each field's values with their probabilities). A record type of up to 32 values
-is scored in one pass; a larger one field by field, and its `confidence` is the probability of the record chosen. Act
-on the confidence in code. A field typed `string` or marked optional makes the result open: split the open part into
-its own function, or keep the tool loop.
+finite, or a union of such records) reasons first and then scores every allowed value (use `readout: instant` on hot
+paths to skip reasoning). `decide(fn, ...args)` (from `@natlang/node`, and the same name in eval) calls it and returns
+`{ value, probabilities, confidence, scored }`, plus `fields` for a record (each field's values with their
+probabilities). A record type of up to 32 values is scored in one pass; a larger one field by field, and its
+`confidence` is the probability of the record chosen. Act on the confidence in code (or wrap `fn` in `escalate` from
+`@natlang/node/std`). A field typed `string` or marked optional makes the result open: split the open part into its own
+function, or keep the tool loop.
 
 <!-- from: examples/refunds/desk.ts -->
 ```ts
@@ -73,8 +74,8 @@ its own function, or keep the tool loop.
 
 `fn.on({ model: NAME })` is the same function on another of the runtime's models: in host code an entry of the
 runtime's `models`; under `natlang run`, the profile that the selected profile names as `escalate`. A name the runtime
-does not have runs on its default model. The local model then settles most requests in one scoring pass each, and only
-the unsure ones cost a stronger model's call. In a `.nl` body the same floors are instructions: nldb's `database.nl`
+does not have runs on its default model. The local model settles high-confidence requests locally, and only the unsure
+or high-risk ones cost a stronger model's call. In a `.nl` body the same floors are instructions: nldb's `database.nl`
 says "decide(classify, request, catalog) ... When its answer is unclear, or no answer has probability at least 0.5,
 change nothing". A driver without a scorer still answers a decision function, with `scored: false` and probability 1.
 
@@ -188,22 +189,55 @@ or a step limit with a deliberate answer when it is reached:
 
 <!-- from: examples/triage/triage.ts -->
 ```ts
-    return await iterateOn(shorten, draft).withLimit({ maxSteps: 3 }).until(text => words(text) <= MAX_SUMMARY_WORDS);
-  } catch (error) {
-    // After three rewrites, keep the shortest honest summary rather than failing the report.
-    if (error instanceof IterationLimitError) return error.lastState as Summary;
+  const repaired = await semanticRepair(draft, {
+    check: text => words(text) <= MAX_SUMMARY_WORDS ? [] : [`Summary has ${words(text)} words; shorten to at most ${MAX_SUMMARY_WORDS} words.`],
+    fix: shorten,
+    attempts: 3,
+  });
 ```
 
-Use `iterateOn` when each step depends on the previous state. Independent items are a `Promise.all` map.
+Use `iterateOn` (or `semanticRepair` / `fixedPoint`) when each step depends on the previous state. Independent items are
+a `semanticMap` or `Promise.all` map.
 
-## Repair, settle and merge: `@natlang/node/std`
+## Collections, policy, convergence & workspaces: `@natlang/node/std`
 
-The standard library (`@natlang/node/std`, in the browser `@natlang/browser/std`) holds the loops that come back in
-program after program, as TypeScript around judgments. The judgments it supplies itself are `.nl` functions shipped
-with it and exported by name (`intentOf`, `compatible`, `combine`, `settled`, `beats`): call them, `decide` them,
-rebind them with `.in(context)` or move them to another model with `.on({ model })`, and pass the result to the
-combinator's option of the same name. Every run records a `std:<name>` trace listing the calls of each stage, and the
-combinators pass values by reference, so a value they carry reaches your functions unchanged.
+The standard library (`@natlang/node/std`, in the browser `@natlang/browser/std`) provides typed TypeScript combinators
+around named `.nl` judgments shipped with the package (`meets`, `relates`, `beats`, `intentOf`, `compatible`, `combine`,
+`settled`, `compileRuleFn`). Every shipped judgment is an ordinary natlang function you can call, `decide`, `.in`, `.on`,
+trace and specialise. Every combinator nests its child calls under a `std:<name>` span and passes values by reference so
+`Neuralese<T>` states flow untouched.
+
+- **Collections**: `semanticMap(items, fn, { concurrency? })`, `semanticFilter(items, criterionOrFn, { floor? })`,
+  `semanticPartition(items, classifier, { floor? })` (`{ groups, uncertain }`),
+  `semanticReduce(items, init, step, { mode?: 'linear' | 'tree', combine? })`,
+  `semanticMatch(left, right, { relation?, match?, block?, floor? })`, and
+  `semanticRank(items, goal, { debiased?: true })` (concurrent symmetric pairwise `beats` + exact Copeland scoring).
+- **Policy & higher-order**: `escalate(fn, { to, floor?, risk? })` (confidence floor + asymmetric per-label risk floors,
+  recording `decision_escalate`), `withContext(fn, entries)` (`fn.in(Context.ofCallable(fn).with(entries))`, keeping
+  companion helpers intact), and `compileRule(rule, { examples?, check?, attempts? })` (synthesizes and example-verifies
+  a reusable judgment function).
+
+`examples/pr-review` composes `withContext`, `semanticMap`, `semanticRank`, and asymmetric `escalate` over untrusted PR
+diffs with `ensures:` verbatim quote checks:
+
+<!-- from: examples/pr-review/review.ts -->
+```ts
+export async function reviewPullRequest(hunks: Hunk[], rules: Rule[]): Promise<ReviewReport> {
+  // Bind check_hunk once per rule while keeping its protected `quotesMatch` verifier in context.
+  const checks = rules.map(rule => ({
+    rule,
+    run: withContext(checkHunk, { rule: `${rule.name}: ${rule.guidance}` }),
+  }));
+  const pairs = hunks.flatMap(hunk => checks.map(check => ({ hunk, check })));
+  const reviews = await semanticMap(pairs, ({ hunk, check }) => check.run(hunk), { concurrency: 6 });
+  const rawFindings: Finding[] = reviews.flatMap(review => review.findings);
+  const findings = rawFindings.length > 1
+    ? (await semanticRank(rawFindings, 'most critical engineering risk to fix before merging')).ranked
+    : rawFindings;
+  // Asymmetric safety gate: escalate when unsure (< 0.85) OR when P(block) >= 0.25.
+  const decideMerge = escalate(mergeVerdict, { to: 'teacher', floor: 0.85, risk: { block: 0.25 } });
+  const decision = await decideMerge(findings);
+```
 
 `semanticRepair(value, { check, fix, attempts })` runs an exact check (a compiler, a schema, tests) and hands what it
 finds to a fix until the check passes. The release desk drafts its notes, then repairs them against rules written in
@@ -300,16 +334,20 @@ argument. Only a proposal with no problems is accepted.
 
 <!-- from: examples/release/publish.ts -->
 ```ts
-export async function publish(folder: Folder, version: string, notes: Notes) {
-  return proposeAndVerify<string>(folder, writeSection, { args: [version, notes], attempts: 2,
-    verify: proposal => sectionProblems(proposal, version, notes) });
+export async function publish(folder: Folder, version: string, notes: Notes, breaking: Change[] = []) {
+  const priorChangelog = await folder.file('CHANGELOG.md').exists() ? await folder.file('CHANGELOG.md').readText() : '';
+  return proposeAndVerify<string>(folder, writeReleaseDocs, {
+    args: [version, notes, breaking],
+    attempts: 2,
+    verify: proposal => releaseDocProblems(proposal, version, priorChangelog, breaking),
+  });
 }
 ```
 
 <!-- from: examples/release/publish.ts -->
 ```ts
-  const file = folder.file(`releases/${version}.md`);
-  const previous = await file.exists() ? await file.readText() : '';
+  const migration = folder.file('MIGRATION.md');
+  const previous = await migration.exists() ? await migration.readText() : '';
 ```
 
 `branchAndSelect(folder, branches, { verify, goal })` runs several reducers, each on its own copy, drops the ones
@@ -356,7 +394,7 @@ caller sees it:
 <!-- from: examples/outline/digest.nl -->
 ```yaml
 ---
-description: The digest of a section and of each of its subsections.
+description: The bottom-up digest of a section integrated with its subsections.
 args:
   section: Section
 returns: Digest
@@ -364,7 +402,7 @@ recursive: structural
 ensures:
   - check: "covers(result, section)"
     message: the digest keeps the section's title and has one part per subsection, in order
-  - predicate: a digest whose gist states the main point of the section's own text in one sentence
+  - predicate: a digest whose gist states the main point of the section's own text and integrates any key findings from its subsections in one sentence
     against: [section]
 ---
 ```
@@ -389,7 +427,8 @@ and `returns: R`; the builtin `view(value, instructions?)` is one ([language](la
 A function starts as instructions and moves toward code as evidence accumulates, with the function staying the
 specification:
 
-1. **A scored decision.** `readout: decision` on a finite result: one pass, calibrated through `decide`.
+1. **A scored decision.** `readout: decision` on a finite result: reasons, then scores every choice with calibrated
+   probabilities through `decide` (`readout: instant` skips reasoning on latency-critical hot paths).
 2. **Compiled cases.** Every call is recorded (`natlang traces`). `natlang specialize --definition NAME` compiles a
    function's recorded calls into guarded crisp TypeScript cases; the runtime loads them by itself, starts a new case
    in shadow, promotes it on evidence, and hands any input no case admits (or a case that fails) back to the model.

@@ -60,8 +60,10 @@ def test_source_mutation_rejected_optout_and_nonopaque_roots_not_hidden(tmp_path
     (capture / 'retained-state-symlink').symlink_to(root, target_is_directory=True)
     prepare_retained_state_packs(capture)
     (root / 'nested/sqlite').write_bytes(b'changed')
-    with pytest.raises(ValueError, match='source changed'):
+    with pytest.raises(ValueError, match='source changed') as caught:
         prepare_retained_state_packs(capture)
+    detail = json.loads(str(caught.value).split('packing: ', 1)[1])
+    assert any(row['path'].endswith('/nested/sqlite') and 'bytes' in row['fields'] for row in detail['sample'])
     monkeypatch.setenv('VIBESTUDIO_PACK_RETAINED_STATE', '0')
     assert prepare_retained_state_packs(capture) == []
 
@@ -77,3 +79,34 @@ def test_transfer_and_checksum_use_only_identical_validated_anchored_exclusions(
     assert [arg for arg in checked if arg.startswith('--exclude=')] == ['--exclude=/retained-state-owned/']
     assert '--delete' not in sent and '--delete' in checked
     assert root.exists()
+
+
+def test_metadata_only_drift_reports_exact_field_and_keeps_archive_and_source(tmp_path):
+    capture, root = fixture(tmp_path)
+    prepare_retained_state_packs(capture)
+    directory = capture / '.retained-state-packs'
+    manifest = json.loads((directory / (root.name + '.json')).read_text())
+    (root / 'nested/sqlite').chmod(0o600)
+    with pytest.raises(ValueError, match='source changed') as caught:
+        validate_pack(manifest, directory, root)
+    detail = json.loads(str(caught.value).split('packing: ', 1)[1])
+    changed = next(row for row in detail['sample'] if row['path'].endswith('/nested/sqlite'))
+    assert changed['fields']['mode'] == {'expected': 0o640, 'actual': 0o600}
+    assert (directory / manifest['archive']).is_file() and root.is_dir()
+
+
+def test_external_hardlink_ctime_drift_rehashes_same_bytes_but_rejects_changed_payload(tmp_path):
+    capture, root = fixture(tmp_path)
+    prepare_retained_state_packs(capture)
+    directory = capture / '.retained-state-packs'
+    manifest = json.loads((directory / (root.name + '.json')).read_text())
+    payload = root / 'nested/sqlite'
+    os.link(payload, tmp_path / 'external-cas-borrower')
+    assert prepare_retained_state_packs(capture) == ['/retained-state-owned/']
+    original = payload.stat()
+    with payload.open('r+b') as stream:
+        stream.write(b'changed')
+    os.utime(payload, ns=(original.st_atime_ns, original.st_mtime_ns))
+    with pytest.raises(ValueError, match='source changed during content revalidation'):
+        validate_pack(manifest, directory, root)
+    assert payload.exists() and (directory / manifest['archive']).exists()

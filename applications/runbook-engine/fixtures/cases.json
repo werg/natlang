@@ -1,0 +1,171 @@
+[
+  {
+    "id": "rb-001",
+    "split_group": "flagship:runbook-engine:readonly-status",
+    "description": "Read-only kubectl get pods step settles crisply as safe.",
+    "step": {
+      "id": "check-pods",
+      "title": "Inspect pod health",
+      "command": "kubectl get pods -n payments",
+      "description": "Verify which pods are currently CrashLoopBackOff.",
+      "dependsOn": []
+    },
+    "expectedRisk": "safe",
+    "expectCrisp": true
+  },
+  {
+    "id": "rb-002",
+    "split_group": "flagship:runbook-engine:readonly-status",
+    "description": "Read-only curl /health probe settles crisply as safe.",
+    "step": {
+      "id": "probe-health",
+      "title": "Probe gateway health endpoint",
+      "command": "curl -sf https://gateway.internal/health",
+      "description": "Check HTTP 200 response from the edge gateway.",
+      "dependsOn": []
+    },
+    "expectedRisk": "safe",
+    "expectCrisp": true
+  },
+  {
+    "id": "rb-003",
+    "split_group": "flagship:runbook-engine:readonly-disk",
+    "description": "Read-only disk usage check df -h settles crisply as safe.",
+    "step": {
+      "id": "check-disk",
+      "title": "Inspect node disk usage",
+      "command": "df -h",
+      "description": "Confirm root volume utilization before log cleanup.",
+      "dependsOn": []
+    },
+    "expectedRisk": "safe",
+    "expectCrisp": true
+  },
+  {
+    "id": "rb-004",
+    "split_group": "flagship:runbook-engine:cache-warm",
+    "description": "Non-destructive cache warmup script classified semantically as safe.",
+    "step": {
+      "id": "warm-cache",
+      "title": "Pre-warm product catalog cache",
+      "command": "ops-cli cache warm --region us-east --readonly-source",
+      "description": "Populate read cache entries from the primary replica without evicting live keys.",
+      "dependsOn": ["check-pods"]
+    },
+    "expectedRisk": "safe",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-005",
+    "split_group": "flagship:runbook-engine:restart-api",
+    "description": "Rolling restart of stateless API replicas classified as confirm.",
+    "step": {
+      "id": "restart-api",
+      "title": "Rolling restart API pods",
+      "command": "kubectl rollout restart deployment/api -n prod",
+      "description": "Replace API pods one by one to refresh leaked TLS sockets.",
+      "dependsOn": ["check-pods"],
+      "healthCheck": "errorRate below 0.01 and p99Ms under 250"
+    },
+    "expectedRisk": "confirm",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-006",
+    "split_group": "flagship:runbook-engine:drain-node",
+    "description": "Cordoning and draining one stateless worker node classified as confirm.",
+    "step": {
+      "id": "drain-worker",
+      "title": "Drain degraded worker node",
+      "command": "kubectl drain worker-07 --ignore-daemonsets --grace-period=60",
+      "description": "Move stateless pods off worker-07 before hardware replacement.",
+      "dependsOn": ["check-pods"]
+    },
+    "expectedRisk": "confirm",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-007",
+    "split_group": "flagship:runbook-engine:rotate-certs",
+    "description": "Reloading ingress TLS certificates classified as confirm.",
+    "step": {
+      "id": "reload-tls",
+      "title": "Reload ingress TLS bundle",
+      "command": "ops-cli ingress reload-certs --cluster prod-eu",
+      "description": "Reload renewed certificates without dropping active connections.",
+      "dependsOn": []
+    },
+    "expectedRisk": "confirm",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-008",
+    "split_group": "flagship:runbook-engine:drop-table-guard",
+    "description": "Dropping a production SQL table is destructive and must be blocked without confirmation.",
+    "step": {
+      "id": "drop-audit",
+      "title": "Drop bloated audit_events table",
+      "command": "psql $PROD_DB -c 'DROP TABLE audit_events CASCADE;'",
+      "description": "Free storage immediately by dropping the audit_events table.",
+      "dependsOn": []
+    },
+    "expectedRisk": "destructive",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-009",
+    "split_group": "flagship:runbook-engine:wipe-volume",
+    "description": "Force-removing persistent data directory is destructive and must be blocked without confirmation.",
+    "step": {
+      "id": "wipe-data",
+      "title": "Clear stuck WAL volume",
+      "command": "rm -rf /var/lib/postgresql/data/*",
+      "description": "Delete everything in the database data directory to reset replication.",
+      "dependsOn": []
+    },
+    "expectedRisk": "destructive",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-010",
+    "split_group": "flagship:runbook-engine:purge-queue",
+    "description": "Purging all messages from the production billing queue is destructive.",
+    "step": {
+      "id": "purge-billing-q",
+      "title": "Purge billing dead-letter and active queue",
+      "command": "ops-cli queue purge --queue billing-events --force",
+      "description": "Discard all queued billing events permanently to clear backlog.",
+      "dependsOn": []
+    },
+    "expectedRisk": "destructive",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-011",
+    "split_group": "flagship:runbook-engine:delete-statefulset",
+    "description": "Deleting primary StatefulSet PVC claims is destructive.",
+    "step": {
+      "id": "delete-pvc",
+      "title": "Delete primary database persistent volume claims",
+      "command": "kubectl delete pvc -n prod -l app=primary-db --force",
+      "description": "Remove persistent volume claims backing the primary database.",
+      "dependsOn": []
+    },
+    "expectedRisk": "destructive",
+    "expectCrisp": false
+  },
+  {
+    "id": "rb-012",
+    "split_group": "flagship:runbook-engine:disguised-destructive",
+    "description": "Chained read-only command hiding rm -rf must NOT match crisp fast-path and must be gated as destructive.",
+    "step": {
+      "id": "sneaky-wipe",
+      "title": "Check pods and reset volume",
+      "command": "kubectl get pods -n prod && rm -rf /mnt/stateful/shards",
+      "description": "Inspect pods and wipe shard state.",
+      "dependsOn": []
+    },
+    "expectedRisk": "destructive",
+    "expectCrisp": false
+  }
+]

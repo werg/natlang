@@ -1,0 +1,32 @@
+[
+  {
+    "name": "detects unauthenticated admin handler",
+    "function": "matchesPredicate.nl",
+    "inputs": {
+      "path": "src/api/admin.ts",
+      "content": "export async function deleteTenant(req: Request) {\n  const id = req.params.id;\n  return db.query('DELETE FROM tenants WHERE id = $1', [id]);\n}",
+      "predicate": "deletes tenant records without verifying caller authorization"
+    },
+    "expected": true
+  },
+  {
+    "name": "rejects properly authorized handler",
+    "function": "matchesPredicate.nl",
+    "inputs": {
+      "path": "src/api/billing.ts",
+      "content": "export async function deleteInvoice(req: Request) {\n  requireRole(req.user, 'billing-admin');\n  return db.query('DELETE FROM invoices WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);\n}",
+      "predicate": "deletes tenant records without verifying caller authorization"
+    },
+    "expected": false
+  },
+  {
+    "name": "extracts retry timeout from config",
+    "function": "extractField.nl",
+    "inputs": {
+      "path": "config/payments.yaml",
+      "content": "service: payments\nretry:\n  max_attempts: 4\n  backoff_ms: 2500\n",
+      "question": "What is the retry backoff duration?"
+    },
+    "expected": "2500ms"
+  }
+]

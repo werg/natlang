@@ -1212,6 +1212,8 @@ def memetic_replay_task(task, directory):
     out = directory / 'memetic'
     out.mkdir(parents=True)
     shutil.copyfile(recorded / 'prepared.json', out / 'prepared.json')
+    if (recorded / 'baselines.json').exists():   # the staged layout's anchor (memetic_workspace.baselines)
+        shutil.copyfile(recorded / 'baselines.json', out / 'baselines.json')
     for summary in sorted((recorded / 'evals').glob('*/summary.json')):
         (out / 'evals' / summary.parent.name).mkdir(parents=True)
         shutil.copyfile(summary, out / 'evals' / summary.parent.name / 'summary.json')

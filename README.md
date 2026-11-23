@@ -11,7 +11,7 @@ own runs.
 ---
 description: Label one ticket using the rubric.
 args:
-  ticket: string
+  ticket: Untrusted<string>
   rubric: string
 returns: Label
 readout: decision
@@ -28,15 +28,15 @@ export type Summary = Is<string, "one paragraph that names the most severe probl
 
 <!-- from: examples/triage/triage.ts -->
 ```ts
-import { decide, IterationLimitError, iterateOn, nl } from '@natlang/node';
+import { nl } from '@natlang/node';
+import { escalate, semanticRepair } from '@natlang/node/std';
 import classify from './classify.nl';
 import isUrgent from './is_urgent.nl';
 ...
-export async function triage(tickets: string[], rubric: string): Promise<Report> {
-  const decisions = await Promise.all(tickets.map(ticket => decide(classify, ticket, rubric)));
+export async function triage(tickets: Untrusted<string>[], rubric: string): Promise<Report> {
   // Only the tickets the local model is unsure of go to the stronger model.
-  const labels = await Promise.all(decisions.map(({ value, confidence }, i) =>
-    confidence >= 0.8 ? value : classify.on({ model: 'teacher' })(tickets[i]!, rubric)));
+  const classifyTicket = escalate(classify, { to: 'teacher', floor: 0.8 });
+  const labels = (await Promise.all(tickets.map(ticket => classifyTicket(ticket, rubric)))).map(result => result.value);
   const real = tickets.filter((_, i) => labels[i] !== 'spam');
   const flags = await Promise.all(real.map(ticket => isUrgent(ticket)));
   const urgent = real.filter((_, i) => flags[i]);
@@ -49,10 +49,10 @@ export async function triage(tickets: string[], rubric: string): Promise<Report>
 ```
 
 `classify.nl` is a natural-language function with `readout: decision`: the model reasons, then scores the three labels,
-and `decide` returns their probabilities. The tickets it is sure of are settled locally; `classify.on({ model:
-'teacher' })` asks a stronger model about the rest (`teacher` is the profile that your model profile names as
-`escalate`; without one the call runs on the default model). Counting is code. The summary's type is a property the
-runtime checks on every draft.
+and `escalate` (from `@natlang/node/std`) settles high-confidence tickets locally while sending unsure ones to
+`classify.on({ model: 'teacher' })` (`teacher` is the profile that your model profile names as `escalate`; without one
+the call runs on the default model). External ticket text is `Untrusted<string>` (fenced as data). Counting is code.
+The summary's type is a property the runtime checks on every draft, shortened via `semanticRepair`.
 
 The compiler plans every `nl` call before the model runs — its parameters,
 return type, and the variables its instructions mention — so natural-language
@@ -168,9 +168,13 @@ Read these programs first; each is the paradigm in working code:
 
 | Program | What it shows |
 |---|---|
-| [`examples/triage`](examples/triage/) | Scored labels with escalation of the unsure ones, exact counts, a summary refined to its type |
-| [`examples/review`](examples/review/) | A named function whose callable folder holds a decision leaf and an exact aggregate |
+| [`examples/pr-review`](examples/pr-review/) | Automated PR review on untrusted diffs: `ensures:` verbatim quote checks, per-rule `withContext`, `semanticMap`, debiased `semanticRank`, asymmetric `escalate` (`risk: { block: 0.25 }`) |
+| [`examples/triage`](examples/triage/) | Scored labels with `escalate` on unsure tickets, exact counts, a refined summary shortened with `semanticRepair` |
+| [`examples/review`](examples/review/) | A named function whose callable folder runs parallel assessments and exact counts in TS while the `.nl` root synthesizes the conclusion |
 | [`examples/refunds`](examples/refunds/) | One verdict function bound per shop with `.in(context)`, a `pluggable` rule, a reply revised until a natural-language check holds, a folder transaction |
+| [`examples/release`](examples/release/) | `@natlang/node/std` convergence & workspaces: `semanticRepair`, `fixedPoint`, `semanticMerge`, `proposeAndVerify` over CHANGELOG/MIGRATION, and `branchAndSelect` |
+| [`examples/screening`](examples/screening/) | Higher-order semantic functions: `meets.partial(req)` and a `.nl` function that returns a typed judgment function |
+| [`examples/outline`](examples/outline/) | Bottom-up structural recursion (`recursive: structural`) with relational `ensures:` contracts |
 | [`applications/notebook`](applications/notebook/) | A dependency graph run one ready cell per step under a measure, with checked citations |
 | [`applications/helpdesk`](applications/helpdesk/) | Per-ticket event loops whose policies are natural-language functions behind settings |
 | [`applications/nldb`](applications/nldb/) | A relational database whose engine is natural-language stages over a folder format |

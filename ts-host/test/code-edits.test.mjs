@@ -41,8 +41,14 @@ async function editingRun(root, store, calls) {
 
 const FIX = ['edit_code', { name: 'label', find: 'return "old";', replace_with: 'return "new";' }];
 
+function freshStore(dir = mkdtempSync(join(tmpdir(), 'natlang-calls-'))) {
+  const store = CallStore.open(dir);
+  store.writeSettings({ minFreeBytes: 0 });
+  return { dir, store };
+}
+
 test('protected items, types.ts and protect: lists cannot be edited; the error says what to fix instead', async () => {
-  const root = program(), store = CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-calls-')));
+  const root = program(), { store } = freshStore();
   try {
     const { requests, record } = await editingRun(root, store, [
       ['edit_code', { name: 'checks.verdict', find: 'text === "ok"', replace_with: 'true' }],
@@ -78,7 +84,7 @@ test('a protect: entry that names nothing is a load error, and a nested function
 });
 
 test('adopt-call installs a checked and tested fix, refuses a failing one, and rollback restores the exact bytes', async () => {
-  const root = program(), store = CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-calls-')));
+  const root = program(), { store } = freshStore();
   try {
     const { record } = await editingRun(root, store, [FIX, ['eval', { code: 'return label(n)' }], ['return_result', { status: 'success' }]]);
     const passing = async directory => {
@@ -116,13 +122,13 @@ test('adopt-call installs a checked and tested fix, refuses a failing one, and r
 });
 
 test('adopt-call refuses calls that failed or changed no code, and a proposal that touches a protected item', async () => {
-  const root = program(), store = CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-calls-')));
+  const root = program(), { store } = freshStore();
   const verify = async () => ({ check: { ok: true, diagnostics: [] }, test: { ok: true } });
   try {
     const { record: failed } = await editingRun(root, store, [FIX, ['return_result', { status: 'failed', reason: 'no' }]]);
     assert.equal(failed.code_revisions, undefined, 'a failed call proposes nothing');
     assert.match((await adoptCall(store, failed.call_id, { verify })).reasons[0], /only a call that succeeded proposes/);
-    const store2 = CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-calls-')));
+    const { store: store2 } = freshStore();
     try {
       const { record: plain } = await editingRun(root, store2, [['eval', { code: 'return label(n)' }], ['return_result', { status: 'success' }]]);
       assert.match((await adoptCall(store2, plain.call_id, { verify })).reasons[0], /changed no code/);
@@ -147,7 +153,7 @@ test('natlang improve adopt-call runs natlang check and natlang test, and --unte
   const { spawnSync } = await import('node:child_process');
   const { fileURLToPath } = await import('node:url');
   const cli = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
-  const root = program(), storeRoot = mkdtempSync(join(tmpdir(), 'natlang-calls-')), store = CallStore.open(storeRoot);
+  const root = program(), { dir: storeRoot, store } = freshStore();
   try {
     const { record } = await editingRun(root, store, [FIX, ['eval', { code: 'return label(n)' }], ['return_result', { status: 'success' }]]);
     store.close();

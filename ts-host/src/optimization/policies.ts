@@ -101,3 +101,135 @@ export function componentFactsOf(keys: readonly string[], parent: SearchCandidat
 export function decide<A extends unknown[], R>(name: ComponentPolicyName, setting: PluggableSetting, crisp: (...args: A) => R | Promise<R>, nl: (...args: A) => R | Promise<R>) {
   return pluggable<A, R>({ crisp, nl }, setting, { name, default: 'crisp', serve: 'crisp' });
 }
+
+// --- Optimization ladder recommendation (`natlang profile`, WS2 R5) -------------------------------------------------
+
+export type FunctionProfile = {
+  name: string;
+  calls: number;
+  p50Ms: number;
+  avgTokens: number;
+  compiledShare: number;
+  decisionP10: number | null;
+  decisionP50: number | null;
+  escalationRate: number;
+  failureRate: number;
+  hasDecisionReadout: boolean;
+  finiteReturn: boolean;
+  /** Optional program directory and definition source for concrete command formatting. */
+  programDir?: string;
+  source?: string | null;
+};
+
+export type OptimizationAction = 'readout-decision' | 'improve' | 'specialize' | 'tune' | 'none';
+
+export type OptimizationRecommendation = {
+  action: OptimizationAction;
+  command: string | null;
+  reason: string;
+};
+
+const OPTIMIZATION_ACTIONS: readonly OptimizationAction[] = ['readout-decision', 'improve', 'specialize', 'tune', 'none'];
+
+const NEXT_OPTIMIZATION_NL = `---
+description: Choose the next optimization action for a profiled natlang function.
+args: { profile: { name: string, calls: number, p50Ms: number, avgTokens: number, compiledShare: number, decisionP10: number | null, decisionP50: number | null, escalationRate: number, failureRate: number, hasDecisionReadout: boolean, finiteReturn: boolean, programDir?: string, source?: string | null } }
+returns: { action: 'readout-decision' | 'improve' | 'specialize' | 'tune' | 'none', command: string | null, reason: string }
+---
+Read the function profile and choose the single best next optimization action:
+- 'readout-decision' when finiteReturn is true and hasDecisionReadout is false.
+- 'improve' when failureRate is high (0.1 or higher).
+- 'specialize' when calls is high (20 or more) and compiledShare is low (below 0.5).
+- 'tune' when escalationRate is high (0.15 or higher) or decisionP50 is below 0.8.
+- 'none' otherwise.
+Return { action, command, reason } with a concrete natlang command (or null for 'none') and one concise sentence for reason.
+`;
+
+let nextOptimizationNlFn: ((profile: FunctionProfile) => Promise<OptimizationRecommendation>) | undefined;
+function defaultNextOptimizationNl(): (profile: FunctionProfile) => Promise<OptimizationRecommendation> {
+  if (!nextOptimizationNlFn) {
+    nextOptimizationNlFn = loadVirtualNatlang({ 'nextOptimization.nl': NEXT_OPTIMIZATION_NL }, 'nextOptimization.nl') as unknown as
+      (profile: FunctionProfile) => Promise<OptimizationRecommendation>;
+  }
+  return nextOptimizationNlFn;
+}
+
+/** Crisp rule for the next optimization step of a profiled function (WS2 R5 default). */
+export function crispNextOptimization(profile: FunctionProfile): OptimizationRecommendation {
+  const dir = profile.programDir ?? '.';
+  if (profile.finiteReturn && !profile.hasDecisionReadout) {
+    return {
+      action: 'readout-decision',
+      command: `add \`readout: decision\` to ${profile.source ?? profile.name}`,
+      reason: `${profile.name} has a finite return type without readout: decision; scoring the finite domain directly avoids the tool loop and yields calibrated confidence.`,
+    };
+  }
+  if (profile.calls >= 1 && profile.failureRate >= 0.1) {
+    return {
+      action: 'improve',
+      command: `natlang improve ${dir}`,
+      reason: `${profile.name} has a ${(profile.failureRate * 100).toFixed(1)}% failure rate across ${profile.calls} call${profile.calls === 1 ? '' : 's'}.`,
+    };
+  }
+  if (profile.calls >= 20 && profile.compiledShare < 0.5) {
+    return {
+      action: 'specialize',
+      command: `natlang specialize --definition ${profile.name}${profile.programDir ? ` --program ${profile.programDir}` : ''}`,
+      reason: `${profile.name} ran ${profile.calls} times with only ${(profile.compiledShare * 100).toFixed(0)}% served by compiled cases (avg ${Math.round(profile.avgTokens)} tokens, p50 ${Math.round(profile.p50Ms)} ms).`,
+    };
+  }
+  if (profile.escalationRate >= 0.15 || (profile.decisionP50 !== null && profile.decisionP50 < 0.8)) {
+    const reasons: string[] = [];
+    if (profile.escalationRate >= 0.15) reasons.push(`escalation rate is ${(profile.escalationRate * 100).toFixed(1)}%`);
+    if (profile.decisionP50 !== null && profile.decisionP50 < 0.8) reasons.push(`median decision confidence is ${profile.decisionP50.toFixed(2)}`);
+    return {
+      action: 'tune',
+      command: `natlang tune ${dir}`,
+      reason: `${profile.name}: ${reasons.join(' and ')}; tuning weights can raise local confidence and reduce escalations.`,
+    };
+  }
+  return {
+    action: 'none',
+    command: null,
+    reason: `${profile.name} has no immediate optimization bottleneck.`,
+  };
+}
+
+/** Verify that a natural-language recommendation stays within the allowed actions and fields. */
+export function verifyOptimizationRecommendation(value: unknown): OptimizationRecommendation {
+  must(!!value && typeof value === 'object', 'nextOptimization must return { action, command, reason }.');
+  const rec = value as Record<string, unknown>;
+  must(typeof rec.action === 'string' && OPTIMIZATION_ACTIONS.includes(rec.action as OptimizationAction),
+    `Optimization action must be one of ${OPTIMIZATION_ACTIONS.join(', ')}.`);
+  must(rec.command === null || typeof rec.command === 'string', 'Optimization command must be a string or null.');
+  must(typeof rec.reason === 'string' && rec.reason.trim().length > 0, 'Optimization reason must be a nonempty string.');
+  return { action: rec.action as OptimizationAction, command: rec.command as string | null, reason: rec.reason as string };
+}
+
+/** Pluggable policy closure recommending the next optimization step (`crisp` default, `nl`, or `shadow`). */
+export function nextOptimizationPolicy(
+  setting: PluggableSetting = 'crisp',
+  nl?: (profile: FunctionProfile) => OptimizationRecommendation | Promise<OptimizationRecommendation>,
+): (profile: FunctionProfile) => Promise<OptimizationRecommendation> {
+  const nlSide = async (profile: FunctionProfile): Promise<OptimizationRecommendation> => {
+    const raw = nl ? await nl(profile) : await defaultNextOptimizationNl()(profile);
+    return verifyOptimizationRecommendation(raw);
+  };
+  return pluggable<[FunctionProfile], OptimizationRecommendation>(
+    { crisp: crispNextOptimization, nl: nlSide },
+    setting,
+    { name: 'nextOptimization', default: 'crisp', serve: 'crisp' },
+  );
+}
+
+/** Recommend the next optimization step for a profiled function (pluggable `crisp` | `nl` | `shadow`, default `crisp`). */
+export async function nextOptimization(
+  profile: FunctionProfile,
+  options: {
+    setting?: PluggableSetting;
+    policy?: PluggableSetting;
+    nl?: (profile: FunctionProfile) => OptimizationRecommendation | Promise<OptimizationRecommendation>;
+  } = {},
+): Promise<OptimizationRecommendation> {
+  return nextOptimizationPolicy(options.setting ?? options.policy ?? 'crisp', options.nl)(profile);
+}

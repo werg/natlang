@@ -54,6 +54,22 @@ means a higher verifier pass rate, paired over items, permutation p < 0.05.
 `applications/wiki/merge`, `applications/nldb` and `applications/migration` are the existing seeds of 6, 8 and 9. The
 flagships extend them rather than forking them (one implementation per concept).
 
+## 3.5 Tier 1 Architectural Blueprints (restored alongside v2's stronger targets)
+
+1. **`pr-shepherd` (`applications/pr-shepherd/`, starter showcase in `examples/pr-review/`)**:
+   - **Typed boundaries**: `Hunk = { file: string; patch: Untrusted<string> }`, `Finding` with verbatim `quote` verified by `ensures: [{ check: "quotesMatch(result, hunk)" }, { predicate: ..., against: [hunk] }]`, `MergeVerdict = "approve" | "request-changes" | "block"`.
+   - **Composition**: binds one `check_hunk.nl` per team convention with `withContext` (`@natlang/node/std`), fans out over `(hunks x rules)` via `semanticMap`, ranks findings via debiased `semanticRank`, gates merge readiness with asymmetric `escalate(mergeVerdict, { to: 'teacher', floor: 0.85, risk: { block: 0.25 } })`, and proposes concrete patches via `proposeAndVerify` against the repo's exact test runner.
+   - **JIT & safety**: repeated lint/style rules specialize to crisp AST checks (`natlang specialize`); `Untrusted<string>` blocks prompt injections embedded in PR comments; `protect:` locks the test runner and `quotesMatch.ts`.
+
+2. **`semantic-etl` (`applications/semantic-etl/`)**:
+   - **Typed boundaries**: `RawBatch = Untrusted<string>[]`, `SchemaField`, `RowMapping`, `TransformCode`.
+   - **Composition**: inspects messy sample rows once to synthesize a typed TypeScript row-mapper via `compileRule` / `semanticRepair` (verified by `code_test.mjs` against schema & conservation invariants), then runs that crisp TypeScript transform across all 10,000+ rows with zero per-row LLM calls — falling back to a leaf `.nl` call ONLY on anomalous rows that fail the schema check (`semanticPartition` / `escalate`).
+   - **JIT & safety**: 95%+ of rows execute in pure TypeScript; conservation invariants (row counts, monetary totals, ID preservation) are exact verifiers.
+
+3. **`sem-sheet` (`applications/sem-sheet/`)**:
+   - **Typed boundaries**: `CellValue`, `ColumnSpec`, `SheetGraph`, `SemanticFormula`.
+   - **Composition**: deterministic topological DAG scheduling and formula arithmetic live in TypeScript (reusing `applications/notebook`'s `iterateOn(...).withMeasure(remainingCells)` pattern); semantic columns (`=SEM(...)`) run concurrently per DAG layer via `semanticMap` / `semanticFilter` / `semanticMatch` (with exact blocking) / `semanticReduce(..., { mode: 'tree' })`; conflicting collaborative edits merge via `semanticMerge`.
+
 ## 4. Benchmark protocol
 | Arm | Configuration |
 |---|---|

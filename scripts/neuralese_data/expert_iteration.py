@@ -318,16 +318,23 @@ def frontier_collector(base):
             return self.by_id[self.order.popleft()]
 
         def _memetic_open(self):
-            """A new memetic group may start: fewer than ``--memetic-max-groups`` run, and its episode wall clock
-            (the rows' ``world.case_seconds``) still fits before the deadline."""
+            """A new memetic group may start: fewer than ``--memetic-max-groups`` run, and its wall clock (the
+            episode's, the larger of the run's and the rows' ``world.case_seconds``, plus a staged group's preparation
+            stage, ``memetic_workspace.group_seconds``) still fits before the deadline."""
+            from natlang_neuralese.rl.memetic_workspace import group_seconds
             if not super()._memetic_open():
                 return False
             running = sum(1 for info in self.groups.values()
                           if info.get('memetic') and info['done'] < info['size'] and not info.get('abandoned'))
             if running >= getattr(self.args, 'memetic_max_groups', MEMETIC_MAX_GROUPS):
                 return False
-            tail = max([((r.get('semantics') or {}).get('world') or {}).get('case_seconds') or 7200
-                        for r in self.memetic_rows] or [7200])
+            layout = getattr(self.args, 'memetic_layout', 'staged')
+            run_seconds = int(getattr(self.args, 'case_seconds', 0) or 0)
+            tail = max([group_seconds(max(run_seconds, int(world.get('case_seconds') or 7200)),
+                                      ((r['semantics'].get('inputs') or {}).get('program') or {}).get('budget', {})
+                                      .get('evaluations', 2), layout)
+                        for r in self.memetic_rows for world in [(r.get('semantics') or {}).get('world') or {}]]
+                       or [7200])
             return time.time() + tail < self.deadline
 
         def _take(self):
@@ -483,6 +490,7 @@ def collect(args):
     g.held_manifest = args.held_manifest or grpo.default_held()
     g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
     g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
+    g.memetic_layout = getattr(args, 'memetic_layout', 'staged')
     g.max_outstanding = args.slots // 2 + 8
     tasks, excluded = grpo.load_tasks(g, work)
     code = grpo.git_pin()
@@ -491,7 +499,8 @@ def collect(args):
     run = {'schema': 'natlang.ei-collect/1', 'started': time.time(), 'code': code, 'pin': pin, 'series': series(),
            'argv': sys.argv, 'checkpoint': args.checkpoint, 'checkpoint_sha256': sha, 'k': args.k, 'hours': args.hours,
            'tasks_file': args.tasks, 'tasks_sha256': sha256_file_hex_cached(Path(args.tasks)), 'eligible': len(tasks),
-           'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups},
+           'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups,
+                       'layout': g.memetic_layout},
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
@@ -1174,6 +1183,7 @@ class Cycle:
                        '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(),
                        '--collect-weight-dtype', collect_w_dtype, '--teacher-attempts', teacher_attempts,
                        '--memetic-share', getattr(self.a, 'memetic_share', MEMETIC_SHARE),
+                       '--memetic-layout', getattr(self.a, 'memetic_layout', 'staged'),
                        '--slots', slots, '--unit-prefix', unit, *actor)
 
     def serve_colab(self, hosts, start, sha, profile):
@@ -1943,6 +1953,137 @@ def dgx_held(args):
         shutil.rmtree(store / 'sglang-hf', ignore_errors=True)    # the export (3.4 GB) is rebuilt from the checkpoint
 
 
+# ---- held-v4 beside the gate (DECISIONS 2026-11-23 "collection health and held cadence") ------------------------------
+HELD_V4_CADENCE = 'every=3,significant,health-sfp'
+HELD_V4_TRIGGERS = ('significant', 'health-sfp')
+HELD_V4_SAMPLES = 2
+HELD_V4_QUEUE_SCHEMA = 'natlang.ei-held-v4-queue/1'
+
+
+def parse_held_v4_cadence(text):
+    """``--held-v4-cadence``: ``off``, or comma-separated ``every=N`` (every Nth published round; 0 never),
+    ``significant`` (a round whose held-v3 verdict has p < 0.05, either direction) and ``health-sfp`` (a round whose
+    collection health report flags a semantic-FP construct)."""
+    out = {'every': 0, 'triggers': set()}
+    for part in [p.strip() for p in str(text or '').split(',') if p.strip()]:
+        if part == 'off':
+            return {'every': 0, 'triggers': set()}
+        if part.startswith('every='):
+            out['every'] = max(0, int(part.split('=', 1)[1]))
+        elif part in HELD_V4_TRIGGERS:
+            out['triggers'].add(part)
+        else:
+            raise ValueError(f'--held-v4-cadence: unknown part {part!r} (every=N, {", ".join(HELD_V4_TRIGGERS)}, off)')
+    return out
+
+
+def held_v4_reasons(cadence, *, round_number=None, verdict=None, health=None):
+    """Why a policy is due a held-v4 measurement under ``cadence`` (``parse_held_v4_cadence``): its published round
+    number, its held-v3 verdict record (``vs_start.p``) or the health report of its collection."""
+    out = []
+    every = cadence.get('every') or 0
+    if round_number and every and round_number % every == 0:
+        out.append(f'every-{every}:round-{round_number}')
+    if verdict is not None and 'significant' in cadence['triggers']:
+        p = (verdict.get('vs_start') or {}).get('p')
+        if p is not None and p < 0.05:
+            out.append(f'significant:{verdict.get("verdict")}')
+    if health is not None and 'health-sfp' in cadence['triggers'] and health.get('sfp_flagged'):
+        out.append('health-sfp')
+    return out
+
+
+class HeldV4Queue:
+    """Policies due a held-v4 measurement (``held-v4/queue.json``): one entry per policy sha with every reason it was
+    queued for; ``next`` is the newest pending one (the newest policy says most); ``finish`` closes an entry."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.lock = threading.RLock()
+        try:
+            state = json.loads(self.path.read_text())
+            self.entries = state['entries'] if state.get('schema') == HELD_V4_QUEUE_SCHEMA else []
+        except (OSError, ValueError, KeyError):
+            self.entries = []
+
+    def save(self):
+        from natlang_neuralese.common.jsonio import write_json_durable
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_durable(self.path, {'schema': HELD_V4_QUEUE_SCHEMA, 'entries': self.entries})
+
+    def add(self, policy, reasons):
+        if not reasons:
+            return None
+        with self.lock:
+            for entry in self.entries:
+                if entry['sha256'] == policy['sha256']:
+                    entry['reasons'] = sorted(set(entry['reasons']) | set(reasons))
+                    self.save()
+                    return entry
+            entry = {'sha256': policy['sha256'], 'checkpoint': str(policy['checkpoint']), 'reasons': sorted(reasons),
+                     'queued_at': round(time.time(), 1), 'state': 'pending', 'attempts': 0}
+            self.entries.append(entry)
+            self.save()
+            return entry
+
+    def next(self):
+        with self.lock:
+            pending = [e for e in self.entries if e['state'] == 'pending']
+            return dict(pending[-1]) if pending else None
+
+    def finish(self, sha, state, **info):
+        with self.lock:
+            for entry in self.entries:
+                if entry['sha256'] == sha:
+                    entry.update(state=state, finished_at=round(time.time(), 1), **info)
+            self.save()
+
+    def attempt(self, sha):
+        with self.lock:
+            for entry in self.entries:
+                if entry['sha256'] == sha:
+                    entry['attempts'] = int(entry.get('attempts', 0)) + 1
+                    self.save()
+                    return entry['attempts']
+        return 0
+
+
+def _result_complete(out):
+    try:
+        return bool(json.loads((Path(out) / 'result.json').read_text()).get('complete'))
+    except (OSError, ValueError):
+        return False
+
+
+def pop_held_measure(out, checkpoint, *, pin, samples, manifest, preempt=None, poll=30):
+    """One held measurement of ``checkpoint`` on Pop with ``manifest`` (``pop-held.sh``, resumable). ``preempt``
+    (a callable) is polled: when it answers true the measurement stops (its ``popheld-<OUT name>-*`` ledger unit and the
+    script) and resumes from its episodes next time. Returns 'complete', 'preempted' or 'incomplete'."""
+    import pop_rl_actor
+    out = Path(out)
+    if _result_complete(out):
+        return 'complete'
+    out.mkdir(parents=True, exist_ok=True)
+    pop_rl_actor.stop_pop_fills()
+    mode = ['base', str(out), str(samples)] if str(checkpoint) == BASE_CKPT else \
+        ['ckpt', str(out), str(samples), str(checkpoint)]
+    env = {**os.environ, 'HELD_MANIFEST': str(manifest)}
+    with (out / 'driver.log').open('a') as handle:
+        process = subprocess.Popen(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(pin), *mode], env=env,
+                                   stdout=handle, stderr=subprocess.STDOUT, start_new_session=True)
+    while process.poll() is None:
+        if preempt is not None and preempt():
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait()
+            units = subprocess.run(['systemctl', '--user', 'list-units', '--plain', '--no-legend',
+                                    f'popheld-{out.name}-*'], capture_output=True, text=True).stdout.split()
+            for unit in [u for u in units if u.startswith(f'popheld-{out.name}-') and u.endswith('.service')]:
+                subprocess.run(['systemctl', '--user', 'stop', unit], check=False)
+            return 'preempted'
+        time.sleep(poll)
+    return 'complete' if _result_complete(out) else 'incomplete'
+
+
 # ---- async round driver & phase switching (async-train §2, §4, §5, §7.4) ---------------------------------------------
 ROUND_MANIFEST_SCHEMA = 'natlang.async-round/1'
 PHASE_STATE_SCHEMA = 'natlang.async-phase-state/2'
@@ -2242,6 +2383,9 @@ class AsyncRoundDriver:
         self.held_wake = threading.Event()
         self.prep_thread = None
         self.colab_hosts = list(self.c.colab_hosts)
+        self.held_done = set()          # held-v3 candidates the held thread finished
+        self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
+        self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
 
     def cycle_args(self):
         """The Cycle helper's arguments (ledger, pin, DGX held series, collection and fill builders) from ours."""
@@ -2252,8 +2396,10 @@ class AsyncRoundDriver:
             kv_gb=a.kv_gb, fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
-            memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE), held_profile='dgx',
-            held_pin=a.held_pin, held_series_host='dgx', held_samples=a.held_samples, held_slots=a.held_slots,
+            memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE),
+            memetic_layout=getattr(a, 'memetic_layout', 'staged'), held_profile=getattr(a, 'held_profile', 'pop'),
+            held_pin=a.held_pin, held_series_host=getattr(a, 'held_profile', 'pop'), held_samples=a.held_samples,
+            held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
             collect_profile='dgx', sft_profile='dgx', select_args=a.select_args, prefer_unseen=[],
             fill_repo=None, data_repo=None, success_pts=a.success_pts, fail_pts=a.fail_pts)
@@ -2637,14 +2783,19 @@ class AsyncRoundDriver:
         return record
 
     def held_loop(self):
-        """The background held series: one measurement at a time, the newest due policy (training never waits)."""
-        done = set()
+        """The background held series: one measurement at a time, the newest due policy (training never waits). The
+        held-v3 gate goes first; a held-v4 measurement (``held_v4_step``) runs only while no held-v3 job waits, and a
+        held-v3 job that becomes due stops it (it resumes later from its episodes)."""
         while True:
             self.held_wake.wait(60)
             self.held_wake.clear()
-            with self.lock:
-                job = self.controller.state.get('measuring')
-            if not job or job['candidate']['sha256'] in done:
+            job = self.held_v3_pending()
+            if not job:
+                try:
+                    self.held_v4_step()
+                except BaseException as error:      # held-v4 never gates: note it and go on
+                    self.note(held_v4_failed=repr(error)[:300])
+                    time.sleep(300)
                 continue
             path = self.root / 'verdicts' / f'{job["candidate"]["sha256"][:12]}.json'
             try:
@@ -2654,9 +2805,119 @@ class AsyncRoundDriver:
                 time.sleep(300)
                 self.held_wake.set()
                 continue
-            done.add(job['candidate']['sha256'])
+            self.held_done.add(job['candidate']['sha256'])
             with self.lock:
                 self.verdicts.append(record)
+            self.held_wake.set()            # a queued held-v4 job may run now
+
+    def held_v3_pending(self):
+        with self.lock:
+            job = self.controller.state.get('measuring')
+        return job if job and job['candidate']['sha256'] not in self.held_done else None
+
+    # -- held-v4 (never gating) ---------------------------------------------------------------------------------------
+    def held_v4_manifest(self):
+        if getattr(self.a, 'held_v4_manifest', None):
+            return Path(self.a.held_v4_manifest)
+        from natlang_neuralese.common import data_registry
+        return Path(data_registry.role_path('held-eval-semantic-fp'))
+
+    def queue_held_v4(self, policy, reasons):
+        if not reasons:
+            return
+        entry = self.held_v4.add(policy, reasons)
+        self.note(held_v4_queued=policy['sha256'], reasons=entry['reasons'])
+        self.held_wake.set()
+
+    def held_v4_step(self):
+        """Measure the newest queued held-v4 policy on Pop at ``--held-v4-samples`` (``pop_held_measure``) and record
+        it beside the held-v3 verdict (``held-v4/hv4-<sha12>/record.json``)."""
+        job = self.held_v4.next()
+        if not job:
+            return
+        out = self.root / 'held-v4' / f'hv4-{job["sha256"][:12]}'
+        state = pop_held_measure(out, job['checkpoint'], pin=self.c.held_pin, samples=self.a.held_v4_samples,
+                                 manifest=self.held_v4_manifest(), preempt=lambda: self.held_v3_pending() is not None)
+        if state == 'preempted':
+            self.note(held_v4_preempted=job['sha256'])
+            return
+        if state != 'complete':
+            attempts = self.held_v4.attempt(job['sha256'])
+            self.note(held_v4_incomplete=job['sha256'], attempts=attempts, out=str(out))
+            if attempts >= 3:
+                self.held_v4.finish(job['sha256'], 'failed', out=str(out))
+            return
+        record = self.held_v4_record(job, out)
+        self.held_v4.finish(job['sha256'], 'measured', out=str(out))
+        self.note(held_v4_measured=job['sha256'], success_rate=record['result'].get('success_rate'),
+                  vs_previous=record.get('vs_previous'), reasons=job['reasons'])
+
+    def held_v4_record(self, job, out):
+        """The held-v4 result of one policy beside its held-v3 verdict (when it has one) and, when an earlier held-v4
+        measurement of this loop exists, compared with the newest one (``held_eval compare``; telemetry only)."""
+        from natlang_neuralese.common.jsonio import write_json_durable
+        result = json.loads((out / 'result.json').read_text())
+        keys = ('complete', 'ran', 'scored', 'successes', 'success_rate', 'ran_out_rate', 'loop_rate', 'timeout_rate',
+                'samples_per_task', 'manifest_sha256')
+        record = {'sha256': job['sha256'], 'checkpoint': job['checkpoint'], 'reasons': job['reasons'],
+                  'manifest': str(self.held_v4_manifest()), 'result': {k: result.get(k) for k in keys}}
+        verdict = self.root / 'verdicts' / f'{job["sha256"][:12]}.json'
+        if verdict.exists():
+            v = json.loads(verdict.read_text())
+            record['held_v3'] = {'verdict': v.get('verdict'), 'vs_start': v.get('vs_start'), 'path': str(verdict)}
+        earlier = sorted((p for p in (self.root / 'held-v4').glob('hv4-*/record.json') if p.parent != out),
+                         key=lambda p: p.stat().st_mtime)
+        if earlier:
+            base = earlier[-1].parent
+            compare_out = out / f'compare-vs-{base.name}.json'
+            rc = subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(base / 'result.json'),
+                                 str(out / 'result.json'), '--out', str(compare_out)], env=self.c.held_env,
+                                cwd=self.c.held_pin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+            if rc == 0 and compare_out.exists():
+                vs = json.loads(compare_out.read_text())
+                record['vs_previous'] = {'against': json.loads((base / 'record.json').read_text())['sha256'],
+                                         'delta': vs['primary']['delta'], 'p': vs['primary']['permutation_p']}
+        write_json_durable(out / 'record.json', record)
+        return record
+
+    # -- collection health (never halts) ------------------------------------------------------------------------------
+    def health_collections(self, policies):
+        """(current, previous, earlier) collection WORKs of a round's health report: the newest policy's, the previous
+        policy's, and every other collection of this loop plus ``--health-baseline`` (the lineage's earlier ones)."""
+        cur, prev = policies[-1], (policies[-2] if len(policies) > 1 else None)
+        current = self.collections_of([cur])
+        previous = self.collections_of([prev]) if prev else []
+        others = [d for d in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists()]
+        earlier = [d for d in others if d not in current and d not in previous and (d / 'runs.jsonl').exists()]
+        earlier += [Path(d) for d in getattr(self.a, 'health_baseline', []) or [] if Path(d) not in earlier]
+        return current, previous, earlier
+
+    def health_report(self, round_dir, policies):
+        """``rN/health.json`` (``collection_health.report``) once per round, a one-line summary in the drive log, each
+        flag in the ops alerts log; a flag on a semantic-FP construct queues held-v4 for the collection's policy."""
+        out = round_dir / 'health.json'
+        if getattr(self.a, 'no_health_report', False) or out.exists():
+            return None
+        import collection_health
+        try:
+            current, previous, earlier = self.health_collections(policies)
+            if not current:
+                return None
+            health = collection_health.report(current, previous, earlier, cache_dir=self.root / 'health-cache',
+                                              label=f'{self.a.name} {round_dir.name}')
+            health['policy'] = policies[-1]['sha256']
+            collection_health.write(health, out)
+            self.note(round=round_dir.name, health=collection_health.summary_line(health), health_flags=len(health['flags']),
+                      health_sfp=health['sfp_flagged'])
+            lines = collection_health.alert_lines(health, f'{self.a.name} {round_dir.name}')
+            if lines and self.a.alerts_log:
+                with open(self.a.alerts_log, 'a') as handle:
+                    handle.write(''.join(line + '\n' for line in lines))
+            self.queue_held_v4(policies[-1], held_v4_reasons(self.held_v4_cadence, health=health))
+            return health
+        except Exception as error:          # the report is telemetry: it never stops a round
+            self.note(round=round_dir.name, health_failed=repr(error)[:300])
+            return None
 
     def apply_verdicts(self):
         """Apply finished verdicts in the main loop: adoption, rollback, phase switch; a failure leaves a bug-hunt note
@@ -2670,6 +2931,9 @@ class AsyncRoundDriver:
                     pending.append(v)
         for record in pending:
             event = self.controller.record_verdict(record)
+            if event.get('action') != 'already applied':
+                self.queue_held_v4({'sha256': record['sha256'], 'checkpoint': record['checkpoint']},
+                                   held_v4_reasons(self.held_v4_cadence, verdict=record))
             self.note(verdict=record['verdict'], policy=record['sha256'], **{k: v for k, v in event.items()
                                                                              if k in ('action', 'switch_phase', 'held_every')})
             if record['verdict'] == 'failure' and 'bug_hunt' in event:
@@ -2713,6 +2977,7 @@ class AsyncRoundDriver:
                     shutil.rmtree(round_dir)                # prepared ahead from a lineage a rollback discarded
                     (round_dir / 'stages').mkdir(parents=True)
                 self.prepare(round_dir, self.lineage_policies())
+                self.health_report(round_dir, self.lineage_policies())
                 nxt = f'r{int(self.controller.state["round_counter"]) + 1:04d}'
                 self.prepare_ahead(self.round_dir(nxt), self.lineage_policies())
                 update_round_manifest(round_dir, trained_from=cur['sha256'], trained_from_version=cur['version'])
@@ -2735,6 +3000,8 @@ class AsyncRoundDriver:
                 if self.controller.held_due() and not self.controller.state.get('measuring'):
                     self.controller.start_measurement()
                     self.held_wake.set()
+                self.queue_held_v4(new, held_v4_reasons(self.held_v4_cadence,
+                                                        round_number=len(self.controller.state['trained_rounds'])))
             for i in range(len(self.a.rebind_actor)):     # a single-endpoint collector cannot tell a rebound actor
                 unit = f'{self.collection_unit(cur)}-remote{i}'
                 if self.c.active(unit):
@@ -2831,6 +3098,10 @@ def main():
         p.add_argument('--memetic-share', type=float, default=MEMETIC_SHARE,
                        help='share of new collection groups that are memetic "improve program P" episodes (default '
                             'MEMETIC_SHARE; 0 opts out); their verified own successes enter the SFT mix')
+        p.add_argument('--memetic-layout', choices=('staged', 'inline'), default='staged',
+                       help="a memetic group's layout (grpo --memetic-layout; rl/memetic_workspace.py bind_layout): "
+                            'staged (default) prepares it as a collector stage and fits its nested runs in the '
+                            "episode's wall clock; inline is the layout before 2026-11-23")
     s = sub.add_parser('select')
     pool_flags(s)
     s.add_argument('--out', required=True)
@@ -3081,8 +3352,22 @@ def main():
     ad.add_argument('--grpo-budget', type=int, default=100, help='GRPO ledger GB (learner + its actor)')
     ad.add_argument('--grpo-extra', default='')
     ad.add_argument('--held-every', type=int, default=2, help='held-eval every Nth round (1: every round)')
+    ad.add_argument('--held-profile', choices=('pop', 'dgx'), default='pop',
+                    help='the held-v3 gate series: pop (default: Pop is otherwise idle; 2 samples) or dgx (4 samples, '
+                         'yields collection slots)')
+    ad.add_argument('--held-v4-cadence', default=HELD_V4_CADENCE,
+                    help='when held-v4 (registry role held-eval-semantic-fp) measures a policy on Pop, never gating and '
+                         'only while Pop has no held-v3 job: every=N published rounds, significant (a held-v3 verdict '
+                         'with p < 0.05), health-sfp (the collection health report flags a semantic-FP construct); off')
+    ad.add_argument('--held-v4-samples', type=int, default=HELD_V4_SAMPLES)
+    ad.add_argument('--held-v4-manifest', help='default: the registry role held-eval-semantic-fp (ops/held-v4)')
+    ad.add_argument('--health-baseline', action='append', default=[], metavar='COLLECT_WORK',
+                    help="the lineage's earlier collections (outside this loop) each round's health report compares with")
+    ad.add_argument('--no-health-report', action='store_true', help='no per-round collection health report')
+    ad.add_argument('--alerts-log', default=str(OPS / 'storage-alerts.log'),
+                    help='the ops alerts log the heartbeat reads (health flags are appended; empty: none)')
     ad.add_argument('--held-every-max', type=int, default=8)
-    ad.add_argument('--held-samples', type=int, default=None, help='default: the DGX series (4)')
+    ad.add_argument('--held-samples', type=int, default=None, help="default: the held profile's (Pop 2, DGX 4)")
     ad.add_argument('--held-slots', type=int, default=HELD_SLOTS)
     ad.add_argument('--success-pts', type=float, default=2.)
     ad.add_argument('--fail-pts', type=float, default=3.)

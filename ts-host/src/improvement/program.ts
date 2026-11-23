@@ -1,9 +1,18 @@
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import YAML from 'yaml';
 import {NATLANG_COMPILE_VERSION} from '../compiler/intrinsics.js';
+import { checkProject } from '../compiler/node-project.js';
+import { hexDigest } from '../native/hash.js';
+import { canonicalValue } from '../native/refinement.js';
 import {SYSTEM_PROMPT} from '../native/prompt.js';
+import { isProtectedSource, loadNamedFunction, protectedSources, type SourceFiles } from '../runtime/loader.js';
+import { adoptSource, type AdoptionRecord, type SourceManifest } from './adoption.js';
 import { OperationJournal } from './operations.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { Folder, FolderSnapshot } from '../native/scoped-fs.js';
-import { createNatlangRuntime, type InvocationTrace, type ModelDriver } from '../runtime/node.js';
+import { __natlang, createNatlangRuntime, type InvocationTrace, type ModelDriver } from '../runtime/node.js';
 import { loadVirtualCallables } from '../runtime/virtual-project.js';
 import { AUTHORED_IMPROVER } from './authored-source.js';
 import { SourceEvaluator, sourceFiles,SOURCE_EVALUATION_VERSION } from './host.js';
@@ -142,4 +151,558 @@ export async function improveProgram(options: ImproveProgramOptions) {
   return { ...result, disposition, sourceDiff, baseline, transformation,
     sourceManifest:{schema:'natlang.program-source/1',source:result.folder.digest,base:baselineSource.digest,contract:options.contract,files,baseFiles:before},
     authored: { identity: fingerprint(authored), files: authored }, validation: measured, ledger: gateway.snapshot(), evaluator };
+}
+
+// --- Directory-form program improvement (`natlang improve DIR`, WS8 N4) -------------------------------------------
+
+export type DirectorySplit = 'support' | 'dev' | 'confirmation';
+
+export type DirectoryImprovementCase = {
+  id: string;
+  name?: string;
+  source: 'examples' | 'call-store';
+  function: string;
+  inputs: Record<string, unknown>;
+  expected: unknown;
+  group: string;
+  split: DirectorySplit;
+  protected?: boolean;
+};
+
+export type DirectoryCasePack = {
+  directory: string;
+  seed: number;
+  cases: DirectoryImprovementCase[];
+  splits: {
+    support: DirectoryImprovementCase[];
+    dev: DirectoryImprovementCase[];
+    confirmation: DirectoryImprovementCase[];
+  };
+  sources: { examples: number; callStore: number };
+};
+
+export type DirectorySplitResult = {
+  passed: number;
+  total: number;
+  passRate: number;
+  results: { id: string; function: string; ok: boolean; expected: unknown; received?: unknown; error?: string }[];
+};
+
+export type DirectoryProposal = {
+  /** Relative file path -> new file text, or `null` to delete the file. */
+  files: Record<string, string | null>;
+  /** Optional summary of the proposed change (e.g. memetic guidance update or instruction edit). */
+  summary?: string;
+};
+
+/** Minimal structural subset of `CallStore` read by `buildDirectoryCasePack` and `improveDirectory`. */
+export type DirectoryCallStoreLike = {
+  calls(filter?: { program?: string; outcome?: string; limit?: number }): readonly { call_id: string }[];
+  call(callId: string): {
+    call_id: string;
+    outcome: string;
+    definition: { source: string | null };
+    inputs: Record<string, { complete: boolean; hash?: string }>;
+    output: { complete: boolean; hash?: string } | null;
+  } | undefined;
+  value(ref: { complete: boolean; hash?: string } | null | undefined): unknown;
+};
+
+export type ImproveDirectoryOptions = {
+  directory: string;
+  store?: DirectoryCallStoreLike;
+  seed?: number;
+  maxStoreCalls?: number;
+  /** Explicit proposal to verify and adopt (e.g. from `--proposal FILE` or tests). */
+  proposal?: DirectoryProposal;
+  /** Plugged improver callback that inspects the program files and `support` split and returns a proposal. */
+  propose?: (context: {
+    directory: string;
+    files: Record<string, string>;
+    support: DirectoryImprovementCase[];
+    casePack: DirectoryCasePack;
+  }) => Promise<DirectoryProposal | null> | DirectoryProposal | null;
+  /** Custom static check runner (defaults to `checkProject`). */
+  check?: (directory: string) => Promise<{ ok: boolean; diagnostics: string[] }>;
+  /** Custom split evaluator (defaults to running each `.nl` function with `options.model`). */
+  evaluateSplit?: (directory: string, cases: readonly DirectoryImprovementCase[]) => Promise<DirectorySplitResult>;
+  /** Model driver used by the default split evaluator when `evaluateSplit` is not supplied. */
+  model?: ModelDriver;
+  /** Where to write the adoption record (defaults to `<DIR>/.natlang/adoptions/improve-<timestamp>.json`). */
+  recordPath?: string;
+  /** Verify without modifying `directory`. */
+  dryRun?: boolean;
+  /** Require dev or confirmation pass rate to strictly improve (default false: non-regression passes). */
+  requireImprovement?: boolean;
+};
+
+export type ImproveDirectoryResult = {
+  status: 'accepted' | 'rejected' | 'checked' | 'unchanged';
+  directory: string;
+  changed: string[];
+  reasons: string[];
+  summary?: string;
+  casePack: DirectoryCasePack;
+  check?: { ok: boolean; diagnostics: string[] };
+  baseline?: { dev: DirectorySplitResult; confirmation: DirectorySplitResult };
+  proposed?: { dev: DirectorySplitResult; confirmation: DirectorySplitResult };
+  record?: AdoptionRecord;
+  recordPath?: string;
+};
+
+const DIR_SKIPPED = new Set(['node_modules', '.git', '.natlang', 'dist', '.venv']);
+
+/** Canonical key for deduplicating `[function, inputs]` across `examples.json` and `CallStore`. */
+const caseDedupeKey = (fnPath: string, inputs: Record<string, unknown>): string =>
+  canonicalValue([fnPath.replace(/\\/g, '/').replace(/^\.\//, ''), inputs]);
+
+/** Read all authored source files of a program directory (excluding generated declarations and metadata dirs). */
+function readProgramFiles(directory: string): Record<string, string> {
+  const files: Record<string, string> = {};
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir).sort()) {
+      if (DIR_SKIPPED.has(entry) || entry.startsWith('.') || entry.endsWith('.d.nl.ts') || entry.endsWith('.d.nz.ts')) continue;
+      const full = join(dir, entry);
+      const rel = relative(directory, full).split(sep).join('/');
+      const stat = statSync(full);
+      if (stat.isDirectory()) walk(full);
+      else if (stat.isFile()) files[rel] = readFileSync(full, 'utf8');
+    }
+  };
+  walk(directory);
+  return files;
+}
+
+/** Protected sources of a program (`types.ts` and every `.nl` file's `protect:` list), matching `adopt-call.ts`. */
+function programProtectedSources(directory: string, overrides: Record<string, string | null>): { protected: string[]; lists: Record<string, string> } {
+  const found: string[] = [];
+  const lists: Record<string, string> = {};
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir).sort()) {
+      if (DIR_SKIPPED.has(entry) || entry.startsWith('.')) continue;
+      const full = join(dir, entry);
+      const rel = relative(directory, full).split(sep).join('/');
+      const stat = statSync(full);
+      if (stat.isDirectory()) { visit(full); continue; }
+      if (!entry.endsWith('.nl')) continue;
+      if (Object.hasOwn(overrides, rel) && overrides[rel] === null) continue;
+      const text = Object.hasOwn(overrides, rel) ? (overrides[rel] as string) : readFileSync(full, 'utf8');
+      const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1];
+      let protect: unknown;
+      try { protect = front ? (YAML.parse(front) as Record<string, unknown> | null)?.protect : undefined; } catch { protect = undefined; }
+      const entries = Array.isArray(protect) ? protect.filter((item): item is string => typeof item === 'string') : [];
+      lists[rel] = JSON.stringify(entries);
+      found.push(...protectedSources(rel, entries));
+    }
+  };
+  visit(directory);
+  return { protected: found, lists };
+}
+
+/** Materialize a temporary copy of `directory` with `changes` applied (`node_modules` symlinked). */
+function materializeDirectoryCopy(directory: string, changes: Record<string, string | null>): string {
+  const target = mkdtempSync(join(tmpdir(), 'natlang-improve-dir-'));
+  for (const entry of readdirSync(directory)) {
+    if (entry === '.git' || entry === '.natlang') continue;
+    if (entry === 'node_modules') {
+      symlinkSync(join(directory, entry), join(target, entry), 'dir');
+      continue;
+    }
+    cpSync(join(directory, entry), join(target, entry), {
+      recursive: true,
+      filter: source => !source.split(sep).includes('node_modules'),
+    });
+  }
+  for (const [rel, text] of Object.entries(changes)) {
+    const dest = join(target, rel);
+    if (text === null) {
+      rmSync(dest, { force: true });
+    } else {
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, text);
+    }
+  }
+  return target;
+}
+
+function nodeSourceFilesFor(root: string): SourceFiles {
+  return {
+    join,
+    dirname,
+    basename,
+    extname,
+    isFile: path => existsSync(path) && statSync(path).isFile(),
+    isDirectory: path => existsSync(path) && statSync(path).isDirectory(),
+    read: path => readFileSync(path, 'utf8'),
+    list: dir => readdirSync(dir),
+    relative: path => relative(root, path).split(sep).join('/'),
+  };
+}
+
+/**
+ * Build a deterministic support / dev / confirmation improvement case pack from `<DIR>/examples.json`
+ * plus recorded successful calls in `CallStore` for `<DIR>` (WS8 N4).
+ *
+ * Deduplicates by `[function, inputs]` (with `examples.json` taking precedence), keeps each case group
+ * in exactly one split, pins `protected: true` examples to `confirmation`, and orders groups by
+ * `sha256(seed + ":" + groupKey)` so split assignment is deterministic and seeded.
+ */
+type SavedExampleLike = { name?: string; function: string; inputs: Record<string, unknown>; expected?: unknown; group?: string; protected?: boolean };
+
+function readDirectoryExamples(root: string): SavedExampleLike[] {
+  const path = join(root, 'examples.json');
+  if (!existsSync(path)) return [];
+  const raw = JSON.parse(readFileSync(path, 'utf8'));
+  if (!Array.isArray(raw)) throw new Error(`${path} must be an array of { function, inputs, expected } examples`);
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || typeof item.function !== 'string' || !item.function.endsWith('.nl') ||
+        !item.inputs || typeof item.inputs !== 'object' || Array.isArray(item.inputs)) {
+      throw new Error(`${path}: each example needs a .nl function and an inputs object (and an expected result to be tested)`);
+    }
+    const delta = relative(resolve(root), resolve(root, item.function));
+    if (delta === '..' || delta.startsWith('..' + sep) || resolve(root, item.function) === resolve(root)) {
+      throw new Error('Example functions must be inside the program');
+    }
+  }
+  return raw as SavedExampleLike[];
+}
+
+export function buildDirectoryCasePack(
+  directory: string,
+  options: { store?: DirectoryCallStoreLike; seed?: number; maxStoreCalls?: number } = {},
+): DirectoryCasePack {
+  const root = resolve(directory);
+  const seed = options.seed ?? 0;
+  if (!Number.isSafeInteger(seed)) throw new RangeError(`seed must be a safe integer, got ${seed}`);
+
+  type RawCase = Omit<DirectoryImprovementCase, 'split'>;
+  const raw: RawCase[] = [];
+  const seenKeys = new Set<string>();
+  let examplesCount = 0;
+  let storeCount = 0;
+
+  // 1. Saved examples from <DIR>/examples.json (only entries with expected values).
+  for (const [index, example] of readDirectoryExamples(root).entries()) {
+    if (!Object.hasOwn(example, 'expected')) continue;
+    const fnRel = example.function.replace(/\\/g, '/').replace(/^\.\//, '');
+    const key = caseDedupeKey(fnRel, example.inputs);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    examplesCount++;
+    const group = typeof example.group === 'string' && example.group.trim() ? example.group.trim() : `case:${hexDigest(key).slice(0, 16)}`;
+    raw.push({
+      id: `example:${index}:${hexDigest(key).slice(0, 12)}`,
+      ...(example.name ? { name: example.name } : {}),
+      source: 'examples',
+      function: fnRel,
+      inputs: example.inputs,
+      expected: example.expected,
+      group,
+      ...(example.protected === true ? { protected: true } : {}),
+    });
+  }
+
+  // 2. Recorded successful calls in CallStore for this program directory.
+  if (options.store) {
+    const summaries = options.store.calls({ program: root, outcome: 'done', limit: options.maxStoreCalls ?? 500 });
+    for (const summary of summaries) {
+      const record = options.store.call(summary.call_id);
+      if (!record || record.outcome !== 'done') continue;
+      const source = record.definition.source;
+      if (!source || !source.endsWith('.nl')) continue;
+      // Normalize source relative to root and ensure it lives inside the program directory.
+      const resolvedSource = resolve(root, source);
+      const rel = relative(root, resolvedSource).split(sep).join('/');
+      if (!rel || rel.startsWith('..') || !existsSync(resolvedSource)) continue;
+      if (!record.output?.complete) continue;
+      const expected = options.store.value(record.output);
+      if (expected === undefined) continue;
+      const inputEntries = Object.entries(record.inputs);
+      if (inputEntries.some(([, ref]) => !ref.complete)) continue;
+      const inputs: Record<string, unknown> = {};
+      let ok = true;
+      for (const [param, ref] of inputEntries) {
+        const value = options.store.value(ref);
+        if (value === undefined) { ok = false; break; }
+        inputs[param] = value;
+      }
+      if (!ok) continue;
+      const key = caseDedupeKey(rel, inputs);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      storeCount++;
+      raw.push({
+        id: `call:${record.call_id}`,
+        source: 'call-store',
+        function: rel,
+        inputs,
+        expected,
+        group: `case:${hexDigest(key).slice(0, 16)}`,
+      });
+    }
+  }
+
+  // Group cases so related cases stay together and never leak across splits.
+  const grouped = new Map<string, { items: RawCase[]; protected: boolean }>();
+  for (const item of raw) {
+    let bucket = grouped.get(item.group);
+    if (!bucket) { bucket = { items: [], protected: false }; grouped.set(item.group, bucket); }
+    bucket.items.push(item);
+    if (item.protected) bucket.protected = true;
+  }
+
+  const protectedGroups: [string, RawCase[]][] = [];
+  const regularGroups: [string, RawCase[]][] = [];
+  for (const [group, bucket] of grouped) {
+    if (bucket.protected) protectedGroups.push([group, bucket.items]);
+    else regularGroups.push([group, bucket.items]);
+  }
+
+  regularGroups.sort(([a], [b]) => hexDigest(`${seed}:${a}`).localeCompare(hexDigest(`${seed}:${b}`)));
+  protectedGroups.sort(([a], [b]) => hexDigest(`${seed}:${a}`).localeCompare(hexDigest(`${seed}:${b}`)));
+
+  const cases: DirectoryImprovementCase[] = [];
+  for (const [, items] of protectedGroups) {
+    for (const item of items) cases.push({ ...item, split: 'confirmation' });
+  }
+
+  const assignSplit = (index: number, total: number): DirectorySplit => {
+    if (total === 1) return 'support';
+    if (total === 2) return index === 0 ? 'support' : 'confirmation';
+    // Guarantee non-empty support, dev, and confirmation splits whenever >= 3 groups exist (~50% support / 25% dev / 25% confirmation).
+    if (index === 0) return 'support';
+    if (index === 1) return 'dev';
+    if (index === 2) return 'confirmation';
+    const mod = index % 4;
+    return mod === 2 ? 'dev' : mod === 3 ? 'confirmation' : 'support';
+  };
+
+  regularGroups.forEach(([, items], index) => {
+    const split = assignSplit(index, regularGroups.length);
+    for (const item of items) cases.push({ ...item, split });
+  });
+
+  return {
+    directory: root,
+    seed,
+    cases,
+    splits: {
+      support: cases.filter(item => item.split === 'support'),
+      dev: cases.filter(item => item.split === 'dev'),
+      confirmation: cases.filter(item => item.split === 'confirmation'),
+    },
+    sources: { examples: examplesCount, callStore: storeCount },
+  };
+}
+
+/** Default split evaluator: loads each `.nl` function in `directory` and checks exact output equality against `expected`. */
+async function evaluateDirectorySplitWithModel(
+  directory: string,
+  cases: readonly DirectoryImprovementCase[],
+  model: ModelDriver,
+): Promise<DirectorySplitResult> {
+  if (!cases.length) return { passed: 0, total: 0, passRate: 1, results: [] };
+  const files = nodeSourceFilesFor(directory);
+  const loaded = new Map<string, { params: string[]; fn: (...args: unknown[]) => Promise<unknown> }>();
+  const results: DirectorySplitResult['results'] = [];
+  let passed = 0;
+  for (const item of cases) {
+    let entry = loaded.get(item.function);
+    if (!entry) {
+      const record = loadNamedFunction(join(directory, item.function), files);
+      const params = Object.keys(record.args).map(name => name.replace(/\?$/, ''));
+      const fn = __natlang.named(record.name, record) as unknown as (...args: unknown[]) => Promise<unknown>;
+      entry = { params, fn };
+      loaded.set(item.function, entry);
+    }
+    const args = entry.params.map(name => item.inputs[name]);
+    try {
+      const runtime = createNatlangRuntime({ model, calls: false, workspace: directory });
+      const received = await runtime.run(() => entry!.fn(...args));
+      const ok = canonicalValue(received) === canonicalValue(item.expected);
+      if (ok) passed++;
+      results.push({ id: item.id, function: item.function, ok, expected: item.expected, received });
+    } catch (error) {
+      results.push({ id: item.id, function: item.function, ok: false, expected: item.expected, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { passed, total: cases.length, passRate: cases.length ? passed / cases.length : 1, results };
+}
+
+/**
+ * Directory-form program improvement (`natlang improve DIR`, WS8 N4):
+ * builds the support/dev/confirmation case pack, obtains a proposal (from `options.proposal` or `options.propose`),
+ * verifies it in an isolated temp copy (`natlang check` + dev & confirmation split evaluation, rejecting if
+ * confirmation pass rate drops or protected files change), and installs atomically via `adoptSource`
+ * (returning an `AdoptionRecord` for byte-identical `rollbackSource`).
+ */
+export async function improveDirectory(options: ImproveDirectoryOptions): Promise<ImproveDirectoryResult> {
+  const directory = resolve(options.directory);
+  const casePack = buildDirectoryCasePack(directory, { store: options.store, seed: options.seed, maxStoreCalls: options.maxStoreCalls });
+  const currentFiles = readProgramFiles(directory);
+
+  const proposal = options.proposal ?? (options.propose
+    ? await options.propose({ directory, files: { ...currentFiles }, support: casePack.splits.support, casePack })
+    : null);
+
+  if (!proposal || !Object.keys(proposal.files).length) {
+    return { status: 'unchanged', directory, changed: [], reasons: ['no source changes proposed'], casePack };
+  }
+
+  // Validate proposed paths stay inside `directory` and compute actual changes.
+  const normalizedChanges: Record<string, string | null> = {};
+  const reasons: string[] = [];
+  for (const [rawPath, content] of Object.entries(proposal.files)) {
+    const clean = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
+    const target = resolve(directory, clean);
+    const rel = relative(directory, target).split(sep).join('/');
+    if (!rel || rel.startsWith('..') || rel !== clean) {
+      reasons.push(`${rawPath} is outside ${directory}`);
+      continue;
+    }
+    normalizedChanges[clean] = content;
+  }
+
+  const changed = Object.keys(normalizedChanges).filter(path => {
+    const next = normalizedChanges[path];
+    const prev = Object.hasOwn(currentFiles, path) ? currentFiles[path] : null;
+    return next !== prev;
+  }).sort();
+
+  if (reasons.length) {
+    return { status: 'rejected', directory, changed, reasons, summary: proposal.summary, casePack };
+  }
+  if (!changed.length) {
+    return { status: 'unchanged', directory, changed: [], reasons: ['proposal leaves every file unchanged'], summary: proposal.summary, casePack };
+  }
+
+  // Reject edits to protected sources (`types.ts` and `.nl` `protect:` lists).
+  const beforeProtected = programProtectedSources(directory, {});
+  const afterProtected = programProtectedSources(directory, normalizedChanges);
+  for (const path of changed) {
+    if (/(^|\/)types\.ts$/.test(path)) {
+      reasons.push(`${path} declares the types results are checked against and cannot be modified by improvement`);
+    } else if (isProtectedSource(path, beforeProtected.protected) || isProtectedSource(path, afterProtected.protected)) {
+      reasons.push(`${path} is protected (protect:) and cannot be modified by improvement`);
+    } else if (beforeProtected.lists[path] !== afterProtected.lists[path]) {
+      reasons.push(`${path}: improvement cannot change a function's protect: list`);
+    }
+  }
+  if (reasons.length) {
+    return { status: 'rejected', directory, changed, reasons, summary: proposal.summary, casePack };
+  }
+
+  const runCheck = options.check ?? (async (dir: string) => {
+    const built = checkProject(dir, { write: false, writeDeclarations: false });
+    return {
+      ok: built.ok,
+      diagnostics: built.diagnostics.filter(item => item.severity === 'error').map(item => `${item.file}:${item.line} ${item.message}`),
+    };
+  });
+
+  const runSplit = options.evaluateSplit ?? (async (dir: string, cases: readonly DirectoryImprovementCase[]) => {
+    if (!cases.length) return { passed: 0, total: 0, passRate: 1, results: [] };
+    if (!options.model) throw new Error('evaluating examples requires a model driver or an evaluateSplit callback');
+    return evaluateDirectorySplitWithModel(dir, cases, options.model);
+  });
+
+  const emptySplit = (): DirectorySplitResult => ({ passed: 0, total: 0, passRate: 1, results: [] });
+
+  // Evaluate baseline on dev and confirmation splits before applying changes.
+  const baselineDev = casePack.splits.dev.length ? await runSplit(directory, casePack.splits.dev) : emptySplit();
+  const baselineConfirmation = casePack.splits.confirmation.length ? await runSplit(directory, casePack.splits.confirmation) : emptySplit();
+  const baseline = { dev: baselineDev, confirmation: baselineConfirmation };
+
+  // Build SourceManifest over the changed files (`adoptSource` handles create, modify, and delete).
+  const baseFiles: Record<string, string> = {};
+  const afterFiles: Record<string, string> = {};
+  for (const path of changed) {
+    if (Object.hasOwn(currentFiles, path)) baseFiles[path] = currentFiles[path]!;
+    const next = normalizedChanges[path];
+    if (typeof next === 'string') afterFiles[path] = next;
+  }
+  const manifest: SourceManifest = {
+    schema: 'natlang.program-source/1',
+    base: Folder.fromFiles(baseFiles).snapshot().digest,
+    source: Folder.fromFiles(afterFiles).snapshot().digest,
+    baseFiles,
+    files: afterFiles,
+    contract: { kind: 'directory-improvement', directory, seed: casePack.seed, ...(proposal.summary ? { summary: proposal.summary } : {}) },
+  };
+
+  let checkReport: { ok: boolean; diagnostics: string[] } | undefined;
+  let proposedSplits: { dev: DirectorySplitResult; confirmation: DirectorySplitResult } | undefined;
+
+  const verifyProposal = async () => {
+    const tempDir = materializeDirectoryCopy(directory, normalizedChanges);
+    try {
+      checkReport = await runCheck(tempDir);
+      if (!checkReport.ok) {
+        return { source: manifest.source, valid: false, diagnostics: ['natlang check failed', ...checkReport.diagnostics], contract: manifest.contract as never };
+      }
+      const dev = casePack.splits.dev.length ? await runSplit(tempDir, casePack.splits.dev) : emptySplit();
+      const confirmation = casePack.splits.confirmation.length ? await runSplit(tempDir, casePack.splits.confirmation) : emptySplit();
+      proposedSplits = { dev, confirmation };
+      const diagnostics: string[] = [];
+      if (casePack.splits.dev.length && dev.passRate < baselineDev.passRate) {
+        diagnostics.push(`dev pass rate dropped from ${(baselineDev.passRate * 100).toFixed(1)}% (${baselineDev.passed}/${baselineDev.total}) to ${(dev.passRate * 100).toFixed(1)}% (${dev.passed}/${dev.total})`);
+      }
+      if (casePack.splits.confirmation.length && confirmation.passRate < baselineConfirmation.passRate) {
+        diagnostics.push(`confirmation pass rate dropped from ${(baselineConfirmation.passRate * 100).toFixed(1)}% (${baselineConfirmation.passed}/${baselineConfirmation.total}) to ${(confirmation.passRate * 100).toFixed(1)}% (${confirmation.passed}/${confirmation.total})`);
+      }
+      if (options.requireImprovement && dev.passRate <= baselineDev.passRate && confirmation.passRate <= baselineConfirmation.passRate) {
+        diagnostics.push('proposal did not improve dev or confirmation pass rate');
+      }
+      return { source: manifest.source, valid: diagnostics.length === 0, diagnostics, contract: manifest.contract as never };
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  };
+
+  if (options.dryRun) {
+    const checked = await verifyProposal();
+    return {
+      status: checked.valid ? 'checked' : 'rejected',
+      directory,
+      changed,
+      reasons: checked.diagnostics,
+      summary: proposal.summary,
+      casePack,
+      check: checkReport,
+      baseline,
+      proposed: proposedSplits,
+    };
+  }
+
+  const recordPath = resolve(options.recordPath ?? join(directory, '.natlang', 'adoptions', `improve-${Date.now()}-${manifest.source.slice(0, 8)}.json`));
+  try {
+    const record = await adoptSource(directory, manifest, verifyProposal, recordPath);
+    return {
+      status: 'accepted',
+      directory,
+      changed,
+      reasons: [],
+      summary: proposal.summary,
+      casePack,
+      check: checkReport,
+      baseline,
+      proposed: proposedSplits,
+      record,
+      recordPath,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.startsWith('adoption build failed')) throw error;
+    return {
+      status: 'rejected',
+      directory,
+      changed,
+      reasons: message.replace(/^adoption build failed:\s*/, '').split('\n').filter(Boolean),
+      summary: proposal.summary,
+      casePack,
+      check: checkReport,
+      baseline,
+      proposed: proposedSplits,
+    };
+  }
 }

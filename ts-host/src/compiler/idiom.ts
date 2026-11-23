@@ -23,7 +23,7 @@
 import ts from 'typescript';
 import type { NatlangDiagnostic } from './inline.js';
 import type { ItemRecord, NatlangRecord } from '../runtime/loader.js';
-import { finiteValues } from '../native/decision.js';
+import { decisionDomain } from '../native/decision.js';
 import { parseTypeCached, TypeEnv } from '../native/types.js';
 
 export const IDIOM_DECISION_READOUT = 'idiom-decision-readout';
@@ -52,15 +52,15 @@ export function checkNlIdioms(record: NatlangRecord, file: string): NatlangDiagn
   const leaf = record.subtype === 'function' && !record.generic && Object.keys(record.codebase).length === 0 &&
     !record.uses?.length && !Object.values(record.args).some(type => /(?<![\w$])Folder(?![\w$])/.test(type));
   if (leaf && record.readout === undefined) {
-    let values: unknown[] | null = null;
+    let size = 0;
     try {
       const env = new TypeEnv(Object.fromEntries(Object.entries(record.types).map(([name, text]) => [name, parseTypeCached(text)])));
-      values = finiteValues(parseTypeCached(record.returns), env);
-    } catch { values = null; }
-    if (values && values.length >= 2) {
+      size = decisionDomain(parseTypeCached(record.returns), env)?.size ?? 0;
+    } catch { size = 0; }
+    if (size >= 2) {
       const at = lines.findIndex((line, index) => index > 0 && (end < 0 || index < end) && line.startsWith('returns:'));
       out.push(warning(file, at < 0 ? 1 : at + 1, 1, IDIOM_DECISION_READOUT,
-        `\`${baseName(file)}\` returns one of ${values.length} values: add \`readout: decision\` so the model reasons and scores them, ` +
+        `\`${baseName(file)}\` returns one of ${size} values: add \`readout: decision\` so the model reasons and scores them, ` +
         'or keep the tool loop if it must call helpers first.'));
     }
   }

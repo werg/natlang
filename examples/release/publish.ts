@@ -1,37 +1,67 @@
 /**
- * Publishing writes files through transactions. `proposeAndVerify` writes the release section on a private copy of the
- * project folder, checks it with an exact verifier the reducer cannot edit, and accepts it only when it passes.
- * `branchAndSelect` drafts the announcement in two styles, each on its own copy, and keeps the one that serves the
- * stated goal better.
+ * Publishing writes files through transactions. `proposeAndVerify` updates CHANGELOG.md and drafts a migration guide
+ * for breaking changes in MIGRATION.md on a private copy of the folder, checks the proposal with an exact verifier the
+ * reducer cannot edit (prior releases untouched, every breaking change documented, no stray files), and accepts only
+ * when it passes. `branchAndSelect` drafts the announcement in two styles, each on its own copy, and keeps the one
+ * that serves the stated goal better via debiased pairwise ranking.
  */
 import { nl, type Folder, type FolderHandle, type FolderProposal } from '@natlang/node';
 import { branchAndSelect, proposeAndVerify } from '@natlang/node/std';
-import type { Notes } from './types.js';
+import type { Change, Notes } from './types.js';
 
-/** The reducer: write releases/VERSION.md from the notes. On a retry it reads its earlier section and the problems. */
-export async function writeSection(folder: FolderHandle, version: string, notes: Notes, problems: string[]): Promise<string> {
-  const file = folder.file(`releases/${version}.md`);
-  const previous = await file.exists() ? await file.readText() : '';
-  const section: string = await nl`Write the release section for version from notes: a first line "## " followed by version, then one line per note that starts with "- ". If previous is not empty, it is your earlier section and problems says what is wrong with it: fix exactly that.`();
-  await file.writeText(`${section.trim()}\n`);
-  return section;
+/** Deterministic Markdown formatting stays in TypeScript; only the breaking-change migration prose calls the model. */
+export async function writeReleaseDocs(
+  folder: FolderHandle,
+  version: string,
+  notes: Notes,
+  breaking: Change[],
+  problems: string[],
+): Promise<string> {
+  const changelog = folder.file('CHANGELOG.md');
+  const existing = await changelog.exists() ? await changelog.readText() : '';
+  const section = `## ${version}\n${notes.map(note => `- ${note}`).join('\n')}\n`;
+  // Exact prepend in TypeScript keeps every prior release byte-for-byte intact.
+  const nextChangelog = existing.includes(`## ${version}\n`) ? existing : `${section}\n${existing}`.trimEnd() + '\n';
+  await changelog.writeText(nextChangelog);
+
+  const migration = folder.file('MIGRATION.md');
+  const previous = await migration.exists() ? await migration.readText() : '';
+  const guide: string = await nl`Write a concise upgrade guide for version covering every breaking change in breaking, using notes for context. Name the exact removed or replaced APIs and what callers should switch to. If previous is not empty, it is your earlier draft and problems lists what the verifier found wrong: fix every problem.`();
+  await migration.writeText(`${guide.trim()}\n`);
+  return guide;
 }
 
-/** The verifier, exact: the heading, one item per note, and no other file changed. */
-export async function sectionProblems(proposal: FolderProposal<string>, version: string, notes: Notes): Promise<string[]> {
-  const path = `releases/${version}.md`;
-  const problems = proposal.diff.changes.filter(change => change.path !== path).map(change => `The change also touches ${change.path}.`);
-  const [heading, ...rest] = (await proposal.folder.readText(path)).trim().split('\n');
-  if (heading !== `## ${version}`) problems.push(`The first line is "${heading}", not "## ${version}".`);
-  const items = rest.filter(line => line.trim());
-  if (items.some(line => !line.startsWith('- '))) problems.push('A line after the heading does not start with "- ".');
-  if (items.length !== notes.length) problems.push(`The section has ${items.length} items for ${notes.length} notes.`);
+/** Exact verifier the reducer cannot edit: prior changelog entries preserved, breaking changes covered, no stray files. */
+export async function releaseDocProblems(
+  proposal: FolderProposal<string>,
+  version: string,
+  priorChangelog: string,
+  breaking: Change[],
+): Promise<string[]> {
+  const allowed = new Set(['CHANGELOG.md', 'MIGRATION.md']);
+  const problems = proposal.diff.changes
+    .filter(change => !allowed.has(change.path))
+    .map(change => `The change also touches ${change.path}.`);
+  const changelog = await proposal.folder.readText('CHANGELOG.md');
+  if (!changelog.includes(`## ${version}\n`)) problems.push(`CHANGELOG.md is missing the "## ${version}" heading.`);
+  if (priorChangelog.trim() && !changelog.includes(priorChangelog.trim()))
+    problems.push('CHANGELOG.md altered or dropped an earlier release section.');
+  const guide = (await proposal.folder.readText('MIGRATION.md')).trim();
+  if (!guide) problems.push('MIGRATION.md is empty.');
+  if (/\bTODO\b/i.test(guide)) problems.push('MIGRATION.md still contains a TODO placeholder.');
+  for (const change of breaking) {
+    if (!guide.includes(change.id)) problems.push(`MIGRATION.md does not reference breaking change ${change.id} (${change.title}).`);
+  }
   return problems;
 }
 
-export async function publish(folder: Folder, version: string, notes: Notes) {
-  return proposeAndVerify<string>(folder, writeSection, { args: [version, notes], attempts: 2,
-    verify: proposal => sectionProblems(proposal, version, notes) });
+export async function publish(folder: Folder, version: string, notes: Notes, breaking: Change[] = []) {
+  const priorChangelog = await folder.file('CHANGELOG.md').exists() ? await folder.file('CHANGELOG.md').readText() : '';
+  return proposeAndVerify<string>(folder, writeReleaseDocs, {
+    args: [version, notes, breaking],
+    attempts: 2,
+    verify: proposal => releaseDocProblems(proposal, version, priorChangelog, breaking),
+  });
 }
 
 /** An announcement writer for one style. */

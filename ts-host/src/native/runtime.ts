@@ -260,14 +260,19 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 /**
  * The eval binding `NatlangContext`: the runtime's Context class (runtime/contexts.ts installs it under a global symbol,
- * as for callable-folder modules) through the static `empty()` only. Undefined parts fail when used, with one sentence.
+ * as for callable-folder modules) through `empty()` and `ofCallable(fn)`. Undefined parts fail when used, with one sentence.
  */
-function evalContextValue(): { empty(): unknown } {
-  return Object.freeze({ empty: () => {
-    const context = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] as { empty(): unknown } | undefined;
+function evalContextValue(): { empty(): unknown; ofCallable(fn: unknown): unknown } {
+  const contextClass = () => {
+    const context = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] as
+      { empty(): unknown; ofCallable(fn: unknown): unknown } | undefined;
     if (!context) throw new Error('NatlangContext is unavailable in this runtime: it has no context support loaded.');
-    return context.empty();
-  } });
+    return context;
+  };
+  return Object.freeze({
+    empty: () => contextClass().empty(),
+    ofCallable: (fn: unknown) => contextClass().ofCallable(fn),
+  });
 }
 
 export const BUILT_IN_DOCS: Record<string, string> = {
@@ -283,10 +288,18 @@ Neuralese<string>. The runtime performs the configured typed readout; the descri
   NatlangContext: `NatlangContext: build a context to run a function under. fn.in(context) is the same function bound to it,
 a new function; the function's instructions read the context's data entries by their names.
   const strict = verdict.in(NatlangContext.empty().with({ policy: strictPolicy }));
-  const label = await strict(message);      verdict's instructions read policy as strictPolicy
-NatlangContext.empty() is the context with nothing in it; .with({ name: value, ... }) adds data entries (a new
-context each time), .without(...names) removes them, .pick(...names) keeps only those, and .data reads them. A
-function keeps every other part of its signature under .in; it must still find each item its instructions name.`,
+  const scoped = verdict.in(NatlangContext.ofCallable(verdict).with({ policy: strictPolicy }));
+NatlangContext.empty() is the context with nothing in it; NatlangContext.ofCallable(fn) starts from fn's own context
+(keeping its callable helpers); .with({ name: value, ... }) adds or replaces data entries (a new context each time),
+.without(...names) removes them, .pick(...names) keeps only those, and .data reads them. A function keeps every other
+part of its signature under .in; it must still find each item its instructions name.`,
+  refine: `refine(value, predicate[, { context }]) or refine<Is<T, "predicate">>(value[, { context }]):
+check that value satisfies a natural-language predicate and return it typed as Is<T, predicate>.
+  const summary = await refine(draft, 'one concise sentence');
+  const grounded = await refine(answer, 'supported by source', { context: { source } });
+Throws refinement-unsatisfied (or refinement-undecided inside an uncertainty band) when the check fails.`,
+  assume: `assume(value, predicate) or assume<Is<T, "predicate">>(value):
+declare that value already satisfies predicate without calling the judge, recording the assumption in the trace.`,
   decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
   const verdict: Neuralese<(statement: string) => Promise<"allow" | "deny">> = nl\`Choose allow or deny for the statement.\`;
   const decision = await decide(verdict, statement);
@@ -353,6 +366,12 @@ turns the progress review off and then also needs a bound.`,
   transcript.entry(n)   call n: { turn, reasoning, tool, code, arguments, status, value, console, output }
 status is ok, rejected or error; value is what an eval returned, as data. Search for something specific rather than
 reading it through, and rather than repeating work.`,
+  search_code: `search_code(query[, limit]): search this call's codebase, types.ts aliases, and service declarations in eval.
+  const matches = search_code("refund");
+  // returns { name, kind, signature?, description?, path? }[] (up to 20 matches by default)
+Matches case-insensitively across callable names, parameter and return types, types.ts aliases, descriptions/doc comments,
+and service declarations, ranked by relevance. Call read_code(match.name) to inspect any result in full.
+Available in eval whenever the call's scope has a codebase.`,
 };
 
 function rejected(error: Reject): NativeResult {
@@ -686,6 +705,199 @@ function listCodebase(codebase: Record<string, unknown>, prefix = ''): string[] 
   return Object.entries(codebase as Record<string, ItemRecord>).flatMap(([name, item]) =>
     [`${prefix}${name}`, ...listCodebase(item.codebase, `${prefix}${name}.`)]);
 }
+
+/** One structured match returned by `search_code(query)`. */
+export type CodeSearchMatch = {
+  name: string;
+  kind: 'natlang' | 'function' | 'value' | 'namespace' | 'type' | 'service';
+  signature?: string;
+  description?: string;
+  path?: string;
+};
+
+type CodeSearchEntry = CodeSearchMatch & { raw?: string };
+
+const formatArgList = (args: Record<string, string>, prefixFolder = false): string => {
+  const parts = Object.entries(args).map(([raw, type]) => `${raw}: ${type}`);
+  if (prefixFolder) parts.unshift('folder: Folder');
+  return parts.join(', ');
+};
+
+const firstDocLine = (text: string | undefined): string | undefined => {
+  if (!text) return undefined;
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return undefined;
+  return cleaned.length > 200 ? `${cleaned.slice(0, 197)}...` : cleaned;
+};
+
+/** Extract declared member entries (functions, properties, types) and doc comments from a service declaration string. */
+function indexServiceDeclaration(serviceName: string, declaration: string): CodeSearchEntry[] {
+  const out: CodeSearchEntry[] = [];
+  const docMatch = /\/\*\*([\s\S]*?)\*\//.exec(declaration);
+  const topDoc = docMatch ? firstDocLine(docMatch[1]!.replace(/^\s*\*\s?/gm, '')) : undefined;
+  out.push({ name: serviceName, kind: 'service', ...(topDoc ? { description: topDoc } : {}), raw: declaration });
+  // Match individual declared functions, methods, consts, types and interfaces inside the declaration block.
+  const memberPattern = /(?:\/\*\*([\s\S]*?)\*\/\s*)?(?:export\s+|declare\s+)?(?:(function)\s+([A-Za-z_$][\w$]*)\s*(<[^>{]*>)?\s*\(([^)]*)\)\s*:\s*([^\n;{]+)|(const|let|var)\s+([A-Za-z_$][\w$]*)\s*:\s*([^\n;]+)|(type)\s+([A-Za-z_$][\w$]*)\s*=\s*([^\n;]+)|(interface)\s+([A-Za-z_$][\w$]*)\s*\{([^}]*)\}|([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*:\s*([^\n;{]+))/g;
+  const seen = new Set<string>();
+  for (const match of declaration.matchAll(memberPattern)) {
+    const doc = match[1] ? firstDocLine(match[1].replace(/^\s*\*\s?/gm, '')) : undefined;
+    if (match[2] === 'function' && match[3]) {
+      const name = `${serviceName}.${match[3]}`;
+      if (seen.has(name)) continue; seen.add(name);
+      const signature = `${match[4] ?? ''}(${(match[5] ?? '').replace(/\s+/g, ' ').trim()}) => ${(match[6] ?? '').replace(/\s+/g, ' ').trim()}`;
+      out.push({ name, kind: 'service', signature, ...(doc ? { description: doc } : {}) });
+    } else if (match[7] && match[8]) {
+      if (match[8] === serviceName) continue;
+      const name = `${serviceName}.${match[8]}`;
+      if (seen.has(name)) continue; seen.add(name);
+      out.push({ name, kind: 'service', signature: (match[9] ?? '').replace(/\s+/g, ' ').trim(), ...(doc ? { description: doc } : {}) });
+    } else if (match[10] === 'type' && match[11]) {
+      const name = `${serviceName}.${match[11]}`;
+      if (seen.has(name)) continue; seen.add(name);
+      out.push({ name, kind: 'type', signature: `type ${match[11]} = ${(match[12] ?? '').replace(/\s+/g, ' ').trim()}`, ...(doc ? { description: doc } : {}) });
+    } else if (match[13] === 'interface' && match[14]) {
+      const name = `${serviceName}.${match[14]}`;
+      if (seen.has(name)) continue; seen.add(name);
+      out.push({ name, kind: 'type', signature: `interface ${match[14]} { ${(match[15] ?? '').replace(/\s+/g, ' ').trim()} }`, ...(doc ? { description: doc } : {}) });
+    } else if (match[16] && !['if', 'for', 'while', 'switch', 'catch', 'return'].includes(match[16])) {
+      const name = `${serviceName}.${match[16]}`;
+      if (seen.has(name)) continue; seen.add(name);
+      const signature = `(${(match[17] ?? '').replace(/\s+/g, ' ').trim()}) => ${(match[18] ?? '').replace(/\s+/g, ' ').trim()}`;
+      out.push({ name, kind: 'service', signature, ...(doc ? { description: doc } : {}) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Lexical + signature search across a codebase tree, its `types.ts` aliases, and service declarations.
+ * Case-insensitive tokenized substring matching ranked by relevance, capped at `limit` (default 20).
+ */
+export function searchCodebase(
+  query: string,
+  codebase: Record<string, unknown>,
+  options: {
+    types?: Record<string, string>;
+    declarations?: Record<string, string>;
+    services?: Record<string, object>;
+    resolveItem?: (item: ItemRecord) => ItemRecord;
+    limit?: number;
+  } = {},
+): CodeSearchMatch[] {
+  const limit = Math.max(1, Math.min(Number.isFinite(options.limit) ? Math.floor(options.limit!) : 20, 100));
+  const entries: CodeSearchEntry[] = [];
+  const seenTypes = new Map<string, string>(); // alias -> definition text (deduplicates identical shared aliases)
+  const addTypeAlias = (alias: string, text: string, ownerName?: string, path?: string) => {
+    const existing = seenTypes.get(alias);
+    if (existing === text) return;
+    if (existing === undefined) {
+      seenTypes.set(alias, text);
+      entries.push({ name: alias, kind: 'type', signature: `type ${alias} = ${text}`, ...(path ? { path } : {}) });
+    } else if (ownerName) {
+      entries.push({ name: `${ownerName}.${alias}`, kind: 'type', signature: `type ${alias} = ${text}`, ...(path ? { path } : {}) });
+    }
+  };
+  const visit = (level: Record<string, ItemRecord>, prefix: string) => {
+    for (const [key, rawItem] of Object.entries(level)) {
+      if (!rawItem || typeof rawItem !== 'object' || !('kind' in rawItem)) continue;
+      const item = options.resolveItem ? options.resolveItem(rawItem) : rawItem;
+      const fullName = prefix ? `${prefix}.${key}` : key;
+      if (item.kind === 'namespace') {
+        entries.push({ name: fullName, kind: 'namespace', ...(item.source ? { path: item.source } : {}) });
+        visit(item.codebase ?? {}, fullName);
+        continue;
+      }
+      for (const [alias, text] of Object.entries(item.types ?? {})) addTypeAlias(alias, text, fullName, item.source);
+      if (item.kind === 'natlang') {
+        const signature = `(${formatArgList(item.args, item.subtype === 'directory-reducer')}) => ${item.returns}`;
+        const description = firstDocLine(item.description || item.instructions.split(/\r?\n/).find(line => line.trim()));
+        entries.push({ name: fullName, kind: 'natlang', signature, ...(description ? { description } : {}), path: item.source, raw: item.instructions });
+      } else if (item.kind === 'module') {
+        const def = item.exports.default;
+        if (def?.kind === 'function') {
+          const signature = `(${formatArgList(def.args)}) => ${def.async ? `Promise<${def.returns}>` : def.returns}`;
+          const description = firstDocLine(def.doc);
+          entries.push({ name: fullName, kind: 'function', signature, ...(description ? { description } : {}), path: item.source, raw: item.text });
+        }
+        for (const [exportName, spec] of Object.entries(item.exports)) {
+          if (exportName === 'default') continue;
+          const memberName = `${fullName}.${exportName}`;
+          if (spec.kind === 'function') {
+            const signature = `(${formatArgList(spec.args)}) => ${spec.async ? `Promise<${spec.returns}>` : spec.returns}`;
+            const description = firstDocLine(spec.doc);
+            entries.push({ name: memberName, kind: 'function', signature, ...(description ? { description } : {}), path: item.source });
+          } else {
+            entries.push({ name: memberName, kind: 'value', ...(spec.type ? { signature: spec.type } : {}), path: item.source });
+          }
+        }
+        for (const [declName, declText] of Object.entries(item.declarations ?? {})) {
+          if (!seenTypes.has(declName)) {
+            seenTypes.set(declName, declText);
+            entries.push({ name: declName, kind: 'type', signature: firstDocLine(declText), path: item.source, raw: declText });
+          }
+        }
+      }
+      visit(item.codebase ?? {}, fullName);
+    }
+  };
+  visit(codebase as Record<string, ItemRecord>, '');
+  for (const [alias, text] of Object.entries(options.types ?? {})) addTypeAlias(alias, text);
+  const declaredServices = new Set<string>();
+  for (const [serviceName, declaration] of Object.entries(options.declarations ?? {})) {
+    declaredServices.add(serviceName);
+    entries.push(...indexServiceDeclaration(serviceName, declaration));
+  }
+  for (const [serviceName, value] of Object.entries(options.services ?? {})) {
+    if (declaredServices.has(serviceName)) continue;
+    entries.push({ name: serviceName, kind: 'service', signature: undeclaredServiceType(value, 0, serviceName) });
+  }
+
+  const trimmed = query.trim().toLowerCase();
+  const toMatch = ({ raw: _raw, ...match }: CodeSearchEntry): CodeSearchMatch => match;
+  if (!trimmed) {
+    const kindOrder: Record<CodeSearchMatch['kind'], number> = { natlang: 0, function: 1, service: 2, type: 3, value: 4, namespace: 5 };
+    return entries
+      .slice()
+      .sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind] || a.name.localeCompare(b.name))
+      .slice(0, limit)
+      .map(toMatch);
+  }
+  const tokens = [...new Set(trimmed.split(/[\s/.,;:()<>[\]{}|&=?!]+/).filter(Boolean))];
+  const scored: { entry: CodeSearchEntry; score: number }[] = [];
+  for (const entry of entries) {
+    const nameLower = entry.name.toLowerCase();
+    const baseNameLower = nameLower.split('.').at(-1) ?? nameLower;
+    const segments = nameLower.split(/[._-]+/).filter(Boolean);
+    const sigLower = (entry.signature ?? '').toLowerCase();
+    const descLower = (entry.description ?? '').toLowerCase();
+    const pathLower = (entry.path ?? '').toLowerCase();
+    const rawLower = (entry.raw ?? '').toLowerCase();
+    let score = 0;
+    let matchedTokens = 0;
+    if (baseNameLower === trimmed || nameLower === trimmed) score += 1000;
+    else if (baseNameLower.startsWith(trimmed) || nameLower.startsWith(trimmed)) score += 400;
+    else if (nameLower.includes(trimmed)) score += 250;
+    if (sigLower.includes(trimmed)) score += 120;
+    if (descLower.includes(trimmed)) score += 80;
+    for (const token of tokens) {
+      let tokenScore = 0;
+      if (segments.includes(token)) tokenScore += 120;
+      else if (baseNameLower.includes(token)) tokenScore += 90;
+      else if (nameLower.includes(token)) tokenScore += 60;
+      if (sigLower.includes(token)) tokenScore += 45;
+      if (descLower.includes(token)) tokenScore += 30;
+      if (pathLower.includes(token)) tokenScore += 20;
+      if (tokenScore === 0 && rawLower.includes(token)) tokenScore += 10;
+      if (tokenScore > 0) { matchedTokens++; score += tokenScore; }
+    }
+    if (matchedTokens === 0) continue;
+    if (matchedTokens === tokens.length) score += 300;
+    else score += Math.round((matchedTokens / tokens.length) * 100);
+    scored.push({ entry, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.entry.name.length - b.entry.name.length || a.entry.name.localeCompare(b.entry.name));
+  return scored.slice(0, limit).map(item => toMatch(item.entry));
+}
 function replaceCodebaseItem(codebase: Record<string, unknown>, path: string[], record: ItemRecord): Record<string, unknown> {
   const [head, ...rest] = path;
   const current = (codebase as Record<string, ItemRecord>)[head!]!;
@@ -841,7 +1053,6 @@ export class NativeRuntime {
         !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
       throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');
     // `offered` is emitted by NativeToolAgent only when it actually builds the opening shown to the model.
-    this.frame = options.frame;
     this.hooks = options.hooks;
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
     // has already wrapped (the kernel records with its own call IDs) are used as given.
@@ -853,6 +1064,9 @@ export class NativeRuntime {
       else graphNode(this.trace,'effect',{call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event},[{node:invocationNodeId(this.options.runId),port:'caller'}]);
       return persisted;
     });
+    // TS native imports and eval share this invocation's checked, journaled ports.
+    // Copy the frame: callers and concurrent siblings may share the supplied one.
+    this.frame = options.frame ? { ...options.frame, services: this.services } : undefined;
     this.declarations = options.declarations ?? {};
     this.neuralese = options.neuralese;
     this.serviceScopes = options.serviceScopes ?? {};
@@ -872,6 +1086,18 @@ export class NativeRuntime {
     }
     if (this.deadline !== undefined && Date.now() >= this.deadline)
       throw new Error('natlang run timed out; external effects may have occurred');
+  }
+
+  /** Lexical + signature search across the active call's codebase, type aliases, and service declarations. */
+  searchCode(query: string, limit?: number): CodeSearchMatch[] {
+    const view = this.frame?.task.programView;
+    return searchCodebase(query, this.root?.codebase ?? {}, {
+      types: this.root?.typesSrc ?? {},
+      declarations: this.declarations,
+      services: this.services,
+      resolveItem: view ? item => view.record(item) : undefined,
+      limit,
+    });
   }
 
   /** Lift only an ordinary string supplied directly to a declared Neuralese<string> parameter. */
@@ -1922,7 +2148,8 @@ export class NativeSession {
    */
   private notATool(name: string, args: Record<string, unknown>): { path: string; code: string; text?: string; expected?: string } {
     const root = name.split('.')[0]!;
-    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'NatlangContext'];
+    const hasCodebase = Object.keys(this.lam.codebase).length > 0;
+    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'NatlangContext', ...(hasCodebase ? ['search_code'] : [])];
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const scope = new Set([...builtins, ...inputs, ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.lam.let),
       ...this.persistentScopeHelpers.keys(), ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())]);
@@ -1930,13 +2157,29 @@ export class NativeSession {
       return { path: name, code: 'bad-action', expected: 'a scope-eval tool' };
     const first = Object.values(args).find(value => typeof value === 'string' || typeof value === 'number');
     const shown = first === undefined ? '' : JSON.stringify(first);
-    const awaited = builtins.includes(root) && root !== 'transcript' && root !== 'NatlangContext' || Object.hasOwn(this.lam.codebase, root) ||
+    const awaited = builtins.includes(root) && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' || Object.hasOwn(this.lam.codebase, root) ||
       this.persistentScopeHelpers.has(root);
-    const value = !awaited && root !== 'transcript' && root !== 'NatlangContext' && !Object.hasOwn(this.availableServices(), root);
+    const value = !awaited && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' && !Object.hasOwn(this.availableServices(), root);
     const example = name === 'transcript' ? 'transcript.search("…")' : value && name === root ? name :
       `${awaited ? 'await ' : ''}${name}(${shown})`;
     return { path: name, code: 'bad-action', text: `${name}: bad-action, ${name} is not a tool: ${root} is in this call's eval scope. ` +
       `Use it in code, for example eval with code: ${example}${builtins.includes(root) ? `; read_code("${root}") shows how to use it` : ''}.` };
+  }
+
+  /** Lexical + signature search across this call's codebase, type aliases, and service declarations. */
+  searchCode(query: string, limit?: number): CodeSearchMatch[] {
+    const view = this.runtime.frame?.task.programView;
+    const types: Record<string, string> = {
+      ...(this.lam.typesSrc ?? {}),
+      ...Object.fromEntries(Object.entries(this.localTypes).map(([name, type]) => [name, formatType(type)])),
+    };
+    return searchCodebase(query, this.lam.codebase, {
+      types,
+      declarations: this.runtime.declarations,
+      services: this.availableServices(),
+      resolveItem: view ? item => view.record(item) : undefined,
+      limit,
+    });
   }
 
   /** The services this call may use: all but those scoped to functions it is not running within. */
@@ -2354,6 +2597,10 @@ export class NativeSession {
     const readCodeBinding = !taken('read_code') && !declaredHere('read_code') &&
       !callableNames.includes('read_code') && !serviceNames.includes('read_code') && !Object.hasOwn(captureCells, 'read_code');
     if (readCodeBinding) opaqueNames.push('read_code');
+    // `search_code(query)` is offered in eval whenever this call's scope has a codebase, unless the name is taken.
+    const searchCodeBinding = callableNames.length > 0 && !taken('search_code') && !declaredHere('search_code') &&
+      !callableNames.includes('search_code') && !serviceNames.includes('search_code') && !Object.hasOwn(captureCells, 'search_code');
+    if (searchCodeBinding) opaqueNames.push('search_code');
     // decide(fn, ...args) calls a function with a finite result type and returns its answer with the probability of
     // every allowed value (runtime.decide in eval), unless the name is taken.
     const decideBinding = !taken('decide') && !callableNames.includes('decide') && !serviceNames.includes('decide') &&
@@ -2466,6 +2713,24 @@ export class NativeSession {
           throw error;
         }
       },
+      searchCode: (input: unknown, limit?: unknown) => {
+        let query: string | undefined;
+        let cap: number | undefined;
+        if (typeof input === 'string') {
+          query = input;
+          cap = typeof limit === 'number' ? limit : undefined;
+        } else if (isPlainRecord(input) && typeof input.query === 'string') {
+          query = input.query;
+          cap = typeof input.limit === 'number' ? input.limit : undefined;
+        }
+        if (query === undefined) throw new Reject([{ path: 'search_code', code: 'type-mismatch',
+          expected: 'a query string or { query: string, limit?: number }',
+          got: input === null ? 'null' : Array.isArray(input) ? 'array' : typeof input }]);
+        const matches = this.searchCode(query, cap);
+        this.runtime.trace.emit('eval_code_search', { call_id: this.runtime.currentCallId ?? this.runtime.options.runId,
+          action: toolCallId ?? null, query, matches: matches.length });
+        return matches;
+      },
       concatNeuralese,
       joinNeuralese,
       arrayToStringNeuralese,
@@ -2479,16 +2744,19 @@ export class NativeSession {
         const frame = currentFrame() ?? this.runtime.frame!;
         return import('../runtime/runtime.js').then(module => module.decideInFrame(frame, fn, args));
       },
-      refine: (value: unknown, predicate: string, options?: { context?: Record<string, unknown> }) => {
+      refine: (value: unknown, predicate: string | readonly string[], options?: { context?: Record<string, unknown> }) => {
         const frame = currentFrame() ?? this.runtime.frame!;
-        return import('../runtime/surface.js').then(module => runInFrame(frame, () => module.refine(value, predicate, options)));
+        return import('../runtime/surface.js').then(module => runInFrame(frame, () => module.refine(value, predicate as string, options)));
       },
       NatlangContext: evalContextValue(),
-      assume: (value: unknown, predicate: string) => {
-        const text = typeof predicate === 'string' ? predicate.replace(/\s+/g, ' ').trim() : '';
-        if (!text) throw new Error('refinement-predicate-invalid: assume(value, predicate) takes a nonempty string predicate, for example "one line of at most 60 characters".');
-        const shown = oneLine(value as Value, undefined, this.runtime.displayLiveId, this.runtime.untrusted);
-        this.runtime.trace.emit('refinement_assumed', { call_id: this.runtime.currentCallId ?? null, predicate: text, value: shown.slice(0, 400) });
+      assume: (value: unknown, predicate: string | readonly string[]) => {
+        const raw = Array.isArray(predicate) ? predicate : [predicate];
+        const texts = raw.map(item => typeof item === 'string' ? item.replace(/\s+/g, ' ').trim() : '');
+        if (!texts.length || texts.some(text => !text))
+          throw new Error('refinement-predicate-invalid: assume(value, predicate) takes a nonempty string predicate, for example "one line of at most 60 characters".');
+        const shown = oneLine(value as Value, undefined, this.runtime.displayLiveId, this.runtime.untrusted).slice(0, 400);
+        for (const text of new Set(texts))
+          this.runtime.trace.emit('refinement_assumed', { call_id: this.runtime.currentCallId ?? null, predicate: text, value: shown });
         return value;
       },
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
@@ -2528,9 +2796,10 @@ export class NativeSession {
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
       ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
       ...(readCodeBinding ? ['const read_code = (input: string | { name: string }) => __live.readCode(input);'] : []),
-      ...(refineBinding ? ['const refine = (value: any, predicate: string, options?: any) => __live.refine(value, predicate, options);'] : []),
+      ...(searchCodeBinding ? ['const search_code = (query: string | { query: string; limit?: number }, limit?: number) => __live.searchCode(query, limit);'] : []),
+      ...(refineBinding ? ['const refine = (value: any, predicate: string | string[], options?: any) => __live.refine(value, predicate, options);'] : []),
       ...(contextBinding ? ['const NatlangContext = __live.NatlangContext;'] : []),
-      ...(assumeBinding ? ['const assume = (value: any, predicate: string) => __live.assume(value, predicate);'] : []),
+      ...(assumeBinding ? ['const assume = (value: any, predicate: string | string[]) => __live.assume(value, predicate);'] : []),
       ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),

@@ -9,6 +9,7 @@ import { fitObligations, TypeSyntaxError } from '../dist/native/types.js';
 import { coerce } from '../dist/native/values.js';
 import { modelTurnsSoFar } from '../dist/native/agent.js';
 import { UntrustedRegistry, untrustedBlock } from '../dist/native/untrusted.js';
+import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 
 test('Untrusted<T> parses, formats, and fits T both ways for crisp code', () => {
   const type = parseType('Untrusted<string>');
@@ -138,4 +139,51 @@ export const bad: Untrusted<string> = "plain";
   const declaration = readFileSync(join(root, 'src/fetch.d.nl.ts'), 'utf8');
   assert.match(declaration, /import type \{ NatlangFunction, Folder as FolderStore, FolderHandle, Untrusted \}/);
   assert.match(declaration, /NatlangFunction<\[url: string\], Untrusted<string>>/);
+});
+
+test('eval snippet analysis reports untrusted-instruction for declared Untrusted<T>, untrusted(...), and derived text', () => {
+  const scope = {
+    types: {},
+    inputs: [{ name: 'message', type: 'Untrusted<string>' }, { name: 'plain', type: 'string' }],
+    locals: [],
+    captures: [],
+    imports: [],
+    returns: 'string',
+  };
+  const check = code => analyzeEvalSnippet(code, scope).diagnostics.filter(item => item.code === 'untrusted-instruction');
+
+  // Direct declared Untrusted<T> input interpolated into nl instruction text
+  const direct = check('return await nl<string>`Summarize: ${message}`();');
+  assert.equal(direct.length, 1);
+  assert.match(direct[0].message, /pass it as an argument instead/);
+
+  // Local created via untrusted(...) call interpolated into nl instruction text
+  const wrapped = check('const raw = untrusted(plain, "http"); return await nl<string>`Summarize: ${raw}`();');
+  assert.equal(wrapped.length, 1);
+
+  // Text derived from an untrusted binding stored in a local variable
+  const derived = check('const raw = untrusted(plain, "http"); const part = raw.slice(0, 20); return await nl<string>`Summarize: ${part}`();');
+  assert.equal(derived.length, 1);
+
+  // Untyped / uncalled nl template still reports untrusted-instruction
+  const uncalled = check('const bad = nl`Summarize: ${message}`; return "ok";');
+  assert.equal(uncalled.length, 1);
+
+  // Safe uses: non-text derived value, passing as argument, and plain string interpolation
+  assert.deepEqual(check('return await nl<string>`Summarize the ${message.length} characters.`();'), []);
+  assert.deepEqual(check('return await nl<string>`Summarize message.`(message);'), []);
+  assert.deepEqual(check('return await nl<string>`Summarize: ${plain}`();'), []);
+});
+
+test('eval rejects interpolating an Untrusted<T> argument into nl instruction text at runtime before executing', async () => {
+  const s = scenario({
+    fn: READ('Untrusted<string>'),
+    steps: [
+      { code: 'return await nl<string>`Summarize: ${message}`();' },
+      { tool: 'return_result', args: { status: 'success', value: 'recovered' } },
+    ],
+    args: [INJECTION],
+  });
+  assert.equal(await s.run(), 'recovered');
+  assert.match(s.seen.join('\n'), /untrusted-instruction/);
 });

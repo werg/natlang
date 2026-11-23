@@ -5,7 +5,7 @@
  * against a goal, one accepted). Nothing reaches the folder except through `accept`; the verifier is the caller's.
  */
 import { APPLY_TO_FOLDER, type FolderHandle, type FolderProposal } from '../native/scoped-fs.js';
-import { decideInFrame } from '../runtime/runtime.js';
+import { semanticRank } from './collections.js';
 import { semanticRepair, type Problems } from './converge.js';
 import { beats as shippedBeats } from './judgments.js';
 import { StdSpan, stdError } from './trace.js';
@@ -74,9 +74,9 @@ export async function proposeAndVerify<R = unknown>(folder: Workspace, reducer: 
       } }));
     const first = await propose([]);
     span.stage('propose', { attempt: 0 });
-    const repair = await semanticRepair(first, { check: async proposal => problemsOf(await span.run(() => options.verify(proposal))),
+    const repair = await span.run(() => semanticRepair(first, { check: async proposal => problemsOf(await span.run(() => options.verify(proposal))),
       fix: (proposal, problems) => propose(problems, proposal), attempts: options.attempts,
-      identity: proposal => proposal.folder.digest });
+      identity: proposal => proposal.folder.digest }));
     span.stage('verify', { attempts: repair.attempts, ok: repair.ok });
     if (repair.ok) await span.run(() => workspace.accept(repair.value));
     span.stage('accept', { accepted: repair.ok });
@@ -100,6 +100,8 @@ export type SelectOptions<R> = {
   select?: (candidates: Candidate<R>[]) => Maybe<number>;
   /** A replacement for the shipped `beats(goal, first, second)`, such as `beats.on({ model })`. */
   beats?: (goal: string, first: unknown, second: unknown) => Promise<boolean>;
+  /** Judge each pair in both orders `(a, b)` and `(b, a)` to cancel position bias (default `false` for 2 branches, `true` for 3+). */
+  debiased?: boolean;
 };
 export type Selected<R> = {
   /** The index of the accepted branch, or null when no branch passed. */
@@ -146,12 +148,13 @@ export async function branchAndSelect<R = unknown>(folder: Workspace, branches: 
       if (!found) throw stdError('std-select-result', `select returns the index of one of the passing candidates (${passing.map(candidate => candidate.index).join(', ')}).`);
       chosen = found;
     } else if (options.goal && passing.length > 1) {
-      // A knockout: each challenger meets the current choice; the earlier branch keeps ties.
+      // Concurrent debiased pairwise Copeland ranking via semanticRank (order-independent; opt out with `debiased: false`).
       const beats = options.beats ?? shippedBeats;
-      for (const challenger of passing.slice(1)) {
-        const decision = await decideInFrame(span.frame, beats, [options.goal, changesOf(challenger), changesOf(chosen)]);
-        if (decision.value === true) chosen = challenger;
-      }
+      const ranked = await span.run(() => semanticRank(passing, options.goal!, {
+        debiased: options.debiased ?? true,
+        beats: (goal, first, second) => beats(goal, changesOf(first), changesOf(second)),
+      }));
+      chosen = ranked.ranked[0]!;
     }
     span.stage('select', { chosen: chosen.index });
     await span.run(() => workspace.accept(chosen.proposal));

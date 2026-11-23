@@ -1,0 +1,158 @@
+[
+  {
+    "id": "merge-001",
+    "split_group": "flagship:sem-merge:disjoint-funcs",
+    "description": "Disjoint edits to two separate helper functions merge crisply with 0 LLM calls.",
+    "file": {
+      "path": "src/math.ts",
+      "base": "export function add(a: number, b: number) {\n  return a + b;\n}\n\nexport function mul(a: number, b: number) {\n  return a * b;\n}\n",
+      "left": "export function add(a: number, b: number) {\n  return a + b + 0;\n}\n\nexport function mul(a: number, b: number) {\n  return a * b;\n}\n",
+      "right": "export function add(a: number, b: number) {\n  return a + b;\n}\n\nexport function mul(a: number, b: number) {\n  return Number(a) * Number(b);\n}\n"
+    },
+    "expectedMode": "crisp",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-002",
+    "split_group": "flagship:sem-merge:disjoint-imports",
+    "description": "Disjoint additions at top and bottom of a module merge crisply with 0 LLM calls.",
+    "file": {
+      "path": "src/index.ts",
+      "base": "import { alpha } from './alpha.js';\n\nexport const version = '1.0.0';\n\nexport function main() {\n  return alpha();\n}\n",
+      "left": "import { alpha } from './alpha.js';\nimport { beta } from './beta.js';\n\nexport const version = '1.0.0';\n\nexport function main() {\n  return alpha();\n}\n",
+      "right": "import { alpha } from './alpha.js';\n\nexport const version = '1.0.0';\n\nexport function main() {\n  return alpha();\n}\n\nexport const ready = true;\n"
+    },
+    "expectedMode": "crisp",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-003",
+    "split_group": "flagship:sem-merge:identical-both",
+    "description": "Identical bugfix applied on both branches deduplicates crisply with 0 LLM calls.",
+    "file": {
+      "path": "src/guard.ts",
+      "base": "export function nonEmpty(s: string) {\n  return s.length > 0;\n}\n",
+      "left": "export function nonEmpty(s: string) {\n  return s.trim().length > 0;\n}\n",
+      "right": "export function nonEmpty(s: string) {\n  return s.trim().length > 0;\n}\n"
+    },
+    "expectedMode": "crisp",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-004",
+    "split_group": "flagship:sem-merge:json-disjoint",
+    "description": "Disjoint JSON configuration keys merge crisply with 0 LLM calls.",
+    "file": {
+      "path": "config/service.json",
+      "base": "{\n  \"port\": 8080,\n  \"logLevel\": \"info\",\n  \"retries\": 2\n}\n",
+      "left": "{\n  \"port\": 9090,\n  \"logLevel\": \"info\",\n  \"retries\": 2\n}\n",
+      "right": "{\n  \"port\": 8080,\n  \"logLevel\": \"info\",\n  \"retries\": 5\n}\n"
+    },
+    "expectedMode": "crisp",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-005",
+    "split_group": "flagship:sem-merge:json-semantic",
+    "description": "Overlapping JSON release notes field combines compatible descriptions via semanticMerge.",
+    "file": {
+      "path": "config/release.json",
+      "base": "{\n  \"summary\": \"Initial sync engine.\"\n}\n",
+      "left": "{\n  \"summary\": \"Initial sync engine with faster indexing.\"\n}\n",
+      "right": "{\n  \"summary\": \"Initial sync engine. Removes legacy v1 endpoint.\"\n}\n"
+    },
+    "expectedMode": "json-semantic",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-006",
+    "split_group": "flagship:sem-merge:compat-params",
+    "description": "Compatible overlapping edits adding a timeout option and structured logging merge cleanly.",
+    "file": {
+      "path": "src/query.ts",
+      "base": "export function runQuery(sql: string) {\n  return db.exec(sql);\n}\n",
+      "left": "export function runQuery(sql: string, timeoutMs = 3000) {\n  return db.exec(sql, { timeoutMs });\n}\n",
+      "right": "export function runQuery(sql: string) {\n  metrics.count('db.query');\n  return db.exec(sql);\n}\n"
+    },
+    "expectedMode": "text-semantic",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-007",
+    "split_group": "flagship:sem-merge:compat-validation",
+    "description": "Compatible edits adding input validation and return type annotation merge cleanly.",
+    "file": {
+      "path": "src/parse.ts",
+      "base": "export function parsePort(raw: string) {\n  return Number(raw);\n}\n",
+      "left": "export function parsePort(raw: string): number {\n  return Number(raw.trim());\n}\n",
+      "right": "export function parsePort(raw: string) {\n  if (!raw) throw new Error('port required');\n  return Number(raw);\n}\n"
+    },
+    "expectedMode": "text-semantic",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-008",
+    "split_group": "flagship:sem-merge:compat-headers",
+    "description": "Compatible edits adding two distinct security HTTP headers in the same object literal merge cleanly.",
+    "file": {
+      "path": "src/headers.ts",
+      "base": "export const securityHeaders = {\n  'X-Frame-Options': 'DENY',\n};\n",
+      "left": "export const securityHeaders = {\n  'X-Frame-Options': 'DENY',\n  'X-Content-Type-Options': 'nosniff',\n};\n",
+      "right": "export const securityHeaders = {\n  'X-Frame-Options': 'DENY',\n  'Referrer-Policy': 'no-referrer',\n};\n"
+    },
+    "expectedMode": "text-semantic",
+    "expectedStatus": "clean"
+  },
+  {
+    "id": "merge-009",
+    "split_group": "flagship:sem-merge:incompat-policy",
+    "description": "Mutually exclusive default authorization policies emit explicit conflict markers.",
+    "file": {
+      "path": "src/policy.ts",
+      "base": "export const DEFAULT_ACCESS = 'ask';\n",
+      "left": "export const DEFAULT_ACCESS = 'deny-all';\n",
+      "right": "export const DEFAULT_ACCESS = 'allow-all';\n"
+    },
+    "expectedMode": "text-semantic",
+    "expectedStatus": "conflict"
+  },
+  {
+    "id": "merge-010",
+    "split_group": "flagship:sem-merge:incompat-retention",
+    "description": "Conflicting audit retention periods (7 days vs 365 days) emit explicit conflict markers.",
+    "file": {
+      "path": "src/retention.ts",
+      "base": "export const AUDIT_RETENTION_DAYS = 30;\n",
+      "left": "export const AUDIT_RETENTION_DAYS = 7;\n",
+      "right": "export const AUDIT_RETENTION_DAYS = 365;\n"
+    },
+    "expectedMode": "text-semantic",
+    "expectedStatus": "conflict"
+  },
+  {
+    "id": "merge-011",
+    "split_group": "flagship:sem-merge:incompat-algorithm",
+    "description": "Conflicting password hashing algorithms emit explicit conflict markers.",
+    "file": {
+      "path": "src/crypto.ts",
+      "base": "export const HASH_ALGO = 'scrypt';\n",
+      "left": "export const HASH_ALGO = 'argon2id';\n",
+      "right": "export const HASH_ALGO = 'pbkdf2-sha512';\n"
+    },
+    "expectedMode": "text-semantic",
+    "expectedStatus": "conflict"
+  },
+  {
+    "id": "merge-012",
+    "split_group": "flagship:sem-merge:incompat-json",
+    "description": "Conflicting JSON boolean feature flags emit explicit conflict markers rather than dropping a side.",
+    "file": {
+      "path": "config/flags.json",
+      "base": "{\n  \"strictMode\": false\n}\n",
+      "left": "{\n  \"strictMode\": true\n}\n",
+      "right": "{\n  \"strictMode\": \"off\"\n}\n"
+    },
+    "expectedMode": "json-semantic",
+    "expectedStatus": "conflict"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "production outage ticket classified high urgency",
+    "function": "classifyCell.nl",
+    "inputs": {
+      "prompt": "Classify customer support escalation urgency.",
+      "cellText": "A2: Checkout returns HTTP 500 for all EU cards since deploy.",
+      "columnName": "urgency"
+    },
+    "expected": "high"
+  },
+  {
+    "name": "cosmetic typo classified low urgency",
+    "function": "classifyCell.nl",
+    "inputs": {
+      "prompt": "Classify customer support escalation urgency.",
+      "cellText": "A3: Minor footer alignment glitch on about page.",
+      "columnName": "urgency"
+    },
+    "expected": "low"
+  }
+]

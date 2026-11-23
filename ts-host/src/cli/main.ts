@@ -40,6 +40,7 @@ ${tables([
       ['dashboard', 'Open the local dashboard: models, programs, runs and traces.']]],
     ['Inspect', [
       ['traces list|show ...', 'The record of natlang calls.'],
+      ['profile [DIR]', 'Per-function call profile and next optimization step.'],
       ['inspect SOURCE', 'Explain how a source resolves without running it.'],
       ['skills [install]', 'Show or install the natlang skills for Claude Code and Codex.']]]])}
 
@@ -61,7 +62,7 @@ const ADVANCED: [string, string][] = [
   ['adapt inspect|export-source ...', 'Inspect trainable authored components.'],
   ['eval SUITE', 'Evaluate independent fixtures.'],
   ['optimize SUITE', 'Optimize instructions through the runtime.'],
-  ['improve CASE.json --out DIR', 'Run the authored source-improvement program.'],
+  ['improve DIR|CASE.json ...', 'Improve a program directory or run a CASE.json improvement job.'],
   ['packages', 'List installed distribution packages.'],
   ['package pack|verify|install ...', 'Pack, verify, or install a distribution archive.']];
 
@@ -260,6 +261,12 @@ Without input, the instruction receives a read-only view of the current director
 Piped stdin is passed as a whole, or one line/JSON record at a time. --files calls
 once per matching file and prints path<TAB>result. --filter prints matching inputs.`,
   traces: TRACES_HELP,
+  profile: `Per-function call profile and next optimization recommendation:
+  natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--json]
+
+Aggregates recorded calls from the call store (filtered to DIR when given): call count,
+p50 latency, average tokens, compiled share, decision confidence p10/p50, escalation rate
+(from decision_escalate events), failure classes, and the nextOptimization recommendation.`,
   compilations: COMPILATIONS,
   specialize: COMPILATIONS,
   dashboard: `The local dashboard:
@@ -307,6 +314,7 @@ actor view, whether its server is running), the escalation teacher, the tuning s
 (--program, or the current directory when it has tuning state) its active release, the base it runs on,
 examples waiting for natlang tune and when to retune.`,
   improve: `Run the authored source-improvement program:
+  natlang improve DIR [--proposal FILE] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]
   natlang improve CASE.json --out DIR --model MODEL [--provider ID] [--server URL] [--dry-run]
   natlang improve init [DIRECTORY] [--entry main.ts] [--export solve] [--out FILE]
   natlang improve resume|step DIR
@@ -315,6 +323,10 @@ examples waiting for natlang tune and when to retune.`,
   natlang improve adopt-call CALL [--into DIR] [--dry-run] [--untested] [--profile NAME] [--json]
   natlang improve rollback RECORD
 
+Passing a program DIR builds a deterministic support/dev/confirmation case pack from
+DIR/examples.json and recorded calls in the call store, verifies proposed changes with
+natlang check and split evaluation (rejecting if confirmation pass rate drops), and installs
+via the atomic source-adoption transaction with byte-identical rollback.
 init writes a case for a program; the run proposes source changes, scores them on the
 case's train/validation/test cases and keeps a journal in DIR (docs/IMPROVEMENT.md).
 adopt-call takes the code a successful call fixed with edit_code (natlang traces show CALL lists it),
@@ -341,6 +353,7 @@ const SEPARATE: Record<string, (argv: string[]) => Promise<number>> = {
   optimize: async argv => (await import('./adaptation.js')).adaptationCommand(argv),
   tune: async argv => (await import('./tune.js')).tuneCommand(argv.slice(1)),
   traces: async argv => (await import('./calls.js')).tracesCommand(argv.slice(1)),
+  profile: async argv => (await import('./profile.js')).profileCommand(argv.slice(1)),
   compilations: async argv => (await import('./calls.js')).compilationsCommand(argv.slice(1)),
   specialize: async argv => main((await import('./calls.js')).specializeArguments(argv.slice(1))),
 };

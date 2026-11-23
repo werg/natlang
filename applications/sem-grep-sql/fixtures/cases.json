@@ -1,0 +1,142 @@
+[
+  {
+    "id": "sgs-01",
+    "split_group": "flagship:sem-grep-sql:auth-audit",
+    "description": "Join service ownership CSV with API handlers and find endpoints missing authorization checks",
+    "query": {
+      "join": { "table": "owners", "onFileField": "path", "onTableField": "file", "type": "inner" },
+      "exactFilters": [{ "field": "tier", "op": "eq", "value": "tier0" }],
+      "semanticPredicate": "performs a state-mutating database write without checking caller roles or permissions"
+    },
+    "expectedMatchedPaths": ["src/api/admin-reset.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-02",
+    "split_group": "flagship:sem-grep-sql:auth-audit",
+    "description": "Find handlers trusting raw JWT payloads without signature verification",
+    "query": {
+      "exactFilters": [{ "field": "path", "op": "includes", "value": "auth/" }],
+      "semanticPredicate": "decodes a bearer token without verifying its cryptographic signature"
+    },
+    "expectedMatchedPaths": ["src/auth/legacy-sso.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-03",
+    "split_group": "flagship:sem-grep-sql:retry-policy",
+    "description": "Aggregate tier-1 services with unbounded retry loops by owning team",
+    "query": {
+      "join": { "table": "owners", "onFileField": "path", "onTableField": "file", "type": "inner" },
+      "semanticPredicate": "retries failed network requests without a maximum attempt bound or backoff cap",
+      "groupBy": "team",
+      "aggregates": [{ "op": "count", "as": "offending_files" }]
+    },
+    "expectedMatchedPaths": ["src/workers/webhook-sender.ts", "src/workers/sync-ledger.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-04",
+    "split_group": "flagship:sem-grep-sql:retry-policy",
+    "description": "Extract retry backoff strategy from resilience modules",
+    "query": {
+      "semanticPredicate": "implements exponential backoff with jitter on upstream 5xx responses",
+      "extracts": [{ "name": "strategy", "question": "What backoff policy is used?" }]
+    },
+    "expectedMatchedPaths": ["src/http/resilient-client.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-05",
+    "split_group": "flagship:sem-grep-sql:pii-logging",
+    "description": "Identify production loggers writing raw customer PII fields and sum monthly traffic",
+    "query": {
+      "join": { "table": "traffic", "onFileField": "path", "onTableField": "file", "type": "inner" },
+      "exactFilters": [{ "field": "rpm", "op": "gte", "value": 1000 }],
+      "semanticPredicate": "logs customer email addresses, phone numbers, or tax identifiers in plaintext",
+      "aggregates": [{ "op": "sum", "field": "rpm", "as": "exposed_rpm" }]
+    },
+    "expectedMatchedPaths": ["src/checkout/audit-log.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-06",
+    "split_group": "flagship:sem-grep-sql:pii-logging",
+    "description": "Confirm prompt injection inside a comment cannot suppress a PII match",
+    "query": {
+      "semanticPredicate": "emits raw payment card or SSN strings to application logs"
+    },
+    "expectedMatchedPaths": ["src/billing/debug-dump.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-07",
+    "split_group": "flagship:sem-grep-sql:sql-safety",
+    "description": "Locate raw SQL string interpolation in multi-tenant data access layers",
+    "query": {
+      "join": { "table": "owners", "onFileField": "path", "onTableField": "file", "type": "left" },
+      "semanticPredicate": "constructs a SQL query by concatenating or interpolating user-supplied variables"
+    },
+    "expectedMatchedPaths": ["src/db/search-invoices.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-08",
+    "split_group": "flagship:sem-grep-sql:sql-safety",
+    "description": "Find tenant queries missing tenant_id isolation predicates",
+    "query": {
+      "exactFilters": [{ "field": "path", "op": "includes", "value": "src/db/" }],
+      "semanticPredicate": "reads or updates customer-owned rows without filtering by tenant identifier"
+    },
+    "expectedMatchedPaths": ["src/db/export-orders.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-09",
+    "split_group": "flagship:sem-grep-sql:deprecation",
+    "description": "Count deprecated v1 API call sites grouped by repo package",
+    "query": {
+      "join": { "table": "packages", "onFileField": "path", "onTableField": "file", "type": "inner" },
+      "semanticPredicate": "invokes the deprecated v1 billing endpoint or legacy XML payload format",
+      "groupBy": "pkg",
+      "aggregates": [{ "op": "count", "as": "v1_callers" }]
+    },
+    "expectedMatchedPaths": ["packages/invoicing/legacy.ts", "packages/reporting/fetch.ts"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-10",
+    "split_group": "flagship:sem-grep-sql:deprecation",
+    "description": "Find docs still recommending removed environment variables",
+    "query": {
+      "exactFilters": [{ "field": "path", "op": "includes", "value": "docs/" }],
+      "semanticPredicate": "instructs operators to configure legacy plaintext master keys via environment variables",
+      "extracts": [{ "name": "envVar", "question": "Which legacy environment variable is recommended?" }]
+    },
+    "expectedMatchedPaths": ["docs/deploy-2024.md"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-11",
+    "split_group": "flagship:sem-grep-sql:sla-compliance",
+    "description": "Join incident SLA CSV with runbooks and extract escalation contacts",
+    "query": {
+      "join": { "table": "services", "onFileField": "path", "onTableField": "runbook", "type": "inner" },
+      "exactFilters": [{ "field": "slo_target", "op": "gte", "value": 99.9 }],
+      "semanticPredicate": "documents manual database failover steps for primary region outage",
+      "extracts": [{ "name": "escalationChannel", "question": "What incident escalation channel or pager alias is listed?" }]
+    },
+    "expectedMatchedPaths": ["runbooks/postgres-failover.md"],
+    "expectedMinCacheHitRateOnRepeat": 1.0
+  },
+  {
+    "id": "sgs-12",
+    "split_group": "flagship:sem-grep-sql:cache-reuse",
+    "description": "Incremental repo update re-queries 9 unchanged files + 1 new file achieving >= 90% cache hit rate",
+    "query": {
+      "semanticPredicate": "spawns external shell subprocesses with unsanitized command arguments"
+    },
+    "expectedMatchedPaths": ["src/ops/archive.ts"],
+    "expectedMinCacheHitRateOnRepeat": 0.9
+  }
+]

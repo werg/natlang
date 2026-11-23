@@ -5,7 +5,7 @@
 import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { lowerTypedRefinementText } from './lower.js';
-import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
+import { analyzeInlineLambdas, isUntrustedType, resolveIntrinsic, spanOf, withCallOf, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
 import { formatTypeScript, parseTypeCached } from '../native/types.js';
 import { NEURALESE_LITERAL_INTRINSIC, type GenericInstantiation, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
@@ -84,6 +84,7 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
     .concat(scope.services ?? [], scope.opaque ?? []));
   if (!named.has('decide')) lines.push('declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): ' +
     'Promise<{ value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean }>;');
+  if (!named.has('untrusted')) lines.push('declare function untrusted<T>(value: T, source?: string): Untrusted<T>;');
   // The runtime writes a model-written Neuralese literal as this call; its contextual type types it.
   lines.push(`declare function ${NEURALESE_LITERAL_INTRINSIC}<T>(id: string, constant?: true, sourceOccurrence?: string): T;`);
   // ...and a model-written soft function body, the whole template of `nl.with({ … })`...``, as this one.
@@ -118,9 +119,6 @@ export function lowerEvalRefinements(source: string, scope: EvalScopeDeclaration
   const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` }, EVAL_COMPILER_OPTIONS);
   return lowerTypedRefinementText(program, program.getSourceFile(SNIPPET_FILE)!, source, prefix.length);
 }
-
-/** Cheap test for whether a snippet needs the checked pass. */
-export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bnl\.with\b|\biterateOn\b|\b__neuralese[(.]/.test(source);
 
 /**
  * Analyze `nl` expressions in an eval snippet. Spans in the returned plans and diagnostics are
@@ -182,6 +180,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
       (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) && inputs.has(declaration.name.text) ? 'input' : 'local') :
       isSnippetTopLevel(declaration) ? 'local' : 'block',
   });
+  checkEvalUntrustedInstructions(snippet, program.getTypeChecker(), diagnostics);
   const offset = prefix.length;
   const shift = <T extends { start: number; end: number; line: number }>(item: T): T =>
     ({ ...item, start: item.start - offset, end: item.end - offset, line: Math.max(1, item.line - 1) });
@@ -274,6 +273,114 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
       message: `${access.expression.getText(snippet)} has no field ${name.text}: ${fields}. Read the field that holds what you need.` });
   }
   return found;
+}
+
+const isEvalTextType = (type: ts.Type): boolean => type.isUnion() ? type.types.every(isEvalTextType) :
+  !!(type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.TemplateLiteral)) ||
+  (type.isIntersection() && type.types.some(isEvalTextType));
+
+/**
+ * Track bindings in an eval snippet known to be `Untrusted<T>` (from declared param/local/capture types,
+ * `untrusted(...)` calls, or text derived from them) and report `'untrusted-instruction'` if one is interpolated
+ * (`${...}`) into an `nl` tagged template literal's instruction text.
+ */
+function checkEvalUntrustedInstructions(snippet: ts.SourceFile, checker: ts.TypeChecker, diagnostics: NatlangDiagnostic[]): void {
+  const untrustedSymbols = new Set<ts.Symbol>();
+  const isUntrustedCall = (node: ts.Node): boolean =>
+    ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'untrusted';
+
+  const untrustedCulprit = (expression: ts.Expression): ts.Expression | undefined => {
+    if (isUntrustedCall(expression)) return expression;
+    if (ts.isIdentifier(expression)) {
+      const symbol = checker.getSymbolAtLocation(expression);
+      if (symbol && untrustedSymbols.has(symbol)) return expression;
+    }
+    const type = checker.getTypeAtLocation(expression);
+    if (isUntrustedType(checker, type)) return expression;
+    if (!isEvalTextType(type)) return undefined;
+    let found: ts.Expression | undefined;
+    const visit = (node: ts.Node): void => {
+      if (found || ts.isFunctionLike(node)) return;
+      if (ts.isExpression(node) && node !== expression) {
+        if (isUntrustedCall(node)) { found = node; return; }
+        if (ts.isIdentifier(node)) {
+          const symbol = checker.getSymbolAtLocation(node);
+          if (symbol && untrustedSymbols.has(symbol)) { found = node; return; }
+        }
+        if (isUntrustedType(checker, checker.getTypeAtLocation(node))) { found = node; return; }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(expression);
+    return found;
+  };
+
+  const markBindingName = (name: ts.BindingName): boolean => {
+    let added = false;
+    if (ts.isIdentifier(name)) {
+      const symbol = checker.getSymbolAtLocation(name);
+      if (symbol && !untrustedSymbols.has(symbol)) { untrustedSymbols.add(symbol); added = true; }
+    } else {
+      for (const element of name.elements) {
+        if (!ts.isOmittedExpression(element) && markBindingName(element.name)) added = true;
+      }
+    }
+    return added;
+  };
+
+  // Fixed-point propagation through locals and reassignments in the snippet.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    const collect = (node: ts.Node): void => {
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        if (ts.isIdentifier(node.name)) {
+          const symbol = checker.getSymbolAtLocation(node.name);
+          if (symbol && !untrustedSymbols.has(symbol) && untrustedCulprit(node.initializer)) {
+            untrustedSymbols.add(symbol);
+            changed = true;
+          }
+        } else if (isUntrustedCall(node.initializer) || isUntrustedType(checker, checker.getTypeAtLocation(node.initializer))) {
+          if (markBindingName(node.name)) changed = true;
+        }
+      } else if (ts.isBinaryExpression(node) &&
+          (node.operatorToken.kind === ts.SyntaxKind.EqualsToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) &&
+          ts.isIdentifier(node.left)) {
+        const symbol = checker.getSymbolAtLocation(node.left);
+        if (symbol && !untrustedSymbols.has(symbol) && untrustedCulprit(node.right)) {
+          untrustedSymbols.add(symbol);
+          changed = true;
+        }
+      }
+      ts.forEachChild(node, collect);
+    };
+    collect(snippet);
+    if (!changed) break;
+  }
+
+  const visitTemplates = (node: ts.Node): void => {
+    if (ts.isTaggedTemplateExpression(node) &&
+        (resolveIntrinsic(checker, node.tag) === 'nl' || withCallOf(checker, node.tag)) &&
+        !ts.isNoSubstitutionTemplateLiteral(node.template)) {
+      for (const span of node.template.templateSpans) {
+        const culprit = untrustedCulprit(span.expression);
+        if (!culprit) continue;
+        const spanStart = span.expression.getStart(snippet);
+        const spanEnd = span.expression.getEnd();
+        const alreadyReported = diagnostics.some(item => item.code === 'untrusted-instruction' &&
+          item.start >= spanStart && item.end <= spanEnd);
+        if (alreadyReported) continue;
+        diagnostics.push({
+          ...spanOf(culprit, () => 'eval'),
+          code: 'untrusted-instruction',
+          severity: 'error',
+          message: `\`${culprit.getText(snippet)}\` is untrusted data (Untrusted<T>) and cannot be interpolated into the ` +
+            'text of an `nl` call; pass it as an argument instead, as in nl`Summarize the message.`(message), so the model reads it as quoted data.',
+        });
+      }
+    }
+    ts.forEachChild(node, visitTemplates);
+  };
+  visitTemplates(snippet);
 }
 
 /** The innermost node of any kind at `position`. */

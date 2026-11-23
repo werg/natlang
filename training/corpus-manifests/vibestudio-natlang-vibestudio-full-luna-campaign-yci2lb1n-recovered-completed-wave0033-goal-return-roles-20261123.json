@@ -1,0 +1,524 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-wave0033-goal-return-roles-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-wave0033-goal-return-roles-20261123",
+  "files": [
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-0.json",
+      "bytes": 316228,
+      "sha256": "111f1b5c42c037848c4318bfe34187f0d0d277a847d8d2a0557a65cf16c6758c"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-1.json",
+      "bytes": 284896,
+      "sha256": "b05f9676b4a1cb98a9aebb3626f11532ce27f2483fb388d037ff6657589c2cac"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-10.json",
+      "bytes": 297307,
+      "sha256": "73aacd0a2adbcfb539831cfe01c3e0a99247ef3adbe3aa2800fffb53de273595"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-11.json",
+      "bytes": 303354,
+      "sha256": "eece561a6adcd1c630c0af614536d24bd0f56821474601cb2b4f7cbaba70aeb8"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-12.json",
+      "bytes": 315750,
+      "sha256": "23c3df9801ade4efb408f7773f6fd014135196a5418a39b3fa13b8aac1b764c8"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-13.json",
+      "bytes": 340085,
+      "sha256": "62f10afc9eaed1b4e81022e9123bca079324db3845add8b0737fdf1b83d5f4bf"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-14.json",
+      "bytes": 466710,
+      "sha256": "976211eaaa5fd2a2ac023e1f8c9afe8bbda00dbff0d4289134ab54294cbe32c3"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-15.json",
+      "bytes": 464196,
+      "sha256": "94ac92176f90d170071ee3d88d0f1039feaeaeb89371e4d82cbe9808e08fc9da"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-16.json",
+      "bytes": 972238,
+      "sha256": "22e50ac5f7603eef3bee990ef6d83bbcaa633927e42d1a26d1c5dd92b5b9a74d"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-2.json",
+      "bytes": 289616,
+      "sha256": "b9300af8d9430781eb2f365664a33e21b8afa3971cd63e79ce0c23c55b250116"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-3.json",
+      "bytes": 294858,
+      "sha256": "b59e09db1135b397b325ae0c84a9199322b40fcf5dcbc524529e177895982bc9"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-4.json",
+      "bytes": 299595,
+      "sha256": "9a31ed362002228126522409366b4d870929fd11332b7f09a182f699d306d9ae"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-5.json",
+      "bytes": 305638,
+      "sha256": "b44cce7031218de4c1f0b59e85ac249f40bdcdaf188d7fbd1553bf38d466011c"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-6.json",
+      "bytes": 280075,
+      "sha256": "67d530c990ffe44c0ca42d04a06b3f79dac666af330b7ca5c040fb9461d9bf37"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-7.json",
+      "bytes": 284377,
+      "sha256": "31226fe115e04839ece1bd36c5f8d4f3b867ee34640458b407449a05cc5d54cd"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-8.json",
+      "bytes": 293863,
+      "sha256": "eeca8fa86ea988e535e3c5669f29125f75b8fd781cf50460333531b60fdbbbdd"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/call-9.json",
+      "bytes": 279797,
+      "sha256": "af67ae88afa8756c2e1737e2073f78d8debc8dc01b3177cb75a84c19d73a57bf"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/completed-outcome-original.json",
+      "bytes": 15985,
+      "sha256": "0962d51212b65b7bf6d1a1139774448d41d400b6ace08e047532e8a82971fe66"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/completed-reassessment.json",
+      "bytes": 16041,
+      "sha256": "e89f45068fae1cbf32cf8050f149a2ccf6c2875db26c03ce8a30ec4a01c5c239"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/manifest.json",
+      "bytes": 4524,
+      "sha256": "446204d0d5e07a64d1351661c50141ecf47d5edf2a34434e158a0da35faaca0a"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/original-outcome.json",
+      "bytes": 312,
+      "sha256": "1a1e2af62f675b713de7d49192d003c0efa0e9bb2f61fb95937527dd49e6436c"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/reassessment-checker_sources-0.ts",
+      "bytes": 16645,
+      "sha256": "db4c6a5ba4c38750e44c6e2ce71bd192b38d4413ecbc99de9757fd87dfe8f6e4"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/reassessment-checker_sources-1.ts",
+      "bytes": 18204,
+      "sha256": "5ff27631cf90e81f52f327c76294f48309b029d5fbe49b3930b9bd09b4a60bc5"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/reassessment-checker_sources-2.mjs",
+      "bytes": 7760,
+      "sha256": "79cd4835bfe63f563c1ea1a1588ff548b1f1ddc1f5628ed3a9df8ed6c933c4f3"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/reassessment-evidence-0.json",
+      "bytes": 17573,
+      "sha256": "9e9eec12bfff83c732205add659e04cdc49a42440bd326b052fd97c4e093cdca"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/reassessment-validator.json",
+      "bytes": 595,
+      "sha256": "699fa9215630f18b8cb5a64abdd9c0cce29d1183fe6c97fe030c14750807d089"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/reassessment.json",
+      "bytes": 673,
+      "sha256": "54a181fa322be0eed8cb920ea891399c9ee593e1c0be4725f60f12ef76efb839"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/trajectory-open-goal-desktop-readiness-lobby-confirm-ready-offer-full.json.gz",
+      "bytes": 1313425,
+      "sha256": "a38616de3f47b713074882c7bec3c03b4ffb9dcf25461b6d6b72ad5f7476fa3c"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/trajectory.native.jsonl.zst",
+      "bytes": 80880,
+      "sha256": "b09ddd729c665e45adeb912c3062dd7c985c052b983228cb5dc08ee01a767ffd"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/verification.json",
+      "bytes": 19834,
+      "sha256": "fd2beea25e00aaa41400cb44ad44d17dbde91a058ce94c172d70b9c6b17c0ff4"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-lobby-confirm-ready-offer/verified/workspace.json",
+      "bytes": 16648,
+      "sha256": "ea4df290b01d7662c8c6a84ff68da3d5ba1d1328e027ff686f004e86426c17d4"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-0.json",
+      "bytes": 312255,
+      "sha256": "e07b4b4089262aca2e4bd2f86ec299c5ef12002925491cbdf94d5b55dd1a3408"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-1.json",
+      "bytes": 294811,
+      "sha256": "033cf6d4bfddbf5a9a32bc40da4033f611026f2e22a4e7bac9c2c048a9442fea"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-10.json",
+      "bytes": 280155,
+      "sha256": "327ac0b32963622e6564790567f89703c906a0ca0d0cf505c5a80a65f37224b8"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-11.json",
+      "bytes": 421868,
+      "sha256": "f4fc1895da26e818c59766371a25eb92feddfe4655fcbf7687507f28f95d2f4a"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-12.json",
+      "bytes": 303347,
+      "sha256": "41545a82dcb7bacde5adb69661b5f374bdd5c079d006be3902d970cb8d93be70"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-13.json",
+      "bytes": 315873,
+      "sha256": "4a3904c513872de793f91a4e0e0a17524a5ffe6334d6fb0c0db6680f161f3e67"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-14.json",
+      "bytes": 339964,
+      "sha256": "fa31bdf997548ac8ca861eda91fd57c3e0a9569b57c3986c33a114613761aada"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-15.json",
+      "bytes": 467018,
+      "sha256": "5ca4e9c8d867bd226fe3dc4063463481315ac9e8ccc377ceda7f0967bd5aee05"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-16.json",
+      "bytes": 610652,
+      "sha256": "8a70b2e7d18f94b137ca8fbc616f9330690a491273720cc953ddb40e2ca00698"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-2.json",
+      "bytes": 281075,
+      "sha256": "50e7ad979606cc95003cbf0fb1712c0d58e9ee156f7cc8324855a6d0b5a243d8"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-3.json",
+      "bytes": 287940,
+      "sha256": "8c1c1bf71d3bfa74811e3492df74257f6426eb9f218594a76fbe0fb65e186ee1"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-4.json",
+      "bytes": 299690,
+      "sha256": "fead483b80f216b8fa97ecfe615a82a0272a98ca1a17d4e667ff6c50f463b34e"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-5.json",
+      "bytes": 303707,
+      "sha256": "486bf51dd8f10b256b10b86b4ecc9aa56ba0c47c9def163a04bb2eb3e10af55d"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-6.json",
+      "bytes": 278475,
+      "sha256": "da3e5a605e1e13ecd2c43cc4b1a775efef8a5cedc3f03cfe0836ee77230d680f"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-7.json",
+      "bytes": 284057,
+      "sha256": "20743e029b3354c1b0c2f70b35924ee02f3a8621a023cc8a7e474b246003ccb4"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-8.json",
+      "bytes": 293862,
+      "sha256": "6c6c08726c90e7930c11012ac734292f485b3c92890d14541f0d44058ba01f68"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/call-9.json",
+      "bytes": 280524,
+      "sha256": "9bc5d5326cbfa241c6b7c8ac1d8809db9325033c7e60aa043642009a7113c28c"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/completed-outcome-original.json",
+      "bytes": 15347,
+      "sha256": "bf0c35483de10bcfbaee12807faaac4170e4ad510fae2a39b8df275383ed24eb"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/completed-reassessment.json",
+      "bytes": 15403,
+      "sha256": "51e5832974e573617d5ad8ec28e6b42b76c2cfdc7de39f3e3bd70103f19e0150"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/manifest.json",
+      "bytes": 4491,
+      "sha256": "800537240031ea0ba0d4a3a0c9e4d87e0a96e23e2b399bdc0961ff0ca4dcad87"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/original-outcome.json",
+      "bytes": 312,
+      "sha256": "1a1e2af62f675b713de7d49192d003c0efa0e9bb2f61fb95937527dd49e6436c"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/reassessment-checker_sources-0.ts",
+      "bytes": 16645,
+      "sha256": "db4c6a5ba4c38750e44c6e2ce71bd192b38d4413ecbc99de9757fd87dfe8f6e4"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/reassessment-checker_sources-1.ts",
+      "bytes": 18204,
+      "sha256": "5ff27631cf90e81f52f327c76294f48309b029d5fbe49b3930b9bd09b4a60bc5"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/reassessment-checker_sources-2.mjs",
+      "bytes": 7760,
+      "sha256": "79cd4835bfe63f563c1ea1a1588ff548b1f1ddc1f5628ed3a9df8ed6c933c4f3"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/reassessment-evidence-0.json",
+      "bytes": 16125,
+      "sha256": "3c0f1bafbb7bd8b077ea60e44c72d8a405a88785f1ce65cddfcab98d33a738dd"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/reassessment-validator.json",
+      "bytes": 597,
+      "sha256": "b1e00efdc1aeb95dd283eb809c89db5e8801971b7ce09a47a97551395e7362f3"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/reassessment.json",
+      "bytes": 675,
+      "sha256": "95d39cd9818c4c6e9873297560b52974e20edda30ff760dedd8a48ad85c8facb"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/trajectory-open-goal-desktop-readiness-office-reconnect-same-build-full.json.gz",
+      "bytes": 1218342,
+      "sha256": "38a73df2f06188becd2d83cb3eddb2553a34d59c19eaa9f4f49bdad63d2efcad"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/trajectory.native.jsonl.zst",
+      "bytes": 80662,
+      "sha256": "5ef471353344dfaeb934d6e6971d4407b15696edacb83b1b706b23ad98e3c3f4"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/verification.json",
+      "bytes": 19890,
+      "sha256": "2547025e3e70ab9363c6e6a0f94a5725763a8aebf37cde035d3d3282a867a608"
+    },
+    {
+      "path": "capture/open-goal-desktop-readiness-office-reconnect-same-build/verified/workspace.json",
+      "bytes": 15994,
+      "sha256": "528874370bf3a252f62b8fed9737ee917902c7668fce683777e410b7033cd224"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-0.json",
+      "bytes": 282591,
+      "sha256": "4fc593277638d433125418e444f9fc5d2fd6e38cb921e41d914a7b00145f3158"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-1.json",
+      "bytes": 265896,
+      "sha256": "984b858d753fcafad5005caa1b8d2e44b94935cd59e73c45a1874aa80ab3354c"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-10.json",
+      "bytes": 745243,
+      "sha256": "14145773f2bcafd431375c9ecaf88fce3932af96000dbf243227fbb2f219e76b"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-11.json",
+      "bytes": 111622,
+      "sha256": "44e9efdae5400ed19cd649011d95276d202ae33524dfcf282aaf1d0e31018510"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-12.json",
+      "bytes": 103417,
+      "sha256": "14bddeb3e30bd44ae7a25e7ef0b76aa52083c1f2dee1a4b36d020a634f638013"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-13.json",
+      "bytes": 98889,
+      "sha256": "8a7450968fb3b465bbc34a6e9daf04c6675277d82a0f3a6811a9061585e9c7d5"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-14.json",
+      "bytes": 979546,
+      "sha256": "80a58812d9dfce88f1da07bf24d2b4aefb3d603e9dbbaf88884acc87976275cd"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-15.json",
+      "bytes": 260584,
+      "sha256": "66cc792e144587c8d74fe9e1fcdf4a02c257cbabd3ab610c829a4868ecf87823"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-16.json",
+      "bytes": 257838,
+      "sha256": "f1dc743cb4f34b4798147d88bc04cd95929dc4dd30d84605318e50cfcd5b3fac"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-17.json",
+      "bytes": 274613,
+      "sha256": "ea34865442f1363b8d45b33ce3153d9025b20708084e0506d7083d1d165e22da"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-18.json",
+      "bytes": 274500,
+      "sha256": "a2b8b716f1ec269e5e16d4cf4ac16bd5d67c75ae8992cd9902c9af7d4ed0e9f6"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-19.json",
+      "bytes": 633254,
+      "sha256": "e84c90390c164186b940be0427012f546e4f0c76b9848af133269225284c92dd"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-2.json",
+      "bytes": 266489,
+      "sha256": "7aa41aba163a77a46106405ac6cf00aaaffcaa0c8346dd1f5964e811f7765491"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-20.json",
+      "bytes": 257505,
+      "sha256": "a8ae583411ce2528efa3069f4d1858a894112336d156330250bf19de938177ca"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-21.json",
+      "bytes": 1079872,
+      "sha256": "7b3491a01cb073102e292bd873de5a36910d5a000d76abe272dfbfabdc115357"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-3.json",
+      "bytes": 994034,
+      "sha256": "2e63cc11b814a9dc89e341cd0b48afeb73960796451795a65ed6e7437126adfc"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-4.json",
+      "bytes": 637495,
+      "sha256": "782ef95259d81913c2dae21247c28cba55377dbfdc9441b9ad37727348499641"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-5.json",
+      "bytes": 192270,
+      "sha256": "28c4f2e601e907ad0aa271bd6a4abec3faaa9d1699e119c6b310fa17cfee92a6"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-6.json",
+      "bytes": 752932,
+      "sha256": "7963521b9564084d866c06cd6a6f5472f51803e5f496f6048636eae85aaca547"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-7.json",
+      "bytes": 101043,
+      "sha256": "aba3bcfc8d6bcda9ec35a5510613abd264a6d6739b57c7d400320f77dd4709b9"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-8.json",
+      "bytes": 99745,
+      "sha256": "e4d8376538787d88a6dd23fe87edd71be9c81f73bd1d906806fc2756afcb0f32"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/call-9.json",
+      "bytes": 194873,
+      "sha256": "2262be372129ade3db03f8b125aed8efb9ca09b7bbcc806a8c460275a11987cf"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/completed-outcome-original.json",
+      "bytes": 17529,
+      "sha256": "ee2a9584f9dd143781d6c006748448e471e2b3931a583f2ba42455db65ebb1c0"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/completed-reassessment.json",
+      "bytes": 17589,
+      "sha256": "a3cb930418dd5cecb784bdb69d117005f49d382dad20e66a60dd280ce04495b0"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/manifest.json",
+      "bytes": 5020,
+      "sha256": "55fa4bef95f1278707a415940a834ccbd89c1cdc2a1d35c799c80c6362f900f2"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/original-outcome.json",
+      "bytes": 405,
+      "sha256": "12e9a64914054922488cf8e23a0efc92de0a01dc40fb25f352454d2c74b0717b"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment-checker_sources-0.ts",
+      "bytes": 16500,
+      "sha256": "733309ab5b71fa73a204aeb89f3db6ca30c537b6356b3951106aef594335d89d"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment-checker_sources-1.ts",
+      "bytes": 16281,
+      "sha256": "1fc3324d5c2205e8b61785a835ab5712bf995a3440685ffca99c6174c4206f22"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment-checker_sources-2.mjs",
+      "bytes": 8833,
+      "sha256": "8e9833a13fec6b8ff0efdbfe67bc0e64b6661a2255a52009aef2931b72239e8b"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment-checker_sources-3.ts",
+      "bytes": 714,
+      "sha256": "f8487972b0bd5401f7d3177c3a207f03262472c0a6aeebe3de7f303127c0900f"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment-evidence-0.json",
+      "bytes": 18628,
+      "sha256": "85a34216b2f671b04788c9b910050968a1a5928fabd0c70b4e0d823c3d6ca0a4"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment-validator.json",
+      "bytes": 595,
+      "sha256": "e666e1bb65258fd757bfe7008c701a0d49455f8bc03faf34aeb3990a5e784bf2"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/reassessment.json",
+      "bytes": 864,
+      "sha256": "e97141cd154e30b397497d1b117e06d49df947ad00947e3a713e663cc25aa6d2"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/trajectory-open-goal-intent-discovery-morning-version-vs-handoff-full.json.gz",
+      "bytes": 1795080,
+      "sha256": "295db96ba4e2ce3936cba6019bf108d9e9705b980d1c4f56f325fd3f58c734cf"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/trajectory.native.jsonl.zst",
+      "bytes": 107542,
+      "sha256": "f765e26cbb9f156424ab283baa7e9eb8887ac849de05d22b21699ea0bb7408c0"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/verification.json",
+      "bytes": 23314,
+      "sha256": "6e1106f7ab828ca52892a68eb846f964deba243b3e9757299ce80f57bd759e36"
+    },
+    {
+      "path": "capture/open-goal-intent-discovery-morning-version-vs-handoff/verified/workspace.json",
+      "bytes": 18006,
+      "sha256": "4b4b2205ec98ac3a459e208ebf7d3e712a32705118eac8eac71d059ef7b33d2a"
+    },
+    {
+      "path": "graph-metrics.json",
+      "bytes": 30052,
+      "sha256": "28fea11ae190802410c33f2ff7adf25c8d6370b404fe82c104be49e3b2b21560"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 718,
+      "sha256": "6c2316a04d93fe21cfaa7216d6d0a42a4461a7df1187217650136a6fca04eedf"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 207747,
+      "sha256": "2f6e16ec80f3b618b14ec7e2ea9556c88525428d586b9e435694ef049d89f82f"
+    },
+    {
+      "path": "wave.json",
+      "bytes": 299,
+      "sha256": "e2899b39d3868a5b3cf98365862bf4feb0195194d51f55dc2609c3daa92357a4"
+    }
+  ],
+  "bytes": 25853369
+}

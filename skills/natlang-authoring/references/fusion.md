@@ -15,13 +15,9 @@ checked = analyze(tree)                 // after `tree = parse(source)`, and tre
 declare(analyze(parse(source)))         // a chain of three: both inner hand-offs are exact
 ```
 
-In prose, in a numbered step of the orchestrator, write the call with its argument inside it
-(`statement = plan(parse(request, kind, catalog, today), catalog)`) and say what the stages do after it. The check reads
-`B(A(x))` as: the value of `A(x)` is B's argument and has no name, so no one else can read it. It reads
-`v = A(x)` as: every later mention of `v` in a call or a sentence is a reader, so `v` must appear once, as an argument of B.
+In TypeScript orchestrators, write the chain directly (`await analyze(await parse(source))`, or `const tree = await parse(source)` used only as `await analyze(tree)`), where the compiler proves single-reader hand-off by exact syntax.
 
-The same holds in TypeScript orchestrators (`analyze(await parse(source))`, or `const tree = await parse(source)` used
-only as `analyze(tree)`), where the proof is exact syntax, and in the code the orchestrating model writes at run time.
+In a `.nl` orchestrator, write the call with its argument inside it (`statement = plan(parse(request, kind, catalog, today), catalog)`) so the check reads `B(A(x))` as an unnamed single-reader hand-off; `v = A(x)` fuses when `v` appears once later, as an argument of `B`.
 
 Prose such as "parse the source, then analyze it" is a chain the check cannot prove, so it stays text.
 

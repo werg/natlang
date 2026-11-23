@@ -294,6 +294,16 @@ export function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, un
     { enum: resolved.members.map(part => (env.resolve(part) as Extract<Type, { kind: 'lit' }>).value) } :
     { anyOf: resolved.members.map(part => schemaOf(part, env, depth + 1)) };
   if (resolved.kind === 'list') return { type: 'array', items: schemaOf(resolved.element, env, depth + 1) };
+  if (resolved.kind === 'tuple') {
+    const minItems = resolved.minLength ?? resolved.elements.length;
+    const maxItems = resolved.elements.length;
+    return {
+      type: 'array',
+      prefixItems: resolved.elements.map(element => schemaOf(element, env, depth + 1)),
+      minItems,
+      maxItems,
+    };
+  }
   if (resolved.kind === 'dict') return { type: 'object', additionalProperties: schemaOf(resolved.element, env, depth + 1) };
   if (resolved.kind === 'record') return { type: 'object',
     properties: Object.fromEntries(resolved.fields.map(field => [field.name, schemaOf(field.type, env, depth + 1)])),

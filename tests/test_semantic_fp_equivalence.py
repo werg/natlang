@@ -135,3 +135,20 @@ def test_report_reads_a_run(tmp_path):
     assert out['passes'] == 1 and out['scored'] == 2 and out['ran'] == 2 and out['judge_pending'] == 0
     assert out['calls_mean'] == 1.5 and out['prompt_tokens_mean'] == 150.0 and out['wall_seconds_mean'] == 15.0
     assert out['program'] == 'design-brief:001' and out['split'] == 'dev'
+
+
+def test_requeue_forgets_attempts_without_a_result(tmp_path):
+    run = tmp_path / 'run'
+    (run / 'workers').mkdir(parents=True)
+    entries = []
+    for key, text in (('a', '{"x": 1}\n'), ('b', ''), ('c', None)):
+        out = run / f'row-{key}' / 'sample-00' / 'results.jsonl'
+        out.parent.mkdir(parents=True)
+        if text is not None:
+            out.write_text(text)
+        (run / 'workers' / f'{key}.journal.jsonl').write_text(json.dumps({'event': 'finish', 'key': key}) + '\n')
+        entries.append({'key': key, 'output': str(out)})
+    (run / 'sealed-queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in entries))
+    assert eq.requeue(run) == ['b', 'c']
+    assert (run / 'workers' / 'a.journal.jsonl').exists() and not (run / 'workers' / 'b.journal.jsonl').exists()
+    assert not (run / 'row-b').joinpath('sample-00').exists()

@@ -10,6 +10,7 @@ import { decideInFrame } from '../runtime/runtime.js';
 import type { NatlangFunction } from '../runtime/surface.js';
 import { combine as shippedCombine, compatible as shippedCompatible, intentOf as shippedIntentOf, settled as shippedSettled,
   type Edit, type Intent } from './judgments.js';
+import { carryOf, defaultSoftRead, defaultSoftView, type CarryMode } from './collections.js';
 import { StdSpan, stdError } from './trace.js';
 import { isPlainObject } from '../runtime/plain-object.js';
 
@@ -103,6 +104,14 @@ export type FixedPointOptions<T> = {
   settled?: (previous: T, current: T) => Maybe<boolean>;
   /** The most steps. Reaching it returns the latest value with `settled: false`. */
   maxSteps?: number;
+  /** How state is carried between revisions: `'text'` (default) or `'neuralese'` (`view` each revision, `read` once at end). */
+  carry?: CarryMode;
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  view?: (value: unknown, instructions?: string) => Maybe<unknown>;
+  /** Optional readout hook used once at the end when `carry: 'neuralese'` (default: Neuralese `read`). */
+  read?: (value: unknown) => Maybe<unknown>;
+  /** Optional instructions forwarded to `view` when `carry: 'neuralese'`. */
+  viewInstructions?: string;
 };
 export type FixedPoint<T> = { value: T; steps: number; settled: boolean };
 
@@ -112,27 +121,37 @@ export async function fixedPoint<T>(step: (value: T) => Maybe<T>, initial: T, op
   if (options.settled && options.maxSteps === undefined)
     throw stdError('iteration-unbounded', 'fixedPoint with an exact settled test needs maxSteps: the most steps before it returns the latest value; leave settled out to judge settledness in natural language.');
   const maxSteps = options.maxSteps === undefined ? undefined : boundOf(options.maxSteps, 'maxSteps', 'fixedPoint');
+  const carry = carryOf(options.carry, 'fixedPoint');
+  const view = options.view ?? defaultSoftView;
+  const read = options.read ?? defaultSoftRead;
   const span = new StdSpan('fixedPoint');
   return span.around(async () => {
     if (maxSteps === 0) return { value: initial, steps: 0, settled: false };
+    const start = (carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial) as T;
     let steps = 0;
+    const finish = async (value: T, isSettled: boolean): Promise<FixedPoint<T>> => ({
+      value: (carry === 'neuralese' ? await span.run(() => read(value)) : value) as T,
+      steps,
+      settled: isSettled,
+    });
     const revise = async (revision: Revision<T>): Promise<Revision<T>> => {
-      const current = await span.run(() => step(revision.current));
+      const raw = await span.run(() => step(revision.current));
+      const current = (carry === 'neuralese' ? await span.run(() => view(raw, options.viewInstructions)) : raw) as T;
       steps++;
-      span.stage('step', { step: steps });
+      span.stage('step', { step: steps, ...(carry === 'neuralese' ? { carry } : {}) });
       return { previous: revision.current, current };
     };
-    const first = await revise({ previous: initial, current: initial });
-    if (stableHash(first.current) === stableHash(initial)) return { value: first.current, steps, settled: true };
+    const first = await revise({ previous: start, current: start });
+    if (stableHash(first.current) === stableHash(start)) return finish(first.current, true);
     let iteration = iterateOn(revise, first);
     if (maxSteps !== undefined) iteration = iteration.withLimit({ maxSteps: maxSteps - 1 });
     const settled = options.settled;
     try {
       const last = await span.run(() => iteration.until(settled ? revision => settled(revision.previous, revision.current) :
         (options.judge ?? shippedSettled) as unknown as (revision: Revision<T>) => Promise<boolean>));
-      return { value: last.current, steps, settled: true };
+      return finish(last.current, true);
     } catch (error) {
-      if (error instanceof IterationLimitError) return { value: (error.lastState as Revision<T>).current, steps, settled: false };
+      if (error instanceof IterationLimitError) return finish((error.lastState as Revision<T>).current, false);
       throw error;
     }
   }, result => `${result.settled ? 'settled' : 'unsettled'} after ${result.steps} steps`);
@@ -205,7 +224,8 @@ export async function semanticMerge<T>(base: T, ours: T, theirs: T, options: Mer
       const [oursIntent, theirsIntent] = await Promise.all([span.run(() => intentOf(conflict.base, conflict.ours)),
         span.run(() => intentOf(conflict.base, conflict.theirs))]);
       const intents = { ours: oursIntent, theirs: theirsIntent };
-      const edits: [Edit, Edit] = [{ after: conflict.ours, intent: oursIntent }, { after: conflict.theirs, intent: theirsIntent }];
+      const editOf = (value: unknown, intent: Intent): Edit => value === undefined ? { removed: true, intent } : { after: value, intent };
+      const edits: [Edit, Edit] = [editOf(conflict.ours, oursIntent), editOf(conflict.theirs, theirsIntent)];
       const decision = await decideInFrame(span.frame, compatible, [conflict.base, ...edits]);
       const compatibility = decision.probabilities.find(item => item.value === true)?.probability ?? 0;
       const keep = () => resolution.set(conflict, conflict[options.keep ?? 'base']);
@@ -214,8 +234,9 @@ export async function semanticMerge<T>(base: T, ours: T, theirs: T, options: Mer
         return keep();
       }
       const value = await span.run(() => combine(conflict.base, ...edits));
-      const kinds = [conflict.ours, conflict.theirs].map(kindOf);
-      const problems = kinds.includes(kindOf(value)) ? options.check ? problemsOf(await span.run(() => options.check!(value, conflict.path)), 'check') : [] :
+      const kinds = [conflict.ours, conflict.theirs].filter(item => item !== undefined).map(kindOf);
+      const kindOk = !kinds.length || kinds.includes(kindOf(value));
+      const problems = kindOk ? options.check ? problemsOf(await span.run(() => options.check!(value, conflict.path)), 'check') : [] :
         [`The combined value is ${kindOf(value)}; the edits are ${[...new Set(kinds)].join(' and ')}.`];
       if (problems.length) {
         unresolved.push({ ...conflict, reason: 'check', intents, compatibility, problems });
@@ -231,7 +252,10 @@ export async function semanticMerge<T>(base: T, ours: T, theirs: T, options: Mer
         return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, fill(item)]).filter(([, item]) => item !== undefined));
       return value;
     };
-    const byPath = (a: { path: string[] }, b: { path: string[] }) => a.path.join('\0') < b.path.join('\0') ? -1 : 1;
+    const byPath = (a: { path: string[] }, b: { path: string[] }) => {
+      const left = a.path.join('\0'), right = b.path.join('\0');
+      return left < right ? -1 : left > right ? 1 : 0;
+    };
     return { value: fill(draft) as T, merged: merged.sort(byPath), unresolved: unresolved.sort(byPath) };
   }, result => `${result.merged.length} merged, ${result.unresolved.length} unresolved`);
 }

@@ -10,8 +10,8 @@ const decisions = { one: 'supported', two: 'contradicted', three: 'uncertain' };
 for (const observations of [[], ['one', 'two', 'three']]) {
   test(`distributed authoring example: ${observations.length} inputs, scripted semantics`, async () => {
     // Ordinary stages use scripted eval; the finite verdict uses the actual tool-free JSON decision surface.
-    const model = scriptedModel(opening => opening.includes('Assess every observation') ?
-      'const assessments = await Promise.all(observations.map(observation => assess(observation, criterion)));\nreturn await summarize(assessments)' :
+    const model = scriptedModel(opening => opening.includes('Call summarize(observations, criterion)') ?
+      'const tally = await summarize(observations, criterion);\nreturn { ...tally, conclusion: tally.contradicted ? "The criterion is contradicted by observation two." : "No evidence contradicts the criterion." };' :
       opening.includes('Decide the verdict with verdict') ? 'return { verdict: await verdict(observation, criterion), reason: "Scripted wiring fixture" }' :
       `return ${JSON.stringify(decisions)}[observation]`);
     const review = loadNatlang(path);
@@ -23,9 +23,18 @@ for (const observations of [[], ['one', 'two', 'three']]) {
       assert.ok(observation, `the decision opening must carry its actual observation: ${wire}`);
       return { text: JSON.stringify(decisions[observation]), calls: [] };
     };
+    driver.decide = async request => {
+      const all = request.messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n');
+      if (/Property: the value is/.test(all)) return { log_probs: [Math.log(0.95), Math.log(0.05)] };
+      const wire = request.messages.filter(m => m.role === 'tool').map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n');
+      const observation = Object.keys(decisions).find(value => new RegExp('\\b' + value + '\\b').test(wire));
+      const expected = decisions[observation];
+      return { log_probs: request.options.map(option => Math.log(JSON.parse(option) === expected ? 0.9 : 0.05)) };
+    };
     const report = await createNatlangRuntime({ model: driver }).run(() => review(observations, 'Fixture criterion'));
     assert.equal(report.assessments.length, observations.length);
     assert.deepEqual(['supported', 'contradicted', 'uncertain'].map(key => report[key]), observations.length ? [1, 1, 1] : [0, 0, 0]);
+    assert.equal(typeof report.conclusion, 'string');
   });
 }
 

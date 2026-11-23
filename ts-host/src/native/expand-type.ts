@@ -18,9 +18,10 @@ export function expandType(type: Type, env: TypeEnv, docs: Record<string, Record
   switch (type.kind) {
     case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: child(field.type) })) };
     case 'list': case 'dict': return { ...type, element: child(type.element) };
+    case 'tuple': return { ...type, elements: type.elements.map(child) };
     case 'union': return { ...type, members: type.members.map(child) };
     case 'refined': case 'untrusted': return { ...type, base: child(type.base) };
-    case 'intersection': case 'index': { try { return child(env.resolve(type)); } catch { return type; } }
+    case 'intersection': case 'index': case 'utility': { try { return child(env.resolve(type)); } catch { return type; } }
     default: return type;
   }
 }

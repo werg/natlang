@@ -121,6 +121,21 @@ and 5 workflows whose oracle is an independent review rubric (`ts-host/scripts/d
 So the exact stratum is 60 gates. The 100 workflows join held-v4 with the verifier oracle (O1/B6), as do the 2 reserved
 Astra/Sol apps, whose fixtures are judged by verifier modules.
 
+## 5.1 `held-v4` v3 upgrade criteria (before promoting `held-v4` to a paired training gate)
+
+An audit of `held-v4-set-2` (252 tasks, sha `c09720e1`) surfaced structural gaps that must be closed in `held-v4` v3
+before locking it as the paired gate alongside `held-v3`:
+1. **Replace the 60 unmigrated legacy design-brief gates** with *migrated* design-brief + Astra/Sol verifier worlds and
+   real `applications/*` / Tier 1 flagship held splits (using the `flagship:` 20% reservation).
+2. **Eliminate prose-TS-recipe roots** (`moderate.nl`, `find_cause.nl`, `shortlist.nl`, `torque_for.nl`): every `held-v4`
+   task must pass `natlang check` with 0 idiom warnings and follow `plans/neuralese/RL_TASK_AUTHORING_KIT_V2.md`.
+3. **Shift from 98.8% exact-match (249/252) to executable artifact verifiers & proper scoring**: adopt
+   `training/semantic_fp_tasks/verifiers/{code_test,policy_eval,service_trace,proper_score}.mjs` so `decision_calibrated`
+   actually scores Brier/log-loss/escalation utility, `higher_order` evaluates synthesized rules on hidden + metamorphic
+   twin cases, and code/service tasks execute real invariants.
+4. **Custody hygiene**: remove legacy `invented:` groups on B1's rows so every held row follows `authored_checks.py`'s
+   `REAL_GROUP` rule.
+
 ## 6. Activate fallow assets (F1)
 - `training/semantic_stack/sol_programs.json` (100 typed programs, 28 worlds, "eligible for plain teacher
   generation", never admitted): run it through the WS7 migrator and the O1 path. Admit what qualifies.

@@ -62,13 +62,66 @@ def workspace(tmp_path, evaluations=2, run='r0'):
 def test_preparation_is_shared_by_the_group_and_anchors_on_the_trivial_improvements(tmp_path):
     w, evaluator = workspace(tmp_path)
     assert w.baseline() == {'attempts': 4, 'success': 0.25}
-    names = [name for name, *_ in evaluator.calls]
-    assert names == ['baseline-support', 'baseline-query-none', 'baseline-query-default']
-    assert evaluator.calls[1][1] == [f'w{i}' for i in range(4, 10)]          # query worlds, never shown as evidence
+    assert [name for name, *_ in evaluator.calls] == ['baseline-support']   # the evidence; the anchor only to score
+    assert w.baselines['none']['success'] == 0.25 and w.baselines['default']['success'] == 0.75
+    calls = {name: worlds for name, worlds, *_ in evaluator.calls}
+    assert set(calls) == {'baseline-support', 'baseline-query-none', 'baseline-query-default'}
+    assert calls['baseline-query-none'] == [f'w{i}' for i in range(4, 10)]   # query worlds, never shown as evidence
     other, other_evaluator = workspace(tmp_path, run='r1')
-    assert other.baseline()['success'] == 0.25 and other_evaluator.calls == []   # read from the shared preparation
-    prepared = json.loads((tmp_path / 'memetic/prepared.json').read_text())
-    assert prepared['baselines']['none']['success'] == 0.25 and prepared['baselines']['default']['success'] == 0.75
+    assert other.baseline()['success'] == 0.25 and other.baselines['none']['success'] == 0.25
+    assert other_evaluator.calls == []                                       # read from the shared preparation
+    assert 'baselines' not in json.loads((tmp_path / 'memetic/prepared.json').read_text())
+    assert json.loads((tmp_path / 'memetic/baselines.json').read_text())['default']['success'] == 0.75
+
+
+def test_a_preparation_recorded_before_the_staged_layout_keeps_its_baselines(tmp_path):
+    out = tmp_path / 'memetic'
+    out.mkdir()
+    (out / 'prepared.json').write_text(json.dumps({'admitted': True, 'support_success': 0.5, 'attempts': [],
+                                                   'baselines': {'none': {'success': 0.4}, 'default': None}}))
+    w, evaluator = workspace(tmp_path)
+    assert w.baselines == {'none': {'success': 0.4}, 'default': None} and evaluator.calls == []
+
+
+def test_the_staged_layout_fits_a_memetic_group_in_the_episode_wall_clock():
+    value = {'budget': {'evaluations': 2}, 'eval': {'case_seconds': 900, 'workers': 4, 'samples': 2}}
+    staged = mw.bind_layout(value, episode_seconds=7200)
+    # support, two evaluations, the commit's query score and the supervisor's own turns: five shares of 7200 s
+    assert staged['layout'] == 'staged' and staged['eval'] == {'case_seconds': 1440, 'workers': 0, 'samples': 2}
+    assert value['eval']['case_seconds'] == 900                               # the pool's spec is unchanged
+    inline = mw.bind_layout(value, episode_seconds=7200, layout='inline')
+    assert inline['eval'] == value['eval'] and inline['layout'] == 'inline'
+    assert mw.group_seconds(7200, 2) == 7200 + 1440 and mw.group_seconds(7200, 2, 'inline') == 7200
+    with pytest.raises(ValueError):
+        mw.bind_layout(value, episode_seconds=7200, layout='sideways')
+
+
+def test_the_preparation_stage_writes_the_evidence_before_the_anchor(tmp_path, monkeypatch, capsys):
+    value = spec(tmp_path)
+    path = tmp_path / 'spec.json'
+    path.write_text(json.dumps(value))
+    seen = []
+
+    def evaluator(spec_value):
+        def evaluate(cases, guidance, *, name, samples=None):
+            if name != 'baseline-support':
+                seen.append((name, (tmp_path / 'memetic/prepared.json').exists()))
+            return Evaluator()(cases, guidance, name=name, samples=samples)
+        return evaluate
+    monkeypatch.setattr(mw, 'collection_evaluator', evaluator)
+    prepared = mw.prepare_stage(path)
+    assert prepared['admitted'] and sorted(seen) == [('baseline-query-default', True), ('baseline-query-none', True)]
+    assert (tmp_path / 'memetic/baselines.json').exists()
+    events = [json.loads(line)['event'] for line in capsys.readouterr().out.splitlines()]
+    assert events == ['memetic prepared', 'memetic baselines']
+
+
+def test_parallel_runs_every_call_at_once_and_raises_the_first_error():
+    import threading
+    barrier = threading.Barrier(3, timeout=5)
+    assert mw.parallel({k: (lambda k=k: barrier.wait() * 0 + k) for k in range(3)}) == {0: 0, 1: 1, 2: 2}
+    with pytest.raises(ZeroDivisionError):
+        mw.parallel({'a': lambda: 1, 'b': lambda: 1 / 0})
 
 
 def test_changes_are_checked_before_they_get_an_id(tmp_path):
@@ -177,6 +230,9 @@ def test_task_rollouts_read_the_world_score_and_score_a_crash_against_the_anchor
     assert memetic_outcome(task, {'outcome': {'world': {'score': 100, 'memetic': scored}}}) == scored
     crashed = memetic_outcome(task, {'outcome': {}})
     assert crashed['quality'] == 0. and crashed['anchor'] == 0.4 and crashed['unscored_workspace']
+    (out / 'prepared.json').write_text(json.dumps({'admitted': True}))      # the staged layout: the anchor on its own
+    (out / 'baselines.json').write_text(json.dumps({'none': {'success': 0.3}, 'default': {'success': 0.6}}))
+    assert memetic_outcome(task, {'outcome': {}})['anchor'] == 0.6
     assert memetic_outcome({'semantics': {}}, {'outcome': {}}) is None
 
 
@@ -200,6 +256,67 @@ def test_grpo_binds_a_memetic_row_to_its_group(tmp_path):
     assert spec_value['out'] == str(directory / 'memetic') and spec_value['endpoint'] == 'http://actor'
     assert spec_value['sampling_config'] == str(tmp_path / 'sampling-config.json')
     assert row['semantics']['world']['task'] == str(tmp_path / 'spec.json')                 # the pool row is unchanged
+    (tmp_path / 'spec.json').write_text(json.dumps({'schema': mw.SPEC_SCHEMA, 'out': None, 'endpoint': None,
+                                                    'budget': {'evaluations': 2}, 'eval': {'case_seconds': 900}}))
+    row['semantics']['world']['case_seconds'] = 7200
+    c.args.case_seconds = 3600                                     # the episode runs the larger clock (build_queue)
+    staged = json.loads(Path(c._bind_memetic(row, directory)['semantics']['world']['task']).read_text())
+    assert staged['layout'] == 'staged' and staged['eval']['case_seconds'] == 1440 and staged['eval']['workers'] == 0
+    c.args.memetic_layout = 'inline'
+    inline = json.loads(Path(c._bind_memetic(row, directory)['semantics']['world']['task']).read_text())
+    assert inline['layout'] == 'inline' and inline['eval'] == {'case_seconds': 900}
+
+
+def _staged_collector(tmp_path, layout='staged'):
+    import collections
+    import random
+    import threading
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / 'spec.json').write_text(json.dumps({'schema': mw.SPEC_SCHEMA, 'out': None, 'endpoint': None,
+                                                    'budget': {'evaluations': 2}, 'eval': {'case_seconds': 900}}))
+    row = {'id': 'memetic:x', 'family': 'memetic_improve', 'split': 'train', 'semantics': {
+        'root': 'improve_program.nl', 'files': {}, 'world': {'kind': 'memetic', 'task': str(tmp_path / 'spec.json'),
+                                                             'case_seconds': 7200}}}
+    c = grpo.Collector.__new__(grpo.Collector)
+    c.args = type('A', (), {'actor': 'http://actor', 'memetic_share': 1., 'memetic_group': 4, 'group': 8,
+                            'case_seconds': 7200, 'memetic_model_requests': 64, 'max_model_requests': 40,
+                            'max_turns': 128, 'seed_base': 0, 'context_tokens': 131072, 'memetic_layout': layout})()
+    c.runtime, c.work, c.policy_sha = tmp_path / 'ts-host', tmp_path, 'a' * 64
+    c.memetic_rows, c.memetic_cursor, c.rng = [row], 0, random.Random(0)
+    c.next_group, c.groups, c.outstanding = 1, {}, 0
+    c.pending, c.lock = collections.deque(), threading.Lock()
+    c._new_group()
+    return c
+
+
+def test_a_staged_memetic_group_starts_its_supervisors_only_once_its_preparation_admits_it(tmp_path, capsys):
+    c = _staged_collector(tmp_path)
+    [(group, item)] = list(c.pending)                       # one preparation item, the supervisors held back
+    assert item[grpo.MEMETIC_PREPARE] and len(c.groups[group]['held_back']) == 4
+    c.pending.popleft()                                     # a slot runs the preparation stage
+    c.pending.append((99, {'key': 'other'}))
+    path = c.groups[group]['dir'] / 'memetic' / 'prepared.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({'admitted': True, 'support_success': 0.5, 'resolved_fraction': 1.0}))
+    assert c._memetic_prepared(group, c.groups[group], path)
+    assert [g for g, _ in c.pending] == [group] * 4 + [99]   # ahead of other groups
+    assert c.groups[group]['held_back'] == [] and c.outstanding == 1
+
+    other = _staged_collector(tmp_path / 'b')
+    [(group, _)] = list(other.pending)
+    path = other.groups[group]['dir'] / 'memetic' / 'prepared.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({'admitted': False, 'support_success': 1.0, 'resolved_fraction': 1.0}))
+    other.pending.clear()
+    assert other._memetic_prepared(group, other.groups[group], path)
+    assert not other.pending and group not in other.groups and other.outstanding == 0
+    dropped = [json.loads(line) for line in capsys.readouterr().out.splitlines() if 'dropped' in line]
+    assert dropped[-1]['reason'] == 'not admitted'
+
+
+def test_an_inline_memetic_group_queues_its_supervisors_at_once(tmp_path):
+    c = _staged_collector(tmp_path, layout='inline')
+    assert len(c.pending) == 4 and not any(item.get(grpo.MEMETIC_PREPARE) for _, item in c.pending)
 
 
 def test_mechanical_guidance_outlines_the_shortest_clean_success():
@@ -397,6 +514,10 @@ def test_expert_iteration_bounds_memetic_groups_in_flight_and_near_the_deadline(
     collector.groups = {}
     collector.deadline = time.time() + 1800
     assert not collector._memetic_open()                   # its wall clock no longer fits before the deadline
+    collector.deadline = time.time() + 4000
+    assert not collector._memetic_open()                   # nor with its preparation stage (3600 + 3600 / 5)
+    collector.args.memetic_layout = 'inline'
+    assert collector._memetic_open()
 
 
 def test_expert_iteration_collection_draws_memetic_groups_by_default_and_opts_out(tmp_path):
@@ -488,7 +609,7 @@ def test_an_evaluation_no_run_finished_measures_nothing(tmp_path):
             report = super().__call__(cases, guidance, name=name, samples=samples)
             return {**report, 'success': None if guidance else report['success'], 'scored': 0 if guidance else len(cases)}
     w = mw.Workspace(spec(tmp_path), Failing(), check=lambda case: [], run='r0')
-    assert w.prepared['baselines']['default']['success'] is None          # the anchor ignores it
+    assert w.baselines['default']['success'] is None                       # the anchor ignores it
     change = w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Read the question twice.'})['id']
     with pytest.raises(ValueError, match='not counted against the budget'):
         w.evaluate([change])

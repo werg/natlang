@@ -21,10 +21,9 @@ answer is needed:
 
 <!-- from: examples/triage/triage.ts -->
 ```ts
-  const decisions = await Promise.all(tickets.map(ticket => decide(classify, ticket, rubric)));
   // Only the tickets the local model is unsure of go to the stronger model.
-  const labels = await Promise.all(decisions.map(({ value, confidence }, i) =>
-    confidence >= 0.8 ? value : classify.on({ model: 'teacher' })(tickets[i]!, rubric)));
+  const classifyTicket = escalate(classify, { to: 'teacher', floor: 0.8 });
+  const labels = (await Promise.all(tickets.map(ticket => classifyTicket(ticket, rubric)))).map(result => result.value);
   const real = tickets.filter((_, i) => labels[i] !== 'spam');
 ```
 
@@ -138,7 +137,7 @@ When a caller should get answers from specialists rather than work the evidence 
 
 ## Judgments in synchronous code
 
-A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
+A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel with `readout: decision` (or `readout: instant` on latency-critical paths), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
 
 ## Semantic merging, notionally CRDT-like
 

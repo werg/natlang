@@ -203,7 +203,7 @@ test('services are injected into eval and callable-folder modules, and every cal
     services: { store }, trace: trace => traces.push(trace) });
   assert.equal(await runtime.run(() => record('first')), 1);
   const effects = traces[0].events.filter(event => event.kind === 'effect' && event.phase === 'completed').map(event => event.capability);
-  assert.deepEqual(effects, ['store.add']);
+  assert.deepEqual(effects, ['store.add', 'store.size']);
 });
 
 test('a callable folder may import siblings, including natural-language functions', async () => {

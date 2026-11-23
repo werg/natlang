@@ -1,0 +1,17 @@
+[
+  {
+    "name": "semantic merge combines compatible highlights",
+    "function": "merge.ts",
+    "inputs": {
+      "base": { "version": "2.4.0", "title": "Sync", "highlights": "Uploads resume.", "upgrade": "None." },
+      "ours": { "version": "2.4.0", "title": "Sync", "highlights": "Uploads resume, and search is faster.", "upgrade": "None." },
+      "theirs": { "version": "2.5.0", "title": "Sync", "highlights": "Uploads resume.", "upgrade": "None." }
+    },
+    "expected": {
+      "version": "2.5.0",
+      "title": "Sync",
+      "highlights": "Uploads resume, and search is faster.",
+      "upgrade": "None."
+    }
+  }
+]

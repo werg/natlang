@@ -736,8 +736,11 @@ def memetic_outcome(task: dict[str, Any], result: dict[str, Any] | None) -> dict
     anchor = 0.
     try:
         spec = json.loads(Path(world["task"]).read_text())
-        prepared = Path(spec["out"]) / "prepared.json"
-        baselines = json.loads(prepared.read_text())["baselines"] if prepared.exists() else {}
+        out = Path(spec["out"])
+        # the staged layout keeps the anchor in baselines.json; a preparation before 2026-11-23 in prepared.json
+        prepared = json.loads((out / "prepared.json").read_text()) if (out / "prepared.json").exists() else {}
+        baselines = (json.loads((out / "baselines.json").read_text()) if (out / "baselines.json").exists()
+                     else prepared.get("baselines") or {})
         anchor = max([item["success"] for item in baselines.values() if item and item.get("success") is not None],
                      default=0.)
     except (OSError, KeyError, TypeError, ValueError):
