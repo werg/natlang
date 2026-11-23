@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the natlang HDD -> Google Drive tier every hour
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=1h
+AccuracySec=5min
+Unit=natlang-drive-tier.service
+
+[Install]
+WantedBy=timers.target
