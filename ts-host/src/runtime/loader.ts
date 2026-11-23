@@ -794,14 +794,15 @@ function attachModuleImports(record: ModuleRecord, path: string, siblings: Recor
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string,
-    allowUntyped = false): ExportRecord {
+    allowUntyped = false, compiled = false): ExportRecord {
   const args: Record<string, string> = {};
   for (const parameter of node.parameters) {
-    if (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped) || parameter.dotDotDotToken)
+    if (!compiled && (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped) || parameter.dotDotDotToken))
       throw new NatlangSourceError(path, `${label}: parameters need names and explicit types`);
-    args[parameter.name.text + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : 'unknown';
+    const name = ts.isIdentifier(parameter.name) ? parameter.name.text : `arg${node.parameters.indexOf(parameter)}`;
+    args[name + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : 'unknown';
   }
-  if (!node.type && !allowUntyped) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
+  if (!node.type && !allowUntyped && !compiled) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
   let returns = node.type ? node.type.getText(file) : 'unknown';
   const promised = !!node.type && ts.isTypeReferenceNode(node.type) && ts.isIdentifier(node.type.typeName) &&
     node.type.typeName.text === 'Promise' && node.type.typeArguments?.length === 1;
@@ -865,12 +866,12 @@ function declaredTypes(file: ts.SourceFile): { types: Record<string, string>; de
 
 /** Parse a TypeScript (or constrained JavaScript) module in a callable folder: its exports, imports, and type aliases. */
 export function parseModule(path: string, text: string, inherited: Record<string, string>, files: SourceFiles,
-    options: { allowUntypedExports?: boolean } = {}): ModuleRecord {
+    options: { allowUntypedExports?: boolean; compiled?: boolean } = {}): ModuleRecord {
   const allowUntyped = options.allowUntypedExports === true;
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, path.endsWith('.js') ? ts.ScriptKind.JS : ts.ScriptKind.TS);
   const errors = (file as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
   if (errors.length) throw new NatlangSourceError(path, errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; '));
-  const policy = checkConstrainedSource(file);
+  const policy = options.compiled ? [] : checkConstrainedSource(file);
   if (policy.length) throw new NatlangSourceError(path, policy.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
   const exports: Record<string, ExportRecord> = {};
   const imports: string[] = [];
@@ -905,11 +906,11 @@ export function parseModule(path: string, text: string, inherited: Record<string
     return;
   };
   const describe = (name: string, node: ts.Node): ExportRecord => {
-    if (ts.isFunctionDeclaration(node)) return functionRecord(path, node, file, name, allowUntyped);
+    if (ts.isFunctionDeclaration(node)) return functionRecord(path, node, file, name, allowUntyped, options.compiled);
     if (ts.isVariableDeclaration(node)) {
       const initializer = node.initializer;
       if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)))
-        return functionRecord(path, initializer, file, name, allowUntyped);
+        return functionRecord(path, initializer, file, name, allowUntyped, options.compiled);
       const type = node.type ? node.type.getText(file) : initializer ? literalType(initializer) : undefined;
       return { kind: 'value', ...(type ? { type } : {}) };
     }
@@ -937,12 +938,12 @@ export function parseModule(path: string, text: string, inherited: Record<string
         const local = locals.get((element.propertyName ?? element.name).text);
         exports[element.name.text] = local ? describe(element.name.text, local) : { kind: 'value' };
       }
-    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier)
+    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && !options.compiled)
       throw new NatlangSourceError(path, 're-exports from other modules are not supported; import and export explicitly');
   }
-  for (const name of Object.keys(exports)) if (name !== 'default') checkName(path, name);
+  for (const name of Object.keys(exports)) if (!options.compiled && name !== 'default') checkName(path, name);
   const name = files.basename(path, files.extname(path));
-  checkName(path, name);
+  if (!options.compiled) checkName(path, name);
   const declared = declaredTypes(file);
   const types = { ...inherited, ...declared.types, ...readTypeAliases(text) };
   for (const record of Object.values(exports)) if (record.kind === 'function') {

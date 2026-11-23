@@ -37,7 +37,7 @@ test('a true cycle among siblings names its path', () => {
     'top.nl': fn(), 'top/a.nl': fn('top/b'), 'top/b.nl': fn('top/a'),
   });
   assert.throws(() => loadNatlang(join(root, 'top.nl')), /top\/a\.nl -> top\/b\.nl -> top\/a\.nl|top\/b\.nl -> top\/a\.nl -> top\/b\.nl/);
-  assert.throws(() => loadNatlang(join(root, 'top/a.nl')), /cannot reach itself/);
+  assert.throws(() => loadNatlang(join(root, 'top/a.nl')), /leads back to this function \(b\.nl -> a\.nl -> b\.nl\)/);
 });
 
 test('uses inside a mounted package keeps that package as its lexical root', () => {

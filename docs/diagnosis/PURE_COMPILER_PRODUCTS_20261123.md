@@ -1,0 +1,15 @@
+# Pure compiler products and isolated runtime ownership
+
+Mechanism inventory before implementation:
+
+* `ts-host/src/compiler/project.ts:compileProject` produces only diagnostics, declarations, generated source, manifest and rewrite/refinement metadata from explicit in-memory source and compiler options.
+* `ts-host/src/runtime/virtual-project.ts:compileVirtualProject` formerly combined that synchronous frontend with realm/runtime/service-bound module instantiation. Node, browser, neutral Core and Workerd Core consume this same implementation via `src/index.ts`, `src/browser/index.ts` and `src/core/index.ts`.
+* Vibe Base `packages/natlang/src/programs.ts:compileProgram` invokes it synchronously from each Eval owner's ProgramLoader. Its content cache contains executable values and therefore cannot safely be shared across owners.
+* Vibe Host `packages/builtin/src/eval-engine/EvalDO.ts:loadLibraryModule` loads each owner's SDK in a separate module map. Sharing a SDK module's exports across owners is unsafe because its confined imports retain owner closures.
+* Vibe Host already offloads trusted compiler transforms through `libraryLoweringWorkerClient` / `authorityAnalysisWorkerClient`. A workspace-provided compiler cannot be executed by an unrestricted host worker. `src/server/nativeWorkspaceRuntime.ts:runJob` is the existing sandboxed native execution owner; result-bearing jobs must retain that boundary.
+* BuildV2's immutable library cache stores compiler executables, not the output of compiling an authored Natlang source snapshot. The new shared product cache must include the exact compiler executable identity and every explicit frontend input.
+* Managed llama-server, wllama, Python native and SGLang actor sample model requests; they do not compile TypeScript projects. This is the common TS host frontend, independent of model serving (see `docs/ENGINE_PARITY.md` engine inventory). Runtime model calls and service instances never enter these products.
+
+The Core now exposes `compileVirtualProjectProduct` (explicit target, serializable result and source snapshot) and `instantiateVirtualProjectProduct` (fresh owner-specific module cache, runtime and platform). The existing API composes them without a compatibility path. A consumer receives its own product clone, preventing mutation of generated outputs or diagnostics from poisoning a shared cache. Authored TypeScript entry tracing and the invocation-local native service binding remain in the instantiation stage.
+
+Native observed evidence: the real Vibe `natlang.describe(prepareContentProject.nl)` workload completed under an inspector CPU profile in 17.483 seconds on Tick, with TypeScript tree traversal and garbage collection among the top frames. This demonstrates synchronous CPU work on the EvalDO event loop. It does not establish the cause of wave0035's TCP resets or the earlier 148-second cold library wait; both causal investigations remain open. Original profiles, SQL and failure logs are preserved separately.
