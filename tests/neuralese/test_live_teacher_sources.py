@@ -645,6 +645,18 @@ def test_completed_reassessment_preserves_original_failure_and_binds_all_checker
     assert episode['trajectory_ir']['outcome']['task_completed'] is True
     assert episode['trajectory_ir']['outcome']['status'] == 'passed'
     assert json.loads((out / 'original-outcome.json').read_text()) == {'passed': False}
+    output_spec = json.loads((out / 'manifest.json').read_text())
+    original_binding = output_spec['calls'][0]
+    original_call_bytes = (out / original_binding['path']).read_bytes()
+    forged_call = json.loads(original_call_bytes)
+    forged_call['events'].append({'kind': 'unrelated-forged-native-observation'})
+    output_spec['calls'][0] = artifact(out, original_binding['path'], forged_call)
+    (out / 'manifest.json').write_text(json.dumps(output_spec))
+    with pytest.raises(ValueError, match='exact original application call graph'):
+        live.load_episode(out / 'manifest.json')
+    (out / original_binding['path']).write_bytes(original_call_bytes)
+    output_spec['calls'][0] = original_binding
+    (out / 'manifest.json').write_text(json.dumps(output_spec))
     copied = json.loads((out / 'workspace.json').read_text())['proof']
     (out / copied['evidence'][0]['path']).write_text('tampered native witness')
     with pytest.raises(ValueError, match='artifact changed'):

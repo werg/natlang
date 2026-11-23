@@ -119,6 +119,12 @@ async function completedReassessment(receipt, manifest, row, root) {
   const packet=JSON.parse(validator.original_packet.path.endsWith('.gz')?gunzipSync(raw):raw);
   const native=packet.execution.diagnostics.natlangTeacher;
   const prior=packet.execution.diagnostics.openGoalVerification;
+  const captured=await Promise.all(manifest.calls.map(async binding=>JSON.parse(await readBound(binding,root))));
+  const byId=calls=>Object.fromEntries(calls.map(item=>[item.callId,item]));
+  if(native.calls?.length!==captured.length || !isDeepStrictEqual(byId(native.calls),byId(captured)) ||
+      !isDeepStrictEqual(native.rootCallIds,receipt.root_call_ids) ||
+      !isDeepStrictEqual(native.entry??null,manifest.interaction?.entry??null) || prior.goal!==manifest.interaction?.goal)
+    throw new Error('completed reassessment does not bind exact original application graph');
   const workspace=receipt.evidence.filter(item=>item.kind==='workspace');
   if(workspace.length!==1)throw new Error('completed reassessment requires one independent whole-outcome proof');
   const proof=JSON.parse(await readBound(workspace[0],root)).proof;

@@ -147,6 +147,14 @@ def verify_completed_reassessment(verification, spec, root):
     packet = json.loads(gzip.decompress(packet_bytes) if packet_path.suffix == '.gz' else packet_bytes)
     native = packet['execution']['diagnostics']['natlangTeacher']
     original_proof = packet['execution']['diagnostics']['openGoalVerification']
+    original_calls = native.get('calls') or []
+    captured_calls = [json.loads(bound_file(binding, root).read_text()) for binding in spec['calls']]
+    if (len(original_calls) != len(captured_calls) or not same_json_value(
+            {item['callId']: item for item in original_calls}, {item['callId']: item for item in captured_calls}) or
+            not same_json_value(native.get('rootCallIds'), verification.get('root_call_ids')) or
+            not same_json_value(native.get('entry'), (spec.get('interaction') or {}).get('entry')) or
+            original_proof.get('goal') != (spec.get('interaction') or {}).get('goal')):
+        raise ValueError('completed reassessment does not bind the exact original application call graph')
     proofs = [json.loads(bound_file(item, root).read_text()).get('proof') for item in verification['evidence'] if item.get('kind') == 'workspace']
     if len(proofs) != 1 or not isinstance(proofs[0], dict):
         raise ValueError('completed reassessment needs one bound independent whole-outcome proof')
