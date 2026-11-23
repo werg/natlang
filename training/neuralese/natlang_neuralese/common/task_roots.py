@@ -4,9 +4,11 @@ from typing import Any
 import hashlib
 
 
-def student_root_row(row: dict[str, Any]) -> dict[str, Any]:
-    """Run the student at the root as well as in children, without reference-root replay."""
-    if row.get("split") != "train":
+def student_root_row(row: dict[str, Any], *, held: bool = False) -> dict[str, Any]:
+    """Run the student at the root as well as in children, without reference-root replay. ``held``: the row is a pinned
+    held-evaluation case (``held_eval measure``), measured whatever its split; a set authored for holding (held-v4) keeps
+    its rows' dev/confirmation splits. Rollouts that may train keep the train-only guard."""
+    if not held and row.get("split") != "train":
         raise ValueError(f"refusing non-train row for RL rollouts: {row.get('id')} (split={row.get('split')!r})")
     curriculum = dict(row.get("curriculum") or {})
     contract = dict(curriculum.get("trajectory_contract") or {})

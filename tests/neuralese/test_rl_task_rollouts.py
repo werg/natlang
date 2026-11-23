@@ -42,6 +42,23 @@ def test_student_root_derivation_refuses_reference_replay_and_non_train_rows():
     assert "authored_root_sha256" not in student["curriculum"]["trajectory_contract"]
     with pytest.raises(ValueError, match="non-train"):
         student_root_row(_row(split="test"))
+    # A pinned held case (held-v4 keeps its rows' dev/confirmation splits) is measured whatever its split.
+    held = student_root_row(_row(split="dev"), held=True)
+    assert held["split"] == "dev" and not held["curriculum"].get("trajectory_contract", {}).get("authored_root_eval")
+
+
+def test_prepare_measures_held_rows_of_any_split(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl.task_rollouts import prepare
+    cases = tmp_path / "cases.jsonl"
+    cases.write_text("".join(json.dumps(_row(split=split)) + "\n" for split in ("train", "dev", "confirmation")))
+    args = lambda out, **extra: SimpleNamespace(cases=cases, out=tmp_path / out, rows=3, offset=0, group=2, temperature=1.0,
+                                                case_seconds=60, max_model_requests=8, max_turns=4, seed_base=1,
+                                                root_mode="student", match_seeds_from=None, **extra)
+    with pytest.raises(ValueError, match="non-train"):
+        prepare(args("rollouts"))
+    prepared = prepare(args("held", held_rows=True))
+    assert prepared["rows"] == 3
 
 
 def test_queue_samples_distinct_seeds_and_refuses_greedy_groups(tmp_path):
