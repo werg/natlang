@@ -759,7 +759,7 @@ TEACHERS = [
     {'model_id': 'baidu/ernie-5.5-flash-preview:free', 'endpoint': 'https://openrouter.ai/api/v1',
      'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1},
     *[{'model_id': model, 'endpoint': VERTEX, 'api_key_env': 'VERTEX_ACCESS_TOKEN', 'api_key_command': VERTEX_TOKEN,
-       'slots': 3, 'min_failed': 1} for model in ('google/gemini-3.1-pro-preview', 'google/gemini-4-argon')]]
+       'slots': slots, 'min_failed': 1} for model, slots in (('google/gemini-4-argon', 4), ('google/gemini-3.1-pro-preview', 2))]]
 
 
 def frontier_rare(frontier_path, rate=0.25):

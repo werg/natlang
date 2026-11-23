@@ -10131,8 +10131,8 @@ out; none in the held-v2/v3/v4 closure by `held_eval.training_exclusion_ids`), o
 
 | Teacher | Luna-solved half | Luna-failed half | Total | s/episode | Reasoning |
 |---|---|---|---|---|---|
-| Gemini 3.1 Pro Preview (Vertex) | 10/10 | 3/9 | 13/19 | 118 | hidden |
-| Gemini 4 Argon (Vertex) | 10/10 | 6/9 | 16/19 | 161 | hidden |
+| Gemini 3.1 Pro Preview (Vertex) | 10/10 | 3/10 | 13/20 | 142 | hidden |
+| Gemini 4 Argon (Vertex) | 10/10 | 7/10 | 17/20 | 182 | hidden |
 | Nemotron 3.5 Super VL 120B-A12B (NIM) | 5/10 | 4/10 | 9/20 | 109 | raw (253/253 targets) |
 | ERNIE 5.5 Flash Preview (OpenRouter free) | 4/10 | 3/10 | 7/20 | 128 | raw (273/384) |
 | Nemotron 3 Ultra (NIM) | 0/2 | | 0/2 (stopped: 1,400 s/episode under NIM throttling) | | raw |
@@ -10150,7 +10150,7 @@ content as a parts array.
 
 **Specs (`expert_iteration.TEACHERS`, also `ops/ei/teachers.json`):** Haiku 4 (retired while the account is empty),
 Luna 6 and Sol 4 (`min_failed` 1) (were 4 and 2; no Codex limit errors), Nemotron 3.5 Super 2 + Nemotron 3 Ultra 1 (NIM:
-one account limit), ERNIE 5.5 Flash 1 (OpenRouter free quota), Gemini 3.1 Pro 3 + Gemini 4 Argon 3 (`min_failed` 1:
+one account limit), ERNIE 5.5 Flash 1 (OpenRouter free quota), Gemini 4 Argon 4 + Gemini 3.1 Pro 2 (`min_failed` 1:
 paid tokens go to tasks another teacher failed). The campaign reads `ops/ei/teachers.json` at each launch from the
 first driver restart on a pin with these commits; until then the running `aei1-teacher` keeps its launch's specs.
 
