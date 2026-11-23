@@ -512,6 +512,13 @@ def make_handler(engine: Engine):
             if supplied:
                 raise RequestError('unsupported-request-field',
                     'remove retired projected-write fields: ' + ', '.join(sorted(supplied)))
+            scoring = [name for name in ('prompt_logprobs', 'continue_final_message') if body.get(name)]
+            if body.get('add_generation_prompt') is False:
+                scoring.append('add_generation_prompt')
+            if scoring:
+                # these ask for a prompt's scores, not a reply: generating one instead would answer another question
+                raise RequestError('unsupported-request-field', ', '.join(scoring) + ' score a prompt: chat completions '
+                                   'only generate here; score continuations with POST /v1/natlang/score')
             if 'x_natlang_native_protocol_recovery' in body and type(body['x_natlang_native_protocol_recovery']) is not bool:
                 raise RequestError('bad-request', 'x_natlang_native_protocol_recovery must be boolean')
             if 'x_natlang_forced_message' in body and (not isinstance(body['x_natlang_forced_message'],dict)

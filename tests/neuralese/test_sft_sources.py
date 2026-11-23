@@ -1007,3 +1007,17 @@ def test_evidence_only_live_episodes_do_not_enter_supervised_candidates(monkeypa
     candidates, _ = s.core_candidates(args, tmp_path, funnel, set())
     assert candidates == []
     assert funnel['teacher']['observed_evidence_without_supervised_targets'] == 1
+
+
+def test_replay_answers_a_field_mode_readout_with_its_whole_record_and_declines_scoring():
+    """A field-mode readout's steps were recorded as calls with the same messages (each its open step text): a
+    declined readout asks once by generation, and the replay serves the call whose reply is the whole record, its step
+    calls with it. A /v1/natlang/score request is declined item by item."""
+    request = {'role': 'user', 'content': 'Answer this call now, without tools. Reply with exactly one JSON value of '
+                                          'this form and nothing else: {"a":<1 | 2>,"b":<true | false>}.'}
+    steps = [turn([SYSTEM, USER, request], content='{"a":2,"'), turn([SYSTEM, USER, request], content='{"a":2,"b":true}')]
+    episode = s.ReplayEpisode(steps)
+    assert episode.answer({'messages': [SYSTEM, USER, request]})['choices'][0]['message']['content'] == '{"a":2,"b":true}'
+    assert episode.served == [True, True]
+    declined = episode.answer({'items': [{'messages': [SYSTEM, USER, request], 'continuations': ['{"a":1,"']}]})
+    assert declined['results'][0]['error'].startswith('decision-unsupported')

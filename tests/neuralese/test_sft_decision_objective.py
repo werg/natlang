@@ -254,3 +254,91 @@ def test_lowered_graph_sources_keep_decisions_as_decision_chains():
     imported = {**row, 'nodes': [{**node, 'imports': [{'at': 0, 'source': 'x', 'start': 0, 'stop': 1}]}
                                  for node in row['nodes']]}
     assert lower_sft_sources._decision_sequences(imported, stats) == [] and stats['skip_decisions_neuralese'] == 1
+
+
+LFM3_SNAPSHOT = Path.home() / ('.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
+                               '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+
+
+@pytest.fixture(scope='module')
+def lfm3_renderer():
+    if not (LFM3_SNAPSHOT / 'tokenizer.json').is_file():
+        pytest.skip('LFM3-1.7B snapshot not cached')
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(str(LFM3_SNAPSHOT), local_files_only=True, trust_remote_code=False)
+    renderer = tokenizer_renderer(tokenizer, model_type='lfm3')
+    renderer.render = sft_sources.TemplateRenderer.render.__get__(renderer)
+    return renderer
+
+
+def _field_turn(content):
+    from natlang_neuralese.data.decision_graph import DECISION_SYSTEM_PROMPT
+    request = ('Answer this call now, without tools. Reply with exactly one JSON value of this form and nothing else: '
+               '{"label":<"spam" | "ham" | "other">,"urgency":<"low" | "mid" | "high">,'
+               '"route":<"billing" | "tech" | "sales" | "abuse">}.')
+    return {'messages': [{'role': 'system', 'content': DECISION_SYSTEM_PROMPT},
+                         {'role': 'user', 'content': 'Triage the ticket.\n\nticket: "double charge on my card"'},
+                         {'role': 'user', 'content': request}],
+            'tools': None, 'target': {'role': 'assistant', 'content': content}, 'invocation_id': 'call-2'}
+
+
+def test_a_field_mode_record_reply_trains_one_open_decision_per_step(lfm3_renderer):
+    """A recorded reply that is a whole record becomes per-step decisions under teacher forcing of its own choices:
+    each step's options are its open continuations (``decision_items(..., open_reply=True)``), each step a decision
+    chain of its own; the plain row stays; the opt-out keeps one plain chain per row."""
+    from natlang_neuralese.serve.native_learning import decision_items
+    reply = '{"label":"ham","urgency":"high","route":"sales"}'
+    turn = _field_turn(reply)
+    prompt, target = _render(lfm3_renderer, turn)
+    decision = sft_sources.render_decision(lfm3_renderer, turn, prompt)
+    steps = decision['steps']
+    assert [len(s['options']) for s in steps] == [3, 3, 4] and all(s['open_reply'] for s in steps)
+    assert [s['values'][s['label']] for s in steps] == ['{"label":"ham","', '{"label":"ham","urgency":"high","', reply]
+    _, opened = decision_items(lfm3_renderer, turn['messages'], None, steps[1]['values'], open_reply=True)
+    assert [o.tolist() for o in steps[1]['options']] == opened
+    # the last step's chosen open text is the reply without its end of message
+    assert steps[2]['options'][steps[2]['label']].tolist() == target.tolist()[:-1]
+    row, _ = sft_sources.rendered_row((prompt, target, 0, decision), 'teacher', 'k', 0, turn)
+    assert 'decision' not in row and len(row['decisions']) == 3
+    chains = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])
+    assert [c['decision']['label'] for c in chains] == [s['label'] for s in steps]
+    assert [c.get('decision_step', 0) for c in chains] == [0, 1, 2]
+    assert all(np.array_equal(exp0_sft.decision_parts(c)[0], prompt) for c in chains)
+    assert exp0_sft.mark_decision_objective(chains) == 3
+    off = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])
+    assert exp0_sft.mark_decision_objective(off, on=False) == 1 and len(off) == 1
+
+
+def test_field_mode_step_replies_and_strays(lfm3_renderer):
+    """A reply that is one step's open text (a recorded step) is trained by its record's turn and its row is
+    dropped; a reply outside the form is carried as an error; a reply in another key order is matched by value."""
+    turn = _field_turn('{"label":"spam","urgency":"low","')
+    prompt, target = _render(lfm3_renderer, turn)
+    assert sft_sources.render_decision(lfm3_renderer, turn, prompt) == {'field_step': True}
+    row, _ = sft_sources.rendered_row((prompt, target, 0, {'field_step': True}), 'rl-own', 'k', 0, turn)
+    assert row['field_step'] is True and 'decisions' not in row
+    stray = _field_turn('{"label":"spam","urgency":"none","route":"tech"}')
+    prompt, _ = _render(lfm3_renderer, stray)
+    assert sft_sources.render_decision(lfm3_renderer, stray, prompt) == {'error': 'reply-not-a-form'}
+    loose = _field_turn('{"route": "tech", "label": "spam", "urgency": "mid"}')
+    prompt, _ = _render(lfm3_renderer, loose)
+    steps = sft_sources.render_decision(lfm3_renderer, loose, prompt)['steps']
+    assert steps[-1]['values'][steps[-1]['label']] == '{"label":"spam","urgency":"mid","route":"tech"}'
+
+
+def test_a_joint_record_decision_is_a_closed_option_set(lfm3_renderer):
+    """Joint mode (product <= 32): the records are the options of the existing request, parsed by raw_decode and
+    trained as closed continuations, as any other decision."""
+    from natlang_neuralese.data.decision_graph import DECISION_SYSTEM_PROMPT, decision_prompt
+    records = [{'label': label, 'urgent': urgent} for label in ('spam', 'ham') for urgent in (True, False)]
+    replies = [json.dumps(r, separators=(',', ':')) for r in records]
+    messages = [{'role': 'system', 'content': DECISION_SYSTEM_PROMPT},
+                {'role': 'user', 'content': 'Triage.\n\nticket: "hi"'},
+                {'role': 'user', 'content': decision_prompt(replies)}]
+    assert decision_replies(messages) == replies
+    turn = {'messages': messages, 'tools': None, 'target': {'role': 'assistant', 'content': replies[2]},
+            'invocation_id': 'c'}
+    prompt, target = _render(lfm3_renderer, turn)
+    decision = sft_sources.render_decision(lfm3_renderer, turn, prompt)
+    assert decision['label'] == 2 and 'open_reply' not in decision
+    assert decision['options'][2].tolist() == target.tolist()

@@ -69,6 +69,14 @@ from natlang_neuralese.train.reply_format import SECOND_CLOSE_STOPS, second_clos
 MAX_LEN = 32000
 
 
+def row_decisions(row):
+    """A row's decisions: its joint ``decision``, or the field steps ``decisions`` of a field-mode readout
+    (``sft_sources.render_decision``); [] for a plain row."""
+    if row.get('decision') is not None:
+        return [row['decision']]
+    return list(row.get('decisions') or ())
+
+
 def chains_of(episodes, max_len=MAX_LEN):
     """Sequences: [{'ids': int32[], 'segs': [(start, length, row)], 'imports': [(start, key)], 'sources': {key:
     producer document}, 'task', 'round'}]; calls of one invocation whose prompt extends the previous call's full text,
@@ -84,14 +92,18 @@ def chains_of(episodes, max_len=MAX_LEN):
             current = None
             for row in rows:
                 ids, sample = row['prompt'], row['sample']
-                if row.get('decision') is not None:
-                    # a decision readout is one choice over its option set: a chain of its own (``decision_backward``)
+                decisions = row_decisions(row)
+                if decisions:
+                    # a decision readout is one choice over its option set: a chain of its own (``decision_backward``);
+                    # a field-mode readout is one choice per field step, each its own chain on the same prompt
                     if current is not None:
                         chains.append(current)
                     current = None
-                    chains.append({'ids': np.concatenate([ids, sample]), 'segs': [(len(ids), len(sample), row)],
-                                   'imports': [], 'sources': {}, 'task': episode['task_id'], 'round': episode['round'],
-                                   'decision': row['decision']})
+                    for step, decision in enumerate(decisions):
+                        chains.append({'ids': np.concatenate([ids, sample]), 'segs': [(len(ids), len(sample), row)],
+                                       'imports': [], 'sources': {}, 'task': episode['task_id'],
+                                       'round': episode['round'], 'decision': decision,
+                                       **({'decision_step': step} if step else {})})
                     continue
                 if len(ids) + len(sample) > max_len:
                     if current is not None:
@@ -495,7 +507,10 @@ DECISION_RULE = 'logLoss'
 
 def mark_decision_objective(chains, on=True):
     """Mark the decision chains (``chains_of``: a row with its ``decision`` option set) of ``chains`` for the decision
-    objective (in place; ``on`` False: they train as the plain token CE of the chosen reply). Returns their count."""
+    objective (in place; ``on`` False: they train as the plain token CE of the chosen reply, once per row: the later
+    field steps of a field-mode row, ``decision_step``, are removed). Returns their count."""
+    if not on:
+        chains[:] = [chain for chain in chains if not chain.get('decision_step')]
     count = 0
     for chain in chains:
         if chain.get('decision') is not None:

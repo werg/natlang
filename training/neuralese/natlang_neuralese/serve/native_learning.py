@@ -50,13 +50,31 @@ SCORE_ITEM_FIELDS = {
                       'at the boundary (fork 33230160b, natlang_track_input_end) or within 255 tokens of it (older forks) '
                       'for every input (sglang_actor._sglang_warm_opening; '
                       'NATLANG_SGLANG_WARM_OPENINGS=0 opts out; ENGINE_PARITY.md)',
+    'open_reply': 'served: each continuation is the start of the assistant reply, scored without its end of message '
+                  '(decision_items open_reply; the fork: continue_final_message "content"); results and the decision '
+                  'capture echo open_reply: true',
 }
 
 
-def decision_items(renderer, messages, tools, options):
+def open_reply_flag(item):
+    """An item's ``open_reply`` (absent: False); anything but a boolean is refused."""
+    value = item.get('open_reply', False)
+    if type(value) is not bool:
+        raise RequestError("neuralese-decision", "open_reply must be a boolean")
+    return value
+
+
+def decision_items(renderer, messages, tools, options, open_reply=False):
     """The decision prompt items and each option's complete closed continuation token IDs (end of message
     included). ``renderer`` is a serving engine or ``data.decision_graph.tokenizer_renderer`` (CPU conversion):
-    one rendering for serving, training rows and recorded captures."""
+    one rendering for serving, training rows and recorded captures.
+
+    ``open_reply``: each option is the start of the reply (a field-mode decision step), scored without the end of
+    message: the template's rendering of the final assistant message with that content, cut at the end of the content
+    (HF ``continue_final_message``, the fork's ``continue_final_message: "content"``). Chat templates end a message with
+    a special end token that the text before it never merges with, so that is the closed continuation without its
+    final end-of-message token (for LFM3: ``</think>`` + content; tests/neuralese/test_decision_open_reply.py checks it
+    against the template's own continue_final_message rendering)."""
     if not isinstance(options, list) or not options:
         raise RequestError("neuralese-decision", "a decision needs at least one option")
     prompt = None
@@ -73,12 +91,20 @@ def decision_items(renderer, messages, tools, options):
         if any(kind != "tok" for kind, _ in rest):
             raise RequestError("neuralese-decision", "options must be ordinary assistant text")
         prompt = before
-        continuations.append([int(value) for _, value in rest])
+        ids = [int(value) for _, value in rest]
+        if open_reply:
+            end = renderer.tokenizer.convert_tokens_to_ids("<|im_end|>")
+            if not ids or ids[-1] != end:
+                raise RequestError("neuralese-decision", "an open reply needs a template that ends a message with <|im_end|>")
+            ids = ids[:-1]
+            if not ids:
+                raise RequestError("neuralese-decision", "an open reply option needs reply text")
+        continuations.append(ids)
     return prompt, continuations
 
 
-def _decision_render(engine, messages, tools, options):
-    prompt, continuations = decision_items(engine, messages, tools, options)
+def _decision_render(engine, messages, tools, options, open_reply=False):
+    prompt, continuations = decision_items(engine, messages, tools, options, open_reply)
     return _native_plan(engine, prompt), continuations
 
 
@@ -96,7 +122,8 @@ def _score_item(engine, item, adapters=None):
     if not isinstance(item, dict):
         raise RequestError("neuralese-decision", "each decision item must be an object")
     options = item.get("continuations", item.get("options"))
-    plan, continuations = _decision_render(engine, item.get("messages") or [], item.get("tools"), options)
+    plan, continuations = _decision_render(engine, item.get("messages") or [], item.get("tools"), options,
+                                           open_reply_flag(item))
     bindings = item.get('adapters', adapters)
     serve = getattr(engine, 'sglang_score', None)  # the SGLang actor front scores on SGLang when it can
     if serve is not None:
@@ -120,8 +147,10 @@ def decision_request(item, bindings):
 def decision_response(item, sequence, continuations, results):
     response={"log_probs": [score for score, _ in results], "tokens": [count for _, count in results],
               "native_state_imports": sequence.native_imports}
+    opened = {'open_reply': True} if item.get('open_reply') is True else {}
+    response.update(opened)
     if item.get('native_recording'):
-        response['native_decision_capture']={'schema':'natlang.native-decision-capture/1',
+        response['native_decision_capture']={'schema':'natlang.native-decision-capture/1', **opened,
             'policy':dict(sequence.native_rl_policy),'adapter_binding':sequence.native_rl_adapter_binding,
             **({'privileged': sequence.native_guidance_receipt} if sequence.native_guidance_receipt is not None else {}),
             'prompt':sequence.native_rl_prompt,'continuations':continuations,
@@ -147,6 +176,7 @@ def decide_native(engine, body: dict) -> dict:
     return _score_item(engine, {"messages": body.get("messages") or [], "tools": body.get("tools"),
                                 "options": body.get("options") or [], "native_state_modes": body.get("native_state_modes"),
                                 "native_recording":body.get("native_recording",False),
+                                **({'open_reply': body['open_reply']} if 'open_reply' in body else {}),
                                 **({'x_natlang_privileged_context': body['x_natlang_privileged_context']}
                                    if body.get('x_natlang_privileged_context') is not None else {})}, body.get('adapters'))
 

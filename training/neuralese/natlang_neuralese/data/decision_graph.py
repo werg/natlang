@@ -64,6 +64,160 @@ def decision_replies(messages):
     return replies if len(replies) >= 2 and len(set(replies)) == len(replies) else None
 
 
+DECISION_FORM_REQUEST = 'Reply with exactly one JSON value of this form and nothing else: '
+DECISION_FORMS_REQUEST = 'Reply with exactly one JSON value of one of these forms and nothing else: '
+
+
+def _form(text, at, decoder):
+    """One FORM of a field-mode request at ``at``: ('value', JSON text) for a scalar arm, ('record', [(key JSON text,
+    [alternative JSON texts])]) for a record arm whose field values are ``<ALT | ALT | ...>`` placeholders (a bare JSON
+    value is a field with one alternative); returns (form, end)."""
+    if not text.startswith('{', at) or text.startswith('{}', at):   # a scalar arm, or a record with no fields
+        _, end = decoder.raw_decode(text, at)
+        return ('value', text[at:end]), end
+    fields, at = [], at + 1
+    while True:
+        key, end = decoder.raw_decode(text, at)
+        if not isinstance(key, str) or not text.startswith(':', end):
+            raise ValueError('a form field is "key":value')
+        key_text, at = text[at:end], end + 1
+        if text.startswith('<', at):
+            alternatives, at = [], at + 1
+            while True:
+                _, end = decoder.raw_decode(text, at)
+                alternatives.append(text[at:end])
+                if text.startswith(' | ', end):
+                    at = end + 3
+                elif text.startswith('>', end):
+                    at = end + 1
+                    break
+                else:
+                    raise ValueError('placeholder alternatives are separated by " | " and closed by ">"')
+        else:
+            _, end = decoder.raw_decode(text, at)
+            alternatives, at = [text[at:end]], end
+        if not alternatives or len(set(alternatives)) != len(alternatives):
+            raise ValueError('a field needs distinct alternatives')
+        fields.append((key_text, alternatives))
+        if text.startswith(',', at):
+            at += 1
+        elif text.startswith('}', at):
+            return ('record', fields), at + 1
+        else:
+            raise ValueError('form fields are separated by "," and closed by "}"')
+
+
+def decision_forms(messages):
+    """The arms a field-mode readout request offers (the runtime's ``decisionFieldsPrompt``: the last user message ends
+    with ``DECISION_FORM_REQUEST`` or ``DECISION_FORMS_REQUEST`` + FORM texts joined by ', ' + '.'), in order (``_form``
+    shapes); None when the last message is not such a request. Every JSON text is read with raw_decode."""
+    import json
+    last = messages[-1] if messages else None
+    content = last.get('content') if isinstance(last, dict) and last.get('role') == 'user' else None
+    if not isinstance(content, str) or not content.endswith('.'):
+        return None
+    marker = next((m for m in (DECISION_FORMS_REQUEST, DECISION_FORM_REQUEST) if m in content), None)
+    if marker is None:
+        return None
+    text = content.rsplit(marker, 1)[1][:-1]
+    decoder, forms, at = json.JSONDecoder(), [], 0
+    while True:
+        try:
+            form, at = _form(text, at, decoder)
+        except (ValueError, IndexError):
+            return None
+        forms.append(form)
+        if at == len(text):
+            break
+        if not text.startswith(', ', at):
+            return None
+        at += 2
+    if (marker == DECISION_FORM_REQUEST) != (len(forms) == 1):
+        return None
+    return forms
+
+
+def _arm_candidate(form, values):
+    """Arm ``form``'s open reply text through the chosen field values ``values`` (its whole text when complete)."""
+    if form[0] == 'value':
+        return form[1]
+    fields = form[1]
+    body = ','.join(f'{key}:{value}' for (key, _), value in zip(fields, values))
+    return '{' + body + ('}' if len(values) == len(fields) else ',"')
+
+
+def field_candidates(forms, chosen):
+    """The candidates of the next field-mode step after the chosen candidate texts ``chosen`` (a list, step order):
+    [(candidate text, complete)] in arm and alternative order, distinct; [] when ``chosen`` is complete. The arms
+    still in play are those whose text matched every chosen candidate; each step extends their chosen values by one
+    field (a scalar arm is one step)."""
+    live = [(form, []) for form in forms]
+    for text in chosen:
+        nxt = []
+        for form, values in live:
+            if form[0] == 'value':
+                if not values and form[1] == text:
+                    nxt.append((form, [form[1]]))
+                continue
+            if len(values) < len(form[1]):
+                for alternative in form[1][len(values)][1]:
+                    if _arm_candidate(form, values + [alternative]) == text:
+                        nxt.append((form, values + [alternative]))
+        live = nxt
+    out = []
+    for form, values in live:
+        if form[0] == 'value':
+            if not values:
+                out.append((form[1], True))
+        elif len(values) < len(form[1]):
+            for alternative in form[1][len(values)][1]:
+                out.append((_arm_candidate(form, values + [alternative]), len(values) + 1 == len(form[1])))
+    seen, distinct = set(), []
+    for candidate in out:
+        if candidate[0] not in seen:
+            seen.add(candidate[0])
+            distinct.append(candidate)
+    return distinct
+
+
+def field_path(forms, reply):
+    """The field-mode steps a complete reply text takes: [(candidates, label)] per step, ``candidates`` the step's
+    candidate texts and ``label`` the reply's (teacher forcing of the reply's own choices: an arm whose fields, in
+    order, each equal one of its alternatives as a JSON value, else whose scalar equals the reply); None when the reply
+    answers no arm. A reply in another key order or spacing is matched by value; the steps are the canonical texts."""
+    import json
+    try:
+        value = json.loads(reply)
+    except (TypeError, ValueError):
+        return None
+    same = lambda a, b: a == b and type(a) is type(b)
+    path = None
+    for form in forms:
+        if form[0] == 'value':
+            if same(json.loads(form[1]), value):
+                path = [form[1]]
+        elif isinstance(value, dict) and sorted(value) == sorted(json.loads(key) for key, _ in form[1]):
+            values = []
+            for key, alternatives in form[1]:
+                match = [a for a in alternatives if same(json.loads(a), value[json.loads(key)])]
+                if len(match) != 1:
+                    break
+                values.append(match[0])
+            else:
+                path = [_arm_candidate(form, values[:index + 1]) for index in range(len(values))]
+        if path is not None:
+            break
+    if path is None:
+        return None
+    steps = []
+    for index, label in enumerate(path):
+        candidates = [text for text, _ in field_candidates(forms, path[:index])]
+        if label not in candidates:
+            return None
+        steps.append((candidates, candidates.index(label)))
+    return steps
+
+
 def decision_label(replies, reply):
     """The index of the option ``reply`` (an assistant reply text) answers: its exact text, else the option whose JSON
     value it spells (surrounding whitespace, other spacing); None when it answers none of them."""
@@ -273,7 +427,8 @@ def decision_graph_row(renderer, record, *, tokenizer_fingerprint):
     """
     from ..data.native_graph_schema import SCHEMA
     from ..serve.native_learning import decision_items
-    prompt, continuations = decision_items(renderer, record['messages'], record.get('tools'), record['options'])
+    prompt, continuations = decision_items(renderer, record['messages'], record.get('tools'), record['options'],
+                                           bool(record.get('open_reply')))
     if any(kind != 'tok' for kind, _ in prompt):
         raise ValueError('a plain-text decision record cannot carry native-state inputs')
     ids = [int(value) for _, value in prompt]

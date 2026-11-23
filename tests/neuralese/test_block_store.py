@@ -258,6 +258,12 @@ def test_http_refuses_retired_fields_and_mismatched_uploads():
         for field in ("neuralese_temperature", "neuralese_max_length", "neuralese_length", "neuralese_passes", "x_natlang_forced"):
             status, raw = _call(base, "POST", "/v1/chat/completions", {"messages": [], field: 1})
             assert status == 400 and json.loads(raw)["error"]["code"] == "unsupported-request-field", field
+        # Prompt-scoring fields are refused, not answered with a generated token; the error names the score endpoint.
+        for extra in ({"prompt_logprobs": 1}, {"add_generation_prompt": False}, {"continue_final_message": True}):
+            status, raw = _call(base, "POST", "/v1/chat/completions", {"messages": [], **extra})
+            error = json.loads(raw)["error"]
+            assert status == 400 and error["code"] == "unsupported-request-field", extra
+            assert next(iter(extra)) in error["message"] and "/v1/natlang/score" in error["message"]
         # An upload whose content hashes to another ID than its path is refused and nothing is stored.
         state = _state(1)
         other = "nzs1_" + "b" * 52
