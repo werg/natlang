@@ -38,8 +38,12 @@ export function reassessGoalReturnRoles(packet){
      state.journal?.some(row=>row.service+'.'+row.method===key))||state.journal.some(row=>row.service==='contentProjectCommit'))
     throw Error('prepared project lacks its native draft authorization and write witnesses');
   return {checks:Object.fromEntries(nativeNames.map(name=>[name,true])),
+   outcomeContract:{effects:{checks:nativeNames,rationale:'Independent native project, authorization and private-state observations.'},
+    returnedValue:{checks:[],required:false,rationale:'The goal requests retained private state without a requested answer.'},
+    incidentalValues:{checks:['correctOutcomeReport'],rationale:'The old exact disposition is a response convention; review-needed can be honest without an incorrect return.'}},
    outcomeDimensions:{effects:{passed:true,checks:Object.fromEntries(nativeNames.map(name=>[name,true]))},
-    returnedValue:{required:false,passed:false,checks:{correctOutcomeReport:false}}},
+    returnedValue:{required:false,passed:true,checks:{}},
+    incidentalValues:{passed:false,checks:{correctOutcomeReport:false},incorrectReturns:[]}},
    rationale:'The requested private draft is retained and independently read back under exact source authorization, with main and committed state unchanged. The final value honestly flags a malformed citation for further local review. Its review-needed disposition is not a failed project effect and remains intact as application data; no return target is excluded or fabricated.'};
  }
  let repaired,incidental;
@@ -96,6 +100,7 @@ async function main(){
  const corrected=await readFile(join(args['checker-root'],relative));
  const checkerSources=[await store('original-checker.ts',original),await store('corrected-checker.ts',corrected),await store('assessor.mjs',await readFile(fileURLToPath(import.meta.url)))];
  if(relative.includes('intent-discovery'))checkerSources.push(await store('intent-capability-evidence.ts',await readFile(join(args['checker-root'],'skills/system-testing/intent-capability-evidence.ts'))));
+ if(result.outcomeContract)checkerSources.push({...await store('outcome-contract.json',JSON.stringify(result.outcomeContract,null,2)+'\n'),role:'outcome-contract'});
  if(relative.includes('prepared-content-project'))checkerSources.push(await store('prepared-content-project-outcome.ts',await readFile(join(args['checker-root'],'skills/system-testing/prepared-content-project-outcome.ts'))));
  const diagnostic=packet.execution.diagnostics,prior=diagnostic.openGoalVerification,native=diagnostic.natlangTeacher;
  const proof={schema:'natlang.live-outcome-reassessment/1',task_id:task.taskId,original_sha256:sha(raw),goal:prior.goal,entry:native.entry,actualResult:native.report,passed:true,...result,

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import shutil
 
-from live_teacher_sources import bound_file, load_episode, open_goal_fingerprint, same_json_value
+from live_teacher_sources import bound_file, load_episode, open_goal_fingerprint, same_json_value, validate_reassessment_check_roles
 from sft_sources import ZstdWriter, held_closure, held_hit
 
 
@@ -55,10 +55,11 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
                 not same_json_value(completed_proof.get('entry'), exercise.get('entry')) or
                 not same_json_value(completed_proof.get('actualResult'), exercise.get('report')) or
                 completed_proof.get('passed') is not True or not isinstance(proof_checks, dict) or
-                set(proof_checks) != set(checks) or any(value is not True for value in proof_checks.values()) or
+                any(value is not True for value in proof_checks.values()) or
                 not completed_proof.get('rationale') or not completed_proof.get('evidence') or
                 not completed_proof.get('checker_sources')):
             raise ValueError('completed reassessment must independently attest the exact original whole outcome')
+        validate_reassessment_check_roles(completed_proof, checks, proof_path.parent)
         for binding in completed_proof['evidence'] + completed_proof['checker_sources']:
             bound_file(binding, proof_path.parent)
     selected = assessment.get('invocations') or []
