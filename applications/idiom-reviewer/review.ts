@@ -1,14 +1,19 @@
 /**
- * Semantic idiom reviewer (WS3 I2, WS6 §2 Tier 0 flagship).
- * Exact splitting and frontmatter parsing stay in TypeScript; semantic classification of sentence groups,
- * cue-word shortcuts, and untyped external inputs runs concurrently through calibrated `readout: decision`
- * functions with `escalate` to a stronger model on uncertain cases.
+ * Semantic idiom reviewer (WS3 I2, WS6 §2 Tier 0 flagship; plans/semantic-fp/03 §3.1).
+ * The crisp floor (`natlang check`, ts-host/src/compiler/idiom.ts) reports what is exact. This reviewer judges the rest:
+ * what each instruction step asks for (`stepKind.nl`), whether a function as a whole is a prose interpreter, cue-word
+ * rules, and external text typed as trusted. Every decision is a `readout: decision` function, escalated when unsure.
+ *
+ * `stepKind.nl`, `splitSource` and `stepsOf` are the migrator's (applications/migration/program): the same contract,
+ * copied because a package cannot import another package's sources yet. Plan 03 §3.1 wants one implementation; the
+ * shared home is `@natlang/std` once both tools move to it.
  */
 import { escalate, semanticMap } from '@natlang/node/std';
-import classifyGroup from './classifyGroup.nl';
+import stepKind from './stepKind.nl';
 import detectCueWords from './detectCueWords.nl';
 import detectUntypedExternal from './detectUntypedExternal.nl';
-import type { IdiomIssue, IdiomReport, ProgramFile, SentenceGroup } from './types.js';
+import isProseInterpreter from './isProseInterpreter.nl';
+import type { IdiomIssue, IdiomReport, KindedStep, ProgramFile } from './types.js';
 
 export type ReviewOptions = {
   /** Model name to escalate uncertain idiom decisions to (default `'teacher'`). */
@@ -19,137 +24,118 @@ export type ReviewOptions = {
   concurrency?: number;
 };
 
-type ParsedNl = {
-  args: Record<string, string>;
-  body: string;
-};
+/** The front matter and body of a `.nl` source (applications/migration/program/host.ts `splitSource`). */
+export function splitSource(text: string): { front: string; body: string } {
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text.replace(/\r\n/g, '\n'));
+  if (!match) throw new Error('a .nl file starts with front matter between --- lines');
+  return { front: match[1]!, body: match[2]! };
+}
 
-/** Parse simple YAML frontmatter `args:` and body from a `.nl` file without touching fenced code blocks. */
-export function parseNlSource(content: string): ParsedNl {
-  const normalized = content.replace(/\r\n/g, '\n');
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(normalized);
-  if (!match) return { args: {}, body: normalized.trim() };
-  const [, front, body] = match;
-  const args: Record<string, string> = {};
-  const lines = front!.split('\n');
-  let inArgs = false;
+/** The body's steps: its numbered items when it has them, else its paragraphs; a fenced block stays in its step
+ * (applications/migration/program/host.ts `stepsOf`). */
+export function stepsOf(body: string): string[] {
+  const lines = body.replace(/\s+$/, '').split('\n');
+  const numbered = lines.some(line => /^\d+\.\s/.test(line));
+  const steps: string[][] = [];
+  let fenced = false;
   for (const line of lines) {
-    if (/^args:\s*\{(.+)\}\s*$/.test(line)) {
-      const inner = /^args:\s*\{(.+)\}\s*$/.exec(line)![1]!;
-      for (const part of inner.split(',')) {
-        const kv = /^\s*([\w$?]+)\s*:\s*(.+?)\s*$/.exec(part);
-        if (kv) args[kv[1]!.replace(/\?$/, '')] = kv[2]!;
-      }
-      inArgs = false;
-      continue;
-    }
-    if (/^args:\s*$/.test(line)) { inArgs = true; continue; }
-    if (inArgs) {
-      if (/^\S/.test(line)) { inArgs = false; continue; }
-      const kv = /^\s+([\w$?]+)\s*:\s*(.+?)\s*$/.exec(line);
-      if (kv) args[kv[1]!.replace(/\?$/, '')] = kv[2]!;
-    }
+    const opens = !fenced && (numbered ? /^\d+\.\s/.test(line) : line.trim() !== '' && (steps.length === 0 || steps.at(-1)!.at(-1)?.trim() === ''));
+    if (opens || steps.length === 0) steps.push([]);
+    steps.at(-1)!.push(line);
+    if (/^\s*```/.test(line)) fenced = !fenced;
   }
-  return { args, body: body!.trim() };
+  return steps.map(step => step.join('\n').trim()).filter(Boolean);
 }
 
-/** Split a `.nl` body into logical sentence/step groups while stripping fenced code blocks. */
-export function splitSentenceGroups(file: string, body: string): SentenceGroup[] {
-  const withoutFences = body.replace(/```[\s\S]*?```/g, '').trim();
-  if (!withoutFences) return [];
-  const raw = withoutFences.split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean);
-  return raw.map((text, index) => ({ file, index, text }));
+/** The declaration the step classifier reads: the front matter without `readout:` (as the migrator passes it). */
+const declarationOf = (front: string) => front.split('\n').filter(line => !/^readout:/.test(line)).join('\n').trim();
+
+/** The `args:` of a front matter, by name (block form `args:\n  name: Type` or flow form `args: { name: Type }`). */
+export function argsOf(front: string): Record<string, string> {
+  const args: Record<string, string> = {};
+  const flow = /^args:\s*\{(.+)\}\s*$/m.exec(front);
+  if (flow) {
+    for (const part of flow[1]!.split(',')) {
+      const kv = /^\s*([\w$]+)\??\s*:\s*(.+?)\s*$/.exec(part);
+      if (kv) args[kv[1]!] = kv[2]!;
+    }
+    return args;
+  }
+  const lines = front.split('\n');
+  const start = lines.findIndex(line => /^args:\s*$/.test(line));
+  if (start < 0) return args;
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line)) break;
+    const kv = /^\s+([\w$]+)\??\s*:\s*(.+?)\s*$/.exec(line);
+    if (kv) args[kv[1]!] = kv[2]!;
+  }
+  return args;
 }
+
+const STEP_ISSUES = {
+  mechanism: ['mechanism-in-prose', 'Move this step into a TypeScript helper and keep the `.nl` function for the judgment.'],
+  'guard-for-type': ['guard-for-type', 'Delete this step: the signature already guarantees it.'],
+  redundant: ['redundant', 'Delete this step: another step already asks for it.'],
+} as const;
 
 export async function reviewProgramIdioms(files: ProgramFile[], options: ReviewOptions = {}): Promise<IdiomReport> {
-  const nlFiles = files.filter(f => f.path.endsWith('.nl'));
   const to = options.escalateTo ?? 'teacher';
   const floor = options.floor ?? 0.78;
   const concurrency = options.concurrency ?? 8;
-
-  const judgeGroup = escalate(classifyGroup, { to, floor });
+  const judgeStep = escalate(stepKind, { to, floor });
+  const judgeInterpreter = escalate(isProseInterpreter, { to, floor });
   const judgeCue = escalate(detectCueWords, { to, floor });
   const judgeExternal = escalate(detectUntypedExternal, { to, floor });
 
-  const parsed = nlFiles.map(file => ({ file, ...parseNlSource(file.content) }));
-  const groups = parsed.flatMap(entry => splitSentenceGroups(entry.file.path, entry.body));
+  const parsed = files.filter(f => f.path.endsWith('.nl')).map(file => {
+    const { front, body } = splitSource(file.content);
+    return { file, front, body: body.trim(), signature: declarationOf(front), steps: stepsOf(body) };
+  });
   const issues: IdiomIssue[] = [];
 
-  const groupResults = await semanticMap(groups, async group => ({
-    group,
-    decision: await judgeGroup(group),
-  }), { concurrency });
-
-  for (const { group, decision } of groupResults) {
-    if (decision.value === 'mechanism') {
-      issues.push({
-        file: group.file,
-        kind: 'mechanism-in-prose',
-        groupIndex: group.index,
-        excerpt: group.text.slice(0, 140),
-        confidence: decision.confidence,
-        escalated: decision.escalated,
-        suggestion: 'Move this deterministic step into a TypeScript helper or host module and call the `.nl` function only for the judgment.',
-      });
-    } else if (decision.value === 'prose-interpreter') {
-      issues.push({
-        file: group.file,
-        kind: 'prose-interpreter',
-        groupIndex: group.index,
-        excerpt: group.text.slice(0, 140),
-        confidence: decision.confidence,
-        escalated: decision.escalated,
-        suggestion: 'Replace the imperative English algorithm with TypeScript control flow (`semanticMap`, `semanticRepair`, or `iterateOn`) calling small typed `.nl` leaves.',
-      });
-    }
+  // What each step asks for, then whether the function as a whole is a prose interpreter.
+  const kinded = await semanticMap(parsed, async entry => {
+    const decisions = await semanticMap(entry.steps, step => judgeStep(step, entry.signature, entry.file.path), { concurrency });
+    return { entry, decisions };
+  }, { concurrency: 1 });
+  for (const { entry, decisions } of kinded) {
+    decisions.forEach((decision, index) => {
+      const issue = decision.value === 'judgment' ? undefined : STEP_ISSUES[decision.value];
+      if (issue) issues.push({ file: entry.file.path, kind: issue[0], stepIndex: index, excerpt: entry.steps[index]!.slice(0, 140),
+        confidence: decision.confidence, escalated: decision.escalated, suggestion: issue[1] });
+    });
+  }
+  const multiStep = kinded.filter(({ decisions }) => decisions.length > 1);
+  const interpreters = await semanticMap(multiStep, async ({ entry, decisions }) => {
+    const steps: KindedStep[] = entry.steps.map((text, index) => ({ text, kind: decisions[index]!.value }));
+    return { entry, decision: await judgeInterpreter(entry.file.path, steps, entry.file.hasHelpers ?? false) };
+  }, { concurrency });
+  for (const { entry, decision } of interpreters) {
+    if (decision.value) issues.push({ file: entry.file.path, kind: 'prose-interpreter', excerpt: entry.body.slice(0, 140),
+      confidence: decision.confidence, escalated: decision.escalated,
+      suggestion: 'Write the algorithm as TypeScript control flow (`semanticMap`, `semanticRepair`, `iterateOn`) calling small typed `.nl` judgments.' });
   }
 
-  const cueResults = await semanticMap(parsed.filter(p => p.body.length > 0), async entry => ({
-    file: entry.file.path,
-    body: entry.body,
-    decision: await judgeCue(entry.body),
-  }), { concurrency });
-
-  for (const { file, body, decision } of cueResults) {
-    if (decision.value) {
-      issues.push({
-        file,
-        kind: 'cue-word-rule',
-        excerpt: body.slice(0, 140),
-        confidence: decision.confidence,
-        escalated: decision.escalated,
-        suggestion: 'Replace keyword/cue-word rules with either a crisp TypeScript matcher (`pluggable`) or genuine meaning-based criteria.',
-      });
-    }
+  const cues = await semanticMap(parsed.filter(p => p.body.length > 0), async entry => ({ entry, decision: await judgeCue(entry.body) }), { concurrency });
+  for (const { entry, decision } of cues) {
+    if (decision.value) issues.push({ file: entry.file.path, kind: 'cue-word-rule', excerpt: entry.body.slice(0, 140),
+      confidence: decision.confidence, escalated: decision.escalated,
+      suggestion: 'State what the judgment means instead of trigger words, or make the exact rule a crisp `pluggable` side.' });
   }
 
-  const paramChecks = parsed.flatMap(entry =>
-    Object.entries(entry.args)
-      .filter(([, type]) => !/\bUntrusted\s*</.test(type))
-      .map(([paramName, paramType]) => ({ file: entry.file.path, paramName, paramType, body: entry.body }))
-  );
-
-  const extResults = await semanticMap(paramChecks, async item => ({
-    item,
-    decision: await judgeExternal(item.paramName, item.paramType, item.body),
-  }), { concurrency });
-
-  for (const { item, decision } of extResults) {
-    if (decision.value) {
-      issues.push({
-        file: item.file,
-        kind: 'untyped-external-input',
-        excerpt: `${item.paramName}: ${item.paramType}`,
-        confidence: decision.confidence,
-        escalated: decision.escalated,
-        suggestion: `Type \`${item.paramName}\` as \`Untrusted<${item.paramType}>\` so untrusted external content is fenced and blocked from prompt interpolation.`,
-      });
-    }
+  const params = parsed.flatMap(entry => Object.entries(argsOf(entry.front))
+    .filter(([, type]) => !/\bUntrusted\s*</.test(type))
+    .map(([name, type]) => ({ file: entry.file.path, name, type, body: entry.body })));
+  const externals = await semanticMap(params, async param => ({ param, decision: await judgeExternal(param.name, param.type, param.body) }), { concurrency });
+  for (const { param, decision } of externals) {
+    if (decision.value) issues.push({ file: param.file, kind: 'untyped-external-input', excerpt: `${param.name}: ${param.type}`,
+      confidence: decision.confidence, escalated: decision.escalated,
+      suggestion: `Type \`${param.name}\` as \`Untrusted<${param.type}>\` so its text reaches the model fenced as data.` });
   }
 
   return {
-    filesReviewed: nlFiles.length,
-    groupsReviewed: groups.length,
+    filesReviewed: parsed.length,
+    stepsReviewed: parsed.reduce((sum, entry) => sum + entry.steps.length, 0),
     clean: issues.length === 0,
     issues,
   };
