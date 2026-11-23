@@ -246,10 +246,13 @@ def verify_original_rejection(packet, proof, root):
     review = json.loads(bound_file(bindings[0], root).read_text())
     observed = packet.get('execution', {}).get('diagnostics', {}).get('openGoalVerification', {})
     original_input = (observed.get('preparedContentProject') or {}).get('artifact', {}).get('semanticReviewInput') or observed.get('semanticReviewInput')
+    exchanges = [review.get('exchange'), *(review.get('exchanges') or [])]
+    captured_exchange = any(isinstance(item, dict) and isinstance(item.get('request'), dict) and
+                            isinstance(item.get('reply'), dict) for item in exchanges)
     return (review.get('schema') == 'natlang.live-workflow-review/1' and
             (review.get('verdict') or {}).get('accepted') is False and
             isinstance(original_input, dict) and bool(original_input) and same_json_value(review.get('input'), original_input) and
-            bool(review.get('exchange') or review.get('exchanges')))
+            captured_exchange)
 
 
 def verify_completed_reassessment(verification, spec, root):

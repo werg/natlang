@@ -291,6 +291,8 @@ test('disk verifier distinguishes rejected original review from original native 
   assert.equal(await verifyOriginalRejection(packet,await binding(),root),true);
   review.verdict.accepted=true;assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
   review.verdict.accepted=false;review.input={...input,expected:{goal:'Other goal'}};assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
+  review.input=input;review.exchange={};assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
+  review.exchange={request:{}};assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
   assert.equal(await verifyOriginalRejection(packet,{evidence:[]},root),false);
  }finally{await rm(root,{recursive:true,force:true});}
 });
