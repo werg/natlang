@@ -62,7 +62,7 @@ const ADVANCED: [string, string][] = [
   ['adapt inspect|export-source ...', 'Inspect trainable authored components.'],
   ['eval SUITE', 'Evaluate independent fixtures.'],
   ['optimize SUITE', 'Optimize instructions through the runtime.'],
-  ['improve DIR|CASE.json ...', 'Check and adopt a change set into a program, or run a CASE.json improvement job.'],
+  ['improve DIR|CASE.json ...', 'Improve a program from its own recorded runs (or check a change set you give it), or run a CASE.json job.'],
   ['packages', 'List installed distribution packages.'],
   ['package pack|verify|install ...', 'Pack, verify, or install a distribution archive.']];
 
@@ -314,7 +314,8 @@ the next action. --json prints the full report: the profile's native checkpoint 
 actor view, whether its server is running), the escalation teacher, the tuning setup, and for a program
 (--program, or the current directory when it has tuning state) its active release, the base it runs on,
 examples waiting for natlang tune and when to retune.`,
-  improve: `Run the authored source-improvement program:
+  improve: `Improve a program, or run the authored source-improvement program:
+  natlang improve DIR --model MODEL [--server URL | --provider ID] [--max-functions N] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]
   natlang improve DIR --proposal FILE [--model MODEL] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]
   natlang improve CASE.json --out DIR --model MODEL [--provider ID] [--server URL] [--dry-run]
   natlang improve init [DIRECTORY] [--entry main.ts] [--export solve] [--out FILE]
@@ -324,11 +325,15 @@ examples waiting for natlang tune and when to retune.`,
   natlang improve adopt-call CALL [--into DIR] [--dry-run] [--untested] [--profile NAME] [--json]
   natlang improve rollback RECORD
 
-Passing a program DIR checks a given change set (--proposal FILE: { "files": { PATH: text or null } }):
-it builds a deterministic support/dev/confirmation case pack from DIR/examples.json and recorded
-calls in the call store, runs natlang check and the dev and confirmation cases on MODEL (rejecting
-if a pass rate drops), and installs through the atomic source-adoption transaction with
-byte-identical rollback. --dry-run without --proposal only reports the splits.
+Passing a program DIR improves it from its own runs: a natural-language improver on MODEL reads the
+program's recorded calls in the call store (failures, escalations and where the fallback disagreed,
+postcondition repairs, testers' bad/fix verdicts) and the support examples it answers wrongly, then
+rewrites the instructions of at most --max-functions functions (front matter unchanged). --proposal
+FILE checks a change set you wrote instead ({ "files": { PATH: text or null } }). Either way the gate
+builds a deterministic support/dev/confirmation case pack from DIR/examples.json and recorded calls,
+runs natlang check and the dev and confirmation cases on MODEL (rejecting if a pass rate drops), and
+installs through the atomic source-adoption transaction with byte-identical rollback. --dry-run
+checks without installing; without --model or --proposal it only reports the splits.
 init writes a case for a program; the run proposes source changes, scores them on the
 case's train/validation/test cases and keeps a journal in DIR (docs/IMPROVEMENT.md).
 adopt-call takes the code a successful call fixed with edit_code (natlang traces show CALL lists it),

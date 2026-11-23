@@ -29,6 +29,30 @@ is not required (owner, 2026-11-12: that rule did not come from the owner and wa
   passed them, so the judgment ran blind to how often its fallback disagreed.
 - **Opt-outs.** `escalate(fn, { history: false, cost: false })`, or explicit values.
 
+### 2026-11-23 — `natlang improve DIR` proposes: three built-in improver stages run on the model (WS8 N4)
+
+- **What changed.** Three new built-in natlang programs (`ts-host/src/builtin/improveDiagnose.nl`,
+  `improveShouldRevise.nl` with `readout: decision`, `improveRevise.nl`) are called by `natlang improve DIR --model M`.
+  They see one function's declaration and instructions plus its run evidence (failures with reasons, escalations with
+  the local and fallback answers, postcondition failures, tester feedback, support examples it answers wrongly), and
+  return a diagnosis, whether to revise, and the new instructions. The calls are recorded like any other (training data).
+- **Why (first principles).** Deciding what to change in a program is policy; it runs as natural-language stages on
+  the local model, and exact gates (front matter kept byte-identical, check, split non-regression) decide adoption.
+- **Prompt text.** The three `.nl` bodies; no change to any existing prompt.
+- **Opt-outs.** `--proposal FILE` checks a hand-written change instead and calls none of them.
+
+### 2026-11-23 — the `nl` escalate policy sees the function's own escalation history and tier cost (WS2 R4)
+
+- **What changed.** `shouldEscalate.nl` now receives `history` (`{ totalCalls, escalationRate, disagreementRate }`)
+  and `cost` (`{ local, fallback, ratio }`, milliseconds) read from the call store's `escalation` notes on the
+  function's earlier local calls, where the caller passed nothing before (both were absent). Its text says what they
+  are: "history (when present) summarizes this function's earlier runs: how many there were, how often they
+  escalated, and how often the fallback answered differently from the local model; cost (when present) compares the
+  local and fallback tiers, in milliseconds per call when measured from those runs."
+- **Why (first principles).** The plan's policy reads history and cost; leaving them to every caller meant no caller
+  passed them, so the judgment ran blind to how often its fallback disagreed.
+- **Opt-outs.** `escalate(fn, { history: false, cost: false })`, or explicit values.
+
 ### 2026-11-23 — a readout without reasoning is read in the reply form the model answers in (`decisionReply: 'auto'`); reasoning samples at T=1 (B14 instant collapse)
 
 - **What changed.** Every profile except a managed stock model now defaults to `decisionReply: 'auto'` (it was `value`

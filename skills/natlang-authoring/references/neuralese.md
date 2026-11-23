@@ -37,16 +37,24 @@ text payloads on every hop:
    `natlang profile` aggregates the machine's call store per function (calls, p50 latency, average tokens, compiled
    crisp share, decision confidence p10/p50, escalation rate, failure rate) and runs the `nextOptimization` policy to
    recommend the next concrete step (`readout: decision`, `natlang specialize`, `natlang tune`, or `natlang improve`).
-2. **Check and adopt a change set transactionally:**
+2. **Improve the program from its own runs:**
    ```bash
-   natlang improve ./my-program --proposal change.json --model MODEL
+   natlang improve ./my-program --model MODEL            # propose from the runs, check, adopt
+   natlang improve ./my-program --model MODEL --dry-run  # propose and check, install nothing
    ```
-   `change.json` is `{ "files": { "PATH": "new text" or null } }`. `natlang improve DIR` builds `support`, `dev`, and
-   `confirmation` splits from `examples.json` and recorded calls, runs `natlang check` and the dev and confirmation
-   cases on a copy with the change, rejects it if either pass rate drops (or if it edits `types.ts` or a `protect:`ed
-   source), and installs an accepted change with a byte-identical rollback record (`natlang improve rollback <record>`).
-   `--dry-run` alone prints the splits. To have the improver write the change, use `natlang improve init` and
-   `natlang improve CASE.json --out DIR`.
+   A natural-language improver on MODEL reads the program's recorded calls in the call store: calls that failed, decisions
+   `escalate` sent to the fallback (with both answers; a disagreement is a labelled hard case), results that broke an
+   `ensures:` postcondition, and calls a tester marked with `natlang traces bad|fix`, plus the support examples the
+   program answers wrongly. For at most `--max-functions` (3) of the most troubled functions it diagnoses what the
+   troubled calls share, decides whether the instructions are at fault, and rewrites only their instructions; the front
+   matter (signature, `protect:`, `ensures:`) stays byte-identical. The gate then builds `support`, `dev`, and
+   `confirmation` splits from `examples.json` and trustworthy recorded calls (the fallback's answer stands for an
+   escalated decision; a fixed call's expected value is the tester's), runs `natlang check` and the dev and
+   confirmation cases on a copy with the change, rejects it if either pass rate drops (or if it edits `types.ts` or a
+   `protect:`ed source), and installs an accepted change with a byte-identical rollback record
+   (`natlang improve rollback <record>`). The improver's own calls are recorded like any other.
+   To check a change you wrote instead: `natlang improve ./my-program --proposal change.json --model MODEL`, where
+   `change.json` is `{ "files": { "PATH": "new text" or null } }`. `--dry-run` without `--model` prints the splits.
 3. **Adopt a single call's transactional fix:**
    When a call repairs a non-protected helper via `edit_code`, review and install it with:
    ```bash
