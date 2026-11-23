@@ -133,3 +133,91 @@ def test_live_admission_and_producer_inputs_use_explicit_owner_without_unpinning
     record=dr.record_dataset('derived',output,kind='trajectories',format='JSONL',inputs=[source_file],registry_repo=owner)
     assert record['inputs'][0]['id']=='live'
     assert set(dr.load(fresh=True).git)=={'frozen'}
+
+
+def published_owner(tmp_path, monkeypatch):
+    owner = primary(tmp_path)
+    code = pin(owner, tmp_path / 'code')
+    origin = tmp_path / 'origin.git'
+    subprocess.run(['git', 'clone', '--bare', str(owner), str(origin)], check=True, capture_output=True)
+    git(owner, 'remote', 'add', 'origin', str(origin))
+    git(owner, 'fetch', 'origin')
+    publisher = tmp_path / 'publisher'
+    subprocess.run(['git', 'clone', str(origin), str(publisher)], check=True, capture_output=True)
+    git(publisher, 'config', 'user.name', 'Registry publisher test')
+    git(publisher, 'config', 'user.email', 'registry@example.invalid')
+    entry = {'id': 'live', 'path': 'data_nvme:live', 'kind': 'trajectories', 'format': 'JSONL',
+             'roles': {'live-teacher': {'order': 0, 'file': 'cases.jsonl'}}}
+    cr.write_entries(publisher, [entry])
+    (publisher / 'training/corpus-manifests').mkdir()
+    (publisher / 'training/corpus-manifests/live.json').write_text(json.dumps({'files': [{'path': 'cases.jsonl'}]}))
+    git(publisher, 'add', '.')
+    git(publisher, 'commit', '-m', 'publish future live source')
+    git(publisher, 'push', 'origin', 'main')
+    git(owner, 'fetch', 'origin')
+    data = tmp_path / 'data'
+    (data / 'live').mkdir(parents=True)
+    (data / 'live/cases.jsonl').write_text('{"id":"future"}\n')
+    monkeypatch.setattr(dr, 'code_repo', lambda: code)
+    monkeypatch.setenv('NATLANG_REPO', str(code))
+    monkeypatch.setenv('NATLANG_DATA_NVME', str(data))
+    monkeypatch.setenv('NATLANG_DATA_REGISTRY', str(tmp_path / 'journal'))
+    monkeypatch.delenv('NATLANG_REGISTRY_REF', raising=False)
+    monkeypatch.setattr(dr, '_LOADED', None)
+    monkeypatch.setattr(dr, '_GIT_CACHE', {})
+    return owner, code, data
+
+
+def test_published_live_ref_sees_new_source_after_pin_without_advancing_dirty_owner(tmp_path, monkeypatch):
+    owner, code, data = published_owner(tmp_path, monkeypatch)
+    before = git(owner, 'rev-parse', 'HEAD')
+    (owner / 'README').write_text('foreign dirty source stays intact\n')
+    cr.write_entries(owner, [{'id': 'unpublished', 'path': 'runs/unpublished'}])
+    oid = dr.registry_owner_ref(owner)
+    assert oid == git(owner, 'rev-parse', 'origin/main') and oid != before
+    assert 'live' not in dr.load(fresh=True).git
+    assert 'live' not in dr.load(repo=owner, fresh=True).git
+    live = dr.load(repo=owner, ref=oid, fresh=True)
+    assert set(live.git) == {'frozen', 'live'}
+    assert live.files('live') == [{'path': 'cases.jsonl'}]
+    assert dr.role_paths('live-teacher', repo=owner, ref=oid) == [str(data / 'live/cases.jsonl')]
+    dr.require_registered([data / 'live/cases.jsonl'], repo=owner, ref=oid)
+    assert dr.consume(['live'], run='live-build', how='published source', record=False, repo=owner, ref=oid)[0]['id'] == 'live'
+    assert git(owner, 'rev-parse', 'HEAD') == before
+    assert git(code, 'rev-parse', 'HEAD') == before
+    assert (owner / 'README').read_text() == 'foreign dirty source stays intact\n'
+
+
+def test_live_ref_requires_published_origin_but_supports_true_local_registry(tmp_path, monkeypatch):
+    owner = primary(tmp_path)
+    monkeypatch.delenv('NATLANG_REGISTRY_REF', raising=False)
+    assert dr.registry_owner_ref(owner) == git(owner, 'rev-parse', 'HEAD')
+    git(owner, 'remote', 'add', 'origin', str(tmp_path / 'not-yet-fetched.git'))
+    with pytest.raises(ValueError, match='origin/main'):dr.registry_owner_ref(owner)
+    monkeypatch.setenv('NATLANG_REGISTRY_REF', 'missing-explicit-ref')
+    with pytest.raises(ValueError, match='missing-explicit-ref'):dr.registry_owner_ref(owner)
+    monkeypatch.delenv('NATLANG_REGISTRY_REF')
+    local = tmp_path / 'filesystem-only';local.mkdir()
+    assert dr.registry_owner_ref(local) is None
+
+
+def test_interleaved_pinned_and_live_reads_cannot_share_wrong_cached_entries(tmp_path, monkeypatch):
+    import threading
+    owner, code, _ = published_owner(tmp_path, monkeypatch)
+    selected = dr.registry_owner_ref(owner)
+    waiting, release = threading.Event(), threading.Event()
+    def journal():
+        if threading.current_thread().name == 'pinned-snapshot':
+            waiting.set();assert release.wait(5)
+        return []
+    monkeypatch.setattr(dr, '_read_journal', journal)
+    outcomes = []
+    thread = threading.Thread(name='pinned-snapshot', target=lambda: outcomes.append(dr.load(repo=code, fresh=True)))
+    thread.start()
+    try:
+        assert waiting.wait(5)
+        assert set(dr.load(repo=owner, ref=selected, fresh=True).git) == {'frozen', 'live'}
+    finally:
+        release.set();thread.join(5)
+    assert not thread.is_alive()
+    assert set(outcomes[0].git) == {'frozen'}
