@@ -699,6 +699,29 @@ def test_a_restarted_driver_resumes_prepare_after_its_last_finished_step(tmp_pat
     assert launched == ['build']
 
 
+def test_prepare_never_rewrites_the_data_script_beneath_a_running_data_unit(tmp_path, monkeypatch):
+    """sh reads its script by offset: a driver restarted while the data unit runs must leave data.sh as it is."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['new-data']], ['build']))
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    rd = d.root / 'r0002'
+    (rd / 'stages').mkdir(parents=True)
+    (rd / 'stages' / 'frontier.done').write_text('{}')
+    (rd / 'data.sh').write_text('set -e\nold-data\n')
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit.endswith('-data'))
+
+    def stop(unit, *a, **kw):
+        raise SystemExit('stop after data')
+    monkeypatch.setattr(d.c, 'ledger', stop)
+    with pytest.raises(SystemExit):
+        d.prepare(rd, [cur])
+    assert (rd / 'data.sh').read_text() == 'set -e\nold-data\n'
+
+
 def test_rounds_publish_advance_and_a_crash_after_the_merge_resumes_without_retraining(tmp_path, monkeypatch):
     """The loop publishes every round and advances the lineage (the GRPO phase too); a driver that died after the
     publication but before recording it resumes the same round, finds policy/published.json and only records it."""

@@ -1601,7 +1601,9 @@ class Cycle:
             lines.append(' '.join(map(_quote, self.own_neuralese_graph_command())))
         script = self.dir / 'data.sh'
         if not self.present(f'{self.a.name}-data'):
-            script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
+            os.replace(tmp, script)
         # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
         self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log', repo=self.data_repo())
         self.mark('data')
@@ -2654,8 +2656,11 @@ class AsyncRoundDriver:
         step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
+        # Preserve an admitted/requeued plan and atomically replace inactive plans.
         if not (round_dir / 'stages' / 'data.done').exists() and not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
-            script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+            os.replace(tmp, script)
         step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
         step('build', 24, build, repo=self.c.data_repo())
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
