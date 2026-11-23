@@ -2626,13 +2626,22 @@ class AsyncRoundDriver:
         if self.a.live_work:
             self.note(live_links=link_live_works(self.c.work, self.a.live_work))
         frontier, lines, build = self.prepare_plan(round_dir, policies)
-        self.c.ledger(f'{self.a.name}-{round_dir.name}-frontier', 4, STAGE_PRIORITY, frontier, round_dir / 'frontier.log')
+
+        # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
+        # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
+        def step(name, budget, argv):
+            done = round_dir / 'stages' / f'{name}.done'
+            if not done.exists():
+                self.c.ledger(f'{self.a.name}-{round_dir.name}-{name}', budget, STAGE_PRIORITY, argv,
+                              round_dir / f'{name}.log')
+                done.write_text(json.dumps({'time': time.time()}) + '\n')
+        step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
-        script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
-        self.c.ledger(f'{self.a.name}-{round_dir.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)],
-                      round_dir / 'data.log')
-        self.c.ledger(f'{self.a.name}-{round_dir.name}-build', 24, STAGE_PRIORITY, build, round_dir / 'build.log')
+        if not (round_dir / 'stages' / 'data.done').exists():
+            script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+        step('data', 12, ['/bin/sh', str(script)])
+        step('build', 24, build)
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],

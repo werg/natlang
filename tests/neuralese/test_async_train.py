@@ -660,6 +660,44 @@ def test_a_round_prepares_from_the_lineages_collections_with_frontier_and_previo
     assert 'x=/a.pkl,share=0.1' in build
 
 
+def test_a_restarted_driver_resumes_prepare_after_its_last_finished_step(tmp_path, monkeypatch):
+    """frontier, data and build each record stages/<step>.done: a driver restarted while the build runs joins the
+    build and never reruns frontier or data beneath it."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    rd = d.root / 'r0001'
+    launched = []
+
+    def crashing(unit, budget, prio, cmd, log, **kw):
+        launched.append(unit.rsplit('-', 1)[1])
+        if unit.endswith('-build'):
+            raise SystemExit('driver stopped while the build ran')
+    monkeypatch.setattr(d.c, 'ledger', crashing)
+    with pytest.raises(SystemExit):
+        d.prepare(rd, [cur])
+    assert launched == ['frontier', 'data', 'build']
+    assert (rd / 'stages' / 'data.done').exists() and not (rd / 'stages' / 'build.done').exists()
+
+    launched.clear()
+
+    def finishing(unit, budget, prio, cmd, log, **kw):
+        launched.append(unit.rsplit('-', 1)[1])
+        (rd / 'mix').mkdir(parents=True, exist_ok=True)
+        (rd / 'mix' / 'build.json').write_text(json.dumps({'admitted_episode_keys': []}))
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'x')
+    monkeypatch.setattr(d.c, 'ledger', finishing)
+    try:
+        d.prepare(rd, [cur])
+    except Exception:
+        pass                                  # what follows the build (manifest, registry) is not this test's subject
+    assert launched == ['build']
+
+
 def test_rounds_publish_advance_and_a_crash_after_the_merge_resumes_without_retraining(tmp_path, monkeypatch):
     """The loop publishes every round and advances the lineage (the GRPO phase too); a driver that died after the
     publication but before recording it resumes the same round, finds policy/published.json and only records it."""
