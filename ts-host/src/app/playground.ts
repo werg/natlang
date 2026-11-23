@@ -9,6 +9,7 @@ import { parseAliases, parseType, type Type } from '../native/types.js';
 import { readTypesFile } from '../runtime/linked-types.js';
 import { admitNativeTrace, type NativeScenarioContract } from '../native/scenario.js';
 import { compileProject, formatDiagnostics } from '../compiler/project.js';
+import { checkNlIdiomsIn } from '../compiler/idiom.js';
 import { loadNamedFunction, NatlangSourceError } from '../runtime/loader.js';
 import { namedCallable } from '../runtime/callable.js';
 import { compileVirtualProject, virtualProjectFiles, virtualSourceFiles } from '../runtime/virtual-project.js';
@@ -20,7 +21,7 @@ export type PlaygroundProject = {
   files: Record<string, string>; inputs: Record<string, unknown>; expected?: unknown;
   revision: string; updatedAt: string;
 };
-export type PlaygroundDiagnostic = { file: string; severity: 'error' | 'warning'; message: string };
+export type PlaygroundDiagnostic = { file: string; severity: 'error' | 'warning'; message: string; code?: string };
 export type PlaygroundRun = {
   schema: 'natlang.playground.run/2'; id: string; projectId: string; projectName: string;
   revision: string; source: { root: string; files: Record<string, string> };
@@ -73,7 +74,12 @@ const sourceFiles = (files: Record<string, string>) => virtualSourceFiles(files,
 export function validatePlaygroundProject(project: PlaygroundProject): PlaygroundDiagnostic[] {
   assertPlaygroundProject(project);
   if (project.root.endsWith('.nl')) {
-    try { loadNamedFunction(`${ROOT}/${project.root}`, sourceFiles(project.files)); return []; }
+    try {
+      const record = loadNamedFunction(`${ROOT}/${project.root}`, sourceFiles(project.files));
+      // The idiom floor, as `natlang check` reports it for a project (compiler/idiom.ts).
+      return checkNlIdiomsIn([{ [record.name]: record }], source => source.replace(`${ROOT}/`, ''))
+        .map(item => ({ file: item.file, severity: item.severity, message: item.message, code: item.code }));
+    }
     catch (error) {
       return [{ file: error instanceof NatlangSourceError ? error.path.replace(`${ROOT}/`, '') : project.root, severity: 'error',
         message: error instanceof Error ? error.message : String(error) }];
@@ -81,7 +87,7 @@ export function validatePlaygroundProject(project: PlaygroundProject): Playgroun
   }
   const result = compileProject({ project: ROOT, files: virtualProjectFiles(project.files, ROOT), emit: false, write: false, module: 'commonjs',
     surfaceSpecifiers: ['@natlang/browser', '@natlang/node'] });
-  return result.diagnostics.map(item => ({ file: item.file, severity: item.severity, message: item.message }));
+  return result.diagnostics.map(item => ({ file: item.file, severity: item.severity, message: item.message, code: item.code }));
 }
 
 function sameValue(a: unknown, b: unknown): boolean {

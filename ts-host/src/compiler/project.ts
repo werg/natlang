@@ -8,6 +8,7 @@
  *   emitted JavaScript calls the runtime through `__natlang`.
  */
 import { checkSequentialNlLoops } from './sequential-loops.js';
+import { checkFixedCursorIterations, checkNlIdiomsIn } from './idiom.js';
 import { refinedSlotsOf, type RefinedSlot } from './refined-slots.js';
 import ts from 'typescript';
 import { RewriteGate, rewriteCombinators, type RewriteRecord } from './rewrites.js';
@@ -488,6 +489,10 @@ export function compileProject(options: BuildOptions): BuildResult {
       /\.(ts|tsx|mts)$/.test(file.fileName)).sort((a, b) => a.fileName.localeCompare(b.fileName))) sources.push(file);
   if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
   for (const file of sources) diagnostics.push(...checkSequentialNlLoops(file, source => rel(source.fileName)));
+  // The idiom floor (compiler/idiom.ts): exact, model-free warnings.
+  for (const file of sources) diagnostics.push(...checkFixedCursorIterations(file, source => rel(source.fileName)));
+  diagnostics.push(...checkNlIdiomsIn([...[...namedRecords.values()].map(record => ({ [record.name]: record })), ...contextRecords.values()],
+    source => source.startsWith('/') ? rel(source) : source));
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;
   const plans = new Map<ts.SourceFile, InlineLambdaPlan[]>();
   const readouts = new Map<ts.SourceFile, import('./neuralese.js').NeuraleseReadout[]>();

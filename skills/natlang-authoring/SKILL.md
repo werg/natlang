@@ -152,6 +152,9 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `invalid-binding` | A name reused for a result (`const plan = await plan(x)`): keep the result under another name (`planResult`). |
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
 | `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, an item an `ensures:` check names, `types.ts`, the `protect:`, `ensures:`, `measure:` and `recursive:` lines): leave it as it is and fix the code that produces the value it rejects. |
+| `idiom-decision-readout` (warning) | Add `readout: decision` to the function's front matter so its finite result is scored in one pass; a function that must call helpers before it answers gets a companion folder for them. |
+| `idiom-code-in-prose` (warning) | Move the step the instructions describe as code into a TypeScript helper in the function's companion folder, and let the instructions call it by name. |
+| `idiom-fixed-cursor-iterate` (warning) | Map the step over the list (`await Promise.all(items.map(item => judge(item)))`) and keep `iterateOn` for steps that read the previous state. |
 | `capture-conflict` | Another task changed a captured `let` mid-call; if it recurs, make the state a parameter or a returned value. |
 | `function-signature-mismatch` | The function passed does not have the slot's function type: pass one whose parameters take what the slot passes, by position, and whose result fits (bind extra leading parameters with `fn.partial(...)`). |
 | `type X is not in the natlang type grammar` (load) | Rewrite alias `X` in `types.ts` with records, unions, literals, arrays and `Record`, or keep it out of natlang signatures. |
