@@ -9696,13 +9696,13 @@ checker required it.
 - **Found and fixed on the way:** the collector never bound a root function's `ensures:` (the kernel binds them to the
   calls it runs; the collector prepares the root itself), so no root postcondition was checked in collection, held eval
   or qualification. `ensuresGate` is now shared. No pool root declares one today.
-- **Measurement** (30 tasks, one per family, 2 samples, sft-v9, same seeds, prose vs typed, same runtime): in
-  flight. The Colab front dropped three times (aei1 moved its round-1 SFT there), so only 9 prose and 6 typed episodes
-  scored there. A ledger unit (`typedwt-measure-supervisor3`, `ops/typed-contracts-20261123/driver/supervise2.sh`)
-  measures both arms on the first endpoint that attests sft-v9, the Colab front or aei1's DGX actor, and reruns
-  episodes an actor loss cut off. Result: `ops/typed-contracts-20261123/measure-<endpoint>/<arm>/run/result.json`,
-  compared with `held_eval compare`. It runs from the `/home/werg/natlang-wt/typed-contracts` worktree; remove that
-  worktree when it finishes.
+- **Measurement** (30 tasks, one per family, 2 samples, sft-v9, same seeds, prose vs typed, same runtime): **not
+  completed; no before/after verdict.** On the Colab front 9 prose and 6 typed episodes scored (6/9 and 3/6; 3 paired
+  samples, 2 vs 1) before aei1 moved its round-1 SFT onto that session and the front went away. On aei1's DGX actor the
+  episodes got no reply in 8 minutes (aei1's own episodes there: one reply per ~20 min, 128 running), so measuring there
+  would only slow aei1's collection; stopped. Partial runs: `ops/typed-contracts-20261123/measure-colab-partial/`.
+  Rerun when an sft-v9 or later actor has room: `ops/typed-contracts-20261123/driver/supervise2.sh` (from the main
+  checkout; it measures on the first endpoint attesting the policy hard-coded in `SHA=`, change it for a newer policy).
 - **Not checked:**
   - a blind solve of the migrated rows;
   - `held_eval verify` against the new sources (same ids and groups as the verified old ones);
