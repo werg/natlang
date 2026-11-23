@@ -49,3 +49,12 @@ test('legacy return selectors retain their original containment validation',()=>
  const f=fixture('forwarded');delete f.selector.contribution;check(f);
  const wrong=fixture();delete wrong.selector.contribution;assert.throws(()=>check(wrong),/outside the actual application result/);
 });
+test('projection witnesses use JSON keys and indices, never JS coercions or array properties',()=>{
+ for(const [value,path,actual] of [[{answer:['wrong']},['answer','length'],{answer:1}],[{answer:['wrong']},['answer','0'],{answer:'wrong'}],[{answer:{'0':'wrong'}},['answer',0],{answer:'wrong'}]]){
+  const f=fixture(),text=JSON.stringify(value),rootText=JSON.stringify(actual);
+  f.proof.actualResult=actual;f.records.get('root').output=output(actual);f.records.get('producer').output=output(value);
+  f.selector.valueJson=text;f.selector.sha256=hash(text);Object.assign(f.selector.contribution,{producer_path:path,root_value_json:rootText,root_sha256:hash(rootText)});
+  assert.throws(()=>check(f),/projection path/);
+ }
+ const valid=fixture(),value={answer:['wrong']},text=JSON.stringify(value);valid.selector.valueJson=text;valid.selector.sha256=hash(text);valid.selector.contribution.producer_path=['answer',0];valid.records.get('producer').output=output(value);check(valid);
+});
