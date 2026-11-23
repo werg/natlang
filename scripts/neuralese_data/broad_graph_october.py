@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """FALLOW-22 broad-graph trajectories -> October per-call teacher rows for ``sft_sources.py extract --october-teacher``.
 
-The fallow-22 whole-chain Neuralese graphs (``/mnt/external/natlang-fallow22-20261110/<source>-s<N>``: fetaqa, 2wiki,
-bird) are token graphs on an old surface (a 33.4k-character system prompt) with native-write spans inside producer
-calls, a form today's runtime does not produce (NEURALESE_PASSTHROUGH_20261117.md). Their source records
-(``shard-*.records.jsonl`` under each shard's receipt ``inputs.work``) keep every call's original plain messages and
+The fallow-22 whole-chain Neuralese graphs (``FALLOW/<source>-s<N>``, FALLOW the external tier's
+``natlang-fallow22-20261110``: fetaqa, 2wiki, bird) are token graphs on an old surface (a 33.4k-character system
+prompt) with native-write spans inside producer calls, a form today's runtime does not produce
+(NEURALESE_PASSTHROUGH_20261117.md). Their source records (``shard-*.records.jsonl`` under each shard's receipt ``inputs.work``) keep every call's original plain messages and
 reply (``native_source_conversion.source_messages`` / ``source_target``: the trajectories ran without a Neuralese
 server; the spans were a post-hoc conversion) and the task program (``task.program_ir``). This writes them in the
 October row form the extract stage turns into ``teacher`` episodes, so ``sft_sources.py replay`` runs each task again
@@ -17,9 +17,10 @@ trajectories whose task id, source ids or source groups are in ``--exclude-ids``
 verify hits and their siblings). The synthetic ``action-notes`` reasoning ("I run the next step in eval.") is dropped:
 no reasoning is better than a constant note.
 
-    broad_graph_october.py --fallow /mnt/external/natlang-fallow22-20261110 --out DIR
+    broad_graph_october.py --fallow FALLOW --out DIR
       -> DIR/october/fallow22-broad-graphs.jsonl.zst (per-call rows), DIR/sources/tasks.jsonl.zst (one task row per
-         trajectory, the rows' ``source_file``), DIR/conversion.json, DIR/avoid-ids.json, DIR/avoid-groups.json (for ``held_eval verify``)
+         trajectory, the rows' ``source_file``), DIR/conversion.json, DIR/avoid-ids.json and
+         DIR/avoid-groups.json (``held_eval verify --avoid-ids/--avoid-groups``)
 """
 from __future__ import annotations
 
@@ -78,7 +79,8 @@ def october_row(record, source_file):
             'source_ids': list(program.get('source_ids') or record.get('source_ids') or ()),
             'source_groups': list(program.get('source_groups') or record.get('source_groups') or ()),
             'messages': messages, 'tools': tools, 'target': target, 'rerendered': False,
-            'provenance': {'source_file': str(source_file), 'model': (record.get('provenance') or {}).get('model', MODEL),
+            'provenance': {'source_file': str(source_file),
+                           'model': (record.get('provenance') or {}).get('model', MODEL),
                            'collection_role': 'reference', 'generator': 'natlang.broad_graph_calls/1',
                            'trajectory': ref['trajectory_id'], 'invocation': ref.get('invocation_id'),
                            'target_tokens': None}}
