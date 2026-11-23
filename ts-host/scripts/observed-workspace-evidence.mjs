@@ -57,16 +57,58 @@ export async function validateReassessmentCheckRoles(proof, originalChecks, root
     throw new Error('reassessment roles must partition the exact original check set');
 }
 
-function declaredReturnSelectors(proof) {
+export function declaredReturnSelectors(proof) {
   const incidental=proof.outcomeDimensions?.incidentalValues;
   if(incidental?.passed!==false)return [];
   if(!Array.isArray(incidental.incorrectReturns))throw new Error('incorrect incidental returns need exact original value bindings');
   const contains=(value,wanted)=>isDeepStrictEqual(value,wanted)||value!==null&&typeof value==='object'&&Object.values(value).some(item=>contains(item,wanted));
   for(const item of incidental.incorrectReturns){
     if(!item.definition?.name||!item.definition?.source||typeof item.valueJson!=='string'||createHash('sha256').update(item.valueJson).digest('hex')!==item.sha256)throw new Error('incorrect return value identity/hash differs');
-    if(!contains(proof.actualResult,JSON.parse(item.valueJson)))throw new Error('incorrect return value is outside the actual application result');
+    if(item.contribution){
+      const c=item.contribution,roles=proof.outcomeDimensions??{};
+      const failed={...roles.returnedValue?.checks,...roles.incidentalValues?.checks};
+      if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection'].includes(c.kind) ||
+         typeof c.root_call_id!=='string'||typeof c.producer_call_id!=='string'||typeof c.root_value_json!=='string'||
+         digest(c.root_value_json)!==c.root_sha256||!isDeepStrictEqual(JSON.parse(c.root_value_json),proof.actualResult)||
+         !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>failed[check]!==false)||
+         ![c.root_path,c.producer_path].every(path=>Array.isArray(path)&&path.every(key=>typeof key==='string'||Number.isSafeInteger(key)&&key>=0))||
+         !Array.isArray(c.lineage)||!c.lineage.length||c.lineage.some(id=>typeof id!=='string')||new Set(c.lineage).size!==c.lineage.length)
+        throw new Error('invalid authored application return contribution');
+    }else if(!contains(proof.actualResult,JSON.parse(item.valueJson)))throw new Error('incorrect return value is outside the actual application result');
   }
   return incidental.incorrectReturns;
+}
+
+
+/** Recheck authored data flow against original typed outputs and the complete native call tree. */
+export function validateReturnContribution(item, records, roots) {
+  const c=item.contribution;if(!c)return;
+  const root=records.get(c.root_call_id),producer=records.get(c.producer_call_id);
+  const matches=(record,text,hash)=>record?.outcome==='done'&&record.output?.complete===true&&record.output.hash===hash&&record.output.bytes===Buffer.byteLength(text);
+  if(roots.length!==1||roots[0]!==c.root_call_id||!root||!producer||
+     !matches(root,c.root_value_json,c.root_sha256)||!matches(producer,item.valueJson,item.sha256)||
+     producer.definition?.name!==item.definition.name||producer.definition?.source!==item.definition.source||
+     c.lineage[0]!==root.call_id||c.lineage.at(-1)!==producer.call_id)
+    throw new Error('application return contribution differs from actual captured outputs');
+  const at=(value,path)=>{for(const key of path){if(value===null||typeof value!=='object'||!Object.hasOwn(value,key))throw new Error('application return projection path is absent');value=value[key];}return value;};
+  if(!isDeepStrictEqual(at(JSON.parse(c.root_value_json),c.root_path),at(JSON.parse(item.valueJson),c.producer_path)))
+    throw new Error('application return projection differs from actual producer value');
+  if(c.kind==='root'){
+    if(producer!==root||c.lineage.length!==1||c.root_path.length||c.producer_path.length)
+      throw new Error('root contribution must identify its whole actual root return');
+    return;
+  }
+  if(producer===root||producer.executor?.kind==='crisp'||!producer.definition?.source?.endsWith('.nl')||
+     !(producer.model_turns??[]).some(turn=>turn.kind==='generation'&&turn.reply&&!turn.error))
+    throw new Error('forwarded or projected contribution needs an actual sampled NL producer');
+  for(let index=0;index<c.lineage.length-1;index++){
+    const ancestor=records.get(c.lineage[index]),child=records.get(c.lineage[index+1]);
+    if(!ancestor||!child||ancestor.executor?.kind!=='crisp'||ancestor.outcome!=='done'||child.parent_call_id!==ancestor.call_id)
+      throw new Error('application return contribution crosses a non-crisp or unrelated ancestor');
+    if(c.kind==='forwarded'&&([...records.values()].filter(record=>record.parent_call_id===ancestor.call_id).length!==1||
+       !matches(ancestor,item.valueJson,item.sha256)))throw new Error('forwarding contribution must preserve the sole child whole return');
+  }
+  if(c.kind==='forwarded'&&(c.root_path.length||c.producer_path.length))throw new Error('forwarding contribution cannot project values');
 }
 
 async function readBound(binding, root) {
@@ -347,6 +389,12 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const records = [];
   if (row.task.interaction?.kind !== 'open-user-goal' || roots.size !== 1 || typeof goal !== 'string' || !goal.trim())
     throw new Error('observed open goal requires one independently attested application root');
+  if(returnSelectors.some(item=>item.contribution))for(const call of row.outcome.invocation_ledger){
+    const original=JSON.parse(await readBound(call.artifact,root));
+    if(capturedRecords.has(call.call_id))throw new Error('observed capture repeats an invocation');
+    capturedRecords.set(call.call_id,original.record);
+  }
+  for(const item of returnSelectors)validateReturnContribution(item,capturedRecords,receipt.root_call_ids);
   for (const call of row.outcome.invocation_ledger) {
     const original = JSON.parse(await readBound(call.artifact, root));
     const record = original.record;
@@ -378,7 +426,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
     const projected = decisions.get(call.call_id) ?? [];
     let selectorMatch=false;
     returnSelectors.forEach((item,index)=>{
-      const matches=record.definition?.name===item.definition.name&&record.definition?.source===item.definition.source&&record.output?.complete===true&&record.output.hash===item.sha256&&record.output.bytes===Buffer.byteLength(item.valueJson);
+      const matches=(!item.contribution||record.call_id===item.contribution.producer_call_id)&&record.definition?.name===item.definition.name&&record.definition?.source===item.definition.source&&record.output?.complete===true&&record.output.hash===item.sha256&&record.output.bytes===Buffer.byteLength(item.valueJson);
       if(matches){matchedReturnSelectors.add(index);selectorMatch=true;}
     });
     const lastGeneration = selectorMatch || incorrectOptionalReturn && record.parent_call_id === null
