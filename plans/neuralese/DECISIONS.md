@@ -9536,3 +9536,52 @@ in sft-v6 through sft-v9 are bit-identical to the HF base's generic reserved-tok
 - in-generation produce spans read by another call (they are still spliced from the producer's context);
 - the llama-server/wllama consumption of text-written states (no such states reach them);
 - the cold vs warm prefix-cache consumer forward on SGLang beyond the parity test.
+
+## 2026-11-23 21:45 Typed output contracts: a directory reducer declares the files it writes; authored tasks carry their output format in types, not prose
+
+The owner saw training-task instructions ending in prose like "Output contract: stock.md rows are seed | packets ...", and
+asked for the target format to come from natlang's own type machinery so the model learns to attend to declared types.
+3,180 of aei1's 37,619 pool tasks (8.5%, all `auth_*` exact desks, round 6 on) carried such a paragraph; the authoring
+checker required it.
+
+- **Mechanism.** The return value was already declared (its type in the signature); the files a directory reducer writes
+  had no declaration at all. Smallest native addition: `writes:` in a directory reducer's frontmatter names one record
+  type whose fields are the paths or globs it may write, each typed by the file's text (`string`, a string literal, or
+  a union). It reuses what exists: types and aliases, field doc comments ("describe a data format there", the skill's
+  rule), the opening's alias rendering, the return gate. The opening shows `The files it writes: T` under the signature
+  with the aliases it names. A return that created or changed an undeclared file, or a file whose text misses its
+  literal type, is refused with one sentence (`writes-unsatisfied`), and the call repairs it. An alias's own doc
+  comment in `types.ts` is now shown above it (it was dropped; only field doc comments reached the model). Spec:
+  `spec/ext/directory-reducers.md` "Declared files"; skills: authoring `language.md`, integration `refinements.md`.
+  Not chosen: template-literal line types and `Is<string, P>` file types (OPEN_ITEMS "Typed output contracts").
+- **Authoring rule.** `authored_checks.py` rule 6: a prose `Output contract:` paragraph is an error for every task; a
+  root that writes files declares `writes:` (error for round-6+ workers), and every file the reference writes must match
+  a field. Kit section 2; `/mnt/external/natlang-rl-authoring/AUTHOR_BRIEF_ROUND23.md` for the next round.
+- **Migration** (`scripts/rl_tasks/migrate_output_contracts.py`, mechanical): the paragraph leaves the instructions. Its
+  sentences about one file become that file's field doc comment in `<Root>Files`; those about the folder become the
+  alias's doc comment; those about the return value become the doc comment of `<Root>Result`, an alias of the declared
+  return type. The declared paths are not only the files the reference writes, which would leak which conditional
+  files stay unwritten. They are also every non-input path and template folder (`replies/<id>.md`) the instructions
+  name, and the input files a numbered step writes. 2,454 rows declare `writes:`; 2,589 got a documented result alias.
+- **Requalification** (`verify.mjs`, reference replay + negative controls, on the new runtime): 3,145 of 3,180 kept, 0
+  wrong answers accepted. 35 left out. 32 fail identically in their original form (17 reference replays in
+  `selected-drafts` w438 and `settings-merges` w432; 15 whose negative controls error on the replay's missing Neuralese
+  writer). 3 fail because of the migration: the declaration misses `ledger.csv`/package files that an installing run
+  writes, so the keyword baseline's return is refused instead of rejected (`verified-folder-edits` w437-p4a, w437-p6b,
+  `transactional-filing-rooms` w408-p3b). Each source's `typed-contracts.json` lists them.
+- **Data.** Each of the 19 grpo-pool sources with contract rows gets a `<id>-typed` version
+  (`data_nvme:rl-typed-contracts-20261123/`): the contract rows replaced by their requalified migrations, the 35 left
+  out, every other row copied byte for byte. Same ids and source groups, so held-v3/v4 exclusions are unchanged. The
+  `-typed` entries take the old entries' `grpo-pool` order, supersede them, and the old entries lose the role. aei1's pin
+  (108cd848) keeps its own registry and runtime. The typed rows enter at the next pin, together with the runtime that
+  reads `writes:`; an older runtime refuses `writes:` as an unknown frontmatter key.
+- **Found and fixed on the way:** the collector never bound a root function's `ensures:` (the kernel binds them to the
+  calls it runs; the collector prepares the root itself), so no root postcondition was checked in collection, held eval
+  or qualification. `ensuresGate` is now shared. No pool root declares one today.
+- **Measurement** (30 tasks, one per family, 2 samples, sft-v9 on the Colab front, same seeds, prose vs typed, same
+  runtime): in flight; appended below when it finishes.
+- **Not checked:**
+  - a blind solve of the migrated rows;
+  - `held_eval verify` against the new sources (same ids and groups as the verified old ones);
+  - a human read of the sentence attribution beyond about 10 samples;
+  - the full `check-main` (only `--quick` and the targeted ts-host and Python tests).

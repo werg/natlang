@@ -41,7 +41,8 @@ import { checkTrustedExactVerifier } from './trusted-exact-verifier.js';
 import { checkFunctionEffects } from './function-effects.js';
 import { findCodebaseItem } from '../native/runtime.js';
 import type { LambdaNode, Value } from '../native/values.js';
-import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
+import { PROGRAM_VERSION, prepareProgramNode, programDefinition, type ProgramRecord } from './program.js';
+import { ensuresGate } from '../runtime/kernel.js';
 import { validateEvaluationFixture, executeEvaluationFixture } from './evaluation-fixture.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
@@ -1856,6 +1857,12 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId,
     ...(options.runLabel !== undefined ? { runLabel: options.runLabel } : {}), signal: options.signal });
   agent = makeAgent(judged ? collectorRefinement(runtime) : undefined);
+  // The root's own postconditions (`ensures:`): the kernel binds them to the calls it runs, and this root is prepared
+  // here, so it binds them itself (before, a root's `ensures:` was never checked in collection, held eval or replay).
+  const rootDefinition = programDefinition(record);
+  if (rootDefinition.ensures?.length && runtime.frame)
+    root.ensures = ensuresGate(rootDefinition, rootDefinition.params.map(param => record.semantics.inputs?.[param.name]),
+      runtime.frame, runtime.frame, undefined, options.runId, runtime.trace);
   registerTrace(options.runId, runtime.trace, runtime.episodeBudget);
   try {
     let result: Awaited<ReturnType<typeof runtime.run>>;

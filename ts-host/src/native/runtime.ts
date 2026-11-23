@@ -5,6 +5,8 @@
  * Portable data reaches eval as a frozen snapshot; live values (host objects, functions, folder
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
+import { aliasDeclaration } from './type-aliases.js';
+import { writesFields, writesProblem, type WritesField } from '../runtime/writes.js';
 import { COMPACTED_RESULT, PROMPT_EXAMPLE_SOURCE, PROMPT_EXAMPLE_TEXTS } from './prompt.js';
 import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
@@ -674,7 +676,7 @@ export const protectedEditError = (source: string): string =>
 export const PROTECTED_TYPES_ERROR = 'types.ts declares the types this call\'s result is checked against, so it cannot be edited here; ' +
   'fix the code that produces the value they reject.';
 const CONTRACT_EDIT_ERROR = (source: string): string =>
-  `The ensures:, measure: and recursive: lines of ${source} judge its calls, so an edit cannot change them; fix the code that produces the value they reject.`;
+  `The ensures:, writes:, measure: and recursive: lines of ${source} judge its calls, so an edit cannot change them; fix the code that produces the value they reject.`;
 const PROTECT_LIST_ERROR = (source: string): string =>
   `The protect: list of ${source} names what judges its calls, so an edit cannot change it; fix the code that produces the value they reject.`;
 
@@ -1708,10 +1710,23 @@ export class NativeSession {
     return element.kind === 'prim' && element.name === 'string';
   }
 
+  /**
+   * What is wrong with the files this call wrote under its definition's `writes:` type (runtime/writes.ts), in one
+   * sentence; undefined when they fit or nothing is declared.
+   */
+  writesProblem(): string | undefined {
+    const tx = this.lam.projectTransaction;
+    if (!this.lam.writes || !tx?.open) return undefined;
+    this.writesChecked ??= writesFields(this.lam.writes, this.env);
+    return writesProblem(this.writesChecked, this.env, this.lam.functionName || 'this call', tx.folder.diffSync().changes);
+  }
+  private writesChecked?: WritesField[];
+
   /** Complete the invocation if an eval has returned a value of the declared type. */
   finish(): boolean {
     if (this.lam.return === MISSING || this.lam.type.kind !== 'lambda') return false;
     if (problems(this.lam.return, this.lam.type.returns, this.env, 'return').holes.length) return false;
+    if (this.writesProblem()) return false;
     const tx = this.lam.projectTransaction;
     if (tx?.open) {
       if (this.lam.reducerMode === 'apply') {
@@ -2122,6 +2137,9 @@ export class NativeSession {
           try { value = coerce(spelled.value, this.lam.type.returns, this.env, 'return'); } catch { throw first; }
         }
       }
+      // The files a directory reducer declares it writes (`writes:`) hold it to them before its result is taken.
+      const unwritten = this.writesProblem();
+      if (unwritten) throw new Reject([{ path: 'files', code: 'writes-unsatisfied', text: `writes-unsatisfied: ${unwritten}` }]);
       this.lam.return = value;
       if (!this.finish()) throw new Reject([returnValueRejection(wording, { kind: 'incomplete' }, formatType(this.lam.type.returns))]);
       return { kind: 'completed', text: `Returned ${oneLine(value, undefined, this.runtime.displayLiveId, this.runtime.untrusted)}.`, value };
@@ -2281,7 +2299,7 @@ export class NativeSession {
         const record = parent && (this.runtime.frame?.task.programView?.record(parent) ?? parent);
         if (record && record.kind !== 'namespace' && Object.hasOwn(record.types, alias)) {
           const declaration = (record.kind === 'module' ? record.declarations?.[alias] : undefined) ??
-            `type ${alias} = ${record.types[alias]};`;
+            aliasDeclaration(alias, record.types[alias]!);
           return { kind: 'ok', text: declaration, value: declaration };
         }
       }
@@ -2294,7 +2312,7 @@ export class NativeSession {
       }
       // A type alias of this call (`Schedule`) is shown as its definition.
       if (name === 'read_code' && Object.hasOwn(this.lam.typesSrc ?? {}, requested)) {
-        const alias = `type ${requested} = ${this.lam.typesSrc[requested]};`;
+        const alias = aliasDeclaration(requested, this.lam.typesSrc[requested]!);
         return { kind: 'ok', text: alias, value: alias };
       }
       // A type alias of the program in the callable folder (its types.ts), which this call's own scope need not have:
@@ -2302,7 +2320,7 @@ export class NativeSession {
       // field-type tasks ended blocked or guessed).
       const programAlias = name === 'read_code' ? codebaseTypeAlias(this.lam.codebase, requested) : undefined;
       if (programAlias !== undefined) {
-        const alias = `type ${requested} = ${programAlias};`;
+        const alias = aliasDeclaration(requested, programAlias);
         return { kind: 'ok', text: alias, value: alias };
       }
       // A bare method name of a scope service (`certificate` of greenhouse) is read as that service's declaration.
@@ -2375,8 +2393,8 @@ export class NativeSession {
       throw new Reject([{ path: requested, code: 'protected', text: PROTECT_LIST_ERROR(record.source) }]);
     // Postconditions and termination measures judge the calls too: an edit cannot weaken them.
     if (record.kind === 'natlang' && updated.kind === 'natlang' &&
-        JSON.stringify([record.ensures ?? [], record.measure ?? null, record.recursive ?? null]) !==
-        JSON.stringify([updated.ensures ?? [], updated.measure ?? null, updated.recursive ?? null]))
+        JSON.stringify([record.ensures ?? [], record.measure ?? null, record.recursive ?? null, record.writes ?? null]) !==
+        JSON.stringify([updated.ensures ?? [], updated.measure ?? null, updated.recursive ?? null, updated.writes ?? null]))
       throw new Reject([{ path: requested, code: 'protected', text: CONTRACT_EDIT_ERROR(record.source) }]);
     let inlineRevision: { original: InlineLambdaPlan[]; previous: InlineLambdaPlan[]; current: InlineLambdaPlan[] } | undefined;
     if (updated.kind === 'module' && record.kind === 'module') {
