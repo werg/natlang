@@ -34,9 +34,17 @@ export function reassessGoalReturnRoles(packet){
     throw Error('prepared project lacks an independently completed private draft with an honest review hold');
   for(const row of state.journal??[])if(!witnessed(row.service,row.method,row.args,row.result))
     throw Error('prepared project journal differs from exact original native effects');
+  const projectServices=new Set(['contentProjectSources','contentProjectScope','contentProjectDraft','contentProjectCommit']);
+  if(effects.some(effect=>projectServices.has(effect.service)&&!state.journal?.some(row=>
+     row.service===effect.service&&row.method===effect.method&&bindingMatches(effect.args,row.args)&&bindingMatches(effect.result,row.result))))
+    throw Error('prepared project journal omits original native effects');
   if(!['contentProjectSources.observe','contentProjectScope.confirm','contentProjectDraft.prepare','contentProjectDraft.write'].every(key=>
      state.journal?.some(row=>row.service+'.'+row.method===key))||state.journal.some(row=>row.service==='contentProjectCommit'))
     throw Error('prepared project lacks its native draft authorization and write witnesses');
+  const snapshot=report.draft.snapshot;
+  if(!snapshot||snapshot.head!==JSON.stringify(state.actual.workingHead)||
+     !state.journal.some(row=>row.service==='contentProjectDraft'&&row.method==='write'&&same(row.result,snapshot)))
+    throw Error('prepared project snapshot differs from its native write or independent readback');
   return {checks:Object.fromEntries(nativeNames.map(name=>[name,true])),
    outcomeDimensions:{effects:{passed:true,checks:Object.fromEntries(nativeNames.map(name=>[name,true]))},
     returnedValue:{required:false,passed:false,checks:{correctOutcomeReport:false}}},

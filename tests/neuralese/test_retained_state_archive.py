@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/neuralese_data'))
-from retained_state_archive import prepare_retained_state_packs, validate_pack, restore_pack, inventory
+from retained_state_archive import prepare_retained_state_packs, validate_pack, restore_pack, inventory, digest_file
 import vibestudio_campaign
 
 
@@ -110,3 +110,32 @@ def test_external_hardlink_ctime_drift_rehashes_same_bytes_but_rejects_changed_p
     with pytest.raises(ValueError, match='source changed during content revalidation'):
         validate_pack(manifest, directory, root)
     assert payload.exists() and (directory / manifest['archive']).exists()
+
+
+def test_source_rehash_checks_open_descriptor_identity_not_just_path_and_bytes(tmp_path, monkeypatch):
+    capture, root = fixture(tmp_path)
+    prepare_retained_state_packs(capture)
+    payload = root / 'nested/sqlite'
+    other = tmp_path / 'substituted-file'
+    other.write_bytes(payload.read_bytes())
+    os.link(payload, tmp_path / 'external-borrower')
+    original_open = open
+
+    def substituted_open(path, *args, **kwargs):
+        # Deterministically model opening another inode while the pathname's
+        # lstat remains unchanged. Matching bytes alone do not prove identity.
+        return original_open(other if path == payload else path, *args, **kwargs)
+
+    monkeypatch.setattr('retained_state_archive.open', substituted_open, raising=False)
+    with pytest.raises(ValueError, match='source changed during content revalidation'):
+        prepare_retained_state_packs(capture)
+    assert payload.exists()
+
+
+def test_stable_source_hash_refuses_symlinks(tmp_path):
+    payload = tmp_path / 'payload'
+    payload.write_bytes(b'original')
+    link = tmp_path / 'link'
+    link.symlink_to(payload)
+    with pytest.raises(OSError):
+        digest_file(link, stable=True)

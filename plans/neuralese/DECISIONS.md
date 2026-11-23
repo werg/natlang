@@ -8492,3 +8492,34 @@ all 5 memetic groups, 20 episodes, unresolved; ordinary groups pass 0.60 with 1.
   rollouts.jsonl. aei1 (pin d29451b846ca, drive pin 2b235280665b) keeps the inline layout until it restarts on a pin
   with this commit; its memetic groups meanwhile hold 4 slots each for 2 h and score nothing (`--memetic-share 0` at its
   next restart opts out, or the new pin fixes it).
+
+### 2026-11-23 — Review of retained-state and private-draft recovery
+
+Mechanism inventory before editing: opaque source proof lives in
+`scripts/neuralese_data/retained_state_archive.py` (`inventory`, `digest_file`,
+`validate_pack`, `pack_root`, `restore_pack`); campaign transfer consumes only its
+validated exclusions (`scripts/neuralese_data/vibestudio_campaign.py:183-193`).
+Private-draft reassessment lives in `reassess_goal_return_roles.mjs` and its native
+witness tests; `live_teacher_sources.py:360-370` consumes the resulting optional
+return dimension. Neither change is a serving protocol change: opaque archives
+are explicitly not training inputs (`retained_state_archive.py:1`), and
+reassessment operates on completed execution records without executing a model
+(`reassess_goal_return_roles.mjs:2`). Managed llama-server, wllama, native Python,
+SGLang, runtime, learner, held eval and probes therefore need no engine changes
+(reviewed `docs/ENGINE_PARITY.md`).
+
+Tighten the draft proof in both directions: every project-service native effect
+must appear in the journal, and the written snapshot must match the reported
+candidate and independently read working head. Otherwise a subset journal can
+hide a commit or an extra write. Connect the JavaScript regression suite to the
+normal pytest suite; the full check currently discovers only ts-host's Node tests.
+Use descriptor metadata around ctime rehashing as well as pathname metadata, so
+the identity check describes the file actually read. Existing unpacked transfer
+opt-out and original failed packets remain available.
+
+Validation: ledger units `review-unpushed-targeted-fix-20261123` (79 Python
+tests, including four Node regressions) and `review-unpushed-quick-20261123`
+(source review, 16 ratchets, TypeScript check) passed. Negative cases cover
+unjournaled commits/writes, a reported snapshot differing from either its write
+receipt or readback, a substituted file descriptor with identical bytes, and a
+symlink presented for source rehashing. No live capture or training state changed.

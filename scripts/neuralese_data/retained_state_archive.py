@@ -14,11 +14,26 @@ ROOT_NAME = re.compile(r'retained-state-[A-Za-z0-9][A-Za-z0-9_.-]*\Z')
 SCHEMA = 'vibestudio.retained-state-pack/1'
 
 
-def digest_file(path):
+def file_identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid,
+            info.st_gid, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def digest_file(path, *, stable=False):
     h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
+    path = Path(path)
+    before = path.lstat() if stable else None
+    # Refuse a substituted symlink or special file during source revalidation.
+    opener = (lambda name, flags: os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK)) if stable else None
+    with open(path, 'rb', opener=opener) as stream:
+        if stable and (not stat.S_ISREG(before.st_mode) or
+                       file_identity(before) != file_identity(os.fstat(stream.fileno()))):
+            raise ValueError('opaque state source changed during content revalidation: ' + str(path))
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             h.update(chunk)
+        if stable and (file_identity(before) != file_identity(os.fstat(stream.fileno())) or
+                       file_identity(before) != file_identity(path.lstat())):
+            raise ValueError('opaque state source changed during content revalidation: ' + str(path))
     return h.hexdigest()
 
 
@@ -142,12 +157,8 @@ def validate_pack(manifest, directory, root=None):
                 if row['kind'] != 'file':
                     continue
                 path = Path(root).parent / row['path']
-                before = path.lstat()
-                actual_hash = digest_file(path)
-                after = path.lstat()
-                identity = lambda info: (info.st_dev, info.st_ino, info.st_mode, info.st_uid,
-                                         info.st_gid, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-                if identity(before) != identity(after) or actual_hash != row['sha256']:
+                actual_hash = digest_file(path, stable=True)
+                if actual_hash != row['sha256']:
                     raise ValueError('opaque state source changed during content revalidation: ' + row['path'])
             confirmed = inventory(root, hashes=False)
             if stable_rows(confirmed) == stable_rows(actual):
