@@ -1,0 +1,209 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-wave0032-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-wave0032-20261123",
+  "files": [
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-0.json",
+      "bytes": 167890,
+      "sha256": "18b2472b0709af54731660608b5852a01655c2d644b64813728243b491156499"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-1.json",
+      "bytes": 298536,
+      "sha256": "902a21346c1816ffb9a6e2ce7ee456ee1fff15a856930c1be603663668ddf6c3"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-10.json",
+      "bytes": 233253,
+      "sha256": "2bf831059350478d8533a26d07944ec65cb6f33552a599d9a5b1ad1b86848070"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-11.json",
+      "bytes": 121597,
+      "sha256": "f41027100a9e0d7159b3eae2aa363d34b32fa3bea9c94a2bebc17a9401af0fae"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-12.json",
+      "bytes": 124046,
+      "sha256": "d10efa85c32021839376c5c2b37976d10021118b9bbd1848857d4aa117ae8934"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-13.json",
+      "bytes": 276475,
+      "sha256": "3d3c8550fcddeac69a97247739d749695132e5e2480836e6a561f958ebdd327a"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-14.json",
+      "bytes": 255777,
+      "sha256": "98ca170bba0b75384a3866ea8d4c09d2c02fb89d5de1ea067aa77278b759d529"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-15.json",
+      "bytes": 494294,
+      "sha256": "8b1fa9c0f58bb1d5984f7cd316fd8b1e3891274158bdbdf1529e6fc0777aa863"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-16.json",
+      "bytes": 276412,
+      "sha256": "93380d100b58e2f7c3f9101569e37a1d3ed0f22cda8a1093f388d2591a62ddd0"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-17.json",
+      "bytes": 275752,
+      "sha256": "919859a3f2ff0ea86766c54e0f843e25e03ab45ac3069c23856a4c2caea6b88d"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-18.json",
+      "bytes": 255849,
+      "sha256": "16cca725bbc2caf54cf0cb4a3faa784a1378343e9c0337dce371bde72e1bb1fd"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-19.json",
+      "bytes": 881764,
+      "sha256": "edb43ac6a6483ddf757175896fc937ae0ad73cb9ea3f0520c8e95882d9eca8d1"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-2.json",
+      "bytes": 298528,
+      "sha256": "9a300cbb834643a2a2f9689de3d6cac2c21f90b4f83a06ddab42d83d1d669796"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-20.json",
+      "bytes": 776970,
+      "sha256": "e07331a255171796f4369e2255bf6a874947108ef833628e0d8be1211309de1f"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-3.json",
+      "bytes": 266288,
+      "sha256": "480a4a450456c510149dda9f09ebedd50eea3227eb8d9c126932a2982ebd70b5"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-4.json",
+      "bytes": 137066,
+      "sha256": "e35781aa4db3a7c8225e6e2792bb0615e819b7dba644caf57ad0b2380cd5dae1"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-5.json",
+      "bytes": 137054,
+      "sha256": "51a547ebd2b702b87d16fc07ec9076ff7dbe3f682c3ce1bd1c24139162996257"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-6.json",
+      "bytes": 141645,
+      "sha256": "458781ddeeb2df5971a070231f2ee29fa6b41f5c561bee45f20305e43de54c59"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-7.json",
+      "bytes": 900914,
+      "sha256": "9aedf19f26010c610339da9b95c1ced593ec5686a7fc624fe0490ee76dc93571"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-8.json",
+      "bytes": 334359,
+      "sha256": "ee8b4d60a9f13e7e4b00f5188412ed25fd38ae1375ebac04b13c7b6283a21096"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/call-9.json",
+      "bytes": 124433,
+      "sha256": "fdb97843449e2fe73940b60063b76c99aea63f21a8356bc0667ea7756a5913b9"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/completed-outcome-original.json",
+      "bytes": 3501,
+      "sha256": "7a88af2f7c4ead84afcb402fb662a22ab9516cbd18c6bcdc128d80967163e765"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/completed-reassessment.json",
+      "bytes": 3564,
+      "sha256": "cb316c4397c9fe071c60e32ad3250f4a2d5657fc321c9e8b0cf6cb20b58a220b"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/manifest.json",
+      "bytes": 4886,
+      "sha256": "a0a7b94c12e6cd76540f4a21a7793036de4a28434e3a2b8d2eb11a5f0107f0a7"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/original-outcome.json",
+      "bytes": 367,
+      "sha256": "d8bfc78ebfd483ec56c03ad22ccfde7598c16ffa0a0607731262d16238fd9f1e"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-checker_sources-0.mjs",
+      "bytes": 506,
+      "sha256": "ed5769ac88d00b06dfa52da1751226bf4ad0b840c9c594893de49528601ccaee"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-checker_sources-1.ts",
+      "bytes": 21969,
+      "sha256": "7e10fdaeb291d5eabdb9a8a80ec0c702aefb60af03b545be2a5fb7d665cf3e67"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-checker_sources-2.ts",
+      "bytes": 21883,
+      "sha256": "ae521d40a0b798f9ec525d5dfa5969328afacfeac4366d4b558d7afc33037dca"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-checker_sources-3.ts",
+      "bytes": 740,
+      "sha256": "01e22446ef1b0d33a1e652b4ff4e7bdac3c581c7acec7d30a894855b42921b1e"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-checker_sources-4.mjs",
+      "bytes": 5949,
+      "sha256": "9fb3d4e85d282f34683728bc4c47d08d5d784a58be3c4eb98b5fe740f1a11e49"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-evidence-0.json",
+      "bytes": 6749,
+      "sha256": "ffea88210f83f34d13b132b14ed4784bc54697ea01d120f80077dc88118861ef"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment-validator.json",
+      "bytes": 586,
+      "sha256": "80cc335490c6a998f5d9bfc0d45a62f57292dce0ce3b7f025389aba62bb12bea"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/reassessment.json",
+      "bytes": 744,
+      "sha256": "e3d09d8f5ca81e3452d5b514181abbed350985f0c2f61c8e0b99af132416274a"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/trajectory-open-goal-tendril-route-capture-supply-label-full.json.gz",
+      "bytes": 1579533,
+      "sha256": "47b13140779a1ad8bbdc04068dbd42ffd79bd844b1a68993dc8c595d5f86e21d"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/trajectory.native.jsonl.zst",
+      "bytes": 88612,
+      "sha256": "fecf681c443bf78becbd2fff390ef09d8e4e360ae338671f5c749f59d6cae771"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/verification.json",
+      "bytes": 21988,
+      "sha256": "8934d4bc38ab657e81548f978f6105a6c0eb832afc5e84b258ef23728e035bcc"
+    },
+    {
+      "path": "capture/open-goal-tendril-route-capture-supply-label/verified/workspace.json",
+      "bytes": 3731,
+      "sha256": "06930296c71e196dccef6487ce72d2db51e9c3033cf2a3663eb36a675ac1ed82"
+    },
+    {
+      "path": "graph-metrics.json",
+      "bytes": 8769,
+      "sha256": "b9d8e185905d2e985ef7d40511e04c493c7f17e0d694b0b654d7c914356a1400"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 222,
+      "sha256": "c537596212f453210d82d54e629fd6587cb4c74e56f53b7b63048207d5033dce"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 88573,
+      "sha256": "d830f5bee15b27848b9d2ba6551d8ab6547deff79b15b521dedf9a991f794e36"
+    }
+  ],
+  "bytes": 8641774
+}
