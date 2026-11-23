@@ -1,0 +1,684 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-review-outcomes-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-review-outcomes-20261123",
+  "files": [
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-0.json",
+      "bytes": 104244,
+      "sha256": "b42e04795d88f274b3bbd1c8b0af8133baa0c0ecdf3eee988e8d76e4c24cee97"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-1.json",
+      "bytes": 107727,
+      "sha256": "154c5b8f8b300afcf6254f274cfb0be70c9556064f9018df576b9e8ad40a2362"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-10.json",
+      "bytes": 173188,
+      "sha256": "c41adc8591900624ab50a61995784feedc97c866f860d22aea1d245f5fb013b3"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-11.json",
+      "bytes": 329709,
+      "sha256": "7107ff06bcf2dc0bf3082eb9e8f30e9cb6c1b8954aeebb2d74f5f86b839603df"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-12.json",
+      "bytes": 324824,
+      "sha256": "c5e321f542e1c752fe1cf21902694aacbc0acefa8d7878225a1cffaa08e16245"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-13.json",
+      "bytes": 397894,
+      "sha256": "5119063d013db71e866468fe5092df22b0c9fd278973ebfb2f6853030c4895b0"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-14.json",
+      "bytes": 800790,
+      "sha256": "a68079f9c571d5c66db0e6a9a688ec2828f6d376cc322572a5be82e91b27988a"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-15.json",
+      "bytes": 458296,
+      "sha256": "6996151702929ba3f0a9789fb57d789dfd622e8e4ee85166c09eea77058cfd27"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-16.json",
+      "bytes": 254978,
+      "sha256": "a97f157608dadf439b2d506ad10b51ae9db50a1d5851246445fa91fb935f4b5d"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-17.json",
+      "bytes": 124719,
+      "sha256": "1b65eb80ddd3cc7f104cc7fde6caf6bcfe4906f72c20aa1aa7b5f738468b7450"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-18.json",
+      "bytes": 145045,
+      "sha256": "8effd82c462f97f4800cac33d10a0c7aa17a67e69197638c555dd46170536e24"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-19.json",
+      "bytes": 128028,
+      "sha256": "db702369996796bc93112c13602ded289342323122801fa5d60ba4aa36818292"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-2.json",
+      "bytes": 111873,
+      "sha256": "db6816447b2bb801bc175e5e52f875a99ca25fe4f02f8906ad1c4dfedc5c6c05"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-20.json",
+      "bytes": 135636,
+      "sha256": "a6d2d4a2e7f397d91a3ac730ece3f96c4a7ca39d8285736e2ee89fed5904d431"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-21.json",
+      "bytes": 140768,
+      "sha256": "c21a772a3dff034abb8b9d4c623764a2f72fe75c32e270d1871d778ca3df266a"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-22.json",
+      "bytes": 284055,
+      "sha256": "c2460ee98dac3d84660b43c69dc8efcb3a539f05292082d22003390ebfa2e230"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-23.json",
+      "bytes": 583563,
+      "sha256": "e992ee45d43dcea226c874409ee219e3ad18f38ec6b7be26ce9fb8e93e697aac"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-24.json",
+      "bytes": 126199,
+      "sha256": "d2bed586874b274447a45e37ec7ec872db3f4d2d801fb8894cac5f5fd0831566"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-25.json",
+      "bytes": 249453,
+      "sha256": "ea528c3ff50f320f7d71f18f481a39dcbfe4f44ff2751bc32ecc7655afe2c3c8"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-26.json",
+      "bytes": 123143,
+      "sha256": "8e1b1f533a03a0dede8c48528cf618b577974590d1e3b3ccb56f39952c05a14d"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-27.json",
+      "bytes": 127162,
+      "sha256": "34390717eeb4be00cb7ec90d2b791562c102e7b0466b0399fd93120023436c74"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-28.json",
+      "bytes": 122791,
+      "sha256": "a88963500d5670f97c4ec71e7f681848f81500887b7196557d7ebbb9793522a5"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-29.json",
+      "bytes": 499161,
+      "sha256": "cdb215d9d8951cca37d6c42ca62453a20cad0cd0f4e70691688daf9664ef2248"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-3.json",
+      "bytes": 110986,
+      "sha256": "76f3656d5a576b8d8b5c309878e9ceab79df6dfb939f81f61f2d4ec29947a229"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-30.json",
+      "bytes": 112438,
+      "sha256": "ab678d91ea585a97c180f56d13905038b488c9d6d63f8bda88cfc9b52adfe465"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-31.json",
+      "bytes": 121758,
+      "sha256": "ea5159a20889a83697bfca55fb73a2ee22a4073b6b349a814379b224445dc5b7"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-32.json",
+      "bytes": 235070,
+      "sha256": "ed78feca2e26621590158dd6f5c1b3799606f8ca8aa52a5ff11a7736cecb3f2a"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-33.json",
+      "bytes": 234388,
+      "sha256": "cc03990e0e4ca99405fd4bf6be85196b6139a3781920c5c2987066161431fb5e"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-34.json",
+      "bytes": 137443,
+      "sha256": "911b5e719d31cc2f2cfd92cc8507fb543d00a60d79fbf3c1380e7bac86fafe83"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-35.json",
+      "bytes": 128439,
+      "sha256": "b961ed087514dc8a816b5dd6d2714e13d5c0c044eb60394dfafc8da7f8f86b21"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-36.json",
+      "bytes": 134062,
+      "sha256": "4db69b1281f9031c9806e99fab7a7a9dc107db21d82e5f39e144110e98c66fff"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-37.json",
+      "bytes": 131437,
+      "sha256": "131dbcf08301e1bb50e28dd3a9c0a8d17e1fb51c61586d86950749b3245b2ae9"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-38.json",
+      "bytes": 133863,
+      "sha256": "b111c0dae6aaacce2a2de583689428ceda1927793d6d0bd982589839b808fbd1"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-39.json",
+      "bytes": 154393,
+      "sha256": "c8cc1ddbb55df6e307c461a99b689de4d4ac9b75ca62a9c804a3eabe3a1123a6"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-4.json",
+      "bytes": 110226,
+      "sha256": "5b73b56b56881e81f81ae18cacf3522f507319167b93eaad50163a4aa782fe1d"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-40.json",
+      "bytes": 216956,
+      "sha256": "518ae3fb7c5b6b622fb89e38c5edd9717098c5added6d6344d6d35012cb8ccfb"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-41.json",
+      "bytes": 123539,
+      "sha256": "c57122d571da5c13a7ca8ffd78720bf6cd03913a31e205cdb851691dd5dc44d0"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-42.json",
+      "bytes": 223060,
+      "sha256": "63ee114fefd5bcefe0ddb84aa05749b67ae4db6682065e34a0180d7ed417e2e6"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-43.json",
+      "bytes": 121713,
+      "sha256": "6760d683de9eb98995a7894de8819a065e439d809128405c0c35189c354ff463"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-44.json",
+      "bytes": 117785,
+      "sha256": "3c3fd2e60a35ac91b0a3c8a76464b971077fe09686fbf5d086d4d99aefb292b3"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-45.json",
+      "bytes": 119695,
+      "sha256": "d686a8464239e9341b2e26cfbff2d882dad1b10b176725bf3983850a94df38b0"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-46.json",
+      "bytes": 117584,
+      "sha256": "46082e2fb035a0b45c164f0257486df6ef8cf2d16fe936717807baca635d0107"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-47.json",
+      "bytes": 117297,
+      "sha256": "a22feabb9b6a878a3686b62d913abefb68b32f981c399064636a530300859d13"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-48.json",
+      "bytes": 121372,
+      "sha256": "e65b96904342d1bc54f528161683f1a0aa5297b4742f28b3bd7b2e23c3c5e53b"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-49.json",
+      "bytes": 198965,
+      "sha256": "71854236aaacaa5162394ef7a2e787461f5596dbf5b7e2f270a6c7230d2ddf65"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-5.json",
+      "bytes": 592917,
+      "sha256": "b501be53ac16235d9334d99c859099af2093edaac509c1386b9370cb6835149d"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-50.json",
+      "bytes": 107118,
+      "sha256": "1ffaf11e8cd5e82fca1a2870f3929827b807e4ca3ec18880edd428f49cb3c64e"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-51.json",
+      "bytes": 111283,
+      "sha256": "9994abd5262d2d78d18e3f38f8444aca18de611a7c3a1feb7d3a9969db33b071"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-52.json",
+      "bytes": 228206,
+      "sha256": "cd341493012b2b0ce17b6d4d805d3d4c7fdc41ea3a7c9984c09d0c9781bc8860"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-53.json",
+      "bytes": 443310,
+      "sha256": "ed7b7370ea5d6224b041ba7b528325c1ab26532179dc337d2d7db4bc2a861189"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-54.json",
+      "bytes": 117906,
+      "sha256": "d25822e002dd73776a867dcd06188d572f2f0c671789a5d87118ce539f038267"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-55.json",
+      "bytes": 122838,
+      "sha256": "d48522e4e13484cf833eff5ef28470a09754f1905b632138479f69a20b0581dc"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-56.json",
+      "bytes": 267030,
+      "sha256": "a90133e4a73e3fbe22a535e618cac8ddcffd27b05bca9fcb28f84a3cbb4ffbeb"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-57.json",
+      "bytes": 435230,
+      "sha256": "2657f8946088531cef025134b5f7c80e2b86ce5e820a7a20bec2afcf87791085"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-58.json",
+      "bytes": 838222,
+      "sha256": "1e89adf3a69cb24da53486a0fe7e7589162c202a98123f99ddf77d3afda1f45c"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-59.json",
+      "bytes": 282227,
+      "sha256": "3120c5b6a14a1854bebbafa8aee6883397c617da8602f2258524323430e66949"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-6.json",
+      "bytes": 132236,
+      "sha256": "b0ac94986ac7fbe9552dff84eb77b70562872840ec212035514d35c564f36ccf"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-60.json",
+      "bytes": 293627,
+      "sha256": "4ad8b429c1ffec1d77ec3a9570ccb71e10aa5d1cd0fcaa8680d6758a98db3adc"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-61.json",
+      "bytes": 393002,
+      "sha256": "de5272d47fa6fdb905a6837484f39e01f8ac64ce6c26d1c614522305f21f3c1f"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-62.json",
+      "bytes": 309879,
+      "sha256": "e85aeed91511e18b6b4c60346b2d34e8747146de6d52d056e5a631e9337aae77"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-63.json",
+      "bytes": 231149,
+      "sha256": "84dc0128296bf3f6f94b6d3efadfa98a3e88c9fb8511576f6d28eacd4f7a6657"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-64.json",
+      "bytes": 265168,
+      "sha256": "7b1117f4cca514d37efc385713aab1eaf2cb7d08d5bc416923a60fa94fcc81b5"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-65.json",
+      "bytes": 407119,
+      "sha256": "61d8c2f3b5580c1db4380cbe24b4b7a2dd2743db05693dc12115c3ec3b75a6af"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-66.json",
+      "bytes": 273162,
+      "sha256": "eca3bbd0dcd96648c555c1ebc9af796193b5f76e4b0b46bf932368587879d0ec"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-67.json",
+      "bytes": 429608,
+      "sha256": "9b40b516e17ccffd2e217b359f658bcf078b49a2476a77772e7a8d9d064e4c74"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-68.json",
+      "bytes": 252452,
+      "sha256": "89375fbaa54430a1fe680b62fda52226d9e708ab0680390b2f4a7a083ecaa597"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-69.json",
+      "bytes": 134325,
+      "sha256": "ffef07fac2bbf5f5f29ffae7aa318526f744cf875e4260a26fe92895d1cb9cdb"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-7.json",
+      "bytes": 126936,
+      "sha256": "a14b6bddb353d03a39fa57ab9549f6e0c896db5791383e1aa6cbc4db95823454"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-70.json",
+      "bytes": 492635,
+      "sha256": "cd3680de1cb21bc21dd30064b404a9caa51a6fd2ef3d4dcc673f4834981967b8"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-71.json",
+      "bytes": 227990,
+      "sha256": "aa0c3c0de56d46af9655f23463b8caf47206ac18fe875e756d053a63030641f9"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-72.json",
+      "bytes": 131161,
+      "sha256": "52b83c2ce257897dfee134c8212ae8eeea4067a64ad7ff49e254d86fb26b0b9c"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-73.json",
+      "bytes": 421484,
+      "sha256": "64c76aded565297f7d8b99d54009ffc87bfa66711d33dd8bc6ac6627401b3a10"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-74.json",
+      "bytes": 270612,
+      "sha256": "251e589fb7d0e1b7d61524ac66300ea6d81c19848b26c7bdb4d3398e2ff8a576"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-75.json",
+      "bytes": 2276386,
+      "sha256": "7202a35cbd069d55ff0ad5808f1376ad80bc835d4bad03f6535af0eab05fa0db"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-76.json",
+      "bytes": 167457,
+      "sha256": "f1a2554f48483c52424987414045d3359d2d35f229c7a948f78d4b3070344c48"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-77.json",
+      "bytes": 305558,
+      "sha256": "161094c4fef196d086b68c0dd34a00a1cd1ab2d486c9401a598d93eeac477bba"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-78.json",
+      "bytes": 3218024,
+      "sha256": "18a0113f3ce4f8d42eef059f6fc3ec9e8373c8f6b6024292fee17a7e319e6abe"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-8.json",
+      "bytes": 126444,
+      "sha256": "f23afbcf43a4c4dcd3ec6d0f93edd7045897cd374d011c0fe0287b5f7f0a66a3"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/call-9.json",
+      "bytes": 126062,
+      "sha256": "c8df908eb209fe325370be8085b53157a0ae956f440237aa34a2bdad06548c86"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/completed-outcome-original.json",
+      "bytes": 475070,
+      "sha256": "0e6d02ff9fdde98bb36e0aecd022d01899ef627ce5ef7747579b9ee45b7d68f0"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/completed-reassessment.json",
+      "bytes": 475100,
+      "sha256": "9a27451a83b06267b260524a4b64f3bc81cbeb0fd1c153a72f26a6a0aa6eadfc"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/manifest.json",
+      "bytes": 12334,
+      "sha256": "f73bb0176ef52ea9303517488bf57464676f5bbca128eace46dce0cb5a4702cc"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/native-admission-proof.json",
+      "bytes": 941,
+      "sha256": "fc733e1e02a2c2513ca9b4a81ba4f05e29f5b2a22e91b88ed1f9deacd3169886"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/original-outcome.json",
+      "bytes": 305,
+      "sha256": "52053bd8e746a686496197ff21bebf3983b069c3c8664013dfb1ac2afde45eae"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-checker_sources-0.mts",
+      "bytes": 9580,
+      "sha256": "73fe356a653acc24d7ddc2a698a67c80a5b1081f49eef330a0e32d585a6286a1"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-checker_sources-1.ts",
+      "bytes": 9419,
+      "sha256": "d3c88090f30b6392cc86fbb98913ac95f290a5576ef9f8374c54944095bcdc62"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-checker_sources-2.ts",
+      "bytes": 901,
+      "sha256": "f9f48a74a37c933717fd6b8efa8a879a9d8f773d574d17dc1112b1a0aa74be50"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-evidence-0.json",
+      "bytes": 36748,
+      "sha256": "bcae7f7924c4aebb9ae57df445e5761aa884f5ecc15c5480d72216543a84f2e6"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-evidence-1.json",
+      "bytes": 332178,
+      "sha256": "f1c60234d86f7b217809608eff927786828df6114d7c726ea8512024c0054d67"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-evidence-2.json",
+      "bytes": 272823,
+      "sha256": "1e7eabb08637c376f16dfd3e1368007fd25b85a03143ab89ecdab84051d23a53"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-evidence-3.json",
+      "bytes": 19585245,
+      "sha256": "cb8a10443618cd5b0e5c2f4c7ad0b82be2d8ff0641235d8617218c3e6efe4de6"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment-validator.json",
+      "bytes": 571,
+      "sha256": "3ff616f59a4a8ae62ceb68dd2b61f286f96e1697a467105a1ef164159dea0d3e"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/reassessment.json",
+      "bytes": 755,
+      "sha256": "4a1f24d9c6d315f2c4733ea7a8d303af1a516e5fe79fe72b3ac5f419761517a2"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/trajectory-open-goal-after-hours-archive-full.json.gz",
+      "bytes": 4697621,
+      "sha256": "f331e6fcb1c881103e78b30c583b71ff80001a07de30464cae0024ec8ad46265"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/trajectory.native.jsonl",
+      "bytes": 14592432,
+      "sha256": "031aa1b822c170a15b0b91e25ea80e81d94f62386907891be0a86f3fb2927c1f",
+      "lines": 1
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/trajectory.native.jsonl.zst",
+      "bytes": 250628,
+      "sha256": "4a135b54f265c984330c31d6d2ecae55713140edd989fad8fcb5a419f777e7dc"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/turns.native.jsonl",
+      "bytes": 15547084,
+      "sha256": "cc286f89e4fdeffe629137382cbb6501ebf4f05c29524a222c4ef09cefef83af",
+      "lines": 118
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/verification.json",
+      "bytes": 76737,
+      "sha256": "b5a6e6ea493346c90a2e9a851996a1cde2f075f89c3f45f0b3db1be96f838f2b"
+    },
+    {
+      "path": "capture/0036-open-goal-after-hours-archive/workspace.json",
+      "bytes": 480805,
+      "sha256": "7306d6e88b8ca800417a9c4ef20389c934db2aa070a792bf257e3bda092efa19"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-0.json",
+      "bytes": 323435,
+      "sha256": "96ceae23b2bebb82edcd13adb5355f08ebc6565182bc901e444c710830414d20"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-1.json",
+      "bytes": 280538,
+      "sha256": "1b1d8d8130b9ca5c388bcc2db4716d08e609236d954715b81e1ef69194ca7eb5"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-10.json",
+      "bytes": 377164,
+      "sha256": "795eb24b0a4bfa6452edc3db250d2f76b400062c6f5fe8cf6fa83cfc4be2ab0e"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-11.json",
+      "bytes": 770716,
+      "sha256": "1cbb2c263141e31b5b18946230e85f81fc2fc0b7ab461f65e0e7e9f8c4897512"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-12.json",
+      "bytes": 305945,
+      "sha256": "267d357f716e745dacad81f9d7aea5d89ef56774cd55390ba01a2eaf3fd1e0af"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-13.json",
+      "bytes": 1389075,
+      "sha256": "00846fdb6a15d1c58c7b897e6c7e0c4bdbc523d814c6dc9112f0f80af3c520c6"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-2.json",
+      "bytes": 291876,
+      "sha256": "7d8f683fa1f82a9dc442c1ef39d65bf7a594340ba8d594966b1b9b1e66d11549"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-3.json",
+      "bytes": 388449,
+      "sha256": "6b009c5b813da26cb27e89d78ae1f49c61dc9b52a029f9e9a8047c9d56fb0fc4"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-4.json",
+      "bytes": 310054,
+      "sha256": "ffd440260de652399989857742a98f66a0795088b36a17402ec2c0b5db1a6361"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-5.json",
+      "bytes": 425597,
+      "sha256": "b477fcfa47359f9b0a3f62e5f319cf3937fe259a7ca8bc031fbaeda9382b777b"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-6.json",
+      "bytes": 269776,
+      "sha256": "1fa7cd710a42f5c702d268c6d6e2342d7260d2c762c91ac60c829c7d1dcb8351"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-7.json",
+      "bytes": 551132,
+      "sha256": "1fa0c0761213daa0f092e76ce235f24cb02a4431fc7df1036d5ffe189c719fcb"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-8.json",
+      "bytes": 141500,
+      "sha256": "ad376c33bcbe54e96625fb6418578b5c7ca11e1f5ac9f834818684099a828e47"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/call-9.json",
+      "bytes": 381280,
+      "sha256": "5167ef885ff0993cf8272fc7a97b24f8f89aaed13d2ca8ac102f785a727fbce1"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/completed-outcome-original.json",
+      "bytes": 15192,
+      "sha256": "dad55d3249f5ce86e0cd2169d22ecbdb5f6d3560345d93f82992f2a1e2d2a67c"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/completed-reassessment.json",
+      "bytes": 15207,
+      "sha256": "5af17ba565763fbdeead1c6a381045815aff4ee41258acc4b84ac79b76d96e58"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/manifest.json",
+      "bytes": 4123,
+      "sha256": "886ef88ed1e54b5a5483578a29ff261b40a20f585689d68c402bf5fe7721e2e5"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/native-admission-proof.json",
+      "bytes": 1020,
+      "sha256": "27d0beae292ff61dcd758638b9b0dad34f1a0c556ee54d1f7e5f3df38ab8be5d"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/original-outcome.json",
+      "bytes": 236,
+      "sha256": "2f74f2f9c95bb67334e607297509b12260945844255122db9b995eb6f49af658"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/reassessment-checker_sources-0.py",
+      "bytes": 6735,
+      "sha256": "284249f0ee66efcd105e191b212d3b8e7f30e6caabdd74df1677294a83457123"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/reassessment-evidence-0.json",
+      "bytes": 30195,
+      "sha256": "61bd27ab6ff3ada1e13308d8e07503946882f21e7ba33adaf8a756b554c932b3"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/reassessment-evidence-1.json",
+      "bytes": 3658,
+      "sha256": "cc80d0721d1b0d14ddcc677e999b0bc7ddfd87ada4223bb1ffdd63cc968a33d2"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/reassessment-evidence-2.json",
+      "bytes": 1682,
+      "sha256": "bd0a7ef36f6eaad64baae34cbc79850e274a01b0160c4c2e741140962534cc5a"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/reassessment-validator.json",
+      "bytes": 571,
+      "sha256": "27eda1167ddef1deae7c2634bf174e7b87e66033bad998b5467e272c19041700"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/reassessment.json",
+      "bytes": 598,
+      "sha256": "50b491796a56600780e258cfd21925a759c92cf2a00917c6cc545e1ab0d9509d"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/trajectory-open-goal-visitor-label-pilot-full.json.gz",
+      "bytes": 1298050,
+      "sha256": "dc0a0f9c5c488f2beec6245f53963463b6eafed4aa57fd081cc61bd6d2ec472f"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/trajectory.native.jsonl",
+      "bytes": 4194973,
+      "sha256": "6af0d9f251039fb8c6b921f0344c6bd2d68811abcad23efe9e11a16d61b76b65",
+      "lines": 1
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/trajectory.native.jsonl.zst",
+      "bytes": 84763,
+      "sha256": "557121ab89e8bf3451de2af22f628574f01ff9061b501989c03bb3270374723b"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/turns.exchange-validated.native.jsonl",
+      "bytes": 3470121,
+      "sha256": "f2a8fd084d3d6e1509d126947c66a4b3288d2ec95b74c98a8a176b1864f3c269",
+      "lines": 26
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/turns.native.jsonl",
+      "bytes": 3470121,
+      "sha256": "f2a8fd084d3d6e1509d126947c66a4b3288d2ec95b74c98a8a176b1864f3c269",
+      "lines": 26
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/verification.json",
+      "bytes": 16521,
+      "sha256": "3bb2bb166ffaacf99b45952c5c4072cbba97fce5eb237e58229e63f4d7d0aafc"
+    },
+    {
+      "path": "capture/0036-open-goal-visitor-label-pilot/workspace.json",
+      "bytes": 15754,
+      "sha256": "4e2f8a9a769d49cf9a2efc183590669606564e3561e7dfa19071997cb9fc127f"
+    },
+    {
+      "path": "graph-metrics.json",
+      "bytes": 22758,
+      "sha256": "2d753a014f40206c71fd5917b2a3c99f55dbe42068bec745e0946693084b0d55"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 764,
+      "sha256": "649d2f53f06ee5a47f3a227b21b3e88a28dcf2974d507a4ca9a64e330b0e6ba1"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 303648,
+      "sha256": "3ea7fb5d4a356311bf94c75f3a07ab6408927677149f053c4c992cdef6dfbc77"
+    }
+  ],
+  "bytes": 99654982
+}
