@@ -819,7 +819,6 @@ export class NativeRuntime {
         !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
       throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');
     // `offered` is emitted by NativeToolAgent only when it actually builds the opening shown to the model.
-    this.frame = options.frame;
     this.hooks = options.hooks;
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
     // has already wrapped (the kernel records with its own call IDs) are used as given.
@@ -831,6 +830,10 @@ export class NativeRuntime {
       else graphNode(this.trace,'effect',{call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event},[{node:invocationNodeId(this.options.runId),port:'caller'}]);
       return persisted;
     });
+    // Authored TS imports resolve through the active frame. Bind those imports
+    // to this invocation's same journaled ports, including the durability ACK.
+    // Using frame.task.services here silently bypasses recording for crisp IO.
+    this.frame = options.frame ? { ...options.frame, services: this.services } : undefined;
     this.declarations = options.declarations ?? {};
     this.neuralese = options.neuralese;
     this.serviceScopes = options.serviceScopes ?? {};
