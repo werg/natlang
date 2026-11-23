@@ -1,0 +1,13 @@
+[Unit]
+Description=natlang third storage tier: cold natlang HDD archives to Google Drive (natlang/hdd), verified, with stubs
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+Nice=19
+IOSchedulingClass=idle
+# A pass still in flight skips this start; each pass is bounded (timeout) and moves at most --budget-gb at the
+# --rate-mb cap (3 MiB/s: about 9 GB per 50 min), pausing while an rsync/scp to a Colab host shares the uplink.
+ExecCondition=/bin/sh -c '! systemctl --user -q is-active natlang-drive-tier-run.service'
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-drive-tier-run --budget-gb 1 --priority low --class service --resumable --wait 1500 -- /usr/bin/timeout -k 60 3300 /usr/bin/python3 -I /home/werg/natlang/scripts/drive_tier.py archive --apply --budget-gb 9 --max-minutes 50 --rate-mb 3
+TimeoutStartSec=1h
