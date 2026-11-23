@@ -1118,10 +1118,21 @@ def teacher_guidance_leak(collector, info, row):
     return guidance_leak(row, answers=answers, decode=decode)
 
 
+def think_close_id(collector):
+    """The ``</think>`` token id (the run's tokenizer, ``--base``), cached on the collector; None without a tokenizer."""
+    if not hasattr(collector, 'think_close'):
+        collector.think_close = None
+        base = getattr(getattr(collector, 'args', None), 'base', None)
+        if base and (Path(base) / 'tokenizer.json').is_file():
+            from tokenizers import Tokenizer
+            collector.think_close = Tokenizer.from_file(str(Path(base) / 'tokenizer.json')).token_to_id('</think>')
+    return collector.think_close
+
+
 def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.common.jsonio import read_jsonl
-    from lower_rollout_turns import decision_turns, episode_turns
+    from lower_rollout_turns import decision_reasoning_turns, decision_turns, episode_turns
     from natlang_neuralese.rl.jolt import student_form
     from natlang_neuralese.rl.rollout_math import budget_stopped_rollout, truncated_rollout
     info = collector.groups[group]
@@ -1139,8 +1150,11 @@ def load_group(collector, group, stats):
                 continue
             row = student_form(row, stats)
         reward = row.get('reward')
-        rows = (trainable_rows(episode_turns(row, stats, collector.states), stats, collector.args.top_p)
-                if row.get('turns') else [])
+        calls = episode_turns(row, stats, collector.states) if row.get('turns') else []
+        if row.get('turns') and getattr(collector.args, 'decision_reasoning', True):
+            # a reasoned decision's action reasoning: the sampled tokens its choice was made after, an ordinary call
+            calls += decision_reasoning_turns(row, stats, collector.states, think_close_id(collector))
+        rows = trainable_rows(calls, stats, collector.args.top_p)
         decisions = decision_turns(row, stats, collector.states) if row.get('turns') else []
         sampled = sum(len(r['sample']) for r in rows)
         collector.generated += sampled
@@ -4249,6 +4263,7 @@ def train(args):
         from tokenizers import Tokenizer
         _tokenizer = Tokenizer.from_file(str(Path(args.base) / 'tokenizer.json'))
         think_close = _tokenizer.token_to_id('</think>')
+        collector.think_close = think_close   # where a reasoned decision's action reasoning ends (load_group)
         second_close_stops = {i for i in (_tokenizer.token_to_id(t) for t in exp0_sft.SECOND_CLOSE_STOPS) if i is not None}
     except Exception as error:
         log_line(log, {'event': 'no </think> id: grad_mass_share is not logged', 'error': repr(error)[:200]})
@@ -5851,6 +5866,10 @@ def build_parser():
                         'tokens per trained call (a decision is one model call whose reply is one categorical action, so it '
                         'weighs like an average call of its episode; 1 if the episode trains no token call); token: 1 (until '
                         '2026-11-13: one decision in ~10k tokens)')
+    t.add_argument('--no-decision-reasoning', dest='decision_reasoning', action='store_false',
+                   help="don't train a reasoned decision's action reasoning (lower_rollout_turns.decision_reasoning_turns: "
+                        'the sampled reasoning the episode\'s choice was made after, through its </think>, as an ordinary '
+                        'sampled call at the episode\'s advantage; default since 2026-11-23); the choice still trains')
     t.add_argument('--decision-unit-cap', type=float, default=8.,
                    help='with --decision-weight call, a decision counts at most this many token units (decision_unit); 0: uncapped')
     t.add_argument('--call-fraction', type=float, default=1.,

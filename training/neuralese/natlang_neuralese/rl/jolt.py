@@ -703,8 +703,12 @@ def student_form(rollout, stats=None):
     Returns a new row; the input is not changed."""
     import copy
     row = copy.deepcopy(rollout)
+    # a reasoned decision's action reasoning (``decision_reasoning.reasoning_sampling``) is a sampled call of its own
+    captures = []
     for turn in row.get('turns') or ():
-        sampling = turn.get('sampling')
+        reasoned = turn.get('decision_reasoning')
+        captures += [turn.get('sampling'), reasoned.get('reasoning_sampling') if isinstance(reasoned, dict) else None]
+    for sampling in captures:
         if not isinstance(sampling, dict):
             continue
         prompt = sampling.get('prompt') or []
