@@ -16,7 +16,7 @@ export const ITERATE_ON_SIGNATURE = '<T, A extends unknown[]>(step: (state: T, .
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   'call', 'apply', 'bind', 'name', 'length', 'prototype', 'constructor', '__proto__', 'caller', 'arguments',
   'toString', 'toLocaleString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable',
-  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with', 'on', 'partial',
+  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with', 'on',
 ]);
 
 /** The camelCase identifier a file or function name with separators stands for: `read-limits` is `readLimits`. */
@@ -152,9 +152,6 @@ interface NatlangContext {
   contains(other: NatlangContext): boolean;
 }
 
-/** The parameters of a function after its first ones are bound to \`B\`. */
-type NatlangDropBound<A extends unknown[], B extends unknown[]> = B extends [unknown, ...infer BR] ?
-  (A extends [any?, ...infer AR] ? NatlangDropBound<AR, BR> : []) : A;
 /** Methods every compiled natlang callable provides. */
 interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
@@ -162,8 +159,6 @@ interface NatlangCallableMethods<A extends unknown[], R> {
   on(options: { model: string }): NatlangFunction<A, R>;
   /** The same function bound to another context, structurally checked against its context interface; a new function. */
   in(context: NatlangContext): NatlangFunction<A, R>;
-  /** The same function with its first parameters bound to these values (as \`bind\` binds them, checked now); a new function of the rest. */
-  partial<B extends Partial<A>>(...bound: B): NatlangFunction<NatlangDropBound<A, B>, R>;
 }
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
@@ -176,7 +171,6 @@ type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFuncti
   with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
   on(options: { model: string }): InlineNatlangFunction<A, R>;
   in(context: NatlangContext): InlineNatlangFunction<A, R>;
-  partial<B extends Partial<A>>(...bound: B): InlineNatlangFunction<NatlangDropBound<A, B>, R>;
 };
 
 /** An nl function without a type argument; the compiler infers its signature from its uses. */
@@ -184,7 +178,6 @@ type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
   on(options: { model: string }): NatlangUntypedFunction;
   in(context: NatlangContext): NatlangUntypedFunction;
-  partial(...bound: any[]): NatlangUntypedFunction;
 };
 type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? InlineNatlangFunction<A, Awaited<R>> : InlineNatlangFunction<any[], F>;
@@ -331,53 +324,6 @@ export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type)
   '/** The runtime package\'s context value (\`NatlangContext\` in eval scope). */\nexport type Context = NatlangContext;\n' +
   'export declare const Context: { empty(): NatlangContext };\n' +
   FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ') + PLUGGABLE_MODULE_DTS;
-
-/**
- * `@natlang/node/std` and `@natlang/browser/std` in virtual programs and callable-folder modules: the declarations of
- * src/std/index.ts over the intrinsic types (test/std-converge.test.mjs holds the two to the same names).
- */
-export const STD_MODULE_DTS = `
-type Maybe<T> = T | Promise<T>;
-export type Problems = readonly string[];
-export type Intent = string;
-export type Edit<T = unknown> = { after: T; intent: Intent };
-export type RepairAttempt<T> = { value: T; problems: string[] };
-export type Repair<T> = { ok: boolean; value: T; problems: string[]; attempts: number; history: RepairAttempt<T>[] };
-export type RepairOptions<T> = { check: (value: T) => Maybe<Problems>; fix: (value: T, problems: string[]) => Maybe<T>; attempts: number; identity?: (value: T) => string };
-export declare function semanticRepair<T>(value: T, options: RepairOptions<T>): Promise<Repair<T>>;
-export type Revision<T> = { previous: T; current: T };
-export type FixedPoint<T> = { value: T; steps: number; settled: boolean };
-export type FixedPointOptions<T> = { judge?: NatlangFunction<[revision: Revision<T>], boolean>; settled?: (previous: T, current: T) => Maybe<boolean>; maxSteps?: number };
-export declare function fixedPoint<T>(step: (value: T) => Maybe<T>, initial: T, options?: FixedPointOptions<T>): Promise<FixedPoint<T>>;
-export type MergeConflict = { path: string[]; base: unknown; ours: unknown; theirs: unknown };
-export type Merged = MergeConflict & { value: unknown; intents: { ours: Intent; theirs: Intent }; compatibility: number };
-export type Unresolved = MergeConflict & { reason: 'incompatible' | 'unsure' | 'check'; intents: { ours: Intent; theirs: Intent }; compatibility: number; problems?: string[] };
-export type Merge<T> = { value: T; merged: Merged[]; unresolved: Unresolved[] };
-export type MergeOptions = { floor?: number; check?: (value: unknown, path: string[]) => Maybe<Problems>; keep?: 'base' | 'ours' | 'theirs';
-  intentOf?: (before: unknown, after: unknown) => Promise<Intent>; compatible?: (base: unknown, ours: Edit, theirs: Edit) => Promise<boolean>;
-  combine?: (base: unknown, ours: Edit, theirs: Edit) => Promise<unknown> };
-export declare function semanticMerge<T>(base: T, ours: T, theirs: T, options?: MergeOptions): Promise<Merge<T>>;
-export type Workspace = { propose(reducer: any, ...args: any[]): Promise<FolderProposal<any>>; accept(proposal: FolderProposal<any>): Promise<unknown> };
-export type Reducer = unknown;
-export type ProposeOptions<R> = { verify: (proposal: FolderProposal<R>) => Maybe<Problems>; attempts: number; args?: unknown[] };
-export type Proposed<R> = { accepted: boolean; proposal: FolderProposal<R>; value: R; problems: string[]; attempts: number; history: string[][] };
-export declare function proposeAndVerify<R = unknown>(folder: Workspace, reducer: Reducer, options: ProposeOptions<R>): Promise<Proposed<R>>;
-export type Branch = Reducer | { reducer: Reducer; args?: unknown[] };
-export type Candidate<R> = { index: number; proposal: FolderProposal<R>; value: R; problems: string[] };
-export type SelectOptions<R> = { verify?: (proposal: FolderProposal<R>) => Maybe<Problems>; goal?: string; select?: (candidates: Candidate<R>[]) => Maybe<number>;
-  beats?: (goal: string, first: unknown, second: unknown) => Promise<boolean> };
-export type Selected<R> = { chosen: number | null; proposal?: FolderProposal<R>; value?: R; candidates: Candidate<R>[] };
-export declare function branchAndSelect<R = unknown>(folder: Workspace, branches: Branch[], options?: SelectOptions<R>): Promise<Selected<R>>;
-export declare const intentOf: NatlangFunction<[before: unknown, after: unknown], Intent>;
-export declare const compatible: NatlangFunction<[base: unknown, ours: Edit, theirs: Edit], boolean>;
-export declare const combine: NatlangFunction<[base: unknown, ours: Edit, theirs: Edit], unknown>;
-export declare const settled: NatlangFunction<[revision: { previous: unknown; current: unknown }], boolean>;
-export declare const beats: NatlangFunction<[goal: string, first: unknown, second: unknown], boolean>;
-`;
-/** Module form of the standard library, resolved for `@natlang/<runtime>/std` imports in virtual programs. */
-export const STD_MODULE_FILE = '/__natlang__/std.d.ts';
-/** The specifiers the standard library is imported by. */
-export const STD_SPECIFIERS = ['@natlang/node/std', '@natlang/browser/std', '@natlang/core/std'] as const;
 
 export const INTRINSICS_FILE = '/__natlang__/intrinsics.d.ts';
 /** Module form, resolved for `@natlang/*` imports in virtual programs. */
