@@ -48,7 +48,7 @@ import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
-import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionSamples, decisionScorer, declineScorer, domainMatch, domainValues,
+import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionReasoningTemperature, decisionSamples, decisionScorer, declineScorer, domainMatch, domainValues,
   pathValue, scoredJointly, softmax, stepCandidates, type DecisionDomain, type DecisionPath } from './decision.js';
 import { decisionFieldsPrompt } from '../decision-frame.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
@@ -1670,11 +1670,12 @@ export class NativeToolAgent {
     const cacheMessages = firstValues >= 0 ? firstValues : encoded.messages.length - 1;
     // A reasoned readout (`readout: decision`, the default) first samples the model's own reasoning on the readout's
     // messages, `samples` times, and scores the options after each; `readout: instant` scores them right away.
+    const reasoningTemperature = decisionReasoningTemperature(this.options.temperature);
     const samples = lam.readout === 'instant' || reasoningRefused.has(this.driver) ? 0 :
-      decisionSamples(this.options.decisionSamples, this.options.temperature);
+      decisionSamples(this.options.decisionSamples, reasoningTemperature);
     let reasonings: DecisionReasoning[] = [];
     if (samples > 0) {
-      const sampled = await this.decisionReasonings(session, encoded.messages, samples, capturedGuidance, guidancePolicy);
+      const sampled = await this.decisionReasonings(session, encoded.messages, samples, reasoningTemperature, capturedGuidance, guidancePolicy);
       if (typeof sampled === 'string') return sampled;
       reasonings = sampled;
     }
@@ -1745,6 +1746,7 @@ export class NativeToolAgent {
       session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
         log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
         ...(fields ? { fields } : {}), ...('reasoned' in result ? { reasoned: result.reasoned, ...reasoningTrace() } : {}),
+        ...(scores.reply_frame ? { reply_frame: scores.reply_frame, reply_masses: scores.reply_masses } : {}),
         ...(scores.prompt_tokens !== undefined ? { prompt_tokens: scores.prompt_tokens } : {}),
         duration_ms: Math.round(performance.now() - started),
         ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
@@ -1813,7 +1815,7 @@ export class NativeToolAgent {
    * as the model replies to them, each its own seed; the reasoning of each reply is kept (its answer after the reasoning
    * is not: the options are scored after the reasoning instead). A string is a failure, as from run.
    */
-  private async decisionReasonings(session: NativeSession, messages: unknown[], samples: number,
+  private async decisionReasonings(session: NativeSession, messages: unknown[], samples: number, temperature: number | undefined,
     privilegedContext?: ModelTurnRequest['privileged_context'], guidancePolicy?: ModelTurnRequest['guidance_policy']): Promise<string | DecisionReasoning[]> {
     const callId = session.runtime.currentCallId ?? null;
     const budgetStop = (): string => {
@@ -1832,7 +1834,7 @@ export class NativeToolAgent {
         ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
         ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
         ...(privilegedContext ? { privileged_context: privilegedContext } : {}), ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
-        ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
+        ...(temperature === undefined ? {} : { temperature }),
         seed: session.runtime.seedPolicy.mode === 'backend' ? null :
           deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'decision-reasoning', index) };
       const reservation = await this.options.modelBudget?.reserve(request.max_tokens ?? null, session.runtime.signal);
