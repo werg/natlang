@@ -17,6 +17,8 @@ An item leaves the register when its fix lands on main. A finding reported by an
 | Python reference engine: unbounded batching runs the GPU out of memory, and an unresponsive health check under load lets `natlang serve` kill it | engine/bench agent (2026-11-23 15:00) |
 | Memetic layout fix (c64d250b2) on a real actor | queued unit `memverify-dgx3`, then the round 1 health report |
 | held-v4 sft-v6 reference measurement | Pop unit `popheld-hv4-sft-v6`; the coordinator appends the result to DECISIONS |
+| GRPO trains the action reasoning sample of reasoned decisions (the async driver can switch to GRPO after two neutral rounds) | GRPO-reasoning agent (2026-11-23 15:20) |
+| Remove the legacy `expert_iteration.py cycle` mode once aei1's round 1 has a held verdict (AGENTS.md: async-drive replaces cycle) | coordinator, after the r0001 verdict |
 | aei1 round 1 build, SFT and held verdict | aei1 driver; the coordinator reads its health report |
 
 ## Language and runtime gaps
@@ -49,5 +51,4 @@ These are owned by the language-gaps agent after the gaps above:
 
 ## Deferred on purpose
 
-- **GRPO training of reasoning tokens for reasoned decisions:** waits for the GRPO polish phase.
 - **A preempted cycle collection gets a fresh `--hours` window:** affects only the legacy cycle path, not async rounds.
