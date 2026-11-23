@@ -161,7 +161,7 @@ Brief E covered only the Neuralese-free capabilities. Open:
 - **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**
   1. Move the driver to a pin at or after 78fb05054: read-back fix, decision-budget fix, memetic leak fix, Colab-via-Drive.
   2. Re-enable Neuralese variants once the L4 actor runs the read-back fix (rollout agent, 2026-11-23 21:45).
-  3. Take the marker-row and produce-span changes once they land (Neuralese learner agent).
+  3. Take the Neuralese marker rows and produce spans: these landed on main (head dda393bc7). Learner and collection must move together, because learners score the consume-marker bans that collection records: 0462075ea plus cd6d9c3dc for the learner, d6b3218e7 plus cd6d9c3dc for the SGLang fronts. The Colab VM actor needs the same commit.
   4. Admit the new task batch from briefs A-D (authoring agent): done, `natlang-rl-task-supply-20261123hfb` is in grpo-pool (242 rows; briefs A–E).
   5. The typed-contract pool replaces prose `Output contract:` tasks (typed-contract agent).
   6. Rerun bench arm D and the GRPO gradient bench.
