@@ -5,6 +5,17 @@ import { dirname, resolve, posix } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { graphCustodyMatches } from '../dist/calls/graph-custody.js';
 
+export function verifyApplicationReturn(binding, records, roots) {
+  if (!binding || !Array.isArray(roots) || roots.length !== 1 || binding.root_call_id !== roots[0] || typeof binding.valueJson !== 'string')
+    throw new Error('application return does not identify its actual authored root');
+  const value = JSON.parse(binding.valueJson), output = records.get(binding.root_call_id)?.output;
+  if (output?.complete !== true || output.bytes !== Buffer.byteLength(binding.valueJson) || output.hash !== digest(binding.valueJson))
+    throw new Error('application return differs from original root output');
+  if (!Object.hasOwn(binding,'selectedResult') || !(isDeepStrictEqual(value,binding.selectedResult) ||
+      value?.results?.length === 1 && Object.hasOwn(value.results[0],'report') && isDeepStrictEqual(value.results[0].report,binding.selectedResult)))
+    throw new Error('selected domain return differs from actual application result');
+}
+
 export async function validateReassessmentCheckRoles(proof, originalChecks, root) {
   const checks = proof.checks;
   if (!checks || Array.isArray(checks) || !Object.keys(checks).length || Object.values(checks).some(value=>value!==true) ||
@@ -259,12 +270,15 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const evidenceKinds = new Set();
   let incorrectOptionalReturn = false;
   const returnSelectors=[];
+  const applicationReturns=[];
   const matchedReturnSelectors=new Set();
   for (const evidence of receipt.evidence ?? []) {
     const evidenceBytes = await readBound(evidence, root);
     evidenceKinds.add(evidence.kind);
     if (evidence.kind === 'workspace') {
-      const proof=JSON.parse(evidenceBytes).proof??{};
+      const payload=JSON.parse(evidenceBytes);
+      if(Object.hasOwn(payload,"applicationReturn"))applicationReturns.push(payload.applicationReturn);
+      const proof=payload.proof??{};
       returnSelectors.push(...declaredReturnSelectors(proof));
       const returned = proof.outcomeDimensions?.returnedValue;
       incorrectOptionalReturn ||= returned?.required === false && returned.passed === false;
@@ -362,6 +376,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
   if ((selected && [...selected.keys()].some(id => !capturedRecords.has(id))) ||
       row.outcome.excluded_return_decisions !== undefined && !equal(row.outcome.excluded_return_decisions, returnExclusions))
     throw new Error('observed decision admission differs from independent training scope or return evidence');
+  for(const binding of applicationReturns)verifyApplicationReturn(binding,capturedRecords,receipt.root_call_ids);
   verifyObservedCallTree(records, receipt.root_call_ids[0]);
   for (const decision of row.trajectory) {
     const chain = [];

@@ -5,7 +5,8 @@ import { probeBrowserGpu, type BrowserGpuCapability } from './gpu.js';
 import { perRequestLora } from '../model/lora-scales.js';
 import { nativeStateMessages } from '../model/openai-compatible.js';
 import { coalescingScorer } from '../model/scoring.js';
-import { batchScoreItem, scoresFromBatchResult, type BatchScoreResult } from '../model/decision-scoring.js';
+import { batchScoreItem, scoreAll, scoresFromBatchResult, type BatchScoreResult } from '../model/decision-scoring.js';
+import { autoFramedScores, decisionReplySetting, type DecisionReplySetting } from '../decision-frame.js';
 import { archiveNeuraleseReplyArtifacts, requestNativeStateIds, restoreNativeStates,
   type NativeStateEngineStore } from '../model/neuralese-server.js';
 import { decodeNativeState, encodeNativeStateWire, type NativeArtifactSource, type NativeStateArtifact,
@@ -87,6 +88,9 @@ export type BrowserModelLoadOptions = {
    * serves the stock model with `--swa-full`): without it a hybrid model reuses a cached prompt only from an early
    * checkpoint, so neither a warm opening nor an earlier call's prefix is continued. */
   fullSlidingWindowCache?: boolean;
+  /** The reply form decision readouts are scored in (decision-frame.ts; model/config.ts `decisionReply`): default
+   * `auto`, the form the loaded model puts more probability on, so a stock or older model is read where it answers. */
+  decisionReply?: DecisionReplySetting;
   onProgress?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal;
 };
@@ -189,6 +193,8 @@ export class BrowserLocalModel {
   private readonly nativeStates = new Set<string>();
   /** The page's native-state archive of this load (`BrowserModelLoadOptions.nativeStateStore`). */
   private nativeStateStore: NeuraleseStore | undefined;
+  /** The reply form of this load's decision readouts (`BrowserModelLoadOptions.decisionReply`). */
+  private decisionReply: DecisionReplySetting = 'auto';
   lastLoadMs: number | null = null;
   lastTurn: { durationMs: number; promptTokens: number | null; cachedTokens: number | null;
     completionTokens: number | null; toolSchemaBytes: number; retries: number; tokensPerSecond: number | null } | null = null;
@@ -251,6 +257,7 @@ export class BrowserLocalModel {
     if (options.nativeStateStore && !(this.engine.capabilities?.nativeStateStore && this.engine.putNativeState && this.engine.getNativeState))
       throw new Error('weights-unavailable: this wllama build cannot store native states after load; use the vendored build (ts-host/vendor/wllama)');
     this.nativeStateStore = options.nativeStateStore;
+    this.decisionReply = options.decisionReply ?? 'auto';
     await action(params);
     for (const adapter of options.loraAdapters ?? []) this.loraIndex.set(adapter.id, this.loraIndex.size);
     for (const state of options.nativeStates ?? []) this.nativeStates.add(state.id);
@@ -380,8 +387,13 @@ export class BrowserLocalModel {
       if (result!.status === 'rejected') throw result!.reason;
       return result!.value;
     }, { scoreMany: many }));
-    return Object.assign((item: DecisionRequest, signal?: AbortSignal) => coalesced(tag(item), signal),
+    const scorer: DecisionScorer = Object.assign((item: DecisionRequest, signal?: AbortSignal) => coalesced(tag(item), signal),
       { scoreMany: (items: DecisionRequest[], signal?: AbortSignal) => many(items.map(tag), signal) });
+    // Each readout in the reply form of this load (decision-frame.ts `autoFramedScores`), as the managed session does.
+    const framed = (item: DecisionRequest, signal?: AbortSignal) =>
+      autoFramedScores(item, decisionReplySetting(this.decisionReply), items => scoreAll(scorer, items, signal));
+    return Object.assign(framed, { scoreMany: (items: DecisionRequest[], signal?: AbortSignal) =>
+      Promise.allSettled(items.map(item => framed(item, signal))) });
   })();
 
   readonly turn = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {

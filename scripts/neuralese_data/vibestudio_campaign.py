@@ -209,9 +209,11 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
     if args.defer_export:
         return
     repo = args.archive_repo
-    remote_command = ['env', f'PYTHONPATH={repo}/scripts/neuralese_data:{repo}/training/neuralese:{repo}',
+    remote_command = ['env', f'NATLANG_REPO={repo}',
+                      f'PYTHONPATH={repo}/scripts/neuralese_data:{repo}/training/neuralese:{repo}',
                       'OMP_NUM_THREADS=1', 'MKL_NUM_THREADS=1', str(repo / '.venv-neuralese/bin/python'),
-                      str(args.archive / 'vibestudio_campaign.py'), str(args.archive), '--held', str(args.archive_held),
+                      str(repo / 'scripts/neuralese_data/vibestudio_campaign.py'),
+                      str(args.archive), '--held', str(args.archive_held),
                       'export-wave', '--archive', str(destination), '--receipt', str(destination / 'receipt.json')]
     unit_prefix = f'{root.name}-{destination.name}-export'.replace('_', '-').lower()
     unit = f'{unit_prefix}-{time.time_ns()}'

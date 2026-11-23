@@ -49,6 +49,26 @@ test('readout: decision reasons first, scores the options after each reasoning a
   assert.deepEqual(event.log_probs.map(Math.exp).map(p => +p.toFixed(6)), [0.375, 0.625]);
 });
 
+test('reasoning samples are drawn at the call\'s temperature, else at T=1 (a backend default may be greedy: B14 drew one reasoning four times)', async () => {
+  const fn = loadVirtualNatlang({ 'invite.nl': source('decision') }, 'invite.nl');
+  let probe = reasoningDriver(() => [0.4, 0.6]);
+  await createNatlangRuntime({ model: { driver: probe.driver }, seed: { mode: 'backend' } }).run(() => decide(fn, 'x'));
+  assert.deepEqual(probe.turns.map(request => request.temperature), [1, 1, 1, 1]);
+  probe = reasoningDriver(() => [0.4, 0.6]);
+  await createNatlangRuntime({ model: { driver: probe.driver, temperature: 0.7 }, seed: { mode: 'backend' } }).run(() => decide(fn, 'x'));
+  assert.deepEqual(probe.turns.map(request => request.temperature), [0.7, 0.7, 0.7, 0.7]);
+  process.env.NATLANG_DECISION_REASONING_TEMPERATURE = 'backend';
+  try {
+    probe = reasoningDriver(() => [0.4, 0.6]);
+    await createNatlangRuntime({ model: { driver: probe.driver }, seed: { mode: 'backend' } }).run(() => decide(fn, 'x'));
+    assert.ok(probe.turns.every(request => !('temperature' in request)), 'backend: the server\'s default, as before');
+    process.env.NATLANG_DECISION_REASONING_TEMPERATURE = '0';
+    probe = reasoningDriver(() => [0.4, 0.6]);
+    await createNatlangRuntime({ model: { driver: probe.driver }, seed: { mode: 'backend' } }).run(() => decide(fn, 'x'));
+    assert.equal(probe.turns.length, 1, 'greedy reasoning is drawn once');
+  } finally { delete process.env.NATLANG_DECISION_REASONING_TEMPERATURE; }
+});
+
 test('readout: instant, decisionSamples 0 and temperature 0 bound the reasoning', async () => {
   const fn = loadVirtualNatlang({ 'invite.nl': source('instant') }, 'invite.nl');
   let probe = reasoningDriver(() => [0.4, 0.6]);

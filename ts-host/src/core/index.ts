@@ -20,8 +20,8 @@ export type { EvalEnvironment, EvalRequest, EvalResult, HostEvent, EnvironmentMo
 // Compiling and loading natlang programs from memory.
 export { compileProject, formatDiagnostics, NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/project.js';
 export type { BuildOptions, BuildResult, ProjectFiles, DefinitionManifest } from '../compiler/project.js';
-export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVirtualNatlang, loadVirtualCallables } from '../runtime/virtual-project.js';
-export type { VirtualProject, VirtualProjectOptions, CompiledProject } from '../runtime/virtual-project.js';
+export { compileVirtualProjectProduct, instantiateVirtualProjectProduct, compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVirtualNatlang, loadVirtualCallables } from '../runtime/virtual-project.js';
+export type { VirtualProject, VirtualProjectOptions, VirtualProjectProduct, VirtualProjectProductOptions, CompiledProject } from '../runtime/virtual-project.js';
 export { loadNamedFunction, loadCallableFolder, NatlangSourceError } from '../runtime/loader.js';
 export type { ItemRecord, NatlangRecord, ModuleRecord, NamespaceRecord, SourceFiles } from '../runtime/loader.js';
 
