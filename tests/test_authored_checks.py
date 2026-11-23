@@ -127,3 +127,26 @@ def test_blind_solve_judges_verifier_tasks_by_their_verifier(repo):
     assert agree['agree'] == 1 and not agree['disagreements']
     differ = blind_solve.compare([row], {row['id']: {'answer': {'ready': ['p1'], 'waiting': ['p2', 'p3']}}})
     assert [d['id'] for d in differ['disagreements']] == [row['id']]
+
+
+def exact_task(**changes):
+    return task(oracle='exact', verifier=None, keyword_baseline=None, **changes)
+
+
+def test_semantic_fp_construct_tags_need_the_construct_and_set_their_technique_flags():
+    """held-v4 (plans/semantic-fp/09 B1): a semantic-FP tag is claimed only when the program or its scripts use the
+    construct, and it sets the curriculum flag a correct trajectory must show."""
+    errors, _ = authored_checks.lint_task(exact_task(constructs=['decision_readout', 'inline_nl', 'untrusted_contract']))
+    assert any(e.startswith('inline_nl:') for e in errors) and any(e.startswith('untrusted_contract:') for e in errors)
+    smoke = {'code': 'const r = await Promise.all(notes.map(n => nl<boolean>`Is n ready?`(n)));\nreturn r;', 'children': {}}
+    files = {'sort_parcels.nl': ROOT.replace('"{ id: string; text: string }[]"', '"Untrusted<{ id: string; text: string }>[]"'),
+             'sort_parcels/read_state.nl': HELPER}
+    good = exact_task(constructs=['decision_readout', 'inline_nl', 'untrusted_contract'], smoke=smoke, files=files)
+    errors, _ = authored_checks.lint_task(good)
+    assert not [e for e in errors if e.split(':')[0] in authored.CONSTRUCTS]
+    row = authored.convert({k: v for k, v in good.items() if v is not None})
+    assert row['curriculum']['inline'] == 'required' and row['curriculum']['named'] == 'required'
+    row = authored.convert({k: v for k, v in good.items() if v is not None} | {'requires': {'iterate': 'required'}})
+    assert row['curriculum']['iterate'] == 'required'
+    with pytest.raises(ValueError, match='requires maps'):
+        authored.convert({k: v for k, v in good.items() if v is not None} | {'requires': {'inline': 'always'}})

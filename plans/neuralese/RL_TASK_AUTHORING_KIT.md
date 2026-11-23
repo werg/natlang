@@ -115,6 +115,15 @@ fields or `null`, never `undefined`.
 | `multi_operation_codebase` | the task's root is one of several operations of the same reusable program: tasks of one `world` run different root functions over the same helper files. A world whose tagged tasks run one root fails qualification. |
 | `effect_state` | `expected` is the complete resulting state, checked field by field |
 
+Semantic-FP tags (2026-11-23, plans/semantic-fp/05 §3; `authored_checks.py` `SEMANTIC_FP_CHECKS` checks each one):
+`inline_nl` (a smoke or reference script creates inline `nl` lambdas), `nl_with_context` (`nl.with({...})`),
+`library_discovery` (10+ `.nl`/`.ts` helpers in the root folder, none named by the root instruction),
+`nl_convergence` (`iterateOn(...).until(nl...)`), `higher_order` (a callable built, passed or returned),
+`context_lens` (`.in(context)`), `folder_transaction` (`propose` then `accept`/`select`), `untrusted_contract`
+(`Untrusted<T>`), `refinement_contract` (`Is<T, P>` or `ensures:`). A construct the reference solution needs sets its
+curriculum technique flag (`inline: required`, `iterate: required`, `named: required`); the task's optional
+`requires` object (`inline`, `named`, `iterate`, `edits`) sets or overrides flags.
+
 Small `folder_reducer` example (`returns_desk_sorting`, level 1; qualified: reference, 4 negatives rejected, alias
 accepted, smoke; generator `/mnt/external/natlang-rl-authoring/examples/folder/make_folder_example.py`):
 
