@@ -71,6 +71,13 @@ def campaign_scope(catalog, held_file):
     return held, training, cases
 
 
+def capture_integrity_errors(errors):
+    # Older producers placed a faithfully recorded model failure in captureErrors.
+    # Keep that original diagnostic, but do not treat it as lost/corrupted evidence.
+    return [error for error in (errors or [])
+            if error != 'Assigned authored root did not complete successfully']
+
+
 def outcomes(capture, names, held, training, cases):
     results = {}
     for name in names:
@@ -100,7 +107,7 @@ def outcomes(capture, names, held, training, cases):
             results[name] = {'status': 'export-rejected' if test.get('passed') else 'test-failed',
                              'raw': str(raw.relative_to(capture)), 'reason': reason,
                              'teacher_started': bool(teacher.get('rootCallIds') or teacher.get('calls'))
-                             if not teacher.get('captureErrors') else None}
+                             if not capture_integrity_errors(teacher.get('captureErrors')) else None}
         else:
             results[name] = {'status': 'no-capture'}
         if capture_errors:
@@ -117,7 +124,7 @@ def workerd_failure(outcome):
 
 
 def infrastructure_failure(outcome, case):
-    if outcome.get('capture_errors'):
+    if capture_integrity_errors(outcome.get('capture_errors')):
         return True
     if workerd_failure(outcome):
         return True
