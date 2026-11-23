@@ -9364,3 +9364,47 @@ finished samples.
   leaf in each of 15 programs).
 - All 11 Astra/Sol apps.
 - Whether the 3x decision cost is worth the change on the full workflow rather than the gate alone.
+
+**2026-11-23 18:45, Google Drive is the third storage tier and the Colab sessions' shared store (`scripts/drive_tier.py`).**
+The owner added `drive.file` to ADC. The coordinator enabled `drive.googleapis.com` on awareness-481308 as the quota
+project (5,498 GB limit, 346 GB used).
+- **Tool.** `drive_tier.py` is standard library only, so a Colab VM runs it as well.
+  - Everything lives under one Drive folder, `natlang`: `hdd/` (archived HDD files), `blobs/<sha256>` (Colab
+    transfers), `colab/<run>/` (learner state and factors) and `manifest.jsonl`.
+  - Credentials: the ADC refresh token on the DGX (no gcloud on PATH needed in ledger units). A VM gets a token file
+    pushed over ssh stdin (0600, `push-token`). Tokens are never logged. Every request carries `x-goog-user-project`,
+    which Drive demands of ADC tokens, the VM's included.
+  - Integrity: uploads are resumable in 16 MiB chunks; md5 and sha256 are computed while streaming, and Drive's
+    `md5Checksum` and size must match before anything relies on the copy. Downloads are hashed the same way and land
+    only whole.
+- **Throughput (512 MB random file, measured alone):**
+  - DGX: 5.49 MB/s up (the whole uplink) and 11.3 MB/s down.
+  - L4 VM: 28.7 MB/s up and 82.6 MB/s down.
+  - Tunnel today (128 MB rsync over the ControlMaster): 2.63 MB/s up and 4.77 MB/s down.
+- **HDD -> Drive tier** (`natlang-drive-tier.timer`, hourly).
+  - Bounds: skips a start while a pass runs; `timeout 3300`; at most 9 GB and 50 min per pass; a 3 MiB/s cap; pauses
+    while an rsync/scp to a Colab host runs.
+  - Eligible: files of natlang's run archives (`DEFAULT_ROOTS`) of at least 64 MB, untouched (mtime and ctime) for 5
+    days, not behind any NVMe symlink (56k links scanned), not in a data-registry dataset, not open.
+  - Other projects (`bgkit*`, hindsight, megatoken, ComfyUI, Vibestudio) are in `NEVER` until the owner decides.
+  - After the md5 check, the HDD copy is replaced by `<file>.ondrive.json`. The manifest
+    (`~/data/drive-tier/manifest.jsonl`, mirrored to `natlang/manifest.jsonl`) records it, and
+    `drive_tier.py restore PATH` restores a file or a tree.
+  - The dry run found 466 files (81 GB), mostly retired lineages: bf95 actor stores 35 GB, lfm-local-recovery 11 GB,
+    grpo-v2 replay controls 9 GB. The 3 MiB/s cap gives about 9 GB/h, so this backlog is about 9 h.
+  - Tests: `tests/test_drive_tier.py`.
+- **Colab path** (`pop_rl_actor`; `NATLANG_COLAB_DRIVE=0` opts out; a Drive failure falls back to the tunnel):
+  - `ship_file` moves checkpoints (`ensure_remote_checkpoint`), the round's chains and the validation chains as
+    `blobs/<sha256>`: uploaded once at the full uplink, fetched and sha-checked on the VM.
+  - Each 15-minute state pull also has the VM `put-dir` its learner-state snapshot to `colab/<run>/learner-state`.
+  - Finished factors go to `colab/<run>/factors` before the tunnel pull.
+  - A lost VM's last save is `drive_tier.py get-dir colab/<run>/learner-state DEST`.
+  - Test: `tests/test_colab_drive.py`.
+- **Before/after on the live L4.** I measured on a scratch directory, with the tool copied there; the VM's checkout,
+  actor and fill were untouched, and the probes ran at nice 19 / ionice idle.
+  - A 3.46 GB checkpoint (sft-v9) over the tunnel: 968 s historically, about 1,316 s at today's 2.63 MB/s.
+  - Through Drive: 631 s for the DGX upload plus 164 s for the VM download, 795 s in all the first time. Once the
+    blob is on Drive (any later VM or round), only the 164 s download remains: 6-8x.
+  - Learner-state-shaped 1 GB directory: the VM put it on Drive in 46 s and read it back in 19 s (identical). Over
+    the tunnel the DGX's pull would take about 210 s.
+  - The sft-v9 checkpoint stays on Drive as `blobs/e15b20a8...`.
