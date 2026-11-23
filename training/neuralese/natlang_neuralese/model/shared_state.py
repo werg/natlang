@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+import os
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -1054,19 +1055,22 @@ class SharedStateModel(nn.Module):
         return result
 
     def logits(self, h):
+        """Head logits. In inference (serving, scoring, sentinels) they leave the head GEMM in FP32 (``HEAD_LOGITS``):
+        rounded to BF16, a logit near |20| moves in steps of 0.125 and per-token log-probs by up to ~0.06 nats."""
         from .readout_storage import readout_weight
         normalized = self.port.final_norm(h)
         force = getattr(self, 'native_shared_execution', 'source-v1') == 'ffn-stable-v1'
-        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"), force_invariant=force)
+        out = torch.float32 if HEAD_LOGITS_FP32 and normalized.dtype == torch.bfloat16 else None
+        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"), force_invariant=force, output_dtype=out)
         from .native_weight_carrier import widen_direct_parameter
         rows = widen_direct_parameter(self.input_rows if self.tied else self.output_rows)
         logits = logits.clone()
-        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"), force_invariant=force)
+        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"), force_invariant=force, output_dtype=out).to(logits.dtype)
         if self.token_override_ids:
             extra = widen_direct_parameter(self.extra_input_rows if self.tied else self.extra_output_rows)
             baseline = self.port.output_weight[list(self.token_override_ids)].to(normalized.dtype)
             delta = extra.to(normalized.dtype) - baseline
-            logits[..., list(self.token_override_ids)] += _linear_weight(normalized, delta, precision=getattr(self, 'native_linear_precision', 'ieee'), force_invariant=force)
+            logits[..., list(self.token_override_ids)] += _linear_weight(normalized, delta, precision=getattr(self, 'native_linear_precision', 'ieee'), force_invariant=force, output_dtype=out).to(logits.dtype)
         return logits
 
     def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
@@ -1646,7 +1650,12 @@ def restore_channel_checkpoint(model, state):
     return model
 
 
-def _linear_weight(x, weight, *, precision="ieee", force_invariant=False):
+# Head logits leave the head GEMM in FP32 in inference (``logits``); NATLANG_HEAD_LOGITS=bf16 opts out (the learner's
+# head reads the same switch, train/lfm3_fast.HEAD_LOGITS_FP32).
+HEAD_LOGITS_FP32 = os.environ.get('NATLANG_HEAD_LOGITS', 'fp32') != 'bf16'
+
+
+def _linear_weight(x, weight, *, precision="ieee", force_invariant=False, output_dtype=None):
     from ..common.native_higher_order import active_reference_arithmetic,reference_linear
     if active_reference_arithmetic() is not None:
         return reference_linear(x,weight)
@@ -1654,7 +1663,8 @@ def _linear_weight(x, weight, *, precision="ieee", force_invariant=False):
         from ..maple.fused_moe import invariant_linear
         shape = x.shape
         return invariant_linear(x.reshape(-1, shape[-1]), weight, precision=precision,
-                                allow_plain_fastpath=not force_invariant).reshape(*shape[:-1], weight.shape[0])
+                                allow_plain_fastpath=not force_invariant,
+                                output_dtype=output_dtype).reshape(*shape[:-1], weight.shape[0])
     if precision != "ieee" and x.dtype == torch.float32:
         raise ValueError("selected native linear arithmetic requires CUDA")
     return F.linear(x, weight)

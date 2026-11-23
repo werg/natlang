@@ -933,7 +933,7 @@ def _rate_change(a, b, tasks, *, resamples, seed=0):
 # Engine settings whose difference refuses a pairing even across series: the engine kind, the weight and KV precision,
 # and speculative decoding (its sampling law is checked apart). Other attested differences (fork commit, running cap,
 # overlap, export format) are recorded with a warning; ``strict_series`` refuses them as well.
-PAIRING_ENGINE_FIELDS = ('engine', 'dtype', 'kv_cache_dtype', 'speculative')
+PAIRING_ENGINE_FIELDS = ('engine', 'dtype', 'kv_cache_dtype', 'speculative', 'head_logits')
 
 
 # The machine behind an attested actor export format (serve_native_checkpoint --actor-export-format; the DGX serves the
@@ -1130,7 +1130,7 @@ ACTOR_BUDGET_GB = 40   # --sglang-kv-gb + 24 (measured 2026-11-12: SGLang 23 GB 
 # max_running: SGLang's running-sequence cap (decode batch shapes and CUDA graphs; Pop 14 -> 20 slots at the
 # grpo-v4 pin, plans/neuralese/POP_HELD_THROUGHPUT_20261117.md). Results of actors that did not attest it read None.
 ENGINE_FIELDS = ('engine', 'dtype', 'projection', 'kv_cache_dtype', 'overlap_schedule', 'bf16_reduction', 'max_running',
-                 'speculative')
+                 'speculative', 'head_logits')
 
 
 def engine_of(binding):

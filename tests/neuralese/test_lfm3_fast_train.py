@@ -223,6 +223,42 @@ def test_nucleus_nll_matches_brute_force_and_dense_autograd():
                           torch.autograd.grad(_dense_nucleus(h, weight, target, .95)[1].sum(), h)[0], atol=1e-5)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA head GEMM')
+@pytest.mark.parametrize('nucleus', [False, True])
+def test_head_logits_leave_the_gemm_in_fp32(monkeypatch, nucleus):
+    """BF16 head rows score with FP32 logits (decision-parity hunt 2026-11-23): the NLL equals cross-entropy of the FP32
+    product of the BF16 operands, the gradients are its autograd gradients rounded to BF16, and the opt-out
+    (NATLANG_HEAD_LOGITS=bf16) restores the BF16-rounded logits."""
+    torch.manual_seed(0)
+    rows, width, vocab = 37, 64, 3000
+    h = (torch.randn(rows, width, device='cuda') * 2).to(torch.bfloat16).requires_grad_()
+    weight = (torch.randn(vocab, width, device='cuda') * 2).to(torch.bfloat16).requires_grad_()
+    target = torch.randint(0, vocab, (rows,), device='cuda')
+    upstream = torch.randn(rows, device='cuda')
+
+    def run(fp32):
+        monkeypatch.setattr(lfm3_fast_train, 'HEAD_LOGITS_FP32', fp32)
+        h.grad = weight.grad = None
+        nll = (lfm3_fast_train.linear_nll_nucleus(h, weight, target, .9, chunk=8)[0] if nucleus
+               else lfm3_fast_train.linear_nll(h, weight, target, chunk=8))
+        (nll * upstream).sum().backward()
+        return nll.detach(), h.grad.clone(), weight.grad.clone()
+
+    hf, wf = h.detach().float().requires_grad_(), weight.detach().float().requires_grad_()
+    logits = hf @ wf.t()
+    expected = F.cross_entropy(logits, target, reduction='none')
+    (expected * upstream).sum().backward()
+    nll, gh, gw = run(True)
+    torch.testing.assert_close(nll, expected.detach(), atol=2e-4, rtol=0)
+    torch.testing.assert_close(gh.float(), hf.grad, atol=2e-2, rtol=2e-2)
+    torch.testing.assert_close(gw.float(), wf.grad, atol=2e-2, rtol=2e-2)
+    assert gh.dtype == torch.bfloat16 and gw.dtype == torch.bfloat16
+    rounded = F.cross_entropy((h.detach() @ weight.detach().t()).float(), target, reduction='none')
+    old, _, _ = run(False)
+    torch.testing.assert_close(old, rounded, atol=2e-4, rtol=0)
+    assert (old - expected.detach()).abs().max() > 10 * (nll - expected.detach()).abs().max()
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA kernel check')
 def test_nucleus_gradient_kernel_casts_inside_bitwise():
     """The compiled gradient kernel takes the BF16 logits and returns the BF16 gradient: bitwise what the fp32 kernel
@@ -673,14 +709,15 @@ def test_nucleus_nll_on_bf16_logits_matches_the_reference_pass_bitwise():
     weight = (torch.randn(vocab, width, device='cuda') * .4).to(torch.bfloat16)
     target = torch.randint(0, vocab, (rows,), device='cuda')
     plain = lfm3_fast_train.linear_nll(h, weight, target)
-    lf = F.linear(h, weight).float()
+    head = lfm3_fast_train._head_linear(h, weight)   # the head's logits (FP32 out of the GEMM, HEAD_LOGITS_FP32)
+    lf = head.float()
     lse = torch.logsumexp(lf, -1)
     for top_k, wide_k in ((4, 8), (4, 16384), (1024, 16384)):
         lfm3_fast_train.NUCLEUS_WIDE_K, saved = wide_k, lfm3_fast_train.NUCLEUS_WIDE_K
         try:
             nll, nucleus, outside = lfm3_fast_train.linear_nll_nucleus(h, weight, target, .95, chunk=128, top_k=top_k)
             want_cut, want_inside = lfm3_fast_train._nucleus_cut_lse(lf, lse, .95, top_k)
-            cut, inside = lfm3_fast_train._nucleus_cut_lse(F.linear(h, weight), lse, .95, top_k)
+            cut, inside = lfm3_fast_train._nucleus_cut_lse(head, lse, .95, top_k)
         finally:
             lfm3_fast_train.NUCLEUS_WIDE_K = saved
         assert torch.equal(nll, plain)

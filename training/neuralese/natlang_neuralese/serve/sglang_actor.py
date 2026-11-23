@@ -322,7 +322,7 @@ class SglangEngine(Engine):
     def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
                     weight_dtype='bfloat16', max_running=None, warm_openings=None, track_input_end=False,
-                    speculative=None):
+                    speculative=None, head_logits='bf16'):
         self.sglang_url = url.rstrip('/')
         self.__dict__.setdefault('_native_lock', threading.RLock())
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
@@ -388,6 +388,8 @@ class SglangEngine(Engine):
                 'conv_and_head_dtype': export_manifest['dtype'],
                 'bf16_reduction': os.environ.get('NATLANG_BF16_REDUCTION', 'fp32-accumulate'), 'projection': projection,
                 'overlap_schedule': bool(overlap_schedule), 'kv_cache_dtype': kv_cache_dtype, 'kv_layout': kv_layout,
+                # LM-head logits precision (serve_native_checkpoint --sglang-head-logits): part of the sampling law
+                'head_logits': head_logits,
                 # SGLang's running-sequence cap (and its decode CUDA-graph batch sizes): batch composition changes the
                 # kernels' batch shapes, so held results pair only within one cap (held_eval.ENGINE_FIELDS)
                 'max_running': None if max_running is None else int(max_running),

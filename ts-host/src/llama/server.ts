@@ -242,12 +242,17 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
       throw new Error(`weights-unavailable: ${executable} cannot import native state spans (tuned soft states need the llama.cpp fork's --native-state)`);
     // Warm openings are saved and restored under --slot-save-path (llama/warm.ts); not with adapters or states, whose KV differs.
     const warmAllowed = environment.NATLANG_WARM_PREFIXES !== 'off' && !tuned;
+    // The release's chat-template switches (LFM3: preserve_thinking) are the server's defaults, not only fields of its
+    // chat requests: POST /v1/natlang/score renders every item with the server's defaults, and without the switch a
+    // readout's opening assistant turn lost its reasoning there, unlike generation and the Python engines.
+    const kwargs = templateKwargs(release);
     // The llama-server command for a model file, port and slot plan.
     const command = (modelPath: string, port: number, slotPlan: SlotPlan) => {
       const template = templatePath(host, release);
       const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', String(slotPlan.slots),
         '-c', String(slotPlan.totalContext), '-ngl', String(options.local?.gpuLayers ?? 99), '--cache-ram', String(options.local?.cacheRamMiB ?? 256),
         '--no-webui', '--jinja', ...(template ? ['--chat-template-file', template] : []),
+        ...(kwargs ? ['--chat-template-kwargs', JSON.stringify(kwargs)] : []),
         // The stock file's sliding-window layers need the full cache for a warm opening or earlier prompt to be reused.
         ...(release.fullSlidingWindowCache && !environment.NATLANG_MODEL_PATH ? ['--swa-full'] : []), ...(options.local?.args ?? []),
         ...(warmAllowed ? ['--slot-save-path', host.directories.warmPrefixes] : [])];
@@ -275,6 +280,7 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
         try { const stat = statSync(item.path); return [item.id, item.path, stat.size, stat.mtimeMs]; } catch { return [item.id, item.path]; }
       };
       const key = sharedServerKey({ model: sha, runtime: label, template: template ? createHash('sha256').update(readFileSync(template)).digest('hex') : null,
+        templateKwargs: kwargs,
         swaFull: !!release.fullSlidingWindowCache && !environment.NATLANG_MODEL_PATH, gpuLayers: local.gpuLayers ?? null, cacheRamMiB: local.cacheRamMiB ?? null,
         args: local.args ?? [], parallel: local.parallel ?? null, contextTokens: local.contextTokens ?? null, memoryBudgetMiB: local.memoryBudgetMiB ?? null,
         kvBytesPerToken: local.kvBytesPerToken ?? null, budgetEnv: environment.NATLANG_MODEL_MEMORY_BUDGET_MIB ?? null,
@@ -362,4 +368,10 @@ export function createLlamaServer(host: LlamaHost, options: LlamaServerOptions =
       launched = null; endpoint = null;
     },
   };
+}
+
+/** A release's chat-template keyword arguments (its `request.chat_template_kwargs`), or null when it declares none. */
+export function templateKwargs(release: { readonly request?: Readonly<Record<string, unknown>> }): Record<string, unknown> | null {
+  const kwargs = release.request?.chat_template_kwargs;
+  return kwargs && typeof kwargs === 'object' && !Array.isArray(kwargs) && Object.keys(kwargs).length ? { ...kwargs as Record<string, unknown> } : null;
 }

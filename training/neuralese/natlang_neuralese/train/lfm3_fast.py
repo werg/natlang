@@ -1387,12 +1387,13 @@ def _ce_forward(logits, target):
     return lse, lse - lf.gather(-1, target[:, None])[:, 0]
 
 
-def _ce_backward(logits, lse, target, grad):
-    """d nll / d logits (bf16, as the stock path's `.float()` backward rounds it): grad * (softmax - onehot)."""
+def _ce_backward(logits, lse, target, grad, out_dtype=None):
+    """d nll / d logits in ``out_dtype`` (default the logits' dtype; the head's rows' dtype, as the stock path's
+    `.float()` backward rounds it): grad * (softmax - onehot)."""
     lf = logits.float()
     p = torch.exp(lf - lse[:, None])
     onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[:, None]
-    return ((p - onehot.float()) * grad[:, None]).to(logits.dtype)
+    return ((p - onehot.float()) * grad[:, None]).to(out_dtype or logits.dtype)
 
 
 _CE = {}
@@ -1404,11 +1405,30 @@ def _ce(name):
     return _CE[name]
 
 
+# Head logits leave the GEMM in FP32 (BF16 inputs, FP32 accumulate and output; torch.mm out_dtype): a BF16 logit near
+# |20| is rounded to a multiple of 0.125, which moved per-token log-probs by up to ~0.06 nats and the native engine's own
+# full-forward and token-stepped scores of one sequence apart by 0.4 nats per decision (decision-parity hunt 2026-11-23).
+# The serving engines read FP32 head logits too (shared_state.logits, SGLang --enable-fp32-lm-head). The gradient into
+# the head GEMMs is still rounded to the rows' dtype, as before. Opt-out: NATLANG_HEAD_LOGITS=bf16.
+HEAD_LOGITS_FP32 = _os.environ.get('NATLANG_HEAD_LOGITS', 'fp32') != 'bf16'
+
+
+def _head_linear(rows, weight):
+    if HEAD_LOGITS_FP32 and rows.is_cuda and rows.dtype == torch.bfloat16 and weight.dtype == torch.bfloat16:
+        return torch.mm(rows, weight.t(), out_dtype=torch.float32)
+    return F.linear(rows, weight)
+
+
+def _head_chunk(chunk, h):
+    """Rows per head chunk: half of ``chunk`` when the logits are FP32, so a chunk's logits keep their bytes."""
+    return max(1, chunk // 2) if HEAD_LOGITS_FP32 and h.is_cuda and h.dtype == torch.bfloat16 else chunk
+
+
 def _head_logits_chunk(rows, weight, sparse_ids, sparse_rows):
-    logits = F.linear(rows, weight)
+    logits = _head_linear(rows, weight)
     if sparse_ids is not None and sparse_rows is not None and sparse_ids.numel():
         logits = logits.clone()
-        logits[:, sparse_ids] = F.linear(rows, sparse_rows.to(rows.dtype))
+        logits[:, sparse_ids] = _head_linear(rows, sparse_rows.to(rows.dtype)).to(logits.dtype)
     return logits
 
 
@@ -1417,7 +1437,7 @@ class _LinearNLL(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, h, weight, target, chunk, sparse_ids, sparse_rows):
-        rows = h.shape[0]
+        rows, chunk = h.shape[0], _head_chunk(chunk, h)
         nll = torch.empty(rows, dtype=torch.float32, device=h.device)
         lse = torch.empty(rows, dtype=torch.float32, device=h.device)
         forward_ce = _ce('forward') if h.is_cuda else _ce_forward
@@ -1448,7 +1468,7 @@ class _LinearNLL(torch.autograd.Function):
             stop = min(h.shape[0], start + ctx.chunk)
             rows = h[start:stop]
             logits = _head_logits_chunk(rows, weight, s_ids, s_rows)
-            d = backward_ce(logits, lse[start:stop], target[start:stop], grad[start:stop])
+            d = backward_ce(logits, lse[start:stop], target[start:stop], grad[start:stop], rows.dtype)
             if need_h:
                 chunk_dh = d @ weight
                 if w_delta is not None:
@@ -1526,13 +1546,14 @@ def _nucleus_cut(lf, lse, top_p, top_k):
     return _nucleus_cut_lse(lf, lse, top_p, top_k)[0]
 
 
-def _nucleus_logit_grad(logits, target, lse, set_lse, cut, grad, grad_nucleus):
-    """d loss / d logits of one chunk: grad * (softmax - onehot) + grad_nucleus * (softmax over the set - onehot)."""
+def _nucleus_logit_grad(logits, target, lse, set_lse, cut, grad, grad_nucleus, out_dtype=None):
+    """d loss / d logits of one chunk in ``out_dtype`` (default the logits' dtype): grad * (softmax - onehot) +
+    grad_nucleus * (softmax over the set - onehot)."""
     lf = logits.float()
     onehot = torch.arange(lf.shape[-1], device=lf.device)[None, :] == target[:, None]
     kept = (lf >= cut[:, None]) | onehot
     d = torch.exp(lf - lse[:, None]) * grad[:, None] + torch.where(kept, torch.exp(lf - set_lse[:, None]), 0.) * grad_nucleus[:, None]
-    return (d - onehot * (grad + grad_nucleus)[:, None]).to(logits.dtype)
+    return (d - onehot * (grad + grad_nucleus)[:, None]).to(out_dtype or logits.dtype)
 
 
 _NUCLEUS_GRAD = {}
@@ -1552,7 +1573,7 @@ class _LinearNLLNucleus(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, h, weight, target, chunk, top_p, top_k, sparse_ids, sparse_rows):
-        rows = h.shape[0]
+        rows, chunk = h.shape[0], _head_chunk(chunk, h)
         nll, lse, set_lse, cut = (torch.empty(rows, dtype=torch.float32, device=h.device) for _ in range(4))
         outside = torch.empty(rows, dtype=torch.bool, device=h.device)
         forward_ce = _ce('forward') if h.is_cuda else _ce_forward
@@ -1591,7 +1612,7 @@ class _LinearNLLNucleus(torch.autograd.Function):
             logits = _head_logits_chunk(rows, weight, s_ids, s_rows)
             d = _nucleus_grad_kernel(rows.device.type)(logits, target[start:stop], lse[start:stop],
                                                        set_lse[start:stop], cut[start:stop], grad[start:stop],
-                                                       grad_nucleus[start:stop])
+                                                       grad_nucleus[start:stop], rows.dtype)
             if need_h:
                 chunk_dh = d @ weight
                 if w_delta is not None:

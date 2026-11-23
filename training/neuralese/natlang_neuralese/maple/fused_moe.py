@@ -707,10 +707,10 @@ def _invariant_forward_plan(rows):
     return SimpleNamespace(size=rows, blocks=triton.cdiv(rows, block), block=block)
 
 
-def _invariant_linear_forward(x, w, precision):
+def _invariant_linear_forward(x, w, precision, output_dtype=None):
     plan = _invariant_forward_plan(x.shape[0])
     return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False,
-                     precision=precision, single_expert=True,
+                     precision=precision, output_dtype=output_dtype, single_expert=True,
                      inference_output=torch.is_inference_mode_enabled())
 
 
@@ -878,27 +878,56 @@ def vendor_projection_self_check(weights, *, rows=(1, 64, 4097, 20000), samples=
 
 
 def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None,
-                     cotangent_anchors=(), allow_plain_fastpath=True) -> torch.Tensor:
+                     cotangent_anchors=(), allow_plain_fastpath=True, output_dtype=None) -> torch.Tensor:
+    """``x @ wᵀ``. ``output_dtype`` (FP32 head logits, shared_state.logits): the product leaves the FP32 accumulator in
+    that dtype instead of being rounded to the inputs' dtype, by the same kernel the path uses; with autograd the value
+    is that product and the gradient the rounded product's (straight through), so inference and training read the
+    same logits."""
     from ..common.native_higher_order import active_reference_arithmetic,reference_linear
     if active_reference_arithmetic() is not None:
         return reference_linear(x,w)
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
+    widen = output_dtype is not None and output_dtype != x.dtype and x.is_cuda
+    inference = torch.is_inference_mode_enabled()
     from ..model.native_weight_carrier import plain_training_active, vendor_projection_active
-    if allow_plain_fastpath and not cotangent_anchors and precision == "ieee" and plain_training_active():
+    weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
+    if allow_plain_fastpath and not cotangent_anchors and precision == "ieee" and plain_training_active() \
+            and weight.dtype == x.dtype:
         # Plain training arithmetic: one vendor GEMM for the forward, dX and dW (FP32 accumulation, one rounding).
-        weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
-        if weight.dtype == x.dtype:
-            return F.linear(x, weight)
-    if not cotangent_anchors and precision == "ieee" and vendor_projection_active():
+        wide = (lambda: torch.mm(x, weight.t(), out_dtype=output_dtype)) if widen and x.ndim == 2 else None
+        return _widened(lambda: F.linear(x, weight), wide, inference, output_dtype)
+    if not cotangent_anchors and precision == "ieee" and vendor_projection_active() and weight.dtype == x.dtype \
+            and x.ndim == 2:
         # Declared vendor projection arithmetic also replaces canonical (forced-invariant) projections in a plain
         # update, keeping the fixed-linear primal reuse of aliased prefix rows.
-        weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
-        if weight.dtype == x.dtype and x.ndim == 2:
-            return _VendorLinear.apply(x, weight)
-    if torch.is_inference_mode_enabled():
+        wide = (lambda: torch.mm(x, weight.t(), out_dtype=output_dtype)) if widen else None
+        return _widened(lambda: _VendorLinear.apply(x, weight), wide, inference, output_dtype)
+    wide = (lambda: _invariant_linear_forward(x, weight, precision, output_dtype)) if widen else None
+    if inference:
         # Preserve the same effective stored operands; there is no autograd
         # graph in true inference, so no cotangent bookkeeping is consumed.
-        weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
-        return _invariant_linear_forward(x, weight, precision)
-    return _InvariantLinear.apply(x, w, precision, forward_storage_dtype, *cotangent_anchors)
+        return _widened(lambda: _invariant_linear_forward(x, weight, precision), wide, True, output_dtype)
+    return _widened(lambda: _InvariantLinear.apply(x, w, precision, forward_storage_dtype, *cotangent_anchors), wide,
+                    False, output_dtype)
+
+
+def _widened(rounded, wide, inference, dtype):
+    """The product: ``wide()`` (unrounded) when asked for, straight through ``rounded()``'s gradient under autograd."""
+    if wide is None:
+        return _cast(rounded(), dtype)
+    if inference or not torch.is_grad_enabled():
+        with torch.no_grad():
+            return wide()
+    base = rounded()
+    if not base.requires_grad:
+        with torch.no_grad():
+            return wide()
+    with torch.no_grad():
+        value = wide()
+    base = base.to(dtype)
+    return base + (value - base).detach()
+
+
+def _cast(value, dtype):
+    return value if dtype is None or value.dtype == dtype else value.to(dtype)

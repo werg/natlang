@@ -1850,7 +1850,8 @@ def render_decision(renderer, turn, prompt):
     readout's request, ``decision_graph.decision_replies``) whose reply is one of the offered values is that readout's
     choice, which the runtime scores rather than samples (``decide``). Rendered by the scorer's own rendering
     (``serve.native_learning.decision_items``, which the Python engine and the SGLang actor score with): {'options':
-    per option its closed continuation ids (int32), 'label': the reply's option, 'values': the option texts,
+    per option its closed continuation ids (int32), 'prefix': the ids every option shares, scored as prompt after the
+    row's prompt (absent when none), 'label': the reply's option, 'values': the option texts,
     'label_source': 'verified-trajectory'}, the learner's option-normalized objective (``exp0_sft.decision_backward``).
     {'error': ...} when the scorer's prompt differs from the row's or the options do not render.
 
@@ -1880,10 +1881,14 @@ def render_decision(renderer, turn, prompt):
                                                    open_reply)
         except Exception as error:
             return {'error': repr(error)[:200]}
-        if any(kind != 'tok' for kind, _ in before) or [int(i) for _, i in before] != [int(i) for i in prompt]:
+        scored, own = [int(i) for _, i in before], [int(i) for i in prompt]
+        if any(kind != 'tok' for kind, _ in before) or scored[:len(own)] != own:
             return {'error': 'prompt-differs-from-scorer'}
+        # 'prefix': the tokens every option shares, which the scorer puts after the row's prompt (decision_items)
+        shared = scored[len(own):]
         return {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': options,
-                'label_source': 'verified-trajectory', **({'open_reply': True} if open_reply else {})}
+                'label_source': 'verified-trajectory', **({'prefix': np.asarray(shared, np.int32)} if shared else {}),
+                **({'open_reply': True} if open_reply else {})}
     if replies is not None:
         label = decision_label(replies, reply)
         return {'error': 'reply-not-an-option'} if label is None else rendered(replies, label)
@@ -1928,7 +1933,8 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
     if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
     decision = decision[0] if decision else None
-    view = lambda d: {**d, 'options': [ids.view(np.int32) for ids in d['options']]}
+    view = lambda d: {**d, 'options': [ids.view(np.int32) for ids in d['options']],
+                      **({'prefix': d['prefix'].view(np.int32)} if 'prefix' in d else {})}
     if decision and 'options' in decision:
         # the plain row stays (``exp0_sft --no-decision-objective`` trains it as token CE, as before)
         row['decision'] = view(decision)
@@ -2306,7 +2312,8 @@ def decision_report(chains):
             p = parts[chain.get('part') or 'unknown']
             p['chains'] += 1
             p['options'] += len(chain['decision']['options'])
-            p['forward_tokens'] += sum(chain['segs'][0][0] + len(ids) for ids in chain['decision']['options'])
+            p['forward_tokens'] += sum(chain['segs'][0][0] + len(chain['decision'].get('prefix', ())) + len(ids)
+                                       for ids in chain['decision']['options'])
     return {'objective': 'option-normalized log score (exp0_sft.decision_backward; --no-decision-objective opts out)',
             'chains': sum(p['chains'] for p in parts.values()), 'parts': {k: dict(v) for k, v in sorted(parts.items())}}
 

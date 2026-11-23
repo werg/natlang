@@ -297,13 +297,16 @@ def test_a_field_mode_record_reply_trains_one_open_decision_per_step(lfm3_render
     _, opened = decision_items(lfm3_renderer, turn['messages'], None, steps[1]['values'], open_reply=True)
     assert [o.tolist() for o in steps[1]['options']] == opened
     # the last step's chosen open text is the reply without its end of message
-    assert steps[2]['options'][steps[2]['label']].tolist() == target.tolist()[:-1]
+    # (after the tokens the step's options share, which the scorer and the learner read as prompt: 'prefix')
+    last = steps[2]
+    assert last['prefix'].tolist() + last['options'][last['label']].tolist() == target.tolist()[:-1]
     row, _ = sft_sources.rendered_row((prompt, target, 0, decision), 'teacher', 'k', 0, turn)
     assert 'decision' not in row and len(row['decisions']) == 3
     chains = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])
     assert [c['decision']['label'] for c in chains] == [s['label'] for s in steps]
     assert [c.get('decision_step', 0) for c in chains] == [0, 1, 2]
-    assert all(np.array_equal(exp0_sft.decision_parts(c)[0], prompt) for c in chains)
+    assert all(np.array_equal(exp0_sft.decision_parts(c)[0], np.concatenate([prompt, s['prefix']]))
+               for c, s in zip(chains, steps))
     assert exp0_sft.mark_decision_objective(chains) == 3
     off = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])
     assert exp0_sft.mark_decision_objective(off, on=False) == 1 and len(off) == 1
@@ -348,4 +351,4 @@ def test_a_joint_record_decision_is_a_closed_option_set(lfm3_renderer):
     prompt, target = _render(lfm3_renderer, turn)
     decision = sft_sources.render_decision(lfm3_renderer, turn, prompt)
     assert decision['label'] == 2 and 'open_reply' not in decision
-    assert decision['options'][2].tolist() == target.tolist()
+    assert decision['prefix'].tolist() + decision['options'][2].tolist() == target.tolist()

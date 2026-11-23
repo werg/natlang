@@ -16,7 +16,11 @@ text) and field mode (the FORM request, one ``open_reply`` step per field). Both
     compare OUT                     per decision (field: per step, on the native prefix) argmax agreement and the
                                     largest |log-prob difference| per option; OUT/result.json
 
-Rendering is ``decision_items`` on the LFM3 tokenizer (``tokenizer_renderer``), the rendering both engines serve with.
+Rendering is ``decision_items`` on the LFM3 tokenizer (``tokenizer_renderer``), the rendering both engines serve with
+(the options' shared tokens, ``</think>`` and the record's opening, are prompt). sglang.json keeps each option's
+per-token sentinel log-probabilities. The 2026-11-23 hunt (DECISIONS "decision parity: FP8 KV, BF16 head logits"):
+the native-vs-SGLang gap is the actor's FP8 KV (BF16 KV: TV mean 0.012 vs 0.038), the score-vs-sentinel gap batch
+composition and radix splits, amplified by FP8 KV.
 """
 from __future__ import annotations
 
@@ -225,15 +229,16 @@ def sglang(out, endpoint):
         prompt, continuations = decision_items(renderer, decisions[item['decision']]['messages'], None, item['options'],
                                                item['open_reply'])
         ids = [int(v) for _, v in prompt]
-        sums = []
+        sums, per_token = [], []
         for continuation in continuations:
             logps = _post(endpoint + '/v1/neuralese/sentinel', {'token_ids': ids + continuation})['sglang']
             tail = logps[len(ids) - 1:]
             assert len(tail) == len(continuation)
             sums.append(float(sum(tail)))
+            per_token.append([float(x) for x in tail])
         score = served.get(item['decision']) if not item['open_reply'] else None
         items.append({**{k: item[k] for k in ('decision', 'mode', 'step', 'options', 'open_reply')},
-                      'sentinel_log_probs': sums,
+                      'sentinel_log_probs': sums, 'sentinel_token_log_probs': per_token,
                       **({'score_log_probs': score['log_probs']} if score and 'log_probs' in score else {}),
                       **({'score_error': score['error']} if score and 'error' in score else {})})
     binding = info.get('rl_policy_binding') or {}

@@ -49,6 +49,34 @@ def test_inference_cast_and_autograd_dispatch_contracts(monkeypatch):
     assert weight.grad is not None and torch.isfinite(weight.grad).all()
 
 
+def test_fp32_output_keeps_the_accumulator_in_inference_only():
+    """``output_dtype`` (FP32 head logits, shared_state.logits): the fixed-tile product leaves its FP32 accumulator
+    unrounded (rounding it gives the BF16 product), in inference and, straight through the rounded product's gradient,
+    under autograd."""
+    torch.manual_seed(5)
+    x=(torch.randn(19,256,device='cuda')*.5).to(torch.bfloat16)
+    weight=(torch.randn(4000,256,device='cuda')*.5).to(torch.bfloat16)
+    exact=x.double()@weight.double().t()
+    with torch.inference_mode():
+        rounded=fused.invariant_linear(x,weight)
+        wide=fused.invariant_linear(x,weight,output_dtype=torch.float32)
+        again=fused.invariant_linear(x[:7],weight,output_dtype=torch.float32)
+    assert rounded.dtype==torch.bfloat16 and wide.dtype==torch.float32
+    assert torch.equal(wide.to(torch.bfloat16),rounded)
+    assert torch.equal(again,wide[:7])          # still batch invariant
+    assert (wide.double()-exact).abs().max()<(rounded.double()-exact).abs().max()/8
+    graph=fused.invariant_linear(x,weight,output_dtype=torch.float32)
+    assert graph.dtype==torch.float32 and torch.equal(graph,wide)
+    xg=x.clone().requires_grad_()
+    trained=fused.invariant_linear(xg,weight,output_dtype=torch.float32)
+    assert torch.equal(trained.detach(),wide)     # training reads the same logits, straight through the rounded product
+    probe=torch.randn_like(trained)
+    (trained*probe).sum().backward()
+    xr=x.clone().requires_grad_()
+    (fused.invariant_linear(xr,weight).float()*probe).sum().backward()
+    assert torch.equal(xg.grad,xr.grad)
+
+
 @pytest.mark.parametrize('family',['lfm'])
 def test_adapted_native_producer_reader_receipts_match_autograd_forward(tmp_path,family,monkeypatch):
     from test_native_serving_adapters import engine_fixture,nonzero_adapter
@@ -58,8 +86,13 @@ def test_adapted_native_producer_reader_receipts_match_autograd_forward(tmp_path
     adapter,_=nonzero_adapter(engine)
     entries=[{'id':adapter.id,'scale':.75}]
     actual_id,actual=capture_actor(engine,entries,monkeypatch)
-    def reference(x,w,*,precision='ieee',forward_storage_dtype=None,cotangent_anchors=(),allow_plain_fastpath=True):
-        return fused._InvariantLinear.apply(x,w,precision,forward_storage_dtype,*cotangent_anchors)
+    def reference(x,w,*,precision='ieee',forward_storage_dtype=None,cotangent_anchors=(),allow_plain_fastpath=True,
+                  output_dtype=None):
+        out=fused._InvariantLinear.apply(x,w,precision,forward_storage_dtype,*cotangent_anchors)
+        if output_dtype is None or output_dtype==out.dtype:return out
+        with torch.no_grad():   # FP32 head logits: the fixed-tile product unrounded (fused._widened)
+            weight=w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
+            return fused._invariant_linear_forward(x,weight,precision,output_dtype)
     monkeypatch.setattr(fused,'invariant_linear',reference)
     expected_id,expected=capture_actor(engine,entries,monkeypatch)
     assert actual_id==expected_id

@@ -285,6 +285,24 @@ test('a stock release with sliding-window layers is served with --swa-full; a co
   assert.equal((await serve(false, { ...release, fullSlidingWindowCache: undefined })).includes('--swa-full'), false);
 });
 
+test('a release\'s chat-template switches are the server\'s defaults, so scoring renders the history generation does', async () => {
+  const bytes = Buffer.from('a tiny stand-in for a GGUF file');
+  const release = { id: 'kw', label: 'KW', family: 'fixture', file: 'kw.gguf', quant: 'Q', bytes: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'), contextTokens: 2048, kvBytesPerToken: 1000,
+    downloadUrl: 'https://models.invalid/kw.gguf', template: 'template.jinja', source: { repository: 'x/y', revision: 'r' },
+    request: { temperature: 0, chat_template_kwargs: { preserve_thinking: true } } };
+  const serve = async stock => {
+    const { host, spawned } = fixtureHost(mkdtempSync(join(tmpdir(), 'natlang-llama-kw-')));
+    const server = createLlamaServer(host, { release: stock, local: { parallel: 2 } });
+    await server.start();
+    await server.close();
+    return spawned[0].args;
+  };
+  const args = await serve(release);
+  assert.deepEqual(JSON.parse(args[args.indexOf('--chat-template-kwargs') + 1]), { preserve_thinking: true });
+  assert.equal((await serve({ ...release, request: { temperature: 0 } })).includes('--chat-template-kwargs'), false);
+});
+
 test('stock model download and verification go through the host\'s fetch, directories and log', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-llama-download-'));
   const bytes = Buffer.from('a tiny stand-in for a GGUF file');

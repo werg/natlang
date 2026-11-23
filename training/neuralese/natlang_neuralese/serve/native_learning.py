@@ -65,8 +65,8 @@ def open_reply_flag(item):
 
 
 def decision_items(renderer, messages, tools, options, open_reply=False):
-    """The decision prompt items and each option's complete closed continuation token IDs (end of message
-    included). ``renderer`` is a serving engine or ``data.decision_graph.tokenizer_renderer`` (CPU conversion):
+    """The decision prompt items and each option's own closed continuation token IDs (end of message included; the
+    tokens every option shares are part of the prompt, ``_shared_into_prompt``). ``renderer`` is a serving engine or ``data.decision_graph.tokenizer_renderer`` (CPU conversion):
     one rendering for serving, training rows and recorded captures.
 
     ``open_reply``: each option is the start of the reply (a field-mode decision step), scored without the end of
@@ -100,7 +100,27 @@ def decision_items(renderer, messages, tools, options, open_reply=False):
             if not ids:
                 raise RequestError("neuralese-decision", "an open reply option needs reply text")
         continuations.append(ids)
-    return prompt, continuations
+    return _shared_into_prompt(prompt, continuations)
+
+
+def _shared_into_prompt(prompt, continuations):
+    """Tokens every option begins with (LFM3's ``</think>`` closing the empty think block, a field step's chosen
+    fields, the record's opening ``{"``) are context, not part of a choice: they move to the prompt, and each option
+    scores only its own tokens (at least its last one). They add the same log-probability to every option, which the
+    readout's softmax cancels only when every option's request computes them identically; scored once in the prompt
+    they cancel exactly (an SGLang score sends one request per option, and the -16 nats of ``</think>`` differed between
+    them by up to ~0.6 nats, decision-parity hunt 2026-11-23). Training rows (sft_sources, decision captures, tune rows)
+    render through here and stay identical. NATLANG_DECISION_SHARED_PREFIX=option keeps them in every option."""
+    import os
+    if len(continuations) < 2 or os.environ.get("NATLANG_DECISION_SHARED_PREFIX", "prompt") == "option":
+        return prompt, continuations
+    first, limit = continuations[0], min(len(ids) for ids in continuations) - 1
+    shared = 0
+    while shared < limit and all(ids[shared] == first[shared] for ids in continuations):
+        shared += 1
+    if not shared:
+        return prompt, continuations
+    return list(prompt) + [("tok", int(token)) for token in first[:shared]], [ids[shared:] for ids in continuations]
 
 
 def _decision_render(engine, messages, tools, options, open_reply=False):

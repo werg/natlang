@@ -8131,3 +8131,58 @@ Observations (LoRA bench, 7c9038cf5, grpo-v4/run2 replay, 6 groups/step): steps 
   - Not checked: a 6-step re-run with the chain steps (the pair above isolates the decision steps); per-token
     breakdown of option scores; trainable-row share of the gradient beyond its telemetry (0.78 of the clipped norm at
     step 1: `</think>`'s input row opens every option).
+
+## 2026-11-23 decision parity: FP8 KV, BF16 head logits, options' shared tokens
+
+Hunt on the semantic-FP B10 decision-parity run (`ops/semantic-fp/decision-parity/`, sft-v8 66422fcf; the Colab A100
+front d3ad57fb). Measurements on a diagnostic SGLang beside the A100 actor (same export, vendor projection, 8 GB) and
+the native engine on the A100 and GB10 (scripts in the session scratchpad; per-token data under
+`ops/semantic-fp/decision-parity/hunt-20261123/`).
+
+- **Observation 1 (score vs sentinel on one server, up to 0.49 nats; native vs SGLang up to 3.74, TV 0.27).** Cause:
+  SGLang input log-probs depend on what a request is batched with and where a radix hit splits its prefill, and the
+  actor's unscaled FP8 e4m3 KV amplifies that ~3x. Same server, same ids: sequential repeats are bitwise identical;
+  radix reuse alone (prompt > 256 tokens) moves an option by <= 0.2; concurrent requests by up to 1.66 (FP8) / 0.51
+  (BF16 KV); the front's schedule (items on 16 threads, the first option then the rest in parallel) by 0.74-0.80 (FP8)
+  / 0.26 (BF16). `--enable-deterministic-inference` makes every schedule bitwise equal (0.000) but disables the radix
+  cache with FlashInfer, so it is no actor default. Native vs SGLang: FP8 KV TV mean 0.038 / max 0.27 / argmax 43 of
+  44 (reproduces the run); BF16 KV TV 0.012 / 0.051 / 44 of 44, per-token |d| mean 0.042 -> 0.011, max 3.7 -> 0.26.
+  K/V e4m3 rounding error is 2.65% RMS per element in every attention layer, the same with a per-layer amax scale
+  (mantissa, not range: no free fix by calibrated scales).
+- **Fixed (defaults, opt-outs, tests):**
+  - Head logits leave the head GEMM in FP32 on every Python path and SGLang: BF16 logits near |20| step by 0.125, and
+    the native engine's own full-forward vs token-stepped scores of one sequence differed by mean 0.066 / max 0.41
+    nats (FP32: 0.034 / 0.18). Learner `lfm3_fast._head_logits_chunk` (gradients still rounded to BF16, chunk halved
+    to keep its bytes), native `shared_state.logits` / `fused_moe.invariant_linear(output_dtype=)` (batch invariant,
+    straight-through under autograd so training reads the same logits), SGLang `--enable-fp32-lm-head`
+    (`serve_native_checkpoint --sglang-head-logits fp32`, attested as `serving_engine.head_logits`, a held pairing
+    field). Opt-outs `NATLANG_HEAD_LOGITS=bf16`, `--sglang-head-logits bf16`. llama.cpp computes F32 logits already.
+  - Tokens every option shares are prompt, not choice (`native_learning._shared_into_prompt`; sft_sources decision
+    rows carry them as `prefix`, `exp0_sft.decision_parts` reads them as prompt; decision captures, tune rows and
+    native graph rows follow `decision_items`; fork commit on llama.cpp-neuralese, below). Opt-out
+    `NATLANG_DECISION_SHARED_PREFIX=option`. On the FP8 actor this lowers the front-vs-sequential option-score gap
+    (median 0.139 -> 0.112, max 0.74 -> 0.53); the normalized readout gap stays (TV mean 0.020 -> 0.018): the rest is
+    the options' own tokens under batch-variant FP8 arithmetic.
+  - Managed llama-server: the release's `chat_template_kwargs` (LFM3 `preserve_thinking`) are server defaults
+    (`--chat-template-kwargs`): `/v1/natlang/score` renders items with the defaults only, and a readout's opening
+    assistant turn lost its reasoning there (`<think></think>`), unlike generation and the Python engines.
+- **Deliberately not changed: FP8 KV stays the collection/held default.** At collection concurrency the KV reads
+  dominate decode on the GB10 (aei1: 145 running, ~1.1-1.3M tokens resident, ~7 GB FP8 KV per decode step against ~2 GB
+  of FP8 weights); BF16 KV would roughly double them and needs ~2x `--sglang-kv-gb`. The learner corrects the actor
+  law with importance weights; held pairs within one KV dtype. `--sglang-kv-cache-dtype auto` is the opt-in where
+  fidelity matters more than throughput (decision-parity checks, scoring-heavy servers).
+- **Observation 2 (-17 to -24 nats per option).** `</think>` right after the generation prompt's `<think>` costs
+  16.4 nats (14.5-18.2) and was scored in every option; the rest averages -4.9. It is never a training target (own
+  readout rows weight it 0, 87% of own rows train reasoning at that position) and every consumer (softmax readout,
+  field-mode product, temperature sampling, `decision_loss`) is shift invariant, so it never moved a probability or a
+  floor; it only added per-option noise on SGLang (fixed above). Sampling the model on the 10 joint prompts (16 each,
+  T=1, top-p 0.95, BF16 KV): it reasons ~400 tokens and its answers differ from the no-think readout: same mode on 7
+  of 10, mean TV 0.31 (answerInvite: readout `accept` p=0.40, sampled `decline` 16/16, which the calendar supports).
+  The readout is a separate no-reasoning policy (trained by readout rows and the decision objective), not the
+  generation policy; its confidence is that policy's. Whether `decide` should read options after a sampled reasoning
+  is a product decision for the readout's owner (cost ~400 generated tokens per decision).
+- **Open:** the in-page engine scores with its template defaults too (`preserve_thinking` false: the vendored wllama
+  applies `default_template_kwargs` only to chat completions) and the fork's shared-prefix commit; both enter with the
+  next fork release (ENGINE_PARITY). Not checked: CUDA graphs (decode only; scoring prefills run eager), overlap
+  scheduler (the diagnostic server ran without it, as the Colab actor), FP8 weights (`--quantization fp8`, the DGX
+  collection profile), mixed adapters in a batch, GB10 FlashInfer kernels for SGLang (all SGLang numbers are A100).

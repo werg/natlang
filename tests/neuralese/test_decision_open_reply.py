@@ -109,10 +109,32 @@ def test_each_steps_open_tokens_are_a_prefix_of_the_whole_replys_tokens(renderer
     """The cut before the next key name lands on a token boundary: every step's open continuation of the reply's path
     is a token prefix of the reply's closed continuation (punctuation runs such as '","' merge into one token)."""
     messages = _messages(request_text)
-    _, (whole,) = decision_items(renderer, messages, None, [reply])
+    base, (whole,) = decision_items(renderer, messages, None, [reply])
+    reply_ids = [i for _, i in base] + whole
     for candidates, label in field_path(decision_forms(messages), reply):
-        _, opened = decision_items(renderer, messages, None, candidates, open_reply=True)
-        assert whole[:len(opened[label])] == opened[label], candidates[label]
+        prompt, opened = decision_items(renderer, messages, None, candidates, open_reply=True)
+        step = [i for _, i in prompt] + opened[label]
+        assert reply_ids[:len(step)] == step, candidates[label]
+
+
+@pytest.mark.parametrize('open_reply', [False, True])
+def test_tokens_every_option_shares_are_prompt(renderer, tokenizer, monkeypatch, open_reply):
+    """The options' shared tokens (</think>, the record's opening, a step's chosen fields) are scored once, as prompt;
+    each option keeps its own tokens, at least one (an option that is a prefix of another); the sequences are
+    unchanged; NATLANG_DECISION_SHARED_PREFIX=option keeps them in every option."""
+    messages = _messages(FIELD_REQUEST)
+    options = ['{"label":"spam","', '{"label":"ham","', '{"label":"other","']
+    prompt, own = decision_items(renderer, messages, None, options, open_reply)
+    monkeypatch.setenv('NATLANG_DECISION_SHARED_PREFIX', 'option')
+    base, whole = decision_items(renderer, messages, None, options, open_reply)
+    monkeypatch.delenv('NATLANG_DECISION_SHARED_PREFIX')
+    ids, base_ids = [i for _, i in prompt], [i for _, i in base]
+    shared = ids[len(base_ids):]
+    assert ids[:len(base_ids)] == base_ids and tokenizer.decode(shared) == '</think>{"label":"'
+    assert all(ids + o == base_ids + w for o, w in zip(own, whole))
+    assert len({o[0] for o in own}) == len(own)            # the first scored token is each option's own
+    _, nested = decision_items(renderer, messages, None, ['"none"', '"none" '], open_reply)
+    assert all(nested) and nested[0] != nested[1]
 
 
 def test_an_open_item_scores_open_continuations_and_its_result_and_capture_echo_the_flag(renderer):

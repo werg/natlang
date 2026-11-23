@@ -134,6 +134,10 @@ def main() -> None:
                              'CUDA graphs can be released and resumed (/release_memory_occupation, '
                              '/resume_memory_occupation). The colocated GRPO actor uses it to give the GB10 its memory '
                              'for each learner phase (grpo.py --actor-release); allocation only, no numerics change')
+    parser.add_argument('--sglang-head-logits', choices=('fp32', 'bf16'), default='fp32',
+                        help="LM-head logits precision on SGLang: fp32 (default, --enable-fp32-lm-head: the head GEMM "
+                             'leaves FP32 logits, as the native engine and the learner read them) or bf16 (rounded to '
+                             'BF16: a logit near |20| moves in steps of 0.125, per-token log-probs by up to ~0.06 nats)')
     parser.add_argument('--sglang-overlap-schedule', action='store_true',
                         help="SGLang's overlapped scheduler. Off by default: on DGX GB10 with CUDA graphs it put "
                              'tokens of a wrong distribution into 2-6%% of real RL turns (up to 24 nats from the '
@@ -499,6 +503,11 @@ def sglang_pool(export_dir, args, context, layout='full'):
     return total, fraction
 
 
+def sglang_head_args(args):
+    """SGLang's LM-head precision flags for ``--sglang-head-logits`` (fp32: ``--enable-fp32-lm-head``)."""
+    return ['--enable-fp32-lm-head'] if getattr(args, 'sglang_head_logits', 'fp32') == 'fp32' else []
+
+
 def memory_saver_library_path(python, current=''):
     """LD_LIBRARY_PATH with the SGLang venv's CUDA runtime wheel directories first: torch_memory_saver's preload hook
     needs libcudart at exec, before torch's own loader would find it (Pop: 'libcudart.so.13: cannot open shared object
@@ -564,6 +573,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                '--incremental-streaming-output', '--stream-interval', '8',
                '--skip-tokenizer-init', '--trust-remote-code', *swa,
                *([] if args.sglang_overlap_schedule else ['--disable-overlap-schedule']),
+               *sglang_head_args(args),
                *(['--enable-memory-saver'] if args.sglang_memory_saver else []),
                *(['--speculative-algorithm', 'NGRAM', '--speculative-num-draft-tokens', str(speculative['draft_tokens']),
                   '--speculative-ngram-max-bfs-breadth', '1', '--speculative-ngram-min-bfs-breadth', '1']
@@ -600,7 +610,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                              'declared_commit': source['declared_commit'], 'dirty': source['dirty']},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
-                       kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout,
+                       kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout, head_logits=args.sglang_head_logits,
                        weight_dtype=weight_dtype,
                        max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')),
                        speculative=speculative)

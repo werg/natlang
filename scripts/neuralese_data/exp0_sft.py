@@ -522,7 +522,8 @@ def mark_decision_objective(chains, on=True):
 
 
 def decision_parts(chain):
-    """(prompt ids, option continuation ids, target probabilities) of a decision chain."""
+    """(prompt ids, option continuation ids, target probabilities) of a decision chain; the prompt ends with the tokens
+    every option shares ('prefix')."""
     start, _, row = chain['segs'][0]
     decision = chain['decision']
     options = [np.asarray(ids, np.int64) for ids in decision['options']]
@@ -532,7 +533,11 @@ def decision_parts(chain):
         target = [float(p) for p in decision['probabilities']]
     else:
         target = [1. if index == decision['label'] else 0. for index in range(len(options))]
-    return np.asarray(chain['ids'][:start], np.int64), options, target
+    # the tokens every option shares are prompt (serve.native_learning.decision_items, sft_sources 'prefix')
+    prompt = np.asarray(chain['ids'][:start], np.int64)
+    if decision.get('prefix') is not None and len(decision['prefix']):
+        prompt = np.concatenate([prompt, np.asarray(decision['prefix'], np.int64)])
+    return prompt, options, target
 
 
 def decision_tokens(chain):

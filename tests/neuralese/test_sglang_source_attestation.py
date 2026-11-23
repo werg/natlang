@@ -67,3 +67,10 @@ def test_hybrid_swa_pool_counts_the_sliding_layers_at_the_swa_ratio(tmp_path):
     assert small.sglang_swa_ratio * tokens >= 128 * (256 + 130) + 2 * 16384 > 0.1 * tokens
     args.sglang_full_kv = True
     assert serve.kv_layout(tmp_path, args, {'hybrid_swa_kv': True}) == 'full'
+
+
+def test_sglang_reads_fp32_head_logits_by_default():
+    """SGLang serves FP32 LM-head logits unless --sglang-head-logits bf16 (decision-parity hunt 2026-11-23)."""
+    import argparse
+    assert serve.sglang_head_args(argparse.Namespace(sglang_head_logits='fp32')) == ['--enable-fp32-lm-head']
+    assert serve.sglang_head_args(argparse.Namespace(sglang_head_logits='bf16')) == []
