@@ -194,7 +194,7 @@ def default_works():
     return data_registry.role_paths('grpo-sd-teacher')
 
 
-def teacher_episodes(works, held_manifest, funnel, drifted=True):
+def teacher_episodes(works, held_manifest, funnel, drifted=True, skip_mismatched_live=True):
     """[{key, work, name, task_id, teacher}] of every verified teacher success of WORKs (first WORK wins a key), held
     closure excluded (``TeacherDemos``' selection without the per-task cap: every episode is data). A replayed episode
     names its replay (``name``); an observed-live one (``live_teacher_sources``: Vibestudio campaigns, no portable
@@ -204,7 +204,8 @@ def teacher_episodes(works, held_manifest, funnel, drifted=True):
     for work in works:
         if not (Path(work) / 'replay.jsonl').exists() and not episode_files(work):
             continue
-        for episode, record in verified_episodes(work, funnel, sources={'teacher'}, drifted=drifted):
+        for episode, record in verified_episodes(work, funnel, sources={'teacher'}, drifted=drifted,
+                                                 skip_mismatched_live=skip_mismatched_live):
             live = record.get('verification_mode') == 'observed-live'
             if episode['key'] in found or not (record.get('name') or live):
                 continue
@@ -776,7 +777,8 @@ def generate(args):
     banned = (json.loads(manifest.read_text()).get('serving') or {}).get('banned_token_ids', []) if manifest.exists() else []
     stops = [i for i in (tokenizer.token_to_id('<|im_end|>'), tokenizer.token_to_id('<|endoftext|>')) if i is not None]
     funnel = collections.defaultdict(collections.Counter)
-    episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on')
+    episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on',
+                                skip_mismatched_live=args.live_mismatch == 'skip')
     done = done_keys(out)
     rates = load_rates(args.prefer_rates) if args.prefer_rates else None
     todo = ordered([e for e in episodes if e['key'] not in done], prefer_works, rates, args.seed)
@@ -843,7 +845,8 @@ def generate(args):
             time.sleep(60 * args.rescan_minutes)
             try:
                 found = teacher_episodes(prefer_works, held, collections.defaultdict(collections.Counter),
-                                         drifted=args.admit_drifted == 'on')
+                                         drifted=args.admit_drifted == 'on',
+                                         skip_mismatched_live=args.live_mismatch == 'skip')
                 added = queue.add_first(ordered(found, prefer_works, rates, args.seed))
                 event = {'event': 'rescan', 'works': prefer_works, 'episodes': len(found), 'added': added}
             except Exception as error:      # a WORK caught mid-extraction: the next rescan reads it again
@@ -1344,6 +1347,10 @@ def build_parser():
     g.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
                    help='also fill verified successes whose replay display drifted from the recording '
                         '(sft_sources.drifted_success): the filled block is chosen under today\'s display')
+    g.add_argument('--live-mismatch', choices=('skip', 'fail'), default='skip',
+                   help='an observed-live episode whose bound source no longer hashes, loads or matches its extraction '
+                        '(sft_sources.recheck_live_episode): skip it with its reason in the funnel (default) or fail '
+                        'the whole generation (before 2026-11-23)')
     g.add_argument('--draw', choices=('staged', 'parallel'), default='staged',
                    help='staged: the anchor first, then band-capped waves until one admitted candidate is in band; '
                         'parallel: every candidate at once with the whole room')
