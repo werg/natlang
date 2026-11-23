@@ -9594,3 +9594,10 @@ checker required it.
   - `held_eval verify` against the new sources (same ids and groups as the verified old ones);
   - a human read of the sentence attribution beyond about 10 samples;
   - the full `check-main` (only `--quick` and the targeted ts-host and Python tests).
+
+
+## 2026-11-23 21:12 UTC — Vibe whole-corpus semantic release activated; resource-gated collection and optional preparation gap
+
+Acted on the whole116-binding application refactor and source-bound native return attribution. Hostfe35/Corecf/Base93/SSTec V14 is built, byte-verified on Pop and Tick and activated; all2327 task identities/goals/groups/splits are preserved. Full116 runtime compile/load passed, as did the actual9-test compiler-child capacity witness,86 optional-return/operational checks and6 Workerd compositions. The eight-worker full Luna queue is submitted with13GiB cap/7.5GiB reserve and is waiting for Tick memory; no new paid generation is claimed. All28 recovered completed goals/496 decisions pass the actual modern09f campaign/held validator and are supplied as reuse seeds; original raw/verdicts/Sol data remain retained.
+
+The modern DGX reader pin+upgrade remain persistently queued with15GiB reserve. Old-reader export frontdoors are held; no recovery publication/fill/SFT exposure is claimed. A productive-job audit found no foreign idle claim to retire. The remaining preparation mechanism is being generalized:155 prebuilt runtime bindings cover only the three builtin roles, and a real optional News panel cold build exceeded3/4GiB model-free startup caps. No native cases have passed in that full managed sweep yet. Prepare selected optional templates by default with a builtin-only opt-out, retain the three default installed workspaces, and deploy as a separate immutable successor; collection on the valid current release need not wait for that optimization. See VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md and candidate machine-readable proofs for actual sources/units.
