@@ -235,6 +235,23 @@ def bound_file(binding, root):
     return path
 
 
+def verify_original_rejection(packet, proof, root):
+    """Keep native failure and a later rejected review as distinct original facts."""
+    passed = packet.get('result', {}).get('passed')
+    bindings = [item for item in proof.get('evidence', []) if item.get('role') == 'original-rejected-review']
+    if not bindings:
+        return passed is False
+    if len(bindings) != 1 or not isinstance(passed, bool):
+        return False
+    review = json.loads(bound_file(bindings[0], root).read_text())
+    observed = packet.get('execution', {}).get('diagnostics', {}).get('openGoalVerification', {})
+    original_input = (observed.get('preparedContentProject') or {}).get('artifact', {}).get('semanticReviewInput') or observed.get('semanticReviewInput')
+    return (review.get('schema') == 'natlang.live-workflow-review/1' and
+            (review.get('verdict') or {}).get('accepted') is False and
+            original_input is not None and same_json_value(review.get('input'), original_input) and
+            bool(review.get('exchange') or review.get('exchanges')))
+
+
 def verify_completed_reassessment(verification, spec, root):
     """Bind a later whole-outcome verdict to immutable original execution and checker evidence."""
     reassessment = verification.get('reassessment')
@@ -271,7 +288,7 @@ def verify_completed_reassessment(verification, spec, root):
     if (assessment.get('completed_outcome', {}).get('sha256') != validator['completed_outcome']['sha256'] or
             not same_json_value(normalize_bindings(proof), normalize_bindings(original_completed))):
         raise ValueError('completed reassessment differs from its bound independent verdict')
-    if (original.get('passed') is not False or not same_json_value(original, packet['result']) or
+    if (not verify_original_rejection(packet, proof, root) or not same_json_value(original, packet['result']) or
             assessment.get('schema') != 'natlang.live-reassessment/1' or
             assessment.get('task_id') != spec['id'] or assessment.get('original_sha256') != hashlib.sha256(packet_bytes).hexdigest() or
             proof.get('schema') != 'natlang.live-outcome-reassessment/1' or proof.get('passed') is not True or

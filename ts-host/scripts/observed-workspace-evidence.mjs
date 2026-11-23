@@ -160,6 +160,16 @@ async function trainingScope(receipt, row, root) {
   return selected;
 }
 
+export async function verifyOriginalRejection(packet, proof, root) {
+  const passed=packet.result?.passed,bindings=(proof.evidence??[]).filter(item=>item.role==='original-rejected-review');
+  if(!bindings.length)return passed===false;
+  if(bindings.length!==1 || typeof passed!=='boolean')return false;
+  const review=JSON.parse(await readBound(bindings[0],root)),observed=packet.execution?.diagnostics?.openGoalVerification;
+  const input=observed?.preparedContentProject?.artifact?.semanticReviewInput??observed?.semanticReviewInput;
+  return review.schema==='natlang.live-workflow-review/1' && review.verdict?.accepted===false && input!==undefined &&
+    isDeepStrictEqual(review.input,input) && !!(review.exchange||review.exchanges?.length);
+}
+
 async function completedReassessment(receipt, manifest, row, root) {
   const reassessment=receipt.reassessment;
   if (!reassessment) {
@@ -188,7 +198,7 @@ async function completedReassessment(receipt, manifest, row, root) {
   const normalized=value=>({...value,...Object.fromEntries(['evidence','checker_sources'].map(field=>[field,(value[field]??[]).map(({path,...binding})=>binding)]))});
   if(assessment.completed_outcome?.sha256!==validator.completed_outcome.sha256 || !isDeepStrictEqual(normalized(proof),normalized(originalCompleted)))
     throw new Error('completed reassessment differs from bound independent verdict');
-  if(original.passed!==false || !isDeepStrictEqual(original,packet.result) ||
+  if(!await verifyOriginalRejection(packet,proof,root) || !isDeepStrictEqual(original,packet.result) ||
       assessment.schema!=='natlang.live-reassessment/1' || assessment.task_id!==manifest.id || assessment.original_sha256!==digest(raw) ||
       proof?.schema!=='natlang.live-outcome-reassessment/1' || proof.passed!==true || proof.task_id!==manifest.id ||
       proof.original_sha256!==assessment.original_sha256 || proof.goal!==prior.goal ||
