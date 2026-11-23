@@ -457,7 +457,7 @@ def _entries(spec):
     task_rollouts.prepare(SimpleNamespace(
         cases=Path(spec['cases']), out=directory, rows=spec['tasks'], offset=0, group=spec['samples'], temperature=1.,
         case_seconds=spec['case_seconds'], max_model_requests=spec['max_model_requests'], max_turns=spec['max_turns'],
-        seed_base=spec.get('seed_base', SEED_BASE), root_mode='student', match_seeds_from=None,
+        seed_base=spec.get('seed_base', SEED_BASE), root_mode='student', held_rows=True, match_seeds_from=None,
         policy_checkpoint_sha256=spec['policy_id'].split('+')[0]))   # an adapted policy: its checkpoint
     entries = list(read_jsonl(directory / 'queue.jsonl'))
     for entry in entries:

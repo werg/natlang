@@ -771,7 +771,10 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     source = read_jsonl(args.cases)
     root_mode = getattr(args, "root_mode", "authored")
-    transform = authored_root_row if root_mode == "authored" else student_root_row
+    held = bool(getattr(args, "held_rows", False))
+    if held and root_mode != "student":
+        raise ValueError("held rows are measured with the student at the root")
+    transform = authored_root_row if root_mode == "authored" else (lambda row: student_root_row(row, held=held))
     selected = [transform(row) for row in source[args.offset:args.offset + args.rows]]
     packet = out / "packet.jsonl"
     packet.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in selected), encoding="utf-8")

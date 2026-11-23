@@ -256,6 +256,18 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
   '  };\n' +
   'The child returns Draft; the TypeScript step returns Progress.\n';
 
+/**
+ * The eval binding `NatlangContext`: the runtime's Context class (runtime/contexts.ts installs it under a global symbol,
+ * as for callable-folder modules) through the static `empty()` only. Undefined parts fail when used, with one sentence.
+ */
+function evalContextValue(): { empty(): unknown } {
+  return Object.freeze({ empty: () => {
+    const context = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] as { empty(): unknown } | undefined;
+    if (!context) throw new Error('NatlangContext is unavailable in this runtime: it has no context support loaded.');
+    return context.empty();
+  } });
+}
+
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
   read: 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. Already-crisp strings pass through unchanged; other non-reference values are rejected. Use FileHandle.readText() or FileHandle.readJson() for files.',
@@ -266,6 +278,13 @@ The descriptor identifies the configured read instruction body (export: "read") 
 neuralese.textReadSource.read or inspect/copy its fields to read a value. Use the supported typed operation
 read(value), or a supported JavaScript text-conversion context such as String(value) for
 Neuralese<string>. The runtime performs the configured typed readout; the descriptor itself does not perform it.`,
+  NatlangContext: `NatlangContext: build a context to run a function under. fn.in(context) is the same function bound to it,
+a new function; the function's instructions read the context's data entries by their names.
+  const strict = verdict.in(NatlangContext.empty().with({ policy: strictPolicy }));
+  const label = await strict(message);      verdict's instructions read policy as strictPolicy
+NatlangContext.empty() is the context with nothing in it; .with({ name: value, ... }) adds data entries (a new
+context each time), .without(...names) removes them, .pick(...names) keeps only those, and .data reads them. A
+function keeps every other part of its signature under .in; it must still find each item its instructions name.`,
   decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
   const verdict: Neuralese<(statement: string) => Promise<"allow" | "deny">> = nl\`Choose allow or deny for the statement.\`;
   const decision = await decide(verdict, statement);
@@ -1901,7 +1920,7 @@ export class NativeSession {
    */
   private notATool(name: string, args: Record<string, unknown>): { path: string; code: string; text?: string; expected?: string } {
     const root = name.split('.')[0]!;
-    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read'];
+    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'NatlangContext'];
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const scope = new Set([...builtins, ...inputs, ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.lam.let),
       ...this.persistentScopeHelpers.keys(), ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())]);
@@ -1909,9 +1928,9 @@ export class NativeSession {
       return { path: name, code: 'bad-action', expected: 'a scope-eval tool' };
     const first = Object.values(args).find(value => typeof value === 'string' || typeof value === 'number');
     const shown = first === undefined ? '' : JSON.stringify(first);
-    const awaited = builtins.includes(root) && root !== 'transcript' || Object.hasOwn(this.lam.codebase, root) ||
+    const awaited = builtins.includes(root) && root !== 'transcript' && root !== 'NatlangContext' || Object.hasOwn(this.lam.codebase, root) ||
       this.persistentScopeHelpers.has(root);
-    const value = !awaited && root !== 'transcript' && !Object.hasOwn(this.availableServices(), root);
+    const value = !awaited && root !== 'transcript' && root !== 'NatlangContext' && !Object.hasOwn(this.availableServices(), root);
     const example = name === 'transcript' ? 'transcript.search("…")' : value && name === root ? name :
       `${awaited ? 'await ' : ''}${name}(${shown})`;
     return { path: name, code: 'bad-action', text: `${name}: bad-action, ${name} is not a tool: ${root} is in this call's eval scope. ` +
@@ -1927,8 +1946,8 @@ export class NativeSession {
     const helperNames = [...this.persistentScopeHelpers.keys()];
     const names = [...new Set([...inputs, ...captures, ...locals, ...helperNames, ...Object.keys(this.lam.codebase),
       ...Object.keys(this.availableServices())])];
-    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}read, iterateOn ` +
-      'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}read, iterateOn, ` +
+      'transcript and NatlangContext (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 
   availableServices(): Record<string, object> {
@@ -2341,6 +2360,11 @@ export class NativeSession {
     const refinementBinding = (name: string) => !taken(name) && !declaredHere(name) && !callableNames.includes(name) &&
       !serviceNames.includes(name) && !Object.hasOwn(captureCells, name);
     const refineBinding = refinementBinding('refine'), assumeBinding = refinementBinding('assume');
+    // NatlangContext: the runtime's context value, so eval can bind a function to another context
+    // (`fn.in(NatlangContext.empty().with({ policy }))`), unless the name is taken. Packages export it as `Context`;
+    // eval uses this name so that a program type named Context does not collide with it.
+    const contextBinding = refinementBinding('NatlangContext');
+    if (contextBinding) opaqueNames.push('NatlangContext');
     // transcript: this call's earlier tool calls and their outputs, read-only, unless the name is taken (an input, a
     // local, a function of the call's folder, a service or a capture: theirs wins, as for read_code and decide).
     const transcriptBinding = !taken('transcript') && !callableNames.includes('transcript') && !serviceNames.includes('transcript') &&
@@ -2452,10 +2476,11 @@ export class NativeSession {
         const frame = currentFrame() ?? this.runtime.frame!;
         return import('../runtime/runtime.js').then(module => module.decideInFrame(frame, fn, args));
       },
-      refine: (value: unknown, predicate: string) => {
+      refine: (value: unknown, predicate: string, options?: { context?: Record<string, unknown> }) => {
         const frame = currentFrame() ?? this.runtime.frame!;
-        return import('../runtime/surface.js').then(module => runInFrame(frame, () => module.refine(value, predicate)));
+        return import('../runtime/surface.js').then(module => runInFrame(frame, () => module.refine(value, predicate, options)));
       },
+      NatlangContext: evalContextValue(),
       assume: (value: unknown, predicate: string) => {
         const text = typeof predicate === 'string' ? predicate.replace(/\s+/g, ' ').trim() : '';
         if (!text) throw new Error('refinement-predicate-invalid: assume(value, predicate) takes a nonempty string predicate, for example "one line of at most 60 characters".');
@@ -2500,7 +2525,8 @@ export class NativeSession {
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
       ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
       ...(readCodeBinding ? ['const read_code = (input: string | { name: string }) => __live.readCode(input);'] : []),
-      ...(refineBinding ? ['const refine = (value: any, predicate: string) => __live.refine(value, predicate);'] : []),
+      ...(refineBinding ? ['const refine = (value: any, predicate: string, options?: any) => __live.refine(value, predicate, options);'] : []),
+      ...(contextBinding ? ['const NatlangContext = __live.NatlangContext;'] : []),
       ...(assumeBinding ? ['const assume = (value: any, predicate: string) => __live.assume(value, predicate);'] : []),
       ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +

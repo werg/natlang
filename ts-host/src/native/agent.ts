@@ -108,10 +108,14 @@ export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "s
   'require an invalid or contradictory operation), give the reason instead of a value.';
 
 /** Named in every opening, so a model that looks for them knows they exist and where their documentation is. */
-export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn, transcript and decide; read_code shows how to use each.';
+/** NatlangContext (fn.in(context) in eval) joined the list on 2026-11-23; NATLANG_PROMPT_REVISION=2026-11-22 keeps the old line. */
+export const BUILT_INS_LINE = promptRevision() === '2026-11-22' ?
+  'Eval also has the built-ins nl, iterateOn, transcript and decide; read_code shows how to use each.' :
+  'Eval also has the built-ins nl, iterateOn, transcript, decide and NatlangContext; read_code shows how to use each.';
 /** Inline children have the same delegation tools as named calls. */
 export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
-export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn, transcript and decide; read_code shows how to use each. ' +
+export const NL_DEPTH_LIMIT_BUILT_INS_LINE = (promptRevision() === '2026-11-22' ? 'Eval has iterateOn, transcript and decide; read_code shows how to use each. ' :
+  'Eval has iterateOn, transcript, decide and NatlangContext; read_code shows how to use each. ') +
   'This is the fifth ad hoc layer: make further judgments here or call an existing named function from a file.';
 /**
  * What one call's opening message adds after its scope: the program's guidance, then the function-tools, folder and

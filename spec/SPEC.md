@@ -392,7 +392,8 @@ A natural-language invocation offers the model these tools:
 - `read_code`, `edit_code`, `diff_code`: inspect and edit the program's codebase
   (its callable items); `read_code` also reads the declaration of a service or an
   importable package, which cannot be edited, and the documentation of eval's
-  built-ins (`nl`, `iterateOn`, `transcript`). `read_code` is offered on every call;
+  built-ins (`nl`, `iterateOn`, `transcript`, `decide`, `NatlangContext`, the package's
+  `Context` under a name no program type takes). `read_code` is offered on every call;
   `edit_code` and `diff_code` where the call has code of its own and edits are not denied.
   An edit is a revision of the run's program view, never of the files: a call that
   succeeds records its revisions in its call record (`code_revisions`), and

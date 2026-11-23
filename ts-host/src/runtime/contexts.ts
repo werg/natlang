@@ -11,6 +11,7 @@
  *   items its instructions name, with their signatures (`context-interface-mismatch`).
  * - A context's ID is a hash of its contents, so a context can never contain itself.
  */
+import { isPlainObject } from './plain-object.js';
 import { hexDigest } from '../native/hash.js';
 import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
 import type { NeuraleseStore } from '../native/neuralese-store.js';
@@ -179,8 +180,8 @@ function snapshotContextValue(value: unknown, active = new WeakSet<object>()): u
     active.delete(value);
     return Object.freeze(copy);
   }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return value;
+  // A record built in another realm (eval code, a callable-folder module) is plain data too, and is snapshotted.
+  if (!isPlainObject(value)) return value;
   if (active.has(value)) throw new TypeError('context JSON data must not contain cycles');
   active.add(value);
   const copy = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, snapshotContextValue(item, active)]));
@@ -203,8 +204,7 @@ function exposeContextValue(value: unknown): unknown {
     return new TypedArray(buffer);
   }
   if (Array.isArray(value)) return Object.freeze(value.map(exposeContextValue));
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return value;
+  if (!isPlainObject(value)) return value;
   return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, item]) => [key, exposeContextValue(item)])));
 }
 

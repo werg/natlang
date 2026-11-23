@@ -51,6 +51,7 @@ CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'n
                         # semantic-FP constructs (plans/semantic-fp/05 §3; authored_checks.py checks each one statically)
                         'inline_nl', 'nl_with_context', 'library_discovery', 'nl_convergence', 'higher_order',
                         'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract',
+                        'ensures_contract', 'structural_recursion',
                         # @natlang/std combinators (ts-host/src/std; B13)
                         'semantic_merge', 'semantic_repair', 'fixed_point', 'propose_and_verify', 'branch_and_select'})
 # The curriculum technique flags a correct trajectory must show (ts-host/src/teacher/curriculum.ts `inline`, `named`,

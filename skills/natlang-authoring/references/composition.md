@@ -108,6 +108,9 @@ item the function's instructions name, with the same signature; otherwise `.in` 
 naming the item. `.on` keeps the context, so the escalated call above reads the same policy. A TypeScript helper in a
 callable folder binds the same way: `import { Context } from '@natlang/node'` and `import verdict from './verdict.nl'`,
 then a default-exported `under(shop)` returns `verdict.in(Context.empty().with({ policy }))` for its caller to call.
+Eval code has the same value as the built-in `NatlangContext` (a program type may be named `Context`), so instructions
+can ask a call to bind a function itself: `const strict = verdict.in(NatlangContext.empty().with({ policy: strictPolicy }))`.
+A record bound this way is a snapshot; later changes to it do not reach the bound function.
 
 ## Functions that take and return judgments
 
