@@ -59,3 +59,19 @@ def test_invalid_instance_cannot_escape_owned_log_roots(tmp_path, instance):
     put(tmp_path / 'capture/cases/a/source.json', {'instance': instance})
     with pytest.raises(ValueError, match='Invalid captured instance'):
         retain_instance_diagnostics(tmp_path / 'capture', tmp_path / 'host', tmp_path / 'out', tmp_path / 'profile')
+
+
+def test_live_log_retirement_during_copy_keeps_previous_snapshot(tmp_path, monkeypatch):
+    from vibestudio_diagnostics import _copy
+    source, target = tmp_path / 'live.log', tmp_path / 'retained.log'
+    source.write_text('new live bytes')
+    target.write_text('previous snapshot')
+    original = Path.open
+    def disappearing(path, *args, **kwargs):
+        if path == source:
+            source.unlink()
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'open', disappearing)
+    assert _copy(source, target) is None
+    assert target.read_text() == 'previous snapshot'
+    assert not list(tmp_path.glob('retained.log.*'))

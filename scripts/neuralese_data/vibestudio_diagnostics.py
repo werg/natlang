@@ -38,6 +38,8 @@ def _copy(source, target):
                 output.write(chunk)
                 remaining -= len(chunk)
         os.replace(temporary, target)
+    except FileNotFoundError:
+        return None  # authoritative instance retirement/rotation won the copy
     finally:
         Path(temporary).unlink(missing_ok=True)
     return {'source': str(source), 'retained': str(target), 'sha256': _digest(target)}
@@ -78,7 +80,11 @@ def retain_instance_diagnostics(capture, host, output, profile):
         if not record.is_file():
             group['record_missing'] = True
             continue
-        record_value = json.loads(record.read_text())
+        try:
+            record_value = json.loads(record.read_text())
+        except FileNotFoundError:
+            group['record_missing'] = True
+            continue
         root = record_value.get('root')
         if not isinstance(root, str) or not Path(root).is_absolute():
             raise ValueError(f'Invalid instance root: {record}')
