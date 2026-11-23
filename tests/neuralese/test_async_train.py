@@ -670,6 +670,7 @@ def test_a_restarted_driver_resumes_prepare_after_its_last_finished_step(tmp_pat
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
     monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['data']], ['build']))
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)  # simulated ledger owns no real systemd jobs
     rd = d.root / 'r0001'
     launched = []
 
