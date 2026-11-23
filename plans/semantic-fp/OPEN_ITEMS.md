@@ -20,7 +20,7 @@ An item leaves the register when its fix lands on main. A finding reported by an
 
 ## Reasoned decisions in training
 
-Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"); the coordinator assigns both:
+Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"). Owners: the scorer re-tokenization goes to the B10 agent, after its pin move and with the tokenization sum, as one fork release. Tune RL goes to the GRPO-reasoning agent.
 - **The scorers re-tokenize the reasoning.** Every engine scores the options after the reasoning *text*, re-encoded, not
   after the sampled ids. In aei1 r0000 (16 action readouts, groups g000689/696/701/720) the scored prompt leaves the
   sampled ids mid-reasoning in 4 of 16 (after 847 of 3476, 531 of 1051, 535 of 2085 and 953 of 1687 tokens; the decoded
