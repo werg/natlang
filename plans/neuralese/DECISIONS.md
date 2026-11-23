@@ -8398,3 +8398,43 @@ The coordinator asked for this batch because live LFM3 scored additive edits as 
   - Floors never bite in replay (confidence 1).
   - The structure count is low (24): every program shares a TS-helper-plus-std shape. Diversity lives in the
     programs (52) and the worlds.
+
+## 2026-11-23 11:30 Collection health per round; held-v3 on Pop every round, held-v4 on Pop on a cadence (coordinator)
+
+Owner goal: balance eval compute against finding problems. Most defects found on 2026-11-23 (every `@natlang/std`
+program failing in collection, every guided memetic evaluation failing on its binding, 55% of own successes rendered
+under another system prompt) were invisible to held eval and visible in data collection already scores.
+- **Collection health report (default on, opt-out `async-drive --no-health-report`).** Each round writes
+  `rN/health.json` (`scripts/neuralese_data/collection_health.py`, also a CLI) over the newest policy's collections,
+  compared with the previous policy's and with every earlier collection of the loop plus `--health-baseline` WORKs.
+  Per task family and per construct tag (`curriculum.external.constructs`): own episodes (guided attempts apart), pass
+  rate, one category per episode (success, wrong_answer, runtime_error, budget_stop, crash, unscored) and a failure
+  reason histogram (outcome, finish status, job error codes, action diagnostics, runtime scope failures, host events),
+  plus infrastructure (unscored, crashed, abandoned, failed scorings, dropped endpoints) and the tasks whose group
+  yielded no scored episode (import, loader, binding, wall-clock failures). Flags: family/construct collapse to 0% with
+  errors where it passed before; a new family/construct that never passes; an error share jump (>= 2x and +5 pts);
+  infrastructure rate > 5%; tasks without episodes. A flag on a semantic-FP construct (`SEMANTIC_FP_CONSTRUCTS`, now
+  one set in `rl_tasks/sources/authored.py`) is marked `sfp`. The summary goes to the drive log, each flag to
+  `ops/storage-alerts.log` (`COLLECTION HEALTH <name> <round>:`), which the heartbeat reads. Flags never halt.
+  Scored groups are cached (`ROOT/health-cache/`); a cold report over ~900 groups took 3.5 min.
+- **Held cadence.** `async-drive --held-profile pop` (new default; `dgx` keeps the old series): the held-v3 gate runs
+  on Pop at 2 samples on the adaptive interval (aei1: every round). `--held-v4-cadence every=3,significant,health-sfp`
+  (default; `off`): held-v4 (registry role `held-eval-semantic-fp`) on Pop at `--held-v4-samples 2` every third
+  published round, for a candidate whose held-v3 verdict has p < 0.05 either way, and for the policy whose collection
+  health flags a semantic-FP construct. It runs in the held thread only while no held-v3 job waits; a held-v3 job that
+  becomes due stops it (`pop_held_measure` preempt: the script and its `popheld-hv4-<sha12>-*` unit), and it resumes
+  from its episodes later. Recorded in `ROOT/held-v4/hv4-<sha12>/record.json` beside the held-v3 verdict (and compared
+  with the loop's previous held-v4 result); never gating. The DGX runs no held-v4 besides the queued sft-v6 reference
+  (`ops/held-v4/runs/measure-both.sh`, untouched). `ops/grpo-v4/pop-held.sh` takes `HELD_MANIFEST` (default held-v3).
+- **First reading** (aei1 `collect/v0000-e15b20a86f1c` at 467 scored groups vs sft-v9's collection): 1,784 own
+  episodes, pass 0.604 (sft-v9 0.611), infrastructure 1.1%. Flags: `no_episodes` = all 4 memetic groups (16 episodes
+  unresolved: the supervisors spent the 7,200 s case wall clock with 0 model replies while their baseline evaluations
+  ran), and `family_collapse` of ext_codebase-ops_repair (8 vs 6 episodes; small). No sfp or std family has run yet:
+  sfp1's 36 rows sit at task order 1157+, sfp2/sfp3 are not in this collection's pool, and std needs a pin at or after
+  c93124ec1.
+- **Applies** at aei1's next round boundary through a new pin; the coordinator restarts the driver.
+- **Tests:** `tests/neuralese/test_collection_health.py` (fixture rounds with a family collapsing to 0, a new family
+  that never passes, memetic-like unscored groups, abandoned and pending groups, caching; cadence, queue, preemption,
+  Pop default, the round's report and its held-v4 trigger).
+- **Not checked:** the Pop held-v4 path end to end (pop-held.sh with HELD_MANIFEST on Pop, the held pin's
+  `held_eval measure` on held-v4 rows); thresholds are first guesses; per-stratum held-v4 rates are not in the record.
