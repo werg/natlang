@@ -7482,3 +7482,46 @@ Brief B15 (`plans/semantic-fp/09_FIRST_BATCH.md`): expert-iteration collection f
   run. The grpo-v4 run2 groups have no rollouts files left (only `memetic/`), so no recorded memetic success could be
   replayed either. `teacher_gen` student rates still count a memetic episode by `reward >= 1` (memetic task ids are
   outside its task universe).
+
+## 2026-11-23 02:30 natlang init writes the inbox planner (semantic-FP B3, WS4 F1)
+
+`natlang init DIR` now writes a semantic-FP program by default: `types.ts` (`Message` with an `Untrusted<string>` body,
+`Route = 'reply' | 'fyi' | 'ignore'`, `Reply = Is<string, "...">`, `Plan`), `route.nl` (`readout: decision`), `main.ts`
+(`decide(route, message)` mapped with `Promise.all`, an inline `nl<Reply>` drafted only for `reply`, and the `main(context)`
+target), `messages.json`, three `route.nl` cases in `examples.json`, `natlang.json`, `tsconfig.json`, README and the
+WS4 section 3 AGENTS.md (each command and API checked against the CLI). `--template classifier` writes the old
+`answer.nl` program; the dashboard's program page and Playground keep creating it (they edit one text-input function).
+`examples/hello` is byte-identical to the new default.
+
+Facts that differed from the plan, and what shipped instead:
+- **Host `decide`:** neither `route.decide(x)` nor a host `decide(fn, ...)` existed (only `runtime.decide`, which opens a
+  task of its own). `decide` is now exported from `@natlang/node`/`@natlang/browser` (`runtime/surface.ts`), the eval
+  builtin's form, implemented by the same `decideInFrame`.
+- **Callable folders:** `main/` is not main.ts's callable folder. Inline `nl` uses the nearest `natlang.d/`, and
+  `route.nl` uses `route/`. The AGENTS.md says so.
+- **examples.json** takes only `.nl` functions and compares exactly, so there is no `plan` case. The three route cases
+  are the tests.
+- **natlang.json** declares no `model.stock`, so the machine default applies, as it did before.
+- **Speed:** on Pop's CPU (12 cores, shared with a running held eval) with stock LFM3-1.7B Q8_0, a cold first `natlang run`
+  took 45.7 s, a warm one 4.7 s, and `natlang test` 5.2 s (3/3). A run whose sample drafts one reply took 672 s:
+  the draft reasoned for about 3k tokens at 5 tok/s. The bundled messages are therefore all fyi/ignore, following
+  section 2's rule. The README and AGENTS.md show `natlang run . -- '[...]'` for a message that gets a reply. The
+  DGX CPU was not measured: the ledger admitted nothing during sft-v9's 100 GB claim.
+- **Sample wording:** stock LFM3 routed "...No action is needed." and an office-closure notice to `ignore`. The
+  `route.nl` text and the sample messages were sharpened until all three route as intended.
+
+Fixed along the way:
+1. A program created inside another (`natlang init` prints that it does this) broke the outer program's build. The `.ts`
+   and `.nz` walks and the source fingerprint now skip nested packages, as `callableFolders` already did.
+2. `--template` was not a registered CLI option.
+3. `Record<K, V>` with a string-literal-union key is now the exact record. With an alias key it is a dictionary. It
+   used to be rejected as "Record keys must be string", and the error was attributed to the first `.nl` file in the
+   folder.
+
+A fresh agent given only the generated AGENTS.md built a PR-review triage program that passes `natlang check`. It has
+TypeScript exact steps, a `readout: decision` `.nl`, an inline `nl<Answer>`, and `Untrusted` on the comment text. The
+Record defect above was its one blocker. Its two unclear points went into the AGENTS.md: how an inline `nl` binds its
+call's arguments, and what `natlang.json` declares.
+Still open: an alias in `types.ts` that the natlang type grammar cannot parse breaks every `.nl` in that folder, with the
+error on the `.nl`. Five env builders parse every alias eagerly (`kernel.ts:297`, `lowered.ts:270`, `values.ts:281`,
+`refined-slots.ts:40`, `nz-file.ts:215`).

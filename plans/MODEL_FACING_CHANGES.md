@@ -3,6 +3,17 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — `natlang init` writes the inbox planner; `Record<'a' | 'b', T>` is a record (B3)
+
+The front door is also the teacher prompt for idiomatic-program demonstrations (WS4 rule 4). Consumers and coding
+agents now start from `types.ts` + `route.nl` (`readout: decision`) + `main.ts` (`decide`, inline `nl<Reply>`), and the
+AGENTS.md of plans/semantic-fp/04 section 3, instead of the one-function classifier (`--template classifier` keeps it).
+`route.nl`'s instructions are model-facing: "reply when the sender asks the reader a question or asks them to do
+something; fyi when a person or team tells the reader something worth knowing and asks nothing; ignore when it is
+advertising, a newsletter or an automated message the reader does not need." On stock LFM3-1.7B its three cases pass.
+Types: `Record<"x" | "y", T>` now renders as `{ x: T, y: T }` and `Record<Alias, T>` as `Record<string, T>` in
+signatures and result checks. Both were rejected before, so no running program changes.
+
 ### 2026-11-23 — the system prompt says eval helpers carry forward, and a helper that calls another one now does
 
 Commit a5d27251b (semantic-FP Wave 0) changed one sentence of `APPROACH_PROMPT` (`native/prompt.ts`, "Getting at
