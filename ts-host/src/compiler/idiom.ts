@@ -60,7 +60,7 @@ export function checkNlIdioms(record: NatlangRecord, file: string): NatlangDiagn
     if (values && values.length >= 2) {
       const at = lines.findIndex((line, index) => index > 0 && (end < 0 || index < end) && line.startsWith('returns:'));
       out.push(warning(file, at < 0 ? 1 : at + 1, 1, IDIOM_DECISION_READOUT,
-        `\`${baseName(file)}\` returns one of ${values.length} values: add \`readout: decision\` to score them in one pass, ` +
+        `\`${baseName(file)}\` returns one of ${values.length} values: add \`readout: decision\` so the model reasons and scores them, ` +
         'or keep the tool loop if it must call helpers first.'));
     }
   }

@@ -309,10 +309,23 @@ def expand_captures(trajectory: list[Any]) -> list[Any]:
 def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The policy's own model turns of a collector result as `natlang.rollout/1` turns ({messages, tools, target}),
     replayable as `logLikelihood` terms. Host-authored actions (`action_provenance`, e.g. the authored root eval) are
-    not policy samples and are skipped."""
+    not policy samples and are skipped.
+
+    A reasoned decision readout's reasoning generations (phase ``decision_reasoning``) are never turns: their free reply
+    after ``</think>`` was never used. Each scored entry (phase ``action``, ``decision_reasoning: {index, samples,
+    action}``) keeps that metadata plus its paired generation's exact sampled ids (``reasoning_sample_ids``, the
+    generation of the same invocation and sample index before it) and the hash of its scored prompt ids
+    (``scored_prompt_sha256``, ``data.decision_graph.token_ids_sha256``), what ``sft_sources build`` trains the
+    reasoning from and checks its rendering against (``data.decision_graph.reasoned_decision_plan``)."""
     turns = []
     invocations = {item.get('invocation_id'): item for item in ((result or {}).get('outcome') or {}).get('invocation_ledger') or []}
+    reasoning_steps: dict[tuple[Any, Any], dict[str, Any]] = {}
     for step in expand_captures((result or {}).get("trajectory") or []):
+        if step.get("phase") == "decision_reasoning":
+            marker = step.get("decision_reasoning")
+            if isinstance(marker, dict):
+                reasoning_steps[(step.get("invocation_id"), marker.get("index"))] = step
+            continue
         assistant = step.get("assistant")
         if step.get("phase") != "action" or not isinstance(assistant, dict) or assistant.get("action_provenance") \
                 or step.get("action_provenance") or not isinstance(step.get("context"), list):
@@ -341,6 +354,7 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                      for index, call in enumerate(assistant.get("calls") or [])]
             if calls:
                 target["tool_calls"] = calls
+        reasoned = _reasoned_decision(step, reasoning_steps)
         invocation = invocations.get(step.get('invocation_id')) or {}
         role = ('unknown' if 'parent_invocation_id' not in invocation else
                 'root' if invocation['parent_invocation_id'] is None else 'child')
@@ -352,6 +366,7 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                       'parent_invocation': invocation.get('parent_invocation_id'), 'invocation_role': role,
                       **({'response_tools':copy.deepcopy(step['response_tools']), 'native_xml_turn':copy.deepcopy(step)} if native_xml else {}),
                       **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
+                      **({'decision_reasoning': reasoned} if reasoned is not None else {}),
                       **({'usage': copy.deepcopy(response['usage'])} if isinstance(response.get('usage'), dict) else
                          {'usage': {'completion_tokens': response['completion_tokens']}}
                          if type(response.get('completion_tokens')) is int else
@@ -363,6 +378,27 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                                  "request_sha256": step.get("request_sha256"),
                                  "raw_response_sha256": step.get("raw_response_sha256")}})
     return turns
+
+
+def _reasoned_decision(step: dict[str, Any], reasoning_steps: dict[tuple[Any, Any], dict[str, Any]]) -> dict[str, Any] | None:
+    """A reasoned decision entry's ``decision_reasoning`` turn field (``rollout_turns``), or None for any other step."""
+    marker = step.get("decision_reasoning")
+    if not isinstance(marker, dict):
+        return None
+    from ..data.decision_graph import capture_prompt_ids, token_ids_sha256
+    out = {key: marker[key] for key in ("index", "samples", "action") if key in marker}
+    out["action"] = marker.get("action") is True
+    scored = capture_prompt_ids((step.get("model_response") or {}).get("rl_sampling"))
+    if scored is not None:
+        out["scored_prompt_sha256"] = token_ids_sha256(scored)
+    paired = reasoning_steps.pop((step.get("invocation_id"), marker.get("index")), None)
+    sampling = ((paired or {}).get("model_response") or {}).get("rl_sampling")
+    if isinstance(sampling, dict) and isinstance(sampling.get("samples"), list):
+        out["reasoning_sample_ids"] = [int(sample["token_id"]) for sample in sampling["samples"]]
+        prompt = capture_prompt_ids(sampling)
+        if prompt is not None:
+            out["reasoning_prompt_sha256"] = token_ids_sha256(prompt)
+    return out
 
 
 def execution_efficiency(rollout: dict[str, Any], weight: float | None = None) -> dict[str, Any]:
@@ -412,7 +448,10 @@ def _decision_frame(row: dict[str, Any], unmatched: list[Any]) -> dict[str, Any]
             "request_sha256": request_sha, "tools_offered": [],
             "model_response": {"calls": [], "text": text, "raw_calls": [], "rl_sampling": copy.deepcopy(capture),
                                **({"native_state_imports": copy.deepcopy(imports)} if isinstance(imports, list) else {})},
-            "assistant": {"content": text, "reasoning": None, "calls": []}}
+            "assistant": {"content": text, "reasoning": capture.get("reasoning") if isinstance(capture.get("reasoning"), str)
+                          else None, "calls": []},
+            **({"decision_reasoning": copy.deepcopy(row["decision_reasoning"])}
+               if isinstance(row.get("decision_reasoning"), dict) else {})}
 
 
 def _graph_of_turn_prefix(graph: list[dict[str, Any]], kept_names: list[str]) -> list[dict[str, Any]]:

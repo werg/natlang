@@ -150,7 +150,7 @@ ${fence}
 it), the \`Route\` a message can take, and a \`Reply\` whose property the runtime checks on every draft.
 
 **route.nl** is a natural-language function: a typed signature and the instructions a model carries out. Its
-\`readout: decision\` makes the model score the three routes in one pass, and \`decide\` returns their probabilities.
+\`readout: decision\` makes the model reason, then score the three routes, and \`decide\` returns their probabilities.
 
 **main.ts** is the program: it routes every message at once, drafts a reply with an inline \`nl<Reply>\` function only
 where one is needed, and keeps each decision's confidence. \`main\` is what \`natlang run\` calls.
@@ -175,7 +175,7 @@ whole program in one screen.
 - \`types.ts\`: the data. \`Untrusted<string>\` marks outside text (the model reads it as data and never follows it);
   \`Is<string, "...">\` is a property the runtime checks on every value and repairs when it fails.
 - \`route.nl\`: a named natural-language function. YAML front matter declares its typed signature; the body says what
-  to decide. \`readout: decision\` makes the model score each allowed value in one pass: fast, and calibrated
+  to decide. \`readout: decision\` makes the model reason, then score each allowed value: calibrated
   (\`decide(route, message)\` gives you the probabilities).
 - \`main.ts\`: TypeScript that maps \`route\` over the messages, and an inline function, \`\`nl<Reply>\`Draft a reply to
   message for its reader.\` \`\`, called only where a reply is needed. An inline \`nl\` takes its call's arguments under

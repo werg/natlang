@@ -1,5 +1,6 @@
 import ts from 'typescript';
 import { INTRINSICS_FILE, INTRINSICS_GLOBAL_DTS, INTRINSICS_MODULE_DTS, STD_MODULE_DTS, STD_MODULE_FILE, SURFACE_MODULE_FILE } from './intrinsics.js';
+import { desugarNlCalls } from './nl-call.js';
 
 /** Minimal file access the compiler needs. Node supplies `ts.sys`; browsers supply virtual files. */
 export interface CompilerFiles {
@@ -46,6 +47,9 @@ export type NatlangCompilerHostOptions = {
   virtual?: ReadonlyMap<string, string>;
   files?: CompilerFiles;
   libs?: LibProvider;
+  /** Read `nl` called on literal instructions as the tag form (default true; a host that resolves symbols itself,
+   * compiler/host-cell.ts, rewrites only the built-in `nl` and passes false). */
+  desugarNl?: boolean;
   currentDirectory?: string;
 };
 
@@ -74,8 +78,14 @@ export function createNatlangCompilerHost(config: NatlangCompilerHostOptions): t
   }
   return {
     getSourceFile(fileName, languageVersion) {
-      const text = read(fileName);
-      if (text === undefined) return undefined;
+      const read_ = read(fileName);
+      if (read_ === undefined) return undefined;
+      // `nl` called on its literal instructions reads as the tag form (compiler/nl-call.ts): every program built here
+      // (project builds, callable-folder modules, eval cells, the page) compiles nl(`...`), nl(`...`)(x),
+      // nl(`...`(x)) and nl(`...`, x) exactly as the tag form; declarations and libraries are never rewritten.
+      // A file that declares its own nl keeps its calls as written (that nl is an ordinary function).
+      const text = config.desugarNl === false || /\.d\.[cm]?ts$/.test(fileName) || fileName.startsWith(`${libDir}/`) ||
+        /\b(?:function|const|let|var|class)\s+nl\b/.test(read_) ? read_ : desugarNlCalls(read_);
       const target = typeof languageVersion === 'number' ? languageVersion : languageVersion.languageVersion;
       return isShared(fileName) ? cachedSourceFile(fileName, text, target) :
         ts.createSourceFile(fileName, text, languageVersion, true);

@@ -1471,7 +1471,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             request:structuredClone(request), scores:structuredClone(scores)}]);
           const id = `native-turn:${randomUUID()}`;
           activeRecorder()?.record({ messages: structuredClone(request.messages), reply: {role:'assistant',content:null},
-            blocks: [], decision: {options: [...request.options]},
+            blocks: [], decision: {options: [...request.options],
+              ...(typeof request.reasoning === 'string' ? {reasoning: request.reasoning} : {}),
+              ...(request.reasoning_sample ? {reasoning_sample: {...request.reasoning_sample}} : {})},
             native: {schema:'natlang.native-recorded-turn/1',kind:'decision',id,retry:0,decision:structuredClone(capture)} });
           scores.x_natlang_native_recorded_turn = id;
         } else {
@@ -1487,7 +1489,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             const capture = scores.native_decision_capture;
             if (!capture) throw new Error('decision collection needs its exact native capture');
             const temperature = config.temperature ?? 0;
-            if (config.request?.x_natlang_rl_capture && temperature > 0) {
+            // A reasoned readout samples its choice on its action sample only; the other samples estimate its
+            // probabilities and carry no behaviour law (native/agent.ts decisionReadout).
+            if (config.request?.x_natlang_rl_capture && temperature > 0 && (request.reasoning_sample?.action ?? true)) {
               const seed = derivedSeed(config.rootSeed, call, ordinal);
               const chosen = sampleOption(scores.log_probs, temperature, seed);
               capture.decision_sample = {schema:'natlang.decision-sample/1', log_probs:[...scores.log_probs], chosen, temperature, seed};
@@ -1504,7 +1508,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           request_sha256:requestSha, tools_offered:[],
           model_response:{calls:[],text:request.options[chosen],raw_calls:[],rl_sampling:structuredClone(capture),
             ...(Array.isArray(capture.native_state_imports) ? {native_state_imports:structuredClone(capture.native_state_imports)} : {})},
-          assistant:{content:request.options[chosen],reasoning:null,calls:[]},
+          assistant:{content:request.options[chosen],reasoning:request.reasoning ?? null,calls:[]},
+          ...(request.reasoning_sample ? {decision_reasoning:{...request.reasoning_sample}} : {}),
           raw_response_sha256:sha256(canonical(scores))});
         return scores;
       };

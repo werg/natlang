@@ -1,0 +1,13 @@
+[Unit]
+Description=natlang continuous storage sweep: disposable scratch, unreferenced pins and worktrees, disk-floor alerts
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+Nice=19
+IOSchedulingClass=idle
+# Disk-floor alerts first, outside the ledger (df only), so they fire even when the ledger cannot admit the sweep.
+ExecStartPre=/usr/bin/env SWEEP_ALERTS_ONLY=1 /home/werg/natlang/scripts/storage_sweep.sh
+# The sweep itself under the memory ledger; it waits up to 25 minutes for admission (the timer runs every 30).
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-storage-sweep-run --budget-gb 1 --priority low --class service --no-resumable --wait 1500 -- /home/werg/natlang/scripts/storage_sweep.sh
+TimeoutStartSec=2h

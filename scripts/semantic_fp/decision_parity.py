@@ -13,6 +13,13 @@ text) and field mode (the FORM request, one ``open_reply`` step per field). Both
                                     SGLang input log-probabilities of exactly the native items' prompt + continuation
                                     ids; field steps use this, so an actor whose code predates ``open_reply`` scores
                                     them too); sequential requests; OUT/sglang.json
+    reasoned OUT --checkpoint C --samples S
+                                    calibration of the reasoned readout (DECISIONS 2026-11-23 "reasoned decisions"):
+                                    S holds sampled replies per joint decision ({'decision', 'outputs': [token ids]},
+                                    the hunt's samples.json); the native engine scores each decision's options without
+                                    reasoning (the instant readout) and after each sample's own reasoning; the reasoned
+                                    readout of k samples is the mean of their conditionals. Against the sampled answers
+                                    of the other samples (held out) and of all: TV, mode agreement; OUT/reasoned.json
     llama-items OUT                 the native run's score items (messages, continuations, open_reply) as
                                     OUT/llama-items.json for scripts/wllama_smoke.mjs --items (the managed llama-server
                                     and the in-page engine score them in one run, same GGUF, release template)
@@ -209,6 +216,92 @@ def native(out, checkpoint, base):
     print(json.dumps({'items': len(items), 'seconds': round(time.time() - started, 1)}))
 
 
+def reasoned(out, checkpoint, base, samples_path, k):
+    """The reasoned readout's calibration against the model's own reasoned answers (see the module docstring)."""
+    import collections
+    import torch
+    from transformers import AutoTokenizer
+    from natlang_neuralese.serve import load_native_engine
+    from natlang_neuralese.serve.native_learning import decide_many_native
+    tokenizer = AutoTokenizer.from_pretrained(str(LFM3), local_files_only=True, trust_remote_code=False)
+    decisions = {d['id']: d for d in json.loads((out / 'decisions.json').read_text()) if d['mode'] == 'joint'}
+    samples = json.loads(Path(samples_path).read_text())
+    started = time.time()
+    engine = load_native_engine(str(checkpoint), base=str(base), device='cuda', dtype=torch.bfloat16,
+                                training_state=False)
+
+    def softmax(scores):
+        top = max(scores)
+        weights = [2.718281828459045 ** (x - top) for x in scores]
+        return [w / sum(weights) for w in weights]
+
+    def score(decision, reasoning=None):
+        item = {'messages': decision['messages'], 'continuations': decision['options'],
+                **({'reasoning': reasoning} if reasoning is not None else {})}
+        result = decide_many_native(engine, {'items': [item]})['results'][0]
+        if 'error' in result or (reasoning is not None and result.get('reasoning') is not True):
+            raise RuntimeError(f"{decision['id']}: {result.get('error', 'reasoning not echoed')}")
+        return softmax(result['log_probs'])
+
+    def tv(p, q):
+        return 0.5 * sum(abs(a - b) for a, b in zip(p, q))
+
+    def empirical(answers, options):
+        counts = collections.Counter(a for a in answers if a in options)
+        total = sum(counts.values())
+        return [counts[o] / total for o in options] if total else None
+
+    rows = []
+    for entry in samples:
+        decision = decisions[entry['decision']]
+        options = decision['options']
+        reasonings, answers = [], []
+        for ids in entry['outputs']:
+            text = tokenizer.decode(ids, skip_special_tokens=False)
+            thought, closed, rest = text.partition('</think>')
+            reasonings.append(thought if closed else None)
+            try:
+                answers.append(dumps(json.loads(rest.replace('<|im_end|>', '').strip())) if closed else None)
+            except ValueError:
+                answers.append(None)
+        instant = score(decision)
+        conditionals = [score(decision, r) if r is not None else None for r in reasonings]
+        usable = [i for i, c in enumerate(conditionals) if c is not None]
+        mix = lambda idx: [sum(conditionals[i][o] for i in idx) / len(idx) for o in range(len(options))]
+        first, rest = usable[:k], usable[k:]
+        held = empirical([answers[i] for i in rest], options)
+        whole = empirical(answers, options)
+        argmax = lambda xs: max(range(len(xs)), key=xs.__getitem__)
+        row = {'decision': decision['id'], 'options': options, 'samples': len(entry['outputs']),
+               'closed_reasoning': len(usable), 'answers': answers,
+               'instant': instant, 'reasoned_k': mix(first), 'reasoned_all': mix(usable),
+               'conditionals': conditionals, 'sampled_held_out': held, 'sampled_all': whole,
+               'conditional_argmax_is_own_answer': sum(options[argmax(conditionals[i])] == answers[i] for i in usable),
+               'conditional_own_answer_probability': [conditionals[i][options.index(answers[i])]
+                                                      if answers[i] in options else None for i in usable]}
+        for name in ('instant', 'reasoned_k', 'reasoned_all'):
+            row[f'tv_{name}_vs_held_out'] = tv(row[name], held) if held else None
+            row[f'tv_{name}_vs_all'] = tv(row[name], whole) if whole else None
+            row[f'mode_{name}_agrees_held_out'] = bool(held) and argmax(row[name]) == argmax(held)
+            row[f'mode_{name}_agrees_all'] = bool(whole) and argmax(row[name]) == argmax(whole)
+        rows.append(row)
+        print(f"{decision['id']:15s} instant {options[argmax(instant)]:40s} p={max(instant):.2f} | reasoned(k={k}) "
+              f"{options[argmax(row['reasoned_k'])]:40s} p={max(row['reasoned_k']):.2f} | sampled "
+              f"{options[argmax(whole)] if whole else None} {max(whole) if whole else 0:.2f} | TV instant "
+              f"{row['tv_instant_vs_held_out']:.2f} reasoned {row['tv_reasoned_k_vs_held_out']:.2f}", flush=True)
+    mean = lambda key: sum(r[key] for r in rows if r[key] is not None) / max(1, sum(r[key] is not None for r in rows))
+    summary = {'decisions': len(rows), 'k': k, 'checkpoint': str(checkpoint), 'engine': 'python-native',
+               'seconds': round(time.time() - started, 1),
+               **{f'mean_tv_{n}_vs_{s}': mean(f'tv_{n}_vs_{s}') for n in ('instant', 'reasoned_k', 'reasoned_all')
+                  for s in ('held_out', 'all')},
+               **{f'mode_agree_{n}_vs_{s}': sum(r[f'mode_{n}_agrees_{s}'] for r in rows)
+                  for n in ('instant', 'reasoned_k', 'reasoned_all') for s in ('held_out', 'all')},
+               'conditional_argmax_is_own_answer': sum(r['conditional_argmax_is_own_answer'] for r in rows),
+               'closed_reasoning_samples': sum(r['closed_reasoning'] for r in rows)}
+    (out / 'reasoned.json').write_text(json.dumps({'summary': summary, 'rows': rows}, indent=1) + '\n')
+    print(json.dumps(summary, indent=1))
+
+
 def _post(url, body, timeout=300):
     request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -344,12 +437,15 @@ def compare(out):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
-    for name in ('build', 'native', 'sglang', 'llama-items', 'llama', 'compare'):
+    for name in ('build', 'native', 'sglang', 'reasoned', 'llama-items', 'llama', 'compare'):
         p = sub.add_parser(name)
         p.add_argument('out', type=Path)
-        if name == 'native':
+        if name in ('native', 'reasoned'):
             p.add_argument('--checkpoint', type=Path, required=True)
             p.add_argument('--base', type=Path, default=LFM3)
+        if name == 'reasoned':
+            p.add_argument('--samples', type=Path, required=True)
+            p.add_argument('--k', type=int, default=4, help='reasoning samples per readout (the runtime default)')
         if name == 'sglang':
             p.add_argument('--endpoint', required=True)
         if name == 'llama':
@@ -361,6 +457,8 @@ def main():
         native(args.out, args.checkpoint, args.base)
     elif args.command == 'sglang':
         sglang(args.out, args.endpoint.rstrip('/'))
+    elif args.command == 'reasoned':
+        reasoned(args.out, args.checkpoint, args.base, args.samples, args.k)
     elif args.command == 'llama-items':
         llama_items(args.out)
     elif args.command == 'llama':

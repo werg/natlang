@@ -16,7 +16,9 @@ export const canGenerateNl = (frame?: Frame): boolean => (frame?.adHocDepth ?? 0
 /** The distribution a decision readout scored: each allowed reply (JSON text) and its probability. A record decision
  * also has `fields`: per field each value (JSON text) and its probability, the marginal of a joint readout or the
  * step's distribution of a field-by-field one (whose `options` is then the one value chosen, with its probability). */
-export type DecisionReadout = { options: string[]; probabilities: number[]; fields?: Record<string, { value: string; probability: number }[]> };
+export type DecisionReadout = { options: string[]; probabilities: number[]; fields?: Record<string, { value: string; probability: number }[]>;
+  /** The reasoning samples the probabilities average over (a reasoned readout); absent for an instant readout. */
+  reasoned?: number };
 
 export type Frame = Readonly<{
   task: NatlangTask;

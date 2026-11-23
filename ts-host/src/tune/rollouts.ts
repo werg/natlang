@@ -138,11 +138,15 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     const capture = scores.native_decision_capture;
     if (!capture) throw fatal ??= new Error('rollout-capture-unavailable: decision readouts need the native server\'s '
       + 'decision capture');
+    // A reasoned readout's other samples only estimate its probabilities: its action sample is the episode's turn.
+    if (request.reasoning_sample && !request.reasoning_sample.action) return scores;
     const chosen = sampleOption(scores.log_probs, options.temperature, turnSeed);
     const binding = currentFrame()?.weights?.binding ?? null;
     if (call in bindings && bindings[call] !== binding) refuse('one invocation ran under two bindings');
     bindings[call] = binding;
-    turns.push({ messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]! },
+    turns.push({ messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]!,
+        ...(typeof request.reasoning === 'string' ? { reasoning_content: request.reasoning } : {}) },
+      ...(request.reasoning_sample ? { decision_reasoning: { ...request.reasoning_sample } } : {}),
       invocation_id: call, sampling: { ...structuredClone(capture), decision_sample: { schema: 'natlang.decision-sample/1',
         log_probs: [...scores.log_probs], chosen, temperature: options.temperature, seed: turnSeed } },
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
@@ -170,6 +174,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
       ...(request.response_tools ? {response_tools: structuredClone(request.response_tools)} : {}),
       ...(reply.tool_parse ? {tool_parse: structuredClone(reply.tool_parse), native_xml_turn: trajectoryTurn(request,reply)} : {}),
       target: { role: 'assistant', content: message.content ?? '', ...(message.tool_calls ? { tool_calls: structuredClone(message.tool_calls) } : {}) },
+      ...(request.decision_reasoning ? { decision_reasoning: { ...request.decision_reasoning } } : {}),
       invocation_id: call, sampling: { ...structuredClone(capture), ...(Array.isArray(imports) ? { native_state_imports: structuredClone(imports) } : {}) },
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
     return reply;

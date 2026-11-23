@@ -9,7 +9,7 @@ whole program in one screen.
 - `types.ts`: the data. `Untrusted<string>` marks outside text (the model reads it as data and never follows it);
   `Is<string, "...">` is a property the runtime checks on every value and repairs when it fails.
 - `route.nl`: a named natural-language function. YAML front matter declares its typed signature; the body says what
-  to decide. `readout: decision` makes the model score each allowed value in one pass: fast, and calibrated
+  to decide. `readout: decision` makes the model reason, then score each allowed value: calibrated
   (`decide(route, message)` gives you the probabilities).
 - `main.ts`: TypeScript that maps `route` over the messages, and an inline function, ``nl<Reply>`Draft a reply to
   message for its reader.` ``, called only where a reply is needed. An inline `nl` takes its call's arguments under

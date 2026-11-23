@@ -3,7 +3,9 @@ import ts from 'typescript';
 /**
  * `nl` called like a function on its instructions, nl(`...`) or nl<T>(`...`), is the one-shot call it reads as:
  * nl`...`(), a new natural-language call with the interpolated values, whose result is the answer. Called at once on
- * arguments, nl<T>(`...`)(item) is the function those instructions make, applied to them: nl<T>`...`(item). Rewritten in
+ * arguments, nl<T>(`...`)(item) is the function those instructions make, applied to them: nl<T>`...`(item); so is the
+ * plain function-call idiom with the arguments after the instructions, nl<T>(`...`, item), and the template called
+ * inside the parentheses, nl<T>(`...`(item)). Rewritten in
  * place with the same length, so positions in diagnostics still point into the code as written. Instructions that
  * are not a literal (a string built at run time) stay as they are, and are reported.
  */
@@ -23,6 +25,36 @@ export function nlCallEdits(file: ts.SourceFile, accept: (callee: ts.Identifier)
   const source = file.text;
   const edits: NlCallEdit[] = [];
   const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'nl' &&
+        node.arguments.length > 1 && accept(node.expression)) {
+      // nl<T>(`...`, a, b): the instructions, then the values they are called on, is nl<T>`...`(a, b). Same length:
+      // "(" + template + "," + spacing before a becomes template + "(" + spaces, so a and everything after stay put.
+      const [argument, first] = [node.arguments[0]!, node.arguments[1]!];
+      let template: string | undefined;
+      if (ts.isNoSubstitutionTemplateLiteral(argument) || ts.isTemplateExpression(argument)) template = argument.getText(file);
+      else if (ts.isStringLiteral(argument) && !/[`\\]|\$\{/.test(argument.text)) template = `\`${argument.text}\``;
+      const open = node.arguments.pos - 1, from = first.getStart(file);
+      if (template !== undefined && template.length === argument.getText(file).length && source[open] === '(' &&
+          from - open >= template.length + 1 && !source.slice(argument.getEnd(), from).replace(',', '').trim()) {
+        edits.push({ start: open, end: from, text: template + '(' + ' '.repeat(from - open - template.length - 1) });
+        for (const value of node.arguments.slice(1)) visit(value);
+        return;
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'nl' &&
+        node.arguments.length === 1 && accept(node.expression) && ts.isCallExpression(node.arguments[0]!) &&
+        (ts.isNoSubstitutionTemplateLiteral(node.arguments[0].expression) || ts.isTemplateExpression(node.arguments[0].expression))) {
+      // nl<T>(`...`(a)): the template called inside the parentheses is nl<T>`...`(a). Same length: "(" + template
+      // becomes template + " ", and the closing parenthesis a space, so the arguments stay where they were written.
+      const inner = node.arguments[0] as ts.CallExpression, template = inner.expression.getText(file);
+      const open = node.arguments.pos - 1, close = node.getEnd() - 1;
+      if (source[open] === '(' && source[close] === ')' && inner.expression.getStart(file) === open + 1) {
+        edits.push({ start: open, end: open + 1 + template.length, text: template + ' ' });
+        for (const value of inner.arguments) visit(value);
+        edits.push({ start: close, end: close + 1, text: ' ' });
+        return;
+      }
+    }
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'nl' &&
         node.arguments.length === 1 && accept(node.expression)) {
       const argument = node.arguments[0]!;

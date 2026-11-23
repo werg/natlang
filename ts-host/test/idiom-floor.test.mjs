@@ -25,7 +25,7 @@ test('a leaf .nl with a finite result and no readout gets the decision-readout w
   const found = floor({ 'natlang.json': '{}', ...tone.files });
   assert.deepEqual(found.map(item => [item.code, item.file, item.line, item.severity]),
     [['idiom-decision-readout', 'feedback/tone.nl', 4, 'warning']]);
-  assert.equal(found[0].message, '`tone.nl` returns one of 3 values: add `readout: decision` to score them in one pass, ' +
+  assert.equal(found[0].message, '`tone.nl` returns one of 3 values: add `readout: decision` so the model reasons and scores them, ' +
     'or keep the tool loop if it must call helpers first.');
   // boolean is finite too; a declared readout, a companion folder, uses:, a Folder parameter or a non-finite result is not flagged.
   assert.equal(floor({ 'natlang.json': '{}', 'ok.nl': '---\nargs:\n  x: string\nreturns: boolean\n---\nJudge x.\n' })[0]?.code, 'idiom-decision-readout');

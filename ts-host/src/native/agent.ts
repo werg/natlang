@@ -48,7 +48,7 @@ import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
-import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionScorer, domainMatch, domainValues,
+import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionSamples, decisionScorer, domainMatch, domainValues,
   pathValue, scoredJointly, softmax, stepCandidates, type DecisionDomain, type DecisionPath } from './decision.js';
 import { decisionFieldsPrompt } from '../decision-frame.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
@@ -551,6 +551,9 @@ export class NativeToolAgent {
       decisionReadout?: 'declared' | 'finite-returns';
       /** Diagnostic opt-out: retain the ordinary tool loop when the backend cannot score decisions. */
       decisionGeneration?: 'json' | 'tool-loop';
+      /** Reasoning samples per `readout: decision` call (native/decision.ts `decisionSamples`; default
+       * DECISION_SAMPLES, `NATLANG_DECISION_SAMPLES`); 0 reads every decision out without reasoning, as `readout: instant`. */
+      decisionSamples?: number;
       /**
        * Guided generation on natlang's own servers (reference and llama.cpp fork; others never receive it): the reply
        * opens a tool call when one is required, call names are checked, and eval code is checked line by line for
@@ -1615,14 +1618,14 @@ export class NativeToolAgent {
    */
   private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
     const lam = session.lam;
-    const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
+    const wanted = lam.readout === 'decision' || lam.readout === 'instant' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
     const domain = decisionDomain(lam.type.returns, session.env);
     const callId = session.runtime.currentCallId ?? null;
     const bounded = this.options.modelBudget?.maxRequests !== undefined || this.options.modelBudget?.maxTokens !== undefined;
     const decide = bounded ? undefined : decisionScorer(this.driver);
     if (!domain || domain.size < 2 || (!decide && this.options.decisionGeneration === 'tool-loop')) {
-      if (lam.readout === 'decision') session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable',
+      if (lam.readout === 'decision' || lam.readout === 'instant') session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable',
         reason: decide ? 'result type is not finite' : 'model driver cannot score replies' });
       return false;
     }
@@ -1650,10 +1653,28 @@ export class NativeToolAgent {
     // the final question when it has none: a server that caches by prefix continues the next call from there.
     const firstValues = encoded.messages.findIndex(message => (message as { role?: unknown }).role === 'tool');
     const cacheMessages = firstValues >= 0 ? firstValues : encoded.messages.length - 1;
-    const score = async (options: string[], open: boolean, turn: number) => {
+    // A reasoned readout (`readout: decision`, the default) first samples the model's own reasoning on the readout's
+    // messages, `samples` times, and scores the options after each; `readout: instant` scores them right away.
+    const samples = lam.readout === 'instant' || reasoningRefused.has(this.driver) ? 0 :
+      decisionSamples(this.options.decisionSamples, this.options.temperature);
+    let reasonings: DecisionReasoning[] = [];
+    if (samples > 0) {
+      const sampled = await this.decisionReasonings(session, encoded.messages, samples, capturedGuidance, guidancePolicy);
+      if (typeof sampled === 'string') return sampled;
+      reasonings = sampled;
+    }
+    // The sample whose choice the call returns when the scorer samples (RL collection), drawn before scoring.
+    const action = reasonings.length > 1 && session.runtime.seedPolicy.mode !== 'backend' ?
+      deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'decision-action', 0) % reasonings.length :
+      reasonings.length > 1 ? Math.floor(Math.random() * reasonings.length) : 0;
+    // Graph turns are the readout's scored turns (the rollout's action turns); its reasoning turns are not actions.
+    let turns = 0;
+    const scoreOne = async (options: string[], open: boolean, reasoning?: DecisionReasoning) => {
+      const turn = ++turns;
       // model-call-kind: decision-readout -- training/model-call-kinds.json
       const scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options, cache_messages: cacheMessages,
         ...(open ? { open_reply: true } : {}),
+        ...(reasoning ? { reasoning: reasoning.text, reasoning_sample: { index: reasoning.index, samples: reasonings.length, action: reasoning.index === action } } : {}),
         ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
         ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
@@ -1663,30 +1684,57 @@ export class NativeToolAgent {
       const turnNode = await this.modelTurnNode(session, encoded.messages,
         scores.native_decision_capture ? { raw_response: { x_natlang_rl_capture: scores.native_decision_capture } } : {}, turn, 'decision');
       if (turnNode && scores.x_natlang_native_recorded_turn) activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn, turnNode);
-      const probabilities = softmax(scores.log_probs);
       if (scores.chosen !== undefined && !(Number.isSafeInteger(scores.chosen) && scores.chosen >= 0 && scores.chosen < options.length))
         throw new Error('decision readout sampled an option outside its option set');
-      return { scores, probabilities, chosen: scores.chosen ?? probabilities.indexOf(Math.max(...probabilities)) };
+      return { scores, probabilities: softmax(scores.log_probs) };
     };
-    const unavailable = (error: unknown): false | Promise<string | void> => {
+    // The readout's probabilities: the instant readout's softmax, or the mean of the conditional softmaxes after each
+    // reasoning sample (the reasoned policy's answer distribution, estimated from `samples` draws). The answer is the
+    // most probable option, or the sampling scorer's choice on the action sample (a draw from that mixture).
+    const score = async (options: string[], open: boolean) => {
+      if (!reasonings.length) {
+        const { scores, probabilities } = await scoreOne(options, open);
+        return { scores, probabilities, chosen: scores.chosen ?? probabilities.indexOf(Math.max(...probabilities)) };
+      }
+      const each = await Promise.all(reasonings.map(reasoning => scoreOne(options, open, reasoning)));
+      const probabilities = options.map((_, index) => each.reduce((sum, item) => sum + item.probabilities[index]!, 0) / each.length);
+      const scores = { ...each[action]!.scores, log_probs: probabilities.map(probability => Math.log(probability)),
+        prompt_tokens: each.every(item => item.scores.prompt_tokens !== undefined) ?
+          each.reduce((sum, item) => sum + item.scores.prompt_tokens!, 0) : undefined };
+      const sampled = each[action]!.scores.chosen;
+      return { scores, probabilities, chosen: sampled ?? probabilities.indexOf(Math.max(...probabilities)),
+        reasoned: { samples: each.length, action, conditionals: each.map(item => item.probabilities),
+          log_probs: each.map(item => item.scores.log_probs) } };
+    };
+    const reasoningTrace = () => reasonings.length ? { reasoning: reasonings.map(item => ({ text: item.text,
+      truncated: item.truncated, completion_tokens: item.completionTokens })) } : {};
+    const unavailable = (error: unknown): false | Promise<false | string | void> => {
       const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('decision-reasoning-unsupported')) {
+        // A scorer that cannot condition on reasoning (an older llama.cpp fork release) reads this function's decisions
+        // out without it from now on (traced), rather than scoring the options as if no reasoning had been sampled.
+        reasoningRefused.add(this.driver);
+        session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable', reason: message, fallback: 'instant' });
+        return this.decisionReadout(session, opening);
+      }
       if (!message.startsWith('decision-unsupported') && !message.startsWith('decision-open-unsupported')) throw error;
       session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable', reason: message });
       return this.options.decisionGeneration === 'tool-loop' ? false : generate();
     };
     if (joint) {
       let result;
-      try { result = await score(replies!, false, 1); } catch (error) { return unavailable(error); }
+      try { result = await score(replies!, false); } catch (error) { return unavailable(error); }
       const { scores, probabilities, chosen } = result;
       const fields = recordMarginals(joint.map(item => item.value), probabilities);
       session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
         log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
-        ...(fields ? { fields } : {}),
+        ...(fields ? { fields } : {}), ...('reasoned' in result ? { reasoned: result.reasoned, ...reasoningTrace() } : {}),
         ...(scores.prompt_tokens !== undefined ? { prompt_tokens: scores.prompt_tokens } : {}),
         duration_ms: Math.round(performance.now() - started),
         ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
       lam.return = joint[chosen]!.value as Value;
-      lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies!.map((reply, index) => [reply, probabilities[index]])) });
+      lam.note = JSON.stringify({ readout: 'decision', ...(reasonings.length ? { reasoned: reasonings.length } : {}),
+        probabilities: Object.fromEntries(replies!.map((reply, index) => [reply, probabilities[index]])) });
       if (!session.finish()) return 'decision readout chose a value the declared type rejects';
       return;
     }
@@ -1695,16 +1743,16 @@ export class NativeToolAgent {
     const steps: Record<string, unknown>[] = [];
     const fields: Record<string, { value: string; probability: number }[]> = {};
     let confidence = 1, promptTokens: number | undefined = 0, finished: DecisionPath | undefined;
-    for (let turn = 1; !finished; turn++) {
+    while (!finished) {
       const candidates = stepCandidates(domain, paths);
       let chosen = 0, probabilities = [1];
       if (candidates.length > 1) {
         let result;
-        try { result = await score(candidates.map(candidate => candidate.text), true, turn); } catch (error) { return unavailable(error); }
+        try { result = await score(candidates.map(candidate => candidate.text), true); } catch (error) { return unavailable(error); }
         ({ chosen, probabilities } = result);
         promptTokens = promptTokens !== undefined && result.scores.prompt_tokens !== undefined ? promptTokens + result.scores.prompt_tokens : undefined;
         steps.push({ options: candidates.map(candidate => candidate.text), log_probs: result.scores.log_probs, probabilities, chosen,
-          tokens: result.scores.tokens ?? null });
+          tokens: result.scores.tokens ?? null, ...('reasoned' in result ? { reasoned: result.reasoned } : {}) });
       }
       confidence *= probabilities[chosen]!;
       candidates.forEach((candidate, index) => {
@@ -1717,16 +1765,18 @@ export class NativeToolAgent {
     }
     const value = pathValue(domain, finished), text = domainMatch(domain, value)!.text;
     session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', mode: 'fields', options: [text],
-      probabilities: [confidence], chosen: 0, steps, fields,
+      probabilities: [confidence], chosen: 0, steps, fields, ...reasoningTrace(),
       ...(promptTokens !== undefined ? { prompt_tokens: promptTokens } : {}), duration_ms: Math.round(performance.now() - started) });
     lam.return = value as Value;
-    lam.note = JSON.stringify({ readout: 'decision', mode: 'fields', probability: confidence, fields });
+    lam.note = JSON.stringify({ readout: 'decision', mode: 'fields', ...(reasonings.length ? { reasoned: reasonings.length } : {}),
+      probability: confidence, fields });
     if (!session.finish()) return 'decision readout chose a value the declared type rejects';
   }
 
   /** One recording boundary for actual generation replies, shared by tool turns and JSON decision readouts. */
   private recordGeneratedTurn(messages: readonly unknown[], tools: unknown[], response: ModelTurn, turn: number,
-    turnNode: string | undefined, driver = this.driver, actor = this.options.actor ?? { id: this.driver.name || 'model', revision: null }): void {
+    turnNode: string | undefined, driver = this.driver, actor = this.options.actor ?? { id: this.driver.name || 'model', revision: null },
+    decisionReasoning?: { index: number; samples: number }): void {
     const recorder = activeRecorder();
     const recordedTurn = response.raw_response?.x_natlang_recorded_turn;
     const recordedNative = response.raw_response?.x_natlang_native_recorded_turn;
@@ -1737,7 +1787,69 @@ export class NativeToolAgent {
       reply: { role: 'assistant', content: response.text ?? null,
         ...(response.raw_calls ? { tool_calls: structuredClone(response.raw_calls) } : response.calls?.length ? {
         tool_calls: response.calls.map(([name, args], index) => ({ id: `call_${turn}_${index}`, type: 'function',
-          function: { name, arguments: JSON.stringify(args) } })) } : {}) }, blocks: [] });
+          function: { name, arguments: JSON.stringify(args) } })) } : {}),
+        ...(typeof response.reasoning === 'string' ? { reasoning_content: response.reasoning } : {}) }, blocks: [],
+      ...(decisionReasoning ? { decision_reasoning: { ...decisionReasoning } } : {}) });
+  }
+
+  /**
+   * The reasoning of a reasoned decision readout: `samples` generation turns on the readout's own messages (no tools),
+   * as the model replies to them, each its own seed; the reasoning of each reply is kept (its answer after the reasoning
+   * is not: the options are scored after the reasoning instead). A string is a failure, as from run.
+   */
+  private async decisionReasonings(session: NativeSession, messages: unknown[], samples: number,
+    privilegedContext?: ModelTurnRequest['privileged_context'], guidancePolicy?: ModelTurnRequest['guidance_policy']): Promise<string | DecisionReasoning[]> {
+    const callId = session.runtime.currentCallId ?? null;
+    const budgetStop = (): string => {
+      session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: 0, reason: 'budget_exhausted', evidence: 'decision reasoning model budget exhausted' });
+      return 'budget: decision reasoning model budget exhausted';
+    };
+    if (this.options.maxTurns === 0 || this.options.maxTokens === 0) return budgetStop();
+    const adapters = adapterCells(session.lam);
+    if (adapters.length && !supportsNeuralese(this.driver)) throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+    const perTurn = this.options.turnTokens ?? (this.options.contextTokens == null ? null : Math.floor(this.options.contextTokens / 4));
+    const limit = this.options.maxTokens === undefined ? perTurn : perTurn === null ? this.options.maxTokens : Math.min(perTurn, this.options.maxTokens);
+    const actor = this.options.actor ?? { id: this.driver.name || 'model', revision: null };
+    const one = async (index: number): Promise<string | DecisionReasoning> => {
+      const turn = index + 1;
+      const request: ModelTurnRequest = { messages, tools: [], max_tokens: limit, decision_reasoning: { index, samples },
+        ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
+        ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
+        ...(privilegedContext ? { privileged_context: privilegedContext } : {}), ...(guidancePolicy ? { guidance_policy: guidancePolicy } : {}),
+        ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
+        seed: session.runtime.seedPolicy.mode === 'backend' ? null :
+          deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'decision-reasoning', index) };
+      const reservation = await this.options.modelBudget?.reserve(request.max_tokens ?? null, session.runtime.signal);
+      if (this.options.modelBudget && !reservation) return budgetStop();
+      if (reservation) request.max_tokens = reservation.limit;
+      const started = performance.now();
+      let response: ModelTurn;
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn, actor: this.options.actor, decision_reasoning: { index, samples } });
+      try {
+        // model-call-kind: decision-reasoning -- training/model-call-kinds.json
+        response = await runInFrame(session.runtime.frame, () => this.driver(request, session.runtime.signal,
+          this.options.onDelta ? { onDelta: delta => this.options.onDelta!(turn, delta) } : undefined));
+        reservation?.finish(response.completion_tokens);
+      } catch (error) {
+        reservation?.finish();
+        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn,
+          duration_ms: Math.round(performance.now() - started), error: String(error) });
+        throw error;
+      }
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn, actor: this.options.actor,
+        duration_ms: Math.round(performance.now() - started), prompt_tokens: response.prompt_tokens ?? null,
+        completion_tokens: response.completion_tokens ?? null, ...(response.cached_tokens === undefined ? {} : { cached_tokens: response.cached_tokens }),
+        decision_reasoning: { index, samples } });
+      // No model_turn graph node: the reasoning is not one of the call's actions (rollout turns count the scored
+      // decision turns, whose captured prompts hold this reasoning's tokens); the recorder keeps it, marked.
+      this.recordGeneratedTurn(messages, [], response, turn, undefined, this.driver, actor, { index, samples });
+      return { index, text: replyReasoning(response), truncated: response.truncated === true,
+        completionTokens: response.completion_tokens ?? null };
+    };
+    const sampled = await Promise.all(Array.from({ length: samples }, (_, index) => one(index)));
+    session.runtime.checkInterruption();
+    const failed = sampled.find(item => typeof item === 'string');
+    return failed !== undefined ? failed as string : sampled as DecisionReasoning[];
   }
 
   /** Generate on the very same short JSON decision surface used by the scored student. No probabilities are inferred. */
@@ -2661,6 +2773,23 @@ export class NativeToolAgent {
       if (results.at(-1)?.kind === 'completed') return;
     }
   }
+}
+
+/** One sampled reasoning of a reasoned decision readout. */
+type DecisionReasoning = { index: number; text: string; truncated: boolean; completionTokens: number | null };
+/** Scorers that refused to condition on reasoning (`decision-reasoning-unsupported`): their readouts read out instantly. */
+const reasoningRefused = new WeakSet<object>();
+
+/** The reasoning a reply carries: what the server split off before `</think>` (every natlang engine does), else a
+ * leading `<think>...</think>` block of the text (a server that splits nothing), else, for a reply cut off by its
+ * token limit before it closed its reasoning, the text so far (the generation prompt opened the block, so all of it is
+ * reasoning; the options are scored after it, closed), else none. */
+function replyReasoning(response: ModelTurn): string {
+  if (typeof response.reasoning === 'string') return response.reasoning;
+  const text = response.text ?? '';
+  const block = /^\s*<think>([\s\S]*?)<\/think>/.exec(text);
+  if (block) return block[1]!;
+  return response.truncated === true && !text.includes('</think>') ? text.replace(/^\s*<think>/, '') : '';
 }
 
 /**

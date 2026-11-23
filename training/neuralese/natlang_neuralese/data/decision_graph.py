@@ -242,6 +242,85 @@ def decision_messages(opening, values, *, guidance=''):
     replies = [json.dumps(value, ensure_ascii=False, separators=(',', ':')) for value in values]
     return ([{'role': 'system', 'content': DECISION_SYSTEM_PROMPT + guidance}, *opening[1:],
              {'role': 'user', 'content': decision_prompt(replies)}], replies)
+
+
+# ---- reasoned readouts (DECISIONS 2026-11-23 "reasoned decisions") --------------------------------------------------
+# A reasoned readout samples k reasonings R_j (generation turns, trajectory phase ``decision_reasoning``) and scores the
+# options after each (``serve.native_learning.decision_items(..., reasoning=R_j)``): k decision entries of phase
+# ``action`` with ``decision_reasoning: {index, samples, action}``; the action entry (``action: true``) is the one whose
+# sampled choice the program used. ``rl.task_rollouts.rollout_turns`` keeps the entries as turns (their reasoning
+# generations never become turns) and adds the paired generation's sampled ids (``reasoning_sample_ids``) and the
+# scored prompt's hash (``scored_prompt_sha256``).
+
+def token_ids_sha256(ids):
+    """The hash a reasoned decision turn records of its scored prompt ids (a capture's token prompt)."""
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps([int(i) for i in ids], separators=(',', ':')).encode()).hexdigest()
+
+
+def capture_prompt_ids(capture):
+    """A capture's prompt as token ids, or None when it holds anything but tokens (imported native state)."""
+    prompt = (capture or {}).get('prompt') if isinstance(capture, dict) else None
+    if not isinstance(prompt, list) or not prompt or any(
+            not isinstance(part, dict) or part.get('kind') != 'tokens' for part in prompt):
+        return None
+    return [int(i) for part in prompt for i in part.get('token_ids') or ()]
+
+
+def reasoned_decision_plan(turns):
+    """Per turn of an episode (``natlang.rollout/1`` semantic turns): None for a turn that is no reasoned decision
+    entry, else {'group': n, 'train': bool, 'why': 'agrees' | 'answer-differs' | 'no-action' | 'several-actions'}.
+
+    The training rule (spec "Training rule"): of a reasoned readout's samples, those whose reply equals the action
+    entry's reply (the answer the program used) train; the others do not; a readout without exactly one action entry
+    trains none. A readout's entries share the invocation and the messages; one sample index appears once per readout,
+    except in a field-mode readout, where sample j's later steps extend its earlier step's reply (each step is an entry,
+    the sample's reply is its last)."""
+    import json
+    groups, open_groups, plan = [], {}, [None] * len(turns)
+    for at, turn in enumerate(turns):
+        dr = turn.get('decision_reasoning') if isinstance(turn, dict) else None
+        if not isinstance(dr, dict):
+            continue
+        key = (turn.get('invocation_id'), json.dumps(turn.get('messages'), sort_keys=True, ensure_ascii=False))
+        reply = ((turn.get('target') or {}).get('content') or '').strip()
+        index = dr.get('index')
+        group = open_groups.get(key)
+        if group is not None and index in group['replies']:
+            earlier = group['replies'][index]
+            if not (reply.startswith(earlier) and reply != earlier):   # not a later field step: a new readout
+                group = None
+        if group is None or dr.get('samples') != group['samples']:
+            group = open_groups[key] = {'members': [], 'replies': {}, 'samples': dr.get('samples'), 'actions': set()}
+            groups.append(group)
+        group['members'].append((at, index))
+        group['replies'][index] = reply
+        if dr.get('action') is True:
+            group['actions'].add(index)
+    for number, group in enumerate(groups):
+        actions = group['actions']
+        chosen = group['replies'][next(iter(actions))] if len(actions) == 1 else None
+        for at, index in group['members']:
+            if chosen is None:
+                why = 'no-action' if not actions else 'several-actions'
+            else:
+                why = 'agrees' if group['replies'][index] == chosen else 'answer-differs'
+            plan[at] = {'group': number, 'train': why == 'agrees', 'why': why}
+    return plan
+
+
+def reasoning_span(tokenizer, at, prompt_ids):
+    """(start, stop) of a reasoned readout's reasoning in its decision prompt ids: from ``at`` (the end of the
+    generation prompt, after ``<think>``) through the first think close (``</think>``) included, the student's own
+    sampled tokens. Raises when the prompt has no think close after ``at``."""
+    close = tokenizer.convert_tokens_to_ids('</think>')
+    ids = [int(i) for i in prompt_ids]
+    if close is None or close == getattr(tokenizer, 'unk_token_id', None) or close not in ids[at:]:
+        raise ValueError('a reasoned decision prompt closes its reasoning with </think>')
+    return at, ids.index(close, at) + 1
+
+
 _FIELDS = {'name', 'options', 'prompt_tokens', 'label', 'probabilities', 'label_source', 'values'}
 
 
@@ -422,13 +501,15 @@ def decision_graph_row(renderer, record, *, tokenizer_fingerprint):
     """One plain-text decision record as a native graph row with option nodes.
 
     ``record``: {id, split, source_groups, messages, tools?, options: [reply texts], label | probabilities,
-    label_source}. Prompts with native-state inputs come from recorded captures (``serve.native_recorded_graph``),
-    never from this text path.
+    label_source, reasoning?}. Prompts with native-state inputs come from recorded captures
+    (``serve.native_recorded_graph``), never from this text path. A record's ``reasoning`` (a reasoned readout's
+    sampled reasoning) is prompt, as the scorer renders it (``decision_items(..., reasoning=)``); graph rows carry no
+    token targets on decision prompts, so it conditions the choice and is not trained here.
     """
     from ..data.native_graph_schema import SCHEMA
     from ..serve.native_learning import decision_items
     prompt, continuations = decision_items(renderer, record['messages'], record.get('tools'), record['options'],
-                                           bool(record.get('open_reply')))
+                                           bool(record.get('open_reply')), record.get('reasoning'))
     if any(kind != 'tok' for kind, _ in prompt):
         raise ValueError('a plain-text decision record cannot carry native-state inputs')
     ids = [int(value) for _, value in prompt]

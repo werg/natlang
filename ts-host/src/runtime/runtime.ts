@@ -53,6 +53,9 @@ export type ModelConfig = { driver: ModelDriver;
   decisionReadout?: 'declared' | 'finite-returns';
   /** Explicit diagnostic opt-out from JSON generation when scoring is unavailable. */
   decisionGeneration?: 'json' | 'tool-loop';
+  /** Reasoning samples per `readout: decision` call before its values are scored (default 4, NATLANG_DECISION_SAMPLES;
+   * 1 at temperature 0); 0 reads every decision out without reasoning, as `readout: instant` does. */
+  decisionSamples?: number;
   /** Guided generation (the `guidance` request field) on natlang's reference server and the llama.cpp fork (managed and in
    * the page). A configured runtime (`natlang run`, natlangRuntime()) turns it on for those backends unless the profile's
    * `runtime.guidance` says otherwise; set directly, it is off unless given. Other backends ignore the field. */
@@ -80,8 +83,13 @@ export type LiveEvent = (LiveCall & { type: 'model_delta'; turn: number; delta: 
   (LiveCall & { type: 'trace'; event: Record<string, unknown> });
 /** Receives live events synchronously as they occur; it must be quick, and what it throws is ignored. */
 export type LiveSink = (event: LiveEvent) => void;
-/** A decision with its distribution (`runtime.decide`): every allowed value's probability, highest is `value`. */
+/** A decision with its distribution (`runtime.decide`): every allowed value's probability, highest is `value`. For a
+ * `readout: decision` call a probability is the model's chance of answering with that value after reasoning first:
+ * the mean, over `reasoned` reasoning samples, of the value's softmax after each; for `readout: instant` it is the
+ * softmax of the values scored without reasoning. */
 export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean;
+  /** The reasoning samples the probabilities average over; absent when the call read out without reasoning. */
+  reasoned?: number;
   /** A record decision: per field, each of its values and its probability (the marginal when the records were scored
    * together; the step's distribution, given the fields chosen before it, when they were scored field by field). */
   fields?: Record<string, { value: unknown; probability: number }[]> };
@@ -605,7 +613,7 @@ export async function decideInFrame<A extends unknown[], T>(frame: Frame, fn: (.
   const fields = scored?.fields && Object.fromEntries(Object.entries(scored.fields).map(([key, items]) =>
     [key, items.map(item => ({ value: JSON.parse(item.value) as unknown, probability: item.probability }))]));
   return { value, probabilities, confidence: Math.max(...probabilities.map(item => item.probability)), scored: scored !== undefined,
-    ...(fields ? { fields } : {}) };
+    ...(fields ? { fields } : {}), ...(scored?.reasoned ? { reasoned: scored.reasoned } : {}) };
 }
 
 /** Resolve the frame for a natlang call: the propagated frame, the creation frame, or the only active task. */

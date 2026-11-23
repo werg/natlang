@@ -3,6 +3,52 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — `readout: decision` reasons first; `readout: instant` is the fast mode (DECISIONS "reasoned decisions")
+
+- **What changed.** A `readout: decision` call (and every finite call under `decisionReadout: 'finite-returns'`, and
+  the std judgments `compatible`, `settled`, `beats`) no longer closes the think block at once. The model replies to
+  the unchanged readout request (decision system prompt, the call's opening, "Answer this call now, without tools.
+  Reply with exactly one of these JSON values ...") `decisionSamples` times (default 4, in parallel, at the call's
+  temperature; 1 at temperature 0), as it does when it generates, and each option is then scored as the reply's
+  content after that reasoning (`<think>R</think>option`; the score item field `reasoning` on every engine). The
+  answer is the option with the highest mean probability over the samples; RL collection samples it on one seeded
+  "action" sample. No prompt text changed, so the system prompt, tool block and decision prompts are byte-identical
+  (no fixture or prompt-piece regeneration). `readout: instant` (new frontmatter value) keeps the one-pass readout.
+- **Why (first principles, measured).** The no-reasoning readout was a different, weaker policy than the one the
+  model runs: on 10 decision prompts its argmax matched the model's own reasoned answers on 7, mean TV 0.31
+  (answerInvite: readout `accept` p 0.40, reasoned answers `decline` 16/16). Confidence floors and escalation read
+  that weaker policy's confidence.
+- **Measured after (sft-v8, native engine, the same 10 prompts and 16 recorded reasoned samples each;
+  `ops/semantic-fp/decision-parity/reasoned-20261123/reasoned.json`).** Readout vs the model's own reasoned answers of
+  12 held-out samples: instant TV 0.30, mode 8/10; reasoned (k=4) TV 0.12, mode 9/10 (vs all 16 samples: 0.31 / 7
+  -> 0.09 / 10). After its own reasoning the scored option equals the answer the model then wrote in 155 of 155 samples.
+  On std `compatible` (B13's four merge cases, sft-v6, k=16) the readout tracks the reasoned answers but they are
+  wrong too: additive edits P(compatible) 0.06 -> 0.19 and 0.13 -> 0.12, clashes 0.02/0.06 -> 0.00; a training target,
+  not a readout defect (DECISIONS).
+- **Training.** SFT trains option scores conditioned on the student's own recorded reasoning and the reasoning tokens
+  of the samples whose answer is the one the verified episode used (`exp0_sft --no-decision-reasoning`: choice only).
+- **Opt-outs.** `readout: instant` per function; `decisionSamples: 0` (model config) or `NATLANG_DECISION_SAMPLES=0`
+  for a whole runtime. A server that does not condition on reasoning is detected (`decision-reasoning-unsupported`)
+  and that driver reads out instantly, traced.
+
+### 2026-11-23 — `nl` called on literal instructions is the tag form everywhere; `nl-not-tag` only for run-time text and `nl` as a value
+
+- **What changed.** Code written in the function-call idioms, ``nl<T>(`...`(x))``, ``nl<T>(`...`, x)``,
+  ``nl<T>(`...`)(x)`` and ``nl<T>(`...`)`` (a string literal works as the template too), is rewritten in place to the
+  tag form it reads as (``nl<T>`...`(x)``; same-length edits in `compiler/nl-call.ts`, so diagnostics keep their
+  positions) and compiled exactly as that form: same instructions, holes, captures, signature and function identity.
+  This now happens on every path that compiles inline `nl`: project builds and callable-folder modules (the compiler
+  host, `compiler/host.ts`), eval cells and host cells (as before, now with the template-inside form), the page and the
+  inline curriculum (they compile through the same host). A file that declares its own `nl` is left as written.
+  `nl-not-tag` remains for instructions built at run time (`nl(prompt)`), with one sentence naming that cause ("nl takes
+  its instructions written in place, not as text built at run time: write them as a template right after nl, with the
+  changing values in ${...} or passed as arguments, for example ..."), and for `nl` used as a value.
+- **Why.** In B13's live run LFM3 wrote a nested `nl` inside `intentOf`'s eval and lost three actions and ~20 minutes
+  to `nl-not-tag` (the rejected code was not retained). The forms are unambiguous standard-JS readings of the same
+  call, so the runtime accepts them (make the idiom work) instead of teaching a rewrite it could do itself.
+  Tests: `ts-host/test/ambient-nl.test.mjs` (the parenthesized forms and the tag form give identical plans),
+  `host-cell.test.mjs`, `nl-call-form.test.mjs`, `eval-guidance.test.mjs`.
+
 ### 2026-11-23 — `@natlang/std` ships five judgments as `.nl` functions (B13, WS3 S2)
 
 New model-facing text, reached only by programs that use the standard library's combinators; no existing call

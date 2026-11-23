@@ -20,7 +20,7 @@
 import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTransport, isStream, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
-import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { activeNativeAdapters, activeNativeStates, activeRecorder, activeSoftStates, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
@@ -431,6 +431,12 @@ export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: Native
 }
 
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
+/** A recorded decision's reasoning and its place in a reasoned readout (model-recording.ts `decision`). */
+function reasonedFields(item: Pick<DecisionRequest, 'reasoning' | 'reasoning_sample'> | undefined) {
+  return { ...(typeof item?.reasoning === 'string' ? { reasoning: item.reasoning } : {}),
+    ...(item?.reasoning_sample ? { reasoning_sample: { ...item.reasoning_sample } } : {}) };
+}
+
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; artifacts: HttpNeuraleseStore; decide: DecisionScorer; neuraleseRuntime: () => Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions> } {
   const { store, request: extra, onExchange, onTurn, owner, nativeStateModes,
@@ -671,7 +677,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
         blocks:structuredClone((((reply.native_state as Json|undefined)?.blocks??[]) as Json[])),
         ...(adapters.length?{adapters:[...adapters]}:{}),
-        ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{})});
+        ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{}),
+        ...(meta?.decision_reasoning?{decision_reasoning:{...meta.decision_reasoning}}:{})});
     }
     return normalizeReply(reply);
   };
@@ -689,18 +696,20 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates(),
     softStates: [...activeSoftStates()] });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
-  // `hints`: the request's cache hint and open-reply flag, carried to the server as they are (SCORE_ITEM_FIELDS).
+  // `hints`: the request's cache hint, open-reply flag and reasoning, carried to the server as they are
+  // (SCORE_ITEM_FIELDS); the reasoned readout's sample identity is recorded with the turn, never sent.
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
-      scope: Scope = here(), record = false, hints?: Pick<Item,'cache_messages'|'open_reply'>):Promise<Item> => {
+      scope: Scope = here(), record = false, hints?: Pick<Item,'cache_messages'|'open_reply'|'reasoning'|'reasoning_sample'>):Promise<Item> => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
     const info = await serverInfo(scope.nativeStates.length > 0);
     const native=info?.native_state as {enabled?:boolean}|undefined;
     const preparedMessages=materializeNativeStateSentinels(await bindNativeStateContext(messages,scope.nativeStates,info)) as unknown[];
     const modes=await nativeStateModesFor(preparedMessages,{adapters:scope.adapters,softStates:scope.softStates});
     if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
-      decision:{options:[...replies],...(hints?.open_reply?{open_reply:true}:{})},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
+      decision:{options:[...replies],...(hints?.open_reply?{open_reply:true}:{}),...reasonedFields(hints)},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
       ...(hints?.cache_messages?{cache_messages:hints.cache_messages}:{}),...(hints?.open_reply?{open_reply:true}:{}),
+      ...(typeof hints?.reasoning==='string'?{reasoning:hints.reasoning}:{}),...(hints?.reasoning_sample?{reasoning_sample:{...hints.reasoning_sample}}:{}),
       ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&(record||scope.recorder||scope.nativeStates.length)?{native_recording:true}:{})};
   };
   // JOLT+ teacher attempt: a decision readout gets its invocation's privileged block like a generated turn.
@@ -729,7 +738,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const native={schema:'natlang.native-recorded-turn/1' as const,kind:'decision' as const,
       id:`native-turn:${globalThis.crypto.randomUUID()}`,decision:structuredClone(capture),retry:0};
     scope.recorder.record({messages:structuredClone(item.messages),reply:{role:'assistant',content:null},blocks:[],
-      decision:{options:[...item.options],...(item.open_reply?{open_reply:true}:{})},...(item.adapters?.length?{adapters:[...item.adapters]}:{}),
+      decision:{options:[...item.options],...(item.open_reply?{open_reply:true}:{}),...reasonedFields(item)},...(item.adapters?.length?{adapters:[...item.adapters]}:{}),
       ...(item.native_state_modes?{native_state_modes:{...item.native_state_modes}}:{}),native});
     return {...scores,x_natlang_native_recorded_turn:native.id};
   };
@@ -737,13 +746,16 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     withRestoredNativeArtifacts(remote,store,adapterArtifactIds(item.adapters??[]),()=>
       withRestoredNativeStates(remote,store,requestNativeStateIds(item.messages),run,nativeUploaded),uploaded);
   const issue = async (item:Item,signal?:AbortSignal):Promise<DecisionScores> => restore(item,async()=>{
+    const {reasoning_sample:_sample,...wire}=item;
     const response=await fetchModel(http.endpoint.replace(/\/$/,'')+'/v1/neuralese/decide',{method:'POST',signal,
-      headers:{'content-type':'application/json',...http.headers},body:JSON.stringify(item)});
+      headers:{'content-type':'application/json',...http.headers},body:JSON.stringify(wire)});
     if(response.status===404||response.status===501)throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
     if(!response.ok)throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0,2000)}`);
-    const scores=await response.json() as DecisionScores & {open_reply?:boolean};
+    const scores=await response.json() as DecisionScores & {open_reply?:boolean;reasoning?:boolean};
     if(item.open_reply&&scores.open_reply!==true)
       throw new Error('decision-open-unsupported: the server scored the replies of a field-by-field decision as closed (open_reply not served)');
+    if(typeof item.reasoning==='string'&&scores.reasoning!==true)
+      throw new Error('decision-reasoning-unsupported: the server scored the replies without the reasoning before them (reasoning not served)');
     return scores;
   });
   // A decision readout's training guidance, like a generated turn's, goes only to a server that renders it.

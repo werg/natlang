@@ -360,7 +360,7 @@ export class BrowserLocalModel {
       return this.engine.createNatlangScore!(body);
     });
     return items.map((item, index): PromiseSettledResult<DecisionScores> => {
-      try { return { status: 'fulfilled', value: scoresFromBatchResult(response.results[index] as BatchScoreResult, item.options.length, item.open_reply === true) }; }
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(response.results[index] as BatchScoreResult, item) }; }
       catch (reason) { return { status: 'rejected', reason }; }
     });
   };

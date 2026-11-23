@@ -13,7 +13,7 @@ natlang dashboard --open             # results, traces and model settings in the
 it), the `Route` a message can take, and a `Reply` whose property the runtime checks on every draft.
 
 **route.nl** is a natural-language function: a typed signature and the instructions a model carries out. Its
-`readout: decision` makes the model score the three routes in one pass, and `decide` returns their probabilities.
+`readout: decision` makes the model reason, then score the three routes, and `decide` returns their probabilities.
 
 **main.ts** is the program: it routes every message at once, drafts a reply with an inline `nl<Reply>` function only
 where one is needed, and keeps each decision's confidence. `main` is what `natlang run` calls.

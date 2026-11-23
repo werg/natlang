@@ -28,6 +28,8 @@ export type ChatTransport = (body: Json, signal?: AbortSignal, meta?: ChatReques
  * belongs to, and a hook for what the scheduler decided. Never sent to the model. A plain transport ignores it.
  */
 export type ChatRequestMeta = { invocation_id?: string; /** Re-sends of one turn count up from 0. */ retry?: number;
+  /** The turn samples a reasoned decision readout's reasoning (`ModelTurnRequest.decision_reasoning`): recorders keep it. */
+  decision_reasoning?: { index: number; samples: number };
   /** Turn number within the invocation, when the caller knows it (the scheduler counts requests otherwise). */ turn?: number;
   /** Requests with the same group are sent next to each other (default: the request's system message). */ group?: string;
   onScheduled?: (info: ScheduledInfo) => void;
@@ -369,7 +371,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       await options.onRequestStart?.(request, retries);
       if (onDelta && emitted) { onDelta({ type: 'reset' }); emitted = false; }
       const reply = await transport(wireRequest, signal, { ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
-        retry: retries, onScheduled: info => { scheduling = { ...info, queue_wait_ms: (scheduling?.queue_wait_ms ?? 0) + info.queue_wait_ms }; },
+        ...(request.decision_reasoning ? { decision_reasoning: { ...request.decision_reasoning } } : {}), retry: retries, onScheduled: info => { scheduling = { ...info, queue_wait_ms: (scheduling?.queue_wait_ms ?? 0) + info.queue_wait_ms }; },
         ...(onDelta ? { onDelta } : {}) });
       const body = isStream(reply) ? await assembleChatCompletion(reply, onDelta) : reply;
       if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
@@ -509,7 +511,7 @@ export function promptLogprobDecider(transport: ChatTransport, options: { reques
     if (!replies.length) throw new Error('a decision needs at least one option');
     const itemExtra = options.extraFor?.(item);
     const responses = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true) }, signal);
+      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true, item.reasoning) }, signal);
       return (isStream(raw) ? await assembleChatCompletion(raw) : raw) as PromptLogprobResponse;
     }));
     return scoresFromPromptLogprobs(responses);

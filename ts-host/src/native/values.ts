@@ -43,7 +43,7 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   hostClasses?: ReadonlyMap<string, Function>;
   /** `decision`: answer by scoring the finite result values in one pass (native/decision.ts). `template`: the first
    * turn's reply is forced to `return_result` with the value written as a block (a Neuralese result) or decoded. */
-  readout?: 'decision' | 'template';
+  readout?: 'decision' | 'instant' | 'template';
   /** Tools this call is not offered: its definition's `withhold:` frontmatter (runtime/loader.ts WITHHOLDABLE_TOOLS). */
   withheldTools?: string[];
   /** Sources of the codebase this call can read but not edit: its definition's `protect:` frontmatter, resolved

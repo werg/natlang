@@ -87,11 +87,14 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
       (options.discovered === true && response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429);
     if (absent) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!response.ok) throw new Error(`batched scoring HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
-    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
+    const body = await response.json().catch(() => ({})) as { results?: ({ log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
+    // A guessed endpoint that answers with something other than score results (a server that routes every POST to its
+    // chat completions) is not natlang's score endpoint either.
+    if (options.discovered === true && !Array.isArray(body.results)) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!Array.isArray(body.results) || body.results.length !== items.length)
       throw new Error('batched scoring returned a different number of results than items');
     return body.results.map((result, index): Settled => {
-      try { return { status: 'fulfilled', value: scoresFromBatchResult(result, items[index]!.options.length, items[index]!.open_reply === true) }; }
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(result, items[index]!) }; }
       catch (reason) { return { status: 'rejected', reason }; }
     });
   } finally { release(); }
