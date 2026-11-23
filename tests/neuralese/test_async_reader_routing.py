@@ -178,3 +178,21 @@ def test_owner_and_pop_eval_presence_keep_preempted_jobs_without_full_status_pro
     monkeypatch.setattr(grpo.subprocess,'run',lambda args,**kwargs:SimpleNamespace(returncode=3))
     assert ei.ledger_queued('owned') and grpo.unit_active('owned')
     assert not ei.ledger_queued('other') and not grpo.unit_active('other')
+
+
+def test_static_consumers_wait_for_ledger_owned_render_and_teacher(tmp_path,monkeypatch):
+    from scripts import memory_ledger
+    import static_curriculum_campaign as static
+    from types import SimpleNamespace
+    waits=[];rendered=[]
+    queue=iter([{'static-render-b01-old.service'},set()])
+    monkeypatch.setattr(memory_ledger,'owned_units',lambda:next(queue))
+    monkeypatch.setattr(static.subprocess,'run',lambda *args,**kwargs:SimpleNamespace(returncode=3,stdout=''))
+    monkeypatch.setattr(static.time,'sleep',lambda seconds:waits.append(seconds))
+    monkeypatch.setattr(static.render_parts,'render',lambda *args,**kwargs:rendered.append(args))
+    static.render(tmp_path,'b01',1,1,1)
+    assert waits==[60] and len(rendered)==1
+    monkeypatch.setattr(memory_ledger,'unit_owned',lambda unit:unit=='natlang-qwen36-teacher')
+    monkeypatch.setattr(static,'teacher_serving',lambda:False)
+    monkeypatch.setattr(static.subprocess,'Popen',lambda *a,**kw:pytest.fail('must not launch a second queued teacher'))
+    static.ensure_teacher_queued()
