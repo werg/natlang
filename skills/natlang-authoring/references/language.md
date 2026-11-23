@@ -109,7 +109,7 @@ export default async function prepare(goal: string): Promise<string[]> {
 ```
 
 - Module shape, allowed imports and the finite-iteration policy: [Callable-folder TypeScript](https://github.com/werg/natlang/blob/main/spec/SPEC.md#callable-folder-typescript) and [Iteration and termination](https://github.com/werg/natlang/blob/main/spec/SPEC.md#iteration-and-termination). A function may call itself only on a smaller argument; `eval` and `Function` are rejected; application TypeScript outside callable folders has none of these restrictions.
-- Other files of the same package are importable by relative path (`import { double } from '../shared/math.js'`); a path that leaves the package root is rejected. Node modules such as `node:crypto` are not importable; standard globals are, so hash with WebCrypto (`await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))`), which makes the function async.
+- Other files of the same package are importable by relative path (`import { double } from '../shared/math.js'`), and so are their types (`import type { Lot } from '../types.js'`, which also types an inline `nl` built from them); a path that leaves the package root is rejected. Node modules such as `node:crypto` are not importable; standard globals are, so hash with WebCrypto (`await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))`), which makes the function async.
 
 ## Types
 

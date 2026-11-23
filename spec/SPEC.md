@@ -223,7 +223,9 @@ exported values are typed values. They may import sibling items, other `.ts`,
 `.js` and `.nl` files of their own package by relative path (inside the package
 root), exports a `natlang.json` `exports` map names, declared npm packages,
 `natlang:services`, and the natlang surface module; a relative import that leaves
-the package root is rejected. They follow the iteration and termination rules below. Application
+the package root is rejected. `import type` of a package file (`import type { Lot }
+from '../types.js'`) types the module's code, including the parameters of an inline
+`nl` it builds, and is erased at run time. They follow the iteration and termination rules below. Application
 TypeScript outside callable folders is unrestricted.
 
 ## Iteration and termination
