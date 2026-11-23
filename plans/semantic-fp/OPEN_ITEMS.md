@@ -1,0 +1,53 @@
+# Open items register
+
+This register lists every known open item, each with an owner or a deliberate deferral. It is kept by the coordinator and reviewed at every 4-hourly review.
+
+An item leaves the register when its fix lands on main. A finding reported by an agent enters here the same day, unless that agent is fixing it itself.
+
+## In flight
+
+| Item | Owner |
+|---|---|
+| B10 four-engine smoke, fork pin move to b12088 (reasoned decisions on llama-server and wllama), ENGINE_PARITY rows | B10 agent |
+| `readout: instant` collapse on triage (4/28, first label always, P(urgent) about 0.9) | instant-readout investigator |
+| Tuple `prefixItems` constrained decoding on all four engines | tuple-parity agent |
+| M2 migrator: one shared `stepKind`/`instructionsOf` in std, `migrate.nl` replaced by a TypeScript driver, P1/P2 measurements, pairs dataset | M2 agent |
+| Benchmark arm D (specialize, tune, escalate) | armed driver `semantic-fp-bench/triage-20261123/d-driver.sh` |
+| Benchmark: rerun arms A–C on the triage program after 8e586c02e | engine/bench agent (2026-11-23 15:00) |
+| Python reference engine: unbounded batching runs the GPU out of memory, and an unresponsive health check under load lets `natlang serve` kill it | engine/bench agent (2026-11-23 15:00) |
+| Memetic layout fix (c64d250b2) on a real actor | queued unit `memverify-dgx3`, then the round 1 health report |
+| held-v4 sft-v6 reference measurement | Pop unit `popheld-hv4-sft-v6`; the coordinator appends the result to DECISIONS |
+| aei1 round 1 build, SFT and held verdict | aei1 driver; the coordinator reads its health report |
+
+## Language and runtime gaps
+
+All of these are owned by the language-gaps agent (2026-11-23 15:00):
+- `natlang improve DIR` only checks and adopts a given proposal. It should propose changes from the program's own runs (WS8 N4).
+- The `escalate` NL policy doesn't read escalation history from the call store; the caller passes it (WS2 R4).
+- The `.d.nl.ts` `import type` emit for `uses:` modules is not built (WS1 L6).
+- An inline `nl.with<T>` built inside a callable-folder TypeScript factory shows its parameter as `unknown`.
+- `natlang check --idiom` doesn't call `applications/idiom-reviewer`.
+
+## Applications
+
+These are owned by the language-gaps agent after the gaps above:
+- codemod-studio re-implements the `applications/migration` edit/check/repair loop. It should call it.
+- sem-grep-sql doesn't build on `applications/nldb`.
+- ci-doctor's bisect has no natural-language stop, and its failures are not clustered semantically.
+- diligence has no Neuralese views or tuning.
+
+## Held and data
+
+- **held-v4:** no `branch_and_select` task; B1's 104 rows keep `invented:` groups; the 100 rubric workflows and 2 reserved apps are outside the set. Owner: next held-v4 extension; due before the first held-v4 cadence measurement after round 3.
+- **Flagship held splits** are 2–5 fixtures per app, too few for p < 0.05. Owner: task-author tool batches, next semantic-FP batch.
+- **`compatible.nl`** judges additive edits incompatible. This is a training target through the sfp3 rows, which are in the pool; watch its family in the health report.
+
+## Operations
+
+- **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.
+- **The Colab keeper's real replacement and upgrade path is untested live.** It is watched by the ops watchdog (`colab` checks).
+
+## Deferred on purpose
+
+- **GRPO training of reasoning tokens for reasoned decisions:** waits for the GRPO polish phase.
+- **A preempted cycle collection gets a fresh `--hours` window:** affects only the legacy cycle path, not async rounds.
