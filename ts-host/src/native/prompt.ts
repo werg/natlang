@@ -93,6 +93,15 @@ For a large file, pass its handle to the child and let it search/read relevant p
 
 export const DIRECTORY_REDUCER_PROMPT = directoryReducerPrompt();
 
+/**
+ * The call note of a function whose result is a function (`returns: (t: Ticket) => boolean`): a function is not JSON, so
+ * the call builds it in eval and finishes with it. Not under prompt revision 2026-11-22 (no such note then).
+ */
+export const functionResultNote = (type: string): string => PREVIOUS ? '' :
+  `This call's result is a function of type ${type}. Build it in eval and finish with it: ` +
+  'eval({ code: "return nl`<what one call of it does>`;", finish: true }) makes a natural-language function with that ' +
+  'signature, and a TypeScript function of that type is a result too.';
+
 /** The final ad hoc layer keeps computation and named helpers, but offers no new ad hoc calls. */
 export const NL_DEPTH_LIMIT_NOTICE = 'This call is at the fifth and final layer of ad hoc natural-language calls. ' +
   'Make the remaining judgments here using the data and tools available. Existing named functions can still be called. ' +

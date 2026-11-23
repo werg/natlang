@@ -15,6 +15,8 @@ import { resolveFrame } from './runtime.js';
 import type { Platform } from './platform.js';
 import { iterateOn, stableHash } from './iterate.js';
 import { traceFor } from '../native/graph.js';
+import { NATLANG_SIGNATURE, parseAliases, parseTypeCached, TypeEnv, type FunctionSignature, type Type } from '../native/types.js';
+import { coerce } from '../native/values.js';
 
 export const NATLANG_CALLABLE: unique symbol = Symbol.for('natlang.callable') as never;
 
@@ -36,6 +38,8 @@ export type CallableMeta = {
     sources?: Record<string, 'input' | 'local' | 'block' | 'handle'>) => NatlangCallable;
   /** Run a call; `at` is the representation its result is used as (a compiled call site's, or a host's `invokeAt`). */
   invoke(args: unknown[], frame: Frame, at?: Instantiation): Promise<unknown>;
+  /** `fn.in(context)` for a callable derived from another (`partial`): the derivation applied to the rebound original. */
+  inContext?: (context: unknown) => NatlangCallable;
 };
 
 /**
@@ -130,22 +134,68 @@ function onModel(meta: CallableMeta, options: { model: string }): NatlangCallabl
   const model = options && typeof options === 'object' && typeof options.model === 'string' ? options.model.trim() : '';
   if (!model || Object.keys(options).some(key => key !== 'model'))
     throw new TypeError('on takes { model: NAME }, where NAME is a model of the runtime (as `model:` frontmatter names one)');
-  const rebind = meta.rebindInline;
+  const rebind = meta.rebindInline, inContext = meta.inContext;
   return makeCallable({ ...meta, definition: { ...meta.definition, model },
     invoke: (args, frame, at) => meta.invoke(args, { ...frame, model }, at),
-    ...(rebind ? { rebindInline: (...args: Parameters<typeof rebind>) => onModel(callableMeta(rebind(...args))!, { model }) } : {}) });
+    ...(rebind ? { rebindInline: (...args: Parameters<typeof rebind>) => onModel(callableMeta(rebind(...args))!, { model }) } : {}),
+    ...(inContext ? { inContext: (context: unknown) => onModel(callableMeta(inContext(context))!, { model }) } : {}) });
+}
+
+/**
+ * `fn.partial(a, b)`: the same function with its first parameters bound to `a` and `b`, as `fn.bind(null, a, b)` binds
+ * them, checked against their types now. The new function takes the remaining parameters; it keeps `iterateOn`, `on`,
+ * `in` and `with`, and carries the narrowed signature.
+ */
+function partialCallable(original: NatlangCallable, meta: CallableMeta, bound: unknown[]): NatlangCallable {
+  const { definition } = meta;
+  if (definition.openParameters)
+    throw new TypeError(`partial binds leading parameters, and ${definition.name} declares none; give it a signature, as in nl<(rubric: string, text: string) => boolean>\`...\``);
+  if (bound.length > definition.params.length)
+    throw new TypeError(`partial: ${definition.name} takes ${definition.params.length} parameter${definition.params.length === 1 ? '' : 's'} (${definition.params.map(parameter => parameter.name).join(', ')}), so it cannot bind ${bound.length}`);
+  const signature = definitionSignature(definition);
+  if (signature) {
+    const env = new TypeEnv(signature.types as Record<string, Type>);
+    bound.forEach((value, index) => { const field = signature.type.params.fields[index]!;
+      if (value !== undefined || !field.optional) coerce(value, field.type, env, `${definition.name}/${field.name}`, { preserveRecordExtras: true }); });
+  }
+  const values = [...bound];
+  const rebind = meta.rebindInline;
+  return makeCallable({ ...meta, definition: { ...definition, params: definition.params.slice(values.length) },
+    invoke: (args, frame, at) => meta.invoke([...values, ...args], frame, at),
+    inContext: context => partialOf((original as unknown as { in(context: unknown): NatlangCallable }).in(context), values),
+    ...(rebind ? { rebindInline: (...args: Parameters<typeof rebind>) => partialOf(rebind(...args), values) } : {}) });
+}
+const partialOf = (fn: NatlangCallable, bound: unknown[]): NatlangCallable =>
+  (fn as unknown as { partial(...bound: unknown[]): NatlangCallable }).partial(...bound);
+
+/**
+ * The checked signature of a definition (native/types.ts NATLANG_SIGNATURE): its parameter and result types with the
+ * aliases they name. Undefined for an inline function that takes whatever each call passes, or a type text that does not
+ * parse (the call reports that).
+ */
+export function definitionSignature(definition: CallableDefinition): FunctionSignature | undefined {
+  if (definition.openParameters) return;
+  try {
+    const fields = definition.params.map(parameter => ({ name: parameter.name, type: parseTypeCached(parameter.type), optional: parameter.optional === true }));
+    const types = parseAliases(definition.types);
+    return { type: { kind: 'lambda', params: { kind: 'record', fields }, returns: parseTypeCached(definition.returns) }, types };
+  } catch { return; }
 }
 
 export function makeCallable(meta: CallableMeta): NatlangCallable {
   const fn = function (...args: unknown[]) { return startCall(meta, args); };
   Object.defineProperty(fn, 'name', { value: meta.definition.name });
   Object.defineProperty(fn, NATLANG_CALLABLE, { value: meta });
+  let signature: FunctionSignature | undefined | null = null;
+  Object.defineProperty(fn, NATLANG_SIGNATURE, { get: () => signature === null ? (signature = definitionSignature(meta.definition)) : signature });
+  Object.defineProperty(fn, 'partial', { value: (...bound: unknown[]) => partialCallable(fn as unknown as NatlangCallable, meta, bound) });
   Object.defineProperty(fn, 'iterateOn', { value: (initial: unknown, ...fixed: unknown[]) =>
     iterateOn(fn as never, initial, ...fixed).inFrame(meta.bound) });
   if (meta.rebindInline) Object.defineProperty(fn, 'with', { value: (captures: Record<string, unknown>) =>
     meta.rebindInline!(captures) });
   Object.defineProperty(fn, 'on', { value: (options: { model: string }) => onModel(meta, options) });
   Object.defineProperty(fn, 'in', { value: (context: unknown) => {
+    if (meta.inContext) return meta.inContext(context);
     const rebinder = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.rebinder')] as Rebinder | undefined;
     if (!rebinder) throw new Error('contexts are not available in this runtime build');
     return rebinder(fn as unknown as NatlangCallable, context);

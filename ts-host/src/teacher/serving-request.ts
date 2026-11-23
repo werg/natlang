@@ -22,7 +22,7 @@ import { SYSTEM_PROMPT, type FileToolSurface } from '../native/prompt.js';
 import { findPieces, promptPieces, renderPromptMessages, renderSystemPrompt, type PromptPiece, type PromptRendering } from '../native/system-prompts.js';
 import { defaultSystemPrompt } from './collector.js';
 import { hexDigest } from '../native/hash.js';
-import { parseType, TypeEnv, type Type } from '../native/types.js';
+import { formatType, parseType, TypeEnv, type Type } from '../native/types.js';
 
 /** The tool-loop entry points, `collector` (eval probes, RL and teacher collection) and `runtime` (natlang run); both
  * send SYSTEM_PROMPT since 2026-11-12 (natlang run sent TOOLS_PROMPT without GENERATION_GUIDANCE before). */
@@ -181,7 +181,12 @@ export function servingRequest(recorded: { messages: Message[]; tools?: unknown[
     cursor = end;
   }
   guidance = (guidance + text.slice(cursor)).replace(/\n{3,}/g, '\n\n').trim();
-  const notes = callNotes({ guidance, ownCode: surface.ownCode, allowAdHoc: !surface.depthLimited, rendering: options.rendering,
+  let functionResult: string | undefined;
+  try {
+    const result = declaredResult(messages[opening]!.content as string);
+    functionResult = result.env.resolve(result.returns).kind === 'lambda' ? formatType(result.returns) : undefined;
+  } catch { functionResult = undefined; }
+  const notes = callNotes({ guidance, ownCode: surface.ownCode, allowAdHoc: !surface.depthLimited, rendering: options.rendering, functionResult,
     folder: surface.folder ? { fileTools: surface.fileTools, writable: surface.folder === 'write' } : undefined });
   const user = messages[opening]!;
   const rebuilt = [{ ...system, content: base }, ...messages.slice(1, opening),

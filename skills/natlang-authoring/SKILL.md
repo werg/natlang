@@ -150,6 +150,8 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
 | `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, `types.ts`, a `protect:` list): leave it as it is and fix the code that produces the value it rejects. |
 | `capture-conflict` | Another task changed a captured `let` mid-call; if it recurs, make the state a parameter or a returned value. |
+| `function-signature-mismatch` | The function passed does not have the slot's function type: pass one whose parameters take what the slot passes, by position, and whose result fits (bind extra leading parameters with `fn.partial(...)`). |
+| `type X is not in the natlang type grammar` (load) | Rewrite alias `X` in `types.ts` with records, unions, literals, arrays and `Record`, or keep it out of natlang signatures. |
 | `type-mismatch` / `undeclared-field` | The value or field doesn't match the declared type: fix the type or the instruction that produces it. |
 | `iteration-measure-exhausted` | The measure hit 0 while `until` was false: make `until` true where the measure is 0. |
 | `model_incomplete: repeated_failed_action` | The model repeated one failing action four times: clarify the instruction, split the stage, or use a stronger model. |

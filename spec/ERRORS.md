@@ -27,6 +27,7 @@ for the codes it answers. Each code was checked with `grep` against those source
 | `undeclared-field` | Eval reads a field the declared type lacks ([SPEC](SPEC.md#types)) | eval time (checked before the eval runs) | `compiler/eval-check.ts` |
 | `invalid-binding` | An eval binding that would shadow or read itself before it exists (`const plan = plan(...)`) | eval time (before the eval runs) | `scope-compiler.ts` |
 | `protected` | `edit_code` of an item that judges the call: a `protect:` entry, `types.ts`, or a change to a `protect:` list ([SPEC](SPEC.md#natural-language-functions)). The message names the item and says to fix the code that produces the value it rejects | eval time (edit_code) | `native/runtime.ts` |
+| `function-signature-mismatch` | A natlang function at a function-typed slot whose signature does not fit the slot's: parameters by position, then the result ([SPEC](SPEC.md#types)). The message names both types | call time (arguments and results crossing a typed slot) | `native/values.ts` |
 | `capture-conflict` | A `let` capture changed under the eval; the write-back is version-checked ([SPEC](SPEC.md#captures)) | eval time (write-back) | `native/runtime.ts` |
 | `context-interface-mismatch` | A rebound or replaced context does not satisfy the function's context interface ([SPEC](SPEC.md#contexts)) | load/bind time | `runtime/contexts.ts` |
 | `context-new-executable` | Rebinding may not add an executable node | load/bind time | `runtime/contexts.ts` |

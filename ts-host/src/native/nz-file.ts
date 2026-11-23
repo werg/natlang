@@ -11,7 +11,7 @@ import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArt
 import { isNativeAdapterRef, isNativeTensorRef, isNeuraleseRef, nativeAdapterRef, nativeTensorRef, neuraleseRef,
   type NeuraleseRef } from './neuralese.js';
 import { readTypeAliases } from './type-aliases.js';
-import { formatType, parseType, TypeEnv, type Type } from './types.js';
+import { formatType, parseAliases, parseType, TypeEnv, type Type } from './types.js';
 import { coerce, Reject } from './values.js';
 
 export const NZ_FORMAT = 'natlang.neuralese-file/1';
@@ -211,8 +211,7 @@ const ADOPTED = new WeakMap<object, Set<string>>();
 
 export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
   const { header, nativeStates, nativeTensors } = decodeNz(bytes);
-  const env = new TypeEnv(Object.fromEntries(Object.entries(header.types ? readTypeAliases(header.types) : {})
-    .map(([name, text]) => [name, parseType(text)])));
+  const env = new TypeEnv(parseAliases(header.types ? readTypeAliases(header.types) : {}, false));
   const types: Record<string, string> = {};
   const parsedTypes: Record<string, Type> = {};
   for (const [name, entry] of Object.entries(header.exports)) {

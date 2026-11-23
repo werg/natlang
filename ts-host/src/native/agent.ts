@@ -12,7 +12,7 @@ import { undeclaredServiceType } from './introspection.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
-  LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, SYSTEM_PROMPT, type FileToolSurface } from './prompt.js';
+  functionResultNote, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, SYSTEM_PROMPT, type FileToolSurface } from './prompt.js';
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
@@ -118,10 +118,14 @@ export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn, transcript and
  * calls for training (native/serving-request.ts) both compose it here.
  */
 export function callNotes(call: { guidance?: string; ownCode: boolean; allowAdHoc: boolean; rendering?: PromptRendering;
-  folder?: { fileTools?: FileToolSurface; writable: boolean; withheld?: readonly string[] } }): string {
+  folder?: { fileTools?: FileToolSurface; writable: boolean; withheld?: readonly string[] };
+  /** The declared result type, when the result is a function (`(t: Ticket) => boolean`). */
+  functionResult?: string }): string {
   const runtime = [call.ownCode ? FUNCTION_TOOLS_PROMPT : '',
     call.folder ? directoryReducerPrompt(call.folder.fileTools, call.allowAdHoc, call.folder.writable, call.folder.withheld) : '',
     call.allowAdHoc ? '' : NL_DEPTH_LIMIT_NOTICE].map(text => text.trim()).filter(Boolean).join('\n\n');
+  const result = call.functionResult ? functionResultNote(call.functionResult) : '';
+  if (result) return [call.guidance?.trim() ?? '', renderSystemPrompt(runtime, call.rendering), result].filter(Boolean).join('\n\n');
   return [call.guidance?.trim() ?? '', renderSystemPrompt(runtime, call.rendering)].filter(Boolean).join('\n\n');
 }
 
@@ -1881,7 +1885,11 @@ export class NativeToolAgent {
     // (guidance, the function-tools and folder paragraphs, the nesting-limit notice) is in the call's opening message.
     const systemPrompt = () =>
       typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? SYSTEM_PROMPT;
-    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0,
+    const declaredReturns = session.lam.type.kind === 'lambda' ? session.lam.type.returns : undefined;
+    let functionResult: string | undefined;
+    try { functionResult = declaredReturns && session.env.resolve(declaredReturns).kind === 'lambda' ? formatType(declaredReturns) : undefined; }
+    catch { functionResult = undefined; }
+    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0, functionResult,
       folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
         writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
       allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });

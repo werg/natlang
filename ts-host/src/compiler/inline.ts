@@ -317,12 +317,13 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   };
 
   /** Later uses of an unannotated local that holds the result or the callable itself. */
-  const laterUses = (declaration: ts.VariableDeclaration): ts.Identifier[] => {
-    if (!ts.isIdentifier(declaration.name)) return [];
-    const symbol = checker.getSymbolAtLocation(declaration.name);
+  const laterUses = (declaration: ts.VariableDeclaration | ts.FunctionDeclaration): ts.Identifier[] => {
+    const declared = declaration.name;
+    if (!declared || !ts.isIdentifier(declared)) return [];
+    const symbol = checker.getSymbolAtLocation(declared);
     const found: ts.Identifier[] = [];
     const visit = (node: ts.Node): void => {
-      if (ts.isIdentifier(node) && node !== declaration.name && node.text === declaration.name.getText() &&
+      if (ts.isIdentifier(node) && node !== declared && node.text === declared.text &&
           checker.getSymbolAtLocation(node) === symbol) found.push(node);
       ts.forEachChild(node, visit);
     };
@@ -339,6 +340,36 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       return;
     }
     return distinct[0];
+  };
+
+  /**
+   * When `tag` is what a function without a declared result type returns (`return nl`...``, or an arrow's body), the
+   * calls of the functions it makes: `factory(x)(t)`, and `const judge = factory(x); judge(t)`. Undefined when `tag` is
+   * not a factory's result, or the factory has no name to find its uses by.
+   */
+  const factoryInvocations = (tag: ts.Node): ts.CallExpression[] | undefined => {
+    let fn: ts.Node | undefined;
+    if (tag.parent && ts.isReturnStatement(tag.parent)) {
+      fn = tag.parent;
+      while (fn && !ts.isFunctionLike(fn)) fn = fn.parent;
+    } else if (tag.parent && (ts.isArrowFunction(tag.parent)) && tag.parent.body === tag) fn = tag.parent;
+    if (!fn || !(ts.isFunctionDeclaration(fn) || ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) || fn.type) return;
+    const holder = ts.isFunctionDeclaration(fn) ? fn : fn.parent && ts.isVariableDeclaration(fn.parent) && fn.parent.initializer === fn ?
+      fn.parent : undefined;
+    if (!holder) return;
+    const invocations: ts.CallExpression[] = [];
+    for (const use of laterUses(holder)) {
+      const made = unwrapParentheses(use).parent;
+      if (!made || !ts.isCallExpression(made) || made.expression !== unwrapParentheses(use)) continue;
+      const outer = unwrapParentheses(made), direct = outer.parent;
+      if (direct && ts.isCallExpression(direct) && direct.expression === outer) { invocations.push(direct); continue; }
+      if (direct && ts.isVariableDeclaration(direct) && direct.initializer === outer && !direct.type)
+        for (const saved of laterUses(direct)) {
+          const invocation = unwrapParentheses(saved).parent;
+          if (invocation && ts.isCallExpression(invocation) && invocation.expression === unwrapParentheses(saved)) invocations.push(invocation);
+        }
+    }
+    return invocations;
   };
 
   const analyze = (node: ts.TaggedTemplateExpression, withCall?: ts.CallExpression): void => {
@@ -366,8 +397,27 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       const invocation = indexed.parent;
       return invocation && ts.isCallExpression(invocation) && invocation.expression === indexed ? [invocation] : [];
     }) : [];
+    // An arrow that returns the `nl` function is a factory when its slot is typed to return a function
+    // (`withRubric(rubric => nl`...`)` for a parameter typed `(rubric: string) => (t: T) => Promise<R>`): its signature
+    // comes from that slot (step 2). A slot with no function type (`items.map(item => nl`...`)`) gets no callable.
+    // The slot is read from the callee's declaration, not the instantiated callback type: in `map(item => nl`...`)` the
+    // callback returns a type parameter, which the tag itself would otherwise instantiate to a function.
+    const slotReturnsFunction = (): boolean => {
+      if (!arrow || !ts.isArrowFunction(arrow) || !arrow.parent || !ts.isCallExpression(arrow.parent)) return false;
+      const declaration = checker.getResolvedSignature(arrow.parent)?.getDeclaration();
+      if (!declaration || !ts.isFunctionLike(declaration) || !declaration.parameters.length) return false;
+      const index = Math.min(arrow.parent.arguments.indexOf(arrow), declaration.parameters.length - 1);
+      const parameterType = declaration.parameters[index]!.type;
+      if (!parameterType) return false;
+      return checker.getTypeFromTypeNode(parameterType).getCallSignatures().some(signature => {
+        const returned = signature.getReturnType();
+        if (returned.flags & (ts.TypeFlags.TypeParameter | ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return false;
+        return (returned.isUnion() ? returned.types : [returned]).some(type =>
+          (neuraleseParts(checker, type)?.element ?? type).getCallSignatures().length > 0);
+      });
+    };
     if (arrow && ts.isArrowFunction(arrow) && arrow.body === outerTag && arrow.parent && ts.isCallExpression(arrow.parent) &&
-        arrow.parent.arguments.includes(arrow)) {
+        arrow.parent.arguments.includes(arrow) && !slotReturnsFunction()) {
       if (indexedCalls.length) call = indexedCalls[0];
       else {
         report(node, 'nl-not-called', 'This arrow returns the `nl` function itself, never called: nl`...` creates a function. ' +
@@ -526,7 +576,21 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     } else if (!signature.parameters) {
       // 5. `const judge = nl`...`` followed by calls: its parameters come from the calls' arguments.
       const holder = outerTag.parent;
-      if (holder && ts.isVariableDeclaration(holder) && !holder.type) {
+      const factory = factoryInvocations(outerTag);
+      if (factory) {
+        // 5b. A function that returns the `nl` function without a declared result type (`function judgeFor(rubric)
+        // { return nl`...`; }`): its parameters come from how the functions it makes are called, `judgeFor(r)(t)` or
+        // `const judge = judgeFor(r); judge(t)`. Nothing calls them in this program: it takes what each call passes.
+        if (factory.length) {
+          const arity = new Set(factory.map(item => item.arguments.length));
+          if (arity.size > 1) { report(node, 'nl-ambiguous-signature', 'Calls of the functions this factory returns pass different numbers of arguments; annotate its return type.'); return; }
+          const first = factory[0]!;
+          signature.parameters = first.arguments.map((argument, index) => ({
+            name: ts.isIdentifier(argument) ? argument.text : index ? `input${index + 1}` : 'input',
+            type: uniqueType(factory.map(item => widen(checker.getTypeAtLocation(item.arguments[index]!))), node,
+              `parameter ${index + 1} type`) ?? checker.getAnyType() }));
+        } else signature.open = true;
+      } else if (holder && ts.isVariableDeclaration(holder) && !holder.type) {
         const calls = laterUses(holder).map(use => unwrapParentheses(use)).map(use => use.parent)
           .filter((parent): parent is ts.CallExpression => !!parent && ts.isCallExpression(parent));
         if (!signature.parameters && calls.length) {

@@ -7715,3 +7715,55 @@ edit becomes a proposal the program can adopt instead of dying with the run. The
 - **Result.** `ts-host/test/collector-refinement-judge.test.mjs` (5 tests: scorer true/false, scripted `holds`
   true/false, opt-out reproduces undecided). `qualify_authored.py` on `w900-refine` with the fixed runtime: PASS
   (reference admitted, smoke returns expected); with the opt-out: FAIL with the original `refinement-undecided`.
+
+## 2026-11-23 Higher-order semantic functions with checked signatures (semantic-FP B9, WS1 L4)
+
+Shipped on main (default on; the model-facing note is off under `NATLANG_PROMPT_REVISION=2026-11-22`):
+- **Uncalled `nl` where a function is expected** (`compiler/inline.ts`): an arrow argument whose parameter slot returns
+  a function (`withRubric(rubric => nl`...`)`) takes that slot's signature; `nl-not-called` stays for slots that expect
+  no function (`items.map(item => nl`...`)`). A factory without a declared result (`function judgeFor(rubric) { return
+  nl`...`; }`, or an arrow) takes its parameters from how the functions it makes are called (`judgeFor(r)(t)`, `const
+  j = judgeFor(r); j(t)`); before, it silently planned `() => unknown`. Return position and function-typed fields with
+  declared types already worked (checked, now tested).
+- **Function types are checked signatures.** `targets.ts` converts an asynchronous TS function type (or a
+  `NatlangFunction`) to the natlang function type `(t: T) => R` (before: a `Live<..., "function">` host value, and an
+  inline nl parameter of `NatlangFunction` type was refused as an intersection). The grammar reads `=> Promise<R>` as
+  `=> R`. Every natlang callable carries `NATLANG_SIGNATURE` (lazy, from its definition); `coerce` checks it with
+  `signatureFits` (positional parameters, contravariant; covariant result; the definer's aliases compared by
+  definition) and refuses with `function-signature-mismatch`. `fitsType` on lambdas is now positional (parameter names
+  had to match before). A plain TS function at a function-typed slot is wrapped (one wrapper per function and slot type)
+  so each call checks its arguments and awaited result; an eval's own annotated locals keep their functions unwrapped
+  (`functions: 'keep'`). Eval and `.d.nl.ts` TypeScript render natlang function types with a promised result.
+- **`fn.partial(...leading)`** binds the first parameters, as `bind` does (positional, so TypeScript types it exactly:
+  `partial<B extends Partial<A>>(...bound: B): NatlangFunction<NatlangDropBound<A, B>, R>`), checks them at once, and
+  keeps `on`, `in` (via `inContext`: the rebound original, partially applied), `with` and `iterateOn`. Decision: positional
+  rather than by name, because tuple labels are not visible to TypeScript types and JS's `bind` is positional.
+  `partial` is a reserved callable property.
+- **Call note** for a call whose result is a function: build it in eval and finish with it (`native/prompt.ts`
+  `functionResultNote`, through `callNotes` for the runtime and the training rebuild). MODEL_FACING_CHANGES entry.
+- **Docs/example:** new `examples/screening` (`meets.partial(requirement)` checks plus `fit_for.nl`, whose result is a
+  function), built and run in `authoring-examples.test.mjs`; composition.md "Functions that take and return judgments",
+  language.md types bullets, SPEC Types, ERRORS + skill error table rows.
+
+Gaps from B3/B4, fixed here:
+- `Record<Verdict, number>` (alias key): the dictionary carries its key alias and `TypeEnv.resolve` makes it the exact
+  record when the alias resolves to string literals (B3 had made it a plain dictionary); `Record<K, number>` with
+  `K = number` names the problem.
+- `Folder.propose`/`apply` inferred `R = unknown` for a reducer whose parameter was annotated: TypeScript's subtype pass
+  of overload resolution fails `any` against the annotation and picks the `unknown` fallback overload. The reducer's
+  folder parameter is now typed `FolderHandle` (what the runtime passes). `examples/refunds/ledger.ts` drops
+  `propose<[], Ledger>`.
+- Target arguments: `Request[]` with a program `Request` (containing `Untrusted`) was refused as the built-in host
+  `Request` before `types.ts` was read. The parse-time check skips shadowable built-in names; the full check follows the
+  program's aliases in `describeArguments`/`readTargetArguments`. The message now says what cannot be written.
+- Unreadable `types.ts` aliases: `parseAliases` turns an alias the grammar cannot read into a marker that reports
+  `type X is not in the natlang type grammar (...)` only where a signature uses it. Used by every eager builder:
+  `loader.ts` (checkSignature, decision domain), `values.ts` buildPending, `kernel.ts` refinedSignature (which silently
+  dropped refinement checks for the whole call when any alias failed), `refined-slots.ts` (same silent loss),
+  `lowered.ts`, `nz-file.ts`, `target-arguments.ts` (mapped unreadable aliases to `unknown`), `app/playground.ts`,
+  `callable.ts`. Left out: `compiler/idiom.ts:57` (B11's uncommitted file; same one-line change applies).
+
+Inventory and what is not applicable: engines receive only rendered prompt text and the tool schema; `schemaOf`
+(`native/agent.ts:280-297`) emits `{}` for function types as before, so no engine (llama-server, wllama, Python native,
+SGLang) changes. Python renderers replay recorded system messages; `serving-request.ts` composes the new note via
+`callNotes`. Browser: same sources through `platformDefaults` (`browser/index.ts:52`), tested in higher-order.test.mjs.

@@ -28,6 +28,9 @@ export type NatlangStepState<A extends unknown[], R> =
 export type NatlangStepArgs<A extends unknown[]> = number extends A['length'] ? any[] :
   A extends [unknown, ...infer Rest] ? Rest : never[];
 
+/** The parameters of a function after its first ones are bound to `B`. */
+export type NatlangDropBound<A extends unknown[], B extends unknown[]> = B extends [unknown, ...infer BR] ?
+  (A extends [any?, ...infer AR] ? NatlangDropBound<AR, BR> : []) : A;
 /** Methods every compiled natlang callable provides. */
 export interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
@@ -35,6 +38,8 @@ export interface NatlangCallableMethods<A extends unknown[], R> {
   on(options: { model: string }): NatlangFunction<A, R>;
   /** The same function bound to another context, structurally checked against its context interface; a new function. */
   in(context: Context): NatlangFunction<A, R>;
+  /** The same function with its first parameters bound to these values (as `bind` binds them, checked now); a new function of the rest. */
+  partial<B extends Partial<A>>(...bound: B): NatlangFunction<NatlangDropBound<A, B>, R>;
 }
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
 export type NatlangFunction<A extends unknown[] = any[], R = any> = ((...args: A) => Promise<R>) & NatlangCallableMethods<A, R>;
@@ -49,6 +54,7 @@ export type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
   on(options: { model: string }): NatlangUntypedFunction;
   in(context: Context): NatlangUntypedFunction;
+  partial(...bound: any[]): NatlangUntypedFunction;
 };
 export type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? NatlangFunction<A, Awaited<R>> : NatlangFunction<any[], F>;

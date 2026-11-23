@@ -13,7 +13,7 @@ import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
 import { coerce, Reject } from '../native/values.js';
-import { formatType, parseType, TypeEnv, TypeSyntaxError, type Type } from '../native/types.js';
+import { formatType, parseAliases, parseType, typeAliasName, TypeEnv, TypeSyntaxError, type Type } from '../native/types.js';
 import { expandType, type ExpandedType } from '../native/expand-type.js';
 import { readTypesFile } from './loader.js';
 import { nodeSourceFiles } from './node-files.js';
@@ -47,8 +47,8 @@ export function parseTargetArguments(value: unknown, target: string): TargetArgu
     if (arg.type === 'json') throw new TypeError(`argument ${arg.name}: json is not a natlang type; use unknown, or a precise type such as "Record<string, number>"`);
     let type: Type;
     try { type = parseType(arg.type); } catch (error) { throw new TypeError(`argument ${arg.name}: ${(error as Error).message}`); }
-    const unsupported = findKind(type, UNSUPPORTED);
-    if (unsupported) throw new TypeError(`argument ${arg.name}: a command-line argument is data; ${unsupported} types cannot be passed`);
+    const unsupported = unsupportedKind(type);
+    if (unsupported) throw new TypeError(unsupportedMessage(arg.name, unsupported));
     if (arg.description !== undefined && typeof arg.description !== 'string') throw new TypeError(`argument ${arg.name}: description must be text`);
     if (arg.required !== undefined && typeof arg.required !== 'boolean') throw new TypeError(`argument ${arg.name}: required must be true or false`);
     if (arg.required === true && arg.default !== undefined) throw new TypeError(`argument ${arg.name}: an argument with a default is optional; remove required`);
@@ -60,21 +60,36 @@ export function parseTargetArguments(value: unknown, target: string): TargetArgu
   });
 }
 
-function findKind(type: Type, kinds: Set<string>): string | undefined {
-  if (kinds.has(type.kind)) return type.kind === 'host' ? (type as { name: string }).name : type.kind;
+/**
+ * The part of `type` a command line cannot write (a function, a live host object, a Neuralese value), with the program's
+ * aliases followed when `env` is given. Without `env`, a built-in name (`Request`, `URL`) is left for the check with
+ * `types.ts`, since a program type of that name shadows the built-in.
+ */
+function unsupportedKind(type: Type, env?: TypeEnv, seen = new Set<string>()): string | undefined {
+  const alias = typeAliasName(type);
+  const defined = alias !== undefined ? env?.lookup(alias) : undefined;
+  if (defined) {
+    if (seen.has(alias!)) return undefined;
+    seen.add(alias!);
+    return unsupportedKind(defined, env, seen);
+  }
+  if (type.kind === 'host' && !env && type.contract.kind === 'tag' && type.contract.tag === type.name) return undefined;
+  if (UNSUPPORTED.has(type.kind)) return type.kind === 'host' ? type.name : type.kind;
   const inner: Type[] = type.kind === 'record' ? type.fields.map(field => field.type) : type.kind === 'list' || type.kind === 'dict' ? [type.element] :
     type.kind === 'union' || type.kind === 'intersection' ? type.members : type.kind === 'refined' || type.kind === 'untrusted' || type.kind === 'index' ? [type.base] : [];
-  for (const child of inner) { const found = findKind(child, kinds); if (found) return found; }
+  for (const child of inner) { const found = unsupportedKind(child, env, seen); if (found) return found; }
   return undefined;
 }
+const unsupportedMessage = (name: string, kind: string) =>
+  `argument ${name}: a command-line argument is data; ${kind === 'lambda' ? 'function' : kind === 'neuralese' ? 'Neuralese' : kind} ` +
+  'values cannot be written on a command line, so declare the data it is made from';
 
 /** The program's type environment: the aliases of its `types.ts`, with their field doc comments. */
 export function programTypes(root: string): { env: TypeEnv; docs: Record<string, Record<string, string>> } {
   const path = join(root, 'types.ts');
   if (!existsSync(path)) return { env: new TypeEnv(), docs: {} };
   const aliases = readTypesFile(path, nodeSourceFiles(root));
-  const names: Record<string, Type> = {};
-  for (const [name, text] of Object.entries(aliases)) { try { names[name] = parseType(text); } catch { names[name] = parseType('unknown'); } }
+  const names = parseAliases(aliases);
   const docs: Record<string, Record<string, string>> = {};
   for (const [name, text] of Object.entries(aliases)) {
     const file = ts.createSourceFile('alias.ts', `type T = ${text};`, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
@@ -110,6 +125,7 @@ export function describeArguments(declared: TargetArgument[] | undefined, root: 
     const type = parseType(arg.type);
     let problem = typesProblem;
     try { types.env.checkNames(type); } catch (error) { problem ??= (error as Error).message; }
+    if (!problem) { const unsupported = unsupportedKind(type, types.env); if (unsupported) problem = unsupportedMessage(arg.name, unsupported); }
     if (!problem && arg.default !== undefined) problem = checkValue(arg.default, type, types.env, `${arg.name} default`).map(item => item.message)[0];
     return { ...arg, required: arg.required === true, text: formatType(type), tree: expandType(type, types.env, types.docs),
       spelling: spelling(type, types.env), ...(problem ? { problem } : {}) };
@@ -144,6 +160,8 @@ export function readTargetArguments(declared: TargetArgument[] | undefined, raw:
   try { env = programTypes(root).env; } catch (error) { problems.push({ argument: '', path: '', message: `types.ts: ${(error as Error).message}` }); return { values, problems }; }
   declared.forEach((arg, index) => {
     const type = parseType(arg.type), text = words[index];
+    const unsupported = unsupportedKind(type, env);
+    if (unsupported) { problems.push({ argument: arg.name, path: arg.name, message: unsupportedMessage(arg.name, unsupported) }); return; }
     let value: unknown;
     if (text === undefined || text === '') {
       if (arg.default !== undefined) value = arg.default;

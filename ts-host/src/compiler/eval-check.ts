@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
+import { formatTypeScript, parseTypeCached } from '../native/types.js';
 import { NEURALESE_LITERAL_INTRINSIC, type GenericInstantiation, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
 import { ITERATE_ON_SIGNATURE, RESERVED_CALLABLE_PROPERTIES } from './intrinsics.js';
 
@@ -38,6 +39,10 @@ const SNIPPET_FILE = '/__natlang__/eval/snippet.ts';
 
 /** Natlang type text to TypeScript declaration text. `Live<"T", ...>` keeps its TypeScript name when resolvable. */
 export function typeScriptText(natlang: string, known: ReadonlySet<string>): string {
+  // A natlang function type is awaited: its TypeScript result is a promise.
+  if (natlang.includes('=>') && !natlang.includes('Live<')) {
+    try { return formatTypeScript(parseTypeCached(natlang)); } catch { /* written as it is */ }
+  }
   return natlang.replace(/Live<\s*"((?:[^"\\]|\\.)*)"(?:\s*,\s*"(?:[^"\\]|\\.)*")*\s*>/g, (_, text: string) => {
     const name = /^[A-Za-z_$][\w$]*/.exec(text)?.[0];
     return name && (known.has(name) || GLOBAL_TYPES.has(name)) ? text : 'any';

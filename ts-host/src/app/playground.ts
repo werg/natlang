@@ -5,7 +5,7 @@
  */
 import { NativeTraceRecorder } from '../native/trace.js';
 import ts from 'typescript';
-import { parseType, type Type } from '../native/types.js';
+import { parseAliases, parseType, type Type } from '../native/types.js';
 import { readTypesFile } from '../runtime/linked-types.js';
 import { admitNativeTrace, type NativeScenarioContract } from '../native/scenario.js';
 import { compileProject, formatDiagnostics } from '../compiler/project.js';
@@ -97,7 +97,7 @@ function sameValue(a: unknown, b: unknown): boolean {
  */
 export function projectSignature(files: Record<string, string>, path: string):
   { types: Record<string, Type>; fields: { name: string; type: Type; optional: boolean }[]; returns: Type } {
-  const parse = (types: Record<string, string>) => Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)]));
+  const parse = (types: Record<string, string>) => parseAliases(types, false);
   if (path.endsWith('.nl')) {
     const record = loadNamedFunction(`${ROOT}/${path}`, sourceFiles(files));
     return { types: parse(record.types), returns: parseType(record.returns),

@@ -258,7 +258,7 @@ test('.nz files in a folder are context data, and a project imports them with ge
   const built = buildProject({ project: root, outDir, runtimeModule });
   const declaration = built.declarations[join(root, 'data', 'support.d.nz.ts')];
   assert.match(declaration, /export declare const rubric: Neuralese<Rubric>;/);
-  assert.match(declaration, /export declare const triage: Neuralese<\(t: string\) => string>;/);
+  assert.match(declaration, /export declare const triage: Neuralese<\(t: string\) => Promise<string>>;/);
   const errors = built.diagnostics.filter(item => item.severity === 'error');
   assert.ok(errors.length > 0 && errors.every(item => item.file === 'bad.ts'), JSON.stringify(errors));
   // Without the misuse, the project builds and its emitted module loads the file.

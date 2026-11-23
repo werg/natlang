@@ -16,7 +16,7 @@ export const ITERATE_ON_SIGNATURE = '<T, A extends unknown[]>(step: (state: T, .
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   'call', 'apply', 'bind', 'name', 'length', 'prototype', 'constructor', '__proto__', 'caller', 'arguments',
   'toString', 'toLocaleString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable',
-  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with', 'on',
+  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with', 'on', 'partial',
 ]);
 
 /** The camelCase identifier a file or function name with separators stands for: `read-limits` is `readLimits`. */
@@ -152,6 +152,9 @@ interface NatlangContext {
   contains(other: NatlangContext): boolean;
 }
 
+/** The parameters of a function after its first ones are bound to \`B\`. */
+type NatlangDropBound<A extends unknown[], B extends unknown[]> = B extends [unknown, ...infer BR] ?
+  (A extends [any?, ...infer AR] ? NatlangDropBound<AR, BR> : []) : A;
 /** Methods every compiled natlang callable provides. */
 interface NatlangCallableMethods<A extends unknown[], R> {
   iterateOn(initial: NatlangStepState<A, R>, ...args: NatlangStepArgs<A>): Iteration<NatlangStepState<A, R>>;
@@ -159,6 +162,8 @@ interface NatlangCallableMethods<A extends unknown[], R> {
   on(options: { model: string }): NatlangFunction<A, R>;
   /** The same function bound to another context, structurally checked against its context interface; a new function. */
   in(context: NatlangContext): NatlangFunction<A, R>;
+  /** The same function with its first parameters bound to these values (as \`bind\` binds them, checked now); a new function of the rest. */
+  partial<B extends Partial<A>>(...bound: B): NatlangFunction<NatlangDropBound<A, B>, R>;
 }
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
@@ -171,6 +176,7 @@ type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFuncti
   with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
   on(options: { model: string }): InlineNatlangFunction<A, R>;
   in(context: NatlangContext): InlineNatlangFunction<A, R>;
+  partial<B extends Partial<A>>(...bound: B): InlineNatlangFunction<NatlangDropBound<A, B>, R>;
 };
 
 /** An nl function without a type argument; the compiler infers its signature from its uses. */
@@ -178,6 +184,7 @@ type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
   on(options: { model: string }): NatlangUntypedFunction;
   in(context: NatlangContext): NatlangUntypedFunction;
+  partial(...bound: any[]): NatlangUntypedFunction;
 };
 type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? InlineNatlangFunction<A, Awaited<R>> : InlineNatlangFunction<any[], F>;
