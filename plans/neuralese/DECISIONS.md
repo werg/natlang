@@ -8438,3 +8438,53 @@ under another system prompt) were invisible to held eval and visible in data col
   Pop default, the round's report and its held-v4 trigger).
 - **Not checked:** the Pop held-v4 path end to end (pop-held.sh with HELD_MANIFEST on Pop, the held pin's
   `held_eval measure` on held-v4 rows); thresholds are first guesses; per-stratum held-v4 rates are not in the record.
+
+## 2026-11-23 12:30 Memetic groups scored no episode: preparation ran inside each supervisor's wall clock (staged layout)
+
+The aei1 health report (2b2352806) over `ops/ei/aei1/collect/v0000-e15b20a86f1c` (pin d29451b846ca, with e89558c2b):
+all 5 memetic groups, 20 episodes, unresolved; ordinary groups pass 0.60 with 1.4% infrastructure failures.
+
+- **Cause: the episode design cost more wall time than the episode had.** The supervisor's `load` ran the group's
+  preparation before its first turn, inside its 7200 s clock: `baseline-support` (4 worlds x 2 = 8 nested runs), then
+  `baseline-query-none` and `baseline-query-default` (12 each), one after the other, 4 runs at a time, each run capped at
+  900 s; the 4 samples waited on one lock. Measured (cases.jsonl to summary.json): g000138 1805 + 2704 + 2707 = 7216 s
+  (prepared.json written at 07:52:04, the supervisors killed at 7202 s with 0 replies); g000281 1803 + 2686 + 2613 s;
+  g000401 1482 + 2705 + 2620 s; g000216 1803 + 1889 + 1691 s, then its supervisors made 23 replies and 3 support
+  evaluations (831-1026 s each) and were killed before `score`. g000145: all 8 support runs passed in 379 s, so it was
+  not admitted and its 4 supervisors failed at `load` (`job:uncoded-error`, `finish:incomplete`). The 900 s nested cap
+  truncated 65 of the 136 nested runs (`unresolved`/`timeout`): nested runs are ordinary episodes of P on the same
+  actor (per-stream decode 13.0 tok/s nested vs 12.7 ordinary; ordinary episodes there: median 854 s, 48% over 900 s),
+  so a phase of 2-3 waves took 1800-2700 s. The health report's "0 model replies" reads rollouts.jsonl, which keeps no
+  turns of a timed-out episode (g000216's supervisors had 23).
+- **Ruled out:** the B15 binding fix works on the real actor (no `invalid natlang.memetic-program-guidance` in any
+  nested log; g000216's guided `baseline-query-default` scored 11 of 12 with the sentinel-wrapped state); nested runs
+  are not slower per token than ordinary ones; the shared collector socket and the actor did not stall them (steady
+  replies in every trace).
+- **Fix (default; `--memetic-layout inline` opts out on grpo and expert_iteration collect/cycle/async-drive):** the
+  staged layout (`memetic_workspace.bind_layout`, applied by `grpo.Collector._bind_memetic`). (1) The collector runs a
+  group's preparation as its own stage on one slot (`python -m natlang_neuralese.rl.memetic_workspace prepare SPEC`):
+  as soon as `prepared.json` exists the supervisors start, ahead of other groups; a group that is not admitted (all
+  support passed, or no verdict) or whose stage failed is dropped without starting them (`memetic group dropped`;
+  collection_health counts `memetic_not_admitted` apart and a failed preparation as a group without episodes).
+  (2) Preparation is the support evidence only; the anchor's two query arms (`baselines`, `baselines.json`) run at once,
+  beside the supervisors, and `score` reads them (a preparation recorded before keeps them in prepared.json; replay
+  copies baselines.json). (3) Every run of a nested evaluation starts at once (`workers` 0). (4) A nested run's wall
+  clock is the episode's / (evaluations + 3) = 1440 s of 7200 (support, each evaluation, the commit's query score, one
+  share for the supervisor's own turns), so a group fits one episode clock plus one nested share; the EI deadline gate
+  counts that share (`group_seconds`).
+- **Verified:** first on the idle Pop held actor (sft-v9 e15b20a86f1c; its front runs code 5b58f94 with the native engine on
+  CPU, 20 running) with a support 2 / query 3 memetic build (`memetic_tasks build --set support=2 --set query=3`,
+  689 programs) and pin 7100bed43: group g000000 (ext_composed_neuralese_relay) bound staged (nested 1440 s, all runs
+  at once); its preparation stage took 1314 s (4 of 4 support runs resolved, success 0.75, admitted) and released the
+  supervisors at once; the query baselines ran beside them in 1442 s: no change 5 of 6 scored (0.60); the mechanical
+  default 0 of 6: every guided run on Pop timed out with no reply, because that front serves native-state turns on its
+  CPU native engine (the front at 200% CPU; today's SGLang actor imports and writes states on SGLang). Stopped there;
+  a DGX run with its own small actor (pin 7100bed43, 2 groups at once) waits for ledger room: see the next entry.
+- **Not checked / left:** a production-size group under aei1's load (the DGX ledger was full and the Colab front was
+  down; the verification ran a support 2 / query 3 build on the idle Pop held actor); nested runs still count against
+  no collector slot, so a memetic group adds up to ~30-50 concurrent streams to the actor beyond `--slots` (aei1 serves
+  160 running for 128 slots); at aei1's 13 tok/s per stream about a third of nested runs would still pass 1440 s and be
+  unresolved (an evaluation then measures the runs that finished); a timed-out episode's partial turns stay out of
+  rollouts.jsonl. aei1 (pin d29451b846ca, drive pin 2b235280665b) keeps the inline layout until it restarts on a pin
+  with this commit; its memetic groups meanwhile hold 4 slots each for 2 h and score nothing (`--memetic-share 0` at its
+  next restart opts out, or the new pin fixes it).
