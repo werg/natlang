@@ -43,6 +43,7 @@ export type ShepherdOptions = {
 const LOCKFILE_RE = /(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock|uv\.lock|Gemfile\.lock|composer\.lock|go\.sum)$/;
 const SNAPSHOT_RE = /(?:^|\/)__snapshots__\/|\.snap$/;
 const GENERATED_RE = /\.min\.(?:js|css)$|\.generated\.[^/]+$|\.pb\.(?:ts|js|go)$/;
+const INDENT_SIGNIFICANT_RE = /\.(?:py|pyi|ya?ml|haml|pug|coffee|nim|fs)$|(?:^|\/)(?:Makefile|[^/]+\.mk)$/;
 const IMPORT_LINE_RE = /^(?:import\s|export\s+(?:type\s+)?\{[^}]*\}\s+from\s|from\s+\S+\s+import\s)/;
 
 /** Extract added and removed content lines from a unified diff hunk (ignoring diff headers). */
@@ -57,16 +58,41 @@ function diffChangedLines(patch: string): { added: string[]; removed: string[] }
   return { added, removed };
 }
 
+/** A line without whitespace outside its string literals (`'`, `"`, backtick): spacing inside strings is content. */
+function withoutCodeWhitespace(line: string): string {
+  let out = '';
+  let quote: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (quote) {
+      out += ch;
+      if (ch === '\\' && i + 1 < line.length) out += line[++i]!;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      out += ch;
+    } else if (!/\s/.test(ch)) {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 /** Deterministic fast-path recognizing routine trivial hunks with zero model calls. */
 export function isTrivialHunkCrisp(hunk: Hunk): boolean {
   if (hunk.isGenerated) return true;
   if (LOCKFILE_RE.test(hunk.file) || SNAPSHOT_RE.test(hunk.file) || GENERATED_RE.test(hunk.file)) return true;
   const { added, removed } = diffChangedLines(String(hunk.patch));
   if (added.length === 0 && removed.length === 0) return true;
-  // Whitespace-only formatting change: identical sequence once trimmed/collapsed.
+  // Formatting-only change: the same code once whitespace outside string literals is removed and lines are rejoined.
+  // Where indentation is syntax, the leading whitespace of every non-blank line must stay the same.
+  const indentation = INDENT_SIGNIFICANT_RE.test(hunk.file)
+    ? (lines: string[]) => lines.filter(l => l.trim()).map(l => /^\s*/.exec(l)![0]).join('\n')
+    : () => '';
+  const unformatted = (lines: string[]) => lines.map(withoutCodeWhitespace).join('');
+  if (unformatted(added) === unformatted(removed) && indentation(added) === indentation(removed)) return true;
   const normAdded = added.map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const normRemoved = removed.map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  if (normAdded.length === normRemoved.length && normAdded.every((line, i) => line === normRemoved[i])) return true;
   // Import-order-only change: every non-empty changed line is an import and sorted multisets match.
   if (normAdded.length > 0 && normAdded.length === normRemoved.length &&
     normAdded.every(l => IMPORT_LINE_RE.test(l)) && normRemoved.every(l => IMPORT_LINE_RE.test(l))) {

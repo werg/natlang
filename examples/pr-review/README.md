@@ -1,6 +1,8 @@
 # pr-review: automated pull-request review with grounded findings and asymmetric escalation
 
-Automates repeat code-review work on a small local model using `@natlang/node/std` and verified contracts:
+Automates repeat code-review work on a small local model using `@natlang/node/std` and verified contracts. This is the
+small teaching version; `applications/pr-shepherd` is the full application (crisp routine-hunk fast path, hunk
+classification, verified documentation fixes) built from the same functions.
 
 ```sh
 natlang check examples/pr-review

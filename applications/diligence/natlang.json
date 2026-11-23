@@ -1,1 +1,21 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/diligence",
+  "version": "0.1.0",
+  "description": "Evaluate papers, libraries or vendors against a rubric: recursive section digests with verified citations, scored criteria and escalation of dealbreakers.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "digestSection",
+    "digestSection.nl",
+    "diligence.ts",
+    "examples.json",
+    "package.json",
+    "scoreCriterion.nl",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

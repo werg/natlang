@@ -9,6 +9,8 @@ export type TaskSeed = {
   splitGroup: string;
 };
 
+/** An authored task with the answers that qualify its oracle: `reference` must pass it, every one of `negatives` and
+ * the `keywordBaseline` (the strongest answer a cue-word rule gives) must fail it. */
 export type AuthoredTask = {
   id: string;
   split_group: string;
@@ -17,16 +19,17 @@ export type AuthoredTask = {
   verifier?: string;
   prompt: string;
   files: Record<string, string>;
-  keywordBaselineInput?: string;
-  expectedPassOnBaseline?: boolean;
+  reference: string;
+  negatives: string[];
+  keywordBaseline: string;
 };
 
 export type QualificationResult = {
   admitted: boolean;
   task: AuthoredTask;
-  structuralIssues: string[];
+  /** Structural, custody and replay problems left after repair (empty when admitted). */
+  problems: string[];
   semanticVerdict: boolean;
   oracleVerdict: boolean;
-  baselineDefeated: boolean;
   escalated: boolean;
 };

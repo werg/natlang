@@ -328,6 +328,12 @@ export type PluggableMode = 'crisp' | 'nl' | 'shadow';
 export type PluggableImplementations<A extends unknown[], R> = { crisp: (...args: A) => R | Promise<R>; nl: (...args: A) => R | Promise<R> };
 export type PluggableOptions<R> = { default?: PluggableMode; name?: string; serve?: 'crisp' | 'nl'; same?: (crisp: R, nl: R) => boolean };
 export declare function pluggable<A extends unknown[], R>(implementations: PluggableImplementations<A, R>, setting: PluggableMode | 'natlang' | 'natural-language' | undefined, options?: PluggableOptions<R>): (...args: A) => Promise<R>;
+export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean; reasoned?: number;
+  fields?: Record<string, { value: unknown; probability: number }[]> };
+/** Call a readout: decision function and return its value with the probabilities of every allowed value. */
+export declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): Promise<Decision<T>>;
+/** Mark a value as outside text: natural-language functions receive it fenced as data and never follow it. */
+export declare function untrusted<T>(value: T, source?: string): Untrusted<T>;
 `;
 
 /** Module declaration text for packages that export the natlang surface. */
@@ -341,6 +347,7 @@ export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type)
  * src/std/index.ts over the intrinsic types (test/std-converge.test.mjs holds the two to the same names).
  */
 export const STD_MODULE_DTS = `
+import type { NatlangFunction } from '/__natlang__/surface';
 type Maybe<T> = T | Promise<T>;
 export type Problems = readonly string[];
 export type Intent = string;

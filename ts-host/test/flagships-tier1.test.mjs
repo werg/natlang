@@ -121,6 +121,39 @@ test('Tier 1 flagships: clean checkProject, >=10 fixture rows with flagship:<app
   assert.doesNotMatch(sheetSrc, /from\s+['"]node:/, 'sem-sheet/sheet.ts must be browser-compatible with zero node:* imports');
 });
 
+test('Tier 1 fixtures agree with the crisp paths: pr-shepherd trivial-hunk counts, sem-sheet crisp formula values and disjoint merges', async () => {
+  const shepherd = await (await buildApp('pr-shepherd'))('shepherd.js');
+  for (const row of JSON.parse(readFileSync(join(repo, 'applications/pr-shepherd/fixtures/cases.json'), 'utf8'))) {
+    const crisp = row.hunks.filter(hunk => shepherd.isTrivialHunkCrisp(hunk)).length;
+    assert.deepEqual([crisp, row.hunks.length - crisp], [row.expected.crispHunks, row.expected.semanticHunks], row.id);
+  }
+  const hunk = (file, removed, added) => ({ file, patch: `@@ -1 +1 @@\n-${removed}\n+${added}` });
+  assert.equal(shepherd.isTrivialHunkCrisp(hunk('a.ts', 'f(a,b)', 'f(a, b)')), true, 'spacing between tokens');
+  assert.equal(shepherd.isTrivialHunkCrisp(hunk('a.ts', 'log("a b")', 'log("ab")')), false, 'spacing inside a string is content');
+  assert.equal(shepherd.isTrivialHunkCrisp(hunk('a.py', '    return x', 'return x')), false, 'indentation is syntax in Python');
+  assert.equal(shepherd.isTrivialHunkCrisp(hunk('a.py', 'f(a,b)', 'f(a, b)')), true);
+
+  const sheet = await (await buildApp('sem-sheet'))('sheet.js');
+  const noModel = async () => { throw new Error('a crisp path called the model'); };
+  noModel.decide = noModel;
+  const runtime = createNatlangRuntime({ model: noModel });
+  let checked = 0;
+  for (const row of JSON.parse(readFileSync(join(repo, 'applications/sem-sheet/fixtures/cases.json'), 'utf8'))) {
+    if (row.cells && Object.values(row.cells).every(cell => cell.kind === 'literal' || cell.kind === 'formula')) {
+      const result = await runtime.run(() => sheet.evaluateSheet(row.cells));
+      for (const [coord, value] of Object.entries(row.expectedValues ?? {})) assert.ok(Math.abs(result.values[coord] - value) < 1e-4, `${row.id} ${coord}`);
+      assert.equal(result.crispShare, 1, row.id);
+      checked++;
+    }
+    if (row.merge && row.expectedMerged) {
+      const merged = await runtime.run(() => sheet.mergeSheetDiffs(row.merge.base, row.merge.ours, row.merge.theirs));
+      assert.deepEqual(merged.value, row.expectedMerged, row.id);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 2);
+});
+
 // --------------------------------------------------------------------------------------------------------------------
 // A1: pr-shepherd
 // --------------------------------------------------------------------------------------------------------------------

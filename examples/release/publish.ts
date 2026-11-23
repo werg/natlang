@@ -1,7 +1,8 @@
 /**
  * Publishing writes files through transactions. `proposeAndVerify` updates CHANGELOG.md and drafts a migration guide
  * for breaking changes in MIGRATION.md on a private copy of the folder, checks the proposal with an exact verifier the
- * reducer cannot edit (prior releases untouched, every breaking change documented, no stray files), and accepts only
+ * reducer cannot edit (prior releases untouched, every breaking change documented, no stray files); a release
+ * without breaking changes writes no guide, and accepts only
  * when it passes. `branchAndSelect` drafts the announcement in two styles, each on its own copy, and keeps the one
  * that serves the stated goal better via debiased pairwise ranking.
  */
@@ -24,6 +25,8 @@ export async function writeReleaseDocs(
   const nextChangelog = existing.includes(`## ${version}\n`) ? existing : `${section}\n${existing}`.trimEnd() + '\n';
   await changelog.writeText(nextChangelog);
 
+  // A release without breaking changes needs no upgrade guide, and no model call writes one.
+  if (!breaking.length) return section;
   const migration = folder.file('MIGRATION.md');
   const previous = await migration.exists() ? await migration.readText() : '';
   const guide: string = await nl`Write a concise upgrade guide for version covering every breaking change in breaking, using notes for context. Name the exact removed or replaced APIs and what callers should switch to. If previous is not empty, it is your earlier draft and problems lists what the verifier found wrong: fix every problem.`();
@@ -46,8 +49,9 @@ export async function releaseDocProblems(
   if (!changelog.includes(`## ${version}\n`)) problems.push(`CHANGELOG.md is missing the "## ${version}" heading.`);
   if (priorChangelog.trim() && !changelog.includes(priorChangelog.trim()))
     problems.push('CHANGELOG.md altered or dropped an earlier release section.');
-  const guide = (await proposal.folder.readText('MIGRATION.md')).trim();
-  if (!guide) problems.push('MIGRATION.md is empty.');
+  if (!breaking.length) return problems;
+  const guide = proposal.folder.isFile('MIGRATION.md') ? (await proposal.folder.readText('MIGRATION.md')).trim() : '';
+  if (!guide) problems.push('MIGRATION.md is missing or empty.');
   if (/\bTODO\b/i.test(guide)) problems.push('MIGRATION.md still contains a TODO placeholder.');
   for (const change of breaking) {
     if (!guide.includes(change.id)) problems.push(`MIGRATION.md does not reference breaking change ${change.id} (${change.title}).`);

@@ -9,10 +9,14 @@ effects per step ID, and converges post-step health checks.
 - **Exact mechanism (TypeScript, `engine.ts`):**
   - `parseMarkdownRunbook` & `orderRunbookSteps`: deterministic Markdown parser and topological DAG sorter with
     explicit cycle and missing-dependency detection.
-  - `isRoutineReadOnlyCommand` wrapped in `pluggable` (`default: 'crisp'`): settles strictly read-only inspection
-    commands (rejecting any shell chaining or mutation verbs) with zero model calls.
+  - `isRoutineReadOnlyCommand`, the crisp side of the `pluggable` read-only fast path (`default: 'crisp'`; nl side:
+    `assessStepRisk.nl` answering `safe`; `shadow` runs both and serves crisp): settles single-line, strictly read-only
+    inspection commands (rejecting shell chaining, substitution, redirection, newlines and mutation verbs) with zero
+    model calls.
   - Asymmetric risk gate: `escalate(assessStepRisk, { to: 'teacher', floor: 0.85, risk: { destructive: 0.2 } })`
-    blocks every unconfirmed `destructive` step and skips its downstream dependents.
+    blocks every unconfirmed `destructive` step and skips its downstream dependents. A step whose health check does
+    not converge also skips its dependents. `unconfirmedDestructiveExecuted` counts executed destructive steps that
+    had no confirmation (the safety counter; 0 by construction of the gate).
   - `createOnceOpsService`: declares `[ONCE_EFFECTS]: ['runStep']` and caches completed step results by `stepId`
     so retries never re-run already executed operational commands.
   - `convergeHealthCheck`: polls `service.readHealth(...)` inside `iterateOn(...).withMeasure(...).withLimit(...)`,

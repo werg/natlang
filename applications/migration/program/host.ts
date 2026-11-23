@@ -290,6 +290,8 @@ async function semanticFindings(root: string, original: CheckResult): Promise<{ 
         message: `${path} has ${nonJudgment} guard-for-type or redundant step(s) in prose.` });
     }
   }));
+  // Promise.all finishes in any order; the findings reach keepOf's prompt, so their order is fixed by file.
+  findings.sort((a, b) => a.file.localeCompare(b.file));
   return { findings, stepsByFile };
 }
 

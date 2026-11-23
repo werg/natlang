@@ -60,7 +60,7 @@ type HealthLoopState = {
 export function isRoutineReadOnlyCommand(command: string): boolean {
   const trimmed = command.trim();
   if (!trimmed) return false;
-  if (/[;&|><`$()]/.test(trimmed)) return false;
+  if (/[;&|><`$()\n\r\\]/.test(trimmed)) return false;
   if (/\b(rm|drop|delete|truncate|wipe|format|kill|shutdown|reboot|destroy|purge|apply|patch|scale|drain|restart)\b/i.test(trimmed)) {
     return false;
   }
@@ -294,19 +294,24 @@ export async function executeRunbook(
     risk: { destructive: options.destructiveRiskFloor ?? 0.2 },
   });
 
+  // Pluggable read-only fast path: crisp matches strictly read-only commands (0 model calls); nl asks assessStepRisk.nl
+  // whether the step is safe; shadow runs both, records agreement, and serves crisp.
+  const routineMode = options.routineMode ?? 'crisp';
+  // One risk decision per step, shared by the fast path's nl side and the main gate.
+  const assessed = new Map<string, ReturnType<typeof safeAssessRisk>>();
+  const assessOnce = (step: RunbookStep) => {
+    let pending = assessed.get(step.id);
+    if (!pending) assessed.set(step.id, pending = safeAssessRisk(step));
+    return pending;
+  };
   const routineFastPath = pluggable(
     {
-      crisp: (step: RunbookStep): StepRisk | null => (isRoutineReadOnlyCommand(step.command) ? 'safe' : null),
-      nl: async (step: RunbookStep): Promise<StepRisk | null> => {
-        const decision = await safeAssessRisk(step);
-        return decision.value;
-      },
+      crisp: (step: RunbookStep): boolean => isRoutineReadOnlyCommand(step.command),
+      nl: async (step: RunbookStep): Promise<boolean> => (await assessOnce(step)).value === 'safe',
     },
-    options.routineMode,
-    { default: 'crisp', name: 'runbook-routine-readonly-check' },
+    routineMode,
+    { default: 'crisp', serve: 'crisp', name: 'runbook-routine-readonly-check' },
   );
-
-  const crispActive = (options.routineMode ?? 'crisp') === 'crisp';
   const confirmed = options.confirmedStepIds ?? new Set<string>();
   const completedOk = new Set<string>();
   const executions: StepExecution[] = [];
@@ -334,28 +339,27 @@ export async function executeRunbook(
     let escalated: boolean;
     let escalationReason: string | undefined;
 
-    const fastRisk = await routineFastPath(step);
-    if (fastRisk === 'safe' && crispActive && isRoutineReadOnlyCommand(step.command)) {
+    if (routineMode !== 'nl' && await routineFastPath(step)) {
       risk = 'safe';
       source = 'crisp';
       confidence = 1;
       escalated = false;
     } else {
-      const decision = await safeAssessRisk(step);
+      const decision = await assessOnce(step);
       risk = decision.value;
       source = 'nl';
       confidence = decision.confidence;
       escalated = decision.escalated;
       escalationReason = decision.reason;
     }
-
     const needsConfirmation =
       risk === 'destructive' ||
       Boolean(step.requiresConfirmation) ||
       (risk === 'confirm' && Boolean(options.requireConfirmForConfirmSteps));
 
+    let isConfirmed = false;
     if (needsConfirmation) {
-      const isConfirmed =
+      isConfirmed =
         confirmed.has(step.id) || (options.confirmStep ? await options.confirmStep(step, risk) : false);
       if (!isConfirmed) {
         executions.push({
@@ -373,6 +377,7 @@ export async function executeRunbook(
       }
     }
 
+    if (risk === 'destructive' && !isConfirmed) unconfirmedDestructiveExecuted++;
     const result = await onceService.runStep(step.id, step.command);
     if (!result.ok) {
       executions.push({
@@ -400,7 +405,8 @@ export async function executeRunbook(
       recovered = health.recovered;
     }
 
-    completedOk.add(step.id);
+    // A step whose health check never converged is not a completed prerequisite: its dependents are skipped.
+    if (recovered !== false) completedOk.add(step.id);
     executions.push({
       stepId: step.id,
       title: step.title,
