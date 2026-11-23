@@ -1,0 +1,12 @@
+[Unit]
+Description=natlang ops watchdog: crisp operational checks appended to ops/alerts.jsonl (scripts/ops_watchdog.py)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+# Outside the memory ledger on purpose (like the storage sweep's disk-floor alerts): a full ledger must not block it.
+# Stdlib only; colab CLI from ~/.local/bin.
+Environment=PATH=/home/werg/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/ops_watchdog.py check
+Nice=10
+TimeoutStartSec=4min
