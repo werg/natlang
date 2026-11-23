@@ -25,7 +25,10 @@ def call(path, body=None, method=None, raw=False, ctype='application/json'):
 def start(*extra, log=sys.argv[3]):
     return subprocess.Popen([server, '-m', gguf, '--port', str(port), '-c', '2048', '-np', '1', '--no-warmup', '--jinja',
                              *(['-ngl', '0'] if '--cpu' in sys.argv else []), *extra],
-                            env={**os.environ, **({'CUDA_VISIBLE_DEVICES': ''} if '--cpu' in sys.argv else {})},
+                            # the exact splice of a produced span is what this checks: produced spans are read in
+                            # the reader's context by default (natlang-b12092, `in-context-text`), so opt out here
+                            env={**os.environ, 'NATLANG_NEURALESE_SPAN_IN_CONTEXT': '0',
+                                 **({'CUDA_VISIBLE_DEVICES': ''} if '--cpu' in sys.argv else {})},
                             stdout=open(log, 'w'), stderr=subprocess.STDOUT)
 def ready(proc):
     for _ in range(300):

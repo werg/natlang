@@ -8,16 +8,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion } from '../dist/model/index.js';
+import { LLAMA_RUNTIME_RELEASE } from '../dist/llama-runtime-release.js';
 
-function fakeServer(path, version = '0.8.0', build = 12081) {
+// the pinned release's own build boundary (it moves with every `update_llama_runtime.mjs --fork`)
+const MINIMUM_BUILD = LLAMA_RUNTIME_RELEASE.compatible.minimumBuild;
+
+function fakeServer(path, version = '0.8.0', build = MINIMUM_BUILD) {
   writeFileSync(path, `#!${process.execPath}\nconsole.log('version: ${version} (build ${build}, commit b29c606e2)');\n`);
   chmodSync(path, 0o755);
 }
 
 test('llama.cpp compatibility checks version and build boundaries', () => {
-  assert.equal(isCompatibleLlamaVersion('0.8.0', 12081), true);
-  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', 12081), true);
-  assert.equal(isCompatibleLlamaVersion('0.8.0', 12080), false);
+  assert.equal(isCompatibleLlamaVersion('0.8.0', MINIMUM_BUILD), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0-dev', MINIMUM_BUILD), true);
+  assert.equal(isCompatibleLlamaVersion('0.8.0', MINIMUM_BUILD - 1), false);
   assert.equal(isCompatibleLlamaVersion('0.5.0', 11146), false, 'llama.cpp before b11938 cannot load LFM3');
   assert.equal(isCompatibleLlamaVersion('0.9.0', 20000), false);
 });

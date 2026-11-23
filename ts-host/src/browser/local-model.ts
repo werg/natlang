@@ -338,7 +338,7 @@ export class BrowserLocalModel {
     return { store, dialect: `native-state/${identity.architecture}`, nativeStateConsumer: {
       architecture: identity.architecture as string, checkpoint_sha256: identity.checkpoint_sha256 as string,
       tokenizer_fingerprint: identity.tokenizer_fingerprint as string, embedding_weight_sha256: identity.embedding_weight_sha256 as string,
-      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization'] } };
+      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization', 'in-context-text'] } };
   }
 
   /** Run `work` after the turns and readouts queued before it (the in-page engine serves one request at a time). */
