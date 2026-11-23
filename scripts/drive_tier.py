@@ -2,8 +2,8 @@
 """Google Drive as the third storage tier (NVMe -> HDD -> Drive) and the Colab sessions' shared store.
 
 Everything lives under one Drive folder, ``natlang`` (the ``drive.file`` scope sees only what these tools create):
-``natlang/hdd`` mirrors archived HDD files (named by their path under ``/mnt/external``), ``natlang/checkpoints`` holds
-checkpoints by sha256 (``<sha>.pt``) for Colab bootstraps, ``natlang/colab/<run>`` holds what Colab learners write
+``natlang/hdd`` mirrors archived HDD files (named by their path under the HDD mount), ``natlang/blobs/<sha256>``
+holds what Colab sessions fetch (checkpoints, chains), ``natlang/colab/<run>`` holds what Colab learners write
 (learner state, factors). Standard library only, so a Colab VM runs it too.
 
 Credentials: on the DGX the ADC user token (``gcloud auth application-default print-access-token``) with the quota
@@ -18,7 +18,7 @@ its place, and appends every placement to the manifest (``~/data/drive-tier/mani
 
     drive_tier.py bench --mb 512                     # upload + download throughput (a random file, then deleted)
     drive_tier.py archive [--apply] [--budget-gb 9]  # one HDD -> Drive pass (rate cap, pauses during Colab transfers)
-    drive_tier.py restore /mnt/external/some/dir     # everything archived under that path, back in place
+    drive_tier.py restore HDD_DIR                    # everything archived under that path, back in place
     drive_tier.py put FILE KEY / get KEY DEST        # one object (KEY like checkpoints/<sha>.pt)
     drive_tier.py put-dir DIR PREFIX / get-dir PREFIX DEST   # a directory (learner state, factors), whole
     drive_tier.py push-token HOST PATH               # a fresh access token to HOST:PATH over ssh (0600)
@@ -44,7 +44,19 @@ FOLDER_MIME = 'application/vnd.google-apps.folder'
 ROOT_NAME = 'natlang'
 CHUNK = 16 * 2**20          # multiple of 256 KiB, as resumable uploads require
 GIB = 2**30
-HDD = Path('/mnt/external')
+def _hdd_root() -> Path:
+    """The external HDD mount (``common.paths``' data_hdd root; NATLANG_DRIVE_HDD overrides; a VM never archives)."""
+    if os.environ.get('NATLANG_DRIVE_HDD'):
+        return Path(os.environ['NATLANG_DRIVE_HDD'])
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+        from natlang_neuralese.common.paths import resolve
+        return Path(resolve('data_hdd'))
+    except Exception:
+        return Path('/nonexistent-hdd')
+
+
+HDD = _hdd_root()
 STATE = Path(os.environ.get('NATLANG_DRIVE_STATE', Path.home() / 'data' / 'drive-tier'))
 MANIFEST = STATE / 'manifest.jsonl'
 PROJECT = os.environ.get('NATLANG_DRIVE_PROJECT', 'awareness-481308')
