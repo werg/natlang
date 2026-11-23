@@ -1,0 +1,29 @@
+{
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-0033",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/0033",
+  "include": [
+    "capture/**",
+    "receipt.json",
+    "trajectory.native.jsonl.zst",
+    "graph-metrics.json",
+    "wave.json"
+  ],
+  "exclude_globs": [
+    "capture/.retained-state-packs/**",
+    "capture/retained-state-*/**"
+  ],
+  "kind": "teacher-demos",
+  "format": "native Vibestudio Luna trajectories and capture evidence",
+  "rows": 38,
+  "protected": false,
+  "producer": {
+    "script": "export0033-on-tick.py",
+    "argv": [],
+    "git_commit": "23c5ac1cb30611d10414f2947644567c0e41e2c5",
+    "dirty": false,
+    "host": "tick"
+  },
+  "manifest_sha256": "888d230468a526d801b9b6169468b3a7b1572576960e74e53fee21c461fe7457",
+  "training_admission": "registry-recorded"
+}
