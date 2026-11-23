@@ -182,15 +182,18 @@ def group_summary(gdir):
 
 
 def log_events(work):
-    """Group-level collector events of ``collect.log``: abandoned groups, failed scorings, dropped endpoints."""
-    out = {'abandoned': collections.Counter(), 'scoring_failed': collections.Counter(), 'endpoint_dropped': 0}
+    """Group-level collector events of ``collect.log``: abandoned groups, failed scorings, dropped endpoints, memetic
+    groups dropped by their preparation stage (grpo ``Collector._drop_memetic``: not admitted or failed)."""
+    out = {'abandoned': collections.Counter(), 'scoring_failed': collections.Counter(), 'endpoint_dropped': 0,
+           'memetic_dropped': {}}
     try:
         handle = open(Path(work) / 'collect.log', errors='replace')
     except OSError:
         return out
     with handle:
         for line in handle:
-            if '"group abandoned"' not in line and '"group scoring failed"' not in line and '"endpoint dropped"' not in line:
+            if ('"group abandoned"' not in line and '"group scoring failed"' not in line
+                    and '"endpoint dropped"' not in line and '"memetic group dropped"' not in line):
                 continue
             try:
                 event = json.loads(line)
@@ -202,6 +205,8 @@ def log_events(work):
                 out['scoring_failed'][event.get('group')] += 1
             elif event.get('event') == 'endpoint dropped':
                 out['endpoint_dropped'] += 1
+            elif event.get('event') == 'memetic group dropped':
+                out['memetic_dropped'][event.get('group')] = event.get('reason')
     return out
 
 
@@ -239,6 +244,10 @@ def collection_summary(work, cache_dir=None):
                 g['state'] = 'abandoned'
             elif events['scoring_failed'].get(index):
                 g['state'] = 'scoring_failed'
+            elif index in events['memetic_dropped']:
+                # not admitted (nothing to improve, or no support verdict) is a decision; a failed preparation is not
+                g['state'] = ('memetic_not_admitted' if events['memetic_dropped'][index] == 'not admitted'
+                              else 'memetic_preparation_failed')
     started = None
     try:
         started = json.loads((work / 'runs.jsonl').open().readline()).get('started')
@@ -262,8 +271,8 @@ def aggregate(collections_):
     for coll in collections_:
         endpoint_dropped += coll.get('endpoint_dropped') or 0
         for g in coll['groups']:
-            if g['state'] == 'pending':
-                continue                    # still running: no verdict either way
+            if g['state'] in ('pending', 'memetic_not_admitted'):
+                continue                    # still running, or a memetic group with nothing to improve: no episodes due
             buckets = [families[g['family']], total, *(constructs[c] for c in g['constructs'])]
             own = [e for e in g['episodes'] if not e['guided']]
             scored = [e for e in own if e['category'] != 'unscored']
@@ -312,7 +321,8 @@ def aggregate(collections_):
                                'endpoint_dropped': endpoint_dropped,
                                'rate': round((infra + abandoned + scoring_failed) / started, 4) if started else None},
             'no_episodes': no_episodes,
-            'pending_groups': sum(1 for c in collections_ for g in c['groups'] if g['state'] == 'pending')}
+            'pending_groups': sum(1 for c in collections_ for g in c['groups'] if g['state'] == 'pending'),
+            'memetic_not_admitted': sum(1 for c in collections_ for g in c['groups'] if g['state'] == 'memetic_not_admitted')}
 
 
 def _merge_rates(*aggregates):

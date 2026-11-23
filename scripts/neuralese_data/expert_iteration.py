@@ -318,16 +318,23 @@ def frontier_collector(base):
             return self.by_id[self.order.popleft()]
 
         def _memetic_open(self):
-            """A new memetic group may start: fewer than ``--memetic-max-groups`` run, and its episode wall clock
-            (the rows' ``world.case_seconds``) still fits before the deadline."""
+            """A new memetic group may start: fewer than ``--memetic-max-groups`` run, and its wall clock (the
+            episode's, the larger of the run's and the rows' ``world.case_seconds``, plus a staged group's preparation
+            stage, ``memetic_workspace.group_seconds``) still fits before the deadline."""
+            from natlang_neuralese.rl.memetic_workspace import group_seconds
             if not super()._memetic_open():
                 return False
             running = sum(1 for info in self.groups.values()
                           if info.get('memetic') and info['done'] < info['size'] and not info.get('abandoned'))
             if running >= getattr(self.args, 'memetic_max_groups', MEMETIC_MAX_GROUPS):
                 return False
-            tail = max([((r.get('semantics') or {}).get('world') or {}).get('case_seconds') or 7200
-                        for r in self.memetic_rows] or [7200])
+            layout = getattr(self.args, 'memetic_layout', 'staged')
+            run_seconds = int(getattr(self.args, 'case_seconds', 0) or 0)
+            tail = max([group_seconds(max(run_seconds, int(world.get('case_seconds') or 7200)),
+                                      ((r['semantics'].get('inputs') or {}).get('program') or {}).get('budget', {})
+                                      .get('evaluations', 2), layout)
+                        for r in self.memetic_rows for world in [(r.get('semantics') or {}).get('world') or {}]]
+                       or [7200])
             return time.time() + tail < self.deadline
 
         def _take(self):
@@ -483,6 +490,7 @@ def collect(args):
     g.held_manifest = args.held_manifest or grpo.default_held()
     g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
     g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
+    g.memetic_layout = getattr(args, 'memetic_layout', 'staged')
     g.max_outstanding = args.slots // 2 + 8
     tasks, excluded = grpo.load_tasks(g, work)
     code = grpo.git_pin()
@@ -491,7 +499,8 @@ def collect(args):
     run = {'schema': 'natlang.ei-collect/1', 'started': time.time(), 'code': code, 'pin': pin, 'series': series(),
            'argv': sys.argv, 'checkpoint': args.checkpoint, 'checkpoint_sha256': sha, 'k': args.k, 'hours': args.hours,
            'tasks_file': args.tasks, 'tasks_sha256': sha256_file_hex_cached(Path(args.tasks)), 'eligible': len(tasks),
-           'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups},
+           'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups,
+                       'layout': g.memetic_layout},
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
@@ -1174,6 +1183,7 @@ class Cycle:
                        '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(),
                        '--collect-weight-dtype', collect_w_dtype, '--teacher-attempts', teacher_attempts,
                        '--memetic-share', getattr(self.a, 'memetic_share', MEMETIC_SHARE),
+                       '--memetic-layout', getattr(self.a, 'memetic_layout', 'staged'),
                        '--slots', slots, '--unit-prefix', unit, *actor)
 
     def serve_colab(self, hosts, start, sha, profile):
@@ -2386,7 +2396,8 @@ class AsyncRoundDriver:
             kv_gb=a.kv_gb, fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
-            memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE), held_profile=getattr(a, 'held_profile', 'pop'),
+            memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE),
+            memetic_layout=getattr(a, 'memetic_layout', 'staged'), held_profile=getattr(a, 'held_profile', 'pop'),
             held_pin=a.held_pin, held_series_host=getattr(a, 'held_profile', 'pop'), held_samples=a.held_samples,
             held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
@@ -3087,6 +3098,10 @@ def main():
         p.add_argument('--memetic-share', type=float, default=MEMETIC_SHARE,
                        help='share of new collection groups that are memetic "improve program P" episodes (default '
                             'MEMETIC_SHARE; 0 opts out); their verified own successes enter the SFT mix')
+        p.add_argument('--memetic-layout', choices=('staged', 'inline'), default='staged',
+                       help="a memetic group's layout (grpo --memetic-layout; rl/memetic_workspace.py bind_layout): "
+                            'staged (default) prepares it as a collector stage and fits its nested runs in the '
+                            "episode's wall clock; inline is the layout before 2026-11-23")
     s = sub.add_parser('select')
     pool_flags(s)
     s.add_argument('--out', required=True)

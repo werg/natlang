@@ -229,3 +229,16 @@ def test_a_rounds_health_report_is_written_logged_alerted_and_queues_held_v4_on_
     assert 'COLLECTION HEALTH aei r0001: family_never_passes' in alerts.read_text()
     assert d.held_v4.next()['reasons'] == ['health-sfp'] and d.held_v4.next()['sha256'] == cur['sha256']
     assert d.health_report(rd, d.lineage_policies()) is None           # once per round
+
+
+def test_a_memetic_group_its_preparation_drops_is_not_admitted_or_a_failure(tmp_path):
+    now = _collection(tmp_path / 'v1', _healthy(n=1), log=[
+        {'event': 'memetic group dropped', 'group': 1, 'task_id': 'memetic:a', 'reason': 'not admitted'},
+        {'event': 'memetic group dropped', 'group': 2, 'task_id': 'memetic:b', 'reason': 'preparation failed'}])
+    for index, task in ((1, 'memetic:a'), (2, 'memetic:b')):
+        g = now / 'groups' / f'g{index:06d}'
+        g.mkdir()
+        (g / 'cases.jsonl').write_text(json.dumps({'id': task, 'family': 'memetic_improve'}) + '\n')
+    agg = ch.aggregate([ch.collection_summary(now)])
+    assert agg['memetic_not_admitted'] == 1 and agg['pending_groups'] == 0
+    assert [(t['task_id'], t['state']) for t in agg['no_episodes']] == [('memetic:b', 'memetic_preparation_failed')]
