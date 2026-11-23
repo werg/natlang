@@ -63,7 +63,7 @@ ERROR_RESULT = re.compile(r'^\s*(?:[A-Z][A-Za-z]*Error\b|Error\b|\d+:\d+ [a-z][a
 
 def logical(path):
     """The absolute path as written, symlinks kept: a plan or operation record must not bind to where a symlink
-    pointed when it was written (2026-11-20: plans resolved through the archive symlink to /mnt/external, the
+    pointed when it was written (2026-11-20: plans resolved through the archive symlink to the HDD archive, the
     directory moved back to the NVMe, and every fit of the chain failed on a missing rows.jsonl)."""
     import os
     return os.path.abspath(path)
@@ -562,6 +562,8 @@ def colab_fit(args):
     family = json.loads((directory / 'split.json').read_text())['family']
     cfg = A.host_config('colab', host=args.host)
     host = cfg['host']
+    # the DGX fit chain (fit-seq.sh) skips a program with this marker: one program is never fitted twice at once
+    (fit / 'colab-claim.json').write_text(json.dumps({'host': host, 'commit': args.commit, 'at': time.time()}) + '\n')
     tcfg = A.colab_tenant_checkout(host, cfg, args.commit)
     remote = f'{cfg["work_root"]}/tenant-fit-{family}'
     sha = plan['manifest']['base']['checkpoint_sha256']

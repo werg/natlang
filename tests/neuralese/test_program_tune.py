@@ -302,6 +302,7 @@ def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_
     monkeypatch.setattr(A, 'pull_verified', pull)
     args = ['colab-fit', '--dir', str(prog), '--host', 'colab-g4', '--commit', 'f' * 40]
     assert P.main(args) == 75 and not (prog / 'fit' / 'release').exists()      # evicted: nothing lands
+    assert (prog / 'fit' / 'colab-claim.json').exists()                         # the DGX chain skips it
     assert P.main(args) == 0 and (prog / 'fit' / 'release' / 'artifacts' / 'nnt1_abc.nnt').exists()
     body = plans['plan']
     remote = '/content/natlang-work/runs/tenant-fit-ext_fam'
