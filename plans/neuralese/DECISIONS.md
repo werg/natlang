@@ -7400,3 +7400,33 @@ pairing.
   decoding) are still refused.
 - **Effect now:** aei1's first verdict pairs round 1 against sft-v7's existing Pop result. Without this, the reference
   needed 8-10 h of DGX held.
+
+## 2026-11-23 B5: the decision objective in expert-iteration SFT (WS5 O3)
+
+- **Change (default on, opt-out `exp0_sft --no-decision-objective`).** A call on a decision readout's surface (no
+  tools, last message the readout's request, reply one of the offered JSON values) is a scored choice, not a sampled
+  reply. `sft_sources build` (`render_candidate`/`admit` -> `render_decision`) now carries each such row's option set:
+  the closed continuation of every option rendered by the scorer's own `serve.native_learning.decision_items` (what the
+  Python engine and the SGLang actor score), the label (the verified trajectory's choice, own and teacher) and the
+  option texts. `exp0_sft.chains_of` makes each decision its own chain; `decision_backward` trains
+  `common.decision_objective.decision_loss` (logLoss, the native-graph trainer's objective) over the options' full-softmax
+  sequence log-probabilities, one target unit of loss mass per decision, in every step (Ambient TM steps included).
+  The plain row stays in the chain, so the opt-out (and an older learner reading a new mix) trains the token CE of the
+  chosen reply as before. A `--resume` keeps the setting its learner state trained with (it changes the step list).
+  `lower_sft_sources.py` no longer drops decision rows: they become decision chains (Neuralese-importing ones are
+  skipped and counted). Why: the runtime's answer and confidence are softmax(s); the token CE of the chosen reply can
+  neither lower a wrongly preferred option nor ignore the shared format tokens.
+- **Teacher distributions:** none of our teacher endpoints returns prompt log-probabilities (the replay declines
+  scoring, `ReplayEpisode.answer`), so teacher decisions train on their label. A `probabilities` target is supported
+  by the learner and by `lower_sft_sources` for when one does.
+- **Verified.** 431/431 own decision captures of sft-v9's collection (SGLang actor) equal the build rendering byte for
+  byte (prompt ids, every option continuation, label = `decision_sample.chosen`); 196/196 replayed decision rows equal a
+  capture; 8 captures with Neuralese prompts never reach the build (replay skips them). In sft-v9's mix the objective
+  covers 307 own and 3,982 teacher decision rows (~5.5M extra forward tokens per epoch against 292M, 1.9%). Tests:
+  `tests/neuralese/test_sft_decision_objective.py` (the loss equals the served scores' softmax CE on an engine
+  fixture; gradient equals the explicit option CE; build rendering carries options into chains and `build.json`
+  `mix.decisions`; lowered graph decisions).
+- **Reports.** `build.json`: `stats.<source>.decision_rows/decision_options/decision_surface_not_carried:*` and
+  `mix.decisions`; `train.log`: `decision_objective` at start, per step `decisions`, `decision_ce`,
+  `decision_accuracy`, `decision_loss_share`, and `val_decision_ce:*`/`val_decision_accuracy:*` for validation sets
+  holding decisions.

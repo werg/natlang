@@ -31,9 +31,54 @@ DECISION_SYSTEM_PROMPT = ('You are running one call of a natural-language functi
                           "the function's return value: one JSON value of the declared type, with nothing else.")
 
 
+DECISION_REPLY_REQUEST = 'Reply with exactly one of these JSON values and nothing else: '
+
+
 def decision_prompt(replies):
-    return ('Answer this call now, without tools. Reply with exactly one of these JSON values and nothing else: '
-            + ', '.join(replies) + '.')
+    return 'Answer this call now, without tools. ' + DECISION_REPLY_REQUEST + ', '.join(replies) + '.'
+
+
+def decision_replies(messages):
+    """The reply texts a readout request offers (the runtime's ``decisionPrompt``, ts-host/src/decision-frame.ts, and
+    the refinement judge's question end the last user message with ``DECISION_REPLY_REQUEST`` + the JSON texts joined by
+    ', ' + '.'), in option order; None when the last message is not such a request or offers fewer than two distinct
+    values. The texts are the scorer's options byte for byte: each is the JSON of one value (``JSON.stringify``)."""
+    import json
+    last = messages[-1] if messages else None
+    content = last.get('content') if isinstance(last, dict) and last.get('role') == 'user' else None
+    if not isinstance(content, str) or DECISION_REPLY_REQUEST not in content or not content.endswith('.'):
+        return None
+    text = content.rsplit(DECISION_REPLY_REQUEST, 1)[1][:-1]
+    decoder, replies, at = json.JSONDecoder(), [], 0
+    while True:
+        try:
+            _, end = decoder.raw_decode(text, at)
+        except ValueError:
+            return None
+        replies.append(text[at:end])
+        if end == len(text):
+            break
+        if not text.startswith(', ', end):
+            return None
+        at = end + 2
+    return replies if len(replies) >= 2 and len(set(replies)) == len(replies) else None
+
+
+def decision_label(replies, reply):
+    """The index of the option ``reply`` (an assistant reply text) answers: its exact text, else the option whose JSON
+    value it spells (surrounding whitespace, other spacing); None when it answers none of them."""
+    import json
+    if not isinstance(reply, str):
+        return None
+    if reply in replies:
+        return replies.index(reply)
+    try:
+        value = json.loads(reply)
+    except ValueError:
+        return None
+    matches = [index for index, option in enumerate(replies) if json.loads(option) == value
+               and type(json.loads(option)) is type(value)]
+    return matches[0] if len(matches) == 1 else None
 
 
 def decision_messages(opening, values, *, guidance=''):

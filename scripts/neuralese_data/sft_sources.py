@@ -1699,13 +1699,44 @@ def call_row(renderer, source, key, index, turn, teacher_think='context', lead_i
                         turn, backend_workarounds)
 
 
-def render_call(renderer, source, turn, teacher_think='context', lead_in='context', own_empty_think='context'):
+def render_call(renderer, source, turn, teacher_think='context', lead_in='context', own_empty_think='context',
+                decisions=False):
     """The expensive half of ``call_row`` (chat template, tokenizer, think context): (prompt ids, target ids as int32
-    arrays, zero-weight lead). Raises on a render error."""
+    arrays, zero-weight lead), and with ``decisions`` a fourth item, the call's decision (``render_decision``). Raises
+    on a render error."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
     context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
-    return np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
+    rendered = np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
+    return (*rendered, render_decision(renderer, turn, rendered[0])) if decisions else rendered
+
+
+def render_decision(renderer, turn, prompt):
+    """The decision a call is, or None: a call on a decision readout's surface (no tools offered, the last message the
+    readout's request, ``decision_graph.decision_replies``) whose reply is one of the offered values is that readout's
+    choice, which the runtime scores rather than samples (``decide``). Rendered by the scorer's own rendering
+    (``serve.native_learning.decision_items``, which the Python engine and the SGLang actor score with): {'options':
+    per option its closed continuation ids (int32), 'label': the reply's option, 'values': the option texts,
+    'label_source': 'verified-trajectory'}, the learner's option-normalized objective (``exp0_sft.decision_backward``).
+    {'error': ...} when the scorer's prompt differs from the row's or the options do not render."""
+    import numpy as np
+    from natlang_neuralese.data.decision_graph import decision_label, decision_replies
+    target = turn.get('target') or {}
+    replies = decision_replies(turn.get('messages') or [])
+    if replies is None or turn.get('tools') or target.get('tool_calls'):
+        return None
+    label = decision_label(replies, (target.get('content') or '').strip())
+    if label is None:
+        return {'error': 'reply-not-an-option'}
+    from natlang_neuralese.serve.native_learning import decision_items
+    try:
+        before, continuations = decision_items(renderer, list(turn['messages']), turn.get('tools'), replies)
+    except Exception as error:
+        return {'error': repr(error)[:200]}
+    if any(kind != 'tok' for kind, _ in before) or [int(i) for _, i in before] != [int(i) for i in prompt]:
+        return {'error': 'prompt-differs-from-scorer'}
+    return {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': replies,
+            'label_source': 'verified-trajectory'}
 
 
 def rendered_row(rendered, source, key, index, turn, backend_workarounds='context'):
@@ -1713,7 +1744,7 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
     boundary are re-viewed with numpy's canonical dtype objects: pickle memoizes a dtype by identity, so rows carrying
     unpickled dtype copies would pickle into a different (if equivalent) chains.pkl."""
     import numpy as np
-    prompt, target, context = rendered
+    prompt, target, context, *decision = rendered
     row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
     row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
            'prompt': prompt.view(np.int32), 'sample': target.view(np.int32)}
@@ -1721,6 +1752,12 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
     if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
+    decision = decision[0] if decision else None
+    if decision and 'options' in decision:
+        # the plain row stays (``exp0_sft --no-decision-objective`` trains it as token CE, as before)
+        row['decision'] = {**decision, 'options': [ids.view(np.int32) for ids in decision['options']]}
+    elif decision:
+        row['decision_error'] = decision['error']
     return row, context
 
 
@@ -1754,7 +1791,7 @@ def render_candidate(renderer, work, c, think, lead_in, own_empty_think):
     calls = []
     for turn in turns:
         try:
-            calls.append(render_call(renderer, c['source'], turn, think, lead_in, own_empty_think))
+            calls.append(render_call(renderer, c['source'], turn, think, lead_in, own_empty_think, decisions=True))
         except Exception as error:
             calls.append(repr(error))
     return turns, calls
@@ -2052,7 +2089,22 @@ def mix_report(chains, aux_report, open_goal_scope=None):
                                    'max_task_tokens': int(ranked[0]) if ranked else 0},
             'open_user_goals': {**open_goal_exposure(chains, open_goal_scope), 'scope': open_goal_scope or 'all'},
             'open_user_goal_depths': open_goal_depth_report(chains),
+            'decisions': decision_report(chains),
             'aux': aux_report}
+
+
+def decision_report(chains):
+    """The decision readout chains of a mix, per part: what ``exp0_sft`` trains with the option-normalized decision
+    objective by default (``--no-decision-objective``: as the token CE of the chosen reply)."""
+    parts = collections.defaultdict(collections.Counter)
+    for chain in chains:
+        if chain.get('decision') is not None:
+            p = parts[chain.get('part') or 'unknown']
+            p['chains'] += 1
+            p['options'] += len(chain['decision']['options'])
+            p['forward_tokens'] += sum(chain['segs'][0][0] + len(ids) for ids in chain['decision']['options'])
+    return {'objective': 'option-normalized log score (exp0_sft.decision_backward; --no-decision-objective opts out)',
+            'chains': sum(p['chains'] for p in parts.values()), 'parts': {k: dict(v) for k, v in sorted(parts.items())}}
 
 
 def publish_sft_rows(rows, mix, minimum_open_goal_share):
@@ -2199,7 +2251,7 @@ def build(args):
             for turn in turns:
                 try:
                     calls.append(render_call(renderer, source, turn, treatment.render(c), args.teacher_lead_in,
-                                             args.own_empty_think))
+                                             args.own_empty_think, decisions=True))
                 except Exception as error:
                     calls.append(repr(error))
         for index, (turn, call) in enumerate(zip(turns, calls)):
@@ -2233,6 +2285,10 @@ def build(args):
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': context,
                             'too_long': len(prompt) + len(target) > MAX_LEN,
+                            **({'decision': {'label': row['decision']['label'], 'values': row['decision']['values'],
+                                             'option_tokens': [len(o) for o in row['decision']['options']]}}
+                               if 'decision' in row else {}),
+                            **({'decision_error': row['decision_error']} if 'decision_error' in row else {}),
                             **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
                                 'world': c['world'], 'live_exchange': turn['live_exchange']}
                                if c.get('verification_mode') == 'observed-live' else {})})
@@ -2251,6 +2307,12 @@ def build(args):
                                                for r in rows))
         s['call_tokens'] += sum(len(r['prompt']) + len(r['sample']) for r in rows)
         s['too_long_calls'] += sum(len(r['prompt']) + len(r['sample']) > MAX_LEN for r in rows)
+        # decision readouts carried with their option sets (exp0_sft trains them with the option-normalized objective)
+        s['decision_rows'] += sum('decision' in r for r in rows)
+        s['decision_options'] += sum(len(r['decision']['options']) for r in rows if 'decision' in r)
+        for r in rows:
+            if 'decision_error' in r:
+                s[f"decision_surface_not_carried:{r.pop('decision_error')}"] += 1
         families[source][c['family']] += 1
         domains[source][c['domain']] += 1
         producer = f"{source}:{c.get('teacher') or c.get('run') or ''}"

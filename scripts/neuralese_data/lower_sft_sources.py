@@ -7,8 +7,10 @@ Every text node of a kept row becomes one sequence: its exact token ids, loss on
 Weights are the lineage's declared own-output objective (`own_output_supervision.graph_weights` of the CE policy:
 assistant replies/actions, reasoning at its declared share, template-forced and context tokens 0), without family scales:
 the mix is set by selection. A node whose ids extend the previous node's ids of the same row is merged into that sequence (identical causal loss,
-fewer forward tokens). Per-call flattening, not whole-graph: nodes that import or produce Neuralese state, and decision
-readout rows, are skipped and counted. Families come from the source's logical-family map; `--drop-family` removes whole
+fewer forward tokens). Per-call flattening, not whole-graph: nodes that import or produce Neuralese state are skipped
+and counted. A decision readout (the row's ``decisions``, ``data.decision_graph``) becomes one decision sequence: its
+prompt, the target option's continuation and the option set, which `exp0_sft` trains with the option-normalized decision
+objective (`exp0_sft.decision_backward`); one whose prompt imports Neuralese state is skipped and counted. Families come from the source's logical-family map; `--drop-family` removes whole
 families (the scripted templates). Read-only on the sources.
 
     lower_sft_sources.py --sources train-sources.json --families families.json --out DIR \
@@ -53,11 +55,35 @@ def leaves(manifest_path):
     return out
 
 
+def _decision_sequences(row, stats):
+    """Decision sequences of one graph row: [(prompt + target option ids, zero weights, option node names, decision)];
+    the decision {'options': continuation ids per option, 'label' | 'probabilities', 'label_source'}. The option nodes
+    carry no token targets, so the row's token flattening skips them."""
+    nodes = {node['name']: node for node in row.get('nodes') or []}
+    out = []
+    for decision in row['decisions']:
+        options = [nodes[name] for name in decision['options']]
+        if any(node.get('imports') for node in options):
+            stats['skip_decisions_neuralese'] += 1
+            continue
+        prompt = decision['prompt_tokens']
+        continuations = [np.asarray(node['token_ids'][prompt:], np.int32) for node in options]
+        if 'label' in decision:
+            target, chosen = {'label': int(decision['label'])}, int(decision['label'])
+        else:
+            probabilities = [float(p) for p in decision['probabilities']]
+            target, chosen = {'probabilities': probabilities}, max(range(len(options)), key=probabilities.__getitem__)
+        ids = np.asarray(options[chosen]['token_ids'], np.int32)
+        out.append((ids, np.zeros(len(ids), np.float32), list(decision['options']),
+                    {'options': continuations, 'prompt_tokens': prompt, 'label_source': decision['label_source'],
+                     **target, **({'values': decision['values']} if 'values' in decision else {})}))
+        stats['decisions'] += 1
+    return out
+
+
 def _flatten(row, objective, stats):
-    """Sequences of one graph row: [(ids int32, weights float32, node names)]."""
-    if row.get('decisions'):
-        stats['skip_rows_decision'] += 1
-        return []
+    """Sequences of one graph row: [(ids int32, weights float32, node names[, decision])]."""
+    decisions = _decision_sequences(row, stats) if row.get('decisions') else []
     from natlang_neuralese.train.own_output_supervision import graph_weights
     try:
         flat, _ = graph_weights(row, objective)
@@ -66,6 +92,8 @@ def _flatten(row, objective, stats):
         stats[f'objective_error:{str(error)[:80]}'] += 1
         return []
     flat = np.asarray(flat, dtype=np.float32)
+    if decisions:
+        stats['rows_with_decisions'] += 1
     sequences, current, offset = [], None, 0
     for node in row.get('nodes') or []:
         node_weights = flat[offset:offset + len(node['token_ids'])]
@@ -89,7 +117,7 @@ def _flatten(row, objective, stats):
         current = [ids, weights, [node['name']]]
         sequences.append(current)
     stats['text_nodes'] += sum(len(s[2]) for s in sequences)
-    return [tuple(s) for s in sequences]
+    return [tuple(s) for s in sequences] + decisions
 
 
 def lower_leaf(job):
@@ -113,11 +141,12 @@ def lower_leaf(job):
             if family in drop or row.get('split') != args_split:
                 stats['skip_rows_dropped_family' if family in drop else 'skip_rows_not_train'] += 1
                 continue
-            for ids, weights, names in _flatten(row, objective, stats):
+            for ids, weights, names, *decision in _flatten(row, objective, stats):
                 positive = weights[weights > 0]
                 weight_values.update(np.round(positive, 4).tolist())
                 pickle.dump({'id': row['id'], 'family': family, 'nodes': names, 'groups': row.get('source_groups') or [],
-                             'ids': ids, 'w': weights}, sink, protocol=4)       # a stream of pickles: bounded memory
+                             'ids': ids, 'w': weights, **({'decision': decision[0]} if decision else {})},
+                            sink, protocol=4)       # a stream of pickles: bounded memory
                 kept += 1
     result = {'path': path, 'stats': dict(stats), 'weights': dict(weight_values.most_common(12)), 'kept': kept}
     out.with_suffix('.json').write_text(json.dumps(result))
@@ -238,7 +267,14 @@ def _text_hits(job):
 
 
 def to_chain(row):
-    """exp0 chain: segments are the runs of positive weight (the first token is never a target)."""
+    """exp0 chain: segments are the runs of positive weight (the first token is never a target); a decision row is one
+    segment, the target option's continuation, with its option set (``exp0_sft.chains_of`` form)."""
+    if row.get('decision') is not None:
+        decision = {k: v for k, v in row['decision'].items() if k != 'prompt_tokens'}
+        start = row['decision']['prompt_tokens']
+        sample = row['ids'][start:]
+        return {'ids': row['ids'], 'segs': [(start, len(sample), {'sample': sample, 'decision': decision})],
+                'task': row['id'], 'round': row['family'], 'decision': decision}
     positive = np.concatenate([[False], row['w'] > 0, [False]])
     edges = np.flatnonzero(positive[1:] != positive[:-1])
     segs = [(int(a), int(b - a), {'sample': row['ids'][a:b], 'weight': row['w'][a:b]}) for a, b in zip(edges[::2], edges[1::2])]
