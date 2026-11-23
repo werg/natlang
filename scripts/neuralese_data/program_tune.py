@@ -107,7 +107,7 @@ def split_manifest(directory, family, name, items, held):
 
 # ---- split -----------------------------------------------------------------------------------------------------------
 def split(args):
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     import grpo
     out = Path(args.out)
     if (out / 'split.json').exists():
@@ -122,7 +122,7 @@ def split(args):
                 rows.append((pool, index, row))
     if not rows:
         raise SystemExit(f'no pool rows of family {args.family}')
-    excluded = exclusion_ids(held, [row for _, _, row in rows])
+    excluded = training_exclusion_ids([row for _, _, row in rows], held)
     errata = set()
     for path in (args.errata or sorted(Path(grpo.ERRATA).glob('*.jsonl'))):
         errata |= {row['id'] for row in read_jsonl(path)}

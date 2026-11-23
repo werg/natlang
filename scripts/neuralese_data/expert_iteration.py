@@ -583,7 +583,7 @@ def record_collection(work, closed=True):
 
 # ---- frontier --------------------------------------------------------------------------------------------------------
 def frontier(args):
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     import grpo
     dirs, policies = [], set()
     for work in map(Path, args.collect):
@@ -595,7 +595,7 @@ def frontier(args):
     if not policies or not policies.issubset(allowed_policies):
         raise SystemExit(f'collections served {sorted(policies)}, not allowed frontier policy set {sorted(allowed_policies)}')
     rates = group_outcomes(dirs)
-    held = set(exclusion_ids(args.held_manifest or grpo.default_held(), [{'id': t} for t in rates]))
+    held = set(training_exclusion_ids([{'id': t} for t in rates], args.held_manifest or grpo.default_held()))
     leaked = sorted(set(rates) & held)
     if leaked:
         raise SystemExit(f'{len(leaked)} held tasks in the collections (e.g. {leaked[0]})')

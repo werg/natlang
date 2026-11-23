@@ -1283,12 +1283,19 @@ def action_text(turns):
     return '\n'.join(parts)
 
 
-def held_closure(manifest_path):
-    """(ids, groups, source ids) of the held set and every earlier held set it excludes: task ids, split groups, the
-    held rows' source groups and source ids (the separation grpo.load_tasks applies, for rows outside the pool too)."""
+class HeldClosure(tuple):
+    """(ids, groups, source ids) of the held sets, with ``reservations``: held sources reserved by rule
+    (``held_eval.reserved``; held-v4's reserved briefs, apps and fixture-pack shares), which ``held_hit`` also applies."""
+    reservations = ()
+
+
+def _held_closure_one(manifest_path):
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    ids, groups, sources = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups']), set()
+    from natlang_neuralese.rl.held_eval import RESERVATIONS_SCHEMA
+    if manifest.get('schema') == RESERVATIONS_SCHEMA:
+        return set(), set(), set(), [manifest]
+    ids, groups, sources, reservations = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups']), set(), []
     cases = manifest_path.parent / manifest['cases']['path']
     if sha256_file(cases) != manifest['cases']['sha256']:
         raise ValueError(f'held cases changed: {cases}')
@@ -1302,13 +1309,34 @@ def held_closure(manifest_path):
     for earlier in manifest.get('also_excludes') or ():
         if sha256_file(earlier['path']) != earlier['sha256']:
             raise ValueError('an excluded earlier held manifest changed: ' + earlier['path'])
-        more = held_closure(earlier['path'])
+        more = _held_closure_one(earlier['path'])
+        ids |= more[0]
+        groups |= more[1]
+        sources |= more[2]
+        reservations += more[3]
+    return ids, groups, sources, reservations
+
+
+def held_closure(manifest_path):
+    """(ids, groups, source ids) of the held set, every earlier held set it excludes and every other ``held-eval*``
+    registry role (held-v4 and its reservations: ``held_eval.held_manifests``): task ids, split groups, the held rows'
+    source groups and source ids (the separation grpo.load_tasks applies, for rows outside the pool too)."""
+    from natlang_neuralese.rl.held_eval import held_manifests
+    ids, groups, sources, reservations, seen = set(), set(), set(), [], set()
+    for path in [manifest_path, *[p for _, p in held_manifests()]]:
+        if path is None or os.path.realpath(path) in seen:
+            continue
+        seen.add(os.path.realpath(path))
+        more = _held_closure_one(path)
         ids |= more[0]
         groups |= more[1]
         sources |= more[2]
     groups.discard(None)
-    return ids, groups, sources
+    closure = HeldClosure((ids, groups, sources))
+    closure.reservations = tuple(reservations)
+    return closure
 
+        reservations += more[3]
 
 def live_holdout_registry(path, held):
     """Add the predeclared Vibestudio holdouts to the learner's source-group closure."""
@@ -1362,7 +1390,14 @@ DEFAULT_OCTOBER_GROUPS = ('luna-curricula=3', 'qwen-s72=2', 'fallow-v13r2=2', 'q
 
 def held_hit(task_id, source_ids, groups, held):
     held_ids, held_groups, held_sources = held
-    return task_id in held_ids or bool(set(groups) & held_groups) or bool(set(source_ids) & held_sources)
+    if task_id in held_ids or set(groups) & held_groups or set(source_ids) & held_sources:
+        return True
+    reservations = getattr(held, 'reservations', ())
+    if reservations:
+        from natlang_neuralese.rl.held_eval import reserved
+        row = {'id': task_id, 'source_groups': list(groups), 'source_ids': list(source_ids)}
+        return any(reserved(r, row) for r in reservations)
+    return False
 
 
 def water_fill(sizes, weights, budget):
@@ -1534,8 +1569,8 @@ def detour_call(turn, backend_workarounds):
 def held_excluded_ids(held_manifest, tasks, held):
     """Task ids among ``tasks`` ({id: task row}) in the held closure: ``held_eval.exclusion_ids`` (held tasks and their
     split groups) plus every row sharing a source group or source id with a held row (``held``: ``held_closure``)."""
-    from natlang_neuralese.rl.held_eval import exclusion_ids
-    excluded = set(exclusion_ids(held_manifest, list(tasks.values())))
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
+    excluded = set(training_exclusion_ids(list(tasks.values()), held_manifest))
     for task_id, task in tasks.items():
         groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
         if held_hit(task_id, task.get('source_ids') or (), groups, held):
@@ -2867,7 +2902,7 @@ def neuralese_text(args):
     import numpy as np
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     from exp0_sft import MAX_LEN, chains_of
     work, out = Path(args.work), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -2878,7 +2913,7 @@ def neuralese_text(args):
     surfaces = replay_surfaces(work, workers)    # the current runtime's surfaces: every call of every exact replay
     episodes = list(all_episodes(work, workers, keep=has_native_state))
     funnel['native_state_episodes'] = len(episodes)
-    excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
+    excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
     kept = []
     for e in episodes:
         task = e['task']
@@ -2999,7 +3034,7 @@ def neuralese_graph(args):
     import random
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     from exp0_sft import MAX_LEN, chains_of, source_tokens
     from lower_rollout_turns import episode_turns
     work, out = Path(args.work), Path(args.out)
@@ -3018,7 +3053,7 @@ def neuralese_graph(args):
     funnel['native_state_episodes'] = len(episodes)
     funnel['excluded_run'] = sum(1 for e in episodes if any(p.search(e.get('run') or '') for p in excluded_runs))
     episodes = [e for e in episodes if not any(p.search(e.get('run') or '') for p in excluded_runs)]
-    excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
+    excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
     kept = []
     for e in episodes:
         task = e['task']

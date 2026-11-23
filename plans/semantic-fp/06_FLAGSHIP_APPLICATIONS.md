@@ -17,7 +17,10 @@ depends on them working.
    size rule. v1's "< 40 words per `.nl`" and "< 150-line TS root" are dropped: a judgment needs the words it needs,
    and an orchestration that decides is policy.
 4. Fixture pack with train / held splits by `split_group`. The held split is reserved for held-v4 (WS5 H1) before
-   any training use. The train split is an O1 task source (WS5).
+   any training use. The train split is an O1 task source (WS5). Convention (B1, 2026-11-23): every fixture row's
+   split group is `flagship:<app>:<group>`. held-v4's reservations (`ops/held-v4/reservations.json`, rule
+   `share_rules`) hold the 20% of those groups for which `held_eval.reservation_share_held(rule, group)` is true;
+   training excludes them from the moment the row exists, and the pack labels its held split with the same function.
 5. `bench/` runs the four arms of §4 and writes `bench/results/<date>.json`.
 6. `natlang improve` (WS8 N4) runs on it once, with no human edits, and the result is recorded.
 

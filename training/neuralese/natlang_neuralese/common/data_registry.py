@@ -769,6 +769,15 @@ def role_paths(name: str, *, repo=None) -> list[str]:
     return [str(p) for _, p in load(repo=repo).role(name)]
 
 
+def role_prefix_paths(prefix: str, *, repo=None) -> list[tuple[str, str]]:
+    """``[(role, local path)]`` of every role whose name starts with PREFIX, sorted by role then role order (the held
+    sets: every ``held-eval*`` role is excluded from training, ``held_eval.training_exclusion_ids``)."""
+    reg = load(repo=repo)
+    names = sorted({name for ident in reg.git_order for name in (reg.git[ident].get('roles') or {})
+                    if name.startswith(prefix)})
+    return [(name, str(p)) for name in names for _, p in reg.role(name)]
+
+
 def role_path(name: str, *, repo=None) -> str:
     paths = role_paths(name, repo=repo)
     if len(paths) != 1:

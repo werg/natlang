@@ -145,7 +145,10 @@ def test_near_duplicates_drop_repeated_actions_and_keep_distinct_ones():
     assert s.minhash(set()) is None and not dedup.seen(None)
 
 
-def test_held_closure_covers_ids_groups_sources_and_earlier_sets(tmp_path):
+def test_held_closure_covers_ids_groups_sources_and_earlier_sets(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import held_eval
+    monkeypatch.setattr(held_eval, 'held_manifests', lambda repo=None: [])   # no other registry held set
+
     def held(directory, row, also=()):
         directory.mkdir()
         cases = directory / 'cases.jsonl'

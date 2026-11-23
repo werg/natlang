@@ -48,7 +48,7 @@ DATA_PATTERNS = {
                  'external-rl-sources/*/'),
     'data_nvme': ('memetic-tasks-*/cases.jsonl', 'sft-sources-*/', 'sft-teacher-demos-*/', 'hindsight-index-*/index.jsonl',
                   'natlang-operator-rows-*/manifest.json', 'vibestudio-live-corpus/seed-*/',
-                  'lfm3-rl-dgx-20261029/ops/teacher-gen-*/*/manifest.jsonl', 'lfm3-rl-dgx-20261029/ops/held-v*/manifest.json',
+                  'lfm3-rl-dgx-20261029/ops/teacher-gen-*/*/manifest.jsonl', 'lfm3-rl-dgx-20261029/ops/held-v*/manifest.json', 'lfm3-rl-dgx-20261029/ops/held-v*/reservations.json',
                   'lfm3-rl-dgx-20261029/ops/grpo-v*/run*/rollouts', 'lfm3-rl-dgx-20261029/ops/operators-v1/merged/'),
 }
 
@@ -57,7 +57,10 @@ def default_check_paths(reg):
     import glob
     from natlang_neuralese.common.paths import root
     paths = []
-    for role in ('grpo-pool', 'grpo-memetic-tasks', 'grpo-sd-teacher', 'held-eval'):
+    for role in ('grpo-pool', 'grpo-memetic-tasks', 'grpo-sd-teacher'):
+        paths += [str(p) for _, p in reg.role(role)]
+    held = sorted({name for e in reg.git.values() for name in (e.get('roles') or {}) if name.startswith('held-eval')})
+    for role in held:      # every held set (held-eval, held-eval-semantic-fp, its reservations)
         paths += [str(p) for _, p in reg.role(role)]
     for name, patterns in DATA_PATTERNS.items():
         for pattern in patterns:
