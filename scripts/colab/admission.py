@@ -11,7 +11,7 @@ Capacity is the probed total less a reserve per pool. A command that finds no li
 memory (a process the shim does not know about holds the rest); with live claims the claims are the accounting,
 because an admitted SGLang engine reserves its pool at launch and the free probe then reads its claim as used.
 
-A ``--preemptible`` claim is a tenant (program tuning between rounds, PROGRAM_TUNING_A100_20261124.md): a normal
+A ``--preemptible`` claim is a tenant (program tuning between rounds, DECISIONS 2026-11-24 "program tuning on the A100"): a normal
 claim that does not fit (a round's SFT learner, an actor served again) evicts tenants, newest first, until it fits
 (SIGTERM to the tenant's process group, SIGKILL after ``EVICT_GRACE_SECONDS``), and while a normal claim waits no tenant
 is admitted. A tenant restarts from its own saved state; the work it yields to never waits on it.
@@ -122,6 +122,29 @@ def write_waiters(state_dir: Path, waiters: dict) -> None:
     os.replace(tmp, state_dir / 'waiting.json')
 
 
+def pending_normal_requests(claims: dict, proc_root: Path = Path('/proc')) -> list[int]:
+    """PIDs of ``admission.py run`` processes without ``--preemptible`` that hold no claim: normal requests waiting
+    for admission. Read from the process table, so a waiting request of any version of this script counts (a round's
+    learner admitted by an older checkout writes no waiting record and evicts nobody: tenants yield to it themselves)."""
+    held = {int(c.get('pid') or 0) for c in claims.values()} | {int(c.get('child') or 0) for c in claims.values()}
+    found = []
+    for entry in proc_root.iterdir() if proc_root.is_dir() else ():
+        if not entry.name.isdigit() or int(entry.name) in held or int(entry.name) == os.getpid():
+            continue
+        try:
+            argv = (entry / 'cmdline').read_bytes().split(b'\0')
+        except OSError:
+            continue
+        words = [w.decode(errors='replace') for w in argv if w]
+        script = next((i for i, w in enumerate(words) if w.endswith('admission.py')), None)
+        if script is None or 'run' not in words[script + 1:]:
+            continue
+        own = words[script + 1:words.index('--')] if '--' in words else words[script + 1:]
+        if '--preemptible' not in own:
+            found.append(int(entry.name))
+    return sorted(found)
+
+
 def evictions(vram_gib: float, host_ram_gib: float, claims: dict, **probes) -> list[str] | None:
     """The preemptible claims (newest first) a normal request evicts to fit, ``[]`` when it fits as is, ``None`` when
     evicting every tenant would not make it fit (pure; ``probes`` are ``decide``'s keyword arguments). With tenants
@@ -204,7 +227,8 @@ def check_admission(vram_gib: float, host_ram_gib: float, *, device: int = 0, st
 
 def wait_and_run(command: list[str], *, vram_gib: float, host_ram_gib: float, label: str = '',
                  wait_seconds: float = 600.0, poll_seconds: float = 5.0, device: int = 0, state_dir: Path = STATE_DIR,
-                 workdir: str | None = None, probes: dict | None = None, preemptible: bool = False) -> int:
+                 workdir: str | None = None, probes: dict | None = None, preemptible: bool = False,
+                 beside_label: str | None = None, proc_root: Path = Path('/proc'), watch_seconds: float = 5.0) -> int:
     """Admit, record the claim, run ``command`` with the lock released, drop the claim when it ends. A normal
     request evicts the tenants it needs gone (``evictions``) and keeps tenants out while it waits; a ``preemptible``
     one is a tenant."""
@@ -217,8 +241,14 @@ def wait_and_run(command: list[str], *, vram_gib: float, host_ram_gib: float, la
                 claims = read_claims(state_dir)
                 ok, info = check_admission(vram_gib, host_ram_gib, device=device, state_dir=state_dir, **(probes or {}))
                 waiters = read_waiters(state_dir)
-                if preemptible and ok and waiters:
-                    ok, info = False, {**info, 'reasons': [f'normal requests wait: {sorted(waiters)}']}
+                if preemptible and ok:
+                    pending = sorted(waiters) or pending_normal_requests(claims, proc_root)
+                    beside = [k for k, c in claims.items() if not c.get('preemptible')
+                              and str(c.get('label') or '').startswith(beside_label or '')]
+                    if pending:
+                        ok, info = False, {**info, 'reasons': [f'normal requests wait: {pending}']}
+                    elif beside_label is not None and not beside:
+                        ok, info = False, {**info, 'reasons': [f'no live claim labelled {beside_label}*']}
                 if ok:
                     claims[claim_id] = {'pid': os.getpid(), 'child': None, 'vram_gib': vram_gib,
                                         'host_ram_gib': host_ram_gib, 'label': label, 'preemptible': preemptible,
@@ -256,19 +286,39 @@ def wait_and_run(command: list[str], *, vram_gib: float, host_ram_gib: float, la
 
     def forward(signum, _frame):
         if proc is not None and proc.poll() is None:
-            proc.send_signal(signum)
+            if preemptible:      # the tenant's command leads its own session: its whole group
+                with contextlib.suppress(OSError):
+                    os.killpg(proc.pid, signum)
+            else:
+                proc.send_signal(signum)
     if threading.current_thread() is threading.main_thread():
         for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             signal.signal(signum, forward)
+    stop_watch = threading.Event()
+
+    def watch():
+        # a tenant yields as soon as a normal request waits (whatever version of this script admits it): its whole
+        # process group (an SGLang actor's server and schedulers too) gets SIGTERM, SIGKILL after the grace period
+        while not stop_watch.wait(watch_seconds):
+            with locked(state_dir):
+                live = read_claims(state_dir)
+                pending = sorted(read_waiters(state_dir)) or pending_normal_requests(live, proc_root)
+            if pending and proc is not None and proc.poll() is None:
+                print(json.dumps({'event': 'colab tenant yields', 'claim': claim_id, 'to': pending}), flush=True)
+                evict({'pid': proc.pid})
+                return
     try:
-        proc = subprocess.Popen(command, cwd=workdir)
+        proc = subprocess.Popen(command, cwd=workdir, start_new_session=preemptible)
         with locked(state_dir):
             claims = read_claims(state_dir)
             if claim_id in claims:
                 claims[claim_id]['child'] = proc.pid
                 write_claims(state_dir, claims)
+        if preemptible:
+            threading.Thread(target=watch, daemon=True).start()
         return proc.wait()
     finally:
+        stop_watch.set()
         with locked(state_dir):
             claims = read_claims(state_dir)
             claims.pop(claim_id, None)
@@ -291,7 +341,9 @@ def main(argv=None) -> int:
     r.add_argument('--poll', type=float, default=5.0)
     r.add_argument('--workdir', default=None)
     r.add_argument('--preemptible', action='store_true',
-                   help='a tenant: normal claims that do not fit evict it, and none is admitted while one waits')
+                   help='a tenant: it yields to any waiting normal request (and normal claims that do not fit evict it)')
+    r.add_argument('--beside-label', help='a tenant is admitted only beside a live normal claim with this label prefix '
+                                          '(actor-: never while the session trains a round)')
     r.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.action == 'status':
@@ -309,7 +361,7 @@ def main(argv=None) -> int:
         raise SystemExit('admission.py run requires a command after --')
     return wait_and_run(cmd, vram_gib=args.vram_gib, host_ram_gib=args.host_ram_gib, label=args.label,
                         wait_seconds=args.wait, poll_seconds=args.poll, device=args.device, state_dir=args.state_dir,
-                        workdir=args.workdir, preemptible=args.preemptible)
+                        workdir=args.workdir, preemptible=args.preemptible, beside_label=args.beside_label)
 
 
 if __name__ == '__main__':

@@ -1240,6 +1240,124 @@ def serve_colab(args):
     raise RuntimeError(f'Colab G4 actor on {host} did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
 
 
+# ---- Colab tenants (program tuning between rounds, DECISIONS 2026-11-24 "program tuning on the A100") -------------------
+# A tenant runs beside the session's actor alone (capped KV, colab_layout 'tenants') under a --preemptible admission
+# claim: it yields to any waiting normal request (a round's learner, an actor served again) and is admitted only beside
+# a live actor claim, so a round never waits on it. Its code is a separate checkout at the tenant's commit (the
+# session's own checkout belongs to the round's commit and a tenant never moves it); the session's venv runs it.
+COLAB_TENANT_MPS_PERCENT = int(os.environ.get('NATLANG_COLAB_TENANT_MPS_PERCENT', '50'))
+COLAB_MEASURE_PORT = 8571
+
+
+def colab_tenant_checkout(host, cfg, commit):
+    """``cfg`` for tenant code: ROOT/natlang-tenant, a detached worktree of the session's clone at ``commit``,
+    verified clean; ``python`` stays the session venv's."""
+    root, repo = f'{cfg["root"]}/natlang-tenant', cfg['repo']
+    q = shlex.quote
+    out = ssh_host(host, f'git -C {q(repo)} fetch -q origin && '
+                         f'{{ test -d {q(root)} || git -C {q(repo)} worktree add -q --detach {q(root)} {q(commit)}; }} && '
+                         f'git -C {q(root)} checkout -q -f --detach {q(commit)} && git -C {q(root)} rev-parse HEAD && '
+                         f'git -C {q(root)} status --porcelain --untracked-files=no | head -5', timeout=600).split()
+    if out != [commit] and not (len(out) == 1 and out[0].startswith(commit)):
+        raise RuntimeError(f'{host}: the tenant checkout is not clean at {commit}: {" ".join(out)[:300]}')
+    return {**cfg, 'repo': root, 'admission': f'{root}/scripts/colab/admission.py', 'commit': out[0]}
+
+
+def colab_tenant_command(cfg, tcfg, claim, label, command, *, mps_percent=None, wait=86400):
+    """``command`` (run with the tenant checkout on PYTHONPATH and an MPS SM share) under a preemptible admission
+    claim of ``claim`` beside the session's actor."""
+    percent = COLAB_TENANT_MPS_PERCENT if mps_percent is None else mps_percent
+    env = ['/usr/bin/env', f'PYTHONPATH={tcfg["repo"]}/training/neuralese:{tcfg["repo"]}:{tcfg["repo"]}/scripts/neuralese_data',
+           f'NATLANG_REPO={tcfg["repo"]}', f'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE={int(percent)}']
+    return [cfg['python'], tcfg['admission'], 'run', '--preemptible', '--beside-label', 'actor-',
+            '--vram-gib', str(claim['vram_gib']), '--host-ram-gib', str(claim['host_ram_gib']), '--label', label,
+            '--wait', str(int(wait)), '--workdir', tcfg['repo'], '--', *env, *command]
+
+
+def colab_tenant_state_path(host, role):
+    safe = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in str(host))
+    return ROOT / f'colab-tenant-{safe}-{role}.json'
+
+
+def stop_colab_tenant(host, role):
+    state_file = colab_tenant_state_path(host, role)
+    state = read_json(state_file) or {}
+    if state.get('pid'):
+        ssh_host(host, f'kill -TERM -- -{int(state["pid"])} 2>/dev/null; for i in $(seq 30); do kill -0 {int(state["pid"])} '
+                       f'2>/dev/null || exit 0; sleep 2; done; kill -KILL -- -{int(state["pid"])} 2>/dev/null; true',
+                 check=False, timeout=120)
+    state_file.unlink(missing_ok=True)
+    return state
+
+
+def ship_release(host, cfg, release, remote):
+    """A program-fit release (result.json + its artifact closure, ~66 MB) on the VM at ``remote``."""
+    ssh_host(host, shlex.join(['mkdir', '-p', remote]))
+    copy_resumable(f'{release}/', f'{host}:{remote}/')
+    return remote
+
+
+def serve_colab_tenant_actor(*, host, checkpoint, sha, commit, release=None, port=COLAB_MEASURE_PORT,
+                             kv_cache_dtype=POP_KV_CACHE_DTYPE, ready_seconds=1800, bind_host=None):
+    """A measurement actor as a tenant: ``sha`` (optionally with a program-fit ``release`` served by default on one
+    SGLang adapter slot) beside the session's actor, sized by ``colab_layout(...)['tenants']['measure_actor']``. The
+    front runs the session's own checkout (its ts-host build); admission and the claim are the tenant checkout's.
+    Returns the attested record; raises when it does not attest in ``ready_seconds`` (e.g. no actor to stand beside)."""
+    cfg = host_config('colab', host=host)
+    tcfg = colab_tenant_checkout(host, cfg, commit)
+    layout = colab_layout(colab_hardware(host))
+    sizing = layout['tenants']['measure_actor']
+    adapters = rank = None
+    if release:
+        release, adapters, rank = adapter_release(argparse.Namespace(adapter_release=release))
+    role = 'measure'
+    previous = read_json(colab_tenant_state_path(host, role))
+    endpoint = remote_endpoint(host, port, bind_host)
+    if previous and previous.get('policy_id') == sha and previous.get('adapters') == adapters \
+            and attested(previous['endpoint'], sha, adapters):
+        return previous
+    stop_colab_tenant(host, role)
+    work = f'{cfg["work_root"]}/tenant-measure-{sha[:12]}'
+    ensure_remote_checkpoint(host, cfg, checkpoint, sha)
+    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab')
+    sglang = {**{k: v for k, v in sglang.items() if k != 'mem_fraction'}, 'kv_gb': sizing['kv_gb']}
+    serve = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/serve_native_checkpoint.py',
+             '--store-dir', f'{work}/store-{(adapters or "base")[:12]}', '--checkpoint', f'{cfg["checkpoints"]}/{sha}.pt',
+             '--checkpoint-sha256', sha, '--base', cfg['base'], '--host', '0.0.0.0', '--port', str(port),
+             '--prompt-rendering', 'full', '--engine', 'sglang', '--sglang-python', cfg['sglang_python'],
+             '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', sglang['kv_cache_dtype'],
+             '--sglang-max-running', str(sglang['max_running']), '--sglang-kv-gb', str(sizing['kv_gb']),
+             '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
+    if release:
+        remote_release = ship_release(host, cfg, release, f'{work}/adapter-{adapters[:16]}')
+        serve += ['--adapter-release', remote_release, '--sglang-adapter-slots', '1', '--sglang-adapter-rank', str(rank)]
+    else:
+        serve += ['--sglang-adapter-slots', '0']
+    # the front's own code is the session checkout's (cfg); only the admission wrapper is the tenant checkout's
+    admitted = colab_tenant_command(cfg, {**tcfg, 'repo': cfg['repo']}, sizing, f'measure-{sha[:12]}', serve)
+    pid = ssh_host(host, f'mkdir -p {shlex.quote(work)} && . {shlex.quote(cfg["env"])} || exit 1; setsid nohup '
+                         f'{shlex.join(admitted)} > {shlex.quote(work + "/actor.log")} 2>&1 < /dev/null & echo $!',
+                   timeout=60).strip()
+    record = {'endpoint': endpoint, 'host': host, 'role': role, 'policy_id': sha, 'adapters': adapters, 'rank': rank,
+              'work': work, 'pid': int(pid.splitlines()[-1]), 'claim': sizing, 'sglang': sglang,
+              'export_format': sglang_format, 'tenant_commit': tcfg['commit'], 'started': time.time()}
+    write_json(colab_tenant_state_path(host, role), record)
+    deadline = time.monotonic() + ready_seconds
+    while time.monotonic() < deadline:
+        if attested(endpoint, sha, adapters):
+            record['ready_seconds'] = round(time.time() - record['started'], 1)
+            write_json(colab_tenant_state_path(host, role), record)
+            log(event='Colab tenant actor ready', **record)
+            return record
+        alive = ssh_host(host, f'kill -0 {record["pid"]} 2>/dev/null && echo yes || true', check=False).strip()
+        if alive != 'yes':
+            break
+        time.sleep(10)
+    tail = ssh_host(host, f'tail -c 1500 {shlex.quote(work + "/actor.log")}', check=False)
+    stop_colab_tenant(host, role)
+    raise RuntimeError(f'Colab tenant actor {sha[:12]}+{(adapters or "")[:12]} did not attest: {tail[-600:]}')
+
+
 def colab_sft_fit(host):
     """(fit, reason): whether round SFT on ``host``'s session beats the DGX (``colab_layout`` ``sft_beats_dgx``: an
     L4 does not; an A100, H100 or G4 does). A session not bootstrapped is not fit. ``NATLANG_COLAB_SFT_ANY_GPU=1``

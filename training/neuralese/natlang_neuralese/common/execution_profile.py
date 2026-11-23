@@ -51,7 +51,7 @@ ACTOR_BESIDE_KV_SHARE = 0.25
 ACTOR_MEM_FRACTION = 0.88       # alone: SGLang's static memory fraction
 # Alone on a large GPU the pool is capped: 128 running used 20% of the L4's 11.2 GB FP8 pool (1.8M LFM3 tokens, mostly
 # conv state; DECISIONS 2026-11-23 13:50), so 24 GB holds ~10x what the actor's sequences use, and the rest of an A100
-# or G4 (~44 / 60 GiB) is free for tenants between rounds (program tuning, PROGRAM_TUNING_A100_20261124.md). An L4's
+# or G4 (~44 / 60 GiB) is free for tenants between rounds (program tuning, DECISIONS 2026-11-24 "program tuning on the A100"). An L4's
 # fraction-sized pool is below the cap and unchanged. NATLANG_COLAB_ACTOR_FULL=1 opts out (the fraction alone).
 ACTOR_ALONE_KV_CAP_GB = 24
 # Tenants of an actor-alone session (scripts/colab/admission.py --preemptible: a round's learner or an actor served

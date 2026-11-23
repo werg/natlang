@@ -135,7 +135,7 @@ def test_admission_does_not_hold_its_lock_while_a_long_lived_actor_runs(tmp_path
 
 
 def test_a_normal_claim_evicts_tenants_newest_first_and_never_a_normal_one():
-    """Program tuning is a tenant of the session (PROGRAM_TUNING_A100_20261124.md): a round's learner or an actor that
+    """Program tuning is a tenant of the session (DECISIONS 2026-11-24 "program tuning on the A100"): a round's learner or an actor that
     does not fit evicts tenants (newest first, only as many as it needs); an actor (normal) is never a victim."""
     probes = dict(total_vram=78.0, total_host=160.0, free_vram=10.0, free_host=100.0)
     claims = {'actor': {'vram_gib': 34.0, 'host_ram_gib': 24.0, 'started': 1.0},
@@ -172,6 +172,52 @@ def test_a_waiting_normal_claim_evicts_a_live_tenant_and_keeps_new_tenants_out(t
     rc = colab_admission.wait_and_run(['/bin/true'], vram_gib=0., host_ram_gib=1., label='fit', wait_seconds=0.5,
                                       poll_seconds=0.1, state_dir=state, preemptible=True)
     assert rc == colab_admission.EXIT_TIMEOUT
+
+
+def _fake_proc(root, pid, argv):
+    (root / str(pid)).mkdir(parents=True, exist_ok=True)
+    (root / str(pid) / 'cmdline').write_bytes(b'\0'.join(w.encode() for w in argv) + b'\0')
+
+
+def test_pending_normal_requests_are_read_from_the_process_table(tmp_path):
+    """A round's learner admitted by an older admission.py writes no waiting record: tenants see it in /proc."""
+    proc = tmp_path / 'proc'
+    _fake_proc(proc, 101, ['/py', '/c/natlang/scripts/colab/admission.py', 'run', '--vram-gib', '77', '--', 'python', 'x'])
+    _fake_proc(proc, 102, ['/py', '/c/admission.py', 'run', '--preemptible', '--', 'python', 'tune'])
+    _fake_proc(proc, 103, ['/py', '/c/admission.py', 'run', '--vram-gib', '34', '--', 'serve'])      # admitted (claim)
+    _fake_proc(proc, 104, ['/py', '/c/admission.py', 'check', '--vram-gib', '1'])
+    _fake_proc(proc, 105, ['bash', '-c', '. env && /py /c/admission.py run --vram-gib 77 -- x'])
+    _fake_proc(proc, 106, ['/py', '/c/admission.py', 'run', '--', '/x/tool', '--preemptible'])  # the command's flag
+    claims = {'actor': {'pid': 103}}
+    assert colab_admission.pending_normal_requests(claims, proc) == [101, 106]
+
+
+def test_a_tenant_yields_to_a_waiting_request_and_waits_beside_an_actor(tmp_path):
+    state, proc = tmp_path / 'adm', tmp_path / 'proc'
+    proc.mkdir()
+    # no live actor claim: a tenant with --beside-label actor- is not admitted
+    rc = colab_admission.wait_and_run(['/bin/true'], vram_gib=0., host_ram_gib=1., label='fit', wait_seconds=0.5,
+                                      poll_seconds=0.1, state_dir=state, preemptible=True, beside_label='actor-',
+                                      proc_root=proc)
+    assert rc == colab_admission.EXIT_TIMEOUT
+    state.mkdir(exist_ok=True)
+    colab_admission.write_claims(state, {'actor-x': {'pid': os.getpid(), 'vram_gib': 0., 'host_ram_gib': 1.,
+                                                     'label': 'actor-e15b20a86f1c', 'started': 1.0}})
+    result = {}
+    tenant = threading.Thread(target=lambda: result.update(rc=colab_admission.wait_and_run(
+        ['sleep', '60'], vram_gib=0., host_ram_gib=1., label='fit', wait_seconds=5, poll_seconds=0.1, state_dir=state,
+        preemptible=True, beside_label='actor-', proc_root=proc, watch_seconds=0.1)))
+    started = time.monotonic()
+    tenant.start()
+    for _ in range(100):
+        if len(colab_admission.read_claims(state)) == 2:
+            break
+        time.sleep(0.05)
+    assert len(colab_admission.read_claims(state)) == 2
+    _fake_proc(proc, 4242, ['/py', '/c/admission.py', 'run', '--vram-gib', '77', '--', 'exp0_sft.py'])
+    tenant.join(timeout=20)
+    assert not tenant.is_alive() and result['rc'] != 0 and time.monotonic() - started < 15
+    assert list(colab_admission.read_claims(state)) == ['actor-x']
 
 
 def test_admission_without_claims_needs_the_probed_free_memory():
