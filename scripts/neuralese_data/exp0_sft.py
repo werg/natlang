@@ -22,7 +22,9 @@ share); the step loss is then the weighted mean over its targets. Each `--val-ch
 
 A chain with a ``decision`` (a decision readout row with its option set, `sft_sources build`) trains the readout's
 option-normalized log score (`decision_backward`, one target unit of loss mass per decision);
-`--no-decision-objective` trains it as the token CE of the chosen reply instead.
+`--no-decision-objective` trains it as the token CE of the chosen reply instead. A reasoned readout's decision (its
+options scored after the student's own sampled reasoning, `reasoning_span`) also trains that reasoning as token CE, one
+unit of loss mass per token (`--no-decision-reasoning`: the choice only, still conditioned on the reasoning).
 
 Speed (GB10, 11k-token sequences): the stock HF modelling code runs at about 1.9k fwd+bwd tokens/s because half of the GPU
 time is unfused elementwise work and a fifth dense sliding-window attention; `lfm3_fast_train` (compiled per-kind layers,
@@ -488,7 +490,7 @@ def row_inputs(row, device, passthrough=True, fixed=None, starts=None):
 
 def chain_mass(chain):
     if chain.get('decision_objective'):
-        return DECISION_MASS
+        return DECISION_MASS + chain.get('decision_reasoning', 0)
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
 
 
@@ -505,10 +507,13 @@ DECISION_MASS = 1.
 DECISION_RULE = 'logLoss'
 
 
-def mark_decision_objective(chains, on=True):
+def mark_decision_objective(chains, on=True, reasoning=True):
     """Mark the decision chains (``chains_of``: a row with its ``decision`` option set) of ``chains`` for the decision
     objective (in place; ``on`` False: they train as the plain token CE of the chosen reply, once per row: the later
-    field steps of a field-mode row, ``decision_step``, are removed). Returns their count."""
+    field steps of a field-mode row, ``decision_step``, are removed). A reasoned readout's decision (``reasoning_span``,
+    the student's own sampled reasoning in its prompt, ``sft_sources.render_decision``) also trains that span as token
+    CE (``decision_reasoning``: its token count, its loss mass besides the decision's); ``reasoning`` False: the choice
+    only. With ``on`` False the plain row holds the reasoning and the reply and trains them once. Returns the count."""
     if not on:
         chains[:] = [chain for chain in chains if not chain.get('decision_step')]
     count = 0
@@ -517,6 +522,8 @@ def mark_decision_objective(chains, on=True):
             if on and chain.get('imports'):
                 raise ValueError('a decision chain with imported Neuralese state trains in the native-graph trainer')
             chain['decision_objective'] = bool(on)
+            span = chain['decision'].get('reasoning_span')
+            chain['decision_reasoning'] = int(span[1] - span[0]) if on and reasoning and span is not None else 0
             count += 1
     return count
 
@@ -540,6 +547,17 @@ def decision_parts(chain):
     return prompt, options, target
 
 
+def decision_reasoning_span(chain):
+    """The (start, stop) of a decision chain's reasoning in its decision prompt that trains as token CE, or None
+    (no reasoned readout, or ``mark_decision_objective`` turned it off)."""
+    if not chain.get('decision_reasoning'):
+        return None
+    start, stop = (int(v) for v in chain['decision']['reasoning_span'])
+    if not 0 < start < stop or stop - start != chain['decision_reasoning']:
+        raise ValueError('a decision reasoning span lies in its prompt after the first token')
+    return start, stop
+
+
 def decision_tokens(chain):
     prompt, options, _ = decision_parts(chain)
     return sum(len(prompt) + len(ids) for ids in options)
@@ -548,15 +566,18 @@ def decision_tokens(chain):
 def decision_backward(model, forward, chains, denominator, pack_tokens, activation_gb, fast=True, mark=None,
                       backward=True):
     """Forward and backward of the decision objective over ``chains`` (decision chains), the loss
-    sum(DECISION_MASS * CE) / ``denominator``. Every option is its prompt followed by its closed continuation; a
-    decision's options (and, on the fast path, several decisions up to ``pack_tokens``) run as packed documents of one
-    forward, so its option scores share one graph. Scores use the full softmax, as the readout does. Returns
-    (sum of the weighted loss, tokens computed, {'decisions', 'ce', 'correct'}); ``backward`` False: no backward
-    (validation, under ``torch.no_grad``)."""
+    sum(DECISION_MASS * CE + reasoning NLL) / ``denominator``. Every option is its prompt followed by its closed
+    continuation; a decision's options (and, on the fast path, several decisions up to ``pack_tokens``) run as packed
+    documents of one forward, so its option scores share one graph. Scores use the full softmax, as the readout does.
+    A reasoned readout's chain (``decision_reasoning`` > 0, ``mark_decision_objective``) also takes the token NLL of
+    its reasoning span (in the prompt every option shares; read off the first option's document). Returns (sum of the
+    weighted loss, tokens computed, {'decisions', 'ce', 'correct', 'reasoning_tokens', 'reasoning_nll'}); ``backward``
+    False: no backward (validation, under ``torch.no_grad``)."""
     from natlang_neuralese.common.decision_objective import decision_loss
     mark = mark or (lambda name, since: time.time())
     device = model.lm_head.weight.device
-    total, computed, report = 0., 0, {'decisions': 0, 'ce': 0., 'correct': 0}
+    total, computed = 0., 0
+    report = {'decisions': 0, 'ce': 0., 'correct': 0, 'reasoning_tokens': 0, 'reasoning_nll': 0.}
     groups, group, size = [], [], 0
     for chain in chains:
         n = decision_tokens(chain)
@@ -570,30 +591,46 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
     for group in groups:
         t = time.time()
         parts = [decision_parts(chain) for chain in group]
-        documents, positions, targets, spans = [], [], [], []
-        offset = 0
-        for prompt, options, _ in parts:
-            for ids in options:
-                documents.append(np.concatenate([prompt, ids]))
-                positions.append(np.arange(offset + len(prompt) - 1, offset + len(prompt) - 1 + len(ids)))
-                targets.append(ids)
+        reasoning = [decision_reasoning_span(chain) for chain in group]
+        # per document: its local target positions and tokens (spans in order: a reasoned decision's reasoning span
+        # on its first option's document, then each option's continuation)
+        documents, local, targets, spans = [], [], [], []
+        for (prompt, options, _), span in zip(parts, reasoning):
+            if span is not None and span[1] > len(prompt):
+                raise ValueError('a decision reasoning span lies in its prompt')
+            for k, ids in enumerate(options):
+                at_rows, at_ids = [], []
+                if k == 0 and span is not None:
+                    at_rows.append(np.arange(span[0] - 1, span[1] - 1))
+                    at_ids.append(prompt[span[0]:span[1]])
+                    spans.append(span[1] - span[0])
+                at_rows.append(np.arange(len(prompt) - 1, len(prompt) - 1 + len(ids)))
+                at_ids.append(ids)
                 spans.append(len(ids))
-                offset += len(prompt) + len(ids)
+                documents.append(np.concatenate([prompt, ids]))
+                local.append(np.concatenate(at_rows))
+                targets.append(np.concatenate(at_ids))
         if fast:
             ids = torch.from_numpy(np.concatenate(documents)).to(device)
             if getattr(model, '_lfm3_fast', None) is not None:
                 set_checkpointing(model, len(ids), activation_gb)
             h = forward(model, ids, [len(d) for d in documents])
-            nll = token_nll(model, h, torch.from_numpy(np.concatenate(positions)).to(device),
+            offsets = np.cumsum([0] + [len(d) for d in documents[:-1]])
+            nll = token_nll(model, h, torch.from_numpy(np.concatenate([o + r for o, r in zip(offsets, local)])).to(device),
                             torch.from_numpy(np.concatenate(targets)).to(device))
         else:                        # the stock path: one document per forward
             nll = torch.cat([token_nll(model, forward(model, torch.from_numpy(d).to(device)),
-                                       torch.from_numpy(np.arange(len(d) - len(c) - 1, len(d) - 1)).to(device),
-                                       torch.from_numpy(c).to(device)) for d, c in zip(documents, targets)])
+                                       torch.from_numpy(r).to(device), torch.from_numpy(c).to(device))
+                             for d, r, c in zip(documents, local, targets)])
         sums = -torch.stack([part.sum() for part in nll.split(spans)])
         t = mark('decision_forward', t)
         loss, at = sums.new_zeros((), dtype=torch.float32), 0
-        for _, options, target in parts:
+        for (_, options, target), span in zip(parts, reasoning):
+            if span is not None:     # the student's own reasoning tokens: token CE, weight 1 each
+                loss = loss - sums[at]
+                report['reasoning_tokens'] += int(span[1] - span[0])
+                report['reasoning_nll'] += float(-sums[at].detach())
+                at += 1
             scores = sums[at:at + len(options)]
             at += len(options)
             ce = decision_loss(scores, rule=DECISION_RULE, probabilities=target)
@@ -970,20 +1007,20 @@ def validation_loss(model, forward, chains, pack_tokens=0, student_top_p=1.):
     return total / max(mass, 1e-9)
 
 
-def resumed_decision_objective(args, wanted):
-    """Whether this run trains the decision objective: ``wanted``, except that a ``--resume`` keeps the setting its
-    learner state trained with (the objective changes decision chains' loss mass, so the step list a state's batch
-    cursor indexes; a state saved before the objective existed trained without it)."""
+def resumed_decision_objective(args, wanted, key='decision_objective'):
+    """Whether this run trains the decision objective (``key`` 'decision_reasoning': a reasoned readout's reasoning
+    tokens): ``wanted``, except that a ``--resume`` keeps the setting its learner state trained with (the objective
+    changes decision chains' loss mass, so the step list a state's batch cursor indexes; a state saved before the
+    setting existed trained without it)."""
     state_dir = Path(args.state_dir) if args.state_dir else Path(args.out_dir) / 'learner-state'
     if not (args.resume and (state_dir / 'learner_manifest.json').is_file()):
         return wanted
     saved = None
     if (state_dir / 'trainer_state.pt').is_file():
-        saved = (torch.load(state_dir / 'trainer_state.pt', map_location='cpu', weights_only=False) or {}).get(
-            'decision_objective')
+        saved = (torch.load(state_dir / 'trainer_state.pt', map_location='cpu', weights_only=False) or {}).get(key)
     saved = bool(saved)
     if saved != wanted:
-        print(json.dumps({'event': 'decision objective kept from the resumed learner state', 'decision_objective': saved,
+        print(json.dumps({'event': 'decision objective kept from the resumed learner state', key: saved,
                           'state_dir': str(state_dir)}), flush=True)
     return saved
 
@@ -1093,9 +1130,16 @@ def train(args):
                           **{f'context_masks:{name}': context_masks(c, tokenizer, second) for name, c in val_sets.items()}}),
               flush=True)
     decision_on = resumed_decision_objective(args, not args.no_decision_objective)
-    decisions = mark_decision_objective(chains, decision_on)
+    reasoning_on = resumed_decision_objective(args, not args.no_decision_reasoning, 'decision_reasoning')
+    decisions = mark_decision_objective(chains, decision_on, reasoning_on)
     print(json.dumps({'decision_objective': {'on': decision_on, 'chains': decisions, 'rule': DECISION_RULE,
                                              'mass_per_decision': DECISION_MASS,
+                                             'reasoning': {'on': reasoning_on,
+                                                           'reasoned': sum(c['decision'].get('reasoning_span') is not None
+                                                                           for c in chains if c.get('decision') is not None),
+                                                           'trained': sum(bool(c.get('decision_reasoning')) for c in chains),
+                                                           'target_tokens': int(sum(c.get('decision_reasoning', 0)
+                                                                                    for c in chains))},
                                              'options': int(sum(len(c['decision']['options']) for c in chains
                                                                 if c.get('decision') is not None)),
                                              'forward_tokens': int(sum(decision_tokens(c) for c in chains
@@ -1249,6 +1293,7 @@ def train(args):
             trained_rounds=rounds_now,
             ref_bundles=ref_bundles, ref_rows=ref_rows,
             trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best, 'decision_objective': decision_on,
+                           'decision_reasoning': reasoning_on,
                            'schedule': {'total': total, 'steps': len(steps), 'replanned': replanned}},
         )
         last_state_save = time.time()
@@ -1277,7 +1322,8 @@ def train(args):
         is_clean = ambient_clean(args.seed, step, args.ambient_p_clean)
 
         def run_step_body(cur_pack_tokens, cur_act_gib):
-            ambient, decided = None, (0., 0, {'decisions': 0, 'ce': 0., 'correct': 0})
+            ambient, decided = None, (0., 0, {'decisions': 0, 'ce': 0., 'correct': 0, 'reasoning_tokens': 0,
+                                              'reasoning_nll': 0.})
             if step_decisions:
                 decided = decision_backward(model, forward, step_decisions, denominator, cur_pack_tokens, cur_act_gib,
                                             mark=mark)
@@ -1319,6 +1365,9 @@ def train(args):
                       'decision_accuracy': decided['correct'] / decided['decisions'],
                       'decision_loss_share': DECISION_MASS * decided['ce'] / max(1e-9, total_nll)}
                      if decided['decisions'] else {}),
+                  **({'decision_reasoning_tokens': decided['reasoning_tokens'],
+                      'decision_reasoning_nll': decided['reasoning_nll'] / decided['reasoning_tokens']}
+                     if decided['reasoning_tokens'] else {}),
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
                   'chain_tokens': int(sum(len(chains[i]['ids']) for i in group)), 'computed_tokens': computed,
                   'forward_tokens_per_s': round(forward_tokens / max(1e-6, time.time() - started)),
@@ -1541,6 +1590,10 @@ def main():
                    help='train decision readout rows (a chain with its option set, sft_sources build) as the plain token '
                    'CE of the chosen reply instead of the option-normalized log score of the readout (default: the '
                    'decision objective, exp0_sft.decision_backward)')
+    p.add_argument('--no-decision-reasoning', action='store_true',
+                   help='with the decision objective: do not train a reasoned readout\'s sampled reasoning as token CE '
+                   '(its options are still scored after it; default: the reasoning span trains, '
+                   'exp0_sft.mark_decision_objective)')
     p.add_argument('--context-masks', choices=('on', 'off'), default='on',
                    help='on (default): at load, a target row\'s leading empty think block and anything after its end '
                         'token are context in the training and validation chains (exp0_sft.context_masks); off: the '

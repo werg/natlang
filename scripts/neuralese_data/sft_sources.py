@@ -110,7 +110,7 @@ def exact_tokens(turn):
 
 def semantic_turn(turn, keep_exact):
     out = {k: turn.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')}
-    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role'):
+    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role', 'decision_reasoning'):
         if key in turn:
             out[key] = turn[key]
     out['completion_tokens'] = (turn.get('usage') or {}).get('completion_tokens')
@@ -890,10 +890,18 @@ def signature_key(messages):
 class ReplayEpisode:
     """The recorded calls of one episode, served once each: an exact visible-history match first; otherwise the next
     unserved call of the same invocation with as many visible messages (a tool output that differs from the recording,
-    counted as 'drifted'); otherwise no reply (the episode ends)."""
+    counted as 'drifted'); otherwise no reply (the episode ends).
+
+    A reasoned readout's recorded samples (``data.decision_graph.reasoned_decision_plan``) are one call of the replay:
+    the runtime asks its reasoning ``samples`` times with the readout's messages, the replay declines the scoring, and
+    the runtime generates the answer once on the same messages. All of these are answered by the group's action entry
+    (its reasoning and answer; the last step's entry of a field-mode readout), the first request as a matched call and
+    the following ones (``repeats``, at most ``samples`` of them) logged as 'group-repeat'; the group's other samples are
+    never served on their own. ``calls`` is the number of recorded calls the replay should match (and record)."""
 
     def __init__(self, turns):
         import threading
+        from natlang_neuralese.data.decision_graph import reasoned_decision_plan
         self.lock = threading.Lock()
         self.turns = turns
         self.keys = [visible_key(t['messages']) for t in turns]
@@ -902,6 +910,20 @@ class ReplayEpisode:
         self.signatures = [signature_key(t['messages']) for t in turns]
         self.lengths = [sum(m.get('role') != 'system' for m in t['messages']) for t in turns]
         self.served = [False] * len(turns)
+        self.repeats = [0] * len(turns)
+        self.active = {}   # visible key -> the reasoned group representative serving its repeats
+        groups = collections.defaultdict(list)
+        for index, entry in enumerate(reasoned_decision_plan(turns)):
+            if entry is not None:
+                groups[entry['group']].append(index)
+        for members in groups.values():
+            actions = [i for i in members if (turns[i].get('decision_reasoning') or {}).get('action') is True]
+            chosen = (actions or members)[-1]
+            for i in members:
+                if i != chosen:
+                    self.served[i] = True   # a sample the program did not use: answered by its group's entry
+            self.repeats[chosen] = int((turns[chosen].get('decision_reasoning') or {}).get('samples') or 1)
+        self.calls = len(turns) - sum(len(members) - 1 for members in groups.values())
         self.log = []
 
     def closest(self, candidates, opening):
@@ -950,6 +972,12 @@ class ReplayEpisode:
         key, opening = visible_key(messages), opening_key(messages)
         length = sum(m.get('role') != 'system' for m in messages)
         with self.lock:
+            active = self.active.get(key)
+            if active is not None and self.repeats[active] > 0:
+                # a reasoned readout's next reasoning request or its generated answer (class docstring)
+                self.repeats[active] -= 1
+                self.log.append({'kind': 'group-repeat', 'turn': active, 'messages': length})
+                return self.reply(active, body)
             match = self.field_reply_first([i for i, k in enumerate(self.keys) if not self.served[i] and k == key],
                                            messages)
             kind = 'exact' if match is not None else 'missing'
@@ -974,6 +1002,8 @@ class ReplayEpisode:
                 entry['now'] = str(json.loads(key)[-2:])[:1200]
             if match is not None:
                 self.served[match] = True
+                if self.repeats[match]:
+                    self.active[key] = match
                 recorded = self.turns[match]
                 system = [m.get('content') for m in messages if m.get('role') == 'system']
                 recorded_system = [m.get('content') for m in recorded['messages'] if m.get('role') == 'system']
@@ -991,6 +1021,9 @@ class ReplayEpisode:
             self.log.append(entry)
         if match is None:
             return None
+        return self.reply(match, body)
+
+    def reply(self, match, body):
         target = {k: v for k, v in self.turns[match]['target'].items() if k != 'role' and v is not None}
         message = {'role': 'assistant', 'content': target.pop('content', '') or '', **target}
         tokens = self.turns[match].get('completion_tokens') or 0
@@ -1137,9 +1170,11 @@ def replay_episode(args, server, episode, env):
               'log': replay.log[:64],
               **({'memetic': memetic_outcome} if memetic else {})}
     # exact: every recorded call served to the same visible history, its opening message at most reworded by the runtime
-    matched = {k: v for k, v in kinds.items() if k != 'scoring-declined'}
+    # (a reasoned readout's recorded samples are one call: ReplayEpisode.calls)
+    matched = {k: v for k, v in kinds.items() if k not in ('scoring-declined', 'group-repeat')}
+    record['replay_calls'] = replay.calls
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
-                       and sum(matched.values()) == len(episode['turns']) and turns == len(episode['turns']))
+                       and sum(matched.values()) == replay.calls and turns == replay.calls)
     for path in directory.iterdir():   # keep the verdict, the replayed record and the logs; drop the job scratch
         if path.is_dir():
             shutil.rmtree(path)
@@ -1842,10 +1877,11 @@ def render_call(renderer, source, turn, teacher_think='context', lead_in='contex
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
     context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
     rendered = np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
-    return (*rendered, render_decision(renderer, turn, rendered[0])) if decisions else rendered
+    return ((*rendered, render_decision(renderer, turn, rendered[0], own=source in OWN_SOURCES)) if decisions
+            else rendered)
 
 
-def render_decision(renderer, turn, prompt):
+def render_decision(renderer, turn, prompt, own=True):
     """The decision a call is, or None: a call on a decision readout's surface (no tools offered, the last message the
     readout's request, ``decision_graph.decision_replies``) whose reply is one of the offered values is that readout's
     choice, which the runtime scores rather than samples (``decide``). Rendered by the scorer's own rendering
@@ -1862,10 +1898,20 @@ def render_decision(renderer, turn, prompt):
     open text (a recorded step, ``open_reply`` capture; the RL collector writes the step's chosen option as the reply) is
     {'field_step': True}: the turn of its last scored step trains it, and its plain row would teach ending the reply
     mid-record (``admit`` drops it). The last scored step's reply is the whole record, or an open text whose later
-    steps have one candidate each (the runtime neither scores nor records those): its path completes it."""
+    steps have one candidate each (the runtime neither scores nor records those): its path completes it.
+
+    A reasoned readout's entry (``turn['decision_reasoning']``, ``rl.task_rollouts.rollout_turns``) is scored after its
+    sampled reasoning R (``target['reasoning_content']``): every option renders with ``decision_items(...,
+    reasoning=R)``, so R and ``</think>`` lead the 'prefix'. Its recorded scored prompt (``scored_prompt_sha256``) is the
+    authority: a rendering that differs is {'error': 'prompt-differs-from-capture'} (the last scored step of a
+    field-mode readout is the one its entry recorded). With ``own`` (the student's own reply) the decision carries
+    'reasoning_span': (start, stop) of R + ``</think>`` in the decision prompt (row prompt + prefix), the student's own
+    tokens that ``exp0_sft.decision_backward`` trains as token CE, and 'reasoning_exact': whether the paired
+    generation's sampled ids (``reasoning_sample_ids``) equal those rendered tokens (the rendered ids train either way:
+    they are what the options were scored after)."""
     import numpy as np
     from natlang_neuralese.data.decision_graph import (decision_forms, decision_label, decision_replies,
-                                                       field_candidates, field_path)
+                                                       field_candidates, field_path, reasoning_span, token_ids_sha256)
     target = turn.get('target') or {}
     messages = turn.get('messages') or []
     replies = decision_replies(messages)
@@ -1874,24 +1920,56 @@ def render_decision(renderer, turn, prompt):
         return None
     from natlang_neuralese.serve.native_learning import decision_items
     reply = (target.get('content') or '').strip()
+    reasoned = turn.get('decision_reasoning') if isinstance(turn.get('decision_reasoning'), dict) else None
+    reasoning = (target.get('reasoning_content') or '') if reasoned is not None else None
 
     def rendered(options, label, open_reply=False):
         try:
             before, continuations = decision_items(renderer, list(turn['messages']), turn.get('tools'), options,
-                                                   open_reply)
+                                                   open_reply, reasoning)
         except Exception as error:
             return {'error': repr(error)[:200]}
-        scored, own = [int(i) for _, i in before], [int(i) for i in prompt]
-        if any(kind != 'tok' for kind, _ in before) or scored[:len(own)] != own:
+        scored, row_prompt = [int(i) for _, i in before], [int(i) for i in prompt]
+        if any(kind != 'tok' for kind, _ in before) or scored[:len(row_prompt)] != row_prompt:
             return {'error': 'prompt-differs-from-scorer'}
         # 'prefix': the tokens every option shares, which the scorer puts after the row's prompt (decision_items)
-        shared = scored[len(own):]
-        return {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': options,
-                'label_source': 'verified-trajectory', **({'prefix': np.asarray(shared, np.int32)} if shared else {}),
-                **({'open_reply': True} if open_reply else {})}
+        shared = scored[len(row_prompt):]
+        decision = {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': options,
+                    'label_source': 'verified-trajectory', **({'prefix': np.asarray(shared, np.int32)} if shared else {}),
+                    **({'open_reply': True} if open_reply else {})}
+        if reasoned is not None:
+            decision['scored'] = scored   # checked against the capture by ``reasoned`` below, then dropped
+        return decision
+
+    def checked(decisions):
+        """The reasoned readout's decisions after the capture check, the first carrying the reasoning span."""
+        if reasoned is None:
+            return None
+        recorded, last = reasoned.get('scored_prompt_sha256'), decisions[-1]['scored']
+        for decision in decisions:
+            decision.pop('scored')
+        if recorded is not None and token_ids_sha256(last) != recorded:
+            return {'error': 'prompt-differs-from-capture'}
+        if own:
+            try:
+                span = reasoning_span(renderer.tokenizer, len(prompt), last)
+            except ValueError:
+                return {'error': 'reasoning-not-closed'}
+            sampled = reasoned.get('reasoning_sample_ids')
+            first = decisions[0]
+            rendered_ids = [int(i) for i in prompt] + [int(i) for i in first.get('prefix', ())]
+            first['reasoning_span'] = span
+            first['reasoning_exact'] = (isinstance(sampled, list)
+                                        and sampled[:span[1] - span[0]] == rendered_ids[span[0]:span[1]])
+        return None
     if replies is not None:
         label = decision_label(replies, reply)
-        return {'error': 'reply-not-an-option'} if label is None else rendered(replies, label)
+        if label is None:
+            return {'error': 'reply-not-an-option'}
+        decision = rendered(replies, label)
+        if 'error' in decision:
+            return decision
+        return checked([decision]) or decision
     path = field_path(forms, reply)
     if path is None:
         chosen = []
@@ -1916,6 +1994,10 @@ def render_decision(renderer, turn, prompt):
     failed = next((step for step in steps if 'error' in step), None)
     if failed is not None:
         return failed
+    if steps:
+        failed = checked(steps)
+        if failed is not None:
+            return failed
     return {'steps': steps} if steps else None
 
 
@@ -2303,6 +2385,11 @@ def mix_report(chains, aux_report, open_goal_scope=None):
             'aux': aux_report}
 
 
+def exp0_sft_row_decisions(row):
+    """A row's decisions (``exp0_sft.row_decisions``, without importing the learner)."""
+    return [row['decision']] if row.get('decision') is not None else list(row.get('decisions') or ())
+
+
 def decision_report(chains):
     """The decision readout chains of a mix, per part: what ``exp0_sft`` trains with the option-normalized decision
     objective by default (``--no-decision-objective``: as the token CE of the chosen reply)."""
@@ -2314,7 +2401,13 @@ def decision_report(chains):
             p['options'] += len(chain['decision']['options'])
             p['forward_tokens'] += sum(chain['segs'][0][0] + len(chain['decision'].get('prefix', ())) + len(ids)
                                        for ids in chain['decision']['options'])
-    return {'objective': 'option-normalized log score (exp0_sft.decision_backward; --no-decision-objective opts out)',
+            span = chain['decision'].get('reasoning_span')
+            if span is not None:   # a reasoned readout's sample: its reasoning trains as token CE (own tokens)
+                p['reasoned'] += 1
+                p['reasoning_target_tokens'] += int(span[1] - span[0])
+    return {'objective': 'option-normalized log score (exp0_sft.decision_backward; --no-decision-objective opts out); '
+                         'a reasoned readout\'s options are scored after its sampled reasoning, which trains as token CE '
+                         '(--no-decision-reasoning opts out)',
             'chains': sum(p['chains'] for p in parts.values()), 'parts': {k: dict(v) for k, v in sorted(parts.items())}}
 
 
@@ -2466,13 +2559,27 @@ def build(args):
                                              args.own_empty_think, decisions=True))
                 except Exception as error:
                     calls.append(repr(error))
+        from natlang_neuralese.data.decision_graph import reasoned_decision_plan
+        reasoned_plan, reasoned_groups = reasoned_decision_plan(turns), set()
         for index, (turn, call) in enumerate(zip(turns, calls)):
+            reasoned = reasoned_plan[index]
+            if reasoned is not None:
+                # a reasoned readout's sample trains only when its answer is the one the program used
+                # (DECISIONS 2026-11-23 "reasoned decisions"; data.decision_graph.reasoned_decision_plan)
+                reasoned_groups.add(reasoned['group'])
+                if not reasoned['train']:
+                    stats[source][f"decision_reasoned_skipped:{reasoned['why']}"] += 1
+                    continue
             try:
                 if isinstance(call, str):
                     raise RenderError(call)
                 row, context = rendered_row(call, source, c['key'], index, turn, args.backend_workarounds)
                 if row.pop('field_step', False):
                     stats[source]['decision_field_step_rows_trained_by_record'] += 1
+                    continue
+                if reasoned is not None and 'decision_error' in row:
+                    # its prompt was scored after the reasoning: a plain row would teach the reply outside the scorer
+                    stats[source][f"decision_reasoned_not_carried:{row['decision_error']}"] += 1
                     continue
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
@@ -2501,8 +2608,14 @@ def build(args):
                             'target_tokens': len(target), 'loss_from': context,
                             'too_long': len(prompt) + len(target) > MAX_LEN,
                             **({'decision': {'label': row['decision']['label'], 'values': row['decision']['values'],
-                                             'option_tokens': [len(o) for o in row['decision']['options']]}}
+                                             'option_tokens': [len(o) for o in row['decision']['options']],
+                                             **({'reasoning_span': list(row['decision']['reasoning_span']),
+                                                 'reasoning_exact': row['decision']['reasoning_exact']}
+                                                if 'reasoning_span' in row['decision'] else {})}}
                                if 'decision' in row else {}),
+                            **({'decision_reasoning': {k: turn['decision_reasoning'].get(k)
+                                                       for k in ('index', 'samples', 'action')}}
+                               if reasoned is not None else {}),
                             **({'decision_steps': [{'label': d['label'], 'values': d['values'],
                                                     'option_tokens': [len(o) for o in d['options']]}
                                                    for d in row['decisions']]} if 'decisions' in row else {}),
@@ -2512,13 +2625,20 @@ def build(args):
                                if c.get('verification_mode') == 'observed-live' else {})})
         if not rows:
             return False
+        s = stats[source]
+        s['decision_reasoned_groups'] += len(reasoned_groups)
+        for row in rows:
+            for d in exp0_sft_row_decisions(row):
+                if 'reasoning_span' in d:
+                    s['decision_reasoned_rows'] += 1
+                    s['decision_reasoning_target_tokens'] += int(d['reasoning_span'][1] - d['reasoning_span'][0])
+                    s['decision_reasoning_ids_exact' if d['reasoning_exact'] else 'decision_reasoning_ids_rendered'] += 1
         for row in written:
             rows_out.write(row)
             target_mass[(c['family'], row['function'], row['invocation_role'])].update(
                 calls=1, target_tokens=row['target_tokens'], weighted_target_tokens=row['target_tokens'] - row['loss_from'])
         funnel[source]['admitted'] += 1
         treatment.counts[treatment.of(c) or 'own'] += 1
-        s = stats[source]
         s['calls'] += len(rows)
         s['target_tokens'] += sum(len(r['sample']) for r in rows)
         s['weighted_target_tokens'] += int(sum(float(r['weight'].sum()) if 'weight' in r else len(r['sample'])

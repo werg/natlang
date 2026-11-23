@@ -77,6 +77,8 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
     """
     if turn.get('schema') != TURN_SCHEMA:
         raise TuneMathError('expected a natlang.tune-turn/v1 row')
+    if reasoning_generation(turn):
+        raise TuneMathError('a reasoned readout\'s reasoning generation is no training turn (lower_rows skips it)')
     if turn.get('partition') != 'train':
         raise TuneMathError('only training-partition turns become training rows')
     if not 0 <= prompt_weight <= 1:
@@ -108,8 +110,10 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
         if (not isinstance(options, list) or len(options) < 2 or any(not isinstance(item, str) for item in options)
                 or len(set(options)) != len(options) or type(chosen) is not int or not 0 <= chosen < len(options)):
             raise TuneMathError('a decision turn needs distinct options and its selected option')
+        # a reasoned readout's action sample: its options were scored after its sampled reasoning (prompt here)
+        reasoning = decision_reasoning_text(turn)
         prompt, continuations = decision_items(engine, messages, turn['tools'], options,
-                                               decision.get('open_reply') is True)
+                                               decision.get('open_reply') is True, reasoning)
         names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
         ids, _, imports, external = soft_items_to_node(engine, prompt, [], prompt_weight=0., state_names=names,
                                                        prefix=prefix)
@@ -240,9 +244,35 @@ def prefix_for(turn, pool, share, lengths):
     return stream[begin:begin + length]
 
 
+def reasoning_generation(turn):
+    """Whether a tune turn is a reasoned readout's reasoning generation (top-level ``decision_reasoning`` without a
+    decision and without ``action``, which a scored sample carries): its reply's free text after ``</think>`` was never
+    used, so it never trains as an ordinary turn."""
+    marker = turn.get('decision_reasoning')
+    return isinstance(marker, dict) and 'action' not in marker and turn.get('decision') is None
+
+
+def decision_reasoning_text(turn):
+    """The reasoning a decision turn's options were scored after (None: an instant readout): the decision's
+    ``reasoning``, else its reply's or target's reasoning content when the turn is a reasoned sample."""
+    decision = turn.get('decision') or {}
+    if isinstance(decision.get('reasoning'), str):
+        return decision['reasoning']
+    if not isinstance(turn.get('decision_reasoning'), dict) and not isinstance(decision.get('reasoning_sample'), dict):
+        return None
+    for message in (turn.get('target'), turn.get('reply')):
+        if isinstance(message, dict):
+            for key in ('reasoning_content', 'reasoning'):
+                if isinstance(message.get(key), str):
+                    return message[key]
+    return ''
+
+
 def lower_rows(engine, rows, *, prompt_weight=0., soft=None, prefix_share=0., prefix_tokens=PREFIX_TOKENS):
     """Turn rows lowered to graph rows (other rows pass through). ``prefix_share`` > 0: prefix-robust training of the
-    soft states (``prefix_for``); the fit's recipe sets it (``Recipe.soft_prefix_share``)."""
+    soft states (``prefix_for``); the fit's recipe sets it (``Recipe.soft_prefix_share``). A reasoned readout's
+    reasoning generations are left out (``reasoning_generation``)."""
+    rows = [row for row in rows if not (row.get('schema') == TURN_SCHEMA and reasoning_generation(row))]
     lowered = [turn_graph(engine, row, prompt_weight=prompt_weight, soft=soft) if row.get('schema') == TURN_SCHEMA else row
                for row in rows]
     if not prefix_share or not soft:

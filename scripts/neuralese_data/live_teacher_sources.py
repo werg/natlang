@@ -254,6 +254,8 @@ def observed_training_turns(trajectory):
     for decision in trajectory['trajectory']:
         if not decision['training_admission']['approved']:
             continue
+        if decision.get('phase') == 'decision_reasoning':
+            continue   # a reasoned readout's reasoning generation: its free reply was never used (observed_decision)
         assistant = decision['assistant']
         target = {'role': 'assistant', 'content': assistant['content']}
         if assistant['reasoning']:
@@ -274,7 +276,9 @@ def observed_decision(binding, record, ancestry, index, exchange, assistant=None
     request = exchange.get('request') or {}
     gateway = ((exchange.get('reply') or {}).get('raw_response') or {}).get('vibestudio')
     return {
-        'phase': 'action' if exchange['kind'] == 'generation' else exchange['kind'],
+        # a reasoned readout's reasoning generation (request metadata ``decision_reasoning``) is no action
+        'phase': ('decision_reasoning' if isinstance(request.get('decision_reasoning'), dict) else
+                  'action' if exchange['kind'] == 'generation' else exchange['kind']),
         'invocation_id': invocation, 'parent_invocation_id': record['parent_call_id'],
         'function': record['definition']['name'], 'definition_id': record['definition']['id'],
         'context': request.get('messages'), 'tools_offered': request.get('tools') or [],

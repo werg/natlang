@@ -35,6 +35,14 @@
    "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/decision_policy.py", "training/neuralese/natlang_neuralese/rl/native_replay.py", "ts-host/src/tune/rollouts.ts", "tests/neuralese/test_decision_supervision.py"]},
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_decision_supervision.py"]}
   },
+  "decision-reasoning": {
+   "summary": "The reasoning of a reasoned decision readout (readout: decision, the default): decisionSamples generation turns on the readout's own messages; the options are then scored after each reasoning (score item field reasoning). The turn's reply after its reasoning is not the call's answer, so it is recorded as phase decision_reasoning, never as an action.",
+   "model_output": "generated",
+   "endpoints": ["/v1/chat/completions"],
+   "sft": {"status": "covered", "evidence": ["scripts/neuralese_data/sft_sources.py", "tests/neuralese/test_decision_reasoning.py"]},
+   "rl": {"status": "covered", "evidence": ["ts-host/src/teacher/collector.ts", "ts-host/src/runtime/trajectory.ts", "ts-host/test/decision-reasoning.test.mjs"]},
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_decision_reasoning.py", "ts-host/test/decision-reasoning.test.mjs", "scripts/semantic_fp/decision_parity.py"]}
+  },
   "decision-generation": {
    "summary": "A finite decision generated as one actual JSON choice on the same short decision prompt as scored readouts, when scoring is unavailable or a graph reservation requires generation. No option probabilities are inferred.",
    "model_output": "generated",
@@ -110,7 +118,7 @@
   }
  },
  "endpoints": {
-  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "operator-call", "decision-generation", "native-forced-write"]},
+  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "operator-call", "decision-generation", "decision-reasoning", "native-forced-write"]},
   "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
   "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},
@@ -119,6 +127,7 @@
   "/v1/neuralese/native-states/init-body": {"kinds": ["native-forced-write"]},
   "/v1/neuralese/native-states/capture": {"kinds": ["native-forced-write"]},
   "/health": {"model_facing": false, "reason": "liveness"},
+  "/v1/neuralese/sentinel": {"model_facing": false, "reason": "diagnostic: the serving engine's input log-probabilities of given token ids (decision-parity checks); no model call of the runtime"},
   "/metrics": {"model_facing": false, "reason": "metrics"},
   "/v1/health": {"model_facing": false, "reason": "liveness"},
   "/v1/models": {"model_facing": false, "reason": "model listing"},

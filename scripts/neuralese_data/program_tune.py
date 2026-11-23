@@ -193,7 +193,14 @@ def episode_turns(task_id, key, turns):
     # A call's last turn ends that invocation (a nested call's result goes to its caller, not to a later turn of its
     # own): in a verified exact episode its actions are judged by the episode's outcome, as the root's last turn is.
     last_of = {turn.get('invocation_id'): index for index, turn in enumerate(turns)}
+    # a reasoned readout's samples train only when their answer is the one the program used
+    # (data.decision_graph.reasoned_decision_plan, as sft_sources build)
+    from natlang_neuralese.data.decision_graph import reasoned_decision_plan
+    reasoned = reasoned_decision_plan(turns)
     for index, turn in enumerate(turns):
+        if reasoned[index] is not None and not reasoned[index]['train']:
+            dispositions.append('reasoned-sample-not-used')
+            continue
         target = turn['target']
         later = [t['messages'] for t in turns[index + 1:]]
         events = []
@@ -215,6 +222,9 @@ def episode_turns(task_id, key, turns):
             rows.append({'schema': TURN_SCHEMA, 'root': f'{task_id}#{key}', 'component': task_id, 'partition': 'train',
                          'binding': BINDING, 'call': turn.get('invocation_id') or 'root', 'turn': index,
                          'messages': turn['messages'], 'tools': turn.get('tools') or [], 'reply': reply_of(target),
+                         **({'decision_reasoning': {k: turn['decision_reasoning'].get(k)
+                                                    for k in ('index', 'samples', 'action')}}
+                            if reasoned[index] is not None else {}),
                          'teacher': key.split(':', 1)[0], 'source': key,
                          'evidence': {'rootOracle': True, 'enclosingSuccess': True, 'callOutcome': 'done',
                                       'actionPolicy': ACTION_POLICY, 'actionDisposition': 'admissible',
@@ -299,6 +309,8 @@ def rows(args):
             stats['turns'] += len(dispositions)
             stats['rejected_turns'] += dispositions.count('rejected')
             stats['unverified_turns'] += dispositions.count('unverified')
+            stats['reasoned_samples_not_used'] = (stats.get('reasoned_samples_not_used', 0)
+                                                  + dispositions.count('reasoned-sample-not-used'))
             stats['rows'] += len(made)
             stats['tasks'].add(task_id)
             stats['by_source'][source] = stats['by_source'].get(source, 0) + 1
