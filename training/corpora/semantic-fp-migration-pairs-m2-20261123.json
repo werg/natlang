@@ -1,0 +1,53 @@
+{
+  "id": "semantic-fp-migration-pairs-m2-20261123",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/pairs",
+  "include": [
+    "pairs.jsonl"
+  ],
+  "kind": "edits",
+  "format": "natlang.semantic-fp-migration-pair/1",
+  "rows": 14,
+  "license": "repo (natlang design briefs)",
+  "protected": false,
+  "note": "M2 verified before/after migrations (07 §4.2 on sft-v9 e15b20a8, 4 samples); held-v3/v4 groups and held-v4 reservations excluded",
+  "inputs": [
+    {
+      "id": null,
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/decisions-p1.jsonl",
+      "sha256": "7ff113e72fc7271fa0205122e8ef124c0eb3d732c174858c235831af3f92e466"
+    },
+    {
+      "id": null,
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/decisions-p2.jsonl",
+      "sha256": "9e86515397eb563ff8831077b5b192875a12b436f3270e805e7d52d0749eebc8"
+    }
+  ],
+  "producer": {
+    "script": "data_registry.py",
+    "argv": [
+      "record",
+      "--id",
+      "semantic-fp-migration-pairs-m2-20261123",
+      "--path",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/pairs/pairs.jsonl",
+      "--kind",
+      "edits",
+      "--format",
+      "natlang.semantic-fp-migration-pair/1",
+      "--license",
+      "repo (natlang design briefs)",
+      "--note",
+      "M2 verified before/after migrations (07 §4.2 on sft-v9 e15b20a8, 4 samples); held-v3/v4 groups and held-v4 reservations excluded",
+      "--input",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/decisions-p1.jsonl",
+      "--input",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/decisions-p2.jsonl"
+    ],
+    "git_commit": "ba3c37a932ac6a05647dd2a1a2f242a88a76a992",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "7d8a451436e7d7aafc161e7c78fd46b7aa7b2f7e543436b9ab9b32e23e2afbc6",
+  "training_admission": "registry-recorded"
+}
