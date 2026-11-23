@@ -23,6 +23,11 @@ test('host call fields for a hosted teacher are an object', () => {
   assert.throws(() => chatRequestControls({ x_natlang_host_call_fields: 'x' }), /object of tool-call fields/);
 });
 
+test('history reasoning field is one of the named aliases', () => {
+  assert.deepEqual(chatRequestControls({ x_natlang_history_reasoning: 'reasoning_content' }), { x_natlang_history_reasoning: 'reasoning_content' });
+  assert.throws(() => chatRequestControls({ x_natlang_history_reasoning: 'thinking' }), /both, reasoning, reasoning_content or none/);
+});
+
 test('RL collection explicitly captures behavior and disables guided sampling', () => {
   assert.deepEqual(chatRequestControls({x_natlang_rl_capture:true, guidance:false}),
     {x_natlang_rl_capture:true, guidance:false});
