@@ -9261,3 +9261,36 @@ episodes after the staged layout (c64d250b2) entered at the 14:26 relaunch on `p
   a copied answer the supervisor could not have read is still refused.
 - **Left:** a round boundary that stops the standing collection abandons every group in flight, memetic ones (up to
   ~2.4 h) most often; families never measured on the actor get no memetic group until they are.
+
+## 2026-11-23 Tune RL trains the action reasoning of reasoned decisions (follow-up to "GRPO trains the action reasoning")
+
+**Defect, confirmed by a run.** A `readout: decision` root went through `runRollouts` (worktree build at 7e3d18520)
+and then through `validate_rollout_graph`, the check `tune/rl.py` applies through `whole_episode_turns`. Every episode
+was refused: "whole-episode graph model-turn inventory differs from captured turns". The tune rollout recorded k+1
+turns (the 4 reasoning generations plus the action entry) against the graph's 4 scored-entry nodes. So tune RL could
+not train any episode with a reasoned readout. Had the names matched, it would have trained all k reasonings with
+their unused free replies.
+
+**Fix, consistent with GRPO.** Default on; recipe `rl_decision_reasoning: false` opts out (the choice only).
+- `ts-host/src/tune/rollouts.ts`:
+  - Every scored entry is a turn, in the order the graph numbers them (a slot is taken before scoring), as
+    `rl.task_rollouts.rollout_turns` records collector episodes.
+  - Only the action entry carries the sampling receipt. The other entries are context, with no receipt.
+  - Reasoning generations are no longer turns. The action entry keeps its reasoning's exact capture
+    (`decision_reasoning.reasoning_sampling`).
+- `rl/episode_graph.whole_episode_turns(rollout, think_close)` adds that capture as one more sampled turn, cut
+  through its first `</think>` (`action_reasoning_capture`), named `<action turn>:reasoning`.
+- `rl/native_replay.compile_replay` counts its node among the action turn's nodes. The objective's turn inventory is
+  unchanged, and the node is recorded in `graph_nodes`.
+- `invocation_behavior_policy` and `prepare_objective` take the same `think_close`. `tune/rl.RLEpisodes` reads it
+  from the engine tokenizer.
+- The decision turns' choice term and the other samples' context are unchanged.
+
+**Tests.**
+- `tests/neuralese/test_tune_rl_decision_reasoning.py`: compile with and without `think_close`, folding of the
+  reasoning node, cut and refusal rules.
+- `ts-host/test/tune-rollouts.test.mjs` (11/11 with `decision-reasoning.test.mjs`, built and run on Pop while the DGX
+  ledger queue was frozen behind the round SFT): one turn per graph node, graph order under out-of-order scoring, only the
+  action entry has a receipt and a reasoning capture.
+- Also run: `test_rl_episode_graph`, `test_native_rl_replay` and `test_native_invocation_actors` (47 passed together
+  with the new file).

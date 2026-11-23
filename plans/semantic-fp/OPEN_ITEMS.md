@@ -21,18 +21,13 @@ An item leaves the register when its fix lands on main. A finding reported by an
 
 ## Reasoned decisions in training
 
-Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"). Owners: the scorer re-tokenization goes to the B10 agent, after its pin move and with the tokenization sum, as one fork release. Tune RL goes to the GRPO-reasoning agent.
+Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"). Owners: the scorer re-tokenization goes to the B10 agent, after its pin move and with the tokenization sum, as one fork release.
 - **The scorers re-tokenize the reasoning.** Every engine scores the options after the reasoning *text*, re-encoded, not
   after the sampled ids. In aei1 r0000 (16 action readouts, groups g000689/696/701/720) the scored prompt leaves the
   sampled ids mid-reasoning in 4 of 16 (after 847 of 3476, 531 of 1051, 535 of 2085 and 953 of 1687 tokens; the decoded
   text is the same). The choice is then scored, and trained, after a tokenization the model never produced. Fix: the
   score item carries the sampled reasoning ids, and every engine (Python native, SGLang, llama.cpp fork, wllama) uses
   them. GRPO's lowering counts it each step (`decision_reasoning_ids_rendered` in `train.jsonl` `lowering`).
-- **Tune RL with reasoned readouts.** `ts-host/src/tune/rollouts.ts` pushes every reasoning generation as an ordinary
-  turn (the `turn` wrapper), and `tune/rl.py` passes them to `native_replay.prepare_objective` unfiltered; only the SFT
-  path (`tune/rows.lower_rows`) skips them. The graph has one node per scored entry, not per reasoning generation, so
-  the turn names cannot match it. Expected effect: such episodes are refused, or all k reasonings and their unused free
-  replies train. Not run. Fix: tune rollouts keep only the action sample's reasoning, as `rl.task_rollouts` does now.
 
 ## Language and runtime gaps
 
