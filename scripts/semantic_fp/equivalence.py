@@ -243,12 +243,12 @@ RESUME_KEYS = ('policy_id', 'manifest_sha256', 'samples', 'seed_base', 'case_sec
 
 
 def record_equivalence(directory, spec):
-    """The finished measurement as a registry dataset (``semantic-fp-equivalence``), replacing held eval's recorder: these
+    """The finished measurement as a registry dataset (kind ``probe``, id ``semantic-fp-equivalence-...``), replacing held eval's recorder: these
     are not held-set episodes."""
     try:
         from natlang_neuralese.common import data_registry
         data_registry.record_dataset(
-            data_registry.dataset_id(directory, 'semantic-fp-equivalence'), directory, kind='semantic-fp-equivalence',
+            data_registry.dataset_id(directory, 'semantic-fp-equivalence'), directory, kind='probe',
             include=['result.json', 'run.json', 'rewards.jsonl', 'packet.jsonl', 'journal.jsonl', 'report.jsonl'],
             format=f'{SCHEMA} report.jsonl + held-eval run files of the episodes', inputs=[spec['manifest']],
             license='project-generated (legacy-corpus behaviour measurement)',
