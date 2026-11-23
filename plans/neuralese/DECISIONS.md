@@ -7972,7 +7972,7 @@ types.
     lint rejects groups on invented worlds.
   - Qualification needs 4 GB: at 1.3 GB the protection closure is OOM-killed.
 - **Measurement.** Base (5ff07638) and current policy (sft-v6, dc95f29d) on the DGX series: `ops/held-v4/runs/`
-  (`measure.sh`: held pin d3ad57fb21db, 4 samples, 16 slots, medium and resumable). It starts only when no other held
+  (`measure.sh`: held pin afa009657912, since d3ad57fb21db was removed before the run started; 4 samples, 16 slots, medium and resumable). It starts only when no other held
   measurement holds the held-priority claim. Results are appended below when complete.
 
 ## 2026-11-23 B16: `natlang:learning` conformance runs end to end on the Python native engine (semantic-FP WS8 N1)
