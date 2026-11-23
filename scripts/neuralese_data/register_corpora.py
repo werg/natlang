@@ -27,6 +27,7 @@ from pathlib import Path
 CODE_REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(CODE_REPO / 'training/neuralese'))
 from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
+from natlang_neuralese.common.code_provenance import code_provenance
 
 REPO = registry_owner_repo()
 ENTRIES = 'training/corpora'      # one file per entry (natlang_neuralese.common.corpus_registry)
@@ -100,8 +101,8 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
     import io
     import contextlib
     import tempfile
-    publisher = _module(REPO / 'scripts/git_publish.py', 'natlang_registration_git_publish')
-    sync = _module(REPO / 'scripts/sync_training_corpora.py', 'natlang_registration_corpus_sync')
+    publisher = _module(CODE_REPO / 'scripts/git_publish.py', 'natlang_registration_git_publish')
+    sync = _module(CODE_REPO / 'scripts/sync_training_corpora.py', 'natlang_registration_corpus_sync')
     git('fetch', '-q', 'origin')
     selected = ([entry_file(entry.get('id')) for entry in entries if isinstance(entry, dict)] +
                 [f"{MANIFESTS}/{entry.get('id')}.json" for entry in entries if isinstance(entry, dict)])
@@ -170,8 +171,8 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
         # Admission reads the same exact published registry snapshot as preflight,
         # plus these proposed successors; local stale metadata cannot replace it.
         registry_file = scratch / 'registry.json'
-        if str(REPO / 'training/neuralese') not in sys.path:
-            sys.path.insert(0, str(REPO / 'training/neuralese'))
+        if str(CODE_REPO / 'training/neuralese') not in sys.path:
+            sys.path.insert(0, str(CODE_REPO / 'training/neuralese'))
         from natlang_neuralese.common import corpus_registry
         document = corpus_registry.load_ref(REPO, published)
         by_id = {e['id']: e for e in document['corpora']}
@@ -180,28 +181,28 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
         registry_file.write_text(json.dumps(document, ensure_ascii=False) + '\n')
         _guard_clean(repository, selected, head_entries)
         if check:
-            quick = subprocess.run(['scripts/check-main.sh', '--quick'], cwd=REPO, capture_output=True, text=True)
+            quick = subprocess.run([str(CODE_REPO / 'scripts/check-main.sh'), '--quick'], cwd=CODE_REPO, capture_output=True, text=True)
             if quick.returncode:
                 failure_path = LOCK.parent / 'register-corpora-last-check-failure.json'
                 failure_path.parent.mkdir(parents=True, exist_ok=True)
                 temporary_failure = failure_path.with_suffix('.tmp')
                 temporary_failure.write_text(json.dumps({'time_unix':time.time(), 'checkout':str(REPO),
-                    'commit':git('rev-parse','HEAD').stdout.strip(), 'corpus_ids':[e['id'] for e in changed],
+                    'commit':code_provenance(CODE_REPO, fresh=True)['git_commit'], 'code_checkout':str(CODE_REPO), 'corpus_ids':[e['id'] for e in changed],
                     'python_override':os.environ.get('NATLANG_PYTHON'), 'returncode':quick.returncode,
                     'stdout':quick.stdout, 'stderr':quick.stderr}, indent=2)+'\n')
                 temporary_failure.replace(failure_path)
                 raise ValueError(f'check-main --quick is red; complete latest failure: {failure_path}')
         candidates = [entry for entry in changed if entry.get('candidate_selection_admission') is not None]
         if candidates:
-            build = subprocess.run(['npm', 'run', '--silent', 'build'], cwd=REPO / 'ts-host', capture_output=True, text=True)
+            build = subprocess.run(['npm', 'run', '--silent', 'build'], cwd=CODE_REPO / 'ts-host', capture_output=True, text=True)
             if build.returncode:
                 raise ValueError('candidate admission verifier build failed: ' + build.stderr[-1500:])
             for entry in candidates:
-                verified = subprocess.run([sys.executable, str(REPO / 'scripts/neuralese_data/render_native_turn_corpus.py'),
+                verified = subprocess.run([sys.executable, str(CODE_REPO / 'scripts/neuralese_data/render_native_turn_corpus.py'),
                     '--corpus-id', entry['id'], '--source', str(corpus_registry.entry_root(entry, REPO) / 'turns.jsonl'),
                     '--verify-admission-only', '--admission-registry-file', str(registry_file),
                     '--admission-manifest-file', str(manifests_dir / (entry['id'] + '.json'))],
-                    cwd=REPO, capture_output=True, text=True)
+                    cwd=CODE_REPO, capture_output=True, text=True)
                 if verified.returncode:
                     raise ValueError(f"candidate admission {entry['id']}: {verified.stderr[-1500:]}")
         _guard_clean(repository, selected, head_entries)

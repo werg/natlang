@@ -524,3 +524,29 @@ def test_promotion_uses_published_curated_fields_and_role_order_with_dirty_stale
     assert git(repo, 'rev-parse', 'HEAD') == original_head
     assert (repo / 'source.txt').read_text() == 'uncommitted owner source\n'
     assert not (repo / 'training/corpora/new.json').exists()
+
+
+def test_promotion_loads_invoking_helper_not_stale_owner_or_cached_module(roots, monkeypatch):
+    import types
+    import data_registry as cli
+    code, owner = roots / 'invoking-code', roots / 'repo'
+    target = code / 'scripts/neuralese_data/register_corpora.py'
+    target.parent.mkdir(parents=True)
+    output = roots / 'actual-code-helper.json'
+    target.write_text("import json\nfrom pathlib import Path\n"
+                      "def register(entries,message,replace=False,check=True,*,expected_registry_ref=None):\n"
+                      f" Path({str(output)!r}).write_text(json.dumps({{'entries':entries,'ref':expected_registry_ref,'helper':__file__}}))\n")
+    stale = owner / 'scripts/neuralese_data/register_corpora.py'
+    stale.parent.mkdir(parents=True)
+    stale.write_text("raise RuntimeError('owner code must not execute')\n")
+    monkeypatch.setitem(sys.modules, 'register_corpora', types.SimpleNamespace(register=lambda *a, **k: pytest.fail('stale cached module')))
+    monkeypatch.setattr(cli, 'REPO', code)
+    monkeypatch.setattr(dr, 'registry_owner_repo', lambda: owner)
+    snapshot = {'id': 'new', 'kind': 'rl-tasks', 'path': 'data_hdd:new', 'owner': 'dgx', 'manifest_sha256': 'a'*64}
+    reg = types.SimpleNamespace(snapshots={'new': [snapshot]}, git={}, git_ref='b'*40)
+    args = types.SimpleNamespace(ids=['new'], all_closed=False, role=None, dry_run=False, no_check=True)
+    assert cli.promote(reg, args) == 0
+    actual = json.loads(output.read_text())
+    assert actual['helper'] == str(target)
+    assert actual['ref'] == reg.git_ref
+    assert actual['entries'][0]['id'] == 'new'

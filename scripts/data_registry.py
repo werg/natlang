@@ -212,8 +212,12 @@ def promote(reg, a) -> int:
         return 0
     # Keep this invocation's pinned read snapshot; publication has a separate mutable owner.
     owner = dr.assert_registry_writable(dr.registry_owner_repo())
-    sys.path.insert(0, str(owner / 'scripts/neuralese_data'))
-    import register_corpora
+    # Helper code belongs to this invocation, independently of the write owner.
+    import importlib.util
+    helper = REPO / 'scripts/neuralese_data/register_corpora.py'
+    spec = importlib.util.spec_from_file_location('natlang_invoking_corpus_publisher', helper)
+    register_corpora = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(register_corpora)
     register_corpora.register(entries, f'data registry: promote {len(entries)} dataset(s)', replace=True,
                               check=not a.no_check, expected_registry_ref=getattr(reg, 'git_ref', None))
     return 0
