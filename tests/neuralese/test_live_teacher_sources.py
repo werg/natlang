@@ -883,3 +883,140 @@ def test_ts_application_entry_binds_actual_default_export():
             live.verify_entry(interaction, {**root, 'definition': definition})
     with pytest.raises(ValueError, match='default export'):
         live.verify_entry(interaction, {**root, 'executor': {'kind': 'agent'}})
+
+
+def contribution_fixture(kind='projection'):
+    producer_value = {'answer': 'wrong', 'internal': 'actual producer state'}
+    actual = producer_value if kind == 'forwarded' else {'answer': 'wrong'}
+    def encoded(value):
+        text = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+        return text, hashlib.sha256(text.encode()).hexdigest()
+    def record(call_id, parent, source, value, executor):
+        text, digest = encoded(value)
+        return {'call_id': call_id, 'parent_call_id': parent, 'definition': {'name': call_id, 'source': source},
+                'executor': {'kind': executor, 'model_id': 'actual-luna' if executor == 'agent' else None},
+                'cost': {'model_requests': 2 if executor == 'agent' else 0}, 'outcome': 'done',
+                'output': {'complete': True, 'hash': digest, 'bytes': len(text.encode())},
+                'model_turns': [{'kind': 'generation', 'reply': {}}, {'kind': 'score'},
+                                {'kind': 'generation', 'reply': {}}] if executor == 'agent' else []}
+    records = {'root': record('root', None, 'compose.ts', actual, 'crisp'),
+               'producer': record('producer', 'root', 'domain/judge.nl', producer_value, 'agent')}
+    text, digest = encoded(producer_value)
+    root_text, root_digest = encoded(actual)
+    selector = {'definition': records['producer']['definition'].copy(), 'valueJson': text, 'sha256': digest,
+                'required': False, 'contribution': {'schema': 'natlang.application-return-contribution/1',
+                'kind': kind, 'root_call_id': 'root', 'producer_call_id': 'producer',
+                'root_value_json': root_text, 'root_sha256': root_digest,
+                'root_path': [] if kind == 'forwarded' else ['answer'],
+                'producer_path': [] if kind == 'forwarded' else ['answer'],
+                'checks': ['answerCorrect'], 'lineage': ['root', 'producer']}}
+    if kind == 'projection':
+        selector['contribution'].update(producer_source_suffix='domain/judge.nl', candidates=[
+            {'call_id': 'producer', 'value_json': text, 'sha256': digest}])
+    proof = {'actualResult': actual, 'outcomeDimensions': {'returnedValue': {'checks': {'answerCorrect': False}},
+             'incidentalValues': {'passed': False, 'checks': {}, 'incorrectReturns': [selector]}}}
+    return proof, records, selector
+
+
+def test_projected_optional_return_binds_only_the_actual_sampled_producer():
+    proof, records, selector = contribution_fixture()
+    # Full producer state is deliberately absent from the public value; the authored projection is required.
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2}
+    unrelated = copy.deepcopy(records['producer'])
+    unrelated['call_id'] = 'unrelated'
+    unrelated['definition']['source'] = 'other/judge.nl'
+    records['unrelated'] = unrelated
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2}
+    legacy = copy.deepcopy(proof)
+    del legacy['outcomeDimensions']['incidentalValues']['incorrectReturns'][0]['contribution']
+    with pytest.raises(ValueError, match='outside the actual application result'):
+        live.declared_return_exclusions([legacy], records)
+
+
+@pytest.mark.parametrize(('target', 'path', 'value'), [
+    ('selector', ['contribution', 'root_call_id'], 'foreign'),
+    ('selector', ['contribution', 'producer_call_id'], 'foreign'),
+    ('selector', ['contribution', 'root_sha256'], '0' * 64),
+    ('selector', ['contribution', 'root_path'], ['absent']),
+    ('selector', ['contribution', 'producer_path'], ['internal']),
+    ('selector', ['contribution', 'checks'], ['nativeWriteCorrect']),
+    ('selector', ['contribution', 'lineage'], ['root', 'foreign', 'producer']),
+    ('records', ['root', 'executor', 'kind'], 'agent'),
+    ('records', ['producer', 'parent_call_id'], 'foreign'),
+    ('records', ['producer', 'executor', 'kind'], 'crisp'),
+    ('records', ['producer', 'model_turns'], []),
+    ('records', ['producer', 'definition', 'source'], 'foreign.nl'),
+    ('records', ['producer', 'output', 'hash'], '0' * 64),
+])
+def test_projected_return_custody_rejects_wrong_paths_sources_lineage_and_unsampled_calls(target, path, value):
+    proof, records, selector = contribution_fixture()
+    current = selector if target == 'selector' else records
+    for key in path[:-1]:
+        current = current[key]
+    current[path[-1]] = value
+    with pytest.raises(ValueError):
+        live.declared_return_exclusions([proof], records)
+
+
+def test_forwarded_return_requires_the_sole_child_whole_output_identity():
+    proof, records, selector = contribution_fixture('forwarded')
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2}
+    records['other'] = {'call_id': 'other', 'parent_call_id': 'root'}
+    with pytest.raises(ValueError, match='sole child'):
+        live.declared_return_exclusions([proof], records)
+    proof, records, selector = contribution_fixture()
+    selector['contribution']['kind'] = 'forwarded'
+    with pytest.raises(ValueError):
+        live.declared_return_exclusions([proof], records)
+
+
+def test_root_contribution_keeps_actual_root_semantics_without_inventing_sampled_targets():
+    proof, records, selector = contribution_fixture()
+    c = selector['contribution']
+    c.update(kind='root', producer_call_id='root', root_path=[], producer_path=[], lineage=['root'])
+    selector.update(definition=records['root']['definition'], valueJson=c['root_value_json'], sha256=c['root_sha256'])
+    assert live.declared_return_exclusions([proof], records) == {}
+    c['producer_path'] = ['answer']
+    with pytest.raises(ValueError):
+        live.declared_return_exclusions([proof], records)
+
+
+def test_projected_return_requires_complete_actual_source_candidate_inventory():
+    proof, records, selector = contribution_fixture()
+    extra = copy.deepcopy(records['producer'])
+    extra['call_id'] = 'second'
+    records['second'] = extra
+    with pytest.raises(ValueError, match='candidate inventory'):
+        live.declared_return_exclusions([proof], records)
+    selector['contribution']['candidates'].append({**selector['contribution']['candidates'][0], 'call_id': 'second'})
+    with pytest.raises(ValueError, match='unique actual producer'):
+        live.declared_return_exclusions([proof], records)
+
+
+@pytest.mark.parametrize('missing_path', [False, True])
+def test_uncertain_optional_producer_holds_every_possible_final_generation(missing_path):
+    proof, records, selector = contribution_fixture()
+    records['second'] = {**copy.deepcopy(records['producer']), 'call_id': 'second'}
+    c = selector['contribution']
+    c['kind'] = 'uncertain-projection'
+    c['uncertainty'] = 'no-verified-actual-producer' if missing_path else 'ambiguous-actual-producer'
+    if missing_path:
+        c['root_path'] = ['missing']
+    c['candidates'].append({**c['candidates'][0], 'call_id': 'second'})
+    second = copy.deepcopy(selector)
+    second['contribution'].update(producer_call_id='second', lineage=['root', 'second'])
+    proof['outcomeDimensions']['incidentalValues']['incorrectReturns'].append(second)
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2, 'second': 2}
+    proof['outcomeDimensions']['incidentalValues']['incorrectReturns'].pop()
+    with pytest.raises(ValueError, match='every possible actual producer'):
+        live.declared_return_exclusions([proof], records)
+
+
+def test_optional_wrong_return_masks_do_not_depend_on_a_false_or_even_declared_incidental_role():
+    proof, records, selector = contribution_fixture()
+    proof['outcomeDimensions']['incidentalValues']['passed'] = True
+    proof['outcomeDimensions']['returnedValue']['passed'] = False
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2}
+    proof['outcomeDimensions']['returnedValue']['incorrectReturns'] = [selector]
+    del proof['outcomeDimensions']['incidentalValues']
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2}
