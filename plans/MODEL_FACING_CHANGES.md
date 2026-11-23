@@ -14,6 +14,78 @@ advertising, a newsletter or an automated message the reader does not need." On 
 Types: `Record<"x" | "y", T>` now renders as `{ x: T, y: T }` and `Record<Alias, T>` as `Record<string, T>` in
 signatures and result checks. Both were rejected before, so no running program changes.
 
+### 2026-11-23 — the tool list runs stable to variable: every call shares its first four tools (B2, R0)
+
+LFM3's chat template writes the tool list into the system turn after the system prompt, so a call shares an earlier
+call's cached prefix (every engine's prompt cache, the learner's prefix tree) only up to its first tool that differs.
+The R0 cache map (`plans/semantic-fp/prompt-audit-20261123.md` §1) found two breaks: the file tools of a folder
+reducer were spliced in after `read_page`, and `edit_code`/`diff_code` (offered since 1cb19e291, 2026-11-17, only to
+calls with code of their own; that change had no entry here and contradicted the 2026-11-12 "one constant opening")
+after `read_code`. Now `NativeToolAgent.tools` orders the list `eval`, `read_page`, `read_code`, `compact_history`
+(STABLE_TOOLS, every call), then `escalate` (configured fallbacks), `edit_code`/`diff_code`, the file tools, and
+`return_result` last (its value typed by the call's declared result, as since 2026-11-12). Which tools a call gets is
+unchanged: a call without code of its own still gets no `edit_code` (a tool it could only be refused). The system
+message was already one text for every tool-loop call. The order change reaches all four engines and the training
+rebuild through the one ts-host renderer (`servingTools` uses `NativeToolAgent.tools`). Opt-out:
+`NATLANG_PROMPT_REVISION=2026-11-22`. Test: `ts-host/test/prompt-prefix-stability.test.mjs`.
+
+### 2026-11-23 — sentence pass over the system prompt and call notes (B2, R1): scar tissue, wrong forms, duplicates, decide
+
+Every sentence of `SEMANTIC_RESULT_PROMPT`, `SEMANTIC_CALL_COMPLETION_PROMPT`, `TOOLS_PROMPT`, `GENERATION_GUIDANCE`,
+`FUNCTION_TOOLS_PROMPT` and `directoryReducerPrompt` is classified in `plans/semantic-fp/prompt-audit-20261123.md` §3
+(with the old and new text of each change). On first principles, the default at once; held measurement of the next
+round shows any regression. Opt-out: `NATLANG_PROMPT_REVISION=2026-11-22` restores every text byte for byte
+(`ts-host/src/native/prompt-2026-11-22.ts`; tested by sha256 of each text); `held_eval.series()` carries it as
+`prompt-revision-2026-11-22` in the model-facing list, so the series key names it and every collector serves it.
+- **Benchmark scar tissue deleted** (rules for one task shape written for every call): save-JSON-and-return-its-text;
+  ordered repair passes; "return the declared draft value itself"; pagination with `more: true` (also in the
+  depth-limit paragraph); paired question/state files, bind output keys to files; conversation states and "a proposed
+  remedy"; find/replace spans and trailing whitespace; prose notes; isolated quotes and record scope; "a recursive tree
+  walker ... is unnecessary"; in the folder note, `change-request.json` with its "done" rule and the table-joined-to-
+  message-files amounts rule.
+- **Wrong forms spelled out, rewritten as the positive form:** "do not print a pseudo invocation ..." (deleted; the
+  first sentence says to answer with return_result); `SEMANTIC_CALL_COMPLETION_PROMPT` (six sentences against
+  re-delegating, which the runtime already refuses with `SAME_QUESTION_REFUSAL`) is now "Give a child call a distinct
+  sub-question and the inputs it needs; answer the question you were given here."; "don't try to solve it via code,
+  keyword or regular-expression matching" -> "Answer questions about meaning by reading the data, or by mapping an nl
+  function over it when it is large."; "Do not add exclusions or require stronger evidence" -> "pass the parent's
+  criterion as it stands"; "never pass the callable again as the initial state" -> "supplies stepFn itself, so its
+  first argument is the initial state"; "never copy a cut-off value" -> "use the variable that holds the value"; "do
+  not redeclare or shadow those bindings or invent function names" -> "Use the actual input, function and service names
+  listed in this call." (`invalid-binding` teaches the rest); "Do not retype, trim, or extend the supplied match"
+  (folder note) deleted.
+- **Anti-delegation pressure removed:** "When the evidence is already available, return the declared value
+  directly" and "make the judgment in this call" went with the completion paragraph.
+- **Copyable domain example replaced:** the refund-policy `const policy = 'Refunds are allowed within 30 days of
+  delivery.'` example and `nl.with<boolean>({ policy })` are schematic (`<items>`, `<criterion>`, "where <angle
+  brackets> stand for this call's own names and criterion"). The `prompt-example` refusal stays for the one example
+  text that remains in model-facing documentation (`read_code`'s `nl` docs: `Decide whether item meets policy.`) and
+  now names that source (the integration skill's recovery reference says so).
+- **Duplicates removed:** the second "A reply without a tool call ends your turn without answering"; the finish:true
+  sentence the eval tool's description carries; "Never present code as though it had run" ("Code runs only in eval");
+  the second Neuralese<string>-result sentence and its capability-error sentence; "In iterateOn, build the next state
+  ... never from a captured outer initial draft"; GENERATION_GUIDANCE's deep copy (now "change only the requested leaf
+  of the mutable copy").
+- **Missing built-in added to the stable core:** "For a function with a finite result (a boolean or a union of
+  literals), decide(fn, ...args) runs it and returns { value, probabilities, confidence }: use it when how sure the
+  answer is matters to what you do next."
+- **Kept:** the Neuralese sentences in the stable core (shared by every call; moving them saves nothing after caching
+  and no R0 record shows a plain call misled by them), `FUNCTION_TOOLS_PROMPT` verbatim, every sentence classed
+  correct in the audit. Nothing per-call moved before a call's instructions.
+- Regenerated: `ts-host/test/fixtures/builtin-prompts.json`, `training/prompt-pieces/pieces.json` (`--history`: the
+  2026-11-22 texts stay matchable in recorded corpora). Soft forms: no deployed prompt-state build holds a changed
+  piece (operator builds hold `view@...`); `promptStateIds` refuses a stale one (`system-prompt-stale`).
+
+### 2026-11-23 — SFT renders the student's own successes under the prompt they were sampled with
+
+`sft_sources build` rendered every replay-verified success from the replaying runtime's record, so an own success
+trained under the replaying checkout's system prompt, tool list and openings, not the ones its calls were sampled
+with: 5,833 of 10,540 replayed own successes in the expert-iteration WORK (55%), e.g. plain-text final answers sampled
+under "reply with the declared string as plain text" trained under "A reply without a tool call is not an answer".
+That is history differing from what was sampled. Own candidates (`rl-own`, `jolt-guided`) now render their recorded
+turns (`scripts/neuralese_data/recorded_turns.py`); the replay still verifies them. Teacher episodes keep the replayed
+rendering. Opt-out: `sft_sources build --own-render replayed`. Test: `tests/neuralese/test_recorded_turns.py`.
+
 ### 2026-11-23 — the system prompt says eval helpers carry forward, and a helper that calls another one now does
 
 Commit a5d27251b (semantic-FP Wave 0) changed one sentence of `APPROACH_PROMPT` (`native/prompt.ts`, "Getting at

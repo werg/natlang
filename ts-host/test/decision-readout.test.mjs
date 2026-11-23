@@ -71,7 +71,7 @@ test('host code calls decide(fn, ...args) inside a running task and gets the sco
     assert.equal(+decision.confidence.toFixed(6), 0.7);
     assert.deepEqual(decision.probabilities.map(p => [p.value, +p.probability.toFixed(6)]), [['knight', 0.3], ['knave', 0.7]]);
   }
-  await assert.rejects(() => decide(fn, 'x'), 'outside a task there is no frame to call in');
+  await assert.rejects(async () => decide(fn, 'x'), 'outside a task there is no frame to call in');
 });
 
 test('a call store counts a scored readout as one model request with the prompt tokens it evaluated', async () => {

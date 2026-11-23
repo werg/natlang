@@ -24,8 +24,8 @@ def test_recorded_runtime_prose_moves_into_the_call_opening():
         assert report["call_surface"] == {"depthLimited": False, "ownCode": True, "folder": None, "fileTools": "all"}
         assert messages[0]["content"] == base
         assert messages[1]["content"] == OPENING + "\n\n" + guidance + "\n\n" + PIECES["function-tools"].strip()
-        assert [t["function"]["name"] for t in tools] == ["eval", "read_page", "read_code", "edit_code", "diff_code",
-                                                         "compact_history", "return_result"]
+        assert [t["function"]["name"] for t in tools] == ["eval", "read_page", "read_code", "compact_history",
+                                                         "edit_code", "diff_code", "return_result"]
         assert report["ts_host"] == serving_identity()
 
 

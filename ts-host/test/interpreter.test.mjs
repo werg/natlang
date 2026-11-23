@@ -296,8 +296,8 @@ test('scope eval persists locals, calls imports positionally, and treats result 
   const repairedMap = await session.applyAsync('eval', { code: 'const repaired = flags.map(flag => await as_num(flag)); repaired' });
   assert.notEqual(repairedMap.kind, 'ok');
   const names = new NativeToolAgent(() => ({ calls: [] })).tools(session).map(entry => entry.function.name);
-  assert.deepEqual(names, ['eval', 'read_page', 'read_code', 'edit_code', 'diff_code',
-    'compact_history', 'return_result']);
+  assert.deepEqual(names, ['eval', 'read_page', 'read_code', 'compact_history', 'edit_code', 'diff_code',
+    'return_result']);   // stable tools first (agent.ts orderedTools)
   const nullCase = open({ type: '() => null', instructions: 'Return null.' });
   assert.equal((await nullCase.session.applyAsync('eval', { code: 'return null' })).kind, 'ok');
   assert.equal(nullCase.lam.return, null);

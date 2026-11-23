@@ -127,10 +127,10 @@ test('partial-check guidance keeps each assigned condition separate from parent 
 });
 
 
-test('complete-record scope is preserved without joining separate records', () => {
+test('separate records stay separate; the record-scope scar tissue is gone (prompt-audit-20261123.md)', () => {
   for (const prompt of [TOOLS_PROMPT, promptAtNlDepthLimit(TOOLS_PROMPT)]) {
-    assert.ok(prompt.includes('carry its stated entity or group scope across sentences'));
-    assert.ok(prompt.includes('do not require the same identifier to be repeated for every fact'));
+    assert.ok(!prompt.includes('carry its stated entity or group scope across sentences'));
+    assert.ok(!prompt.includes('An isolated quote can lose the scope'));
     assert.ok(prompt.includes('Keep facts from different records separate unless the task asks for a join'));
   }
 });
@@ -138,7 +138,7 @@ test('complete-record scope is preserved without joining separate records', () =
 test('delegated draft edits carry the caller contract and latest state', () => {
   assert.ok(TOOLS_PROMPT.includes('pass the applicable output contract'));
   assert.ok(TOOLS_PROMPT.includes('pass the full current carried value as its argument'));
-  assert.ok(TOOLS_PROMPT.includes('never from a captured outer initial draft'));
+  assert.ok(TOOLS_PROMPT.includes('a captured outer initial draft stays the original value'));
   assert.ok(BUILT_IN_DOCS.nl.includes('capture the applicable output contract'));
 });
 
@@ -150,7 +150,8 @@ test('typed nl.with example separates captured context, child arguments, and ret
 });
 
 test('semantic selection example uses typed Boolean verdicts instead of object truthiness', () => {
-  assert.ok(TOOLS_PROMPT.includes('items.filter((item, i) => verdicts[i] === true)'));
+  assert.ok(TOOLS_PROMPT.includes('<items>.filter((item, i) => verdicts[i] === true)'));
+  assert.ok(!TOOLS_PROMPT.includes('Refunds are allowed'));   // schematic, not a domain example to copy
   assert.ok(TOOLS_PROMPT.includes('objects and strings are not Boolean verdicts'));
   assert.ok(BUILT_IN_DOCS.nl.includes('nl.with<boolean>({ policy })'));
   assert.ok(BUILT_IN_DOCS.nl.includes('items.filter((item, i) => verdicts[i] === true)'));
@@ -160,9 +161,8 @@ test('semantic selection example uses typed Boolean verdicts instead of object t
 
 test('answer and note calls distinguish returned values from requested file edits', () => {
   for (const prompt of [TOOLS_PROMPT, promptAtNlDepthLimit(TOOLS_PROMPT)]) {
-    assert.ok(prompt.includes('When the instruction asks for a decision, extraction, or revised notes, return that value.'));
     assert.ok(prompt.includes('Use input and captured files as evidence; save or edit a file only when this call asks for that file change.'));
-    assert.ok(prompt.includes('For prose notes, preserve supported facts rather than exact wording, unless the task requires verbatim copying.'));
+    assert.ok(!prompt.includes('For prose notes'));
     assert.ok(prompt.includes('Use eval for exact computation'));
   }
 });
@@ -180,7 +180,7 @@ test('the parent and its semantic child both receive responsibility for completi
   } });
   assert.equal(await runtime.run(() => judge('Please cancel my account.')), true);
   assert.equal(seen.length, 2);
-  const inlineChildRule = 'when the child\'s inputs and captured context are enough to judge its assigned question, return that declared typed answer directly';
+  const inlineChildRule = 'Give a child call a distinct sub-question and the inputs it needs; answer the question you were given here.';
   for (const request of seen) {
     const system = request.messages.find(message => message.role === 'system').content;
     assert.ok(system.includes(SEMANTIC_CALL_COMPLETION_PROMPT));

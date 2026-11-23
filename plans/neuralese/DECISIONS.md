@@ -7431,6 +7431,36 @@ pairing.
   `decision_accuracy`, `decision_loss_share`, and `val_decision_ce:*`/`val_decision_accuracy:*` for validation sets
   holding decisions.
 
+## 2026-11-23 B2: stable prompt prefix, sentence pass, own successes render as sampled
+
+Semantic-FP B2 (WS2 R0 + R1; `plans/semantic-fp/prompt-audit-20261123.md`). All three ship as the default now, each
+with an opt-out and targeted tests; the async driver picks them up at its next pin (collection then samples under the
+new prompt; held pairs across the series change with a warning, per the 2026-11-22 owner rule).
+- **Open question 1, answered yes.** The conditional `edit_code`/`diff_code` (1cb19e291, 2026-11-17, unrecorded in
+  MODEL_FACING_CHANGES) and the folder file tools spliced into the middle of the tool list broke the byte-stable
+  prefix after `read_page`/`read_code`. Decision: keep which tools a call gets (campaign v2: "edit_code stays on where a
+  call owns code"), and order the list stable to variable (`eval, read_page, read_code, compact_history`, then
+  escalate, code-editing, file tools, `return_result`). Restoring "offer edit_code everywhere" would buy nothing more
+  after caching (return_result is per call anyway) and would show every call a tool it can only be refused.
+- **Open question 2, answered: replayed, not recorded.** SFT rendered own successes under the replaying runtime's prompt
+  (55% of 10,540 own successes in the ei-sources WORK had a different system prompt than they were sampled under).
+  Fixed to the recorded turns (`recorded_turns.py`, `--own-render replayed` opts out). Considered and rejected:
+  rendering under the current deployment prompt, since a target trained under a prompt it was not sampled with teaches
+  acting against the prompt (the observed case: plain-text answers under "a reply without a tool call is not an
+  answer").
+- **R1:** the sentence pass removes scar tissue, wrong forms, duplicates and anti-delegation pressure, makes the inline
+  example schematic and adds `decide` to the stable core (MODEL_FACING_CHANGES 2026-11-23). Opt-out
+  `NATLANG_PROMPT_REVISION=2026-11-22`, carried by `held_eval.series()` into every collector and the series key.
+- Plan facts found wrong: 09 B2 assumed the refund example lived only in the system prompt; `read_code`'s nl docs still
+  carry `Decide whether item meets policy.`, so the `prompt-example` refusal stays for that text. 02 §2.1 called the
+  11-12 entry's "edit_code on every call" current; it was reverted 11-17.
+- **Cache numbers** (`ops/semantic-fp/prompt-cache/2026-11-23{,-after}.json`, same records): in-episode first
+  differences of invocation openings in the tool block were at `compact_history`/`read_code`/`edit_code` for 117 of
+  178 held openings and 52 of 77 collection openings before; after, all at `return_result`. System prompt 3,417 ->
+  2,841 LFM3 tokens (-17%); prompt tokens per call 11,786 -> 11,171 (held) and 10,895 -> 10,271 (collection);
+  recomputed tokens per invocation opening in episode scope 2,447 -> 2,209 (held, -10%) and 1,985 -> 1,773
+  (collection, -11%); in window scope (radix cache holding everything) about unchanged (409 -> 402, 198 -> 191).
+
 ## 2026-11-23 02:30 Memetic groups in expert-iteration collection; every guided memetic evaluation had failed (B15; e89558c2b)
 
 Brief B15 (`plans/semantic-fp/09_FIRST_BATCH.md`): expert-iteration collection forced `--memetic-share 0`. Owner

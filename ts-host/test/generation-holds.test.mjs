@@ -23,11 +23,11 @@ test('QASPER live generation pauses while static references and prior valid samp
   assert.equal(calls,1);
 });
 
-test('iteration guidance explains the initial stopping check and complete pagination', async () => {
+test('iteration guidance explains the initial stopping check, with no task-specific pagination rule', async () => {
   const {TOOLS_PROMPT,TOOLS_PROMPT_AT_NL_DEPTH_LIMIT}=await import('../dist/native/prompt.js');
   for (const prompt of [TOOLS_PROMPT,TOOLS_PROMPT_AT_NL_DEPTH_LIMIT]) {
     assert.match(prompt,/stopping check runs on the initial state before any step/);
-    assert.match(prompt,/For pagination, start with more: true/);
+    assert.doesNotMatch(prompt,/pagination/);   // benchmark scar tissue, removed 2026-11-23 (prompt-audit-20261123.md)
   }
 });
 
