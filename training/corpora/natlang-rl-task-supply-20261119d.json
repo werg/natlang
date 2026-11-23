@@ -13,15 +13,9 @@
   ],
   "source_class": "immutable-RL-task-source",
   "split": "Train-only 114-row RL task source for grpo.py POOLS: authored round-20 rows (w300-w307, FinQA train seed in w304), 8 new families; folder reducers 83%, decide 54%, call depth >= 3 48%, iterateOn 53%, typed Neuralese results 40%.",
-  "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 15. Qualified on grpo-v4 pin runtime 935d119e9, novelty-gated, Sonnet blind-solved (every flagged task held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261119r20. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related on the first build (distinct root inputs per task); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 300 --max-worker 307 (via round18/final.sh). Data on /mnt/external (runs/ entry is a symlink).",
+  "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 15. Qualified on grpo-v4 pin runtime 935d119e9, novelty-gated, Sonnet blind-solved (every flagged task held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261119r20. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related on the first build (distinct root inputs per task); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 300 --max-worker 307 (via round18/final.sh). Data on /mnt/external (runs/ entry is a symlink). Superseded in the grpo-pool role by natlang-rl-task-supply-20261119d-typed (2026-11-23, typed output contracts).",
   "kind": "rl-tasks",
   "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
-  "roles": {
-    "grpo-pool": {
-      "order": 13,
-      "file": "cases.jsonl"
-    }
-  },
   "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
   "training_admission": "grpo-task-pool"
 }

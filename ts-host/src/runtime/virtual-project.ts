@@ -67,7 +67,7 @@ export function virtualSourceFiles(files: Record<string, string>, root = '/proje
     extname: path => { const base = path.slice(path.lastIndexOf('/') + 1); const at = base.lastIndexOf('.'); return at > 0 ? base.slice(at) : ''; },
     isFile: path => virtual.isFile(path), isDirectory: path => virtual.isDirectory(path),
     read: path => virtual.read(path), list: path => virtual.list(path),
-    relative: path => path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path };
+    relative: path => path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path, root };
 }
 
 /** Load a named `.nl` function, with its companion folder, from in-memory files; its TypeScript modules run on `platform`. */

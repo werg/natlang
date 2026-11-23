@@ -9601,3 +9601,26 @@ checker required it.
 Acted on the whole116-binding application refactor and source-bound native return attribution. Hostfe35/Corecf/Base93/SSTec V14 is built, byte-verified on Pop and Tick and activated; all2327 task identities/goals/groups/splits are preserved. Full116 runtime compile/load passed, as did the actual9-test compiler-child capacity witness,86 optional-return/operational checks and6 Workerd compositions. The eight-worker full Luna queue is submitted with13GiB cap/7.5GiB reserve and is waiting for Tick memory; no new paid generation is claimed. All28 recovered completed goals/496 decisions pass the actual modern09f campaign/held validator and are supplied as reuse seeds; original raw/verdicts/Sol data remain retained.
 
 The modern DGX reader pin+upgrade remain persistently queued with15GiB reserve. Old-reader export frontdoors are held; no recovery publication/fill/SFT exposure is claimed. A productive-job audit found no foreign idle claim to retire. The remaining preparation mechanism is being generalized:155 prebuilt runtime bindings cover only the three builtin roles, and a real optional News panel cold build exceeded3/4GiB model-free startup caps. No native cases have passed in that full managed sweep yet. Prepare selected optional templates by default with a builtin-only opt-out, retain the three default installed workspaces, and deploy as a separate immutable successor; collection on the valid current release need not wait for that optimization. See VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md and candidate machine-readable proofs for actual sources/units.
+
+## 2026-11-23 22:30 In-context-text reads broke the episode graph under RL capture; fixed (rollout agent)
+
+Follow-up to "Neuralese read-back" (21:30). The Colab L4 actor for aei1's collection now runs 78fb05054 (same policy
+e15b20a8, same serving settings; `pop_rl_actor serve-checkpoint --commit`, then an in-place rebind for the measured
+four-route attestation). Read-back probe on the live front, greedy: before 0/6 state, 5/6 inline, 0/6 shuffled; after
+10/12 state, 10/12 inline, 0/12 shuffled (each shuffled read returns the other state's text).
+
+**Defect found in collection.** An `in-context-text` read is captured as a `tokens` segment, but ts-host's model-turn
+graph (`native/agent.ts`) reconciles every native read against the captured prompt's `native_state` segments, so a
+traced read threw `neuralese-native-grad-invalid: request graph contains native reads absent from the captured model
+prompt`. The model saw that error in its tool result (2 of ~140 collection episodes in the first 40 minutes after the
+swap; 0 before). Learners (`rl/native_occurrences.py`, ts-host `nativeCaptureGraphBinding`) had the same inventory rule.
+
+**Fix, no switch of its own** (the read-back opt-out `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` removes the case): a read
+the response's import receipts name as `in-context-text` stays in the graph with its writer edge, as format
+`in-context-text`, outside the native-state inventory, like teacher text (agent.ts, model-recording.ts,
+native_occurrences.py, graph_replay.py read bindings). Tests: ts-host `native-state-values.test.mjs` (the read is kept
+and excluded; without the receipt the old refusal stands), `test_teacher_text_occurrences.py`. Also fixed:
+`test_native_stop_wire.py` tested the splice path without the opt-out since d16437be8.
+
+The live collector (pin 108cd84) runs the old ts-host and keeps hitting this until the driver moves to a pin with the
+fix; do not re-enable Neuralese variants on a pin without it.

@@ -183,7 +183,8 @@ export class ModelTurnRecorder implements TurnRecorder {
 /** Exact capture/event matching; equal IDs do not select a latest writer. */
 export function nativeCaptureGraphBinding(name:string,capture:Record<string,unknown>,nodes:ReadonlyMap<string,Record<string,unknown>>):NativeTurnGraphBinding {
   const writes=[...nodes.values()].filter(event=>event.kind==='block_write'&&event.turn===name);
-  const reads=[...nodes.values()].filter(event=>event.kind==='block_read'&&event.turn===name);
+  // an `in-context-text` read is the state's exact tokens in the prompt, not a captured native-state segment
+  const reads=[...nodes.values()].filter(event=>event.kind==='block_read'&&event.turn===name&&event.format!=='in-context-text');
   const capturedWrites=(capture.writes??[]) as {state_id:string}[];
   const capturedReads=((capture.prompt??[]) as Record<string,unknown>[]).filter(segment=>segment.kind==='native_state');
   const fail=(message:string):never=>{throw Object.assign(new Error(`neuralese-native-grad-invalid: ${message}`),{code:'neuralese-native-grad-invalid'});};

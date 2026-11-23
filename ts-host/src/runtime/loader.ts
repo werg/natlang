@@ -37,6 +37,8 @@ export type SourceFiles = {
   sourceGraphReuse?: boolean;
   /** Display path relative to the loaded root. */
   relative?(path: string): string;
+  /** The loaded root (the directory `relative` counts from): where package-root `uses:` paths resolve when no manifest is above. */
+  root?: string;
   /** Binary contents, for `.nz` files. Without it, `.nz` files in callable folders are not loaded. */
   readBytes?(path: string): Uint8Array;
 };
@@ -517,7 +519,7 @@ function isWithinRoot(root: string, target: string): boolean {
 }
 
 /** The nearest directory with `natlang.json` or `package.json`, or undefined when none exists. */
-function findPackageRoot(dir: string, files: SourceFiles): string | undefined {
+export function findPackageRoot(dir: string, files: SourceFiles): string | undefined {
   for (let current = dir; ; current = files.dirname(current)) {
     if (files.isFile(files.join(current, 'natlang.json')) || files.isFile(files.join(current, 'package.json'))) return current;
     if (files.dirname(current) === current) return undefined;
@@ -671,10 +673,68 @@ export function usesTargetsOf(record: NatlangRecord): Readonly<Record<string, st
 
 /** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users. */
 const ATTACHING: string[] = [];
-/** Functions of callable folders whose load is still running, by normalized file path: a `uses` naming one shares that record. */
+/**
+ * Functions of callable folders read by the load still running, by normalized file path: a `uses` naming one shares that
+ * record (a sibling, a cousin under the same owner, a child of an owner), never a second copy reloaded through its owner.
+ * Kept until the outermost load ends, so a folder that finished earlier in the same load is found here.
+ */
 const LOADING = new Map<string, NatlangRecord>();
-/** The `uses` edges between records of folders being loaded, by normalized file path, to find a cycle among siblings. */
+/** The `uses` edges between records of the running load, by normalized file path, to find a cycle among them. */
 const LOADING_EDGES = new Map<string, Set<string>>();
+/** Nesting depth of the running load (folders and named functions); LOADING and LOADING_EDGES end with the outermost. */
+let loadDepth = 0;
+/** Callable folders whose load is running, innermost last (normalized paths), with the `uses` binds waiting for each. */
+const LOAD_DIRS: { dir: string; deferred: DeferredUse[] }[] = [];
+/** A `uses` naming a function of a folder tree still being read, bound when the folder that holds both has loaded. */
+type DeferredUse = { record: NatlangRecord; path: string; name: string; item: string; target: string; normTarget: string };
+/** Records with `uses` binds still waiting: their `ensures:`/`measure:` names are checked once those are bound. */
+const PENDING_USES = new Map<NatlangRecord, number>();
+function withLoadScope<T>(run: () => T): T {
+  loadDepth++;
+  try { return run(); }
+  finally { if (--loadDepth === 0) { LOADING.clear(); LOADING_EDGES.clear(); PENDING_USES.clear(); } }
+}
+/** The innermost folder being loaded whose tree will hold the `.nl` file `normTarget` (not under `node_modules` or a dot folder). */
+function loadingDirOf(normTarget: string) {
+  if (!normTarget.endsWith('.nl')) return undefined;
+  for (let index = LOAD_DIRS.length - 1; index >= 0; index--) {
+    const entry = LOAD_DIRS[index]!;
+    if (!normTarget.startsWith(`${entry.dir}/`)) continue;
+    const parts = normTarget.slice(entry.dir.length + 1).split('/');
+    return parts.some(part => part === 'node_modules' || part.startsWith('.')) ? undefined : entry;
+  }
+  return undefined;
+}
+const addEdge = (from: string, to: string) => { LOADING_EDGES.set(from, (LOADING_EDGES.get(from) ?? new Set()).add(to)); };
+/** Bind a `uses` target that is a record of the running load, rejecting a cycle among those records. */
+function bindLive(record: NatlangRecord, path: string, name: string, item: string, normTarget: string, live: NatlangRecord, files: SourceFiles): void {
+  const normPath = normalizePath(path);
+  const base0 = (file: string) => files.relative?.(file) ?? file;
+  const backPath = findEdgePath(normTarget, normPath);
+  if (backPath) throw new NatlangSourceError(path, cycleMessage(item, [normPath, ...backPath].map(base0)));
+  addEdge(normPath, normTarget);
+  record.codebase[name] = live;
+}
+/** Bind the `uses` waiting for the folder that has just loaded, then check the records whose binds are all done. */
+function bindDeferredUses(deferred: DeferredUse[], files: SourceFiles): void {
+  const done = new Set<NatlangRecord>();
+  for (const use of deferred) {
+    const live = LOADING.get(use.normTarget);
+    if (live) bindLive(use.record, use.path, use.name, use.item, use.normTarget, live, files);
+    else {
+      // Not read by this load after all: load it on its own, as an attach outside any running folder would.
+      const normPath = normalizePath(use.path);
+      addEdge(normPath, use.normTarget);
+      ATTACHING.push(normPath, use.normTarget);
+      try { use.record.codebase[use.name] = loadNamedFunction(use.target, files); }
+      finally { ATTACHING.pop(); ATTACHING.pop(); }
+    }
+    const left = (PENDING_USES.get(use.record) ?? 1) - 1;
+    if (left > 0) PENDING_USES.set(use.record, left);
+    else { PENDING_USES.delete(use.record); done.add(use.record); }
+  }
+  for (const record of done) checkProtect(record, record.source);
+}
 const findEdgePath = (from: string, to: string, seen = new Set<string>()): string[] | undefined => {
   if (from === to) return [from];
   if (seen.has(from)) return undefined;
@@ -701,7 +761,9 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
     ? Object.fromEntries(record.uses.map(item => [item.slice(item.lastIndexOf('/') + 1).replace(/\.(?:nl|ts|js)$/, ''), item]))
     : undefined);
   if (!usesMap || !Object.keys(usesMap).length || files === PATH_ONLY) return;
-  const root = packageRoot(files.dirname(path), files);
+  const dir = files.dirname(path);
+  // Without a manifest above, package-root paths count from the loaded root, not from the filesystem root.
+  const root = findPackageRoot(dir, files) ?? (files.root !== undefined && isWithinRoot(files.root, dir) ? files.root : packageRoot(dir, files));
   const normPath = normalizePath(path);
   const base0 = (file: string) => files.relative?.(file) ?? file;
   const pushedSelf = !ATTACHING.includes(normPath);
@@ -718,15 +780,18 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
         const chain = at >= 0 ? [...ATTACHING.slice(at), normTarget] : [normPath, normTarget];
         throw new NatlangSourceError(path, cycleMessage(item, chain.map(base0)));
       }
-      // A sibling or relative in a folder this load is still reading is that very record, not a second copy of its owner.
+      // A function this load has read (sibling, cousin, owner's child) is that very record, not a second copy of its owner.
       const live = LOADING.get(normTarget);
-      if (live) {
-        const backPath = findEdgePath(normTarget, normPath);
-        if (backPath) throw new NatlangSourceError(path, cycleMessage(item, [normPath, ...backPath].map(base0)));
-        LOADING_EDGES.set(normPath, (LOADING_EDGES.get(normPath) ?? new Set()).add(normTarget));
-        record.codebase[name] = live;
+      if (live) { bindLive(record, path, name, item, normTarget, live, files); continue; }
+      // One in a folder tree this load has yet to read is bound once the folder holding both has loaded.
+      const waiting = loadingDirOf(normTarget);
+      if (waiting) {
+        waiting.deferred.push({ record, path, name, item, target, normTarget });
+        PENDING_USES.set(record, (PENDING_USES.get(record) ?? 0) + 1);
         continue;
       }
+      // Kept as an edge too, so a bind deferred until later still sees a cycle that runs through this load.
+      addEdge(normPath, normTarget);
       ATTACHING.push(normTarget);
       try {
         if (target.endsWith('.nl')) record.codebase[name] = loadNamedFunction(target, files);
@@ -1040,21 +1105,25 @@ const isSource = (name: string) => (name.endsWith('.nl') || (name.endsWith('.ts'
 
 /** Load a callable folder into a record tree. `inherited` holds type aliases from enclosing folders. */
 export function loadCallableFolder(dir: string, files: SourceFiles, inherited: Record<string, string> = {}): Record<string, ItemRecord> {
-  return withSourceLoadSession(files,()=>loadCallableFolderInSession(dir,files,inherited));
+  return withSourceLoadSession(files,()=>withLoadScope(()=>loadCallableFolderInSession(dir,files,inherited)));
 }
 function loadCallableFolderInSession(dir: string, files: SourceFiles, inherited: Record<string, string>): Record<string, ItemRecord> {
   if (!files.isDirectory(dir)) return {};
+  const loading = { dir: normalizePath(dir).replace(/\/+$/, ''), deferred: [] as DeferredUse[] };
+  LOAD_DIRS.push(loading);
+  try { return loadFolderItems(dir, files, inherited, loading); }
+  finally { LOAD_DIRS.splice(LOAD_DIRS.lastIndexOf(loading), 1); }
+}
+function loadFolderItems(dir: string, files: SourceFiles, inherited: Record<string, string>, loading: { deferred: DeferredUse[] }): Record<string, ItemRecord> {
   const typesFile = files.join(dir, 'types.ts');
   const types = { ...inherited, ...(files.isFile(typesFile) ? readTypesFile(typesFile, files) : {}) };
   const entries = files.list(dir).filter(name => !name.startsWith('.')).sort();
   const items: Record<string, ItemRecord> = {};
-  const mine: string[] = [];
   const add = (name: string, record: ItemRecord, path: string) => {
     if (Object.hasOwn(items, name)) throw new NatlangSourceError(path, `two items in ${dir} are named ${JSON.stringify(name)}`);
     items[name] = record;
-    if (record.kind === 'natlang' && files !== PATH_ONLY) { const norm = normalizePath(path); LOADING.set(norm, record); mine.push(norm); }
+    if (record.kind === 'natlang' && files !== PATH_ONLY) LOADING.set(normalizePath(path), record);
   };
-  try {
   for (const entry of entries) {
     const path = files.join(dir, entry);
     if (!files.isFile(path) || !isSource(entry) || entry.endsWith('.d.ts') || entry.endsWith('.d.nl.ts')) continue;
@@ -1082,10 +1151,10 @@ function loadCallableFolderInSession(dir: string, files: SourceFiles, inherited:
     if (item.kind === 'natlang' && (item.uses || item.usesMap)) attachUses(item, files.join(dir, `${name}.nl`), files);
     else if (item.kind === 'module') attachModuleImports(item, files.join(dir, `${name}.ts`), items, files);
   }
-  for (const item of Object.values(items)) if (item.kind === 'natlang') checkProtect(item, item.source);
+  for (const item of Object.values(items)) if (item.kind === 'natlang' && !PENDING_USES.has(item)) checkProtect(item, item.source);
+  bindDeferredUses(loading.deferred, files);
   if (files !== PATH_ONLY) registerFileRecords(items);
   return items;
-  } finally { for (const path of mine) { LOADING.delete(path); LOADING_EDGES.delete(path); } }
 }
 
 /**
@@ -1120,10 +1189,13 @@ function folderNzData(dir: string, files: SourceFiles, items: Record<string, Ite
 
 /** Load a named `.nl` function with its companion folder as its callable context. */
 export function loadNamedFunction(path: string, files: SourceFiles): NatlangRecord {
-  return sourceLoadMemo(files,'named:'+normalizePath(path),()=>loadNamedFunctionInSession(path,files));
+  return sourceLoadMemo(files,'named:'+normalizePath(path),()=>withLoadScope(()=>loadNamedFunctionInSession(path,files)));
 }
 function loadNamedFunctionInSession(path: string, files: SourceFiles): NatlangRecord {
   if (!files.isFile(path) || files.extname(path) !== '.nl') throw new NatlangSourceError(path, 'expected a .nl file');
+  // A function the running load has read is that record: reloading its owner (still mid-load) would build a second tree.
+  const live = files === PATH_ONLY ? undefined : LOADING.get(normalizePath(path));
+  if (live) return live;
   const dir = files.dirname(path);
   // A child loaded by its own path has the same lexical types as when reached through its owner.
   const names = [files.basename(path, '.nl')];
@@ -1155,7 +1227,7 @@ function loadNamedFunctionInSession(path: string, files: SourceFiles): NatlangRe
     if (Object.keys(data).length) record.contextData = data;
   }
   attachUses(record, path, files);
-  checkProtect(record, path);
+  if (!PENDING_USES.has(record)) checkProtect(record, path);
   registerFileRecords(record);
   return record;
 }

@@ -1,0 +1,43 @@
+{
+  "id": "natlang-rl-task-supply-20261119b-typed",
+  "owner": "dgx",
+  "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261119b-typed",
+  "include": [
+    "cases.jsonl",
+    "typed-contracts.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
+  "rows": 130,
+  "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
+  "protected": false,
+  "supersedes": "natlang-rl-task-supply-20261119b",
+  "note": "natlang-rl-task-supply-20261119b with its 130 rows that carried a prose `Output contract:` paragraph migrated to declared types (root `writes:` and doc-commented aliases in types.ts; scripts/rl_tasks/migrate_output_contracts.py) and requalified by reference replay and negative controls (scripts/rl_tasks/verify.mjs on the typed-contracts runtime): 130 replaced, 0 left out (typed-contracts.json lists them with the reason); 0 rows copied byte for byte. Same ids and source groups as natlang-rl-task-supply-20261119b, so held-v3/v4 exclusions apply unchanged. DECISIONS 2026-11-23 \"typed output contracts\".",
+  "inputs": [
+    {
+      "id": "natlang-rl-task-supply-20261119b",
+      "manifest_sha256": null
+    }
+  ],
+  "producer": {
+    "script": "scripts/rl_tasks/migrate_output_contracts.py rebuild",
+    "argv": [
+      "/tmp/claude-1000/-home-werg-natlang/4c9bd489-afe4-4847-b74c-378caa27432c/scratchpad/kept_final.jsonl",
+      "/home/werg/data/rl-typed-contracts-20261123",
+      "/tmp/claude-1000/-home-werg-natlang/4c9bd489-afe4-4847-b74c-378caa27432c/scratchpad/registry_entries.json"
+    ],
+    "git_commit": "ea23adc9b9914f42980a7dc0d2e683c12ed364b4",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "3589f24e1d9bef7eb37570cf5e900a48fdd4542c1af525484586f4c60b6576e6",
+  "training_admission": "grpo-task-pool",
+  "source_class": "immutable-RL-task-source",
+  "split": "Train-only 130-row RL task source for grpo.py POOLS: authored round-18 rows (w285-w289, TAT-QA train seed in w288) and the round-16/17 leftovers w268, w277, w280; 8 new families; folder reducers 92%, decide 62%, call depth >= 3 62%, iterateOn 46%, typed Neuralese results 26%.",
+  "roles": {
+    "grpo-pool": {
+      "order": 11,
+      "file": "cases.jsonl"
+    }
+  }
+}

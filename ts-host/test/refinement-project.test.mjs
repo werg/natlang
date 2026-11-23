@@ -79,7 +79,7 @@ export async function run(text: string): Promise<string> {
   assert.equal(result.ok, true, JSON.stringify(result.diagnostics, null, 1));
   const emitted = readFileSync(join(root, 'dist/app.js'), 'utf8');
   assert.match(emitted, /refine\(text, "a reply that is polite"\)/);
-  assert.match(emitted, /assume\(text, "short; and lowercase"\)/);
+  assert.match(emitted, /assume\(text, \["short", "lowercase"\]\)/);
 });
 
 test('a refined alias in types.ts is the same type as the one in the generated declaration, with no import of Is', () => {

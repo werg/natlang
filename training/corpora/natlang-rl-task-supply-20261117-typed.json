@@ -1,0 +1,43 @@
+{
+  "id": "natlang-rl-task-supply-20261117-typed",
+  "owner": "dgx",
+  "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261117-typed",
+  "include": [
+    "cases.jsonl",
+    "typed-contracts.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
+  "rows": 1355,
+  "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay; plus tau-bench / APIGen-MT store-service tasks (upstream dataset licenses)",
+  "protected": false,
+  "supersedes": "natlang-rl-task-supply-20261117",
+  "note": "natlang-rl-task-supply-20261117 with its 447 rows that carried a prose `Output contract:` paragraph migrated to declared types (root `writes:` and doc-commented aliases in types.ts; scripts/rl_tasks/migrate_output_contracts.py) and requalified by reference replay and negative controls (scripts/rl_tasks/verify.mjs on the typed-contracts runtime): 447 replaced, 0 left out (typed-contracts.json lists them with the reason); 908 rows copied byte for byte. Same ids and source groups as natlang-rl-task-supply-20261117, so held-v3/v4 exclusions apply unchanged. DECISIONS 2026-11-23 \"typed output contracts\".",
+  "inputs": [
+    {
+      "id": "natlang-rl-task-supply-20261117",
+      "manifest_sha256": null
+    }
+  ],
+  "producer": {
+    "script": "scripts/rl_tasks/migrate_output_contracts.py rebuild",
+    "argv": [
+      "/tmp/claude-1000/-home-werg-natlang/4c9bd489-afe4-4847-b74c-378caa27432c/scratchpad/kept_final.jsonl",
+      "/home/werg/data/rl-typed-contracts-20261123",
+      "/tmp/claude-1000/-home-werg-natlang/4c9bd489-afe4-4847-b74c-378caa27432c/scratchpad/registry_entries.json"
+    ],
+    "git_commit": "ea23adc9b9914f42980a7dc0d2e683c12ed364b4",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "080c7513ab60c82c0282ec3c1433241314191fac7b69907d32e7d5e8a1a4eae2",
+  "training_admission": "grpo-task-pool",
+  "source_class": "immutable-RL-task-source",
+  "split": "Train-only 1,355-row RL task source for grpo.py POOLS: 447 authored rows (382 round-9 rows in 16 new writing/chat/reasoning families, 65 round-8 rows admitted after the last pool build) and 908 tau-bench retail train tasks / APIGen-MT-5k retail and airline trajectories (store service, final-state digest oracle, at most one per customer).",
+  "roles": {
+    "grpo-pool": {
+      "order": 2,
+      "file": "cases.jsonl"
+    }
+  }
+}

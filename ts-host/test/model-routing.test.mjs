@@ -35,7 +35,7 @@ test('uses: a function calls the package items it lists, by base name, besides i
   assert.throws(() => loadNatlang(join(root, 'bad.nl')), /uses shared\/missing, but the package has no shared\/missing.nl or shared\/missing.ts/);
   write('loop/a.nl', '---\nreturns: number\nuses: [loop/b]\n---\nx\n');
   write('loop/b.nl', '---\nreturns: number\nuses: [loop/a]\n---\nx\n');
-  assert.throws(() => loadNatlang(join(root, 'loop/a.nl')), /cannot reach itself/);
+  assert.throws(() => loadNatlang(join(root, 'loop/a.nl')), /uses loop\/a, which leads back to this function \(a\.nl -> b\.nl -> a\.nl\)/);
 });
 
 test('uses: a project whose functions share a used item checks, the item described once', async () => {
