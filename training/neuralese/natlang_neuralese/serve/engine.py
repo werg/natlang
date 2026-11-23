@@ -1917,7 +1917,8 @@ class Engine:
         if limit is None:
             import os
             limit = self.native_spec_draft = int(os.environ.get('NATLANG_NATIVE_SPEC_DRAFT', '0'))
-            self.native_spec_layers_ok = not any(
+            # the layer check only matters when drafting is on (an engine stub without a backbone drafts nothing)
+            self.native_spec_layers_ok = limit > 0 and not any(
                 self.backbone.layer_types[index] == 'linear_attention' for index in range(self.backbone.num_layers))
         marker = self.role_tokens
         markers = {marker.produce_open, marker.produce_close, marker.consume_open, marker.consume_close}

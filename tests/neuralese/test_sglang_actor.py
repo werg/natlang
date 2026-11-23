@@ -390,6 +390,8 @@ def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_pat
     prompt_ids = [token for segment in theirs['prompt'] for token in segment['token_ids']]
     with torch.no_grad():
         inline = native.shared_model.logits(native_step(native.shared_model, torch.tensor([prompt_ids]))['h_final'][:, -1])
+    from natlang_neuralese.serve.engine import role_bans
+    inline[..., sorted(role_bans(roles))] = float('-inf')   # the draw's logits carry the consume-marker bans
     assert torch.allclose(seen[0].float(), inline.float(), atol=1e-4)
     # Opt-out: the stored state is spliced (the old path); a state not written from text is spliced too.
     monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
