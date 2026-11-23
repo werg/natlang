@@ -8601,3 +8601,169 @@ Continuation: wave0035 finished its nine cases in402s, retaining every capture; 
   job behind a medium/high head it backfills as `reclaimable` whenever 1+1 GiB fits, instead of only within a lent
   allowance (at 13:29 the allowance was used up by legacy same-priority backfills behind `aei1-r0001-build`). Unit file
   updated in `scripts/systemd/` and `~/.config/systemd/user/`; admitted at 13:30 as `reclaimable`.
+
+## 2026-11-23 13:50 Colab: the L4 serves the fills, round SFT stays off it, and a keeper replaces and upgrades sessions
+
+- **Incident.** About 09:45 the A100 session `g4a` was replaced by a CPU-only VM, and every fill on the Colab ports
+  failed after that. A100 and G4 requests answer "Service Unavailable", and H100 answers 400 (no entitlement). The
+  owner created `g4a` on an L4 (24 GB, Standard). The replaced CPU VM was still assigned with no local name (`[?]`,
+  billed): it is unassigned (2.02 to 1.94 CU/h). The stale `colab-g4` host key is removed from
+  `~/.ssh/known_hosts.colab`, and the tunnel reconnected.
+- **L4 bootstrapped** at e65d0f16d (the driver's commit) with the SGLang fork ec27f0809a shipped as `git archive`. The
+  bootstrap took 168 s. The L4 has 22.5 GiB VRAM, 53 GB host RAM and sm_89.
+  - The actor serves e15b20a8, sft-v9's candidate and aei1's current policy, the policy the live fill already used.
+    It runs BF16 weights with FP8 KV.
+  - The checkpoint shipped in 968 s (3.46 GB, ~3.6 MB/s).
+  - The SGLang pool is 11.2 GB and holds 1.8M tokens, because LFM3's KV is mostly conv state.
+  - At 21 running: ~900 tok/s decode, 3% of the pool in use. At 128 running (the `colab_layout` default, kept for
+    every session size): 800-2050 tok/s, 20% of the pool.
+  - The backlog fill (`colab-g4a-fill-backlog-after-v9-20261123`, ports 18731/19731) resumed by itself.
+  - The live Vibestudio fill stays on the DGX student actor (8470), where its keeper config put it at 11:xx. An L4
+    shared with the 128-in-flight backlog fill would give it less.
+- **Round SFT is not sent to an L4** (`colab_layout(...)['sft_beats_dgx']`, `pop_rl_actor.colab_sft_fit`). Reasoning
+  from hardware specs:
+  - The learner is compute bound: the A100 (312 TFLOPS) measured 9 s/step against the GB10's 36.8 s.
+  - The L4 has ~121 TFLOPS dense BF16 and 300 GB/s, the GB10's class, with ~10 GiB of activations. The DGX learner
+    keeps 56 GiB, so on the L4 most layers would recompute and long chains would split. It would be slower than the
+    DGX fallback before counting the transfers.
+  - Rule: a session trains rounds when its GPU has at least 2x the GB10's dense BF16 throughput (125 TFLOPS) and at
+    least 16 GiB of activations for a learner alone. This passes the A100 80/40 GB, H100 and G4. It fails the L4, the
+    T4 and any GPU the table does not name.
+  - `run-sft` refuses an unfit session before anything moves, so its actor never yields. The async driver records a
+    DGX takeover at once instead of waiting `--fallback-wait-minutes`. The cycle's `choose_profile` drops unfit
+    sessions for the SFT stage.
+  - Opt-out: `NATLANG_COLAB_SFT_ANY_GPU=1`.
+  - The running aei1 driver (pin e65d0f16d) predates this check. Its r0001 SFT would still try the L4 until the driver
+    restarts on a pin with this commit.
+- **Session keeper** (`scripts/colab/session_keeper.py`, unit `colab-g4a-keeper`, log
+  `ops/ei/colab/session-keeper.log`, state `ops/ei/colab/session-keeper.json`) replaces `g4-poll.sh` and the
+  `colab-g4a-tunnel-heal` unit (stopped). It checks once a minute and acts on one decision (`decide`, pure):
+  - **lost**: the session is missing, runs on a CPU or unranked hardware, or SSH has failed for 15 min. The keeper
+    stops what is left and requests `g4a` again in the order A100 `--high-mem`, G4, L4, at most every 5 min.
+  - **upgrade**: while on G4 or L4, every 20 min it requests each better tier as `g4a-next`. Not while a `run-sft`
+    learner targets the session. Colab has no capacity probe: the assignment GET succeeds for every entitled GPU, and
+    only the POST that assigns reports capacity. So the old session is stopped as soon as the new one is assigned
+    (an overlap of seconds), and the new one is renamed `g4a` in the CLI's own store.
+  - **heal**: on HTTP 429s, the 2026-11-22 healer (`scripts/colab/end_stale_sshd.py` through `colab exec`). Missing
+    forwards are re-added over the master.
+  - A new session gets its stale host key removed, the tunnel restarted, the bootstrap at the actor record's commit,
+    and the actor served again from the record's own `serve_args`. The record of the lost VM is moved aside, so its pid
+    is never signalled on the new VM.
+  - Unnamed CPU assignments are unassigned. When another GPU session exists, the keeper waits instead of requesting
+    one.
+  - Output from `colab` is redacted before it is logged.
+  - First live cycle (13:37): A100 and G4 were refused ("Service Unavailable") and the L4 kept serving.
+- **Follow-up (14:30).**
+  - The backlog fill on the L4 made 264 episodes (728 calls) between 13:33 and 14:29, about 280 episodes an hour.
+    The A100 made ~700 an hour on 11-22 afternoon.
+  - The keeper's upgrade requests at 13:38, 13:59 and 14:19 were refused.
+  - aei1's driver was restarted at 14:26 on pin 96a02bd4abe1 (this work), with its argv otherwise unchanged. Its r0001
+    build unit kept running. The pin-e65d0f16d driver would have sent r0001's SFT to the L4.
+- **Not checked:**
+  - a real replacement or upgrade end to end (only the refusals ran live; the request/stop/rename sequence is tested
+    against a fake `colab`);
+  - `colab exec -s g4a -f` on the new session (the healer path);
+  - FP8 weights on the L4 (sm_89; FP8 on Colab hardware is still unmeasured);
+  - the L4 SFT speed itself (not measured, following the "don't measure what first principles settle" rule).
+
+## 2026-11-23 B14 flagship benchmark harness and the first triage reading (semantic-FP WS6 A0)
+
+**Built (ad9f1d248, f8f37a608).** `scripts/semantic_fp/bench.py` (split / setup / run / prepare-d / report / compare)
+runs WS6 §4's arms for real: A = `frontier_loop.mjs` (gpt-6-luna, reasoning effort low, over natlang's Pi transport in a
+standard tool loop: the app's services plus a submit tool, prose task prompt carrying the same rubric and urgency rule);
+B-D = `natlang run` of the program per unit on bench profiles (WORK/config; one call store per arm via
+NATLANG_CALL_STORE), C and D in reasoned and instant decision modes. Statistics reuse `held_eval._rate_change` and
+`binomial_two_sided`. Merged with 8e586c02e's harness (one implementation): kept its `split` labelling of any fixture
+pack and a result-file `compare`; dropped its own permutation code and runner-protocol stub. Pack:
+`examples/triage/bench/` (148 one-ticket units, 28 held by the held-v4 flagship share rule).
+
+**Fixed on the way (ad9f1d248, MODEL_FACING_CHANGES).** On a Pi provider every `readout: decision` drew 4 reasoning
+samples and discarded them (scorer declined), and every `Is<>` check failed the call with `decision-unsupported`
+(triage failed all urgent tickets on Luna). A declining scorer is now no scorer (generate at once; judge as the ordinary
+`holds` call); Pi turns report the whole prompt with cache reads as `cached_tokens`.
+
+**Triage, held split (program at 19844f4d; results `examples/triage/bench/results/2026-11-23.json`).**
+| arm | pass | vs A (CI, p) | p50 latency | $ / 100 units |
+|---|---|---|---|---|
+| A Luna loop (2 samples) | 55/56 = 0.982 | | 2.1 s | 0.006 |
+| B program on Luna (2 samples) | 56/56 = 1.000 | +1.8 [0, +5.4], p 1.0 | 3.2 s | 0.021 |
+| C program on base, reasoned | 26/28 = 0.929 | -5.4 [-17.9, +3.6], p 0.56 | 103 s | 3.28 (118 GPU-s/unit at $1/h) |
+| C program on base, instant | 4/28 = 0.143 | -83.9 [-96.4, -69.6], p 0.0001 | 743 s | 7.94 |
+| D policy + specialize/tune + escalate | not measured yet | | | |
+
+Reading: no arm beats A; the frontier arms sit at ceiling on single-ticket triage. Base LFM3 with reasoned decisions is
+statistically indistinguishable from A at n=28 but costs ~500x more and is ~50x slower on this setup (Python reference
+engine on a GB10 shared with the 128-slot aei1 collection actor, ~15 decode tokens/s; the summary's 4-5k-token tool
+loop dominates). Instant decisions on base collapse: the readout picks the first option (spam -> billing) and gives
+P(urgent) 0.89-0.91 on every ticket, so every unit runs the summary loop; root cause not established (not checked: the
+rendered readout bytes; whether the policy shows the same flat P).
+
+**Open.** Arm D: the policy server (and even 1 GB units) waits behind the ledger queue head aei1-r0001-build (24 GB,
+>80 min); `WORK/d-driver.sh` (WORK = /home/werg/data/semantic-fp-bench/triage-20261123) runs prepare-d (30-row seeded
+train sample: record, specialize on Luna, tune) and both D modes when admitted, then `bench.py report` regenerates the
+file. Arms A-C ran the pre-8e586c02e triage program (untrusted tickets, std escalate, semanticRepair now); rerun all arms
+on it. The B/C runs recorded held tickets into the machine call store (~/.local/share/natlang/calls) before per-arm
+stores existed. Native reference engine findings, not fixed: its batched decode admits every queued lane and OOMs at its
+CUDA cap (natlang test of 210 examples at once), and under load its health route stops answering so `natlang serve`
+kills it.
+
+
+## 2026-11-23 15:30 Semantic-FP applications, tools, examples and verifiers: review of da8ae933a and 8e586c02e (rv2)
+
+- **Why:** the two campaign commits added ten flagship apps, two Tier 0 tools, `examples/pr-review`, playground and
+  example upgrades and four verifiers in one push. The review (scope: applications, examples, playground, website,
+  bench, migrator changes, `code_test.mjs`/`policy_eval.mjs`, kit v2) found defects that make results untrustworthy.
+- **Verifiers:** `code_test.mjs` ran model code in a vm context seeded with host intrinsics and called it with host
+  objects, so `x.constructor.constructor('return process')()` reached the verifier's process (shown: escape candidates
+  scored 1), and a synchronous loop in a case hung the verifier. Now: a worker thread with memory limits, a fresh
+  context without string code generation, JSON in and out only, the vm timeout per step and worker termination for
+  promise loops; TypeScript candidates are type-stripped; an empty `cases` is refused. `policy_eval.mjs` accepted an
+  answer that skipped cases while staying above `min_accuracy`; every case now needs a verdict. Tests cover each
+  rejection.
+- **Apps:** the 12 new apps had `natlang.json` `{}`, so `natlang test` refused them; they now have real manifests.
+  Shared pluggable misuse in inbox-pilot, ci-doctor and runbook-engine (nl decisions run twice, shadow never served
+  crisp) fixed; runbook-engine ran dependents of a step whose health check never converged; ci-doctor's assertion guard
+  passed weakened assertions; diligence accepted citations from the wrong section; pr-shepherd treated Python
+  re-indentation and string-internal spacing as trivial. Fixture packs that held only counts or names with no inputs
+  (sem-grep-sql, codemod-studio, diligence) are deleted; the remaining packs are checked against the crisp paths in the
+  tier tests. Each DECOMPOSITION lists what is not built (e.g. codemod-studio re-implements `applications/migration`'s
+  edit/validate/repair loop instead of calling it; sem-grep-sql does not generalise nldb).
+- **Tier 0:** idiom-reviewer now classifies steps with the migrator's `stepKind.nl` contract (copied; packages cannot
+  import each other's sources, so the shared home is `@natlang/std`), judges prose interpreters per function, and runs
+  as `natlang run applications/idiom-reviewer -- DIR`; `natlang check --idiom` does not call it yet. task-author
+  admitted tasks without running any oracle and with no keyword baseline; drafts now carry a reference, ≥ 2 negatives
+  and a keyword-baseline answer, replayed through a required `replay` service, with a required `isReserved` custody
+  check.
+- **Live (policy e15b20a8 via the aei1 collection actor):** pr-shepherd examples 3/5, idiom-reviewer 5/6, inbox-pilot
+  3/3, runbook-engine 4/4, semantic-etl 2/2, sem-sheet 1/2, task-author 1/2, examples/pr-review 2/2, examples/triage
+  21/28.
+
+## 2026-11-23 16:00 Expert-iteration ledger priorities: round stages outrank collections (priority inversion fix)
+
+- **Observation.** The standing aei1 DGX collection (`ensure_collection`, ledger priority high, ~74 GB) held its own
+  round's build (`aei1-r0001-build`, 24 GB, medium) for 96 minutes. The ledger preempts only resumable units of
+  strictly lower priority, so a medium stage could never take memory from a high collection, and every medium job
+  queued behind the blocked build. The supervisor stopped the collection by hand.
+- **Decision.** Fix it in the ledger's own terms rather than with driver-side yielding: `STAGE_PRIORITY = 'high'` for
+  every critical-path stage (async `frontier`, `data`, `build`, DGX SFT, GRPO, `publish`; the cycle's `frontier`,
+  `data`, `build`; launch-sft.sh is already high) and `COLLECTION_PRIORITY = 'medium'` (resumable, the ledger default)
+  for every collection (the standing DGX one, remote collection clients, a cycle's collect and recollect; opt-out:
+  `NATLANG_EI_COLLECTION_PRIORITY=high` in the driver's environment). A waiting
+  stage now preempts the collection; the ledger requeues it with its launch spec (same policy, pin and work dir), the
+  collector resumes from its scored groups (`collect`: first group after the last, `already_scored`), and the fill
+  waits for the actor on the same port (`filled_reasoning` retries a refused actor for 4 h). This also covers the
+  cross-process case a driver-side yield cannot (another driver's collection blocking a cycle's build), and other
+  agents' medium smokes and evals still cannot preempt the collection (equal priority). Driver-side stopping was
+  rejected: the cycle path's collection belongs to another process whose collect stage exits on a stopped collection,
+  and restart bookkeeping races the DGX SFT's own stop.
+- **Requeue-awareness.** `Cycle.present(unit)` = active or `ledger_queued`; `Cycle.ledger` joins a requeued unit
+  instead of launching it twice, `Cycle.wait` and the cycle's collect loop wait through a requeue, and
+  `ensure_collection`, `ensure_remote_collection`, `stop_collections` (so a DGX SFT cancels a requeued collection
+  instead of the ledger relaunching it beside the learner), `prepare`'s snapshot wait and the halt/recollect paths use
+  it. Side effect: a collection no longer outranks a DGX held measurement (both medium); held keeps its slot share.
+- **Open.** A preempted cycle collection gets a fresh `--hours` window from its relaunch (`collect` sets the deadline
+  at start); harmless for the standing async collection (long horizon), it can lengthen a cycle's collect stage.
+- **Rollout.** aei1 untouched; the coordinator moves it onto the new pin at the next round boundary. Tests:
+  `test_round_stages_preempt_the_standing_collection_which_resumes_on_its_policy` (test_async_train.py, including
+  `memory_ledger.preemption_plan` with the real priorities) and
+  `test_cycle_stages_outrank_its_collection_and_a_requeued_unit_is_joined` (test_expert_iteration.py).

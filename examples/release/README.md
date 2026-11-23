@@ -17,8 +17,11 @@ natlang traces show CALL_ID         # what one call did; std:<combinator> traces
 - **merge.ts**: `semanticMerge(base, ours, theirs, { check })` over the release record. Fields only one side changed
   are taken from it; fields both changed are judged by the shipped `intentOf`, `compatible` and `combine`, and the
   version must still be a version number. What does not merge is listed in `unresolved`.
-- **publish.ts**: `proposeAndVerify(folder, writeSection, { verify, attempts: 2, args })` writes `releases/VERSION.md`
-  on a private copy and accepts it only when the exact `sectionProblems` verifier passes; a failed draft is proposed
-  again with the problems. `branchAndSelect(folder, branches, { verify, goal })` writes the announcement in two
-  styles, each on its own copy, and keeps the one the shipped `beats` judges better for the goal.
+- **publish.ts**: `proposeAndVerify(folder, writeReleaseDocs, { verify, attempts: 2, args })` prepends the release
+  section to `CHANGELOG.md` in TypeScript and, when there are breaking changes, writes an upgrade guide to
+  `MIGRATION.md` with an inline `nl` call, all on a private copy. It accepts the copy only when the exact
+  `releaseDocProblems` verifier passes (earlier releases untouched, every breaking change's id in the guide, no other
+  file changed); a failed draft is proposed again with the problems. `branchAndSelect(folder, branches, { verify, goal })`
+  writes the announcement in two styles, each on its own copy, and keeps the one the shipped `beats` judges better for
+  the goal.
 - **main.ts**: the `release` target. The project folder lives in the program's state directory.

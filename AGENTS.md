@@ -283,8 +283,9 @@ DECISIONS.md entries are authoritative.
 - **DGX (GB10, 128 GB unified memory)** is the durable coordinator and data store: it collects, trains (cycles; an
   async round when no Colab session answers, resuming the session's synced `learner-state/` and recording the takeover
   in `round.json`), merges and publishes, and runs the held series (`dgx-held`). **Colab** sessions (profile `colab`,
-  old name `colab_g4`; the hardware varies by session: the current one is an A100-SXM4-80GB with 167 GB host RAM and
-  no FP8, `scripts/colab/bootstrap.py` at `/content/natlang-work`, `scripts/colab/admission.py` claims VRAM and host
+  old name `colab_g4`; the hardware varies by session (A100, G4 or L4; the `colab-g4a-keeper` unit, `scripts/colab/session_keeper.py`,
+  replaces a lost session and retries better tiers every 20 min; round SFT goes only to sessions faster than the DGX,
+  not an L4), `scripts/colab/bootstrap.py` at `/content/natlang-work`, `scripts/colab/admission.py` claims VRAM and host
   RAM; learner and actor claims come from the session's `colab-ready.json` hardware, `execution_profile.colab_layout`)
   run LoRA SFT (`pop_rl_actor run-sft`:
   the DGX recipe from `launch.json` on the VM checkout at the driver's commit, the start policy merged on the VM from

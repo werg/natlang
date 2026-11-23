@@ -269,3 +269,16 @@ export default async function ask(x: string): Promise<string> {
   const warnings = checkNlIdioms(record, 'route.nl');
   assert.ok(warnings.some(w => w.code === 'idiom-decision-readout'), JSON.stringify(warnings));
 });
+
+test('S3 compileRule through the shipped compileRule.nl returns a callable judgment', async () => {
+  const { scriptedModel } = await import('./support/natlang.mjs');
+  const model = scriptedModel(opening => /Write a reusable natural-language function that applies rule/.test(opening) ?
+    'return nl<boolean>`Decide whether item is urgent.`;' :
+    `return ${/db outage/.test(opening)};`);
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
+  const verdicts = await runtime.run(async () => {
+    const fn = await compileRule('urgent tickets are urgent');
+    return [await fn('urgent db outage'), await fn('color tweak')];
+  });
+  assert.deepEqual(verdicts, [true, false]);
+});

@@ -51,7 +51,8 @@ export type EscalateOptions<R> = {
 export type Escalated<R> = Decision<R> & {
   /** Whether the stronger model settled this call. */
   escalated: boolean;
-  /** Why the call escalated (`'confidence'`, `'risk:<label>'`, `'policy'`), when `escalated` is true. */
+  /** Why the call escalated (`'confidence'`, `'risk:<label>'`, `'policy'`), when `escalated` is true; when it should have
+   * but the runtime has no model `to`, `escalated` is false and this starts with `unavailable:`. */
   reason?: string;
   /** The local model's initial argmax before escalation, when `escalated` is true. */
   initialValue?: R;
@@ -107,6 +108,13 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
         ? ((await span.run(() => options.shouldEscalate!(decision))) ? 'policy' : undefined)
         : await span.run(() => decidePolicy(decision));
       if (!reason) return { ...decision, escalated: false };
+      // `fn.on({ model })` runs a name the runtime lacks on the default model: that would be the same answer again,
+      // reported as escalated. Without the model the local answer stands, marked unavailable (a local run of a program
+      // written for a fallback still works).
+      if (!span.frame.task.runtime.options.models?.[to]) {
+        span.emit('decision_escalate', { to, reason, unavailable: true, confidence: decision.confidence, initial_value: decision.value });
+        return { ...decision, escalated: false, reason: `unavailable: this runtime has no model ${to} (${reason})` };
+      }
       span.emit('decision_escalate', { to, reason, confidence: decision.confidence, initial_value: decision.value });
       const value = await span.run(() => fallback(...args));
       span.stage('escalate', { to, reason });

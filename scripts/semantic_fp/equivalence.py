@@ -315,17 +315,20 @@ def measure(cases, out, endpoints, *, samples=4, seed_base=None, case_seconds=36
     return result, rows
 
 
-def requeue(run):
+def requeue(run, *, timeouts=False):
     """Forget the finished attempts of a stopped run that wrote no result row (the collector could not reach the actor),
-    so that resuming the run measures them again; an attempt with a result, pass or fail, is kept. Returns their keys."""
+    so that resuming the run measures them again; an attempt with a result, pass or fail, is kept. With ``timeouts`` an
+    attempt the case wall clock stopped is forgotten too (on an oversubscribed shared actor the clock measures queueing,
+    not the program). Returns their keys."""
     run = Path(run)
     dropped = []
     for entry in read_jsonl(run / 'sealed-queue.jsonl'):
         journal = run / 'workers' / f"{entry['key']}.journal.jsonl"
-        if not journal.exists() or not any(r.get('event') == 'finish' for r in read_jsonl(journal)):
+        finish = next((r for r in read_jsonl(journal) if r.get('event') == 'finish'), None) if journal.exists() else None
+        if finish is None:
             continue
         output = Path(entry['output'])
-        if output.is_file() and output.stat().st_size > 0:
+        if output.is_file() and output.stat().st_size > 0 and not (timeouts and finish.get('status') == 'timeout'):
             continue
         journal.unlink()
         shutil.rmtree(output.parent, ignore_errors=True)
@@ -377,7 +380,8 @@ def report(run):
     for entry in queue:
         journal = run / 'workers' / f"{entry['key']}.journal.jsonl"
         finish = next((r for r in (read_jsonl(journal) if journal.exists() else []) if r.get('event') == 'finish'), None)
-        reward = rewards.get((entry['group'], entry['sample'])) or {}
+        # A reward counts only for an attempt this run's journal finished (a requeued attempt's old reward is stale).
+        reward = (rewards.get((entry['group'], entry['sample'])) or {}) if finish else {}
         cost = _sample_cost(entry['output']) if finish else None
         row = packet[entry['index']]
         marker = row.get('equivalence') or {}
@@ -529,6 +533,7 @@ def main(argv=None):
     q.add_argument('--out', type=Path)
     w = sub.add_parser('requeue', help='a stopped run: attempts that wrote no result run again on resume')
     w.add_argument('run', type=Path)
+    w.add_argument('--timeouts', action='store_true', help='also rerun attempts the case wall clock stopped')
     s = sub.add_parser('summary', help='pass counts per corpus and case kind of a report or baseline JSONL')
     s.add_argument('report', type=Path)
     args = parser.parse_args(argv)
@@ -565,7 +570,7 @@ def main(argv=None):
             args.out.write_text(text)
         sys.stdout.write(text)
     elif args.command == 'requeue':
-        dropped = requeue(args.run)
+        dropped = requeue(args.run, timeouts=args.timeouts)
         print(json.dumps({'requeued': len(dropped), 'keys': dropped}))
     elif args.command == 'summary':
         print(json.dumps(summary(list(read_jsonl(args.report))), indent=1))

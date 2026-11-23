@@ -1,1 +1,21 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/inbox-pilot",
+  "version": "0.1.0",
+  "description": "Triage incoming mail against standing prose rules: crisp newsletter and receipt routing, escalating action decisions, drafted replies and exactly-once mail effects.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "decideAction.nl",
+    "draftReply.nl",
+    "examples.json",
+    "fixtures",
+    "package.json",
+    "pilot.ts",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

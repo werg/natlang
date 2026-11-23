@@ -1,18 +1,57 @@
-{
-  "isSemantic": [
-    {
-      "inputs": {
-        "task": {
-          "id": "t1",
-          "split_group": "sfp:pr:1",
-          "constructs": ["ensures_contract", "escalate"],
-          "oracle": "verifier",
-          "verifier": "proper_score.mjs",
-          "prompt": "Review PR diffs against security invariants and escalate uncertain block risks.",
-          "files": { "natlang.json": "{}", "review.ts": "export {};" }
-        }
-      },
-      "expected": true
-    }
-  ]
-}
+[
+  {
+    "name": "meaning-routed support task is semantic",
+    "function": "isSemantic.nl",
+    "inputs": {
+      "task": {
+        "id": "sfp-inbox-007",
+        "split_group": "sfp:inbox:007",
+        "constructs": [
+          "readout-decision",
+          "untrusted"
+        ],
+        "oracle": "exact",
+        "prompt": "Route each support message to the team that must act on it, judging what the customer needs rather than the words they use.",
+        "files": {
+          "natlang.json": "{}",
+          "route.nl": "---\nargs:\n  message: Untrusted<string>\nreturns: \"billing\" | \"technical\" | \"account\"\nreadout: decision\n---\nDecide which team must act on message.",
+          "types.ts": "export {};"
+        },
+        "reference": "technical",
+        "negatives": [
+          "billing",
+          "account"
+        ],
+        "keywordBaseline": "billing"
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "keyword-routed task is not semantic",
+    "function": "isSemantic.nl",
+    "inputs": {
+      "task": {
+        "id": "sfp-inbox-007",
+        "split_group": "sfp:inbox:007",
+        "constructs": [
+          "readout-decision",
+          "untrusted"
+        ],
+        "oracle": "exact",
+        "prompt": "Return billing when the message contains the word invoice, otherwise return technical.",
+        "files": {
+          "natlang.json": "{}",
+          "route.ts": "export const route = (m: string) => m.includes('invoice') ? 'billing' : 'technical';"
+        },
+        "reference": "technical",
+        "negatives": [
+          "billing",
+          "account"
+        ],
+        "keywordBaseline": "billing"
+      }
+    },
+    "expected": false
+  }
+]

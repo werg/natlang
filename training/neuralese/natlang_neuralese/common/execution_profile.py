@@ -10,7 +10,8 @@ Three profiles are supported:
   attested hardware (``colab_layout``). It has no held series (async-train §1 supersedes lfm3opti §4's G4 series).
 - ``pop``: Pop laptop with discrete RTX 4060 (8 GB VRAM, 15 GiB host RAM): the legacy held series (2 samples).
 
-Colab L4 (~300 GB/s bandwidth, same as GB10) is explicitly excluded per lfm3opti.md §1.
+Colab L4 (~300 GB/s bandwidth, same as GB10) is explicitly excluded per lfm3opti.md §1 as a profile; an L4 session
+still serves actors (fills, collection), but round SFT goes there only when ``colab_layout(...)['sft_beats_dgx']``.
 
 Cost: Colab bills a session from its start to its stop, busy or idle, so ``CostTelemetry`` charges sessions
 (``open_session``/``close_session``, an open one up to now); stage entries attribute wall time to stages, and a stage
@@ -48,6 +49,16 @@ VRAM_UNREPORTED_GIB = 2.0       # nvidia-smi total less what a process can alloc
 ACTOR_FIXED_GIB = 10.0
 ACTOR_BESIDE_KV_SHARE = 0.25
 ACTOR_MEM_FRACTION = 0.88       # alone: SGLang's static memory fraction
+# Round SFT goes to a Colab session only when it trains faster than the DGX. The learner is compute bound (A100 measured
+# 9 s/step against the GB10's 36.8 s on the same mix), so the session's GPU needs at least SFT_MIN_SPEEDUP x the
+# GB10's dense BF16 throughput (~125 TFLOPS) and room for SFT_MIN_ACTIVATION_GIB of saved activations (below that most
+# layers recompute and long chains split). An L4 (121 TFLOPS, 300 GB/s, ~10 GiB of activations) is the GB10's class
+# with an eighth of its memory: slower, so its rounds stay on the DGX. An unknown GPU stays on the DGX.
+GB10_BF16_TFLOPS = 125.0
+BF16_DENSE_TFLOPS_BY_NAME = (('A100', 312.0), ('H100', 756.0), ('H200', 989.0), ('RTX PRO 6000', 500.0),
+                             ('L40', 362.0), ('A10', 125.0), ('L4', 121.0), ('T4', 65.0))
+SFT_MIN_SPEEDUP = 2.0
+SFT_MIN_ACTIVATION_GIB = 16
 FP8_MIN_COMPUTE_CAPABILITY = (8, 9)    # SGLang FP8 weight GEMMs: Ada / Hopper / Blackwell, not Ampere (sm_80)
 # compute capability by GPU name when a session's ready file predates its probe (bootstrap probes compute_cap now)
 COMPUTE_CAPABILITY_BY_NAME = (('A100', '8.0'), ('A10', '8.6'), ('L4', '8.9'), ('L40', '8.9'), ('H100', '9.0'),
@@ -64,6 +75,12 @@ def compute_capability(hardware: dict) -> tuple[int, int] | None:
         return None
     major, _, minor = str(raw).partition('.')
     return int(major), int(minor or 0)
+
+
+def bf16_dense_tflops(hardware: dict) -> float | None:
+    """Peak dense BF16 TFLOPS of a session's GPU by name (None when unknown)."""
+    name = str(hardware.get('gpu_name') or '')
+    return next((tflops for key, tflops in BF16_DENSE_TFLOPS_BY_NAME if key in name), None)
 
 
 def colab_layout(hardware: dict) -> dict:
@@ -86,12 +103,22 @@ def colab_layout(hardware: dict) -> dict:
     kv = round(ACTOR_BESIDE_KV_SHARE * usable)
     beside = {'kv_gb': kv, 'max_running': max(8, min(64, int(64 * kv / 24))), 'vram_gib': float(kv + ACTOR_FIXED_GIB),
               'host_ram_gib': round(min(24.0, 0.2 * host), 1)}
+    # alone, 128 running on every session: LFM3's KV is small (mostly conv layers), so even an L4's pool (11.2 GB FP8
+    # after mem fraction 0.88) holds 1.8M tokens, 14k per running sequence; decode is bandwidth bound and gains from them
     alone = {'kv_gb': None, 'max_running': 128, 'vram_gib': float(round(ACTOR_MEM_FRACTION * usable + 1.0)),
              'host_ram_gib': round(min(24.0, 0.2 * host), 1), 'mem_fraction': ACTOR_MEM_FRACTION}
+    learner_alone = learner(usable - ADMISSION_RESERVE_GIB)
+    tflops = bf16_dense_tflops(hardware)
+    speedup = round(tflops / GB10_BF16_TFLOPS, 2) if tflops else None
+    sft = bool(speedup and speedup >= SFT_MIN_SPEEDUP and learner_alone['activation_gib'] >= SFT_MIN_ACTIVATION_GIB)
     return {'gpu_name': hardware.get('gpu_name'), 'vram_total_gib': total, 'usable_gib': usable,
             'compute_capability': '.'.join(map(str, cap)) if cap else None,
             'fp8': bool(cap and cap >= FP8_MIN_COMPUTE_CAPABILITY),
-            'learner_alone': learner(usable - ADMISSION_RESERVE_GIB),
+            'sft_beats_dgx': sft,
+            'sft_reason': (f'{hardware.get("gpu_name")}: {speedup}x the GB10\'s BF16 throughput (need '
+                           f'{SFT_MIN_SPEEDUP}), learner alone {learner_alone["activation_gib"]} GiB of activations '
+                           f'(need {SFT_MIN_ACTIVATION_GIB})'),
+            'learner_alone': learner_alone,
             'learner_beside_actor': learner(usable - beside['vram_gib'] - ADMISSION_RESERVE_GIB),
             'actor_beside_learner': beside, 'actor_alone': alone}
 
@@ -444,6 +471,7 @@ __all__ = [
     'DEFAULT_FALLBACK_WAIT_MINUTES',
     'DEFAULT_G4_CU_PER_HOUR',
     'EXCLUDED_PROFILES',
+    'bf16_dense_tflops',
     'ExecutionProfile',
     'G4_HARDWARE',
     'PROFILE_ALIASES',

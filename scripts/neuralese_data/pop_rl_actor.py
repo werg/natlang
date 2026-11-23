@@ -1155,6 +1155,19 @@ def serve_colab(args):
     raise RuntimeError(f'Colab G4 actor on {host} did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
 
 
+def colab_sft_fit(host):
+    """(fit, reason): whether round SFT on ``host``'s session beats the DGX (``colab_layout`` ``sft_beats_dgx``: an
+    L4 does not; an A100, H100 or G4 does). A session not bootstrapped is not fit. ``NATLANG_COLAB_SFT_ANY_GPU=1``
+    opts out (any bootstrapped GPU is fit)."""
+    try:
+        layout = colab_layout(colab_hardware(host))
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        return False, f'{host}: no attested hardware ({str(error)[:200]})'
+    if os.environ.get('NATLANG_COLAB_SFT_ANY_GPU') == '1':
+        return True, layout['sft_reason'] + ' (NATLANG_COLAB_SFT_ANY_GPU=1)'
+    return layout['sft_beats_dgx'], layout['sft_reason']
+
+
 def colab_learner_layout(host):
     """The SFT learner's claims on ``host`` (``colab_layout``): beside the capped actor when this DGX's record of
     the session's actor says it was served beside the learner, else alone."""
@@ -1284,6 +1297,10 @@ def run_remote_sft(args):
     host = cfg['host']
     if not host:
         raise RuntimeError('run-sft requires --host or NATLANG_COLAB_HOSTS')
+    fit, reason = colab_sft_fit(host)
+    if not fit:     # before anything moves or the session's actor yields: its rounds train faster on the DGX
+        log(event='Colab session unfit for SFT', host=host, reason=reason)
+        raise SystemExit(f'{host}: round SFT here is slower than on the DGX: {reason}')
     launch = json.loads(Path(args.launch_json).read_text())
     recipe = shlex.split(launch['exp0_sft_args'])
     local_work = Path(args.work).resolve()

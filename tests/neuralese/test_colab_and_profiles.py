@@ -188,6 +188,37 @@ def test_colab_layouts_fit_the_sessions_gpu_by_the_measured_memory_model(hardwar
         assert lay['learner_beside_actor']['vram_gib'] == 59.0 and lay['actor_alone']['vram_gib'] == 84.0
 
 
+L4 = {'gpu_name': 'NVIDIA L4', 'vram_total_gib': 22.49, 'host_ram_total_gib': 52.96, 'compute_cap': '8.9'}  # live
+
+
+def test_an_l4_serves_an_actor_and_takes_no_round_sft():
+    """The L4 (24 GB, ~121 TFLOPS BF16, 300 GB/s: the GB10's class with an eighth of its memory) is slower than the
+    DGX for SFT; the A100 (2.5x) and G4 (4x) are faster. An actor alone runs 128 there too (its 11.2 GB FP8 pool holds
+    1.8M LFM3 tokens)."""
+    l4, a100, g4 = colab_layout(L4), colab_layout(A100), colab_layout(G4_HARDWARE)
+    assert not l4['sft_beats_dgx'] and 'NVIDIA L4' in l4['sft_reason'] and l4['fp8']
+    assert a100['sft_beats_dgx'] and g4['sft_beats_dgx']
+    assert colab_layout({**A100, 'gpu_name': 'NVIDIA A100-SXM4-40GB', 'vram_total_gib': 40.0})['sft_beats_dgx']
+    assert not colab_layout({**A100, 'gpu_name': 'Some Future GPU'})['sft_beats_dgx']     # unknown: the DGX
+    assert l4['actor_alone']['max_running'] == 128 and l4['actor_alone']['vram_gib'] <= l4['usable_gib']
+    assert a100['actor_alone']['max_running'] == 128 and g4['actor_alone']['max_running'] == 128
+
+
+def test_run_sft_refuses_a_session_slower_than_the_dgx_before_anything_moves(tmp_path, monkeypatch):
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: dict(L4))
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    moved = []
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda *a, **k: moved.append(a))
+    monkeypatch.setattr(pop_rl_actor, 'stop_colab', lambda host: moved.append(('stop', host)))
+    args = types.SimpleNamespace(host='g4', run_name='y', work=str(tmp_path), launch_json=str(tmp_path / 'l.json'),
+                                 commit=None, state_sync_minutes=15.0, vram_gib=None, host_ram_gib=None)
+    with pytest.raises(SystemExit, match='slower than on the DGX'):
+        pop_rl_actor.run_remote_sft(args)
+    assert moved == []
+    monkeypatch.setenv('NATLANG_COLAB_SFT_ANY_GPU', '1')
+    assert pop_rl_actor.colab_sft_fit('g4')[0]
+
+
 def test_run_sft_sizes_the_learner_from_the_session_and_whether_an_actor_runs_beside(tmp_path, monkeypatch):
     monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
     monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: dict(A100))

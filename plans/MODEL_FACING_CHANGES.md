@@ -3,6 +3,34 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — Semantic-FP language and eval surface (da8ae933a, 8e586c02e; recorded in review)
+
+These two commits changed what the model sees without an entry here; this records them, with the review's fixes.
+- **`search_code(query[, limit])` in eval** (R2). Bound in eval when the call has a codebase; `read_code("search_code")`
+  documents it; calling it as a tool gets the bad-action sentence that names it as an eval built-in. The opening's
+  built-ins line names it only when the call's codebase is too large to read through (`largeCallableScope`, more than
+  96 entries): "Eval also has the built-ins nl, iterateOn, transcript, decide, NatlangContext and search_code; read_code
+  shows how to use each." Other calls keep the line as it was (no prefix change). Before the review it was declared as a
+  global of every compiled program and eval snippet (a name with no value outside eval) and never named in an opening,
+  so no model could find it. Opt-out: `NATLANG_PROMPT_REVISION=2026-11-22` keeps the old line.
+- **`read_code` built-in docs.** `NatlangContext` now documents `NatlangContext.ofCallable(fn)` (a context starting
+  from fn's own, keeping its callable helpers); `refine` and `assume` have entries. `refine`/`assume` in eval accept
+  the predicate list the compiler writes for stacked `Is<Is<T, "a">, "b">` (separate obligations, one judge call each).
+- **Tuples and record utilities in types the model reads.** `[A, B]` and `[A, B?]` render as tuples in signatures and in
+  inline `nl` result types (before: flattened to `(A | B)[]`), and the `return_result` value schema gives a tuple
+  `prefixItems` with `minItems`/`maxItems` (before: `items` with `anyOf`). `Partial`, `Required`, `Pick`, `Omit` and
+  `Record<K, V>` over a key expression render as written. natlang's own guidance checks eval code, not this schema
+  (`serve/guidance.py`); a llama-server that builds a tool-call grammar reads `prefixItems` (llama.cpp's JSON-schema
+  grammar supports it). Not checked in this review: SGLang/xgrammar on a tuple schema.
+- **`untrusted-instruction` follows locals.** Text derived from an `Untrusted<T>` value through a local
+  (`const part = message.slice(0, 20)`, then `${part}` in `nl` text) is refused like the value itself, in eval and in
+  compiled programs (one implementation, `compiler/inline.ts`). Before the review eval had a second checker and declared
+  an `untrusted()` function that eval never bound.
+- **New load errors.** `uses:` takes relative paths, package exports and a map form; a `uses` chain back to the function
+  says "a recursive function calls itself by its own name (recursive: structural), so merge functions that call each
+  other into one" (the review removed an admission of recursive cycles that cut the inner function's helpers).
+  A callable-folder import that matches no package file names what may be imported.
+
 ### 2026-11-23 — A backend that cannot score replies is no scorer: no reasoning samples for a score that never comes, refinement judges as ordinary calls (B14)
 
 - **What changed.** A Pi provider session (e.g. `openai-codex`, as `natlang run --provider` and teachers use) no longer

@@ -1,1 +1,25 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/pr-shepherd",
+  "version": "0.1.0",
+  "description": "Review pull-request hunks against team rules: crisp routine-hunk skipping, verbatim-quote findings, ranked findings, an escalating merge verdict and verified doc fixes.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "checkHunk",
+    "checkHunk.nl",
+    "classifyHunk.nl",
+    "examples.json",
+    "fixtures",
+    "isTrivialHunk.nl",
+    "mergeVerdict.nl",
+    "package.json",
+    "proposeDocFix.nl",
+    "shepherd.ts",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

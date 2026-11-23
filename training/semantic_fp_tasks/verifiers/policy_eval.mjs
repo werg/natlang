@@ -10,7 +10,7 @@
 // oracle: {
 //   cases: { <id>: { expected: unknown, weight?: number, critical?: boolean } },
 //   twins?: [[string, string]],   // pairs of case IDs that must receive the SAME verdict (anti-cue metamorphic check)
-//   min_accuracy?: number,        // default 1.0
+//   min_accuracy?: number,        // default 1.0; every case still needs a verdict
 // }
 const norm = v => typeof v === 'string' ? v.trim().toLowerCase() : v;
 const same = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -56,6 +56,8 @@ export function verifyCandidate({ value, oracle }) {
   const minAcc = oracle.min_accuracy ?? 1.0;
   const criticalFailed = cases.some(([id, spec]) => spec.critical && (!given.has(id) || !same(given.get(id), spec.expected)));
   const twinFailed = (oracle.twins ?? []).some(([a, b]) => !given.has(a) || !given.has(b) || !same(given.get(a), given.get(b)));
-  const ok = !criticalFailed && !twinFailed && accuracy >= minAcc && !issues.some(s => s.startsWith('unexpected'));
+  // Every case needs a verdict: skipping the unsure ones would otherwise pass min_accuracy on the rest.
+  const malformed = issues.some(s => s.startsWith('unexpected') || s.endsWith(': missing verdict'));
+  const ok = !criticalFailed && !twinFailed && accuracy >= minAcc && !malformed;
   return { ok, issues: ok ? [] : issues, score: ok ? 1 : Math.min(accuracy * (twinFailed ? 0.5 : 1), 0.999) };
 }

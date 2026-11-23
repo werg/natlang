@@ -1088,18 +1088,6 @@ export class NativeRuntime {
       throw new Error('natlang run timed out; external effects may have occurred');
   }
 
-  /** Lexical + signature search across the active call's codebase, type aliases, and service declarations. */
-  searchCode(query: string, limit?: number): CodeSearchMatch[] {
-    const view = this.frame?.task.programView;
-    return searchCodebase(query, this.root?.codebase ?? {}, {
-      types: this.root?.typesSrc ?? {},
-      declarations: this.declarations,
-      services: this.services,
-      resolveItem: view ? item => view.record(item) : undefined,
-      limit,
-    });
-  }
-
   /** Lift only an ordinary string supplied directly to a declared Neuralese<string> parameter. */
   async materializeSoftStringArguments(definition: { params: { name: string; type: string }[]; types: Record<string, string> },
     inputs: readonly unknown[], parentCallId?: string): Promise<unknown[]> {

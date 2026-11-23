@@ -100,7 +100,7 @@ export type SelectOptions<R> = {
   select?: (candidates: Candidate<R>[]) => Maybe<number>;
   /** A replacement for the shipped `beats(goal, first, second)`, such as `beats.on({ model })`. */
   beats?: (goal: string, first: unknown, second: unknown) => Promise<boolean>;
-  /** Judge each pair in both orders `(a, b)` and `(b, a)` to cancel position bias (default `false` for 2 branches, `true` for 3+). */
+  /** Judge each pair in both orders `(a, b)` and `(b, a)` to cancel position bias (default `true`). */
   debiased?: boolean;
 };
 export type Selected<R> = {

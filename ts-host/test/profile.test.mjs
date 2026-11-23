@@ -313,3 +313,17 @@ test('natlang.json rewrites.measurements reaches RewriteGate and keeps rules off
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('the shipped nextOptimization.nl runs as a natlang call and its answer is checked', async () => {
+  const { createNatlangRuntime } = await import('../dist/index.js');
+  const { scriptedModel } = await import('./support/natlang.mjs');
+  const sample = { name: 'route', calls: 30, p50Ms: 250, avgTokens: 500, compiledShare: 0.1, decisionP10: null, decisionP50: null,
+    escalationRate: 0, failureRate: 0, hasDecisionReadout: false, finiteReturn: false };
+  const model = scriptedModel(opening => {
+    assert.match(opening, /Choose the next optimization action|single best next optimization action/);
+    return 'return { action: "specialize", command: "natlang specialize --definition route", reason: "Many calls, few compiled." };';
+  });
+  const result = await createNatlangRuntime({ model: model.driver, calls: false }).run(() => nextOptimizationPolicy('nl')(sample));
+  assert.equal(result.action, 'specialize');
+  assert.equal(model.openings.length, 1);
+});

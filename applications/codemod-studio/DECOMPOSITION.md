@@ -13,9 +13,20 @@ Tier 3 flagship (WS6 §3 A9): repository-scale code migrations where determinist
   - `transformFile.nl`: transforms one uncovered source file given `MigrationSpec` and verifier `problems`, returning the updated source text.
   - `mineCrispRule.nl`: inspects verified before/after semantic migration pairs and proposes a reusable `{ find, replace, description, regex? }` crisp rule.
 
+## Status and limits
+
+- **Which files need migrating is decided by the verifier.** Stage 1 sends a file to the semantic stage only when the
+  crisp draft fails `verify`. A file that still uses the old API but type-checks and passes its tests is reported
+  `unchanged`, so `verify` must also reject files the migration has not reached (for example a crisp "old API still
+  imported" check). `applications/migration` makes that decision in natural language (survey, site classification,
+  per-site edit decisions, repair with an NL stopping judgment); plan 06 names it as this flagship's seed, and the
+  semantic stage here (`transformFile.nl` inside `proposeAndVerify`) duplicates its edit/validate/repair loop instead
+  of calling it. What this package adds is the crisp-rule pass and rule mining.
+- **No fixture pack.** The earlier `fixtures/cases.json` named migrations and expected counts without any source
+  files, so nothing could run it; it was removed.
+
 ## Safety & Custody
 
 - Every repository file body crosses the boundary as `Untrusted<string>`.
 - Unverified semantic proposals are never accepted into the workspace folder.
 - Mined rules are never admitted without passing exact verification with zero regressions.
-- Fixture rows in `fixtures/cases.json` use `split_group: "flagship:codemod-studio:<group>"`.

@@ -274,3 +274,15 @@ test('natlang improve DIR --dry-run CLI detects directory form and reports split
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('natlang improve DIR without a change set says what to pass instead of reporting it unchanged', async () => {
+  const dir = createFixtureProgram();
+  const { root: storeRoot, dispose } = freshStore();
+  try {
+    await assert.rejects(improvementCommand([dir, '--store', storeRoot, '--model', 'm']),
+      /checks and adopts a change set it is given: pass --proposal FILE/);
+  } finally {
+    dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

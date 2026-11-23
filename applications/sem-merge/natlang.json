@@ -1,1 +1,21 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/sem-merge",
+  "version": "0.1.0",
+  "description": "Resolve three-way merge conflicts: crisp merges of non-overlapping edits, intent-compatibility decisions, verified merged hunks and explicit markers when intents clash.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "examples.json",
+    "fixtures",
+    "intentsCompatible.nl",
+    "merge.ts",
+    "mergeHunk.nl",
+    "package.json",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

@@ -541,8 +541,8 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
     stops = []
     monkeypatch.setattr(d, 'stop_collections', lambda **kw: stops.append((kw, len(launched))))
     assert d.train_sft(rd, cur) == rd / 'sft' / 'factors'
-    # the DGX collection (a high claim the ledger will not preempt) yields before the learner launches; remote
-    # actors keep collecting
+    # the DGX collection yields for the whole SFT before the learner launches (preempted, the ledger would relaunch it
+    # beside the learner); remote actors keep collecting
     assert stops == [({'remote': False}, 0)]
     (argv, env), = launched
     assert argv[:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')] and 'PREFLIGHT_ONLY' not in env
@@ -552,6 +552,88 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
     if script.exists():
         text = script.read_text()
         assert 'memory_ledger.py run --unit "$UNIT"' in text and '--epochs 1' in text and 'exp0_sft.py $ARGS' in text
+
+
+def test_a_round_skips_an_answering_session_slower_than_the_dgx_and_trains_on_the_dgx_at_once(tmp_path, monkeypatch):
+    """An L4 session answers (its actor keeps serving fills) but trains slower than the DGX: the round does not run
+    run-sft there and does not wait --fallback-wait-minutes; it records the takeover and launches the DGX learner."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--sft-profile', 'colab', '--colab-hosts', 'colab-g4'])
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    (rd / 'round.json').write_text('{}')
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'reachable_hosts', lambda profile, hosts: ['colab-g4'])
+    monkeypatch.setattr(pop_rl_actor, 'colab_sft_fit', lambda host: (False, 'NVIDIA L4: 0.97x'))
+    launched = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: launched.append(argv) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: (_ for _ in ()).throw(AssertionError('waited for a session')))
+    def finished(unit, poll=60):
+        (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
+        (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    monkeypatch.setattr(d.c, 'wait', finished)
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: None)
+    assert d.train_sft(rd, d.controller.current) == rd / 'sft' / 'factors'
+    assert not any('run-sft' in argv for argv in launched)
+    assert launched and launched[-1][:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')]
+    changes = json.loads((rd / 'round.json').read_text())['profile_changes']
+    assert changes[-1]['to_profile'] == 'dgx' and 'slower than the DGX' in changes[-1]['reason']
+
+
+def test_round_stages_preempt_the_standing_collection_which_resumes_on_its_policy(tmp_path, monkeypatch):
+    """2026-11-23: the standing collection (high, 74 GB, not preemptible by medium) held its round's build (medium)
+    and every medium job behind it for 96 minutes. Round stages run high; collections medium and resumable: the ledger
+    preempts the collection for a waiting stage and requeues it with its launch spec (same policy, pin and work dir);
+    the driver joins a requeued collection (no duplicate launch) and cancels it with a stop."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
+    import memory_ledger as ml
+    ei, d = _driver(tmp_path, monkeypatch)
+    assert ml.PRIORITIES[ei.STAGE_PRIORITY] > ml.PRIORITIES[ei.COLLECTION_PRIORITY]
+    gib = ml.GIB
+    collection = {'budget': 74 * gib, 'used': 70 * gib, 'priority': ei.COLLECTION_PRIORITY, 'class': 'experiment',
+                  'admitted': 0, 'reserve': 0.}
+    wanted = lambda priority: {'priority': priority, 'budget': 24 * gib, 'reserve': 0}
+    assert ml.preemption_plan({'aei-collect-v0001': collection}, 10 * gib, wanted(ei.STAGE_PRIORITY)) == \
+        ['aei-collect-v0001']
+    assert ml.preemption_plan({'aei-collect-v0001': collection}, 10 * gib, wanted('medium')) == []  # others wait
+    launched, stopped, queued = [], [], set()
+    monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: unit in queued)
+    monkeypatch.setattr(d.c, 'stop_unit', stopped.append)
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        launched.append((unit, priority, command))
+        if unit.endswith('-select'):
+            Path(command[command.index('--out') + 1]).write_text('[]')
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    cur = d.controller.current
+    unit = d.ensure_collection(cur)
+    assert [(u, p) for u, p, _ in launched] == [(f'{unit}-select', 'medium'), (unit, ei.COLLECTION_PRIORITY)]
+    argv = launched[-1][2]
+    assert argv[argv.index('--checkpoint-sha256') + 1] == cur['sha256'] and argv[argv.index('--work') + 1] == \
+        str(d.collect_dir(cur))
+    queued.add(unit)                                 # preempted for a stage: requeued until room returns
+    assert d.ensure_collection(cur) == unit and len(launched) == 2      # joined, not launched twice
+    d.stop_collections(remote=False)                 # a DGX SFT: the requeued collection must not relaunch beside it
+    assert stopped == [unit]
+    # the round's frontier, data and build run at the stage priority
+    rd = d.root / 'r0001'
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
+    launched.clear()
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, policies: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
+    monkeypatch.setattr(ei, 'write_round_manifest', lambda *a, **kw: {})
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda rd: None)
+
+    def stage(unit, budget, priority, command, log, **kw):
+        launched.append((unit, priority))
+        (rd / 'mix').mkdir(parents=True, exist_ok=True)
+        (rd / 'mix' / 'build.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'ledger', stage)
+    d.prepare(rd, d.lineage_policies())
+    assert launched == [(f'aei-r0001-{s}', ei.STAGE_PRIORITY) for s in ('frontier', 'data', 'build')]
 
 
 def test_a_round_prepares_from_the_lineages_collections_with_frontier_and_previous_policy(tmp_path, monkeypatch):

@@ -87,6 +87,16 @@ TEACHER_ATTEMPTS = 2
 # is left before the collection's deadline (the collection would wait for it). 0 opts out (--memetic-share 0).
 MEMETIC_SHARE = 0.02
 MEMETIC_MAX_GROUPS = 2
+# Ledger priorities (scripts/memory_ledger.py: a waiting job preempts only resumable units of strictly lower priority).
+# The round pipeline's critical-path stages (frontier, data, build, SFT, GRPO, merge/publish) run high; collections
+# (the standing DGX one, remote collection clients, a cycle's collect and recollect) run medium and resumable, so a
+# waiting stage preempts them: the ledger requeues a preempted collection with its launch spec (the same policy, pin and
+# work dir) and the collector resumes from its scored groups (``collect``: first_group after the last, already_scored),
+# its fill waits for the actor on the same port. 2026-11-23: the standing aei1 collection (high, 74 GB) held its own
+# round's build (medium, 24 GB) and every medium job behind it for 96 minutes. Opt-out: the driver's environment
+# NATLANG_EI_COLLECTION_PRIORITY=high (the earlier rule; requeue-aware joins stay).
+STAGE_PRIORITY = 'high'
+COLLECTION_PRIORITY = os.environ.get('NATLANG_EI_COLLECTION_PRIORITY', 'medium')
 # DGX held series (async-train §1): a held measurement's claim file here makes every DGX collection shrink to
 # HELD_PRIORITY_SHARE of its slots while it runs (held episodes take priority over collection)
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
@@ -943,6 +953,19 @@ class Cycle:
             preferred = resolve_profile(preferred, hosts=self.colab_hosts)
         hosts = (self.colab_hosts if preferred.name == 'colab' else
                  [pop_rl_actor.POP] if preferred.name == 'pop' and pop_rl_actor.POP else ())
+        if stage == 'sft' and preferred.name == 'colab':
+            # an answering session slower than the DGX for SFT (an L4) is no SFT host: without another the stage
+            # falls back to the DGX at once instead of waiting for a session that will not get faster
+            unfit = {h: pop_rl_actor.colab_sft_fit(h) for h in hosts if pop_rl_actor.host_reachable(h)}
+            unfit = {h: reason for h, (ok, reason) in unfit.items() if not ok}
+            if unfit:
+                self.note(stage=stage, unfit_sessions=unfit)
+                hosts = [h for h in hosts if h not in unfit]
+                if not hosts:
+                    fallback = resolve_profile('dgx')
+                    self.note(stage=stage, profile_fallback='every answering Colab session is slower than the DGX '
+                                                            'for SFT', active_profile=fallback.name)
+                    return fallback, ['local']
         active, hosts, reason = select_stage_profile(preferred, reachable_fn=pop_rl_actor.host_reachable, hosts=hosts)
         if reason:
             self.note(stage=stage, profile_fallback=reason, active_profile=active.name)
@@ -986,18 +1009,24 @@ class Cycle:
         return any(subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}{suffix}.service']).returncode == 0
                    for suffix in ('', '-waiter'))
 
+    def present(self, unit):
+        """Whether ``unit`` runs or the ledger holds it (waiting, or requeued after a preemption until its relaunch)."""
+        return self.active(unit) or ledger_queued(unit)
+
     def wait(self, unit, poll=60):
-        """Until ``unit`` ends; a failed unit ends the cycle (its stage must not be marked done)."""
+        """Until ``unit`` ends (a preempted, requeued unit has not ended); a failed unit ends the cycle (its stage must
+        not be marked done)."""
         time.sleep(20)
-        while self.active(unit):
+        while self.present(unit):
             time.sleep(poll)
         if subprocess.run(['systemctl', '--user', 'is-failed', '-q', f'{unit}.service']).returncode == 0:
             raise SystemExit(f'{unit} failed: see its log; rerun the cycle to resume')
 
     def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
-        ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin)."""
-        if not self.active(unit):
+        ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin). A unit the ledger holds requeued (preempted,
+        awaiting its relaunch) is joined too, never launched a second time."""
+        if not self.present(unit):
             subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}.service'], stderr=subprocess.DEVNULL)
             shell =' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
             values = {**self.env, **({'NATLANG_REPO': str(repo), 'PYTHONPATH': f'{repo}/training/neuralese:{repo}'}
@@ -1063,7 +1092,7 @@ class Cycle:
                    '--policy-id', sha, '--samples', self.a.held_samples, '--slots', self.a.held_slots,
                    '--held-pin', self.held_pin, '--label', f'{self.a.name}-{name}', '--unit', unit]
         started = time.time()
-        # medium and resumable: training (the SFT, a collection: high) preempts it, the ledger requeues it and the
+        # medium and resumable: a training stage (high) preempts it, the ledger requeues it and the
         # measurement resumes its episodes (held_eval measure keeps run.json); nothing that trains waits for it
         for attempt in range(50):
             self.ledger(unit, budget, 'medium', list(map(str, command)), out / 'driver.log', repo=self.held_pin)
@@ -1229,16 +1258,17 @@ class Cycle:
                 endpoints = [ep for _, ep in served]
                 slots = len(endpoints) * profile.collect_slots
                 budget = max(8, round(slots * COLLECTOR_SLOT_GB) + 4)
-                self.ledger(unit, budget, 'high', self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
+                self.ledger(unit, budget, COLLECTION_PRIORITY,
+                            self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
                             self.dir / 'collect.log', detach=True)
             else:
                 budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
-                self.ledger(unit, budget, 'high', self.collect_command(unit, start, sha, self.a.slots),
+                self.ledger(unit, budget, COLLECTION_PRIORITY, self.collect_command(unit, start, sha, self.a.slots),
                             self.dir / 'collect.log', detach=True)
                 if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
                     self.fill_alongside(unit, sha)
             time.sleep(20)
-            while self.active(unit):
+            while self.present(unit):          # a preempted collection is requeued and resumes: it has not ended
                 if self.speculative and not self.gate() and self.recollect_due():
                     self.stop_unit(unit)          # the candidate failed held: its collection is not data (gate recollects)
                     self.stop_unit(f'{self.a.name}-fill')
@@ -1516,7 +1546,7 @@ class Cycle:
         _, sha = self.collect_policy()
         _, train_sha, _ = self.train_policy()
         measured = self.dir / ('frontier.json' if sha == train_sha else 'frontier-sibling.json')
-        self.ledger(f'{self.a.name}-frontier', 4, 'medium',
+        self.ledger(f'{self.a.name}-frontier', 4, STAGE_PRIORITY,
                     self.py('expert_iteration.py', 'frontier', '--out', measured,
                             '--collect', self.collect_dir, '--policy', sha), self.dir / 'frontier.log')
         data = json.loads(measured.read_text())
@@ -1576,7 +1606,7 @@ class Cycle:
         script = self.dir / 'data.sh'
         script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
         # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
-        self.ledger(f'{self.a.name}-data', 12, 'medium', ['/bin/sh', str(script)], self.dir / 'data.log')
+        self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log')
         self.mark('data')
 
     def failed_policies(self):
@@ -1618,7 +1648,7 @@ class Cycle:
 
     def build_stage(self):
         repo, command = self.build_command()
-        self.ledger(f'{self.a.name}-build', 24, 'medium', command, self.dir / 'build.log', repo=repo)
+        self.ledger(f'{self.a.name}-build', 24, STAGE_PRIORITY, command, self.dir / 'build.log', repo=repo)
         sha = subprocess.check_output(['sha256sum', str(self.mix / 'chains.pkl')], text=True).split()[0]
         (self.mix / 'chains.sha256').write_text(sha + '\n')
         build = json.loads((self.mix / 'build.json').read_text())
@@ -1779,18 +1809,18 @@ class Cycle:
         record = {'verdict': verdict, 'reference': reference, 'cycle': self.a.name, 'at': time.time(),
                   'debug': verdict.get('debug') or 'regression: hunt it (AGENTS.md "degradation means bug")'}
         (self.dir / 'bug-hunt.json').write_text(json.dumps(record, indent=1, default=str) + '\n')
-        if collect_reference and not self.active(f'{self.a.name}-recollect'):
+        if collect_reference and not self.present(f'{self.a.name}-recollect'):
             sha = self.previous_start_sha(reference)
             self.set_collect_aside(sha)
             unit = f'{self.a.name}-recollect'
             budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
-            self.ledger(unit, budget, 'high', self.collect_command(unit, reference, sha, self.a.slots),
+            self.ledger(unit, budget, COLLECTION_PRIORITY, self.collect_command(unit, reference, sha, self.a.slots),
                         self.dir / 'collect.log', detach=True)
             record['collecting'] = unit
         if stop_next and self.done('next'):
             nxt = json.loads((self.dir / 'stages' / 'next.done').read_text())
             for unit in [nxt.get('unit'), *(f'{nxt.get("name")}-{u}' for u in ('collect', 'recollect', 'fill', 'sft'))]:
-                if unit and self.active(unit):
+                if unit and self.present(unit):
                     self.stop_unit(unit)
             record['stopped_next'] = nxt.get('name')
         (self.dir / 'stages' / 'halted.done').write_text(json.dumps(record, default=str) + '\n')
@@ -2431,11 +2461,11 @@ class AsyncRoundDriver:
         unit, work = self.collection_unit(policy), self.collect_dir(policy)
         for other in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
             other_unit = f'{self.a.name}-collect-{other.name.split("-")[0]}'
-            if other_unit != unit and self.c.active(other_unit):
+            if other_unit != unit and self.c.present(other_unit):
                 for u in (other_unit, f'{other_unit}-fill'):
                     self.c.stop_unit(u)
                 self.note(collection_stopped=other_unit)
-        if self.c.active(unit):
+        if self.c.present(unit):           # running, or preempted and requeued (the ledger relaunches it)
             return unit
         work.mkdir(parents=True, exist_ok=True)
         tasks = work / 'tasks.json'
@@ -2445,7 +2475,7 @@ class AsyncRoundDriver:
         argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
         argv[argv.index('--tasks') + 1] = str(tasks)
         budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
-        self.c.ledger(unit, budget, 'high', argv, work / 'collect.log', detach=True)
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
         self.note(collection_started=unit, policy=policy['sha256'], work=str(work))
         if self.a.fill:
             threading.Thread(target=self._fill_beside, args=(unit, work, policy), daemon=True).start()
@@ -2481,7 +2511,7 @@ class AsyncRoundDriver:
         policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it)."""
         for i, (host, _front, endpoint) in enumerate(self.remote_actors()):
             unit = f'{self.collection_unit(policy)}-remote{i}'
-            if self.c.active(unit) or not endpoint_alive(endpoint, policy['sha256']):
+            if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
                 continue
             work = self.collect_dir(policy).with_name(self.collect_dir(policy).name + f'-remote{i}')
             work.mkdir(parents=True, exist_ok=True)
@@ -2492,7 +2522,7 @@ class AsyncRoundDriver:
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.remote_slots,
                                           endpoints=[f'{endpoint}={self.a.remote_slots}'])
             argv[argv.index('--tasks') + 1] = str(tasks)
-            self.c.ledger(unit, max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4), 'high', argv,
+            self.c.ledger(unit, max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4), COLLECTION_PRIORITY, argv,
                           work / 'collect.log', detach=True)
             self.note(remote_collection=unit, host=host, endpoint=endpoint)
 
@@ -2503,7 +2533,7 @@ class AsyncRoundDriver:
             unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
             remotes = [f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor))] if remote else []
             for u in (unit, f'{unit}-fill', *remotes):
-                if self.c.active(u):
+                if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
                     self.c.stop_unit(u)
 
     def ensure_teacher(self, round_dir):
@@ -2585,7 +2615,7 @@ class AsyncRoundDriver:
                 started = json.loads(runs.read_text().splitlines()[0])['started']
                 if time.time() - started >= 3600 * self.a.snapshot_min_hours:
                     break
-            if not self.c.active(self.collection_unit(cur)):
+            if not self.c.present(self.collection_unit(cur)):
                 if runs.exists():
                     break                   # stopped early (a rollback, a phase switch): what it scored is the snapshot
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
@@ -2596,12 +2626,13 @@ class AsyncRoundDriver:
         if self.a.live_work:
             self.note(live_links=link_live_works(self.c.work, self.a.live_work))
         frontier, lines, build = self.prepare_plan(round_dir, policies)
-        self.c.ledger(f'{self.a.name}-{round_dir.name}-frontier', 4, 'medium', frontier, round_dir / 'frontier.log')
+        self.c.ledger(f'{self.a.name}-{round_dir.name}-frontier', 4, STAGE_PRIORITY, frontier, round_dir / 'frontier.log')
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
         script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
-        self.c.ledger(f'{self.a.name}-{round_dir.name}-data', 12, 'medium', ['/bin/sh', str(script)], round_dir / 'data.log')
-        self.c.ledger(f'{self.a.name}-{round_dir.name}-build', 24, 'medium', build, round_dir / 'build.log')
+        self.c.ledger(f'{self.a.name}-{round_dir.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)],
+                      round_dir / 'data.log')
+        self.c.ledger(f'{self.a.name}-{round_dir.name}-build', 24, STAGE_PRIORITY, build, round_dir / 'build.log')
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
@@ -2673,6 +2704,15 @@ class AsyncRoundDriver:
             away_since, failures = None, 0
             while not (factors / 'policy_manifest.json').exists():
                 up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
+                fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
+                if up and not any(ok for ok, _ in fit.values()):
+                    # an answering session slower than the DGX (an L4) keeps its actor; the round trains here now
+                    record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
+                                          reason='Colab session slower than the DGX for SFT: '
+                                                 + '; '.join(reason for _, reason in fit.values()))
+                    self.note(round=round_dir.name, takeover='dgx', unfit_sessions=up)
+                    break
+                up = [h for h in up if fit[h][0]]
                 if up and failures >= 3:       # the session answers but the learner keeps failing there
                     record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
                                           reason='the Colab learner failed 3 times')
@@ -2700,8 +2740,9 @@ class AsyncRoundDriver:
                 return factors
         unit = f'{self.a.name}-{round_dir.name}-sft'
         if not self.c.active(unit):
-            # the standing DGX collection is a high-priority claim too (74 GB beside a ~100 GB learner on 128 GB):
-            # the ledger does not preempt it for the SFT, so it yields here; the next round's collection restarts it
+            # the standing DGX collection (74 GB beside a ~100 GB learner on 128 GB) yields for the whole SFT: the
+            # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room
+            # appears; stopped (and cancelled if requeued) here, the next round's collection restarts it
             self.stop_collections(remote=False)
             self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
         self.c.wait(unit, poll=120)
@@ -2727,7 +2768,7 @@ class AsyncRoundDriver:
             self.stop_collections()
             unit = f'{self.a.name}-{round_dir.name}-grpo'
             resume = ['--resume'] if (round_dir / 'grpo-state').exists() and steps else []
-            self.c.ledger(unit, self.a.grpo_budget, 'high', [*self.grpo_command(round_dir, policy), *resume],
+            self.c.ledger(unit, self.a.grpo_budget, STAGE_PRIORITY, [*self.grpo_command(round_dir, policy), *resume],
                           round_dir / 'grpo.log')
         if not (last / 'policy_manifest.json').exists():
             raise SystemExit(f'round {round_dir.name}: GRPO left no step-{self.a.grpo_steps} factors')
@@ -2744,7 +2785,7 @@ class AsyncRoundDriver:
         ``policy/published.json`` is written last), then the remote actors rebound to it."""
         published = round_dir / 'policy' / 'published.json'
         if not published.exists():
-            self.c.ledger(f'{self.a.name}-{round_dir.name}-publish', 24, 'high',
+            self.c.ledger(f'{self.a.name}-{round_dir.name}-publish', 24, STAGE_PRIORITY,
                           self.publish_command(round_dir, policy, factors), round_dir / 'publish.log')
         if not published.exists():
             raise SystemExit(f'round {round_dir.name}: publication failed ({round_dir}/publish.log)')

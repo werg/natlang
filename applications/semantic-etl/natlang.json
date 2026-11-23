@@ -1,1 +1,22 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/semantic-etl",
+  "version": "0.1.0",
+  "description": "Map drifting vendor feeds into a strict schema: a model-built row mapping verified on samples runs crisply over every row; only anomalous rows reach the model.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "buildMapper.nl",
+    "etl.ts",
+    "examples.json",
+    "fixtures",
+    "package.json",
+    "parseAnomalousRow.nl",
+    "sameEntity.nl",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}
