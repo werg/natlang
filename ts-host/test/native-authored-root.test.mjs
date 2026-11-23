@@ -67,7 +67,7 @@ test('NL eval sees the actual rest signature of a TS helper',async()=>{
  store.writeSettings({minFreeBytes:0,specialization:'off'});
  const platform=core.nodePlatform(),rt=core.createNatlangRuntime({platform,calls:store,model:async()=>({calls:[['eval',{code:'return helper.join("p:",1,2,3);',finish:true}]]})});
  const program={'main.nl':'---\nargs: {}\nreturns: string\n---\nJoin the supplied values using helper.',
- 'helper.ts':'export function join(prefix:string,...values:number[]):string{return prefix+values.join(",");}'};
+ 'main/helper.ts':'export function join(prefix:string,...values:number[]):string{return prefix+values.join(",");}'};
  try{const main=core.loadVirtualNatlang(program,'main.nl','/reference',platform);assert.equal(await rt.run(()=>main()),'p:1,2,3');}
  finally{rt.close();store.close();rmSync(dir,{recursive:true,force:true});}
 });
