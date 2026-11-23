@@ -379,6 +379,25 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
 }
 
 /**
+ * The `ensures:` check of one call of `definition` on `inputs` (runtime/contracts.ts), one verdict per distinct result:
+ * crisp checks run in `frame` (the call's own), judged predicates on the judges of `judgeFrame` (its caller's). The
+ * kernel binds it to every call it runs; a host that prepares a root node itself (the collector) binds it to the root.
+ */
+export function ensuresGate(definition: CallableDefinition, inputs: unknown[], frame: Frame, judgeFrame: Frame,
+  model: Parameters<Frame["task"]["refinementJudges"]>[0], callId: string, trace: { emit(kind: string, data: Record<string, unknown>): unknown }): NonNullable<LambdaNode['ensures']> {
+  const task = frame.task, verdicts = new Map<string, Promise<RefinementFailure[]>>();
+  const input = { frame, owner: definition, inputs, checker: task.refinementChecker(), judges: task.refinementJudges(model, judgeFrame),
+    callId, signal: frame.signal ?? task.signal, trace: trace as never, untrusted: scopedUntrusted(task),
+    emit: (kind: string, data: Record<string, unknown>) => { trace.emit(kind, data); } };
+  return value => {
+    const result = toHost(value), key = canonicalValue(result);
+    let verdict = verdicts.get(key);
+    if (!verdict) verdicts.set(key, verdict = checkEnsures(input, result));
+    return verdict;
+  };
+}
+
+/**
  * Bind a context's skills to a call (S2 §2.2): the opening lists them, `read_code("skills.<name>")` discloses them, and
  * their declared scope bindings join the call's scope. A binding whose name is taken (a parameter, a capture) or that
  * fails its type is left out; invalid skills are left out by the loader.
@@ -879,20 +898,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         text: kept, reason: 'the text differs from the one its soft state was primed from; it stays text' });
     }
     if (handoff) node.handoff = handoff;
-    if (definition.ensures?.length) {
-      // Postconditions over the result and the arguments (`ensures:`): the executor's return gate asks them like refined
-      // slots, and so does the check below whatever path produced the value. One verdict per distinct result.
-      const verdicts = new Map<string, Promise<RefinementFailure[]>>();
-      const input = { frame: childFrame, owner: definition, inputs, checker: task.refinementChecker(), judges: task.refinementJudges(model, frame),
-        callId, signal: frame.signal ?? task.signal, trace: runtime.trace, untrusted: scopedUntrusted(task),
-        emit: (kind: string, data: Record<string, unknown>) => { runtime!.trace.emit(kind, data); } };
-      node.ensures = value => {
-        const result = toHost(value), key = canonicalValue(result);
-        let verdict = verdicts.get(key);
-        if (!verdict) verdicts.set(key, verdict = checkEnsures(input, result));
-        return verdict;
-      };
-    }
+    // Postconditions over the result and the arguments (`ensures:`): the executor's return gate asks them like refined
+    // slots, and so does the check below whatever path produced the value.
+    if (definition.ensures?.length) node.ensures = ensuresGate(definition, inputs, childFrame, frame, model, callId, runtime.trace);
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
     if (extraTransactions.length) node.extraTransactions = extraTransactions;
     const result = await runInFrame(childFrame, () => runtime!.run(node));

@@ -20,7 +20,12 @@ path the instructions name that is not an input file, every folder they name tha
 named in a sentence that writes to them, and the input folders named as a destination (`to done/`). A file named in the instructions keeps its exact path; files the instructions do
 not name (per-item outputs, moved files) are covered by a glob of their folder.
 
-    migrate_output_contracts.py IN.jsonl... --out OUT.jsonl [--report REPORT.json]
+    migrate_output_contracts.py IN.jsonl... --out OUT.jsonl [--report REPORT.json] [--only-contract]
+    migrate_output_contracts.py rebuild SOURCE.jsonl --verified KEPT.jsonl --out OUT.jsonl --report REPORT.json
+
+``rebuild`` writes a new version of a task source: each row with a root ``Output contract:`` paragraph is replaced by its
+migrated row from KEPT.jsonl (verify.mjs's kept rows), or left out with its reason when verification did not keep it;
+every other row is copied byte for byte.
 
 Rows without a root ``Output contract:`` paragraph are copied unchanged. A row that cannot be migrated (already declares
 ``writes:``, an unreadable ``returns:``) is left out and listed in the report with its reason. Qualification (reference
@@ -40,6 +45,9 @@ FRONT = re.compile(r'^---\r?\n(.*?)\r?\n---\r?\n?(.*)$', re.S)
 EXT = r'(?:md|json|txt|csv|tsv|ya?ml|log|ini|toml|xml|html)'
 FILE_PATH = re.compile(rf'(?<![\w/.<>-])((?:[A-Za-z0-9_][\w.-]*/)*[A-Za-z0-9_][\w.-]*\.{EXT})(?![\w/-])')
 DIR_PATH = re.compile(r'(?<![\w/.<>-])((?:[A-Za-z0-9_][\w.-]*/)+)(?![\w<*])')
+# A per-item path written as a template, `replies/<id>.md` or `done/<same file name>`: its folder holds written files.
+TEMPLATE_PATH = re.compile(r'(?<![\w/.<>-])((?:[A-Za-z0-9_][\w.-]*/)+)<[^>\n]{1,40}>(\.[A-Za-z0-9]+)?')
+STEP = re.compile(r'(?m)^\s*(?:\d+[.)]|[a-z][.)]|-)\s')
 RETURN = re.compile(r'\b(return|returns|returned|result)\b', re.I)
 RETURN_LEAD = re.compile(r'^\W*(?:the\s+)?(?:return|returns|returned|result)\b', re.I)
 WRITE_VERB = re.compile(r'\b(write|writes|written|rewrite|rewrites|update|updates|updated|append|appends|appended|add|adds|'
@@ -110,12 +118,20 @@ def output_fields(semantics, root_body, contract_text):
             globs.add((posixpath.dirname(path), posixpath.splitext(path)[1]))
         else:
             exact.add(path)
+    # A named input file is written when its numbered step writes (a step that reads it and appends to it may name the
+    # write in another sentence: "Read ledger.csv ...", then "a ledger line appended for every refund").
+    steps = [part for part in STEP.split(instructions) if part.strip()]
     for path in named_files:
         if path in inputs:
-            if any(path in s and WRITE_VERB.search(s) for s in sentences(instructions)):
+            if any(path in step and WRITE_VERB.search(step.replace(path, '')) and not re.match(r'\s*read\b', step, re.I)
+                   or any(path in s and WRITE_VERB.search(s) for s in sentences(step)) for step in steps):
                 exact.add(path)
         elif not any(path.startswith(d + '/') for d, _ in globs):
             exact.add(path)
+    for folder, ext in set(TEMPLATE_PATH.findall(instructions)):
+        name = folder.rstrip('/')
+        if name and not any(d == name for d, _ in globs):
+            globs.add((name, ext))
     for folder in set(DIR_PATH.findall(instructions)):
         name = folder.rstrip('/')
         if not name or any(d == name for d, _ in globs):
@@ -216,7 +232,47 @@ def migrate(row):
     return out, None
 
 
+def rebuild(argv):
+    parser = argparse.ArgumentParser(description='rebuild a task source with its migrated rows')
+    parser.add_argument('source')
+    parser.add_argument('--verified', required=True, action='append')
+    parser.add_argument('--out', required=True)
+    parser.add_argument('--report', required=True)
+    args = parser.parse_args(argv)
+    kept = {}
+    for path in args.verified:
+        for line in Path(path).read_text().splitlines():
+            if line.strip():
+                kept[json.loads(line)['id']] = line
+    lines, replaced, dropped, copied = [], 0, [], 0
+    for line in Path(args.source).read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        semantics = row.get('semantics') or {}
+        root = (semantics.get('files') or {}).get(semantics.get('root'), '')
+        body = FRONT.match(root).group(2) if FRONT.match(root) else root
+        if not CONTRACT.search(body):
+            lines.append(line)
+            copied += 1
+        elif row['id'] in kept:
+            lines.append(kept[row['id']])
+            replaced += 1
+        else:
+            dropped.append({'id': row['id'], 'reason': 'the migrated row did not requalify (verify.mjs: reference replay '
+                            'and negative controls)'})
+    Path(args.out).write_text(''.join(line + '\n' for line in lines))
+    report = {'schema': 'natlang.typed-output-contract-rebuild/1', 'source': str(Path(args.source).resolve()),
+              'copied': copied, 'replaced': replaced, 'dropped': dropped}
+    Path(args.report).write_text(json.dumps(report, indent=1) + '\n')
+    print(json.dumps({k: (len(v) if isinstance(v, list) else v) for k, v in report.items()}))
+    return 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == 'rebuild':
+        return rebuild(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('inputs', nargs='+')
     parser.add_argument('--out', required=True)

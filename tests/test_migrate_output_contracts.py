@@ -77,3 +77,32 @@ def test_migrated_root_loads_in_the_runtime(tmp_path):
                           capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout) == {'writes': 'ApplyFixFiles', 'returns': 'ApplyFixResult'}
+
+
+def test_rebuild_replaces_contract_rows_with_their_verified_migration_and_drops_the_rest(tmp_path):
+    plain = row()
+    plain['id'] = 'auth:x:plain'
+    plain['semantics']['files']['apply_fix.nl'] = ROOT.split('\nOutput contract:')[0] + '\n'
+    failed = row()
+    failed['id'] = 'auth:x:failed'
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(''.join(json.dumps(item) + '\n' for item in (row(), plain, failed)))
+    kept = tmp_path / 'kept.jsonl'
+    kept.write_text(json.dumps(migrate.migrate(row())[0]) + '\n')
+    out, report = tmp_path / 'out.jsonl', tmp_path / 'report.json'
+    assert migrate.main(['rebuild', str(source), '--verified', str(kept), '--out', str(out), '--report', str(report)]) == 0
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert [r['id'] for r in rows] == ['auth:x:1', 'auth:x:plain']
+    assert 'writes: ApplyFixFiles' in rows[0]['semantics']['files']['apply_fix.nl'] and rows[1] == plain
+    assert [d['id'] for d in json.loads(report.read_text())['dropped']] == ['auth:x:failed']
+
+
+def test_template_paths_and_step_writes_are_declared_even_when_the_reference_writes_nothing_there():
+    """A declaration of only the reference's writes would tell a solver that `replies/` stays empty (the proposal is not
+    installed) and refuse a run that installs: per-item template paths declare their folder."""
+    item = row()
+    root = ROOT.replace('4. Move each applied request to done/<same file name>.',
+                        '4. Write replies/<id>.md for every request and move it to done/<same file name>.')
+    item['semantics']['files']['apply_fix.nl'] = root
+    fields = migrate.migrate(item)[0]['curriculum']['external']['typed_output_contract']['writes']
+    assert {'replies/*.md', 'done/*.md'} <= set(fields)
