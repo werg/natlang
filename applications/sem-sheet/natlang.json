@@ -1,1 +1,22 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/sem-sheet",
+  "version": "0.1.0",
+  "description": "Analytical spreadsheet: an exact formula DAG in TypeScript with semantic cells, classification columns promotable to crisp rules, and semantic workbook merges.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "classifyCell.nl",
+    "combineSummary.nl",
+    "evalSemanticCell.nl",
+    "examples.json",
+    "fixtures",
+    "package.json",
+    "sheet.ts",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

@@ -1,14 +1,14 @@
 /**
  * Inbox Pilot (WS6 Tier 2 flagship A4):
  * - Crisp `pluggable` fast-path archives routine newsletters and receipts with zero model calls.
- * - Standing prose rules bind onto `decideAction.nl` via `withContext` and can be compiled/verified with `compileRule`.
+ * - Standing prose rules are `decideAction.nl`'s `rules` argument and can be compiled/verified with `compileRule`.
  * - Every external subject/body is fenced with `untrusted(...)` before any model sees it.
  * - Asymmetric `escalate(decideAction, { to: 'teacher', floor: 0.85, risk: { escalate: 0.25 } })` routes risky or
  *   uncertain messages (including prompt-injection attempts) to the stronger model and prevents unauthorized actions.
  * - `ONCE_EFFECTS` idempotent mail service wrapper ensures each message executes at most one mutating effect.
  */
 import { ONCE_EFFECTS, pluggable, untrusted, type PluggableSetting } from '@natlang/node';
-import { compileRule, escalate, semanticMap, withContext } from '@natlang/node/std';
+import { compileRule, escalate, semanticMap } from '@natlang/node/std';
 import decideAction from './decideAction.nl';
 import draftReply from './draftReply.nl';
 import type {
@@ -87,23 +87,22 @@ export function fenceMessage(message: IncomingMessage): IncomingMessage {
  * at most one mutating mail effect across retries or duplicate deliveries.
  */
 export function createOnceMailService(inner: MailService): OnceMailService {
-  const byMessage = new Map<string, MailEffectResult>();
+  // The first effect per messageId is kept as a promise, so concurrent duplicate deliveries share one effect.
+  const byMessage = new Map<string, Promise<MailEffectResult>>();
   const counts = new Map<string, number>();
-
   const runOnce = async (
     messageId: string,
     effect: () => Promise<MailEffectResult> | MailEffectResult,
   ): Promise<MailEffectResult> => {
     const existing = byMessage.get(messageId);
     if (existing) {
-      return { ...existing, deduplicated: true };
+      return { ...(await existing), deduplicated: true };
     }
-    const result = await effect();
-    byMessage.set(messageId, result);
     counts.set(messageId, (counts.get(messageId) ?? 0) + 1);
-    return result;
+    const pending = Promise.resolve().then(effect);
+    byMessage.set(messageId, pending);
+    return pending;
   };
-
   return {
     [ONCE_EFFECTS]: ['archive', 'saveDraft', 'hold'] as const,
     archive: (messageId: string) => runOnce(messageId, () => inner.archive(messageId)),
@@ -144,30 +143,26 @@ export async function triageMessage(
 ): Promise<PilotDecision> {
   const message = fenceMessage(rawMessage);
   const onceService = ONCE_EFFECTS in service ? (service as OnceMailService) : createOnceMailService(service);
-  const boundDecide = withContext(decideAction, {
-    standingRules: rules.map(r => `${r.name}: ${r.guidance}`),
-  });
-  const safeDecide = escalate(boundDecide, {
+  const safeDecide = escalate(decideAction, {
     to: options.escalateTo ?? 'teacher',
     floor: options.floor ?? 0.85,
     risk: { escalate: options.escalateRiskFloor ?? 0.25 },
   });
-
-  // Pluggable fast-path: crisp handles newsletters/receipts with 0 LLM calls; nl falls through to semantic triage.
+  // One semantic triage decision per message, shared by the fast path's nl side and the main decision below.
+  let pendingDecision: ReturnType<typeof safeDecide> | undefined;
+  const decideOnce = () => (pendingDecision ??= safeDecide(message, rules));
+  // Pluggable fast path: is this routine bulk mail to archive? crisp reads transport headers (0 model calls); nl asks
+  // the triage decision; shadow runs both, records agreement and serves crisp.
   const fastPath = pluggable(
     {
-      crisp: (msg: IncomingMessage): InboxAction | null => (isRoutineNewsletterOrReceipt(msg) ? 'archive' : null),
-      nl: async (msg: IncomingMessage): Promise<InboxAction | null> => {
-        const decision = await safeDecide(msg, rules);
-        return decision.value;
-      },
+      crisp: (msg: IncomingMessage): boolean => isRoutineNewsletterOrReceipt(msg),
+      nl: async (): Promise<boolean> => (await decideOnce()).value === 'archive',
     },
     options.fastPathMode,
-    { default: 'crisp', name: 'inbox-routine-fast-path' },
+    { default: 'crisp', serve: 'crisp', name: 'inbox-routine-fast-path' },
   );
-
-  const fastAction = await fastPath(message);
-  if (fastAction === 'archive' && (options.fastPathMode ?? 'crisp') === 'crisp' && isRoutineNewsletterOrReceipt(message)) {
+  const fastMode = options.fastPathMode ?? 'crisp';
+  if (fastMode !== 'nl' && await fastPath(message)) {
     const effect = await onceService.archive(message.id);
     return {
       messageId: message.id,
@@ -178,7 +173,6 @@ export async function triageMessage(
       effect,
     };
   }
-
   // Evaluate compiled standing rules if available (only for non-escalate matches; escalate still goes to safe hold).
   for (const entry of compiledRules) {
     const ruleAction = await entry.evaluate(message);
@@ -207,7 +201,7 @@ export async function triageMessage(
     }
   }
 
-  const decision = await safeDecide(message, rules);
+  const decision = await decideOnce();
   const guidanceText = rules.map(r => `${r.name}: ${r.guidance}`).join('\n');
 
   if (decision.value === 'archive') {

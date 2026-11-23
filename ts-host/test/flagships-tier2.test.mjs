@@ -428,3 +428,74 @@ test('A7 applications/runbook-engine: Markdown DAG parser, crisp read-only fast-
   assert.equal(dup.deduplicated, true);
   assert.equal(service.executedStepCount('drain-replica'), 1);
 });
+
+test('Tier 2 fixture packs agree with the crisp fast paths (expectCrisp rows settle crisply with the expected label)', async () => {
+  const fixtures = app => JSON.parse(readFileSync(join(repo, 'applications', app, 'fixtures/cases.json'), 'utf8'));
+  const { isRoutineNewsletterOrReceipt } = await (await buildApp('inbox-pilot'))('pilot.js');
+  for (const row of fixtures('inbox-pilot')) {
+    assert.equal(isRoutineNewsletterOrReceipt(row.message), row.expectCrisp, row.id);
+    if (row.expectCrisp) assert.equal(row.expectedAction, 'archive', row.id);
+  }
+  const { detectKnownFlakeSignature } = await (await buildApp('ci-doctor'))('doctor.js');
+  for (const row of fixtures('ci-doctor')) {
+    assert.equal(detectKnownFlakeSignature(row.trace.log) !== null, row.expectCrisp, row.id);
+    if (row.expectCrisp) assert.equal(row.expectedKind, 'flake', row.id);
+  }
+  const { isRoutineReadOnlyCommand } = await (await buildApp('runbook-engine'))('engine.js');
+  for (const row of fixtures('runbook-engine')) {
+    assert.equal(isRoutineReadOnlyCommand(row.step.command), row.expectCrisp, row.id);
+    if (row.expectCrisp) assert.equal(row.expectedRisk, 'safe', row.id);
+  }
+});
+
+test('ci-doctor guards: an edited assertion is rejected, and a flake signature beside an assertion failure is not settled crisply', async () => {
+  const { checkAssertionsPreserved, detectKnownFlakeSignature } = await (await buildApp('ci-doctor'))('doctor.js');
+  const enc = text => new TextEncoder().encode(text);
+  const before = 'assert.equal(discount(100, 0.2), 80);\nassert.equal(discount(50, 0.1), 45);\n';
+  const weakened = 'assert.equal(discount(100, 0.2), discount(100, 0.2));\nassert.equal(discount(50, 0.1), 45);\n';
+  const proposal = after => ({ diff: { changes: [{ path: 'test/p.test.ts', kind: 'modified', before: enc(before), after: enc(after) }] } });
+  assert.match(checkAssertionsPreserved(proposal(weakened)).join('\n'), /changed existing assertion/);
+  assert.deepEqual(checkAssertionsPreserved(proposal(before + 'assert.ok(true);\n')), []);
+  assert.equal(detectKnownFlakeSignature('read ECONNRESET\nAssertionError: expected 80, got 20'), null);
+  assert.equal(detectKnownFlakeSignature('read ECONNRESET while polling'), 'flake:econnreset');
+});
+
+test('runbook-engine: multi-line commands are never read-only, and a step whose health never converges skips its dependents', async () => {
+  const { executeRunbook, isRoutineReadOnlyCommand } = await (await buildApp('runbook-engine'))('engine.js');
+  assert.equal(isRoutineReadOnlyCommand('kubectl get pods\nmv /data /tmp/data'), false);
+  assert.equal(isRoutineReadOnlyCommand('kubectl get pods -n prod'), true);
+  const markdown = [
+    '# Restart', '',
+    '## restart-api: Restart the API', 'Health: error rate below 1%', '```bash', 'kubectl rollout restart deploy/api', '```', '',
+    '## warm-cache: Warm the cache', 'Depends: restart-api', '```bash', 'kubectl get pods -n api', '```',
+  ].join('\n');
+  const ran = [];
+  const ops = {
+    runStep: async (stepId) => { ran.push(stepId); return { ok: true, stepId, exitCode: 0, output: 'ok' }; },
+    readHealth: async (stepId, attempt) => ({ stepId, attempt, status: 'degraded', metrics: { errorRate: 0.3 }, message: 'errors 30%' }),
+  };
+  const driver = async () => ({ text: '"confirm"', calls: [] });
+  driver.decide = async req => req.options.includes('"destructive"')
+    ? { log_probs: req.options.map(o => Math.log(JSON.parse(o) === 'confirm' ? 0.96 : 0.02)) }
+    : { log_probs: req.options.map(o => Math.log(JSON.parse(o) === false ? 0.95 : 0.05)) };
+  const runtime = createNatlangRuntime({ model: driver, calls: openTempCalls('natlang-runbook-health-') });
+  const report = await runtime.run(() => executeRunbook(markdown, ops, { maxHealthChecks: 2 }));
+  assert.deepEqual(ran, ['restart-api']);
+  assert.equal(report.steps[0].recovered, false);
+  assert.equal(report.steps[1].status, 'skipped-dependency');
+  assert.equal(report.recovered, false);
+});
+
+test('inbox-pilot: concurrent duplicate deliveries share one ONCE_EFFECTS effect', async () => {
+  const { createOnceMailService } = await (await buildApp('inbox-pilot'))('pilot.js');
+  let archived = 0;
+  const service = createOnceMailService({
+    archive: async id => { archived++; await new Promise(r => setTimeout(r, 5)); return { messageId: id, effect: 'archive', ok: true }; },
+    saveDraft: async id => ({ messageId: id, effect: 'saveDraft', ok: true }),
+    hold: async id => ({ messageId: id, effect: 'hold', ok: true }),
+  });
+  const [a, b] = await Promise.all([service.archive('m-1'), service.archive('m-1')]);
+  assert.equal(archived, 1);
+  assert.equal(service.executedCount('m-1'), 1);
+  assert.equal([a.deduplicated, b.deduplicated].filter(Boolean).length, 1);
+});

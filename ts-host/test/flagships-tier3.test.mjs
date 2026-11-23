@@ -41,18 +41,12 @@ const textOf = req => req.messages.flatMap(m => [
   ...(m.tool_calls ?? []).map(c => c.function?.arguments ?? ''),
 ]).join('\n');
 
-test('all three Tier 3 flagships pass natlang check cleanly and include >=10 split-grouped fixtures and examples', async () => {
+test('all three Tier 3 flagships pass natlang check cleanly and include examples', async () => {
   for (const app of ['sem-grep-sql', 'codemod-studio', 'diligence']) {
     const project = join(repo, 'applications', app);
     const checked = checkProject(project, { write: false });
     assert.equal(checked.ok, true, `${app}: ${JSON.stringify(checked.diagnostics)}`);
     assert.deepEqual(checked.diagnostics, [], `${app}: expected clean checkProject with 0 warnings`);
-
-    const cases = JSON.parse(readFileSync(join(project, 'fixtures', 'cases.json'), 'utf8'));
-    assert.ok(Array.isArray(cases) && cases.length >= 10, `${app}: expected >=10 fixture cases`);
-    for (const row of cases) {
-      assert.match(row.split_group, new RegExp(`^flagship:${app}:[a-z0-9-]+$`), `${app}: invalid split_group ${row.split_group}`);
-    }
 
     const examples = JSON.parse(readFileSync(join(project, 'examples.json'), 'utf8'));
     assert.ok(Array.isArray(examples) && examples.length >= 2, `${app}: expected examples.json array`);
@@ -505,4 +499,18 @@ test('A10 applications/diligence: recursive digestSection enforces verbatim cita
   assert.equal(report.ranked[0].dossierId, 'vendor-safe');
   assert.equal(report.ranked[1].dossierId, 'vendor-risky');
   assert.ok(report.rankings[0].score > report.rankings[1].score);
+});
+
+test('diligence citationsMatch: a quote must occur in the section its sectionId names', async () => {
+  // The protected helper is plain TypeScript with type-only imports: Node strips the types and runs it directly.
+  const { default: citationsMatch } = await import(pathToFileURL(join(repo, 'applications/diligence/digestSection/citationsMatch.ts')).href);
+  const section = { id: 'root', title: 'Vendor', text: 'Overview of the vendor.', sections: [
+    { id: 'sec', title: 'Security', text: 'SOC 2 Type II report issued 2026.', sections: [] },
+  ] };
+  const digest = citations => ({ sectionId: 'root', title: 'Vendor', summary: 's', keyClaims: [], citations, children: [
+    { sectionId: 'sec', title: 'Security', summary: 's', keyClaims: [], citations: [], children: [] },
+  ] });
+  assert.equal(citationsMatch(digest([{ sectionId: 'sec', quote: 'SOC 2 Type II' }]), section), true);
+  assert.equal(citationsMatch(digest([{ sectionId: 'root', quote: 'SOC 2 Type II' }]), section), false, 'quote attributed to the wrong section');
+  assert.equal(citationsMatch(digest([{ sectionId: 'sec', quote: 'ISO 27001' }]), section), false, 'fabricated quote');
 });

@@ -1,1 +1,21 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/ci-doctor",
+  "version": "0.1.0",
+  "description": "Triage CI failures: crisp known-flake signatures, flake/env/regression decisions, bisection of the culprit commit and verified fixes that keep every assertion.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "classifyFailure.nl",
+    "doctor.ts",
+    "examples.json",
+    "fixtures",
+    "package.json",
+    "proposeFix.nl",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}
