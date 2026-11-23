@@ -114,11 +114,13 @@ def test_rounds_link_the_live_works_build_against_their_registry_and_fill_them_f
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
     _, _, build = d.prepare_plan(d.root / 'r0001', [cur])
     assert build[build.index('--live-holdout-registry') + 1] == str(live / ing.REGISTRY)
-    monkeypatch.setattr('natlang_neuralese.common.data_registry.role_paths', lambda role: ['/role/work'])
+    monkeypatch.setattr('natlang_neuralese.common.data_registry.role_paths', lambda role, **kw: ['/role/work'])
     fill = d.c.fill_command({'sglang': 's', 'url': 'u', 'export': 'e'})
     works = [fill[i + 1] for i, x in enumerate(fill) if x == '--work']
     assert works[0] == str(live) and fill[fill.index('--prefer-work') + 1] == str(live)
     assert fill[fill.index('--rescan-minutes') + 1] == '30'
+    assert fill[fill.index('--registry-repo') + 1] == str(d.c.live_data_owner())
+    assert build[build.index('--registry-repo') + 1] == str(d.c.live_data_owner())
     (tmp_path / 'other').mkdir()
     (tmp_path / 'other' / ing.REGISTRY).write_text('{"different": 1}\n')
     with pytest.raises(SystemExit, match='different holdout registries'):
@@ -153,3 +155,15 @@ def test_evidence_only_completed_trajectory_does_not_reserve_goal(monkeypatch):
     assert kept == ['evidence', 'usable']
     assert [row['decisions'] for row in records] == [0, 1]
     assert dropped == {}
+
+
+def test_ingest_forwards_one_published_owner_snapshot_to_extraction(campaign, tmp_path):
+    root, _ = campaign
+    owner = tmp_path / 'registry-owner'
+    owner.mkdir()
+    extracted = []
+    ing.ingest_once(root, tmp_path / 'work-owner', 'held.json', extract=extracted.append,
+                    registry_repo=owner, registry_ref='published-snapshot')
+    assert len(extracted) == 1 and len(extracted[0].live_run) == 2
+    assert extracted[0].registry_repo == owner and extracted[0].registry_ref == 'published-snapshot'
+    assert extracted[0].held_manifest == 'held.json'

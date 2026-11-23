@@ -799,7 +799,7 @@ def live_holdout_registry(live_works):
 
 
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
-                      live_registry=None, max_target_tokens=0):
+                      live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None):
     """The mix build (``sft_sources build``) of a cycle or an async round: Ambient frontier build from WORK's replayed
     successes (own first, then teacher; observed-live teacher episodes against ``live_registry``), the teacher pools,
     aux parts and the lineage's prefer-unseen builds."""
@@ -813,6 +813,8 @@ def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_
             *[x for b in prefer_unseen for x in ('--prefer-unseen', b)],
             *(['--previous-policy', previous_policy] if previous_policy else []),
             *(['--live-holdout-registry', live_registry] if live_registry else []),
+            *(['--registry-repo', registry_repo] if registry_repo is not None else []),
+            *(['--registry-ref', registry_ref] if registry_ref is not None else []),
             *(['--max-target-tokens', max_target_tokens] if max_target_tokens else [])]
 
 
@@ -1478,14 +1480,36 @@ class Cycle:
             subprocess.run(['git', '-C', str(repo), 'diff', '--quiet', 'HEAD', '--'], check=True)
 
     def data_py(self, script, *args):
-        return [PY, str(self.data_repo() / 'scripts/neuralese_data' / script), *map(str, args)]
+        return [PY, str(self.data_repo() / 'scripts/neuralese_data' / script), *map(str, args),
+                *(self.live_data_args() if script == 'sft_sources.py' else [])]
+
+    def live_data_owner(self):
+        if not getattr(self.a, 'live_work', None):
+            return None
+        from natlang_neuralese.common import data_registry
+        return data_registry.registry_owner_repo()
+
+    def live_data_ref(self, owner=None):
+        owner = owner if owner is not None else self.live_data_owner()
+        if owner is None:
+            return None
+        from natlang_neuralese.common import data_registry
+        return data_registry.registry_owner_ref(owner)
+
+    def live_data_args(self):
+        owner = self.live_data_owner()
+        if owner is None:
+            return []
+        ref = self.live_data_ref(owner)
+        return ['--registry-repo', str(owner), *(['--registry-ref', ref] if ref is not None else [])]
 
     def fill_build_command(self, *args):
         # A data stage may intentionally use different fill and mix readers.
         repo = self.fill_repo()
         return ['/usr/bin/env', 'NATLANG_REPO=' + str(repo),
                 f'PYTHONPATH={repo}/scripts/neuralese_data:{repo}/training/neuralese:{repo}',
-                PY, str(repo / 'scripts/neuralese_data/filled_reasoning.py'), 'build', *map(str, args)]
+                PY, str(repo / 'scripts/neuralese_data/filled_reasoning.py'), 'build', *map(str, args),
+                *self.live_data_args()]
 
     def fill_alongside(self, collect_unit, sha=None):
         """Filled reasoning (filled_reasoning.py generate, the rationalization strand's tool) drawn from the same actor
@@ -1515,7 +1539,11 @@ class Cycle:
         self.require_data_readers()
         from natlang_neuralese.common import data_registry
         live = [str(w) for w in getattr(self.a, 'live_work', None) or ()]
-        works = list(dict.fromkeys([*live, *map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
+        owner = self.live_data_owner()
+        ref = self.live_data_ref(owner)
+        works = list(dict.fromkeys([*live, *map(str, self.a.seed_work),
+                    *data_registry.role_paths('grpo-sd-teacher',
+                      **({'repo': owner, **({'ref': ref} if ref is not None else {})} if owner is not None else {}))]))
         rates = self.dir / 'tasks.rates.json'
         if pop:
             n = self.a.pop_fill_running
@@ -1533,6 +1561,8 @@ class Cycle:
                            # the live WORKs' episodes first, and their new ones as the ingester adds them
                            *[x for w in live for x in ('--prefer-work', w)],
                            *(('--rescan-minutes', 30) if live else ()),
+                           *(('--registry-repo', owner) if owner is not None else ()),
+                           *(('--registry-ref', ref) if ref is not None else ()),
                            *(('--prefer-rates', rates) if rates.exists() else ())])]
 
     def stop_unit(self, unit):
@@ -1645,7 +1675,8 @@ class Cycle:
         command = mix_build_command(repo, work=self.work, out=self.mix, frontier=self.dir / 'frontier.json', aux=aux,
                                     prefer_unseen=self.train_policy()[2], teacher_budget=self.a.teacher_budget,
                                     own_share=self.a.own_share,
-                                    live_registry=live_holdout_registry(getattr(self.a, 'live_work', None) or ()))
+                                    live_registry=live_holdout_registry(getattr(self.a, 'live_work', None) or ()),
+                                    registry_repo=self.live_data_owner(), registry_ref=self.live_data_ref())
         return repo, list(map(str, command))
 
     def build_stage(self):
@@ -2650,6 +2681,8 @@ class AsyncRoundDriver:
                                   teacher_budget=self.a.teacher_budget, own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
                                   live_registry=live_holdout_registry(self.a.live_work),
+                                  registry_repo=self.c.live_data_owner(),
+                                  registry_ref=self.c.live_data_ref(),
                                   max_target_tokens=self.a.round_target_tokens)
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 

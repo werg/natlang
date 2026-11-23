@@ -190,8 +190,19 @@ def filled_rows(calls, fills, close_id, name):
 
 
 # ---- sources ---------------------------------------------------------------------------------------------------------
-def default_works():
-    return data_registry.role_paths('grpo-sd-teacher')
+def default_works(registry_repo=None, registry_ref=None):
+    from sft_sources import registry_options
+    return data_registry.role_paths('grpo-sd-teacher', **registry_options(registry_repo, ref=registry_ref))
+
+
+def generation_registry_repo(args):
+    """Standing live WORKs grow after the code pin; static fills retain pinned admission."""
+    explicit = getattr(args, 'registry_repo', None)
+    if explicit is not None:
+        return data_registry.assert_registry_writable(explicit)
+    if getattr(args, 'rescan_minutes', 0) and getattr(args, 'prefer_work', None):
+        return data_registry.registry_owner_repo()
+    return None
 
 
 def teacher_episodes(works, held_manifest, funnel, drifted=True, skip_mismatched_live=True):
@@ -762,12 +773,19 @@ def done_keys(out):
 def generate(args):
     from tokenizers import Tokenizer
     from natlang_neuralese.common.code_provenance import code_provenance
+    from sft_sources import registry_options
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     prefer_works = [str(w) for w in getattr(args, 'prefer_work', None) or ()]
-    works = list(dict.fromkeys([*prefer_works, *(args.work or default_works())]))
+    registry_repo = generation_registry_repo(args)
+    registry_ref = getattr(args, 'registry_ref', None)
+    if registry_ref is None and registry_repo is not None:
+        registry_ref = data_registry.registry_owner_ref(registry_repo)
+    selection = registry_options(registry_repo, ref=registry_ref)
+    works = list(dict.fromkeys([*prefer_works, *(args.work or
+                  (default_works(registry_repo, registry_ref) if registry_repo is not None else default_works()))]))
     held = args.held_manifest or data_registry.role_path('held-eval')
-    data_registry.consume([*works, held], run=f'filled-reasoning:{out}', how='teacher episodes to fill')
+    data_registry.consume([*works, held], run=f'filled-reasoning:{out}', how='teacher episodes to fill', **selection)
     export = Path(args.export)
     tokenizer = Tokenizer.from_file(str(export / 'tokenizer.json'))
     # the rendering tokenizer must be the served one (ids pass through unchanged)
@@ -792,12 +810,14 @@ def generate(args):
     filler = Filler(args, actor, tokenizer, stops, banned)
     renderer = Renderer(args.render_tokenizer)
     run = {'event': 'start', 'schema': SCHEMA, 'code': code_provenance(REPO), 'argv': sys.argv, 'works': works,
-           'held': held, 'episodes': len(episodes), 'done': len(done), 'todo': len(todo), 'export': str(export),
+           'held': held, 'registry_repo': str(registry_repo) if registry_repo is not None else None,
+           'registry_ref': registry_ref,
+           'episodes': len(episodes), 'done': len(done), 'todo': len(todo), 'export': str(export),
            'policy': actor.policy(), 'funnel': {k: dict(v) for k, v in funnel.items()}, 'time': time.time()}
     log = (out / 'generate.log').open('a')
     log.write(json.dumps(run) + '\n')
     log.flush()
-    record_fills(out, works, held)   # registered from the start: a cycle stops generation without a clean exit
+    record_fills(out, works, held, **registry_options(registry_repo, ref=registry_ref, writer=True))
     print(json.dumps({k: run[k] for k in ('episodes', 'done', 'todo', 'policy')}), flush=True)
     write_lock = threading.Lock()
     fills = (out / 'fills.jsonl').open('a')
@@ -866,16 +886,18 @@ def generate(args):
               + '\n')
     log.close()
     fills.close()
-    record_fills(out, works, held)
+    record_fills(out, works, held, **registry_options(registry_repo, ref=registry_ref, writer=True))
 
 
-def record_fills(out, works, held):
+def record_fills(out, works, held, *, registry_repo=None, registry_ref=None):
+    from sft_sources import registry_options
     data_registry.record_dataset(data_registry.dataset_id(out, 'filled-reasoning'), out, kind='trajectories',
                                  include=['fills.jsonl', 'generate.log'], inputs=[*works, held],
                                  format=f'{SCHEMA}: fills.jsonl (per verified teacher episode: the student\'s filled '
                                         'think block per call and every candidate\'s statistics; filled_reasoning.py)',
                                  license='derived: teacher providers\' licenses (registered with the WORKs)',
-                                 producer={'script': 'scripts/neuralese_data/filled_reasoning.py'}, closed=False)
+                                 producer={'script': 'scripts/neuralese_data/filled_reasoning.py'}, closed=False,
+                                 **registry_options(registry_repo, ref=registry_ref, writer=True))
 
 
 # ---- status, build and report ----------------------------------------------------------------------------------------
@@ -1068,10 +1090,18 @@ def build(args):
     import pickle
     from exp0_sft import chains_of
     from natlang_neuralese.common.code_provenance import code_provenance
+    from sft_sources import registry_options
     corpus = Path(args.corpus)
     corpus.mkdir(parents=True, exist_ok=True)
     starts = [json.loads(l) for l in (Path(args.out) / 'generate.log').open() if '"event": "start"' in l]
-    record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'])   # the fills as built
+    registry_repo = getattr(args, 'registry_repo', None)
+    if registry_repo is None and any(r.get('registry_repo') is not None for r in starts):
+        registry_repo = data_registry.registry_owner_repo()
+    registry_ref = getattr(args, 'registry_ref', None)
+    if registry_ref is None and registry_repo is not None:
+        registry_ref = data_registry.registry_owner_ref(registry_repo)
+    record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'],
+                 **registry_options(registry_repo, ref=registry_ref, writer=True))
     records = list(read_fills(args.out))
     excluded = set(args.exclude_policy)
     weighting = block_weights(records, args.length_reweight_cap, args.block_reweight)
@@ -1138,7 +1168,8 @@ def build(args):
                                  format='natlang.sft-chains/1: chains.pkl (exp0_sft --chains; sft_sources build '
                                         '--aux filled=PATH,share=S,replaces=teacher), report.json',
                                  license='derived: teacher providers\' licenses (registered with the WORKs)',
-                                 producer={'script': 'scripts/neuralese_data/filled_reasoning.py'})
+                                 producer={'script': 'scripts/neuralese_data/filled_reasoning.py'},
+                                 **registry_options(registry_repo, ref=registry_ref, writer=True))
     print(json.dumps({k: report[k] for k in ('counts', 'chains', 'forward_tokens', 'weighted_target_tokens',
                                              'filled_share')}), flush=True)
 
@@ -1382,6 +1413,10 @@ def build_parser():
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
     b.add_argument('--corpus', required=True)
+    for parser in (g, b):
+        parser.add_argument('--registry-repo', default=None,
+                            help='mutable live registry owner; static fills default to their pinned snapshot')
+        parser.add_argument('--registry-ref', default=None, help='published Git snapshot for live source admission')
     b.add_argument('--length-reweight-cap', type=float, default=4.,
                    help='cap of the per-cell weights that make trained blocks follow the student\'s own (0 opts out)')
     b.add_argument('--block-reweight', choices=('joint', 'length', 'off'), default='joint',

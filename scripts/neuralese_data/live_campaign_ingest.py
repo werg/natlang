@@ -119,11 +119,14 @@ def select(manifests, held_manifest, held, training, seen_keys, seen_goals, load
     return kept, records, dropped
 
 
-def ingest_once(campaign, work, held_manifest=None, extract=None):
+def ingest_once(campaign, work, held_manifest=None, extract=None, *, registry_repo=None, registry_ref=None):
     """Ingest every committed, not yet ingested directory; returns the new ingest records."""
     from sft_sources import held_closure, live_holdout_registry
     if extract is None:
         from sft_sources import extract
+    registry_repo = (data_registry.assert_registry_writable(registry_repo) if registry_repo is not None
+                     else data_registry.registry_owner_repo())
+    registry_ref = registry_ref if registry_ref is not None else data_registry.registry_owner_ref(registry_repo)
     campaign, work = Path(campaign).resolve(), Path(work)
     work.mkdir(parents=True, exist_ok=True)
     held_manifest = held_manifest or data_registry.role_path('held-eval')
@@ -150,7 +153,8 @@ def ingest_once(campaign, work, held_manifest=None, extract=None):
         if kept_all:
             extract(types.SimpleNamespace(work=str(work), rl=[], teacher=[], live_run=kept_all, live_capture_root=[],
                                           live_trajectory_out=None, out_name=name, october_teacher=[],
-                                          october_model=[], held_manifest=held_manifest))
+                                          october_model=[], held_manifest=held_manifest,
+                                          registry_repo=registry_repo, registry_ref=registry_ref))
         new = []
         with (work / 'ingest.jsonl').open('a') as handle:
             for directory, dataset, manifests, kept, records, dropped in batch:
@@ -182,12 +186,15 @@ def main():
         s.add_argument('--campaign', required=True, help='the campaign root (status.json, catalog.jsonl, wave dirs)')
         s.add_argument('--work', required=True, help='the sft_sources WORK this keeps growing')
         s.add_argument('--held-manifest', default=None, help='default: the registry role held-eval (held-v3)')
+        s.add_argument('--registry-repo', default=None, help='mutable dataset registry owner; code and held selection stay pinned')
+        s.add_argument('--registry-ref', default=None, help='published Git snapshot; default current owner publication')
         if name == 'poll':
             s.add_argument('--every', type=float, default=1800., help='seconds between scans')
     args = p.parse_args()
     while True:
         try:
-            ingest_once(args.campaign, args.work, args.held_manifest)
+            ingest_once(args.campaign, args.work, args.held_manifest, registry_repo=args.registry_repo,
+                        registry_ref=args.registry_ref)
         except Exception as error:
             if args.command == 'once':
                 raise

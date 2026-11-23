@@ -148,11 +148,18 @@ DERIVED_LICENSE = 'derived: each input keeps its registered license (teacher pro
 WORK_INCLUDE = ['*.jsonl.zst', '*.json', '*.jsonl', 'replay/*/rollouts.jsonl', 'replay/*/*.json']
 
 
-def record_work(work, inputs):
+def registry_options(repo, *, ref=None, writer=False):
+    """Only explicit live flows use the mutable registry; ordinary pinned readers keep their snapshot."""
+    return {**({('registry_repo' if writer else 'repo'): repo} if repo is not None else {}),
+            **({('registry_ref' if writer else 'ref'): ref} if ref is not None else {})}
+
+
+def record_work(work, inputs, *, registry_repo=None, registry_ref=None):
     data_registry.record_dataset(data_registry.dataset_id(work, 'sft-work'), work, kind='trajectories', include=WORK_INCLUDE, inputs=inputs,
                                  format='sft_sources WORK: episodes*.jsonl.zst (extracted episodes), replay.jsonl '
                                         '(verdicts), replay/<episode>/rollouts.jsonl (verified replays)',
-                                 license=DERIVED_LICENSE, closed=False)
+                                 license=DERIVED_LICENSE, closed=False,
+                                 **registry_options(registry_repo, ref=registry_ref, writer=True))
 
 
 def record_built(out, args, schema):
@@ -162,7 +169,8 @@ def record_built(out, args, schema):
               *[a.split('=', 1)[1].split(',')[0] for a in getattr(args, 'aux', None) or []]]
     data_registry.record_dataset(data_registry.dataset_id(out, 'sft-rows'), out, kind='sft-rows', format=f'{schema}: chains.pkl (exp0_sft --chains), '
                                  'rows.jsonl.zst, cases.jsonl, build.json', inputs=[i for i in inputs if i],
-                                 license=DERIVED_LICENSE)
+                                 license=DERIVED_LICENSE,
+                                 **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None), writer=True))
 
 
 def build_inputs(args):
@@ -300,7 +308,8 @@ def extract(args):
                                     getattr(args, 'live_capture_root', None) or [])
     data_registry.require_registered([*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
                                       *live_runs,
-                                      *(getattr(args, 'october_teacher', None) or [])])
+                                      *(getattr(args, 'october_teacher', None) or [])],
+                                     **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None)))
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
     episodes_out = work / f'{args.out_name}.jsonl.zst'
@@ -435,7 +444,8 @@ def extract(args):
                                                     'rl': args.rl, 'teacher': args.teacher, 'live_runs': live_runs,
                                                     'october_teacher': getattr(args, 'october_teacher', None) or []}, indent=1) + '\n')
     record_work(work, [*(r.split(':', 1)[1] if ':' in r else r for r in args.rl), *args.teacher,
-                       *live_runs, *(getattr(args, 'october_teacher', None) or [])])
+                       *live_runs, *(getattr(args, 'october_teacher', None) or [])],
+                **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None), writer=True))
     print(json.dumps(summary, indent=1))
 
 
@@ -1277,7 +1287,7 @@ def replay_episodes(args, episodes):
             future.add_done_callback(finished)
             pending.add(future)
         concurrent.futures.wait(pending)
-    record_work(work, [])
+    record_work(work, [], **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None), writer=True))
     print(json.dumps(dict(counts)), flush=True)
 
 
@@ -2554,7 +2564,8 @@ def distinct_candidates(core, threshold, funnel):
 
 
 def build(args):
-    data_registry.require_registered(build_inputs(args))
+    data_registry.require_registered(build_inputs(args),
+                                     **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None)))
     import random
     import numpy as np
     import pickle
@@ -3251,7 +3262,8 @@ def neuralese_text(args):
     closure, and each call's system prompt and tool schemas equal to ones the current runtime rendered in an exact replay
     (calls with an unseen surface are dropped). Writes OUT/chains.pkl (`exp0_sft.py train --chains`, the build's format),
     OUT/rows.jsonl.zst and OUT/build.json."""
-    data_registry.require_registered(build_inputs(args))
+    data_registry.require_registered(build_inputs(args),
+                                     **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None)))
     import random
     import numpy as np
     import pickle
@@ -3384,7 +3396,8 @@ def neuralese_graph(args):
     closure, and each call's system prompt and tool schemas equal to ones the current runtime rendered in an exact
     replay (an episode with a call on an unseen surface is dropped whole: its graph would lose a dependency). Writes
     OUT/chains.pkl (`exp0_sft.py train --chains`), OUT/rows.jsonl.zst and OUT/build.json."""
-    data_registry.require_registered(build_inputs(args))
+    data_registry.require_registered(build_inputs(args),
+                                     **registry_options(getattr(args, 'registry_repo', None), ref=getattr(args, 'registry_ref', None)))
     import random
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
@@ -3674,6 +3687,9 @@ def main():
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
+    for parser in (e, r, c, b, n, g):
+        parser.add_argument('--registry-repo', default=None, help='explicit live dataset registry owner; default pinned snapshot')
+        parser.add_argument('--registry-ref', default=None, help='published Git snapshot for explicit live admission')
     args = p.parse_args()
     if hasattr(args, 'held_manifest') and not args.held_manifest:
         args.held_manifest = data_registry.role_path('held-eval')
