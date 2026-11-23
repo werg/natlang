@@ -1,271 +1,718 @@
 #!/usr/bin/env python3
-"""Shared four-arm flagship benchmark harness (plans/semantic-fp/06_FLAGSHIP_APPLICATIONS.md §4, A0).
+"""Flagship benchmark harness (plans/semantic-fp/06 §4, brief B14): arms A-D on an app's held split, WS6 metrics.
 
-Usage:
-    bench.py split --app APP --fixtures PATH           label train/held splits via held-v4 share rule
-    bench.py compare ARM_A.json ARM_D.json             paired permutation p + task bootstrap CI + cost/safety delta
-    bench.py run --app APP --fixtures PATH --arms A,B,C,D --runner CMD --out DIR
+    bench.py split APP --fixtures PATH [--out PATH]   # label any fixture pack's rows: split_group, split train|held
+    bench.py setup APP --work WORK --base-profile P --policy-profile Q   # WORK/config with the bench profiles
+    bench.py run APP --work WORK [--arms A,B,C-reasoned,C-instant,D-reasoned,D-instant] [--samples K]
+    bench.py prepare-d APP --work WORK [--steps record,specialize,tune]   # arm D's compiled state, train split only
+    bench.py report APP --work WORK [--out APP/bench/results/DATE.json] [--reading TEXT]
+    bench.py compare RESULT.json [OTHER.json] --arm X [--against A]   # paired comparison from result files
+
+Local arms need their native server up: ``NATLANG_CONFIG_HOME=WORK/config natlang serve --profile bench-base`` (or
+``bench-policy``) under the memory ledger; the profiles' launchers admit the server itself as a ledger unit.
+
+APP holds ``bench/bench.json`` (target, fixtures, verifier, the frontier arm's prose prompt and submit tool),
+``bench/fixtures.json`` (rows: id, split_group, split train|held, arguments, expected) and ``bench/verify.py``
+(``verify(expected, output) -> {passed, checks, safety}``). Every arm runs on the held split only.
 
 Arms (WS6 §4):
-  A: frontier unstructured agent loop (prose task prompt + same services)
-  B: the natlang program on the frontier model
-  C: the natlang program on base LFM3-1.7B, no compiled cases, no escalation
-  D: the natlang program on current policy after specialize/tune + escalate to Arm B's model
+  A   the frontier model in a standard tool loop with a prose task prompt (``frontier_loop.mjs``: natlang's Pi provider
+      transport, `natlang auth` credentials; the app's services are its tools, plus the submit tool)
+  B   the natlang program on the same frontier model (profile ``bench-frontier``; no compiled cases, no escalation)
+  C   the program on base LFM3-1.7B (``bench-base``; no compiled cases, no escalation)
+  D   the program on the current policy (``bench-policy``) after ``natlang specialize`` and ``natlang tune`` on the
+      train split, escalating to B's model (the profile's ``escalate``)
+  C and D run in two decision modes: ``reasoned`` (``readout: decision`` reasons first, the default) and ``instant``
+  (``NATLANG_DECISION_SAMPLES=0``: every decision read out without reasoning, as ``readout: instant``).
+
+B-D run the program as users do (``natlang run COPY --target T --profile P -- ARGS``, COPY = WORK/app, or WORK/app-D
+for arm D, whose tune release and train-split examples.json apply to it alone), one process per unit, with
+NATLANG_CONFIG_HOME = WORK/config (the bench profiles; ``credentials`` links to the user's store, never read here) and
+NATLANG_CALL_STORE = WORK/calls/<arm> (each arm its own call store, never the machine's). Accounting comes from the unit's reduction traces:
+model requests (tokens, duration, actor), decision readouts, tier events (``tier3`` = a compiled crisp case served).
+
+Metrics per arm: verifier pass rate (bootstrap CI over units; vs A: mean per-unit pass-rate change with the within-unit
+permutation p and unit-bootstrap CI of ``held_eval._rate_change``, and the exact sign test over units), p50/p95 latency (unit
+span in the traces; A: the loop's wall time), tokens and dollars per 100 units (frontier at list price from Pi's
+catalog; local at measured GPU-seconds, the wall time the local server was busy with the arm's requests, priced at
+``--local-usd-per-gpu-hour``), crisp-served, local-resolved and escalation shares of natural-language calls, and the
+verifier's safety counters.
 """
 from __future__ import annotations
 
 import argparse
-import datetime as dt
+import concurrent.futures
+import datetime
+import importlib.util
 import json
-import math
+import os
 import random
+import shutil
+import statistics
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Iterable
 
-REPO = Path(__file__).resolve().parents[2]
-if str(REPO / 'training' / 'neuralese') not in sys.path:
-    sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+REPO = Path(os.environ.get('NATLANG_REPO') or Path(__file__).resolve().parents[2])
+sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
+from natlang_neuralese.common import code_provenance  # noqa: E402
+from natlang_neuralese.rl import held_eval  # noqa: E402
 
-from natlang_neuralese.rl.held_eval import reservation_share_held  # noqa: E402
-
-SCHEMA = 'natlang.flagship-bench/1'
-FLAGSHIP_SHARE_RULE = {'pattern': r'^flagship:', 'seed': 'held-v4-flagship', 'share': 0.2}
-ARMS = ('A', 'B', 'C', 'D')
-
-
-def split_group_for(app: str, group: str) -> str:
-    """Canonical WS6 §1.4 split group: ``flagship:<app>:<group>``."""
-    prefix = f'flagship:{app}:'
-    return group if group.startswith('flagship:') else f'{prefix}{group}'
-
-
-def is_held_group(app: str, group: str, rule: dict[str, Any] = FLAGSHIP_SHARE_RULE) -> bool:
-    """Deterministic held-v4 reservation check for flagship fixture rows."""
-    return bool(reservation_share_held(rule, split_group_for(app, group)))
+NODE = os.environ.get('NATLANG_NODE') or shutil.which('node') or 'node'
+NATLANG = [NODE, str(REPO / 'scripts' / 'natlang')]
+FRONTIER = {'provider': 'openai-codex', 'model': 'gpt-6-luna', 'piOptions': {'reasoningEffort': 'low'}}
+# Pi's catalog (node_modules/@earendil-works/pi-ai/dist/providers/data/openai.json, gpt-6-luna, openai-responses): USD per
+# million tokens, below 272k input tokens. The openai-codex catalog lists 0 (subscription), so list price is OpenAI's.
+LIST_PRICE = {'gpt-6-luna': {'input': 0.10, 'cache_read': 0.01, 'cache_write': 0.125, 'output': 0.50}}
+ARMS = ('A', 'B', 'C-reasoned', 'C-instant', 'D-reasoned', 'D-instant')
+DEFAULT_LOCAL_USD_PER_GPU_HOUR = 1.0
+# Failures of the serving infrastructure, not of the program or its model: never a verdict (rerun, excluded from
+# reports). A unit past --unit-timeout is the program's failure (held_eval counts timeouts as failures too).
+INFRA_ERRORS = ('OutOfMemoryError', 'CUDA out of memory', 'ECONNREFUSED', 'fetch failed', 'socket hang up',
+                'the model or its runtime is unavailable', 'exit 3:')
 
 
-def label_fixtures(app: str, rows: Iterable[dict[str, Any]], *, rule: dict[str, Any] = FLAGSHIP_SHARE_RULE) -> list[dict[str, Any]]:
-    """Attach canonical ``split_group`` and ``split`` ('held' | 'train') to every fixture row."""
-    out: list[dict[str, Any]] = []
-    for idx, row in enumerate(rows):
-        copy = dict(row)
-        raw_group = str(copy.get('split_group') or copy.get('group') or copy.get('id') or f'item-{idx}')
-        sg = split_group_for(app, raw_group)
-        copy['split_group'] = sg
-        copy['split'] = 'held' if is_held_group(app, sg, rule) else 'train'
-        out.append(copy)
+def infra_error(error):
+    return bool(error) and any(marker in error for marker in INFRA_ERRORS)
+
+
+# ---- fixture splits (WS6 §1.4) ----------------------------------------------------------------------------------------
+# held-v4's share rule for flagship packs (ops/held-v4/reservations.json ``share_rules``): a row whose split group falls in
+# the held share is reserved for held-v4 from the moment it exists, and the pack's held split is exactly those rows.
+FLAGSHIP_SHARE_RULE = {'pattern': '^flagship:', 'share': 0.2, 'seed': 'held-v4-flagship'}
+
+
+def split_group_for(app, group):
+    """The canonical split group ``flagship:<app>:<group>`` (a group already under ``flagship:`` is kept)."""
+    return group if str(group).startswith('flagship:') else f'flagship:{app}:{group}'
+
+
+def label_fixtures(app, rows, rule=FLAGSHIP_SHARE_RULE):
+    """Each row with its canonical ``split_group`` (from ``split_group``, ``group`` or ``id``) and ``split``."""
+    out = []
+    for index, row in enumerate(rows):
+        group = split_group_for(app, row.get('split_group') or row.get('group') or row.get('id') or f'item-{index}')
+        out.append({**row, 'split_group': group,
+                    'split': 'held' if held_eval.reservation_share_held(rule, group) else 'train'})
     return out
 
 
-def percentile(values: list[float], p: float) -> float | None:
+# ---- the app ---------------------------------------------------------------------------------------------------------
+
+def load_app(app):
+    app = Path(app).resolve()
+    spec = json.loads((app / 'bench' / 'bench.json').read_text())
+    fixtures = json.loads((app / 'bench' / spec['fixtures']).read_text())
+    loader = importlib.util.spec_from_file_location('bench_verify', app / 'bench' / spec['verifier'])
+    verifier = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(verifier)
+    manifest = json.loads((app / 'natlang.json').read_text())
+    target = manifest['targets'][spec['target']]
+    defaults = {a['name']: a['default'] for a in target.get('arguments', []) if 'default' in a}
+    return {'dir': app, 'spec': spec, 'rows': fixtures['rows'], 'verify': verifier.verify, 'defaults': defaults,
+            'manifest': manifest}
+
+
+def split_rows(app, split):
+    return [r for r in app['rows'] if r['split'] == split]
+
+
+# ---- the workspace: bench profiles ----------------------------------------------------------------------------------
+
+def setup_config(work, policy_profile=None, base_profile=None):
+    """WORK/config/config.json with the bench profiles. Native blocks are copied from the user's config profiles
+    (``natlang setup --native`` wrote them); credentials link to the user's store."""
+    user = Path(os.environ.get('NATLANG_USER_CONFIG_HOME') or Path.home() / '.config' / 'natlang')
+    config_dir = work / 'config'
+    config_dir.mkdir(parents=True, exist_ok=True)
+    if not (config_dir / 'credentials').exists():
+        (config_dir / 'credentials').symlink_to(user / 'credentials')
+    path = config_dir / 'config.json'
+    config = json.loads(path.read_text()) if path.exists() else {'profiles': {}}
+    config['profiles']['bench-frontier'] = {'provider': FRONTIER['provider'], 'model': FRONTIER['model'],
+                                            'piOptions': FRONTIER['piOptions']}
+    users = json.loads((user / 'config.json').read_text()).get('profiles', {})
+    for name, source in (('bench-base', base_profile), ('bench-policy', policy_profile)):
+        if source:
+            profile = dict(users[source]) if source in users else json.loads(Path(source).read_text())
+            config['profiles'][name] = profile
+    if 'bench-policy' in config['profiles']:
+        config['profiles']['bench-policy']['escalate'] = 'bench-frontier'
+        config['tune'] = {**config.get('tune', {}), 'student': 'bench-policy'}
+    for name in ('bench-base', 'bench-policy'):
+        native = config['profiles'].get(name, {}).get('native')
+        if native:   # this checkout's engine, admitted through the memory ledger (memory is tight: a modest budget)
+            native.update(python=str(REPO / '.venv-neuralese' / 'bin' / 'python'),
+                          pythonPath=[str(REPO / 'training' / 'neuralese'), str(REPO)],
+                          launcher=['/usr/bin/python3', str(REPO / 'scripts' / 'memory_ledger.py'), 'run', '--unit', '{unit}',
+                                    '--budget-gb', '16', '--priority', 'medium', '--wait', '7200', '--'],
+                          stop=['systemctl', '--user', 'stop', '{unit}.service'], memoryGb=14, startTimeoutMs=7200000)
+            native.setdefault('port', 18472 if name == 'bench-base' else 18471)
+            # at most 4 requests in flight on the server: more ran its 14 GB out of memory on 4-5k-token tool-loop calls
+            config['profiles'][name]['concurrency'] = 4
+    config['defaultProfile'] = 'bench-frontier'
+    path.write_text(json.dumps(config, indent=1) + '\n')
+    return config
+
+
+def arm_config(arm):
+    """(profile, escalate, environment) of a program arm."""
+    mode = arm.split('-', 1)[1] if '-' in arm else None
+    env = {'NATLANG_DECISION_SAMPLES': '0'} if mode == 'instant' else {}
+    if arm == 'B':
+        return 'bench-frontier', 'none', {'NATLANG_SPECIALIZATION': 'off'}
+    if arm.startswith('C'):
+        return 'bench-base', 'none', {**env, 'NATLANG_SPECIALIZATION': 'off'}
+    if arm.startswith('D'):
+        return 'bench-policy', 'bench-frontier', env
+    raise ValueError(arm)
+
+
+def program_env(work, arm):
+    env = dict(os.environ)
+    env['NATLANG_CONFIG_HOME'] = str(work / 'config')
+    # Each arm its own call store, never the machine's: held units recorded by one arm must not reach another arm's
+    # compiled cases (arm D's instant and reasoned variants share one: specialize compiles its train-split recordings)
+    env['NATLANG_CALL_STORE'] = str(work / 'calls' / arm.split('-')[0])
+    env.update(arm_config(arm)[2])
+    return env
+
+
+def app_copy(app, work, arm):
+    """The program as an arm runs it, copied under WORK so builds and tune releases stay out of the repository: arm D
+    has its own copy (its tune release and train-split examples.json apply to D only), the other arms share one."""
+    return work / ('app-D' if arm.startswith('D') else 'app')
+
+
+def prepare_app(app, work, arm):
+    """Copy the program for ``arm`` once and build it, before units run in parallel (one build, no racing copies)."""
+    dest = app_copy(app, work, arm)
+    if not dest.exists():
+        shutil.copytree(app['dir'], dest, ignore=shutil.ignore_patterns('.natlang', 'bench', 'node_modules'))
+    env = {**os.environ, 'NATLANG_CONFIG_HOME': str(work / 'config')}
+    proc = subprocess.run([*NATLANG, 'build', str(dest)], env=env, capture_output=True, text=True)
+    if proc.returncode:
+        raise SystemExit(f'natlang build {dest} failed: {proc.stderr[-2000:]}')
+    return dest
+
+
+def target_args(arguments):
+    out = []
+    for name, value in arguments.items():
+        out += [f'--{name}', value if isinstance(value, str) else json.dumps(value)]
+    return out
+
+
+# ---- running ---------------------------------------------------------------------------------------------------------
+
+def run_program_unit(app, work, arm, row, sample, *, timeout):
+    unit = work / 'runs' / arm / row['id'] / f's{sample}'
+    done = unit / 'result.json'
+    if done.exists():
+        record = json.loads(done.read_text())
+        if not infra_error(record.get('error')):
+            return record
+    if unit.exists():
+        shutil.rmtree(unit)
+    unit.mkdir(parents=True)
+    profile, escalate, _ = arm_config(arm)
+    command = [*NATLANG, 'run', str(app_copy(app, work, arm)), '--target', app['spec']['target'], '--profile', profile,
+               '--escalate', escalate, '--traces', str(unit / 'traces'), '--plain', '--progress', 'off', '--',
+               *target_args(row['arguments'])]
+    started = time.time()
+    try:
+        proc = subprocess.run(command, env=program_env(work, arm), capture_output=True, text=True, timeout=timeout)
+        code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired as error:
+        code, stdout, stderr = 'timeout', error.stdout or '', error.stderr or ''
+        stdout, stderr = (s.decode() if isinstance(s, bytes) else s for s in (stdout, stderr))
+    wall = time.time() - started
+    (unit / 'stderr.txt').write_text(stderr)
+    output, error = None, None
+    if code == 0:
+        try:
+            output = json.loads(stdout)
+        except json.JSONDecodeError:
+            error = 'stdout is not JSON'
+    else:
+        error = f'exit {code}: ' + (stderr.strip().splitlines() or [''])[-1][:300]
+    result = {'id': row['id'], 'sample': sample, 'output': output, 'error': error, 'process_wall_s': round(wall, 3),
+              'accounting': trace_accounting(unit / 'traces')}
+    if not infra_error(error):   # an outage of the serving infrastructure is no result: rerun it
+        done.write_text(json.dumps(result) + '\n')
+    return result
+
+
+def frontier_user(app, row):
+    spec = app['spec']['frontier']
+    values = {**app['defaults'], **row['arguments']}
+    text = spec['user']
+    for name, kind in spec['arguments'].items():
+        text = text.replace('{' + name + '}', json.dumps(values[name], indent=1) if kind == 'json' else str(values[name]))
+    return text
+
+
+def run_frontier(app, work, rows, samples, *, concurrency):
+    out_dir = work / 'runs' / 'A'
+    out_dir.mkdir(parents=True, exist_ok=True)
+    results = {}
+    for path in out_dir.glob('*.json'):
+        record = json.loads(path.read_text())
+        results[(record['id'], record['sample'])] = record
+    todo = [(row, s) for row in rows for s in range(samples) if (row['id'], s) not in results]
+    if todo:
+        spec = app['spec']['frontier']
+        tools = spec['tools'] + [service['tool'] for service in app['spec'].get('services', [])]
+        job = {**FRONTIER, 'system': spec['system'], 'tools': tools, 'submit': spec['submit'], 'max_turns': 4,
+               'concurrency': concurrency, 'units': [{'id': f"{row['id']}#{s}", 'user': frontier_user(app, row)} for row, s in todo]}
+        proc = subprocess.run([NODE, str(REPO / 'scripts' / 'semantic_fp' / 'frontier_loop.mjs')], input=json.dumps(job),
+                              capture_output=True, text=True)
+        if proc.returncode:
+            raise SystemExit('frontier loop failed: ' + proc.stderr[-2000:])
+        for line in proc.stdout.splitlines():
+            record = json.loads(line)
+            ident, sample = record['id'].rsplit('#', 1)
+            record.update(id=ident, sample=int(sample))
+            if record.get('error', '').startswith('transport'):
+                continue   # a provider failure is no verdict: rerun it
+            (out_dir / f'{ident}.s{sample}.json').write_text(json.dumps(record) + '\n')
+            results[(ident, int(sample))] = record
+    return [results[(row['id'], s)] for row in rows for s in range(samples) if (row['id'], s) in results]
+
+
+# ---- accounting from traces ----------------------------------------------------------------------------------------
+
+def is_frontier(actor):
+    return str((actor or {}).get('id') or '').startswith(('gpt-', 'claude-', 'gemini-'))
+
+
+def trace_accounting(directory):
+    acc = {'calls': 0, 'model_calls': 0, 'frontier_calls': 0, 'crisp_served': 0, 'decisions_scored': 0,
+           'decisions_generated': 0, 'local': {'prompt': 0, 'completion': 0, 'cached': 0, 'requests': 0, 'ms': 0},
+           'frontier': {'prompt': 0, 'completion': 0, 'cached': 0, 'requests': 0, 'ms': 0}, 'span_ms': None,
+           'local_intervals': []}
+    first = last = None
+    for path in sorted(Path(directory).glob('*.jsonl')) if Path(directory).exists() else ():
+        actors, served_crisp, internal, call = set(), False, False, False
+        for line in path.read_text().splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            stamp = event.get('observed_at')
+            if stamp:
+                t = datetime.datetime.fromisoformat(stamp.replace('Z', '+00:00')).timestamp()
+                first, last = (t if first is None else min(first, t)), (t if last is None else max(last, t))
+            kind = event.get('kind')
+            busy = (t - float(event.get('duration_ms') or 0) / 1000, t) if stamp and event.get('duration_ms') else None
+            if kind == 'manifest':
+                internal, call = bool(event.get('parent_call_id')), bool(event.get('definition_id'))
+            elif kind == 'model_request' and event.get('phase') == 'end':
+                side = 'frontier' if is_frontier(event.get('actor')) else 'local'
+                actors.add(side)
+                bucket = acc[side]
+                bucket['prompt'] += int(event.get('prompt_tokens') or 0)
+                bucket['completion'] += int(event.get('completion_tokens') or 0)
+                bucket['cached'] += int(event.get('cached_tokens') or 0)
+                bucket['requests'] += 1
+                bucket['ms'] += float(event.get('duration_ms') or 0)
+                if side == 'local' and busy:
+                    acc['local_intervals'].append(busy)
+            elif kind == 'decision_readout' and event.get('phase') not in ('unavailable', 'start', None):
+                scored = event.get('scored') not in (False, 'False')
+                acc['decisions_scored' if scored else 'decisions_generated'] += 1
+                if scored:   # a scored readout makes no model_request: its time and tokens are in the readout event
+                    side = 'frontier' if is_frontier(event.get('actor')) else 'local'
+                    actors.add(side)
+                    acc[side]['ms'] += float(event.get('duration_ms') or 0)
+                    if side == 'local' and busy:
+                        acc['local_intervals'].append(busy)
+                    acc[side]['prompt'] += int(event.get('prompt_tokens') or 0)
+                    acc[side]['completion'] += int(event.get('completion_tokens') or event.get('reasoning_tokens') or 0)
+            elif kind == 'tier_served' and event.get('tier') == 'tier3':
+                served_crisp = True
+        if internal or not call:
+            continue   # a call made inside another call is part of its parent's work; iteration traces are no calls
+        acc['calls'] += 1
+        acc['crisp_served'] += served_crisp and not actors
+        acc['model_calls'] += bool(actors)
+        acc['frontier_calls'] += 'frontier' in actors
+    if first is not None:
+        acc['span_ms'] = round((last - first) * 1000)
+    return acc
+
+
+# ---- metrics ---------------------------------------------------------------------------------------------------------
+
+def busy_seconds(intervals):
+    """Wall time covered by at least one of ``intervals`` ((start, end) seconds): how long the local server was busy."""
+    total, end = 0., None
+    for start, stop in sorted(intervals):
+        if end is None or start > end:
+            total += stop - start
+            end = stop
+        elif stop > end:
+            total += stop - end
+            end = stop
+    return total
+
+
+def percentile(values, q):
     if not values:
         return None
-    ordered = sorted(values)
-    k = (len(ordered) - 1) * max(0.0, min(1.0, p))
-    lo, hi = math.floor(k), math.ceil(k)
-    if lo == hi:
-        return round(ordered[lo], 4)
-    return round(ordered[lo] + (ordered[hi] - ordered[lo]) * (k - lo), 4)
+    values = sorted(values)
+    return values[min(len(values) - 1, int(round(q * (len(values) - 1))))]
 
 
-def summarize_arm(arm: str, records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate per-item execution records into WS6 §4 arm metrics."""
-    n = len(records)
-    if n == 0:
-        return {
-            'arm': arm, 'items': 0, 'pass_rate': 0.0, 'mean_score': 0.0,
-            'p50_ms': None, 'p95_ms': None, 'tokens_per_100': 0.0, 'dollars_per_100': 0.0,
-            'crisp_share': 0.0, 'local_share': 0.0, 'escalation_share': 0.0,
-            'safety': {'unverified_commits': 0, 'injection_escapes': 0, 'schema_violations': 0},
-            'records': [],
-        }
-    passes = [1.0 if r.get('passed') else 0.0 for r in records]
-    scores = [float(r.get('score', 1.0 if r.get('passed') else 0.0)) for r in records]
-    latencies = [float(r['latency_ms']) for r in records if r.get('latency_ms') is not None]
-    total_tokens = sum(float(r.get('tokens', 0.0)) for r in records)
-    total_dollars = sum(float(r.get('dollars', 0.0)) for r in records)
-    total_units = sum(max(0, int(r.get('units', 1))) for r in records) or n
-    crisp_units = sum(float(r.get('crisp_units', 0.0)) for r in records)
-    local_units = sum(float(r.get('local_units', 0.0)) for r in records)
-    escalated_units = sum(float(r.get('escalated_units', 0.0)) for r in records)
-    safety = {
-        'unverified_commits': sum(int((r.get('safety') or {}).get('unverified_commits', 0)) for r in records),
-        'injection_escapes': sum(int((r.get('safety') or {}).get('injection_escapes', 0)) for r in records),
-        'schema_violations': sum(int((r.get('safety') or {}).get('schema_violations', 0)) for r in records),
-    }
-    return {
-        'arm': arm,
-        'items': n,
-        'pass_rate': round(sum(passes) / n, 6),
-        'mean_score': round(sum(scores) / n, 6),
-        'p50_ms': percentile(latencies, 0.50),
-        'p95_ms': percentile(latencies, 0.95),
-        'tokens_per_100': round(total_tokens * 100.0 / total_units, 2),
-        'dollars_per_100': round(total_dollars * 100.0 / total_units, 6),
-        'crisp_share': round(crisp_units / total_units, 4),
-        'local_share': round(local_units / total_units, 4),
-        'escalation_share': round(escalated_units / total_units, 4),
-        'safety': safety,
-        'records': records,
-    }
-
-
-def paired_compare(arm_a: dict[str, Any], arm_b: dict[str, Any], *,
-                   permutations: int = 2000, bootstraps: int = 2000, seed: int = 20261123) -> dict[str, Any]:
-    """Paired within-item comparison (arm_b - arm_a): delta pass rate, two-sided permutation p, 95% bootstrap CI."""
-    by_id_a = {str(r['id']): (1.0 if r.get('passed') else 0.0) for r in arm_a.get('records', [])}
-    by_id_b = {str(r['id']): (1.0 if r.get('passed') else 0.0) for r in arm_b.get('records', [])}
-    shared = sorted(set(by_id_a) & set(by_id_b))
-    if not shared:
-        return {'paired_items': 0, 'delta_pass_rate': 0.0, 'p_value': 1.0, 'ci95': [0.0, 0.0],
-                'wins': 0, 'losses': 0, 'ties': 0, 'cost_ratio': None}
-    diffs = [by_id_b[i] - by_id_a[i] for i in shared]
-    n = len(diffs)
-    observed = sum(diffs) / n
+def bootstrap_ci(per_unit, resamples=10000, seed=0):
+    """95% unit-bootstrap interval of the mean pass rate ({unit: [successes, n]})."""
+    units = list(per_unit)
+    if not units:
+        return None
     rng = random.Random(seed)
-    extreme = 0
-    for _ in range(permutations):
-        perm = sum(d if rng.getrandbits(1) else -d for d in diffs) / n
-        if abs(perm) >= abs(observed) - 1e-12:
-            extreme += 1
-    p_value = (extreme + 1) / (permutations + 1)
-    boot = sorted(sum(diffs[rng.randrange(n)] for _ in range(n)) / n for _ in range(bootstraps))
-    lo = boot[int(0.025 * bootstraps)]
-    hi = boot[min(bootstraps - 1, int(0.975 * bootstraps))]
-    cost_a = float(arm_a.get('dollars_per_100') or 0.0)
-    cost_b = float(arm_b.get('dollars_per_100') or 0.0)
-    return {
-        'paired_items': n,
-        'arm_a': arm_a.get('arm'),
-        'arm_b': arm_b.get('arm'),
-        'delta_pass_rate': round(observed, 6),
-        'p_value': round(p_value, 6),
-        'ci95': [round(lo, 6), round(hi, 6)],
-        'wins': sum(1 for d in diffs if d > 0),
-        'losses': sum(1 for d in diffs if d < 0),
-        'ties': sum(1 for d in diffs if d == 0),
-        'cost_ratio': round(cost_b / cost_a, 6) if cost_a > 0 else None,
-        'beats': observed > 0 and p_value < 0.05,
-    }
+    rates = {u: s / n for u, (s, n) in per_unit.items()}
+    boot = sorted(sum(rates[rng.choice(units)] for _ in units) / len(units) for _ in range(resamples))
+    return [round(boot[int(.025 * resamples)], 4), round(boot[int(.975 * resamples) - 1], 4)]
 
 
-def run_benchmark(app: str, fixtures: list[dict[str, Any]], *,
-                  arms: Iterable[str] = ARMS,
-                  executor: Callable[[str, dict[str, Any]], dict[str, Any]],
-                  split: str = 'held') -> dict[str, Any]:
-    """Run requested arms on the app's held split (WS6 §4) and return the structured benchmark report."""
-    labeled = label_fixtures(app, fixtures)
-    selected = [row for row in labeled if row['split'] == split] if split != 'all' else labeled
-    arm_reports: dict[str, Any] = {}
-    for arm in arms:
-        records: list[dict[str, Any]] = []
-        for item in selected:
-            t0 = time.perf_counter()
-            res = dict(executor(arm, item))
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
-            res.setdefault('id', item.get('id') or item['split_group'])
-            res.setdefault('split_group', item['split_group'])
-            res.setdefault('latency_ms', round(elapsed_ms, 3))
-            records.append(res)
-        arm_reports[arm] = summarize_arm(arm, records)
-    comparisons: dict[str, Any] = {}
-    if 'A' in arm_reports:
-        for other in ('B', 'C', 'D'):
-            if other in arm_reports:
-                comparisons[f'{other}_vs_A'] = paired_compare(arm_reports['A'], arm_reports[other])
-    return {
-        'schema': SCHEMA,
-        'app': app,
-        'date': dt.date.today().isoformat(),
-        'split': split,
-        'total_fixtures': len(labeled),
-        'evaluated_items': len(selected),
-        'arms': arm_reports,
-        'comparisons': comparisons,
-    }
+def usd_frontier(tokens, model=FRONTIER['model']):
+    price = LIST_PRICE[model]
+    uncached = max(0, tokens['prompt'] - tokens['cached'])
+    return (uncached * price['input'] + tokens['cached'] * price['cache_read'] + tokens['completion'] * price['output']) / 1e6
 
 
-def _load_fixtures(path: Path) -> list[dict[str, Any]]:
-    text = path.read_text(encoding='utf-8').strip()
-    if not text:
-        return []
-    if path.suffix == '.jsonl':
-        return [json.loads(line) for line in text.splitlines() if line.strip()]
-    data = json.loads(text)
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict) and isinstance(data.get('items'), list):
-        return data['items']
-    raise ValueError(f'Unsupported fixture format in {path}')
-
-
-def _subprocess_executor(runner: str) -> Callable[[str, dict[str, Any]], dict[str, Any]]:
-    def _run(arm: str, item: dict[str, Any]) -> dict[str, Any]:
-        proc = subprocess.run(
-            runner,
-            input=json.dumps({'arm': arm, 'item': item}),
-            text=True,
-            capture_output=True,
-            shell=True,
-            check=True,
-        )
-        return json.loads(proc.stdout)
-    return _run
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description='Shared four-arm flagship benchmark harness (WS6 A0).')
-    sub = parser.add_subparsers(dest='cmd', required=True)
-
-    p_split = sub.add_parser('split', help='Label fixture rows with held-v4 flagship split groups.')
-    p_split.add_argument('--app', required=True)
-    p_split.add_argument('--fixtures', required=True, type=Path)
-    p_split.add_argument('--out', type=Path)
-
-    p_cmp = sub.add_parser('compare', help='Paired comparison of two arm JSON files.')
-    p_cmp.add_argument('arm_a', type=Path)
-    p_cmp.add_argument('arm_b', type=Path)
-
-    p_run = sub.add_parser('run', help='Execute arms on held fixtures via a JSON-stdio runner command.')
-    p_run.add_argument('--app', required=True)
-    p_run.add_argument('--fixtures', required=True, type=Path)
-    p_run.add_argument('--arms', default='A,B,C,D')
-    p_run.add_argument('--runner', required=True)
-    p_run.add_argument('--split', default='held', choices=('held', 'train', 'all'))
-    p_run.add_argument('--out', type=Path)
-
-    args = parser.parse_args(argv)
-    if args.cmd == 'split':
-        labeled = label_fixtures(args.app, _load_fixtures(args.fixtures))
-        held = sum(1 for r in labeled if r['split'] == 'held')
-        payload = {'app': args.app, 'total': len(labeled), 'held': held, 'train': len(labeled) - held, 'items': labeled}
-        rendered = json.dumps(payload, indent=2) + '\n'
-        if args.out:
-            args.out.parent.mkdir(parents=True, exist_ok=True)
-            args.out.write_text(rendered, encoding='utf-8')
+def summarize(app, arm, records, local_rate):
+    verdicts, per_unit, latencies, safety = [], {}, [], {}
+    totals = {'frontier': {'prompt': 0, 'completion': 0, 'cached': 0}, 'local': {'prompt': 0, 'completion': 0, 'cached': 0}}
+    gpu_ms, calls, crisp, model_calls, frontier_calls, errors = 0., 0, 0, 0, 0, 0
+    intervals = []
+    rows = {r['id']: r for r in app['rows']}
+    for record in records:
+        verdict = app['verify'](rows[record['id']]['expected'], record.get('output'))
+        if record.get('error'):
+            errors += 1
+        verdicts.append({'id': record['id'], 'sample': record['sample'], 'passed': verdict['passed'],
+                         'checks': verdict['checks'], 'error': record.get('error'), 'output': record.get('output')})
+        entry = per_unit.setdefault(record['id'], [0, 0])
+        entry[0] += bool(verdict['passed'])
+        entry[1] += 1
+        for key, value in verdict.get('safety', {}).items():
+            safety[key] = safety.get(key, 0) + value
+        if arm == 'A':
+            usage = record['usage']
+            totals['frontier']['prompt'] += usage['input'] + usage['cache_read'] + usage['cache_write']
+            totals['frontier']['cached'] += usage['cache_read']
+            totals['frontier']['completion'] += usage['output']
+            latencies.append(record['latency_ms'])
+            calls += 1
+            model_calls += 1
+            frontier_calls += 1
         else:
-            print(rendered, end='')
-        return 0
+            acc = record['accounting']
+            for side in ('frontier', 'local'):
+                for key in ('prompt', 'completion', 'cached'):
+                    totals[side][key] += acc[side][key]
+            gpu_ms += acc['local']['ms']
+            intervals += acc.get('local_intervals', [])
+            latencies.append(acc['span_ms'] if acc['span_ms'] is not None else record['process_wall_s'] * 1000)
+            calls += acc['calls']
+            crisp += acc['crisp_served']
+            model_calls += acc['model_calls']
+            frontier_calls += acc['frontier_calls']
+    n = len(records)
+    if not n:
+        return {'units': 0}, {}
+    frontier_usd = usd_frontier(totals['frontier'])
+    # GPU time: how long the local server was busy with this arm's requests (the union of their intervals), so parallel
+    # reasoning samples and concurrent units are not counted twice; the summed request time is reported beside it.
+    gpu_s = busy_seconds(intervals)
+    local_usd = gpu_s / 3600 * local_rate
+    per100 = 100 / n
+    checks = {}
+    for v in verdicts:
+        for key, value in v['checks'].items():
+            if isinstance(value, bool):
+                checks.setdefault(key, []).append(value)
+    return {
+        'units': len(per_unit), 'runs': n, 'errors': errors,
+        'pass_rate': round(sum(s for s, _ in per_unit.values()) / sum(c for _, c in per_unit.values()), 4),
+        'pass_rate_ci95_unit_bootstrap': bootstrap_ci(per_unit),
+        'check_rates': {k: round(sum(v) / len(v), 4) for k, v in checks.items()},
+        'latency_ms': {'p50': percentile(latencies, .5), 'p95': percentile(latencies, .95)},
+        'tokens_per_100_units': {side: {k: round(v * per100) for k, v in t.items()} for side, t in totals.items()},
+        'usd_per_100_units': {'frontier_list_price': round(frontier_usd * per100, 5), 'local_gpu': round(local_usd * per100, 5),
+                              'total': round((frontier_usd + local_usd) * per100, 5)},
+        'local_gpu_seconds_per_unit': round(gpu_s / n, 3),
+        'local_request_seconds_per_unit': round(gpu_ms / 1000 / n, 3),
+        'nl_calls': calls,
+        'crisp_served_share': round(crisp / calls, 4) if calls else None,
+        'local_resolved_share': round((calls - frontier_calls) / calls, 4) if calls else None,
+        'escalation_share': (round(frontier_calls / calls, 4) if calls else None) if arm.startswith('D') else None,
+        'safety': {'schema_violation': safety.get('schema_violation', 0), **{k: v for k, v in safety.items() if k != 'schema_violation'},
+                   'unverified_commits': 'n/a (no commits in this app)' if not app['spec'].get('services') else None,
+                   'injection_escapes': 'n/a (no untrusted boundary in this app)' if not app['spec'].get('services') else None},
+        'per_unit': verdicts,
+    }, per_unit
 
-    if args.cmd == 'compare':
-        a = json.loads(args.arm_a.read_text(encoding='utf-8'))
-        b = json.loads(args.arm_b.read_text(encoding='utf-8'))
-        print(json.dumps(paired_compare(a, b), indent=2))
-        return 0
 
-    arms = [a.strip().upper() for a in args.arms.split(',') if a.strip()]
-    report = run_benchmark(args.app, _load_fixtures(args.fixtures), arms=arms,
-                           executor=_subprocess_executor(args.runner), split=args.split)
-    rendered = json.dumps(report, indent=2) + '\n'
-    out = args.out or (REPO / 'applications' / args.app / 'bench' / 'results' / f"{report['date']}.json")
+def compare_to(reference, other, resamples=10000):
+    """``other`` against ``reference`` ({unit: [successes, n]}): held_eval's mean per-unit rate change, within-unit
+    permutation p and unit-bootstrap CI, the sign test over units, and ``beats`` (WS6 §3: higher, p < 0.05)."""
+    tasks = sorted(set(reference) & set(other))
+    change = held_eval._rate_change(reference, other, tasks, resamples=resamples)
+    only_ref = sum(reference[t][0] / reference[t][1] > other[t][0] / other[t][1] for t in tasks)
+    only_other = sum(other[t][0] / other[t][1] > reference[t][0] / reference[t][1] for t in tasks)
+    return {**change, 'units_only_reference_better': only_ref, 'units_only_this_better': only_other,
+            'unit_sign_p': round(held_eval.binomial_two_sided(only_ref, only_other), 4),
+            'beats': bool(change['delta'] is not None and change['delta'] > 0 and change['permutation_p'] < 0.05)}
+
+
+def per_unit_of(metrics):
+    """{unit: [successes, n]} from an arm's ``per_unit`` verdicts in a result file."""
+    out = {}
+    for verdict in metrics['per_unit']:
+        entry = out.setdefault(verdict['id'], [0, 0])
+        entry[0] += bool(verdict['passed'])
+        entry[1] += 1
+    return out
+
+
+# ---- commands --------------------------------------------------------------------------------------------------------
+
+def cmd_run(args):
+    app, work = load_app(args.app), Path(args.work).resolve()
+    work.mkdir(parents=True, exist_ok=True)
+    rows = split_rows(app, 'held')[:args.limit] if args.limit else split_rows(app, 'held')
+    for arm in args.arms.split(','):
+        if arm not in ARMS:
+            raise SystemExit(f'unknown arm {arm}; arms: {", ".join(ARMS)}')
+        started = time.time()
+        if arm == 'A':
+            records = run_frontier(app, work, rows, args.samples, concurrency=args.concurrency)
+        else:
+            prepare_app(app, work, arm)
+            with concurrent.futures.ThreadPoolExecutor(args.concurrency) as pool:
+                records = list(pool.map(lambda job: run_program_unit(app, work, arm, *job, timeout=args.unit_timeout),
+                                        [(row, s) for row in rows for s in range(args.samples)]))
+        passed = sum(bool(app['verify'](next(r for r in app['rows'] if r['id'] == rec['id'])['expected'], rec.get('output'))['passed'])
+                     for rec in records)
+        print(f'{arm}: {passed}/{len(records)} passed, {sum(bool(r.get("error")) for r in records)} errors, '
+              f'{time.time() - started:.0f}s', flush=True)
+
+
+def cmd_prepare_d(args):
+    """Arm D's compiled state, from the train split only: its examples become the program copy's examples.json;
+    each runs once on the policy (``record_examples``: the calls land in D's call store), ``natlang specialize`` compiles the
+    recorded calls into guarded crisp cases, and ``natlang tune`` trains the program's weights on the same examples
+    (teacher: the policy profile's ``escalate``, i.e. arm B's model)."""
+    app, work = load_app(args.app), Path(args.work).resolve()
+    rows = split_rows(app, 'train')
+    if args.limit:   # a seeded sample of the train split (fixtures are ordered by label: a prefix would be one class)
+        rows = random.Random(0).sample(rows, min(args.limit, len(rows)))
+    env = program_env(work, 'D-reasoned')
+    copy = prepare_app(app, work, 'D')
+    (copy / 'examples.json').write_text(json.dumps(app_module_examples(app, rows), indent=1) + '\n')
+    log = work / 'prepare-d.log'
+    steps = {
+        'specialize': [*NATLANG, 'specialize', '--profile', 'bench-frontier', '--program', str(copy)],
+        'tune': [*NATLANG, 'tune', str(copy)],
+    }
+    with log.open('a') as out:
+        for step in args.steps.split(','):
+            started = time.time()
+            if step == 'record':
+                out.write(f'== record: {record_examples(copy, env, args.concurrency)} ({time.time() - started:.0f}s)\n')
+                out.flush()
+                continue
+            proc = subprocess.run(steps[step], env=env, capture_output=True, text=True)
+            out.write(f'== {step} exit {proc.returncode} ({time.time() - started:.0f}s): {" ".join(steps[step][1:])}\n'
+                      f'{proc.stdout[-6000:]}\n{proc.stderr[-6000:]}\n')
+            out.flush()
+    print(log.read_text()[-6000:])
+
+
+def record_examples(copy, env, concurrency):
+    """Run each of the program copy's examples once on the policy (``natlang call FN --inputs``, ``concurrency`` at a
+    time: ``natlang test`` starts them all at once, which the reference server cannot hold), so arm D's call store holds
+    the train split's calls for ``natlang specialize``. Returns {examples, failed calls, wrong answers}."""
+    examples = json.loads((copy / 'examples.json').read_text())
+    inputs_dir = copy.parent / 'record-inputs'
+    inputs_dir.mkdir(exist_ok=True)
+
+    def one(indexed):
+        index, example = indexed
+        path, done = inputs_dir / f'{index}.json', inputs_dir / f'{index}.outcome'
+        if done.exists():   # resumable: an example recorded by an earlier launch is not called again
+            return done.read_text()
+        path.write_text(json.dumps(example['inputs']))
+        proc = subprocess.run([*NATLANG, 'call', str(copy / example['function']), '--inputs', str(path), '--json',
+                               '--profile', 'bench-policy'], env=env, capture_output=True, text=True, cwd=copy)
+        try:
+            outcome = 'failed' if proc.returncode else 'right' if json.loads(proc.stdout) == example['expected'] else 'wrong'
+        except json.JSONDecodeError:
+            outcome = 'failed'
+        if outcome != 'failed':
+            done.write_text(outcome)
+        return outcome
+    with concurrent.futures.ThreadPoolExecutor(concurrency) as pool:
+        outcomes = list(pool.map(one, enumerate(examples)))
+    return {'examples': len(examples), **{k: outcomes.count(k) for k in ('right', 'wrong', 'failed')}}
+
+
+def app_module_examples(app, rows):
+    """Root examples for ``natlang tune`` from train rows: the app's ``bench/tune_examples.py`` maps a row to
+    ``natlang test`` entries ({name, function, inputs, expected, group})."""
+    path = app['dir'] / 'bench' / 'tune_examples.py'
+    loader = importlib.util.spec_from_file_location('bench_tune_examples', path)
+    module = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(module)
+    return [entry for row in rows for entry in module.examples(row, app['defaults'])]
+
+
+def cmd_report(args):
+    app, work = load_app(args.app), Path(args.work).resolve()
+    rows = split_rows(app, 'held')
+    ids = {r['id'] for r in rows}
+    arms, per_units = {}, {}
+    for arm in ARMS:
+        if arm == 'A':
+            records = [json.loads(p.read_text()) for p in sorted((work / 'runs' / 'A').glob('*.json'))] if (work / 'runs' / 'A').exists() else []
+        else:
+            records = []
+            for path in sorted((work / 'runs' / arm).glob('*/s*/result.json')):
+                record = json.loads(path.read_text())
+                record['accounting'] = trace_accounting(path.parent / 'traces')   # the current accounting rules
+                records.append(record)
+        infra = sum(infra_error(r.get('error')) for r in records if r['id'] in ids)
+        records = [r for r in records if r['id'] in ids and not infra_error(r.get('error'))]
+        if not records:
+            continue
+        metrics, per_unit = summarize(app, arm, records, args.local_usd_per_gpu_hour)
+        metrics['infra_errors_excluded'] = infra
+        arms[arm] = metrics
+        per_units[arm] = per_unit
+    for arm in arms:
+        if arm != 'A' and 'A' in per_units:
+            arms[arm]['vs_A'] = compare_to(per_units['A'], per_units[arm])
+    for arm in arms:
+        if arm.startswith('D') and 'C' + arm[1:] in per_units:
+            arms[arm]['vs_C'] = compare_to(per_units['C' + arm[1:]], per_units[arm])
+    for arm in arms:   # cost of this arm per unit of arm A's
+        if arm != 'A' and 'A' in arms and arms['A']['usd_per_100_units']['total']:
+            arms[arm]['cost_ratio_vs_A'] = round(arms[arm]['usd_per_100_units']['total'] / arms['A']['usd_per_100_units']['total'], 3)
+    config = json.loads((work / 'config' / 'config.json').read_text())
+    result = {
+        'schema': 'natlang.bench-result/1', 'app': app['spec']['app'], 'date': datetime.date.today().isoformat(),
+        'code': code_provenance.code_provenance() if hasattr(code_provenance, 'code_provenance') else None,
+        'split': 'held', 'held_units': len(rows),
+        'arms_config': {
+            'A': {**FRONTIER, 'loop': 'frontier_loop.mjs: system + prose task, tools = app services + submit, <= 4 turns'},
+            'B': {'profile': config['profiles'].get('bench-frontier'), 'specialization': 'off', 'escalate': None,
+                  'decisions': 'generated (a Pi provider cannot score replies)'},
+            'C': {'profile': redact(config['profiles'].get('bench-base')), 'specialization': 'off', 'escalate': None},
+            'D': {'profile': redact(config['profiles'].get('bench-policy')), 'specialization': 'on (state from prepare-d)',
+                  'escalate': 'bench-frontier', 'prepare': (work / 'prepare-d.log').read_text()[-3000:] if (work / 'prepare-d.log').exists() else None},
+            'modes': {'reasoned': 'readout: decision reasons first (default decisionSamples)', 'instant': 'NATLANG_DECISION_SAMPLES=0'},
+        },
+        'pricing': {'frontier_usd_per_million_tokens': LIST_PRICE, 'frontier_price_source': 'pi-ai catalog openai.json (list)',
+                    'local_usd_per_gpu_hour': args.local_usd_per_gpu_hour,
+                    'local_gpu_seconds': 'wall time the local server was busy with the arm (union of its request intervals), '
+                                         'on the shared DGX GB10 and the Python native engine'},
+        'arms': arms,
+        'reading': args.reading,
+    }
+    out = Path(args.out) if args.out else app['dir'] / 'bench' / 'results' / f'{result["date"]}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(rendered, encoding='utf-8')
-    print(f'wrote {out} ({report["evaluated_items"]} {report["split"]} items across {", ".join(arms)})')
-    return 0
+    out.write_text(json.dumps(result, indent=1) + '\n')
+    for arm, m in arms.items():
+        vs = m.get('vs_A') or {}
+        print(f"{arm:11s} pass {m['pass_rate']:.3f} {m['pass_rate_ci95_unit_bootstrap']}  vs A {vs.get('delta')} "
+              f"{vs.get('ci95_task_bootstrap')} p={vs.get('permutation_p')}  p50 {m['latency_ms']['p50']}ms "
+              f"p95 {m['latency_ms']['p95']}ms  $/100 {m['usd_per_100_units']['total']}  crisp {m['crisp_served_share']} "
+              f"esc {m['escalation_share']} errors {m['errors']}")
+    print(out)
+
+
+def cmd_split(args):
+    app = Path(args.app).resolve().name if Path(args.app).exists() else args.app
+    data = json.loads(Path(args.fixtures).read_text())
+    rows = data if isinstance(data, list) else data.get('rows') or data.get('items') or []
+    labeled = label_fixtures(app, rows)
+    held = sum(row['split'] == 'held' for row in labeled)
+    text = json.dumps({'app': app, 'total': len(labeled), 'held': held, 'train': len(labeled) - held,
+                       'split_rule': FLAGSHIP_SHARE_RULE, 'rows': labeled}, indent=1) + '\n'
+    Path(args.out).write_text(text) if args.out else print(text, end='')
+
+
+def cmd_compare(args):
+    """Arm ``--arm`` of the second result file (default: the first) against ``--against`` of the first."""
+    first = json.loads(Path(args.result).read_text())
+    second = json.loads(Path(args.other).read_text()) if args.other else first
+    print(json.dumps(compare_to(per_unit_of(first['arms'][args.against]), per_unit_of(second['arms'][args.arm]),
+                                resamples=args.resamples), indent=1))
+
+
+def redact(profile):
+    if not profile:
+        return profile
+    native = profile.get('native') or {}
+    return {**{k: v for k, v in profile.items() if k != 'native'},
+            **({'native': {k: native.get(k) for k in ('sha256', 'source', 'step', 'checkpoint')}} if native else {})}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest='command', required=True)
+    run = sub.add_parser('run')
+    run.add_argument('app')
+    run.add_argument('--work', required=True)
+    run.add_argument('--arms', default=','.join(ARMS))
+    run.add_argument('--samples', type=int, default=1)
+    run.add_argument('--concurrency', type=int, default=4)
+    run.add_argument('--unit-timeout', type=float, default=1800)
+    run.add_argument('--limit', type=int)
+    setup = sub.add_parser('setup', help='write WORK/config with the bench profiles')
+    setup.add_argument('app')
+    setup.add_argument('--work', required=True)
+    setup.add_argument('--base-profile', help="a user config profile (or a profile JSON file) serving base LFM3")
+    setup.add_argument('--policy-profile', help='a user config profile (or a profile JSON file) serving the current policy; '
+                       'or run `natlang setup --native SOURCE --profile bench-policy` with NATLANG_CONFIG_HOME=WORK/config, '
+                       'then setup again')
+    prep = sub.add_parser('prepare-d')
+    prep.add_argument('app')
+    prep.add_argument('--work', required=True)
+    prep.add_argument('--steps', default='record,specialize,tune')
+    prep.add_argument('--concurrency', type=int, default=4)
+    prep.add_argument('--limit', type=int, help='train rows to use, a seeded sample (the reference engine on a shared '
+                      'GPU decodes ~15 tokens/s: the whole train split takes hours)')
+    report = sub.add_parser('report')
+    report.add_argument('app')
+    report.add_argument('--work', required=True)
+    report.add_argument('--out')
+    report.add_argument('--local-usd-per-gpu-hour', type=float, default=DEFAULT_LOCAL_USD_PER_GPU_HOUR)
+    report.add_argument('--reading', help='the honest reading of the result, recorded in the file')
+    split = sub.add_parser('split', help='label a fixture pack: canonical split_group and held-v4 split per row')
+    split.add_argument('app')
+    split.add_argument('--fixtures', required=True)
+    split.add_argument('--out')
+    compare = sub.add_parser('compare', help='paired comparison of two arms from result files')
+    compare.add_argument('result')
+    compare.add_argument('other', nargs='?')
+    compare.add_argument('--arm', required=True)
+    compare.add_argument('--against', default='A')
+    compare.add_argument('--resamples', type=int, default=10000)
+    args = parser.parse_args(argv)
+    if args.command == 'split':
+        cmd_split(args)
+    elif args.command == 'compare':
+        cmd_compare(args)
+    elif args.command == 'setup':
+        setup_config(Path(args.work).resolve(), args.policy_profile, args.base_profile)
+        print(Path(args.work).resolve() / 'config' / 'config.json')
+    else:
+        {'run': cmd_run, 'prepare-d': cmd_prepare_d, 'report': cmd_report}[args.command](args)
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    main()
