@@ -194,8 +194,11 @@ def test_a_differentiated_adapter_row_leaves_no_cyclic_garbage(tmp_path):
     engine = engine_fixture(tmp_path, 'lfm', service_template=True)
     rows, _ = P.episode_turns('task-1', 'k', episode())
     recipe = Recipe.from_json({'parameterization': 'free-lora', 'ranks': {'tree': 2, 'folder': 0, 'lambda': 0},
-                               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.}, 'steps': 1, 'batch_rows': 2})
+                               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.}, 'steps': 2, 'batch_rows': 2})
     trainer = JointTrainer(engine, P.manifest('fam', {}), lower_rows(engine, rows, prompt_weight=0.), recipe)
+    # The first step also leaves one-time garbage of lazy imports and caches (667 objects when this test ran first,
+    # 2026-11-24): measure a row's operation on the second step.
+    trainer.step()
     gc.collect()
     gc.disable()
     try:
