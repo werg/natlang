@@ -87,7 +87,7 @@ export function validateReturnContribution(item, records, roots) {
   const c=item.contribution;if(!c)return;
   const root=records.get(c.root_call_id),producer=records.get(c.producer_call_id);
   const matches=(record,text,hash)=>record?.outcome==='done'&&record.output?.complete===true&&record.output.hash===hash&&record.output.bytes===Buffer.byteLength(text);
-  const sampled=record=>record?.outcome==='done'&&['agent','crisp-agent'].includes(record.executor?.kind)&&record.definition?.source?.endsWith('.nl')&&
+  const sampled=record=>record?.outcome==='done'&&['agent','crisp-agent'].includes(record.executor?.kind)&&typeof record.executor?.model_id==='string'&&!!record.executor.model_id&&record.cost?.model_requests>0&&record.definition?.source?.endsWith('.nl')&&
     (record.model_turns??[]).some(turn=>turn.kind==='generation'&&turn.reply&&!turn.error);
   const chainOf=record=>{
     const chain=[],seen=new Set();let current=record;

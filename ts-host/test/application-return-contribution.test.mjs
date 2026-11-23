@@ -8,7 +8,7 @@ function fixture(kind='projection'){
  const value={answer:'wrong',diagnostics:'actual producer metadata'},actual=kind==='forwarded'?value:{answer:value.answer};
  const records=new Map([
   ['root',{call_id:'root',parent_call_id:null,executor:{kind:'crisp'},outcome:'done',definition:{name:'compose',source:'compose.ts'},output:output(actual)}],
-  ['producer',{call_id:'producer',parent_call_id:'root',executor:{kind:'agent'},outcome:'done',definition:{name:'judge',source:'judge.nl'},output:output(value),model_turns:[{kind:'generation',reply:{}}]}],
+  ['producer',{call_id:'producer',parent_call_id:'root',executor:{kind:'agent',model_id:'offline-reference'},cost:{model_requests:1},outcome:'done',definition:{name:'judge',source:'judge.nl'},output:output(value),model_turns:[{kind:'generation',reply:{}}]}],
  ]);
  const valueJson=JSON.stringify(value),rootJson=JSON.stringify(actual);
  const selector={definition:structuredClone(records.get('producer').definition),valueJson,sha256:hash(valueJson),required:false,
@@ -82,4 +82,9 @@ test('unique projection retains a sibling with a different projected result; unb
  const second=structuredClone(f.selector);second.valueJson=text;second.sha256=hash(text);second.contribution.producer_call_id='sibling';second.contribution.lineage=['root','sibling'];
  f.proof.outcomeDimensions.incidentalValues.incorrectReturns=[f.selector,second];validateReturnContributions(declaredReturnSelectors(f.proof),f.records,['root']);
  assert.throws(()=>validateReturnContributions([f.selector],f.records,['root']),/omitted/);
+});
+
+test('optional returned-value masks work without inventing an incidental outcome role',()=>{
+ const f=fixture();delete f.proof.outcomeDimensions.incidentalValues;
+ f.proof.outcomeDimensions.returnedValue.incorrectReturns=[f.selector];check(f);
 });
