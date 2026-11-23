@@ -135,7 +135,7 @@ def main(argv=None) -> int:
     if a.cmd == 'consume':
         _print(dr.consume(a.items, run=a.run, how=a.how, amount=a.amount))
         return 0
-    reg = dr.load()
+    reg = dr.load(repo=dr.registry_owner_repo()) if a.cmd == 'promote' else dr.load()
     if a.cmd == 'show':
         ds = reg.datasets.get(a.name)
         if ds is None:
@@ -199,7 +199,9 @@ def promote(reg, a) -> int:
     if a.dry_run or not entries:
         _print(entries)
         return 0
-    sys.path.insert(0, str(REPO / 'scripts/neuralese_data'))
+    # Keep this invocation's pinned read snapshot; publication has a separate mutable owner.
+    owner = dr.assert_registry_writable(dr.registry_owner_repo())
+    sys.path.insert(0, str(owner / 'scripts/neuralese_data'))
     import register_corpora
     register_corpora.register(entries, f'data registry: promote {len(entries)} dataset(s)', replace=True,
                               check=not a.no_check)

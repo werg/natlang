@@ -349,3 +349,28 @@ def test_shared_container_rejects_unique_files_without_deleting_them(tmp_path):
     with pytest.raises(SystemExit, match='unique data'):
         module.ensure_shared_view(source, target)
     assert (target / 'unique').read_text() == 'must survive'
+
+
+def test_pin_created_from_pin_anchors_shared_paths_to_primary_owner(repository, tmp_path, monkeypatch):
+    repo = repository
+    for relative in ('runs', 'data', '.venv-neuralese', '.natlang/packages/native-models'):
+        (repo / relative).mkdir(parents=True)
+        (repo / relative / 'keep').write_text(relative)
+    module = load(repo)
+    npm_stub(module, monkeypatch, lambda **kwargs: None)
+    first = module.create('HEAD', tmp_path / 'first')
+    original_commit = module.git('rev-parse', 'HEAD', cwd=first).strip()
+    # A newer owner commit must not substitute code into the child pin.
+    (repo / 'source.txt').write_text('new owner source')
+    module.git('add', 'source.txt')
+    module.git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'new owner source')
+    module.REPO = first
+    second = module.create(original_commit, tmp_path / 'second')
+    assert json.loads((second / '.natlang-pin.json').read_text())['source'] == str(repo)
+    assert (second / 'source.txt').read_text() == 'tracked source'
+    for relative in ('runs', 'data', '.venv-neuralese', '.natlang/packages/native-models'):
+        assert (second / relative).readlink() == repo / relative
+    module.REPO = repo
+    module.remove(first)
+    for relative in ('runs', 'data', '.venv-neuralese', '.natlang/packages/native-models'):
+        assert (second / relative / 'keep').read_text() == relative

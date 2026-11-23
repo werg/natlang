@@ -18,14 +18,17 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
 from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
+REPO = registry_owner_repo()
 REGISTRY = REPO / 'training' / 'corpora'
 SPLITS = {'dev': 'dev.jsonl', 'confirmation': 'confirmation.jsonl'}
 
 
 def register(source, prefix, stamp, label, dry_run):
     from natlang_neuralese.common import corpus_registry
+    assert_registry_writable(REPO)
     registry = corpus_registry.load(REPO)
     ids = {entry['id'] for entry in registry['corpora']}
     entries, summary = [], {}
@@ -38,6 +41,8 @@ def register(source, prefix, stamp, label, dry_run):
         if dry_run:
             continue
         directory = REPO / 'runs' / packet_id
+        assert_registry_writable(directory)
+        assert_registry_writable(REPO / 'training/corpus-manifests')
         directory.mkdir(parents=True)
         cases = directory / 'cases.jsonl'
         cases.write_text(''.join(line + '\n' for line in rows))

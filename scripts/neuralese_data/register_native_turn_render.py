@@ -138,7 +138,8 @@ def parse(argv=None):
                    help='register and publish through register_corpora.py from canonical main')
     a = p.parse_args(argv)
     # The registry path is the link inside the repo, not where it resolves (corpora may live on NVMe behind a link).
-    a.path = os.path.relpath(os.path.abspath(a.render_dir), ROOT)
+    from natlang_neuralese.common.data_registry import registry_owner_repo
+    a.path = os.path.relpath(os.path.abspath(a.render_dir), registry_owner_repo())
     return a
 
 
@@ -189,11 +190,13 @@ def main(argv=None):
         register([entry], f'Register {a.id}', replace=True)
         return
     from natlang_neuralese.common import corpus_registry
-    replaced = corpus_registry.entry_path(ROOT, a.id).exists()
-    corpus_registry.write_entries(ROOT, [entry], replace=True)
+    from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
+    owner = assert_registry_writable(registry_owner_repo())
+    replaced = corpus_registry.entry_path(owner, a.id).exists()
+    corpus_registry.write_entries(owner, [entry], replace=True)
     print(json.dumps({'registered': a.id, 'replaced': replaced}))
     if not a.no_publish:
-        subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--machine', a.machine,
+        subprocess.run([sys.executable, str(ROOT / 'scripts/sync_training_corpora.py'), 'publish', '--repo', str(owner), '--machine', a.machine,
                         '--id', a.id], check=True)
 
 

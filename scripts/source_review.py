@@ -30,6 +30,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "training" / "neuralese"))
+from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_hex  # noqa: E402
 from natlang_neuralese.common.jsonio import canonical_json_str  # noqa: E402
 
@@ -180,7 +181,9 @@ def build_manifest(manifest_id: str, registry: Path = REGISTRY, previous: str | 
     }
 
 
-def write_manifest(manifest: dict[str, Any], manifests: Path = MANIFESTS) -> Path:
+def write_manifest(manifest: dict[str, Any], manifests: Path | None = None) -> Path:
+    manifests = manifests if manifests is not None else registry_owner_repo() / "training/corpus-manifests"
+    assert_registry_writable(manifests)
     path = manifests / f"{manifest['id']}.json"
     if path.exists():
         raise ReviewError(f"{path} exists; manifests are immutable, so choose a new id")
@@ -347,6 +350,7 @@ def receipt_path(identifier: str, receipts: Path) -> Path:
 
 
 def save_receipt(receipt: dict[str, Any], receipts: Path, replace: bool = False) -> Path:
+    assert_registry_writable(receipts)
     receipts.mkdir(parents=True, exist_ok=True)
     path = receipt_path(receipt["id"], receipts)
     if path.exists() and not replace:
@@ -366,10 +370,15 @@ def load_receipt(identifier: str, receipts: Path) -> dict[str, Any]:
 
 # ------------------------------------------------------------------------------------------------------------ decisions
 
-def decide(identifier: str, value: str, by: str, note: str = "", *, registry: Path = REGISTRY, receipts: Path | None = None,
-           manifests: Path = MANIFESTS, now: datetime | None = None) -> dict[str, Any]:
+def decide(identifier: str, value: str, by: str, note: str = "", *, registry: Path | None = None, receipts: Path | None = None,
+           manifests: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
     """Record the explicit decision. Only a `hold` on an item receipt changes the registry (a new pending record and manifest)."""
+    registry = registry if registry is not None else registry_owner_repo() / "training/source-reviews"
+    manifests = manifests if manifests is not None else registry_owner_repo() / "training/corpus-manifests"
     receipts = receipts or registry / "receipts"
+    # Validate every destination before the first holds/receipt write.
+    for destination in (registry, manifests, receipts):
+        assert_registry_writable(destination)
     now = now or datetime.now(timezone.utc)
     if value not in DECISIONS:
         raise ReviewError("the decision is hold, clear or defer")
@@ -469,9 +478,9 @@ def annotations_from_row_receipts(path: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--registry", type=Path, default=REGISTRY)
+    parser.add_argument("--registry", type=Path)
     parser.add_argument("--receipts", type=Path, default=None, help="receipt folder (default: <registry>/receipts)")
-    parser.add_argument("--manifests", type=Path, default=MANIFESTS)
+    parser.add_argument("--manifests", type=Path)
     sub = parser.add_subparsers(dest="command", required=True)
     receipt = sub.add_parser("receipt")
     receipt.add_argument("outputs", type=Path)
@@ -487,6 +496,9 @@ def main(argv: list[str] | None = None) -> int:
     show = sub.add_parser("show")
     show.add_argument("receipt_id")
     args = parser.parse_args(argv)
+    owner = registry_owner_repo() if args.command in {"receipt", "decide", "manifest"} else ROOT
+    args.registry = args.registry if args.registry is not None else owner / "training/source-reviews"
+    args.manifests = args.manifests if args.manifests is not None else owner / "training/corpus-manifests"
     receipts = args.receipts or args.registry / "receipts"
     try:
         if args.command == "receipt":

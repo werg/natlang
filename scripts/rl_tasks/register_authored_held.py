@@ -23,10 +23,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
 from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 DEFAULT_POOL = resolve_str('data_hdd', 'natlang-rl-authoring', 'admitted')
+REPO = registry_owner_repo()
 REGISTRY = REPO / 'training' / 'corpora'
 PREFIX = 'natlang-rl-authored-'
 SPLITS = {'dev': 'dev', 'confirmation': 'confirmation'}
@@ -44,6 +46,7 @@ def registered_ids(registry):
 
 def register(pool, stamp, dry_run):
     from natlang_neuralese.common import corpus_registry
+    assert_registry_writable(REPO)
     registry = corpus_registry.load(REPO)
     known = registered_ids(registry)
     rows = [json.loads(line) for line in (Path(pool) / 'cases.jsonl').read_text().splitlines() if line.strip()]
@@ -57,6 +60,8 @@ def register(pool, stamp, dry_run):
             continue
         packet_id = f'{PREFIX}{split}-{stamp}'
         directory = REPO / 'runs' / packet_id
+        assert_registry_writable(directory)
+        assert_registry_writable(REPO / 'training/corpus-manifests')
         if directory.exists():
             raise SystemExit(f'{directory} exists: packets are immutable; choose another --stamp')
         directory.mkdir(parents=True)

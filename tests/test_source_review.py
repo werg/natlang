@@ -264,3 +264,13 @@ def test_family_hold_structured_dataset_matches_executor_without_hashing_dict(tm
 def test_family_hold_structured_family_is_not_a_dataset_mapping_key(tmp_path):
     (tmp_path / 'datasets.json').write_text(json.dumps({'familyDataset': {}}))
     assert sr.pending_family_hold_reason({'curriculum': {'family': {'kind': 'typed'}}}, tmp_path) is None
+
+
+def test_manifest_writer_rejects_pin_subdirectory_before_creation(tmp_path):
+    import pytest
+    pin = tmp_path / 'pin'
+    pin.mkdir()
+    (pin / '.natlang-pin.json').write_text('{}')
+    with pytest.raises(ValueError, match='pin'):
+        sr.write_manifest({'id': 'source-reviews-pinned'}, pin / 'training/corpus-manifests')
+    assert not (pin / 'training').exists()

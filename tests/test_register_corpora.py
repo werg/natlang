@@ -451,3 +451,37 @@ def test_unpublished_local_commit_of_other_entry_is_never_swept_into_registratio
     assert rc.register([NEW],'Register new',check=False)==['new']
     assert main_ids(origin)==['new','old']
     assert json.loads(path.read_text())['id']=='local-only'
+
+
+def test_explicit_pin_is_refused_before_links_fetch_or_git_publication(tmp_path, monkeypatch):
+    pin = tmp_path / 'pin'
+    pin.mkdir()
+    marker = pin / '.natlang-pin.json'
+    marker.write_text(json.dumps({'source': str(tmp_path / 'owner'), 'commit': 'a' * 40}))
+    monkeypatch.setattr(rc, 'REPO', pin)
+    monkeypatch.setattr(rc, 'git', lambda *args, **kwargs: pytest.fail('pin refusal must precede git'))
+    with pytest.raises(ValueError, match='pin'):
+        rc.register([NEW], 'must not mutate pin', links={'data/corpora/new': '/outside'}, check=False)
+    assert list(pin.iterdir()) == [marker]
+
+
+def test_pinned_producer_default_publishes_owner_without_changing_read_snapshot(tmp_path, monkeypatch):
+    import importlib.util
+    from natlang_neuralese.common import data_registry as dr, corpus_registry
+    origin, owner = setup(tmp_path, monkeypatch)
+    pin = tmp_path / 'code-pin'
+    sh('git', 'worktree', 'add', '--detach', str(pin), 'HEAD', cwd=owner)
+    (pin / '.natlang-pin.json').write_text(json.dumps({'source': str(owner), 'commit': sh('git', 'rev-parse', 'HEAD', cwd=pin).strip()}))
+    monkeypatch.setattr(dr, 'code_repo', lambda: pin)
+    monkeypatch.delenv('NATLANG_REGISTRY_REPO', raising=False)
+    spec = importlib.util.spec_from_file_location('pinned_default_registration', REAL / 'scripts/neuralese_data/register_corpora.py')
+    producer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(producer)
+    assert producer.REPO == owner
+    producer.LOCK = tmp_path / 'publisher.lock'
+    before = sh('git', 'rev-parse', 'HEAD', cwd=pin)
+    assert producer.register([NEW], 'owner publication from pinned producer', check=False) == ['new']
+    assert sh('git', 'rev-parse', 'HEAD', cwd=pin) == before
+    assert not (pin / producer.entry_file('new')).exists()
+    assert {e['id'] for e in corpus_registry.load(pin)['corpora']} == {'old'}
+    assert {e['id'] for e in corpus_registry.load(owner)['corpora']} == {'old', 'new'}

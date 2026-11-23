@@ -135,6 +135,10 @@ def create(commit, dest):
 
 
 def create_locked(commit, dest, lock_fd):
+    # Creating from an existing pin must not make its data/env lifetime an ancestor.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training/neuralese'))
+    from natlang_neuralese.common.data_registry import canonical_checkout_repo
+    owner = canonical_checkout_repo(REPO)
     marker = dest / '.natlang-pin.json'
     if dest.exists() or dest.is_symlink():
         registered_checkout(dest, commit)
@@ -150,7 +154,7 @@ def create_locked(commit, dest, lock_fd):
     # .gitignore rules can list both a directory and its descendants.
     covered = set(SHARED)
     for name in LINKED:
-        source, target = REPO / name, dest / name
+        source, target = owner / name, dest / name
         if not os.path.lexists(source):
             continue
         if git('ls-files', '--', name, cwd=dest).strip():
@@ -158,15 +162,15 @@ def create_locked(commit, dest, lock_fd):
         ensure_shared_view(source, target)
         covered.add(name)
     for name in SHARED:
-        if os.path.lexists(REPO / name):
-            ensure_link(REPO / name, dest / name)
+        if os.path.lexists(owner / name):
+            ensure_link(owner / name, dest / name)
     ignored = git('ls-files', '-o', '-i', '--exclude-standard', '--directory').splitlines()
     for path in sorted(ignored, key=lambda name: (name.rstrip('/').count('/'), name)):
         relative = path.rstrip('/')
         if path.startswith(SKIPPED) or any(relative == root or relative.startswith(root + '/') for root in covered):
             continue
         top = relative.split('/', 1)[0]
-        source, target = REPO / relative, dest / relative
+        source, target = owner / relative, dest / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         if top in LINKED:
             if relative != top:  # tracked roots remain real directories
@@ -191,7 +195,7 @@ def create_locked(commit, dest, lock_fd):
     subprocess.run(['npm', 'run', '--silent', 'build:node'], cwd=dest / 'ts-host', env=env, check=True,
                    stdout=sys.stderr, pass_fds=(lock_fd,))
     registered_checkout(dest, commit)
-    publish_marker(marker, {'commit': commit, 'created': time.time(), 'source': str(REPO)})
+    publish_marker(marker, {'commit': commit, 'created': time.time(), 'source': str(owner)})
     return dest
 
 

@@ -25,6 +25,7 @@ from pathlib import Path, PurePosixPath
 # The machine's repo root (common/paths.py), not this file's location: a frozen recipe runtime or a code snapshot
 # outside the checkout must still read the live registries and manifests.
 from .common.paths import root as _root
+from .common.data_registry import registry_owner_repo, assert_registry_writable
 
 REPO = _root("repo")
 REGISTRY = "training/neuralese_artifacts.json"
@@ -66,6 +67,7 @@ def load_registry(repo: Path = REPO) -> dict:
 
 
 def save_json(path: Path, value) -> None:
+    assert_registry_writable(path.parent)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(value, indent=2) + "\n")
@@ -188,6 +190,7 @@ def snapshot(repo: Path, item: dict) -> dict:
 
 def publish(repo: Path, item: dict) -> dict:
     """Write the immutable manifest of a registered artifact (idempotent; a change needs a new id)."""
+    repo = assert_registry_writable(repo)
     value = snapshot(repo, item)
     target = manifest_path(repo, item["id"])
     if target.exists() and json.loads(target.read_text()) != value:
@@ -198,15 +201,18 @@ def publish(repo: Path, item: dict) -> dict:
 
 def register(repo: Path, item: dict, sources: dict[str, Path]) -> dict:
     """Copy `sources` (file name → path) into the store, add the entry and publish its manifest."""
+    repo = assert_registry_writable(repo)
     registry = load_registry(repo)
     if any(a["id"] == item["id"] for a in registry["artifacts"]):
         raise ArtifactError(f"artifact already registered: {item['id']}")
     item = {**item, "path": item.get("path") or f"{STORE}/{item['id']}", "files": sorted(sources)}
     validate_entry(item, registry, registered_corpora(repo))
     root = repo / item["path"]
+    assert_registry_writable(root)
     root.mkdir(parents=True, exist_ok=True)
     for name, source in sources.items():
         target = root / safe_relative(name)
+        assert_registry_writable(target)
         if target.exists():
             if digest(target) != digest(Path(source)):
                 raise ArtifactError(f"store already holds different bytes at {target}")
@@ -310,7 +316,7 @@ def register_output(path: Path, *, identity: str, kind: str, dialect: str, backb
     """Register a file a trainer produced (init method "trained"), unqualified until a gate says otherwise."""
     import datetime
 
-    repo = repo or REPO
+    repo = assert_registry_writable(repo if repo is not None else registry_owner_repo())
     item = {"id": identity, "kind": kind, "owner": "dgx", "dialect": dialect, "backbone": backbone,
             "init": {"method": "trained", **({"parent": parent} if parent else {"source": run or str(path)})},
             "training": {"corpora": corpora or [], "trainer": trainer, "commit": commit, **({"run": run} if run else {})},
@@ -339,7 +345,8 @@ def register_run(run: Path, identity: str, *, backbone_revision: str | None = No
                  commit: str, repo: Path | None = None, file: str = "system-prompts.nz") -> dict:
     """Register the bank a finished trainer run wrote (``summary.json`` + ``system-prompts.nz``): dialect from the file,
     parent found by content among registered artifacts, training corpora found by the content of the run's inputs."""
-    repo = repo or REPO
+    write_repo = repo if repo is not None else registry_owner_repo()
+    repo = repo if repo is not None else REPO
     run = Path(run)
     summary = json.loads((run / "summary.json").read_text())
     options = summary.get("options", {})
@@ -363,4 +370,4 @@ def register_run(run: Path, identity: str, *, backbone_revision: str | None = No
                            trainer=trainer or summary.get("trainer") or "unspecified",
                            commit=commit, corpora=corpora, parent=parent[0] if parent else None,
                            run=str(run.resolve()), notes=f"inputs not registered as corpora: "
-                           f"{len(shas) - len(corpora_by_sha(shas, repo))} of {len(shas)}", repo=repo)
+                           f"{len(shas) - len(corpora_by_sha(shas, repo))} of {len(shas)}", repo=write_repo)

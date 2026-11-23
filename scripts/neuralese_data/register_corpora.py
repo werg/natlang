@@ -24,7 +24,11 @@ import sys
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+CODE_REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(CODE_REPO / 'training/neuralese'))
+from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
+
+REPO = registry_owner_repo()
 ENTRIES = 'training/corpora'      # one file per entry (natlang_neuralese.common.corpus_registry)
 MANIFESTS = 'training/corpus-manifests'
 LOCK = Path.home() / '.local/state/natlang/register-corpora.lock'
@@ -32,6 +36,7 @@ TRAILERS = 'Registration-Tool: scripts/neuralese_data/register_corpora.py'
 
 
 def git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
+    assert_registry_writable(cwd or REPO)
     result = subprocess.run(['git', *args], cwd=cwd or REPO, capture_output=True, text=True)  # REPO at call time
     if check and result.returncode:
         raise RuntimeError(f'git {" ".join(args)}: {result.stderr.strip()[-500:]}')
@@ -40,6 +45,7 @@ def git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.C
 
 def registered_ids(fetch: bool = True) -> set[str]:
     """Ids registered on origin/main (the shared checkout may lag behind or hold uncommitted edits)."""
+    assert_registry_writable(REPO)
     if fetch:
         git('fetch', '-q', 'origin')
     listing = git('ls-tree', '--name-only', 'origin/main', ENTRIES + '/').stdout.split()
@@ -56,7 +62,9 @@ def entry_text(entry: dict) -> bytes:
 
 def link(rel: str, target: str | Path) -> None:
     """Create the gitignored data link REL -> TARGET in the shared checkout (corpora live on NVMe)."""
+    assert_registry_writable(REPO)
     path = REPO / rel
+    assert_registry_writable(path.parent)
     if path.is_symlink() and os.readlink(path) == str(target):
         return
     if path.exists() or path.is_symlink():
@@ -88,6 +96,7 @@ def _guard_clean(publisher_git, paths, original_head):
 
 
 def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tries=10) -> list[str]:
+    assert_registry_writable(REPO)
     import io
     import contextlib
     import tempfile
@@ -243,6 +252,7 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
 def register(entries: list[dict], message: str, replace: bool = False, links: dict[str, str] | None = None,
              tries: int = 10, check: bool = True) -> list[str]:
     """Register ENTRIES from canonical main, preserving all other work."""
+    assert_registry_writable(REPO)
     for rel, target in (links or {}).items():
         link(rel, target)
     LOCK.parent.mkdir(parents=True, exist_ok=True)

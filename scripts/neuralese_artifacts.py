@@ -27,6 +27,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "training/neuralese"))
 from natlang_neuralese import artifacts  # noqa: E402
+from natlang_neuralese.common.data_registry import registry_owner_repo, assert_registry_writable
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 sys.path.insert(0, str(REPO / "scripts"))
@@ -60,7 +61,7 @@ def cmd_register(args):
                  **({"parent": args.parent} if args.parent else {}),
                  **({"builder": args.builder} if args.builder else {})},
         "training": ({"corpora": args.training_corpus or [], "trainer": args.trainer,
-                      "commit": args.commit or git_commit(args.repo),
+                      "commit": args.commit or git_commit(REPO),
                       **({"recipe": args.recipe} if args.recipe else {}),
                       **({"run": args.run} if args.run else {})}
                      if args.trainer else None),
@@ -120,7 +121,7 @@ def transfer(args, direction):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("action", choices=["register", "register-run", "verify", "resolve", "list", "push", "pull"])
-    parser.add_argument("--repo", type=Path, default=REPO)
+    parser.add_argument("--repo", type=Path)
     parser.add_argument("--id", action="append", dest="ids")
     parser.add_argument("--file", action="append", help="register: NAME=PATH (repeatable); resolve: NAME")
     parser.add_argument("--kind", choices=sorted(artifacts.KINDS))
@@ -145,6 +146,9 @@ def main(argv=None):
     parser.add_argument("--host", default=PEERS["pop"])
     parser.add_argument("--remote-repo", default=resolve_str("repo"))
     args = parser.parse_args(argv)
+    args.repo = args.repo if args.repo is not None else (registry_owner_repo() if args.action in {"register", "register-run"} else REPO)
+    if args.action in {"register", "register-run"}:
+        assert_registry_writable(args.repo)
     try:
         if args.action == "register":
             if not args.ids or len(args.ids) != 1:
@@ -159,7 +163,7 @@ def main(argv=None):
             if not args.ids or len(args.ids) != 1 or not args.run_dir:
                 raise SystemExit("register-run needs --id and --run-dir")
             manifest = artifacts.register_run(args.run_dir, args.ids[0], backbone_revision=args.backbone_revision,
-                                              trainer=args.trainer, commit=args.commit or git_commit(args.repo),
+                                              trainer=args.trainer, commit=args.commit or git_commit(REPO),
                                               repo=args.repo)
             print(json.dumps({"registered": args.ids[0], "bytes": manifest["bytes"]}))
         elif args.action == "verify":

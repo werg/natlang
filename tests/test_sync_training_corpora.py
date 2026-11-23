@@ -492,3 +492,17 @@ class OffloadTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_publish_refuses_manifest_destination_inside_pin_before_creation(tmp_path):
+    import pytest
+    repo = tmp_path / 'pin'
+    repo.mkdir()
+    marker = repo / '.natlang-pin.json'
+    marker.write_text(json.dumps({'source': str(tmp_path / 'owner')}))
+    source = repo / 'rows'
+    source.mkdir()
+    (source / 'a.jsonl').write_text('{}\n')
+    with pytest.raises(ValueError, match='pin'):
+        module.publish(repo, {'id': 'pinned', 'path': 'rows', 'owner': 'dgx', 'include': ['*.jsonl']})
+    assert not (repo / 'training').exists()

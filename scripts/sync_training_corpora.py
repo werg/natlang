@@ -55,7 +55,16 @@ def corpus_registry():
     return module
 
 
+def registry_write_api():
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training/neuralese'))
+    from natlang_neuralese.common import data_registry
+    return data_registry
+
+
 def save(path, value):
+    # Receipts may be external, but no destination may mutate an immutable code pin.
+    registry_write_api().assert_registry_writable(path.parent)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
     temp.write_text(json.dumps(value, indent=2) + '\n')
@@ -79,7 +88,8 @@ def offload_unlink_preflight(paths):
 
 def save_offload_receipt(repo, path, receipt):
     """Persist the latest receipt and append every state to immutable attempt history."""
-    history = repo / '.coordination' / 'artifact-evictions' / 'history' / (receipt['verification_id'] + '.jsonl')
+    registry_write_api().assert_registry_writable(path.parent)
+    history = registry_write_api().canonical_checkout_repo(repo) / '.coordination' / 'artifact-evictions' / 'history' / (receipt['verification_id'] + '.jsonl')
     history.parent.mkdir(parents=True, exist_ok=True)
     line = (json.dumps(receipt, sort_keys=True) + '\n').encode()
     descriptor = os.open(history, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -288,7 +298,6 @@ def publish(repo, entry, reuse_cache=None, *, manifest_output=None):
                       json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest(),
                   'file_stats': file_stats}
         cache_path = Path(reuse_cache)
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
         save(cache_path, cached)
     print(json.dumps({'published': entry['id'], 'files': len(rows), 'bytes': value['bytes'],
                       'manifest_file_sha256': digest(target)[0]}), flush=True)
@@ -296,7 +305,7 @@ def publish(repo, entry, reuse_cache=None, *, manifest_output=None):
 
 
 def current_receipt(repo, manifest):
-    path = repo / '.coordination/corpus-receipts' / (manifest['id'] + '.json')
+    path = registry_write_api().canonical_checkout_repo(repo) / '.coordination/corpus-receipts' / (manifest['id'] + '.json')
     if not path.exists():
         return False
     receipt = json.loads(path.read_text())
@@ -356,7 +365,8 @@ def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='
                'manifest_sha256_encoding': 'UTF-8 json.dumps(manifest, sort_keys=True); object identity, not file bytes',
                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'errors': errors, 'file_stats': stats}
     receipt['verification_id'] = receipt_key or manifest['id']
-    save(repo / '.coordination' / receipt_group / (receipt['verification_id'] + '.json'), receipt)
+    receipt_repo = registry_write_api().canonical_checkout_repo(repo)
+    save(receipt_repo / '.coordination' / receipt_group / (receipt['verification_id'] + '.json'), receipt)
     if errors:
         raise ValueError(json.dumps(receipt))
     print(json.dumps({k: v for k, v in receipt.items() if k != 'file_stats'}), flush=True)
@@ -607,7 +617,7 @@ def offload(repo, entry, manifest, args):
                'remote_verification': remote_receipt,
                'restore': restore, 'status': 'verified_not_unlinked',
                'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    receipt_path = repo / '.coordination' / 'artifact-evictions' / (verification_id + '.json')
+    receipt_path = registry_write_api().canonical_checkout_repo(repo) / '.coordination' / 'artifact-evictions' / (verification_id + '.json')
     save_offload_receipt(repo, receipt_path, receipt)
     removed = []
     try:
@@ -733,7 +743,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['publish', 'verify', 'verify-remote', 'sync', 'restore', 'status', 'offload'],
                         help='offload transfers and verifies exact manifest files before optional local unlink')
-    parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument('--repo', type=Path, help='registry checkout (publish defaults to mutable owner; reads retain this code checkout)')
     parser.add_argument('--machine', choices=['pop', 'dgx'], required=True,
                         help='identity of the machine running this command, not a verification destination')
     parser.add_argument('--id', action='append', dest='ids')
@@ -745,6 +755,9 @@ def main():
     parser.add_argument('--remote-repo', default='/home/werg/natlang')
     parser.add_argument('--reserve-gib', type=float, default=8)
     args = parser.parse_args()
+    args.repo = args.repo if args.repo is not None else (registry_write_api().registry_owner_repo() if args.action == 'publish' else Path(__file__).resolve().parents[1])
+    if args.action == 'publish':
+        registry_write_api().assert_registry_writable(args.repo)
     if args.files and (args.action not in {'sync', 'restore', 'offload'} or not args.ids or len(args.ids) != 1):
         parser.error('--file requires sync/restore/offload and exactly one --id')
     if args.action == 'offload' and (not args.files or not args.ids or len(args.ids) != 1):
