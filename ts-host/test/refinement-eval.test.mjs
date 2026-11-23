@@ -8,13 +8,14 @@ const REPLY = `---\nargs: { complaint: string }\nreturns: 'Is<string, "${POLITE}
 
 /** A model that plays `steps` (one eval per turn after the runtime's own first eval) and a judge that dislikes "fault". */
 function scenario(steps, returns = REPLY) {
-  const judged = [], seen = [];
+  const judged = [], seen = [], requests = [];
   const driver = Object.assign(async ({ messages }) => {
     const turn = modelTurnsSoFar(messages);
     seen.push(String(messages.at(-1).content));
     const step = steps[Math.min(turn, steps.length - 1)];
     return { calls: [step.tool ? [step.tool, step.args] : ['eval', step]] };
   }, { decide: async request => {
+    requests.push(request);
     const value = /<<<value\n([^]*?)\nvalue>>>/.exec(String(request.messages.at(-1).content))[1];
     judged.push(value);
     const p = /fault/.test(value) ? 0.02 : 0.98;
@@ -23,7 +24,7 @@ function scenario(steps, returns = REPLY) {
   const traces = [];
   const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' }, calls: false, trace: trace => traces.push(trace) });
   const fn = loadVirtualNatlang({ 'reply.nl': returns }, 'reply.nl');
-  return { judged, seen, traces, run: () => runtime.run(() => fn('late')) };
+  return { judged, seen, traces, requests, run: () => runtime.run(() => fn('late')) };
 }
 
 test('an eval that finishes with an unsatisfying refined result is rejected and the model repairs it', async () => {
@@ -50,4 +51,14 @@ test('refine and assume are bound in the eval scope', async () => {
   assert.equal(await s.run(), 'Kind words. anything');
   assert.equal(s.judged.filter(value => value === 'Kind words.').length, 1);
   assert.ok(s.traces.flatMap(trace => trace.events).some(event => event.kind === 'refinement_assumed'));
+});
+
+test('refine in eval scores its judge as a child decision of the calling invocation', async () => {
+  const s = scenario([{ code: `return await refine("Kind words.", "${POLITE}");`, finish: true }]);
+  assert.equal(await s.run(), 'Kind words.');
+  const judge = s.requests.find(request => /Kind words\./.test(String(request.messages.at(-1).content)));
+  assert.ok(judge, 'the judge was scored');
+  // A decision-readout collector refuses a scored request without its invocation identity.
+  assert.match(String(judge.invocation_id), /\/judge:[0-9a-f]{16}$/);
+  assert.equal(judge.invocation_role, 'child');
 });

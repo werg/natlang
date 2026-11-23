@@ -9345,3 +9345,44 @@ project (5,498 GB limit, 346 GB used).
   - Learner-state-shaped 1 GB directory: the VM put it on Drive in 46 s and read it back in 19 s (identical). Over
     the tunnel the DGX's pull would take about 210 s.
   - The sft-v9 checkpoint stays on Drive as `blobs/e15b20a8...`.
+
+## 2026-11-23 19:00 Held failure taxonomy: Neuralese read-back is broken, the budget charged decisions 8x; five runtime fixes; task briefs A–E
+
+The question was why the current policy fails held tasks, answered offline from the Pop measurements of sft-v7 and
+sft-v9 on held-v3 (2 × 256 each) and sft-v6 on held-v4 (329 finished). Seven independently briefed readers labelled
+all 582 failed episodes from their trajectories: outcome, cause, construct, evidence and remedy. Full taxonomy:
+`plans/neuralese/HELD_FAILURES_20261123.md`; data in `ops/ei/sft-v9/held/failure-taxonomy-20261123/`.
+
+- **Neuralese read-back returns unrelated text.** It returned the producer's text in 1/87 (v7), 1/87 (v9), 0/24
+  (v6) and 13/465 (aei1 DGX collection), with the state imported. Spec-following episodes fail on it, and bypassing
+  the callables pays: among tasks with callables, episodes without child calls pass 64%, those with a Neuralese read
+  33%. Expert iteration is therefore trained toward bypass. Bug hunt assigned in OPEN_ITEMS. This is the first fix,
+  ahead of more Neuralese-variant collection.
+- **The 40-request budget counted each decision readout's 4 reasoning samples and 4 scorings.** Six `decide` calls
+  exhausted it (held-v4 row 087: 37 of 40). Fixed: a reasoned decision counts once (`teacher/collector.ts`, opt-out
+  `NATLANG_BUDGET_EACH_DECISION_REQUEST=1`). This is a new held scoring series; the next held measurement re-measures
+  its base.
+- **Runtime fixes (MODEL_FACING_CHANGES 2026-11-23):**
+  - `await` in a non-async function names the fix; it used to leak `__natlang_own`, in 13 failed episodes and no pass.
+  - Arity errors list the parameters.
+  - A `for … of` over an unawaited Promise says to await it.
+  - `refine()` in eval works under decision-readout collectors; it used to fail with "decision readout needs its
+    invocation identity".
+- **Training-data classes**, in order of size:
+  - spec misreads in directory reducers and file effects (v9 43 misreads, 41 wrong-files);
+  - child-call discipline (re-run loops, self-calls);
+  - decision label calibration (about 15 per policy);
+  - codebase exploration coverage and precision;
+  - zero-rate authored families (47 tasks fail in all 4 episodes; aei1 sampled those families 0–2 times).
+
+  Task-authoring briefs A–E are written into `plans/semantic-fp/OPEN_ITEMS.md` (owner: next task-author batch). The
+  zero-rate families go to the teacher tier once read-back works.
+- **sft-v9 vs sft-v7 flips** are mostly sampling variance in bypass and path slips. v9 is better at decision labels
+  and folder-root destinations, and worse at destructive file handling and status/stop judgements (12 vs 6). Net
+  +3 passes, consistent with the neutral +0.6.
+- **Not checked:**
+  - Pop engine parity for these failures;
+  - where the read-back loses the content;
+  - unfinished held-v4 episodes;
+  - a second reader per episode;
+  - labels of passing episodes, beyond the flips read for comparison.

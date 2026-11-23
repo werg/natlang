@@ -1013,6 +1013,13 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let judgeReady: Promise<unknown> | undefined;
     let judgeSent = 0;
     let sent = 0;
+    // The whole-case budget counts the program's model calls. A reasoned decision readout is one call: its first
+    // reasoning sample counts, its further samples and its option scorings do not (with k = 4 a readout cost 8 of the
+    // 40, so a program with five decide() calls could not finish). NATLANG_BUDGET_EACH_DECISION_REQUEST=1 restores
+    // counting every request.
+    let budgeted = 0;
+    const decisionIsOneRequest = process.env.NATLANG_BUDGET_EACH_DECISION_REQUEST !== '1';
+    const outsideBudget = new WeakSet<ModelTurnRequest>();
     const evidenceAttemptId = randomUUID();
     // Counts collector sender invocations after every local admission gate. It cannot see
     // model steps behind an HTTP adapter, or physical network retries hidden by an SDK/server.
@@ -1120,10 +1127,13 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             throwIfCollectionFatal();
             if (actionSignal?.aborted) throw interrupted(actionSignal);
             // Every admitted resend consumes budget and gets its own immutable ordinal/evidence row.
-            if (config.maxModelRequests && sent >= config.maxModelRequests) {
+            const counted = !decisionIsOneRequest ||
+              !(outsideBudget.has(request) || (request.decision_reasoning?.index ?? 0) > 0);
+            if (config.maxModelRequests && counted && budgeted >= config.maxModelRequests) {
               throw requestBudgetExceeded();
             }
             sent++;
+            if (counted) budgeted++;
             const requestOrdinal = sent;
             const entry: CollectorRequestStart = { attempt_id: evidenceAttemptId,
               case_sequence: requestTelemetry.starts.length + 1, request_ordinal: requestOrdinal, role,
@@ -1478,6 +1488,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           scores.x_natlang_native_recorded_turn = id;
         } else {
           const pseudo: ModelTurnRequest = { invocation_id: call, messages: request.messages, tools: [], seed: null, max_tokens: 0 };
+          // A reasoned readout's scorings belong to the decision its first reasoning sample already counted.
+          if (request.reasoning_sample) outsideBudget.add(pseudo);
           if (slots) await slots.acquire(1);
           try {
             const reply = await admittedSend(pseudo, async () => {

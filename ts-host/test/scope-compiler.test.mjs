@@ -202,6 +202,14 @@ test('eval code may use try/catch, classes, and host globals; generators stay un
     '[new Box(3).value, parsed, bytes]'].join('\n'), { allowNetwork: true });
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   assert.equal(compileScopeSnippet('function* count() { yield 1; }').diagnostics[0]?.code, 'forbidden-loop');
+  const awaitInArrow = compileScopeSnippet('const texts = files.map(f => [f.name, await f.readText()]); texts', { inputBindings: ['files'] });
+  assert.equal(awaitInArrow.ok, false);
+  assert.match(awaitInArrow.diagnostics.map(d => d.message).join('\n'), /`await` is used inside a function that is not async/);
+  assert.ok(!awaitInArrow.diagnostics.some(d => /__natlang_own/.test(d.message)));
+  assert.equal(compileScopeSnippet('const texts = await Promise.all(files.map(async f => await f.readText())); texts',
+    { inputBindings: ['files'] }).ok, true);
+  assert.equal(compileScopeSnippet('const out = []; for (const f of files) out.push(await f.readText()); out',
+    { inputBindings: ['files'] }).ok, true);
 });
 
 test('scope compiler rejects prototype mutation but permits matching data keys', () => {

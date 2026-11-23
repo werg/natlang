@@ -148,6 +148,11 @@ test('invokeDefinition releases supplied folder transactions on recursion and de
     assert.equal(transaction.open, false);
     const next = await target.beginTransaction(false); next.abort();
 
+    const arity = { ...child, id: 'arity-child', name: 'read_function', subtype: 'function',
+      params: [{ name: 'question', type: 'string' }, { name: 'name', type: 'string' }, { name: 'note', type: 'string', optional: true }] };
+    await assert.rejects(invokeDefinition(frame, arity, ['q']),
+      /read_function expects 2 to 3 arguments \(question: string, name: string, note\?: string\), got 1/);
+
     const malformedReturn = { ...child, id: 'bad-return-child',
       returns: 'The answer in the file, as plain text.' };
     await assert.rejects(invokeDefinition(frame, malformedReturn, [target]), /bad character/);
