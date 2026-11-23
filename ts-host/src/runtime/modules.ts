@@ -8,7 +8,7 @@ import type { Platform } from './platform.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
-import { natlangTransformer } from '../compiler/lower.js';
+import { lowerTypedRefinementText, natlangTransformer } from '../compiler/lower.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { STD_MODULE_FILE, STD_SPECIFIERS } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
@@ -128,7 +128,10 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   // A sibling with a representation-generic result: its call sites need the checker to pick their instance.
   const generic = Object.values(level).some(item => item.kind === 'natlang' && !!item.generic);
   const parsed = ts.createSourceFile(path, record.text, ts.ScriptTarget.ES2022, true);
-  if (containsTaggedTemplate(parsed) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`) || generic) {
+  // `refine<Is<T, "p">>(value)` / `assume<R>(value)`: lowering reads the predicate from the type argument.
+  const typedRefinement = /\b(?:refine|assume)\s*</.test(record.text);
+  let text = record.text;
+  if (containsTaggedTemplate(parsed) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`) || generic || typedRefinement) {
     const files: Record<string, string> = { [path]: record.text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
@@ -153,9 +156,16 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     files[`${FOLDER}/__external.d.ts`] = [...external].filter(([specifier]) => !/^@natlang\//.test(specifier) && specifier !== NEUTRAL_RUNTIME_SPECIFIER)
       .map(([specifier, names]) => `declare module ${JSON.stringify(specifier)} {\n${[...names].map(name =>
         `  export const ${name}: any;`).join('\n')}\n  const value: any;\n  export default value;\n}`).join('\n');
-    const program = createVirtualProgram(files, { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'],
+    const compilerOptions = { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'],
       ...Object.fromEntries(STD_SPECIFIERS.map(specifier => [specifier, [STD_MODULE_FILE]])),
-      [NEUTRAL_RUNTIME_SPECIFIER]: ['/__natlang__/surface.d.ts'] } });
+      [NEUTRAL_RUNTIME_SPECIFIER]: ['/__natlang__/surface.d.ts'] } };
+    let program = createVirtualProgram(files, compilerOptions);
+    // Typed refine/assume calls become their predicate form in the text itself: the transform below runs on a separate
+    // parse of the text, where the type argument cannot be resolved.
+    if (typedRefinement) {
+      const lowered = lowerTypedRefinementText(program, program.getSourceFile(path)!, text);
+      if (lowered !== text) { text = lowered; files[path] = text; program = createVirtualProgram(files, compilerOptions); }
+    }
     const file = program.getSourceFile(path)!;
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
       sourceRevision: record.revision, authored: true });
@@ -188,7 +198,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     plans = new Map(analysis.plans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan]));
     checker = program.getTypeChecker();
   }
-  const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
+  const output = ts.transpileModule(text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
     transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, arrayMaps, concats, jsons, instantiations,
       errors: errorReadouts, stringArguments, scalarConversions, stringReplaces, runtime: '__natlang', context: '__natlang_context',

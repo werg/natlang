@@ -161,6 +161,8 @@ export type NativeRuntimeHooks = {
     instantiations?: import('../compiler/neuralese.js').GenericInstantiation[] };
   /** Reads of fields a value's declared type does not have, checked in every eval. */
   checkFields?(session: NativeSession, source: string): NatlangDiagnostic[];
+  /** The snippet with typed `refine<Is<T, "p">>(value)` / `assume<R>(value)` calls in their predicate form. */
+  lowerRefinements?(session: NativeSession, source: string): string;
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -2319,7 +2321,8 @@ export class NativeSession {
       throw new Reject([{ path: 'code', code: 'computed-neuralese-marker-concatenation',
         expected: 'This argument is declared Neuralese<T>. Marker bodies are literal and do not evaluate JavaScript concatenation. Return the computed typed value directly, without marker strings.' }]);
     // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
-    const code = desugarNlCalls(sourceWithLiteralCalls(written));
+    const desugared = desugarNlCalls(sourceWithLiteralCalls(written));
+    const code = this.runtime.hooks.lowerRefinements ? this.runtime.hooks.lowerRefinements(this, desugared) : desugared;
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
     const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const localNames = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));

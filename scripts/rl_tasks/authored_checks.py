@@ -284,12 +284,13 @@ SEMANTIC_FP_CHECKS = {
     'context_lens': (r'\.in\(', 'both', 'context_lens: no script or function uses .in(context)'),
     'folder_transaction': (r'\.propose\(', 'both', 'folder_transaction: nothing calls folder.propose(...)'),
     'untrusted_contract': (r'\bUntrusted<', 'program', 'untrusted_contract: no argument or type is Untrusted<T>'),
-    'refinement_contract': (r'\bIs<|^ensures:', 'program', 'refinement_contract: no Is<T, P> type or ensures: contract'),
+    'refinement_contract': (r'\bIs<|^ensures:|(?<![.\w$])refine\s*[<(]', 'both',
+                            'refinement_contract: no Is<T, P> type, refine(...) call or ensures: contract'),
     'ensures_contract': (r'^ensures:', 'program', 'ensures_contract: no .nl function declares ensures: postconditions'),
     'structural_recursion': (r'^(?:recursive:\s*structural|measure:)', 'program',
                              'structural_recursion: no .nl function declares recursive: structural or measure:'),
     # @natlang/std combinators: the program imports the combinator from the standard library and calls it.
-    **{construct: (rf'@natlang/(?:node|browser)/std[\s\S]*\b{name}\(|\b{name}\([\s\S]*@natlang/(?:node|browser)/std', 'program',
+    **{construct: (rf'@natlang/(?:node|browser)/std[\s\S]*\b{name}(?:<[^>()]*>)?\(|\b{name}(?:<[^>()]*>)?\([\s\S]*@natlang/(?:node|browser)/std', 'program',
                    f'{construct}: no program file imports {name} from @natlang/node/std and calls it')
        for construct, name in (('semantic_merge', 'semanticMerge'), ('semantic_repair', 'semanticRepair'),
                                ('fixed_point', 'fixedPoint'), ('propose_and_verify', 'proposeAndVerify'),
