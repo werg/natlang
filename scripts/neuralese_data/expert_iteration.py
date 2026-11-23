@@ -1513,6 +1513,7 @@ class Cycle:
         that when the engine has spare slots), with twice as many episode workers so the cap is reached (each worker
         draws at most 4 candidates at a time and scores between them). In the fill window the dedicated actor's every
         slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes)."""
+        self.require_data_readers()
         from natlang_neuralese.common import data_registry
         live = [str(w) for w in getattr(self.a, 'live_work', None) or ()]
         works = list(dict.fromkeys([*live, *map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
@@ -1573,6 +1574,7 @@ class Cycle:
             os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', self.work / 'tokenizer')
 
     def data_stage(self):
+        self.require_data_readers()
         w = self.work
         self.work_tokenizer()
         steps = []
@@ -1631,6 +1633,7 @@ class Cycle:
     def build_command(self):
         """The mix build (``sft_sources build``) and the checkout it runs from: ``--data-repo`` (data preparation,
         outside the held scoring series), else the pin."""
+        self.require_data_readers()
         aux = list(self.a.aux)
         if (self.dir / 'filled' / 'chains.pkl').exists():
             aux.append(f'filled={self.dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
@@ -3344,6 +3347,7 @@ def main():
                    "cycle's mix until a Pop serve stops it)")
     y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
                    'tooling outside the held scoring series)')
+    y.add_argument('--minimum-data-reader-commit', help='required ancestor of both immutable data/fill reader pins; runtime scoring pin unchanged')
     y.add_argument('--data-repo', help="checkout whose sft_sources.py builds the mix (default the pin; data preparation "
                    'outside the held scoring series, e.g. a faster build that keeps chains byte-identical)')
     y.add_argument('--speculative-after', help='previous cycle DIR whose SFT candidate is --start: collect while Pop '
