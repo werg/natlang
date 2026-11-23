@@ -20,7 +20,7 @@ import { commandProgress, parseProgressMode } from './progress.js';
 import { lockFor, readProgramManifest, warmProgram } from '../build-lock.js';
 import { writeBuildLock, type BuildLock } from '../package/warm.js';
 import { defaultNativePython, ensureNativeServer, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
-  stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';
+  stopNativeServer, nativeListening, type NativeModelSettings } from '../model/native-managed.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
 import { discoverLocalApplications, isApplicationManifest } from '../package/discover.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
@@ -299,14 +299,28 @@ async function serveCommand(parsed: Parsed): Promise<number> {
   await ensureNativeServer(choice.managedNative);
   if (!ownsNativeServer(choice.endpoint)) { output(`already serving ${choice.managedNative.sha256.slice(0, 12)} at ${choice.endpoint}`, false); return 0; }
   output(`serving profile ${name} at ${choice.endpoint}; other natlang commands use it until you press Ctrl-C`, false);
-  // Signal listeners do not keep the process alive; the health check does, and ends the command if the server dies.
+  // Signal listeners do not keep the process alive; the liveness check does, and ends the command once the server is
+  // gone. A server that is busy (its health route unanswered) but still listening is alive and keeps serving.
   const failed = await new Promise<boolean>(resolveStop => {
-    const health = setInterval(() => void fetch(choice.endpoint + '/health', { signal: AbortSignal.timeout(10_000) })
-      .then(response => { if (!response.ok) throw new Error(); }).catch(() => { clearInterval(health); resolveStop(true); }), 30_000);
+    let checking = false, busy = false;
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const answered = await fetch(choice.endpoint + '/health', { signal: AbortSignal.timeout(10_000) }).then(response => response.ok, () => false);
+        if (answered) { if (busy) process.stderr.write(`natlang: the native server at ${choice.endpoint} answers again\n`); busy = false; return; }
+        if (await nativeListening(choice.endpoint)) {
+          if (!busy) process.stderr.write(`natlang: the native server at ${choice.endpoint} is busy (health unanswered, still listening); it keeps serving\n`);
+          busy = true; return;
+        }
+        clearInterval(health); resolveStop(true);
+      } finally { checking = false; }
+    };
+    const health = setInterval(() => void check(), 30_000);
     const stop = () => { clearInterval(health); resolveStop(false); };
     process.once('SIGINT', stop); process.once('SIGTERM', stop);
   });
-  if (failed) process.stderr.write(`natlang: the native server at ${choice.endpoint} stopped answering\n`);
+  if (failed) process.stderr.write(`natlang: the native server at ${choice.endpoint} is gone (no longer listening)\n`);
   await stopNativeServer(choice.endpoint);
   return failed ? 1 : 0;
 }

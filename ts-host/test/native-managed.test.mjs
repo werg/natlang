@@ -94,3 +94,28 @@ mkdir -p "$7/${sha}"; echo receipt > "$7/${sha}/r.json"; echo '{"path":"'"$7/${s
     assert.ok(!existsSync(join(models, 'actor-views', sha)));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('a server that is too busy to answer is alive: it is waited for, never started a second time', async () => {
+  const { createServer } = await import('node:http');
+  const { nativeListening } = await import('../dist/model/native-managed.js');
+  const identity = { architecture: 'lfm3', checkpoint_sha256: sha, embedding_weight_sha256: 'cd'.repeat(32), tokenizer_fingerprint: 'ef'.repeat(32) };
+  let calls = 0;
+  // The first identity request goes unanswered past the client's timeout (a busy engine); later ones answer.
+  const server = createServer((request, response) => {
+    if (++calls === 1) { setTimeout(() => response.destroy(), 7000); return; }
+    response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ native_state: identity }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port, endpoint = `http://127.0.0.1:${port}`;
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-busy-native-'));
+  try {
+    assert.equal(await nativeListening(endpoint), true);
+    // No interpreter exists at this path: a second start would fail instead of finding the busy server.
+    await ensureNativeServer({ checkpoint: '/direct/checkpoint.pt', sha256: sha, port, python: '/nonexistent/python' }, { NATLANG_NATIVE_MODELS: directory });
+    assert.ok(calls >= 2);
+  } finally {
+    server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+    rmSync(directory, { recursive: true, force: true });
+  }
+  assert.equal(await nativeListening(endpoint), false, 'a closed port is a gone server');
+});
