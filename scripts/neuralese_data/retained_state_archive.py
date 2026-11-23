@@ -57,6 +57,23 @@ def stable_rows(rows):
     return [{key: value for key, value in row.items() if key != 'sha256'} for row in rows]
 
 
+def source_differences(expected, actual):
+    """Report exact source drift; this never substitutes for the member proof."""
+    before = {row['path']: row for row in stable_rows(expected)}
+    after = {row['path']: row for row in stable_rows(actual)}
+    changes = []
+    for name in sorted(before.keys() | after.keys()):
+        left, right = before.get(name), after.get(name)
+        if left == right:
+            continue
+        fields = ({key: {'expected': left.get(key), 'actual': right.get(key)}
+                   for key in sorted(left.keys() | right.keys()) if left.get(key) != right.get(key)}
+                  if left is not None and right is not None else
+                  {'member': {'expected': left, 'actual': right}})
+        changes.append({'path': name, 'fields': fields})
+    return changes
+
+
 def validate_pack(manifest, directory, root=None):
     if manifest.get('schema') != SCHEMA or not ROOT_NAME.fullmatch(manifest.get('root', '')):
         raise ValueError('invalid opaque state pack manifest')
@@ -111,8 +128,33 @@ def validate_pack(manifest, directory, root=None):
                 raise ValueError('opaque state member content/type mismatch')
     if seen != set(expected):
         raise ValueError('opaque state archive omitted a member')
-    if root is not None and stable_rows(inventory(root, hashes=False)) != stable_rows(manifest['members']):
-        raise ValueError('opaque state source changed after packing')
+    if root is not None:
+        actual = inventory(root, hashes=False)
+        changes = source_differences(manifest['members'], actual)
+        if changes and all(set(change['fields']) == {'ctime_ns'} for change in changes):
+            # ctime is a race detector, not portable archive data: adding an
+            # external hardlink to an immutable CAS blob changes it without
+            # changing a captured byte or metadata we restore. Prove identity
+            # again instead of treating that event as lost recovery state.
+            by_name = {row['path']: row for row in manifest['members']}
+            for change in changes:
+                row = by_name[change['path']]
+                if row['kind'] != 'file':
+                    continue
+                path = Path(root).parent / row['path']
+                before = path.lstat()
+                actual_hash = digest_file(path)
+                after = path.lstat()
+                identity = lambda info: (info.st_dev, info.st_ino, info.st_mode, info.st_uid,
+                                         info.st_gid, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                if identity(before) != identity(after) or actual_hash != row['sha256']:
+                    raise ValueError('opaque state source changed during content revalidation: ' + row['path'])
+            confirmed = inventory(root, hashes=False)
+            if stable_rows(confirmed) == stable_rows(actual):
+                changes = []
+        if changes:
+            raise ValueError('opaque state source changed after packing: ' +
+                             json.dumps({'changed_members': len(changes), 'sample': changes[:8]}, sort_keys=True))
     return archive
 
 
