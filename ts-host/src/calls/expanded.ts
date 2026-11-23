@@ -8,5 +8,6 @@ export function expandedRecord(store: CallStore, record: CallRecord): Record<str
     captures: Object.fromEntries(Object.entries(record.captures).map(([name, ref]) => [name, value(ref)])),
     output: value(record.output), effects: record.effects.map(effect => ({ ...effect, args: value(effect.args), result: value(effect.result) })),
     capture_writes: record.capture_writes.map(write => ({ ...write, after: value(write.after) })),
+    ...(record.code_revisions ? { code_revisions: record.code_revisions.map(revision => ({ ...revision, after: value(revision.after) })) } : {}),
     definition: { ...record.definition, instructions: value(record.definition.instructions) } };
 }

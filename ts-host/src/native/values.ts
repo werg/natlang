@@ -44,7 +44,10 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
    * turn's reply is forced to `return_result` with the value written as a block (a Neuralese result) or decoded. */
   readout?: 'decision' | 'template';
   /** Tools this call is not offered: its definition's `withhold:` frontmatter (runtime/loader.ts WITHHOLDABLE_TOOLS). */
-  withheldTools?: string[] };
+  withheldTools?: string[];
+  /** Sources of the codebase this call can read but not edit: its definition's `protect:` frontmatter, resolved
+   * (runtime/loader.ts protectedSources). */
+  protectedSources?: string[] };
 export type Pending = LambdaNode;
 /** `text`, when set, is the whole model-facing line (a sentence without the `path: code` prefix); `code` stays for traces. */
 export type Diagnostic = { path: string; code: string; expected?: string; got?: string; text?: string };

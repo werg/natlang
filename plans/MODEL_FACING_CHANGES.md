@@ -2959,3 +2959,18 @@ binding now carries the sentinel. An evaluation with no scored run now reports n
 the anchor ignores that arm, a group whose support runs all failed is not admitted, and a committed set whose query
 runs all failed leaves the episode unmeasured. Guided programs now see their guidance as the runtime's
 `<natlang_program_guidance>` block, as designed. No opt-out: the old path failed every guided run.
+
+### 2026-11-23 — edit_code refuses what judges the call, with an error that names the fix (semantic-FP B8, WS1 L3)
+
+A stuck model could edit the thing that decides whether it succeeded: in teacher data every run whose board refused a
+move rewrote the board module to accept it. `edit_code` now refuses items a function lists in its new `protect:`
+frontmatter (verifiers, checkers, fixtures), the program's `types.ts`, and an edit that would change a `protect:` list,
+with one sentence: "`review/checks/verdict.ts` decides whether this call succeeded, so it cannot be edited here; fix the
+code that produces the value it rejects." (`types.ts`: "...declares the types this call's result is checked against...";
+a `protect:` list: "The protect: list of `f.nl` names what judges its calls, so an edit cannot change it; ..."). Code
+`protected`, `native/runtime.ts` `functionTool`. The tool block is unchanged (no new tool, no schema change), so the
+stable prefix is untouched; only rejected-edit observations carry new text. `FUNCTION_TOOLS_PROMPT` is unchanged. No
+opt-out for the refusal itself (a program that wants an item editable does not protect it); `codeEdits: 'deny'` and
+`withhold: [edit_code]` stay as before. Successful calls now also record their committed revisions (`code_revisions`
+in the call record, from a new `code_revision` trace event), which renderers of recorded prompts ignore: the event is
+not a message.

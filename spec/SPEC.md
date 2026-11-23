@@ -116,6 +116,7 @@ Assess every observation with assess, then summarize the assessments.
 
 Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
 (`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold` and `budget`. `generic` declares a
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold`, `protect` and `budget`. `generic` declares a
 representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
@@ -124,7 +125,7 @@ items the function may call besides its companion folder, by path from the packa
 joins its context under its base name, with its own companion folder. `withhold` lists optional tools the
 function's own calls are not offered (`withhold: [delegate]`): `edit_code`, `diff_code` and the folder tools; eval,
 return_result, read_page, compact_history and read_code are always offered. A withheld tool is absent from the call's
-tool schema and prompt, and calling it anyway is refused with a one-sentence error. `budget` bounds the model work of each of
+tool schema and prompt, and calling it anyway is refused with a one-sentence error. `protect` lists the items of the function's companion folder that judge its calls (verifiers, checkers, fixtures), by path from that folder (`protect: [checks/citations.ts]`; an entry without extension or a subfolder also matches): its calls can read them but `edit_code` refuses them (`protected`), as it refuses `types.ts` and an edit that changes a `protect` list. An entry that names no item is a load error. `budget` bounds the model work of each of
 the function's calls in place of its model's own bounds: a map of `maxTurns`, `turnTokens` (reply tokens of one turn),
 `maxTokens` and `contextTokens` to positive whole numbers (`budget: { maxTurns: 8, turnTokens: 1024 }`); a call that
 exhausts it fails with reason `budget-exhausted`. No budget applies by default: termination is structural. `args`, `returns`, `generic` and `types` hold
@@ -346,7 +347,12 @@ A natural-language invocation offers the model these tools:
 - `read_code`, `edit_code`, `diff_code`: inspect and edit the program's codebase
   (its callable items); `read_code` also reads the declaration of a service or an
   importable package, which cannot be edited, and the documentation of eval's
-  built-ins (`nl`, `iterateOn`, `transcript`). It is offered on every call.
+  built-ins (`nl`, `iterateOn`, `transcript`). `read_code` is offered on every call;
+  `edit_code` and `diff_code` where the call has code of its own and edits are not denied.
+  An edit is a revision of the run's program view, never of the files: a call that
+  succeeds records its revisions in its call record (`code_revisions`), and
+  `natlang improve adopt-call CALL` installs them only after `natlang check` and
+  `natlang test` pass on the proposed source and no protected item changed.
 
 A [directory reducer](ext/directory-reducers.md) additionally receives `list_files`, `search_files`,
 `read_file`, `write_file`, `edit_file`, and `diff_files`, and the conversation

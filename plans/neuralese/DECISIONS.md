@@ -7632,3 +7632,51 @@ selected programs whose judgments were keyword lists (`contains the word dog, ca
 - **Not done here:** no model has run these tasks, so their pass rate and frontier tier are unmeasured. There are no
   Neuralese, folder or iterate constructs, and decide appears in 33%. w401, the exemplar with one program, was not
   admitted.
+
+## 2026-11-23 05:30 Malleable code through a transaction: protected judges, recorded revisions, adopt-call (semantic-FP B8, WS1 L3)
+
+Decision (WS1 L3, kept): `edit_code` stays on wherever a call owns code; what judges the call is protected, and a good
+edit becomes a proposal the program can adopt instead of dying with the run. The default stays `allow`.
+- **Protected items.** New frontmatter `protect: [path, ...]` (paths from the function's companion folder; extension
+  optional; a subfolder protects everything in it). `edit_code` refuses (code `protected`, one teaching sentence, WS4 §8
+  text) the protected items of the executing function and of every function in its codebase tree, the program's
+  `types.ts`, and an edit that changes any `protect:` list (so a nested function cannot unprotect its verifier). An
+  entry that names no item is a load error. Services were already refused as external (unchanged text).
+  `ensures:` checks (L7, B12) are not on main yet: when they land, their named items join `treeProtectedSources`
+  (`runtime/loader.ts`), the one place protection is computed.
+- **Revisions are recorded.** Each committed edit emits a `code_revision` trace event (item, source, revision, hashes,
+  the find/replace patch, the edited text); a call that ends `done` records them as `code_revisions` in its call record
+  (`after` is a blob ref linked against eviction). `natlang traces show` lists them; the dashboard trace page shows them
+  with **Adopt this fix** (job kind `adopt-call`).
+- **Adoption is a Folder transaction.** `natlang improve adopt-call CALL [--into DIR] [--dry-run] [--untested]` takes the
+  last revision of each source, refuses a stale checkout (file hash must equal the text the call edited), refuses any
+  change to `types.ts`, protected items or `protect:` lists, materializes the proposal in a temp copy, runs `natlang
+  check` and `natlang test` there (the real CLI, as subprocesses), and installs through `improvement/adoption.ts`
+  `adoptSource` (adoption record first, atomic install). `natlang improve rollback RECORD` restores the exact bytes. A
+  program with no saved examples is refused unless `--untested` (adopt on check alone): adopting untested model edits
+  silently would make the gate decorative.
+- **Stale comment fixed** (`native/runtime.ts`: "edit_code is offered to every call"; it is offered only where
+  `codeEditable()` holds, `agent.ts` toolsScope).
+- **Inventory.** Changed: `runtime/loader.ts` (key, validation, resolution helpers), `runtime/callable.ts`,
+  `runtime/kernel.ts` (definition plumbing), `native/values.ts` (`protectedSources`), `native/runtime.ts` (refusals,
+  event), `calls/{types,recorder,store-core,expanded,trace-view}.ts`, `improvement/adopt-call.ts`, `cli/improvement.ts`,
+  `cli/main.ts`, `dashboard/server.ts`, `dashboard/{run-host.js,pages/traces.js}`, spec SPEC/ERRORS, skill SKILL.md and
+  `references/language.md`, MODEL_FACING_CHANGES. Not changed, with reason:
+  - Engines (managed llama-server, wllama, Python native, SGLang): edit_code runs in ts-host (`native/runtime.ts`
+    `functionTool`); engines see only the tool schemas, which are unchanged (`native/agent.ts` toolsScope, edit_code
+    still offered under `session.codeEditable()`), and the refusal text as an observation.
+  - Browser runtime: shares `native/runtime.ts` and `runtime/loader.ts`, so protection applies there too; adopt-call is
+    Node-only (it installs files in a checkout; `improvement/adoption.ts` is `node:fs`).
+  - `ProgramView` (`adaptation/program-view.ts`): unchanged; revisions stay run-scoped there, recording reads the event.
+  - Learner, held eval, collectors, Python renderers of recorded prompts: they replay recorded messages; no message
+    changed except the refusal observation, and the new trace event kind is not a message. Held and EI collection pass
+    `codeEdits: 'deny'` already (WS1 L3 v2 fact).
+  - Authored-task checks (`scripts/rl_tasks/authored_checks.py`, `verify.mjs`, `structure_smoke.mjs`): they load `.nl`
+    through the TS loader, which now accepts `protect:`; the Python checks read only `args` (authored_checks.py
+    `_arg_counts`).
+  - `improvement/program.ts` (`natlang improve CASE.json`): its own proposal search with adoption via `adopt`; adopt-call
+    reuses the same `adoptSource`. WS8 N4 (`natlang improve DIR`) should call `adoptCall`'s gate rather than add a third.
+- **Tests.** `ts-host/test/code-edits.test.mjs` (5 tests: protected/types/protect-list refusals with exact text,
+  revision record, load error, adopt accept/reject/dry-run/stale, byte-identical rollback, refusal of failed and
+  no-edit calls and of a forged protected revision, the CLI end to end with real `natlang check`). Conformance 22/22
+  incl. 17-reopen-refine.

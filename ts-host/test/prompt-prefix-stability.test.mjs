@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -63,7 +63,13 @@ test('a real run: every tool-loop request sends one system message, its tools op
   const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, path: fileURLToPath(new URL('../dist/index.js', import.meta.url)),
     types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
   const outDir = mkdtempSync(join(tmpdir(), 'natlang-prefix-'));
-  const built = buildProject({ project: fileURLToPath(new URL('../../examples/triage', import.meta.url)), outDir, runtimeModule, writeDeclarations: false });
+  // examples/triage scores classify and is_urgent as decision readouts (B4); without `readout:` they run the tool loop
+  // with three different declared results (Label, boolean, string), which is what this test compares.
+  const project = mkdtempSync(join(tmpdir(), 'natlang-prefix-triage-'));
+  cpSync(fileURLToPath(new URL('../../examples/triage', import.meta.url)), project, { recursive: true });
+  for (const file of readdirSync(project).filter(name => name.endsWith('.nl')))
+    writeFileSync(join(project, file), readFileSync(join(project, file), 'utf8').replace(/^readout: decision\n/m, ''));
+  const built = buildProject({ project, outDir, runtimeModule, writeDeclarations: false });
   assert.equal(built.ok, true, JSON.stringify(built.diagnostics));
   const { triage } = await import(pathToFileURL(join(outDir, 'triage.js')).href);
   const scripted = scriptedModel(opening => {
@@ -82,7 +88,7 @@ test('a real run: every tool-loop request sends one system message, its tools op
     }
     return scripted.driver(request);
   };
-  const tickets = JSON.parse(readFileSync(new URL('../../examples/triage/tickets.json', import.meta.url), 'utf8'));
+  const tickets = JSON.parse(readFileSync(join(project, 'tickets.json'), 'utf8'));
   await createNatlangRuntime({ model: driver }).run(() => triage(tickets, 'billing, technical, spam'));
   const loops = requests.filter(request => request.tools.length);
   assert.ok(loops.length >= 4, 'tool-loop calls ran');

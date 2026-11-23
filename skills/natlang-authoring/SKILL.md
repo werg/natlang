@@ -65,6 +65,7 @@ together. Then return summarize of the assessments, in the original order.
 matter are TypeScript type text read verbatim, so no YAML comments after them. A complete version is in
 [assets/review/](assets/review/) (copy the whole directory). Front matter keys: `description`,
 `args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `budget`; see
+`args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `protect`, `budget`; see
 [language and source contracts](references/language.md).
 
 **Callable folders.** A function calls exactly the items in its companion folder (`foo/` beside `foo.nl`), and their
@@ -147,6 +148,7 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `called itself without a smaller argument` | Recurse on part of the input, a shorter array or string, or a smaller non-negative integer; a function may not appear in its own chain of callers. |
 | `invalid-binding` | A name reused for a result (`const plan = await plan(x)`): keep the result under another name (`planResult`). |
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
+| `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, `types.ts`, a `protect:` list): leave it as it is and fix the code that produces the value it rejects. |
 | `capture-conflict` | Another task changed a captured `let` mid-call; if it recurs, make the state a parameter or a returned value. |
 | `type-mismatch` / `undeclared-field` | The value or field doesn't match the declared type: fix the type or the instruction that produces it. |
 | `iteration-measure-exhausted` | The measure hit 0 while `until` was false: make `until` true where the measure is 0. |
