@@ -1,0 +1,399 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-outcomes-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-outcomes-20261123",
+  "files": [
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-0.json",
+      "bytes": 241770,
+      "sha256": "ceeb3ca111efb8353d17803a59a6b6d8c1bf39add1d07287d95d0e9d524ee2d0"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-1.json",
+      "bytes": 247860,
+      "sha256": "3a82ae93ef08889a63cb05997dbd7a68e4522652f38e601d244e60fdf4cc7911"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-10.json",
+      "bytes": 235001,
+      "sha256": "ef245b9da06b1f6ad0a53f471e1d0629bc242152f1fb0f5d4a6fe30b4762393e"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-11.json",
+      "bytes": 230336,
+      "sha256": "5fc968c8a9fce5307de5e34d6b863be2dd996833038d40b4745ae69daba76a5c"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-12.json",
+      "bytes": 434064,
+      "sha256": "52410e60d30e7f996f4a097175a70216d87e39d08494ded746a5f357759b1958"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-13.json",
+      "bytes": 599236,
+      "sha256": "3c1ef603b7b6c239b0629ef546f91871339ef1614632ff6c29d64db656293b1f"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-2.json",
+      "bytes": 133577,
+      "sha256": "012de0ef40bad65579f3b938e7ccb7f5a77558ebc8067fd89aa4592a09e2cffc"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-3.json",
+      "bytes": 285954,
+      "sha256": "9a2b3a8dbd31613fc42ef721afd31f5cb0ffbe87f76f19e5d855620f26a0ca12"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-4.json",
+      "bytes": 232859,
+      "sha256": "80ba592305c1ec7781bfd58f3268db7a95a85ac7af5aead9a9f3295a0e06937a"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-5.json",
+      "bytes": 184720,
+      "sha256": "737efcf9912b2e7b11a485f9cf4f44135e61ccfb88edbc575b8b07400e1c510a"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-6.json",
+      "bytes": 943767,
+      "sha256": "970db401fefe1872bd635ec71c721cfda05551d12964e7a1abd2c68310393841"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-7.json",
+      "bytes": 310407,
+      "sha256": "a002ad282fdd6a4511ea86fa81753fdac746005f014bb26c0f4389b8522a6d8c"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-8.json",
+      "bytes": 390597,
+      "sha256": "075540d8ba6110c2c569929efb8fef271ab7600a1612e35dbeda1e8c2ed3bfcd"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/call-9.json",
+      "bytes": 235844,
+      "sha256": "24326a6c44019a8bb3ea9eebb2ab1ba68cd2aed201531b895ff275a535cda4a6"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/completed-outcome-original.json",
+      "bytes": 4024,
+      "sha256": "2ea0236e74959d389829140b8639914886606f77dd932e7c4e28ce3de427eeb0"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/completed-reassessment.json",
+      "bytes": 4051,
+      "sha256": "a4606292e5c4c8d03bca003ca75856198c566a002567b20509c1e62c890880ea"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/manifest.json",
+      "bytes": 4037,
+      "sha256": "1ac6a69428e814797589a12723d2fb6e1756649d508feab75a7d3acc81b8a268"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/original-outcome.json",
+      "bytes": 377,
+      "sha256": "47facd68551ea6db059cd5cf8ca74c58f8cfd958ae204363fb4670ad0f506134"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-0.ts",
+      "bytes": 15726,
+      "sha256": "6f883a5b0ed6497e1eb798760e6fba14bfcbb81841a87369ffe225e4e58e84a5"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-1.mjs",
+      "bytes": 40071,
+      "sha256": "79b43c67310dfe017efbc289f305890477ecbff5af4d3c559bc7c816555bd989"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-10.ts",
+      "bytes": 9105,
+      "sha256": "040e55747cb1f6ae9b78d31fb3d104832d2cc637d5ea4a4de6adb59ce7656f6c"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-11.ts",
+      "bytes": 11024,
+      "sha256": "8bd0ea235477bf6485c665b1d54328889c90f0b4672601a764d10759a2520656"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-12.ts",
+      "bytes": 25905,
+      "sha256": "ffde218861d85f31daa72e5e949c7cd4f98b00fad0547f7f4f7496c70f92a06a"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-2.mjs",
+      "bytes": 6614,
+      "sha256": "85438fab6726a098dadb7e5c67ed5ed2fd732416d6f5a18105803ebd24d97b99"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-3.ts",
+      "bytes": 1068,
+      "sha256": "b5ddfc391f2724908983bb8bf38734eff2d3bb2a48cdf6359e52f4b331845624"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-4.ts",
+      "bytes": 1009,
+      "sha256": "8a28e52d5a1e2056f01bc8b02c0f3d851c66ada92ef0567adbc935712d0bb511"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-5.ts",
+      "bytes": 1825,
+      "sha256": "dd61a9c446f1c99c7bb274e45ee59939d70ad646cb282bef04a80353872d1430"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-6.ts",
+      "bytes": 7395,
+      "sha256": "16c0c4643c07153e7b1876c705f641a69afe4ecacf4752bcb75ea4405f271e38"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-7.ts",
+      "bytes": 3969,
+      "sha256": "bf28e6c161c8a6df6661c67ead961a4da728858557d4b47a5646a0888c068473"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-8.ts",
+      "bytes": 597,
+      "sha256": "d50a2a7edc970de1d3c44a5e1c9da52853558902b79e6e118ee1e90d7ef74778"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-checker_sources-9.ts",
+      "bytes": 973,
+      "sha256": "94bd283f2c90d8fc0f5a5c87576e1a80008fb137541a4e1aeb0eef53cb932e56"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-evidence-0.json",
+      "bytes": 3038,
+      "sha256": "f84749dcedcb2da58a998e9d12e972a59a04fcc5c0ef2f1fae75de61a5819120"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment-validator.json",
+      "bytes": 588,
+      "sha256": "18c097d06965c6226f162a9f04b84302b6f0e998e73fed87a1e2c86ec8e39715"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/reassessment.json",
+      "bytes": 706,
+      "sha256": "f65ef503f5252266ccd18627d2309907a322015f4883d71e32c9d4d5b76cef85"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/trajectory-open-goal-present-local-tool-station-equipment-full.json.gz",
+      "bytes": 1068778,
+      "sha256": "fd71d00f7283487c948b55d1807d82b503cb6125bae8261013f118e46faa9ffa"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/trajectory.native.jsonl.zst",
+      "bytes": 79555,
+      "sha256": "1e5f8427be50a51d47434acf7ce10c8fe295352478dc252618e8e5799dec4981"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/verification.json",
+      "bytes": 16253,
+      "sha256": "0e6d42635992c654c262b9e74faf0a6a0f691dda2504c8d13d26d25e05cb05a4"
+    },
+    {
+      "path": "capture/0027-open-goal-present-local-tool-station-equipment/workspace.json",
+      "bytes": 4264,
+      "sha256": "403f86ebeb7bc0a4ee8d3ab308c3e0f3004171a02fe7adc6a7a3d427b30d1865"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-0.json",
+      "bytes": 239305,
+      "sha256": "7d4db2b783073ccdd063b37d108ac844a803be9d3527dbd6bfd84a4c0ef434a7"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-1.json",
+      "bytes": 119332,
+      "sha256": "6e2cb96e6988e753ead6c8811fb43e1cad5a59aa07071277d0311aa8690f9a66"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-2.json",
+      "bytes": 338402,
+      "sha256": "0419fc9af0e877637d0dceed9687f40f30053584943f2a29738ff9e761642b3d"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-3.json",
+      "bytes": 95421,
+      "sha256": "58cf9850733986e6da6e214e4241c6699ce7585e41363ac58b740cee85a4f2e1"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-4.json",
+      "bytes": 99624,
+      "sha256": "5cd201727ca5722b3cdd4d4899aa64abfaf7fb69680169809b5bf8238b67c7f2"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-5.json",
+      "bytes": 242037,
+      "sha256": "59c40f838fbe8e6193113a4a8665040d25dd2c5378144fff127e6a33c8bff02c"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-6.json",
+      "bytes": 263664,
+      "sha256": "fef52833033d19665df896d19c967d6e9b8e3d92957b32b6921dfaef0bcbaba4"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-7.json",
+      "bytes": 256483,
+      "sha256": "17cc5cfa70d94844fb6567f46d886e573bcbe464855448700ab7b55839348f4e"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-8.json",
+      "bytes": 292852,
+      "sha256": "9fc073f27cee02fac25c3527a66b685905099380ce85a2f2c3fd8a242050616f"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/call-9.json",
+      "bytes": 569158,
+      "sha256": "70233702f2871a818646d4b50c138912605b0798b867bb2103f6d47f45d66153"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/completed-outcome-original.json",
+      "bytes": 5581,
+      "sha256": "066e154847a2b2bac0fcfe8cd72a4d33603a6dc89c1a18c826910807a45d398d"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/completed-reassessment.json",
+      "bytes": 5631,
+      "sha256": "9a198047003eb2d918e4f8e14e8630a740774b492dd45ddbf17e68280a56264b"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/manifest.json",
+      "bytes": 3943,
+      "sha256": "47bf3a75f9277af3812b93a9e6ae3ae322a62ad7839c2c058fac983d85cc3c3a"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/original-outcome.json",
+      "bytes": 229,
+      "sha256": "589c3b1e91c041039adda2b2054771aabefadb4345f83725418a3168577d722d"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-0.mjs",
+      "bytes": 6914,
+      "sha256": "e41631138f354f7ed6940fae82b57a7ee319324af642d1253701ade30c770d93"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-1.mjs",
+      "bytes": 8092,
+      "sha256": "fbf8241d120667228addf1aac8db5bd73246e28cca14a2e1c85d90d4536e3668"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-10.ts",
+      "bytes": 1546,
+      "sha256": "afbf6ba3ec378299fad18b00d480cf2b350f819d6f50feb9407ea5f49c9a06a5"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-11.ts",
+      "bytes": 3173,
+      "sha256": "e0d73848c020b4ad2bfefc1e7c6e8ac55e11a853721b747842f463317c26cb55"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-12.ts",
+      "bytes": 13628,
+      "sha256": "8658e896739140b3a6109f444914cf1ebb9b68b23794ee9b16d34f43dc63bce6"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-13.mjs",
+      "bytes": 5190,
+      "sha256": "a860dd9396b78cfbce27212bab748035e20ae95d94a94e0ebf84784b1bb52676"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-14.nl",
+      "bytes": 2666,
+      "sha256": "3aa7c7195e1d08af29d45ef257c6de4f1435969ee5e92f068467b53ecbcd8e61"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-15.ts",
+      "bytes": 426,
+      "sha256": "fa0571244d2aab290e0b1f0efd72cb5757755a9afabfb125298685b35e0c0a8a"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-2.ts",
+      "bytes": 267,
+      "sha256": "d2e502c719c76b3357b8ade0175715b0a8f948c54444645ac5bbe3ac8689ba16"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-3.ts",
+      "bytes": 1068,
+      "sha256": "b5ddfc391f2724908983bb8bf38734eff2d3bb2a48cdf6359e52f4b331845624"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-4.ts",
+      "bytes": 1009,
+      "sha256": "8a28e52d5a1e2056f01bc8b02c0f3d851c66ada92ef0567adbc935712d0bb511"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-5.ts",
+      "bytes": 1825,
+      "sha256": "dd61a9c446f1c99c7bb274e45ee59939d70ad646cb282bef04a80353872d1430"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-6.ts",
+      "bytes": 7395,
+      "sha256": "16c0c4643c07153e7b1876c705f641a69afe4ecacf4752bcb75ea4405f271e38"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-7.ts",
+      "bytes": 3969,
+      "sha256": "bf28e6c161c8a6df6661c67ead961a4da728858557d4b47a5646a0888c068473"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-8.ts",
+      "bytes": 597,
+      "sha256": "d50a2a7edc970de1d3c44a5e1c9da52853558902b79e6e118ee1e90d7ef74778"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-checker_sources-9.ts",
+      "bytes": 973,
+      "sha256": "94bd283f2c90d8fc0f5a5c87576e1a80008fb137541a4e1aeb0eef53cb932e56"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-evidence-0.json",
+      "bytes": 80539,
+      "sha256": "aa38cb7cc72eb251aa8398053e6630938ae1071196cef50d96809d9012453dc6"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-evidence-1.json",
+      "bytes": 3951,
+      "sha256": "1cb398aeb00af2e74d2cce524233f08eed58bceb6e336ee7d4f0d4954eca5655"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment-validator.json",
+      "bytes": 602,
+      "sha256": "c279041b0cc94e5e8ee437098341c6943386c0bbcb02a9ca5d5b1c46f3c3d89d"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/reassessment.json",
+      "bytes": 786,
+      "sha256": "7fd9c792a13822ed0dba573de2dc5afc44ddd918d48c33de42406049f0e93661"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/trajectory-open-goal-public-brief-print-example-without-domain-purchase-full.json.gz",
+      "bytes": 597829,
+      "sha256": "bc3b7dbae1f65121f4896a31c582a05c1ef5e469846c223090425241f1125651"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/trajectory.native.jsonl.zst",
+      "bytes": 65180,
+      "sha256": "a1d2be06b056a88b6cad5f66e5c155f3e385f54656cd65f8878806e948d9f9c8"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/verification.json",
+      "bytes": 12322,
+      "sha256": "9daf061c7a69f8fea520fe4749dad58232431c2e6455990eb538f9764dadda62"
+    },
+    {
+      "path": "capture/0027-open-goal-public-brief-print-example-without-domain-purchase/workspace.json",
+      "bytes": 5890,
+      "sha256": "a290e0933589cd999f96808b0abf88e66cfd012fc855c62b2ea08182103e927d"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 683,
+      "sha256": "8cc852b0fbf486d9af45592614bb1f2f659b0aab294381322deb0a75688dde3e"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 125703,
+      "sha256": "fc020aee4952582c54e7f8824ad8bddbb3f333b6a44cd9531ed04497a98165a4"
+    }
+  ],
+  "bytes": 9500829
+}

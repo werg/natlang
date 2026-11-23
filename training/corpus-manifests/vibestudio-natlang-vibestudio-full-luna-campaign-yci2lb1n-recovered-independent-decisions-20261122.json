@@ -1,0 +1,1059 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-independent-decisions-20261122",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-independent-decisions-20261122",
+  "files": [
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-0.json",
+      "bytes": 235851,
+      "sha256": "1bc95273568c0b6f5cbe92e3246e717fe3161421a203ad21b3054e3e1315406c"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-1.json",
+      "bytes": 909515,
+      "sha256": "26f665ab192743128a0039a47309c84312ded56825a88786b9f024adbee17146"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-2.json",
+      "bytes": 292689,
+      "sha256": "6088da770088a839c3dddba82fead58fdbf436e0216fa2f0bd927abbcf533c2d"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-3.json",
+      "bytes": 289649,
+      "sha256": "702f072612638259505966c9e0f0b799d8c5fcdf94136b189460a4a1557103d4"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-4.json",
+      "bytes": 251167,
+      "sha256": "4b4099332e38868101b537e9c06866090f1aceb815b1115429d3b092cf193cf2"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-5.json",
+      "bytes": 306036,
+      "sha256": "6e475fdb406eaf9f3d227d9c57d692a1ffafbf59461fdb9171e4b164e2ea02fb"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/call-6.json",
+      "bytes": 1191035,
+      "sha256": "8dcbf757afa93e4f2bfee755f97ea890a6a1732c55153b7f2983c0d30577286c"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/manifest.json",
+      "bytes": 2747,
+      "sha256": "9817063c22291ee5f24453501d8d0fb525eae80a2cb07fcfab588f60a41af09d"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/original-outcome.json",
+      "bytes": 276,
+      "sha256": "6c988f03a491925f87dc6a9f1610c98e20a0f7c70e9b01976178275955a19dba"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/reassessment-validator.json",
+      "bytes": 429,
+      "sha256": "c7bbb452ad91a5942dc463565e160bc479fbc45a71e05ce123df37df1ce195ff"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/reassessment.json",
+      "bytes": 1247,
+      "sha256": "e189f7347532b1541dfad32c011c40219216a1d14c3ca10b66188b7d976729dd"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/trajectory-open-goal-audit-onboarding-pack-direct-access-full.json.gz",
+      "bytes": 649610,
+      "sha256": "435ae97bf89e1252dc6a281d6ca4b31055dc3edc05ed3ea318634e48535748f2"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/verification.json",
+      "bytes": 10169,
+      "sha256": "a20aef359858c7a3e57c9077a1defe3d4a44eda3ce036eb2f7587788603f761a"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access/workspace.json",
+      "bytes": 4237,
+      "sha256": "c162bc1d72b2f9a9281f63cf1cac8fdf0b0c7c2f4a27646d8d070c9694585c70"
+    },
+    {
+      "path": "capture/0002-open-goal-audit-onboarding-pack-direct-access-assessment.json",
+      "bytes": 1247,
+      "sha256": "e189f7347532b1541dfad32c011c40219216a1d14c3ca10b66188b7d976729dd"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-0.json",
+      "bytes": 491844,
+      "sha256": "88ce7c5454e4ad241b7bc675e073bbad45a3bddd5f646b4b16463e0c1630b8a6"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-1.json",
+      "bytes": 291362,
+      "sha256": "ed0aeb45beb400d7234048ed5b730da63a544a7102359488dbb393f97fdb8186"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-10.json",
+      "bytes": 107714,
+      "sha256": "9944281b78f657afb7c0bdd5b7df6196130c20304c07c20bc55d87f1a2e4381a"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-11.json",
+      "bytes": 178474,
+      "sha256": "4a7df8eb30205ee27ba1a79c084558afd41390342c2a0f4ab4c646dd9f84f669"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-12.json",
+      "bytes": 343568,
+      "sha256": "407900e07ffe5888917c8d32294b3a3d8001391eec225b10ca62e5f2db69ce9c"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-13.json",
+      "bytes": 449434,
+      "sha256": "1e21a27b3c95f2a96f6c6b058f22cab0476bd60db63ba9360a910bd9035c4667"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-14.json",
+      "bytes": 293188,
+      "sha256": "535c2ea2363bc94fddbe21ba0c435572d1592c39f695ce137ee27c8723530272"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-15.json",
+      "bytes": 612874,
+      "sha256": "8be68ce8fafcafea00208e21800eb4cb6ccbff44344a2f2237b29d8b9df111e9"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-16.json",
+      "bytes": 536213,
+      "sha256": "d6252db544b508b9b1f028ca954123cece3d9df97cf807b7e040f004a33d4ba5"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-17.json",
+      "bytes": 408765,
+      "sha256": "c7ba34bf2535223ffc78c1c1d7db1653a243244d70042a5f45476900302278a0"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-18.json",
+      "bytes": 108734,
+      "sha256": "5f9f683a3aa01c6006d3a099df23c0968021b626bf60fbd44cb01d7551418914"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-19.json",
+      "bytes": 114373,
+      "sha256": "fac228601c43f77952bba73b5dfb839a73db36f7336e39cfd4c3cd1fb56514f5"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-2.json",
+      "bytes": 289312,
+      "sha256": "df1292e3dcb3e063b108467ccb8bc2756a6bee751193e50a44390ebdce8b230f"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-20.json",
+      "bytes": 198947,
+      "sha256": "3fa0aee593eb5ffea3e1e9146f17a88f937c1cbce2328fdb67653b0e246f5711"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-21.json",
+      "bytes": 340788,
+      "sha256": "12d561b43f8a4f7b2525abbc0d885458c9b0c60fc53c738195d1cf478426e627"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-22.json",
+      "bytes": 731050,
+      "sha256": "887b23d9cc1956d535253ada65d44b24d18758e0def46f276c03035570630a05"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-23.json",
+      "bytes": 3379700,
+      "sha256": "a155acbffb1c866af69e9e28255a798bb1290a919df1e3bcce815966e3175104"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-3.json",
+      "bytes": 252677,
+      "sha256": "22af72d05bfd786f389386fcc3939d0f9cdfa562b9683d551032b8a0efa8668a"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-4.json",
+      "bytes": 447946,
+      "sha256": "96f2db5338765d68cc3a2456b0c0299e953583df52b4e40454a04219f24543e5"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-5.json",
+      "bytes": 727817,
+      "sha256": "6c7b25a66163389624f6b7723ef686cb994e03765445e475fa1f614210010d19"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-6.json",
+      "bytes": 412906,
+      "sha256": "da3059d690552e6aeda3d500d715ca604c739818c664a8deaac305d949194b43"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-7.json",
+      "bytes": 416444,
+      "sha256": "7666001511fb02a786433a758ec8f65287d074c206c4215a3ba29809e875d053"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-8.json",
+      "bytes": 174675,
+      "sha256": "687fba34735e164269fa009b2d2e103aa2cf854e21c9ec45470591a498c05832"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/call-9.json",
+      "bytes": 106770,
+      "sha256": "3c9398ba4aef87c5ddaf9f7c419fdd5041cb0598c9f534cd7caae2b0ede0358b"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/manifest.json",
+      "bytes": 4913,
+      "sha256": "63a17d9e67faee9d55eaa0fb61243e72519462a9ce9b99271c444d382fbe7b37"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/original-outcome.json",
+      "bytes": 276,
+      "sha256": "6c988f03a491925f87dc6a9f1610c98e20a0f7c70e9b01976178275955a19dba"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/reassessment-validator.json",
+      "bytes": 443,
+      "sha256": "7666cdd6f701624a53929e052faab78c7a8a438aa18e3cde20fae218a255dd60"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/reassessment.json",
+      "bytes": 2320,
+      "sha256": "3c15e41af022cfe69be11f8b1b7e9ee75a09e2c5fa3f9c0a6068e595b8b6996d"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/trajectory-open-goal-hold-volunteer-directory-access-on-truncated-list-full.json.gz",
+      "bytes": 2176839,
+      "sha256": "528baddb4353095668fcc12359a52790983672d38f4e23d999f22bc30ccf06bd"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/verification.json",
+      "bytes": 28791,
+      "sha256": "e35d6c0e9f6b51575705ae15f42b132ab69a3b8283f5ee89735097857760ca7b"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list/workspace.json",
+      "bytes": 2223,
+      "sha256": "f2a726ad04d9f1c3d7842dd3068161820e65b5fbdc45739f5ccda1f6f85e6bf3"
+    },
+    {
+      "path": "capture/0010-open-goal-hold-volunteer-directory-access-on-truncated-list-assessment.json",
+      "bytes": 2320,
+      "sha256": "3c15e41af022cfe69be11f8b1b7e9ee75a09e2c5fa3f9c0a6068e595b8b6996d"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-0.json",
+      "bytes": 314429,
+      "sha256": "6a0e474a28caf9cd13edc4806e21898e675847dc55d4e408532f06b98981f54c"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-1.json",
+      "bytes": 299731,
+      "sha256": "b2a46d8dd09b472ffdf49d3c1e6e4f3b6d491e9aa0cc123224dd30ea04a6a9f4"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-10.json",
+      "bytes": 5965035,
+      "sha256": "c219b32f73a5f46be7711c1c063bf17b5c0e1923a19a2871b9952497dfa651e4"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-2.json",
+      "bytes": 427090,
+      "sha256": "b40019ceb1eb59c74fc794a528ccbe8c5a02a34cafbe965833a2069f401bbd39"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-3.json",
+      "bytes": 90339,
+      "sha256": "880818dbd4a729aac6f695b2729e3b3be7e8da9fdcd1fbe50c438ed232c421f9"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-4.json",
+      "bytes": 302823,
+      "sha256": "f883c585f6b5a76da24beb656be93800c7b5c795f372d14e32f9ab72ed8d0af0"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-5.json",
+      "bytes": 427256,
+      "sha256": "0db143ba0397773e9f5256c43be831a22006b387bddfe49d68bb9ee8df2b1566"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-6.json",
+      "bytes": 460007,
+      "sha256": "be1b897bb1a116d4c719e4f1e7f56ad731ca7b1cf5ed4254d9fb14ebfce1f4b6"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-7.json",
+      "bytes": 230879,
+      "sha256": "0d3d504d03b13aaddb631e3beb2278ffe9699c67e4b1999402b7c3871b0a1240"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-8.json",
+      "bytes": 224734,
+      "sha256": "b576318c2cf0a13d9e1949892aa48cd9f9b6da07f8ff183f3454a876c5c8ea3e"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/call-9.json",
+      "bytes": 636424,
+      "sha256": "fba79210247e1a1b2917ea50425b82d42785fa698fe61346777d50b20d265cde"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/manifest.json",
+      "bytes": 3187,
+      "sha256": "c46859bc89eb60a919fe714c11ff9d34f0de8f968f25022c65c7f33a08c8fdf5"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/original-outcome.json",
+      "bytes": 318,
+      "sha256": "1a380ddd389c9f63d64331f53db6951862dd416fd2afd4ae46fe24b66d2ca27d"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/reassessment-validator.json",
+      "bytes": 440,
+      "sha256": "f9314f0d5abd112ee9f28f4535b35968850fb60e8b50a69e196bd535f2bdfa0c"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/reassessment.json",
+      "bytes": 1968,
+      "sha256": "46f0df28be265b53b77016603f5a2309d677158bea243644c3c40cb319761491"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/trajectory-open-goal-hold-report-draft-when-provider-identity-moved-full.json.gz",
+      "bytes": 1493283,
+      "sha256": "837be7943edc0da42eb1ace164c004e42ea890dc006a7402017720d932e516a0"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/verification.json",
+      "bytes": 15142,
+      "sha256": "e5e5090cb49efe227a435381f02a17978a094a1e241fb2a53686dda287596bca"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved/workspace.json",
+      "bytes": 3401,
+      "sha256": "ab6263c6384779fd420acb27b63e2201f5c1e6f355b2386b9a66473b3aeda423"
+    },
+    {
+      "path": "capture/0011-open-goal-hold-report-draft-when-provider-identity-moved-assessment.json",
+      "bytes": 1968,
+      "sha256": "46f0df28be265b53b77016603f5a2309d677158bea243644c3c40cb319761491"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-0.json",
+      "bytes": 240704,
+      "sha256": "255402ab0f6232bf2f4b01354df74c0f4f26190554d5a3d7a74c41a88f45c146"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-1.json",
+      "bytes": 346861,
+      "sha256": "84b614934c8bd17420cf7ab7bbb30201fe8900d9c86ae2451237a7df27e479f5"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-2.json",
+      "bytes": 230910,
+      "sha256": "28e0fd19e314123d2132568451c3d0727b32c94a726255b3e65227c9c0b6cf7e"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-3.json",
+      "bytes": 162715,
+      "sha256": "25127ce44b16e57c4adea23825585ec3389e22fbf49b0401f562439b669e922c"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-4.json",
+      "bytes": 162759,
+      "sha256": "a3b28f3eacaa8f11594d315dd9eb9987934b8e2424635a93fd2fe5d17ddc3b08"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-5.json",
+      "bytes": 227161,
+      "sha256": "d0e18a984f0e029c4775117ff0a888e024fc88691d922633d47afbdbd884c48d"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-6.json",
+      "bytes": 624491,
+      "sha256": "34c246c933bfeb0d388aee169d56597573dbeee08050659fa9b1a6b6c0192e6f"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/call-7.json",
+      "bytes": 1157780,
+      "sha256": "216301224776aa08d858dd5ce95929092c3f9714dd6dd1f86cdbb0685c642266"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/manifest.json",
+      "bytes": 2777,
+      "sha256": "41c9c7a3e677c3eb6a0e6d2d4e4647761bf2bdef9bdc21dd4b2d249ac130bab3"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/original-outcome.json",
+      "bytes": 318,
+      "sha256": "1a380ddd389c9f63d64331f53db6951862dd416fd2afd4ae46fe24b66d2ca27d"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/reassessment-validator.json",
+      "bytes": 441,
+      "sha256": "40759d8627fa49fa36f86324f6d84d2e4b8e5c91f651a3aa52513af6041cba37"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/reassessment.json",
+      "bytes": 1357,
+      "sha256": "0a7a715ffd24f071f962f2146a2fd8ffea639349b93a5c4515e9a403d99ac9c8"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/trajectory-open-goal-do-not-recreate-missing-permit-application-save-full.json.gz",
+      "bytes": 616835,
+      "sha256": "56c64950a8359a10ea5a6dc27d35a5d030453cbd049f9ce689f8cdd780ed5390"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/verification.json",
+      "bytes": 11043,
+      "sha256": "b43002abc6b7b17e77582d4218c5dc6276e93f75d304ac4d04e82a6e40a65561"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save/workspace.json",
+      "bytes": 2451,
+      "sha256": "a1ad52a73382d07912378f1b97930e30824f16703a685408c598a959dbce00bd"
+    },
+    {
+      "path": "capture/0012-open-goal-do-not-recreate-missing-permit-application-save-assessment.json",
+      "bytes": 1357,
+      "sha256": "0a7a715ffd24f071f962f2146a2fd8ffea639349b93a5c4515e9a403d99ac9c8"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-0.json",
+      "bytes": 322977,
+      "sha256": "b44d2fced05dbb59c3795b42cbccc716d79578e1ce0f98573349cffcd6d0c2c9"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-1.json",
+      "bytes": 231010,
+      "sha256": "66b377aec44448dc12a4b9706c3c9ce639ad6f0caa6f1d3cb32e71cdc73b5afc"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-2.json",
+      "bytes": 225648,
+      "sha256": "ea1b3877cbb60cbdbc83a9d3ae271e278d8e65a5840d61be76f61abf527eae7b"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-3.json",
+      "bytes": 628588,
+      "sha256": "77366b4d2820f632f46832fffa5ccdd3928781b17087d3556deb7d4534c53270"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-4.json",
+      "bytes": 426332,
+      "sha256": "1487ed8c2587208ea9713d43b39d18b7b2c3abb80c4d32fb89024da3d9eb0972"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-5.json",
+      "bytes": 230975,
+      "sha256": "148f4e9d7b77f52218c0267c6c70fce4873a82bae228f8329c772879de7c5fdd"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-6.json",
+      "bytes": 86819,
+      "sha256": "78ec9f2edd72984d0c96453d1ddd0fc3130bb9761d6cc0f49102481d6183a9d6"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-7.json",
+      "bytes": 228059,
+      "sha256": "9519a8f5c3d25dbd0a17da9cccb2026b2ab13759e0f6e7c829cdac8e4208d6e5"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-8.json",
+      "bytes": 636076,
+      "sha256": "b9a6c4ec66fa434edb837cde0e2249bd0a3f356976bb2c6692076638669d485a"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/call-9.json",
+      "bytes": 1160443,
+      "sha256": "24955aa349bbf297796b620c1f7592306dac6339ace94203d16fc38d309473bb"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/manifest.json",
+      "bytes": 2988,
+      "sha256": "0054fd8f564dd28052db63f1b51e0d2769bf24e4e427c4c590cb97a44f5b4516"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/original-outcome.json",
+      "bytes": 318,
+      "sha256": "1a380ddd389c9f63d64331f53db6951862dd416fd2afd4ae46fe24b66d2ca27d"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/reassessment-validator.json",
+      "bytes": 438,
+      "sha256": "58fdb7fb868ee02e31ef97c5149bc91456a72ae4788d0550352824203ea407b3"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/reassessment.json",
+      "bytes": 1966,
+      "sha256": "0511b41da7f3948ea75c9ed4db9138bfd662b0c5d3eb943b4c0f70a731cee1da"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/trajectory-open-goal-verify-retained-observatory-delivery-receipt-full.json.gz",
+      "bytes": 857373,
+      "sha256": "487e878187e32b96cb1383875d10a97d989b270d4e973d53685e9c8c9366d23c"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/verification.json",
+      "bytes": 14220,
+      "sha256": "6191ef7bb0b94bb538430e61c924cb60b2a5213dcc8eb56cc693fdeeb7facedb"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt/workspace.json",
+      "bytes": 2853,
+      "sha256": "f8d0080fac4cbbc685935d7f8716c0adfc8bc87983d8918fb4c92208d3166ccc"
+    },
+    {
+      "path": "capture/0013-open-goal-verify-retained-observatory-delivery-receipt-assessment.json",
+      "bytes": 1966,
+      "sha256": "0511b41da7f3948ea75c9ed4db9138bfd662b0c5d3eb943b4c0f70a731cee1da"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-0.json",
+      "bytes": 84893,
+      "sha256": "1af084b0d3bc17e6efa67c19aa43bdd543f71276307f4f754f8fbce4cc25c008"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-1.json",
+      "bytes": 228499,
+      "sha256": "857fc8f7f7d879764eb41b262fe41342b91f33a35d49b791e98bc58175138d02"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-10.json",
+      "bytes": 425712,
+      "sha256": "13c1c96ee0f21c1a82010f94c1c8eaa1b1b0abb75c57309bf1e529c9fbb515fc"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-11.json",
+      "bytes": 10551641,
+      "sha256": "1e900dd1626105ce03705e6b5769f878ebbbb82e1b36019e9f42945ae8636398"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-2.json",
+      "bytes": 425850,
+      "sha256": "f6c01442ed4c5200cf4c9f35f5e3c1e9d4c1007bf6dc328f96371b7ac4b3cd1f"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-3.json",
+      "bytes": 348326,
+      "sha256": "f76efc578b03a0fb30198acb3ed32e5fb5f1332ae8877da86b74fc5e14699af3"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-4.json",
+      "bytes": 307460,
+      "sha256": "9995cc402e1f13ab9fa88c36ebec8b62f73f607f4a7590c75e4ec8c85ad1a074"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-5.json",
+      "bytes": 92386,
+      "sha256": "1558af4e6f23cce6954443363f127d6c5248be874c234361e0092c53970f7115"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-6.json",
+      "bytes": 91439,
+      "sha256": "b0a0f93afe4689074155391d69b0d76d6b2d0c0d75ab3f05074aa8fe512a65aa"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-7.json",
+      "bytes": 228342,
+      "sha256": "3a05b8d6c855509c4329320d67e24e40733e093a25fea07f82b1b426ae5285f5"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-8.json",
+      "bytes": 533614,
+      "sha256": "e0ec2871117020e9f70cba16d38969613b8e4200f841f06eacfa1d74b3257062"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/call-9.json",
+      "bytes": 223652,
+      "sha256": "76fa4536f8db148a861d47c755b0249e5eb244ce7c6d80515e93255d3fdc022a"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/manifest.json",
+      "bytes": 3234,
+      "sha256": "04919a14ab06b7736f0896c1df275cf34928a29e7222cd6940e1ae7d604d41e6"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/original-outcome.json",
+      "bytes": 318,
+      "sha256": "1a380ddd389c9f63d64331f53db6951862dd416fd2afd4ae46fe24b66d2ca27d"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/reassessment-validator.json",
+      "bytes": 448,
+      "sha256": "78b786966354670022aec41f2a5cda089184f7a592dc5d5cb0a3843433c2e63c"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/reassessment.json",
+      "bytes": 1977,
+      "sha256": "b7225e9b6d0819a282b99f79e2d380e63a1eea724e4aef0738c3f8d5e2a480f3"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/trajectory-open-goal-report-retained-rota-draft-link-missing-without-search-full.json.gz",
+      "bytes": 1922197,
+      "sha256": "fa57eff8d80991ade50c4f481c0703f1979aeb96184be900f31f29c2cd623cf9"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/verification.json",
+      "bytes": 15984,
+      "sha256": "ab8d6729fdc2b943f6588888a023cecec77c50ef799e08c0f9155ec808e309d0"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search/workspace.json",
+      "bytes": 2481,
+      "sha256": "0d81c91d8991bfb6c1a383656b2612ac6abbb75c16d62fa7fe6c2966dbcb5532"
+    },
+    {
+      "path": "capture/0014-open-goal-report-retained-rota-draft-link-missing-without-search-assessment.json",
+      "bytes": 1977,
+      "sha256": "b7225e9b6d0819a282b99f79e2d380e63a1eea724e4aef0738c3f8d5e2a480f3"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-0.json",
+      "bytes": 242944,
+      "sha256": "d90b26af4642b2c0652d22857ba75ed0d2d1d286417e69a9cd33b9c2034c34eb"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-1.json",
+      "bytes": 239773,
+      "sha256": "f04603526b8cdc7d9329f1f3309a43f98a98bc8b74e508a3b9496afff9515c3f"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-10.json",
+      "bytes": 254407,
+      "sha256": "72845c5836cee418a16526f4f14c27aebb4fa364c4d21732d627d7aa159830c9"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-11.json",
+      "bytes": 242670,
+      "sha256": "fb8d088c03328577dee97760a4e3bdba8ea1604aecbb77857894bb0dbad24292"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-12.json",
+      "bytes": 263298,
+      "sha256": "09b1b49acbf1d58891499af1054f4f1894e1c87dabd4e5adc28cea2c677e277a"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-13.json",
+      "bytes": 449826,
+      "sha256": "6c19dbabf3ff502e943f1d076fa4307902e5d40808361066e829859793911607"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-14.json",
+      "bytes": 279010,
+      "sha256": "42ddc1203272de97f8fdcafe2662320a978106efdad086540c6f457aaf43c605"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-15.json",
+      "bytes": 280875,
+      "sha256": "2b6b2eb9a5fc9abb1adc9e50c027cf854c6a9e42bfedeb99dd4095f91cc570bd"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-16.json",
+      "bytes": 309552,
+      "sha256": "4c05d0da236ed8a45cda27a217795bd01d3cfa88e4ddba7a7e28787c649c357c"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-17.json",
+      "bytes": 1077514,
+      "sha256": "46e8e3f436e08925e6fffd55f752832e769eb9498408a9e5d675bb509b1e7952"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-18.json",
+      "bytes": 217676,
+      "sha256": "61efa082fb128cfd09bf1c75b9db65301c10972fd45e8218b13592a16387f2b3"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-19.json",
+      "bytes": 217672,
+      "sha256": "70391052b7672f16fdef63571cfb06eae42902ac0f29ac90e4007bc0c602a901"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-2.json",
+      "bytes": 269802,
+      "sha256": "31fcf11a6b2894ea05cc347e1fd9d120272939dba796a637b75b979a2995cfe9"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-20.json",
+      "bytes": 1133127,
+      "sha256": "e66c98e4d53b81f9606f646b0e5761113b5531a93072585048f655ca81933aa5"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-21.json",
+      "bytes": 371524,
+      "sha256": "5304393bf187405f1ace35ef7db6b2128fb99fccf15c75ea554cd0c588f99b29"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-22.json",
+      "bytes": 6253945,
+      "sha256": "d009e1df14b7e4ab8af1ace8090d9822230957eb7fb22ea487c71bab0c0a1897"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-3.json",
+      "bytes": 274259,
+      "sha256": "973777a165759df4e3e89f76cfe79de986dfa8ec3865b21fd4ec7a3c413b297c"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-4.json",
+      "bytes": 560686,
+      "sha256": "632cd69b8f431bf4ed500d90b5bdc3012f1b981d83949a6fe8fcd40c0fc458ec"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-5.json",
+      "bytes": 233071,
+      "sha256": "daef4ecfe6ea8185736b8690cf1da67cb6e3f2db1d7623bc6f5f02d6bbc49503"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-6.json",
+      "bytes": 239061,
+      "sha256": "7806a7f2d1e6a64f42754bfcf728a1f5f2a99fb10a7c3511fe904d86a833eddd"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-7.json",
+      "bytes": 234815,
+      "sha256": "4656d8f3341037a7e312c44328ede4c143ace53e16ccff25531cb2e90fe9ea23"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-8.json",
+      "bytes": 341488,
+      "sha256": "634410addb6b4cced8dac1b34171885426c4ddf4f8b9bc8c2faf652a2f99e6e5"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/call-9.json",
+      "bytes": 249998,
+      "sha256": "d6bd016b56c6d9e9f7e70697d296e5a2046493dad153f0b1e21d635445223d45"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/manifest.json",
+      "bytes": 4713,
+      "sha256": "bc39b08b297402e6b36bf91f1b650dd30ee5ce40c9a618af6e46bb033f12dab1"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/original-outcome.json",
+      "bytes": 327,
+      "sha256": "9533bc85440325f2139d8d7f42969d8b4b072c112eeaac71b52c9a098dfa837d"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/reassessment-validator.json",
+      "bytes": 440,
+      "sha256": "5cc0c16626ac8221fd8d72b753f1e171631fe0712a18ee93293e3627fb718dd5"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/reassessment.json",
+      "bytes": 1803,
+      "sha256": "68d01b1a5c5a6c05d59e2f0e990b4c7a621141a39027f1c6145c099a7643f759"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/trajectory-open-goal-skill-maintenance-board-priorities-typed-batch-full.json.gz",
+      "bytes": 2556360,
+      "sha256": "0fcf2ea0b6ef85d97292f20756fd3f821c434100373831b26d7a7a46990ca716"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/verification.json",
+      "bytes": 27915,
+      "sha256": "83bd51a5fb3cf33d772937a34fa0a1f8aab556bfb6cce41efa562864894962a4"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch/workspace.json",
+      "bytes": 12587,
+      "sha256": "e4a5b58cabed14698e09639df395dc6222e37a926828629d1012c5e4b796645f"
+    },
+    {
+      "path": "capture/0016-open-goal-skill-maintenance-board-priorities-typed-batch-assessment.json",
+      "bytes": 1803,
+      "sha256": "68d01b1a5c5a6c05d59e2f0e990b4c7a621141a39027f1c6145c099a7643f759"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-0.json",
+      "bytes": 249729,
+      "sha256": "be863aa713adc1c87ef31eed786561254f95b41e55af95d348d32427a6d2815f"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-1.json",
+      "bytes": 250458,
+      "sha256": "c9eff0336069f75b3c410444df52238f0b1e60f1b2401ed202f9fccc2e1cddb8"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-10.json",
+      "bytes": 579820,
+      "sha256": "df250647e275b6acc913fc33b79507b7ddac5636bff0b489f56235b4e53b6cb1"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-11.json",
+      "bytes": 1163934,
+      "sha256": "94d25488111690c0fce29e4313ebae258d2bf6768d7e8477178dc4414344674f"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-2.json",
+      "bytes": 339356,
+      "sha256": "4aa6fd225f1e62b2d69046659be3dd719ea1a918978be4c600a34654bee0e62f"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-3.json",
+      "bytes": 248863,
+      "sha256": "381e5acb3871b4f86f1db442f4aabb205c09717db911a0b7f8ad69ed177b639d"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-4.json",
+      "bytes": 360987,
+      "sha256": "f355ce4be3bf73483a841351d9e2f57487054da58ce2e520b14a207687915057"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-5.json",
+      "bytes": 381319,
+      "sha256": "483ca652583895f1d0471d1ec3f70258bf4a175441f5f11cc50d2e0390a2cb36"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-6.json",
+      "bytes": 252119,
+      "sha256": "67c0bb0ab307bf2be489d07f9a7a2447fcb8be4c41c33ca28172a67dec719be3"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-7.json",
+      "bytes": 270209,
+      "sha256": "f845a880dfaa4d4a02f788dc1675ff347896fe09480429a3e71a2f8711c45142"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-8.json",
+      "bytes": 394606,
+      "sha256": "ec0b1edb2a32ab4669a127eb749cd81f879879d18f3caf1ae4894f6785e4a86d"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/call-9.json",
+      "bytes": 265136,
+      "sha256": "7e5ec8737a744e39fb1ca7e81d5f1b5c36f7fd79188fa568344eacbcaa7627e8"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/manifest.json",
+      "bytes": 3241,
+      "sha256": "7f26f3e96c86dbc0fc94613c4cfa49732ce324bcc4caf9c0b7db4de6f42c47b0"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/original-outcome.json",
+      "bytes": 322,
+      "sha256": "a88bfdb57c1c283fb1edfc74e9f01aa21dd588dd9cd74b691f2b32a2b2d2e49a"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/reassessment-validator.json",
+      "bytes": 426,
+      "sha256": "9ec8250ae2b7078926e7593fc702525a6a190dd2d4e58d1cbcda0755fae03fd5"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/reassessment.json",
+      "bytes": 611,
+      "sha256": "8fac188954621dd83beca06cb2896b85566137fca79141dcd3ea3cc3317765bc"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/trajectory-open-goal-explain-museum-gallery-readiness-full.json.gz",
+      "bytes": 965642,
+      "sha256": "9d0eac26ef51dbf89cd3b1eded0ad1ebe62c7a674d40dfa828bfaf1a0a514061"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/verification.json",
+      "bytes": 14126,
+      "sha256": "d73c293c494a91eaae72545a8c45e3cdada05adb7d999301c105c321c295c303"
+    },
+    {
+      "path": "capture/0017-open-goal-explain-museum-gallery-readiness/workspace.json",
+      "bytes": 4316,
+      "sha256": "c1d1fbc5b3841ceda68043fd1d69cef4d3aff8c53071f15ee7d44cb0bdab5b23"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-0.json",
+      "bytes": 367426,
+      "sha256": "9f1e18ccce0086e46e6b248dcb1c5ac19c50c8b133918a36d46f8036d6bb57e1"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-1.json",
+      "bytes": 242873,
+      "sha256": "64520243049536dcb445e25c3e9e96285ea45c68e3bc6e02325403d60191cdd9"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-10.json",
+      "bytes": 665088,
+      "sha256": "8af1e3d6683f63708ad0109ea21c5355707c21966a519c046f5742780c5859cd"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-11.json",
+      "bytes": 276946,
+      "sha256": "d334f1b75299f247b4fddeeff14106d7830e937e67e4c37a276b7330fa21dded"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-12.json",
+      "bytes": 632644,
+      "sha256": "b57fb3a480a14e3b2b7c1666360f40c103784f234f2464b3b71096747ac71907"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-2.json",
+      "bytes": 354954,
+      "sha256": "0c2029026c992f3d661a8b54ada34c3fd4ac782736b6dafc2cbb719107950f96"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-3.json",
+      "bytes": 362355,
+      "sha256": "f793f83e9c84829de99316eed23997610090a0fd33baf2cb588bf069ed405523"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-4.json",
+      "bytes": 710603,
+      "sha256": "a4e13f4dbb276cf47eedccbf8ed719e2b963ad579a940c5cf6cb700af70970f8"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-5.json",
+      "bytes": 122678,
+      "sha256": "660a8c49b4660655f0b49e34b6370fb2465bee6fd4848e4857a9bb505142d42f"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-6.json",
+      "bytes": 132107,
+      "sha256": "06cdec7bababe11d8d8df1c4da1dfe4f8cbe0e145708100d1a6a14d8ad7437c4"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-7.json",
+      "bytes": 205014,
+      "sha256": "f38f3b483f776bd33c5f7f53ffe5be0ef77d3506485cd0ae94834c5b22d99185"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-8.json",
+      "bytes": 449063,
+      "sha256": "82de5e8e2c06fbe74f281b034e62dda647fd9027ca1ac2a146e35bfbb5a9426a"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/call-9.json",
+      "bytes": 254305,
+      "sha256": "1c8b2812499815ae6135595b51b68c8fb213f8c9342cf92c1001a735b1c9baec"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/manifest.json",
+      "bytes": 3436,
+      "sha256": "41a45d9d09351675de7ca8001c89169738703f069503f7a27d5ed142abb7fca0"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/original-outcome.json",
+      "bytes": 354,
+      "sha256": "5b12a4308699037e2eb530b07972cf03ad15423c1c84f118d087a86cc48dd23d"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/reassessment-validator.json",
+      "bytes": 434,
+      "sha256": "4961e939579178d9b8005e31eed119e1d2598adbb32dcd6f112fc18039c0fa2e"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/reassessment.json",
+      "bytes": 1030,
+      "sha256": "21d905c4592a84b504443231efc9bd03578b8e741edc755e62609a106358eaf0"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/trajectory-open-goal-recover-current-corridor-brief-for-shift-full.json.gz",
+      "bytes": 1008906,
+      "sha256": "89e57c717e757f5b6a0c62ae9c74eb940a953e453fd0a30ba1502b3595cd4029"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/verification.json",
+      "bytes": 15688,
+      "sha256": "3f3a1c914f34c566c251c4c2e3e19894e2cea202bf673cf595231c00170d5e1b"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift/workspace.json",
+      "bytes": 8835,
+      "sha256": "e3a2cfbbf200ef0806db77f446039eb7c98e317619a30946f6d91e13a61f7161"
+    },
+    {
+      "path": "capture/0017-open-goal-recover-current-corridor-brief-for-shift-assessment.json",
+      "bytes": 1030,
+      "sha256": "21d905c4592a84b504443231efc9bd03578b8e741edc755e62609a106358eaf0"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-0.json",
+      "bytes": 269739,
+      "sha256": "336ba440d4747a05268353dadb7c43e5805ae9361279e3a1d4b80972f0c82898"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-1.json",
+      "bytes": 250785,
+      "sha256": "6fb2a557c3668212ee0511257cda7f32c162d33bb6d307a77bca9ce97ae781b7"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-2.json",
+      "bytes": 388310,
+      "sha256": "c84e0e15d8efbad593ba2bd14d8ab6f9e1e5e0db7b9b91a2ec0f7091fb0f15ca"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-3.json",
+      "bytes": 629322,
+      "sha256": "858b8c408c7415dd92db7f30818c50b990622db739147f3b6cd71d0ab4b6a385"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-4.json",
+      "bytes": 260384,
+      "sha256": "7575bc8a985a6b3a550f015e15f5a3937b3a36ccf69d7ff18f93341bba93db15"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-5.json",
+      "bytes": 583262,
+      "sha256": "82735764656647948a931ed9d9637448c717b7a8a78751e8ffae80385db0eb47"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/call-6.json",
+      "bytes": 610460,
+      "sha256": "912833f0bb8cc101923f525e23b56697bc18ea0e5478fbbc366ebf1eea9f6b44"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/manifest.json",
+      "bytes": 2674,
+      "sha256": "098bfbc84909987b704a94016a25e6cc8282ea9b2fe5b88b5f5ca232dd51f96c"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/original-outcome.json",
+      "bytes": 323,
+      "sha256": "91c69f81800e61aec6a67a829eb89ecc24bb16401af8aab7d566a4760e50bcca"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/reassessment-validator.json",
+      "bytes": 448,
+      "sha256": "3408a83630724084d4b4d8f079e60456cb17afb92181f4c8b1a72b9aeec2b271"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/reassessment.json",
+      "bytes": 633,
+      "sha256": "bcf3586ee429689143d62eebbf75eb97a9a7ba70cec65057ed8a07aea3ef9c0d"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/trajectory-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card-full.json.gz",
+      "bytes": 617648,
+      "sha256": "a8daf7a853e2a9db4c2e6d05f907034334fe56f5565cbc2ea86d317e8190b3d4"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/verification.json",
+      "bytes": 9076,
+      "sha256": "2875ad34ff8a0861427cc51db9c2324fa459d8759a0a21c6b3aa6e2baca31a5e"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card/workspace.json",
+      "bytes": 7864,
+      "sha256": "751d4274f5f358b4ba8e35180a41a28883c45ac786a01caa948b4421cb12fba1"
+    },
+    {
+      "path": "capture/0022-open-goal-hold-ambiguous-badge-cutover-and-prepare-selected-card-assessment.json",
+      "bytes": 633,
+      "sha256": "bcf3586ee429689143d62eebbf75eb97a9a7ba70cec65057ed8a07aea3ef9c0d"
+    },
+    {
+      "path": "capture/coverage.json",
+      "bytes": 1383,
+      "sha256": "d13420288cf70bb929015b32dc3f21ddb21af5623db0cabe9a771819e1ad013a"
+    },
+    {
+      "path": "capture/recovered-index.json",
+      "bytes": 2957,
+      "sha256": "0c837e2c19c42576d0386ae87d537a80164a7a1269a24e8b5058ddeb7b83ca76"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2877,
+      "sha256": "12ab958b1947e665770ad1eae013fa31a09bfb4e358a5aec2ce57bde8b2495c9"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 833894,
+      "sha256": "fb5e9de59cd8da1427c568366c2f2ba826d05b6cbabea9743f095d1fc5990c38"
+    }
+  ],
+  "bytes": 85894099
+}

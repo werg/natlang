@@ -1,0 +1,23 @@
+{
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-outcomes-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-outcomes-20261123",
+  "include": [
+    "capture/**",
+    "receipt.json",
+    "trajectory.native.jsonl.zst"
+  ],
+  "kind": "teacher-demos",
+  "format": "native Vibestudio Luna trajectories and capture evidence",
+  "rows": 2,
+  "protected": false,
+  "producer": {
+    "script": "export-on-tick.py",
+    "argv": [],
+    "git_commit": "72e57a32a45f8cc4142881791f5f3ca04aaaf217",
+    "dirty": false,
+    "host": "tick"
+  },
+  "manifest_sha256": "c56225b0b9d286d2b1c79d06b97452cb89aab55e8a0db5b811a4cd655566dc50",
+  "training_admission": "registry-recorded"
+}
