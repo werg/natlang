@@ -9536,3 +9536,12 @@ in sft-v6 through sft-v9 are bit-identical to the HF base's generic reserved-tok
 - in-generation produce spans read by another call (they are still spliced from the producer's context);
 - the llama-server/wllama consumption of text-written states (no such states reach them);
 - the cold vs warm prefix-cache consumer forward on SGLang beyond the parity test.
+
+
+### 2026-11-23: whole-corpus semantic functional integration (in progress)
+
+The second audit found that domain-named roots still mixed deterministic I/O with copied audit envelopes. The whole116-binding/114-function surface now has100 typed TS compositions and14 genuine semantic NL coordinators, preserving all2327 goals/groups/splits. Native application effects and requested returned values are separate; real saved/delivered content is checked independently. Exact actual producer/generation masks preserve useful earlier actions and every raw capture, including Sol history; new paid teachers remain Luna. Full immutable release/collection activation is pending combined toolchain integration, not declared complete from source counts.
+
+Actual validation:254 dependent-template native tests +3 program tests;85 operational tests;19 shared outcome tests;28 configured-checkout unit/API tests; combined reader126 Python +52 Node (1 optional archived fixture unavailable) +quick. Two actual offline value/void TS-root captures passed export/both readers/native CLI and are excluded from training. Exact units, source proofs, limitations and the still-pending28 recoveries/496 decisions are recorded in VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md.
+
+The full compile exposed canonical type-only workspace aliases absent from virtual mounts and a per-entry programId in the shared frontend cache key. Fix the shared resolver/cache mechanism rather than duplicate DTOs, insert casts or repeatedly compile the same codebase. Earlier SDK97 graph/declaration reuse fixes passed their targets but did not make the full compile fit a1.1GiB heap; the bounded2GiB run reached remaining type errors at about1.85GiB. The final successor's all116 compile and155-release proof remain required; no measured memory-saving claim or campaign restart is made here.
