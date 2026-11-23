@@ -61,6 +61,27 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 - `ts-host/test/repository-migration.test.mjs` keeps its own copy of the scripted migration stages
   (`test/support/migration-stages.mjs` is the shared one); fold it in when that test next changes.
 
+## Typed output contracts
+
+Landed 2026-11-23 (DECISIONS "typed output contracts"): `writes:` on directory reducers, alias doc comments shown, the
+authoring rule (a prose `Output contract:` paragraph is an error), the migrated pool (`*-typed` sources), a root's
+`ensures:` checked in collection. Open:
+- **File text is typed `string` plus a doc comment.** The runtime checks which files a call writes and literal-typed
+  contents, not line formats: a line template (`<id> | <change>`, one decimal place) is still prose, in the field's
+  doc comment. A crisp line grammar (TypeScript template literal types per line, or a record per line with a declared
+  rendering) would make it a checked type on every engine's result schema too. Owner: typed-contracts follow-up, after
+  the next held measurement shows whether the migrated rows change pass rates.
+- **`Is<string, P>` file types are a load error** (the check runs at return and would need a judge on every written
+  file). Owner: same follow-up, with the crisp-checker registry.
+- **Declarations derived from instructions can miss a conditionally written input file** that its step names only as
+  read (`ledger.csv` in `verified-folder-edits` w437-p4a: the reference installs nothing, so the declaration reveals
+  it). verify.mjs dropped that row through its keyword baseline; rows without a baseline are not caught. Owner: next
+  authoring round writes `writes:` by hand (AUTHOR_BRIEF_ROUND23.md); the migrated rows stay until then.
+- **32 rows that already failed qualification in their original form** (17 reference replays: `selected-drafts` w438
+  wrong_return, `settings-merges` w432 unanswered child `intentOf`; 15 with negative controls that error on the missing
+  Neuralese writer of the replay) were left out of the typed sources with the others. They are in the old datasets and
+  in no current role. Owner: task-author batch that fixes the w432/w438 references.
+
 ## Held and data
 
 - **held-v4:** no `branch_and_select` task; B1's 104 rows keep `invented:` groups; the 100 rubric workflows and 2 reserved apps are outside the set. Owner: next held-v4 extension; due before the first held-v4 cadence measurement after round 3.

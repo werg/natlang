@@ -21,7 +21,7 @@ named in a sentence that writes to them, and the input folders named as a destin
 not name (per-item outputs, moved files) are covered by a glob of their folder.
 
     migrate_output_contracts.py IN.jsonl... --out OUT.jsonl [--report REPORT.json] [--only-contract]
-    migrate_output_contracts.py rebuild SOURCE.jsonl --verified KEPT.jsonl --out OUT.jsonl --report REPORT.json
+    migrate_output_contracts.py rebuild SOURCE.jsonl --verified KEPT.jsonl --out OUT.jsonl --report REPORT.json [--reasons R.json]
 
 ``rebuild`` writes a new version of a task source: each row with a root ``Output contract:`` paragraph is replaced by its
 migrated row from KEPT.jsonl (verify.mjs's kept rows), or left out with its reason when verification did not keep it;
@@ -238,7 +238,9 @@ def rebuild(argv):
     parser.add_argument('--verified', required=True, action='append')
     parser.add_argument('--out', required=True)
     parser.add_argument('--report', required=True)
+    parser.add_argument('--reasons', help='JSON list of {id, reason, ...}: why a contract row is left out')
     args = parser.parse_args(argv)
+    reasons = {item['id']: item for item in json.loads(Path(args.reasons).read_text())} if args.reasons else {}
     kept = {}
     for path in args.verified:
         for line in Path(path).read_text().splitlines():
@@ -259,8 +261,9 @@ def rebuild(argv):
             lines.append(kept[row['id']])
             replaced += 1
         else:
-            dropped.append({'id': row['id'], 'reason': 'the migrated row did not requalify (verify.mjs: reference replay '
-                            'and negative controls)'})
+            dropped.append({**reasons.get(row['id'], {}), 'id': row['id'],
+                            'reason': 'the migrated row did not requalify (verify.mjs: reference replay and negative controls)'
+                            + (': ' + reasons[row['id']]['reason'] if row['id'] in reasons else '')})
     Path(args.out).write_text(''.join(line + '\n' for line in lines))
     report = {'schema': 'natlang.typed-output-contract-rebuild/1', 'source': str(Path(args.source).resolve()),
               'copied': copied, 'replaced': replaced, 'dropped': dropped}
