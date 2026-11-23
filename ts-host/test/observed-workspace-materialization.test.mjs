@@ -62,6 +62,12 @@ else:
    proof['outcomeDimensions']['incidentalValues']['incorrectReturns'].append({**selector,'definition':copy.deepcopy(child['record']['definition'])})
    spec['calls'][1]=artifact(root,'child.json',child)
   verification['evidence']=[{**artifact(root,'incidental.json',{'proof':proof}),'kind':'workspace'}]
+ if kind=='native-bridge':
+  selected={'question':'Actual source-backed brief','statements':[]}
+  actual={'results':[{'kind':'domain','report':selected}],'remaining':[]}
+  text=json.dumps(actual,separators=(',',':'))
+  detail['record']['output']={'complete':True,'bytes':len(text.encode()),'hash':hashlib.sha256(text.encode()).hexdigest()}
+  verification['evidence']=[{**artifact(root,'native-return.json',{'applicationReturn':{'root_call_id':'call-one','valueJson':text,'selectedResult':selected}}),'kind':'workspace'}]
  if kind in ('caught-child','incidental-nested'):
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
@@ -100,7 +106,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -240,4 +246,29 @@ test('source-bound check roles preserve omitted false observations and reject in
    const candidate=structuredClone(proof);mutate(candidate);await assert.rejects(validateReassessmentCheckRoles(candidate,original,root));
   }
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+for (const mutation of ['root','hash','selected']) test(`native bridge disk verification rejects ${mutation} forgery`, async()=>{
+  const {root,row}=await fixture('native-bridge');
+  try {
+    const manifestBinding=row.provenance.source_manifest;
+    // Bind the changed evidence consistently; the independent root must still disagree.
+    const manifest=JSON.parse(await readFile(manifestBinding.path,'utf8'));
+    const receiptPath=resolve(root,manifest.verification.path);
+    const receipt=JSON.parse(await readFile(receiptPath,'utf8'));
+    const evidence=receipt.evidence.find(item=>item.kind==='workspace');
+    const evidencePath=resolve(root,evidence.path);
+    const payload=JSON.parse(await readFile(evidencePath,'utf8'));
+    if(mutation==='root')payload.applicationReturn.root_call_id='foreign';
+    if(mutation==='hash')payload.applicationReturn.valueJson='{}';
+    if(mutation==='selected')payload.applicationReturn.selectedResult={question:'forged'};
+    await writeFile(evidencePath,JSON.stringify(payload));
+    evidence.sha256=createHash('sha256').update(await readFile(evidencePath)).digest('hex');
+    await writeFile(receiptPath,JSON.stringify(receipt));
+    manifest.verification.sha256=createHash('sha256').update(await readFile(receiptPath)).digest('hex');
+    await writeFile(manifestBinding.path,JSON.stringify(manifest));
+    manifestBinding.sha256=createHash('sha256').update(await readFile(manifestBinding.path)).digest('hex');
+    row.provenance.verification=manifest.verification;
+    await assert.rejects(verifyObservedWorkspaceEvidence(row),/application return|domain return/u);
+  } finally {await rm(root,{recursive:true,force:true});}
 });
