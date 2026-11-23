@@ -2,7 +2,7 @@
   "schema": "natlang.corpus-snapshot/1",
   "id": "held-v4-set",
   "owner": "dgx",
-  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v4",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v4/v1",
   "files": [
     {
       "path": "cases.jsonl",
