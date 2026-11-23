@@ -509,7 +509,7 @@ function findPackageRoot(dir: string, files: SourceFiles): string | undefined {
 }
 
 /** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */
-function packageRoot(dir: string, files: SourceFiles): string {
+export function packageRoot(dir: string, files: SourceFiles): string {
   return findPackageRoot(dir, files) ?? (() => {
     let current = dir;
     while (files.dirname(current) !== current) current = files.dirname(current);
@@ -746,6 +746,17 @@ function siblingHasSpecifier(specifier: string, siblings: Record<string, ItemRec
   return true;
 }
 
+/** Shared source resolution for runtime module loading and explicit compiler import closure. */
+export function resolveImportedSource(specifier: string, from: string, files: SourceFiles): string | undefined {
+  if (RUNTIME_OR_BUILTIN_IMPORT.test(specifier)) return undefined;
+  if (specifier.startsWith('./') || specifier.startsWith('../')) {
+    const base = normalizePath(files.join(files.dirname(from), ...specifier.split('/')));
+    return resolveTargetFile(base, files, ['ts', 'js', 'nl']);
+  }
+  if (!specifier.startsWith('/')) return resolvePackageExport(specifier, packageRoot(files.dirname(from), files), files, ['ts', 'js', 'nl']).target;
+  return undefined;
+}
+
 /**
  * Resolve package-relative `.ts`/`.js`/`.nl` imports and `natlang.json` package exports for a callable-folder module.
  * Enforces the project-root boundary and the same finite-iteration policy (`parseModule`) on every imported module.
@@ -768,7 +779,7 @@ function attachModuleImports(record: ModuleRecord, path: string, siblings: Recor
       const base = normalizePath(files.join(files.dirname(path), ...specifier.split('/')));
       if (escapesBoundary(path, base, files))
         throw new NatlangSourceError(path, `cannot import ${JSON.stringify(specifier)}: import escapes the project root`);
-      const target = resolveTargetFile(base, files, ['ts', 'js', 'nl']);
+      const target = resolveImportedSource(specifier, path, files);
       if (!target) continue;
       const normTarget = normalizePath(target);
       if (target.endsWith('.nl')) {

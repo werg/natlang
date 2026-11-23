@@ -24,7 +24,7 @@ import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, STD_MODULE_FILE, SURFACE_MODU
 import { createNatlangCompilerHost } from './host.js';
 import { loadNzSync, nzDeclaration, toBase64 } from '../native/nz-file.js';
 import { compileModule } from '../runtime/modules.js';
-import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError, usesTargetsOf,
+import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError, usesTargetsOf, packageRoot, resolveImportedSource,
   type ItemRecord, type NatlangRecord } from '../runtime/loader.js';
 import type { SourceFiles } from '../runtime/loader.js';
 import { joinSourcePath as join, normalizeSourcePath as normalize } from '../runtime/source-path.js';
@@ -419,6 +419,21 @@ export function compileProject(options: BuildOptions): BuildResult {
   const sourceProblem = (fallback: string, error: unknown) => error instanceof NatlangSourceError ?
     problem(rel(error.path), error.reason, 'callable-scope', error.line, error.hint) : problem(rel(fallback), String(error));
 
+  // TypeScript program over ordinary project files, with generated `.nl` declarations.
+  const configHost: ts.ParseConfigFileHost = { useCaseSensitiveFileNames: true, getCurrentDirectory: () => root,
+    fileExists: path => fs.isFile(path), readFile: path => fs.isFile(path) ? fs.read(path) : undefined,
+    readDirectory: (dir, extensions, excludes, includes, depth) => fs.compiler?.readDirectory ?
+      fs.compiler.readDirectory(dir, extensions, excludes, includes, depth) : walkTs(fs, dir),
+    onUnRecoverableConfigFileDiagnostic: diagnostic => diagnostics.push(fromTypeScript(diagnostic, rel(configPath!))) };
+  const parsed = configPath ? ts.getParsedCommandLineOfConfigFile(configPath, {}, configHost) : undefined;
+  const compilerOptions: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, skipLibCheck: true,
+    ...(parsed?.options ?? {}), allowArbitraryExtensions: true, noEmit: false, declaration: false,
+    ...(options.module === 'commonjs' ? { module: ts.ModuleKind.CommonJS, moduleResolution: ts.ModuleResolutionKind.Node10 } : {}) };
+  const outDir = resolve(options.outDir ?? compilerOptions.outDir ?? join(root, 'dist'));
+  compilerOptions.outDir = outDir;
+  compilerOptions.rootDir ??= root;
+
   // Callable folders and named functions.
   const layout = callableFolders(fs, root);
   const namedRecords = new Map<string, NatlangRecord>();
@@ -431,6 +446,53 @@ export function compileProject(options: BuildOptions): BuildResult {
   for (const dir of layout.contexts) {
     try { contextRecords.set(dir, loadCallableFolder(dir, files)); }
     catch (error) { sourceProblem(dir, error); }
+  }
+  // Nested packages remain independent until an actual TS import (or a TS
+  // helper in an available NL codebase) reaches them. Keep their manifests:
+  // package-local types/exports still own name resolution.
+  const inCallableFolder = (path: string) => [...layout.folders].some(folder => path.startsWith(folder + sep) || path === folder);
+  const ordinaryRoots = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path =>
+    (!inCallableFolder(path) || path.endsWith('.d.ts')) && !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
+  const importedSources = new Set(ordinaryRoots), compilerSources = new Set(ordinaryRoots), pendingSources = [...ordinaryRoots], visitedSources = new Set<string>();
+  const packageLayouts = new Map<string, ReturnType<typeof callableFolders>>([[root, layout]]), declarationPackages = new Set<string>();
+  const enqueue = (path: string, standalone = false): void => {
+    const promoted = standalone && !compilerSources.has(path);
+    if (standalone) compilerSources.add(path);
+    if (promoted && visitedSources.delete(path)) pendingSources.push(path);
+    if (!importedSources.has(path)) { importedSources.add(path); pendingSources.push(path); }
+  };
+  const scanCodebase = (level: Record<string, ItemRecord>): void => {
+    for (const record of Object.values(level)) {
+      if (record.kind === 'module') enqueue(resolve(root, record.source));
+      scanCodebase(record.codebase);
+    }
+  };
+  for (const record of namedRecords.values()) scanCodebase(record.codebase);
+  for (const level of contextRecords.values()) scanCodebase(level);
+  for (let cursor = 0; cursor < pendingSources.length; cursor++) {
+    const source = pendingSources[cursor]!;
+    if (visitedSources.has(source) || !fs.isFile(source)) continue;
+    visitedSources.add(source);
+    const owner = packageRoot(dirname(source), files);
+    if (owner && !declarationPackages.has(owner)) {
+      declarationPackages.add(owner);
+      for (const declaration of walkTs(fs, owner)) if (declaration.endsWith('.d.ts')) enqueue(declaration, true);
+    }
+    if (source.endsWith('.nl')) continue;
+    for (const imported of ts.preProcessFile(fs.read(source), true, true).importedFiles) {
+      const target = resolveImportedSource(imported.fileName, source, files);
+      if (!target || !/\.(?:ts|nl)$/.test(target) || relative(root, target).startsWith('..')) continue;
+      if (target.endsWith('.nl')) {
+        if (!compilerSources.has(source) || namedRecords.has(target)) continue;
+        const packageDirectory = packageRoot(dirname(target), files) ?? root;
+        let targetLayout = packageLayouts.get(packageDirectory);
+        if (!targetLayout) { targetLayout = callableFolders(fs, packageDirectory); packageLayouts.set(packageDirectory, targetLayout); }
+        // Private NL children remain properties of their actual public parent.
+        if (!targetLayout.named.includes(target)) continue;
+        try { const record = loadNamedFunction(target, files); namedRecords.set(target, record); scanCodebase(record.codebase); enqueue(target); }
+        catch (error) { sourceProblem(target, error); }
+      } else enqueue(target, compilerSources.has(source));
+    }
   }
   const collectAdaptation = options.adaptation !== false;
   const optimizationComponents: ComponentDescriptor[] = [];
@@ -464,24 +526,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   }
   for (const records of contextRecords.values()) checkModules(records);
 
-  // TypeScript program over ordinary project files, with generated `.nl` declarations.
-  const configHost: ts.ParseConfigFileHost = { useCaseSensitiveFileNames: true, getCurrentDirectory: () => root,
-    fileExists: path => fs.isFile(path), readFile: path => fs.isFile(path) ? fs.read(path) : undefined,
-    readDirectory: (dir, extensions, excludes, includes, depth) => fs.compiler?.readDirectory ?
-      fs.compiler.readDirectory(dir, extensions, excludes, includes, depth) : walkTs(fs, dir),
-    onUnRecoverableConfigFileDiagnostic: diagnostic => diagnostics.push(fromTypeScript(diagnostic, rel(configPath!))) };
-  const parsed = configPath ? ts.getParsedCommandLineOfConfigFile(configPath, {}, configHost) : undefined;
-  const compilerOptions: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, skipLibCheck: true,
-    ...(parsed?.options ?? {}), allowArbitraryExtensions: true, noEmit: false, declaration: false,
-    ...(options.module === 'commonjs' ? { module: ts.ModuleKind.CommonJS, moduleResolution: ts.ModuleResolutionKind.Node10 } : {}) };
-  const outDir = resolve(options.outDir ?? compilerOptions.outDir ?? join(root, 'dist'));
-  compilerOptions.outDir = outDir;
-  compilerOptions.rootDir ??= root;
   const inFolder = (path: string) => [...layout.folders].some(folder => path.startsWith(folder + sep) || path === folder);
-  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path =>
-    (!inFolder(path) || path.endsWith('.d.ts')) &&
-    !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
+  const rootNames = [...compilerSources].filter(path => !path.endsWith('.nl') && !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
   const withNeutral = (specifiers: readonly string[]) => [...new Set([...specifiers, NEUTRAL_RUNTIME_SPECIFIER])];
   const bound = options.runtimeModule && { ...options.runtimeModule, specifiers: withNeutral(options.runtimeModule.specifiers) };
   // `@natlang/node/std` is emitted as the library module of the same build as the bound runtime, so both share one instance.
@@ -636,6 +682,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   };
   if (collectAdaptation) {
     collectSources(root);
+    // Imported packages retain their actual manifests and source identity too.
+    for (const owner of declarationPackages) if (owner !== root && !relative(root, owner).startsWith('..')) collectSources(owner);
     let dependencyRoot = root;
     while (true) {
       for (const lock of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {

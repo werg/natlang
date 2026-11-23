@@ -141,3 +141,42 @@ for(const mode of ['node','workerd'])test(`overlapping ${mode} native roots pres
   }
  }finally{for(const release of gates)release();rt.close();env.close();}
 });
+
+for(const mode of ['node','workerd'])test(`actual ${mode} TS service ancestry honors explicit descendant scope without global grants`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ for(const nativeRoots of [true,false])for(const scope of ['owner.ts/**','owner.ts']){
+  const env=setup(platform),rt=core.createNatlangRuntime({platform,calls:env.store,recording:{nativeRoots},services:{notes:{read(){return 'actual';}}},serviceScopes:{notes:[scope]},agent:async session=>{session.lam.return=Object.hasOwn(session.availableServices(),'notes')?'allowed':'denied';}});
+  const project={'owner.ts':'import judge from "./judge.nl"; export default async function owner():Promise<string>{return await judge();}',
+   'other.ts':'import judge from "./judge.nl"; export default async function other():Promise<string>{return await judge();}',
+   'judge.nl':'---\nargs: {}\nreturns: string\n---\nRead only the actually available scoped service.'};
+  try{
+   const compiled=core.compileVirtualProject({files:project,root:'/scoped-reference'},core,{platform});assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));
+   assert.equal(await rt.run(()=>compiled.require('owner.ts').default()),scope.endsWith('/**')?'allowed':'denied');
+   assert.equal(await rt.run(()=>compiled.require('other.ts').default()),'denied');
+  }finally{rt.close();env.close();}
+ }
+});
+
+for(const mode of ['node','workerd'])test(`actual ${mode} explicit nested-package NL imports retain own types and ambient service declarations`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const dir=mkdtempSync(join(tmpdir(),'explicit-package-reference-')),store=core.CallStore.open(dir);store.writeSettings({minFreeBytes:0,specialization:'off'});
+ const project={
+  'natlang.json':JSON.stringify({name:'outer'}),
+  'types.ts':'export type Result = { wrong: boolean };',
+  'entry.ts':'import answer from "./library/answer.nl"; export default async function entry():Promise<string>{return (await answer()).answer;}',
+  'library/natlang.json':JSON.stringify({name:'inner',exports:{lookup:'./lookup.nl'}}),
+  'library/types.ts':'export type Result = { answer:string };',
+  'library/services.d.ts':'declare module "natlang:services" {export const journal:{read():Promise<import("./types.js").Result>};}',
+  'library/answer.nl':'---\nargs: {}\nreturns: Result\nuses: [lookup]\n---\nUse lookup.',
+  'library/lookup.nl':'---\nargs: {}\nreturns: Result\n---\nRead the actual service through readNative.',
+  'library/lookup/readNative.ts':'import {journal} from "natlang:services"; import type {Result} from "../types.js"; export default async function readNative():Promise<Result>{return await journal.read();}',
+  'unimported/natlang.json':JSON.stringify({name:'unrelated'}),'unimported/broken.ts':'this is invalid TypeScript and must remain excluded',
+ };
+ let turns=0;const rt=core.createNatlangRuntime({platform,calls:store,services:{journal:{async read(){return {answer:'actual'};}}},model:async()=>({calls:[['eval',{code:++turns===1?'return await lookup();':'return await readNative();',finish:true}]]})});
+ try{
+  const compiled=core.compileVirtualProject({files:project,root:'/package-reference'},core,{platform});assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));
+  assert(Object.keys(compiled.declarations).some(path=>path.endsWith('/library/answer.d.nl.ts')));
+  assert.equal(await rt.run(()=>compiled.require('entry.ts').default()),'actual');
+  assert.equal(turns,2);
+ }finally{rt.close();store.close();rmSync(dir,{recursive:true,force:true});}
+});
