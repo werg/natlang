@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import os
 import queue
 import threading
 import time
@@ -23,6 +24,9 @@ from .chat import RequestError, build_message, placeholder, render_messages, spl
 from .native_protocol import capture_enabled
 from ..common.sampling import behavior_top_k_declaration
 from .store import TensorStore
+
+# A text-written state consumed as its exact tokens in the consumer's own context (Engine.text_write_in_context).
+TEXT_IN_CONTEXT_MODE = 'in-context-text'
 
 
 def derive_seed(*parts) -> int:
@@ -663,6 +667,8 @@ class Engine:
         exact = self._native_exact(block)
         state_receipt = None
         declared_mode = (seq.request.native_state_modes or {}).get(block_id)
+        if exact and declared_mode is None and self.text_write_in_context(block_id):
+            return self._native_consume_text_in_context(seq, block_id, block)
         if declared_mode is not None:
             from ..model.native_adapters import adapter_state_input_receipt, SAME_BASE_STATE_MODE
             if declared_mode != SAME_BASE_STATE_MODE:
@@ -727,6 +733,59 @@ class Engine:
                                    **({'state_derivation':block.derivation} if block.derivation is not None else {}),
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
+
+    def text_write_in_context(self, block_id):
+        """Whether an import of `block_id` is fed as its exact tokens in the consumer's own context (`in-context-text`).
+
+        A state this engine wrote from text (`native_write_text`, no adapters) holds that text's KV computed at
+        positions 0.. with nothing before it: no BOS, no call. Spliced into a reader's call, the reader could not tell it
+        from noise (2026-11-23: 1 of 87 held read-backs returned the producer's text; the same text captured in the
+        reader's own context reads back exactly). The text-primed state of a value is therefore its tokens computed
+        where the consumer reads them; with the identity producer adapter this is the inline text. States written
+        otherwise (in-context captures, contextual bodies, optimized or derived states) still splice exactly.
+        NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices text writes too (the pre-2026-11-23 behaviour)."""
+        if os.environ.get('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '1') == '0':
+            return False
+        if block_id in self.__dict__.get('_text_written_states', ()):
+            return True
+        marks = self._text_write_marks()
+        return marks is not None and os.path.exists(os.path.join(marks, block_id))
+
+    def _text_write_marks(self):
+        """The store's record of text-written states (one empty file per id), so a restarted front still reads the
+        states it wrote before; None for an in-memory store."""
+        directory = getattr(self.store, 'directory', None)
+        return None if directory is None else os.path.join(os.fspath(directory), 'text-writes')
+
+    def _note_text_write(self, block_id):
+        """Remember a state written from text by this engine (bounded in memory, one marker file in the store)."""
+        import collections
+        written = self.__dict__.setdefault('_text_written_states', collections.OrderedDict())
+        written[block_id] = True
+        written.move_to_end(block_id)
+        while len(written) > (1 << 18):
+            written.popitem(last=False)
+        marks = self._text_write_marks()
+        if marks is not None:
+            os.makedirs(marks, exist_ok=True)
+            open(os.path.join(marks, block_id), 'a').close()
+
+    def _native_consume_text_in_context(self, seq, block_id, block):
+        """`in-context-text` consumption: consume_open, the block's exact token ids prefilled in this call's context,
+        consume_close. The receipt names the block it read (`observed_native_state_id`); the recorded prompt holds the
+        tokens, so learners replay exactly what was computed."""
+        ids = [int(token) for token in block.token_ids.tolist()]
+        span = [self.role_tokens.consume_open, *ids, self.role_tokens.consume_close]
+        out = self._native_prefill_forward(span, seq.cache)
+        seq.cache = out["cache"]
+        if capture_enabled(seq):
+            for part in ([span[0]], ids, [span[-1]]):
+                if part:
+                    seq.native_rl_prompt.append({"kind": "tokens", "token_ids": part, "producing": [False] * len(part)})
+        seq.native_own_position += len(span)
+        seq.logits = self._native_logits(out["h_final"])
+        seq.native_imports.append({"id": block_id, "mode": TEXT_IN_CONTEXT_MODE, "observed_native_state_id": block_id,
+                                   **({'state_derivation': block.derivation} if block.derivation is not None else {})})
 
     def stored_native_state(self, block_id):
         """A stored native state for its identity, text and token ids: the verified store file (`NativeStateFile`, no
@@ -1266,7 +1325,10 @@ class Engine:
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
-        return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
+        result = self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
+        if not adapters:   # a state written under adapters is read only as stored
+            self._note_text_write(result['id'])
+        return result
 
     def _forced_message_plan(self,forced,tools,*,opening):
         """Render an exact assistant response against its actual prompt, forcing text spans through native roles."""

@@ -38,7 +38,7 @@ from concurrent.futures import Future
 import numpy as np
 
 from .chat import RequestError
-from .engine import Engine, Sequence, _insert_privileged, derive_seed
+from .engine import TEXT_IN_CONTEXT_MODE, Engine, Sequence, _insert_privileged, derive_seed
 from ..common.sampling import TOP_K_MASS_FIELD
 from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
@@ -683,6 +683,7 @@ class SglangEngine(Engine):
             raise RequestError('context-length', 'forced native text and producer markers exceed this model context')
         opened = [int(self.role_tokens.produce_open)] + [int(token) for token in ids]
         block, record = self._native_store_capture(ids, [{'ids': opened, 'start': 1, 'end': len(opened)}], text=text)
+        self._note_text_write(record.id)
         meta = record.meta()
         if value_type is not None:
             meta['type'] = value_type
@@ -1516,7 +1517,16 @@ class SglangEngine(Engine):
                                                       layout=self._sglang_layout)
             except (ValueError, NativeAdapterError) as error:
                 raise RequestError('neuralese-native-state-mode', str(error)) from error
-        if receipt is not None or self._sglang_exact(block):
+        if receipt is None and request_mode is None and self.text_write_in_context(block_id) and self._sglang_exact(block):
+            # A text-written state: its exact tokens in this call's context (`Engine.text_write_in_context`).
+            tokens = [int(token) for token in block.token_ids]
+            ids.extend(tokens)
+            seq.native_own_position += len(tokens)
+            if capture and tokens:
+                seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': tokens, 'producing': [False] * len(tokens)})
+            mode = TEXT_IN_CONTEXT_MODE
+            observed = {'observed_native_state_id': block_id}
+        elif receipt is not None or self._sglang_exact(block):
             count = len(block.token_ids)
             if count:   # an empty state imports nothing; a count-0 span made the scheduler raise and die (2026-11-10)
                 seq.sglang_imports.append({'path': str(block.path), 'start': len(ids), 'count': count})
