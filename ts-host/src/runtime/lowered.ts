@@ -561,6 +561,9 @@ function notIterable(source: unknown, label: string | undefined): string {
   if (source === null || source === undefined)
     return `${lead}, but got ${source}. A value that can be missing, such as String.match's result when nothing ` +
       `matches, needs a fallback: \`for (… of ${label ?? 'value'} ?? [])\`.`;
+  // An unawaited call (`for (const f of folder.files(...))`) is a Promise, not the plain object it looks like.
+  if (typeof source === 'object' && typeof (source as { then?: unknown }).then === 'function')
+    return `${lead}, but got a Promise: await it first, as in \`for (… of await ${label ?? 'value'})\`.`;
   if (typeof source === 'object' && typeof (source as { [Symbol.iterator]?: unknown })[Symbol.iterator] === 'function')
     return `${lead}; spread other iterables into an array first: \`for (… of [...${label ?? 'value'}])\`.`;
   if (typeof source === 'object')

@@ -67,6 +67,82 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 - **Flagship held splits** are 2–5 fixtures per app, too few for p < 0.05. Owner: task-author tool batches, next semantic-FP batch.
 - **`compatible.nl`** judges additive edits incompatible. This is a training target through the sfp3 rows, which are in the pool; watch its family in the health report.
 
+## Held failure taxonomy (2026-11-23, `plans/neuralese/HELD_FAILURES_20261123.md`)
+
+- **Neuralese read-back loses the content.** `natlang:model-read/1` returned the producer's text in 1 of 87
+  read-backs (sft-v7), 1/87 (sft-v9), 0/24 (sft-v6 held-v4) and 13/465 in aei1's DGX collection. The state is imported
+  (`exact-native-state`, producer's id), yet a two-line string reads back as `jinja2`. Spec-following episodes fail on
+  it, while bypassing episodes pass (33% vs 64% pass rate), so expert iteration rewards not following the program.
+  Find where the content is lost: the producer's state vs a text-primed span, the import positions, the template
+  readout, or an untrained reader. Episodes: `ops/ei/sft-v9/held/failure-taxonomy-20261123/readback.py`. Owner:
+  coordinator assigns a bug hunt, ahead of more Neuralese-variant collection.
+- **Harness messages found, not changed** (`HELD_FAILURES` 3.8). Owner: runtime-messages agent, next session:
+  - the "cut off" footer after a `console.log` that printed the whole value;
+  - a rejected service write that reads as a partial write;
+  - `finish:true` accepts record fields outside the declared type;
+  - `return_result` refuses a JSON string of the declared record, with an unrelated `nl.with<T>` hint;
+  - `moveTo`/`folder.file` silently take `[object Object]` paths or nest a file under itself;
+  - the sandbox `mv` will not overwrite and says "cannot safely determine whether … are the same file";
+  - `read_code("refine")` answers no-such-function;
+  - "Binding is immutable" never names `const`;
+  - `const intent = await intent(x)` gives a raw TDZ ReferenceError;
+  - leaked `</think><tool_call>` text in eval code.
+- **Held-v3 errata review:** six tasks with a suspect gold or oracle (`HELD_FAILURES` 3.9: rows 130, 095, 235, 249,
+  204 and the QA span oracle). Owner: next held errata pass.
+- **Decision-readout tie-break:** three 2–2 ties of the four samples all went to needs-review, wrong each time
+  (held-v4 design-brief gates). Check the tie rule. Owner: B10 agent.
+
+### Task-authoring briefs (owner: next task-author batch)
+
+Seed from new domains and existing datasets, never from held inputs or their siblings (`held_eval.exclusion_ids()`).
+Each task gets an exact oracle with reference, negative and alias replay. Measure repetition against the pool before
+admitting the batch.
+
+- **A. Directory reducers with exact effects.** Programs that read a folder of notes and must move, not copy, each
+  note into destination folders at the folder root, write a summary file in an exact line template, and return a
+  count. Vary:
+  - where destinations live (root vs nested, stated explicitly);
+  - move vs copy vs delete;
+  - cut-off rules ("stop when …");
+  - null or absent fields that select a default branch;
+  - name vs path in output lines;
+  - literal words in the template that must appear verbatim;
+  - a final newline.
+
+  Negative replays: the right summary with no moves; moves into nested folders; a copied file left behind; a dropped
+  template word. Domains: depots, clinics, archives, workshops, municipal permits, school rosters (not courts, ferries,
+  harbours, claims or bike docks).
+- **B. Child-call discipline in eval.** Programs whose root loops over items and calls a named child function once per
+  item, then aggregates. Construct pressure:
+  - results stored once and reused in the next eval (an oracle on the model-call count: at most N + small);
+  - children that answer directly rather than calling themselves or a new `nl` with the same instructions;
+  - 3–5-level chains where each level does one step;
+  - `Promise.all` over async children;
+  - `for … of await folder.files(…)`.
+
+  Negative replays: re-running the loop (budget), a self-call, by-hand computation where the child is the specified
+  path (`hinted_technique` oracle).
+- **C. Exhaustive codebase exploration with exact paths.** Callable-program exploration tasks: leaves under nested
+  namespaces, direct children excluding the parent, functions whose instructions mention an exact identifier
+  (not substring, not frontmatter args), parameter-type users including the root. Answers are full dotted paths from
+  the root. Programs have 12–20 functions over 3–4 levels, so passing needs reading all of them. Use new program
+  domains, not `codebases-design-briefs-0xx`.
+- **D. Decision-readout calibration on hard negatives.** `decide`/`readout: decision` tasks whose label sets have
+  near-miss out-of-scope requests, fine-grained question types, money words in personal (ham) messages, and
+  two-team routing where the request names one team's symptom and the other's remedy. Roughly 30% of items should be
+  the out-of-scope or near-miss class. Sources: intent and classification datasets outside held source groups.
+- **E. Fresh siblings of the zero-rate capabilities** (held families with 0% historic pool rate). These are written
+  from the capability, not the held task:
+  - an obligation carried across sections of a long register into per-section notes;
+  - request-to-service-call queues with conditional reject reasons;
+  - reconciliation over damaged or missing folder entries;
+  - an edit stream applied to a document;
+  - choosing a procedure from a skill library;
+  - multi-round state games with a stop rule.
+
+  Give each a Neuralese-free variant until the read-back defect above is fixed, so own successes and teacher
+  demonstrations are possible.
+
 ## Operations
 
 - **Benchmark arm D (specialize, tune, escalate on sft-v9):** its 24 GB tune job (`bench-tune-b2`) was cancelled at 18:40. It sat at the head of the DGX ledger during round 1's SFT and froze 18 jobs behind it. Rerun arm D (`/home/werg/data/semantic-fp-bench/triage-20261123b/driver.sh`) after the r0001 SFT finishes. Owner: coordinator.

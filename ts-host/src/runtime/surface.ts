@@ -172,6 +172,9 @@ export async function refine(value: unknown, predicate?: string | readonly strin
   const obligations = predicates.map(text => ({ path: 'value', predicate: text, value, ...(context ? { context } : {}) }));
   const failures = await task.refinementChecker().check(obligations,
     { phase: 'refine', ...task.refinementJudges(task.model(), frame), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
+      // The calling invocation's trace gives a scored judge its own invocation identity: without it a decision-readout
+      // collector refused every refine() ("decision readout needs its invocation identity").
+      ...(frame.parentCallId ? { trace: traceFor(frame.parentCallId) } : {}),
       untrusted: scopedUntrusted(task), emit: (kind, data) => emitRefinement(frame, kind, data) });
   if (failures.length) throw failureError(failures[0]!);
   return value;

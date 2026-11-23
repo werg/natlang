@@ -3286,3 +3286,36 @@ not a message.
   argument, so a relational `refine` in eval was judged without its context), and a record built in eval or a module
   realm is snapshotted into a context like a host record (it was kept by reference, so later mutation reached the bound
   function).
+
+### 2026-11-23 — `await` in a non-async function and a wrong argument count get errors that name the fix (held failure taxonomy)
+
+Found reading the held-v3 failures of sft-v7 and sft-v9 (`plans/neuralese/HELD_FAILURES_20261123.md`):
+- `files.map(f => [f.name, await f.readText()])` in eval parsed, then failed in the engine with
+  "SyntaxError: Unexpected identifier '__natlang_own'" (the name of the lowering's call wrapper) or "await is only valid
+  in async functions". 23 such errors in 13 failed episodes across sft-v6/v7/v9, none in a passing one. The scope
+  compiler now refuses it before running, at the function: "`await` is used inside a function that is not async. Await
+  in the eval code itself, as in `for (const file of files) { const text = await file.readText(); }`, or mark the
+  function async and await all its results: `await Promise.all(files.map(async file => await file.readText()))`."
+  (code `typescript-syntax`, `ts-host/src/scope-compiler.ts`). Only code that already failed is affected.
+- A natural-language function called with the wrong number of arguments said only "read_function expects 3 arguments,
+  got 1"; the model then guessed (18 such errors on `read_function`/`read_file` helper notes in codebase-explore tasks).
+  The error now lists the parameters: "read_function expects 3 arguments (question: string, name: string, source:
+  string), got 1" (`ts-host/src/runtime/kernel.ts`). Every engine sees the same text (the runtime produces it).
+No opt-out: both change only the text of an error that already occurred, never whether a call succeeds. Tests:
+`test/scope-compiler.test.mjs`, `test/runtime.test.mjs`.
+- A `for … of` over an unawaited call (`for (const f of folder.files('notes/*.md'))`) said "but got a plain object;
+  iterate Object.keys, …", which sent the model the wrong way. It now says "…but got a Promise: await it first, as in
+  `for (… of await folder.files('notes/*.md'))`" (`ts-host/src/runtime/lowered.ts`). Test: `test/interpreter.test.mjs`.
+- `refine(value, predicate)` in eval failed under every decision-readout collector (held and RL collection) with
+  "decision readout needs its invocation identity": `runtime/surface.ts` did not pass the calling invocation's trace
+  to the refinement checker, so its scored judge had no invocation id (the kernel's argument, service and return
+  checks already passed it). It does now (`test/refinement-eval.test.mjs`). No opt-out: the old path always failed.
+- **The whole-case request budget counts a reasoned decision once** (`ts-host/src/teacher/collector.ts`). A
+  `readout: decision` call sends k = 4 reasoning samples and k option scorings, and each counted against the 40-request
+  budget, so one `decide()` cost 8 requests. In held-v4 (sft-v6) 94 of 177 scored failures were budget stops, and in
+  `auth:sfp-untrusted-contract` row 087 six `urgency` readouts used 37 of the 40 while the root used 3; a program with
+  five decisions could not finish however well it ran. Now the first reasoning sample counts and the further samples
+  and the scorings do not; an unreasoned decision still counts its one scoring. This changes held scoring (a new
+  scoring series: re-measure the base on it). Opt-out: `NATLANG_BUDGET_EACH_DECISION_REQUEST=1`. Left as is: the
+  runtime's own `limits.maxModelRequests` (`native/model-budget.ts`), a user-declared limit on actual requests.
+  Test: `test/teacher-collector.test.mjs`.
