@@ -69,13 +69,28 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 
 ## Held failure taxonomy (2026-11-23, `plans/neuralese/HELD_FAILURES_20261123.md`)
 
-- **Neuralese read-back loses the content.** `natlang:model-read/1` returned the producer's text in 1 of 87
-  read-backs (sft-v7), 1/87 (sft-v9), 0/24 (sft-v6 held-v4) and 13/465 in aei1's DGX collection. The state is imported
-  (`exact-native-state`, producer's id), yet a two-line string reads back as `jinja2`. Spec-following episodes fail on
-  it, while bypassing episodes pass (33% vs 64% pass rate), so expert iteration rewards not following the program.
-  Find where the content is lost: the producer's state vs a text-primed span, the import positions, the template
-  readout, or an untrained reader. Episodes: `ops/ei/sft-v9/held/failure-taxonomy-20261123/readback.py`. Owner:
-  coordinator assigns a bug hunt, ahead of more Neuralese-variant collection.
+- **Neuralese read-back: fixed (d16437be8, f109bedfd; DECISIONS 2026-11-23 21:30).** A text-written state was encoded with no
+  context and could not be read. Engines now read it as its tokens, inline in the reader's context with no markers
+  (`in-context-text`, opt-out `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`). Native probe: 11/12 after, against 0/12 before
+  on the live SGLang front. Follow-ups:
+  - **Re-enable Neuralese variants in aei1's collection and SFT mix** at the next pin with d16437be8. Measure the
+    collection's read-back rate with the failure-taxonomy `readback.py`. Owner: coordinator.
+  - **Marker rows** (125033–125036): bit-identical to the base's reserved row through sft-v9 (the legacy freeze). The
+    current learner trains them, but they start identical and `produce_close` never occurs in training data. Do these
+    at a round boundary, each with an opt-out:
+    - text-initialise the four rows from distinct phrases, scaled to ordinary row norm. This changes the tied head's
+      marker logits: measure spontaneous marker emission on the probe.
+    - give the rows their own optimizer group with an LR multiplier.
+    - find why producer documents lack `produce_close`.
+    - keep the rows in FP32 in merged checkpoints (`merge_policy_state` `sparse_row_dtype`).
+    - delete the dead `exp0_sft.write_checkpoint`.
+
+    Owner: learner agent, next round.
+  - **Produce spans the model emits and another call reads** are still spliced from the producer's context, which is
+    the same out-of-context problem. Decide between in-context reading of every text-primed state and trained readers,
+    with `neuralese_readback_probe.py` as the acceptance test. Owner: Neuralese agent.
+  - **A text-written state moved between engines** is spliced as stored (ENGINE_PARITY gap row). Blocked on a durable
+    producer-kind field in the state header.
 - **Harness messages found, not changed** (`HELD_FAILURES` 3.8). Owner: runtime-messages agent, next session:
   - the "cut off" footer after a `console.log` that printed the whole value;
   - a rejected service write that reads as a partial write;
