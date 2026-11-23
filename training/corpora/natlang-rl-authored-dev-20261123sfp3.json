@@ -1,0 +1,12 @@
+{
+  "id": "natlang-rl-authored-dev-20261123sfp3",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-authored-dev-20261123sfp3",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "cases.jsonl"
+  ],
+  "kind": "held",
+  "protected": true,
+  "note": "Held dev rows of the authored (Haiku-written, qualified) RL task pool: 18 verified cases in 18 worlds (split dev), registered 20261123sfp3. Related invocation worlds stay on one split. For development and confirmation of RL outcomes; never a training source."
+}

@@ -8337,3 +8337,63 @@ p 0.40 vs `decline` 16/16), and floors and escalation read its confidence.
 A resumable ledger preemption after `git worktree add` left an exact checkout without its readiness marker; the previous helper retried add and failed. The canonical pin helper now serializes create/remove per destination, resumes only the registered detached requested commit with clean tracked sources, repeats ignored-state/link preparation and rebuilds before atomically publishing the completion marker. Completed pins are validated before reuse. The marker format and all training consumers stay unchanged; no active pins were edited. Targeted interruption, mismatch/dirty/foreign rejection, atomic publication and concurrent create/remove tests:13 passed (189 MiB peak); ledgered quick gate passed (871 MiB peak). Root can now resubmit the interrupted DGX reader pin using the updated helper.
 
 Pin retry follow-up: the real DGX partial checkout included correct dangling shared links. `Path.exists()` misclassified them as absent and attempted a duplicate symlink. LINKED leaves/roots and SHARED now use one lexical intended-target check; correct dangling links are preserved and conflicting paths rejected. Failed-build/retry coverage now includes dangling run/data leaves, venv root and model store.17 targeted tests plus quick gate passed; source fix published for the unchanged clean partial pin to resume.
+
+## 2026-11-23 08:20 Verifier tasks over the @natlang/std combinators (sfp3): std now runs in collection, 9 batches, 73 train rows in grpo-pool
+
+The coordinator asked for this batch because live LFM3 scored additive edits as less compatible than real clashes in
+`compatible.nl` (B13). The tasks are programs that use `semanticMerge`, `semanticRepair`, `fixedPoint`,
+`proposeAndVerify` and `branchAndSelect` with the shipped judgments (no overrides), and their verifiers judge the outcome.
+- **Collection could not run std at all; fixed in c93124ec1.**
+  - *First bug.* The collector loads the runtime without the package entry, so `@natlang/node/std` in callable-folder
+    TypeScript fell through to the package loader. That ran a second copy of the runtime, which has no active task
+    ("No natlang task is active here"). Now `platform-defaults.ts` registers the standard library on every platform.
+  - *Second bug.* `semanticMerge` treated records built in the module realm as opaque values, because they have
+    another `Object.prototype`, so the whole record became one conflict. A single realm-tolerant `isPlainObject`
+    (`runtime/plain-object.ts`) now serves std and seven other places that tested `=== Object.prototype`: native
+    values and runtime, canonical data, call normalization, folder iteration, folder Python, the learning module and the
+    teacher materializer.
+  - The async module path also exports `Context`. Test: `ts-host/test/std-platform-entry.test.mjs` imports only the Node
+    platform.
+- **Merge verifier.** New verifier `merge.mjs` (fe8efaa41). It checks that a judged field equals an accepted value or
+  contains each compatible edit's piece. It also checks that `unresolved` lists exactly the incompatible paths. Where a
+  reading is genuinely two-way, `{any: [...]}` and `unresolved_optional` accept both.
+- **Construct tags.** New tags `semantic_merge`, `semantic_repair`, `fixed_point`, `propose_and_verify` and
+  `branch_and_select`, each checked statically (the program imports the combinator and calls it). The repetition
+  structure key carries the std combinators a program calls. Kit section 20 covers std tasks.
+- **Batches.** 9 Opus authors (w430-w438) wrote 108 tasks; 106 were admitted.
+  - Each merge world has >= 8 judged conflicts, about half of them compatible. The all-compatible and all-incompatible
+    readings are both wrong answers, so the outcome depends on every real compatibility judgment.
+  - Qualification on pin c93124ec1b: references, wrong controls (0 accepted), keyword baselines (all ran, all
+    rejected), aliases, full smoke replays, novelty, held-v3/held-v4 separation.
+  - Blind solves (Sonnet):
+    - w435-w438: 48/48.
+    - Merge batches: 47 of 62 at first.
+    - w432 at first: 0/12. It read capacity edits as deltas (40->46 and 40->48 made 54). The author rewrote every
+      count as named groups, then 10/12.
+  - Disputed conflicts were widened to accept both readings, or the task was dropped (w434 p2a/p3a, w432 p2a/p6b).
+  - Nearly every dispute had one pattern: one edit keeps base text that the other edit changes ("1 year" kept while
+    the other side writes "2 years"). Readers split on whether the kept text is a purpose. These now accept both
+    readings, so expert iteration trains compatibility on the unambiguous cases: each side adds its own part, two
+    different new values for one thing, or a removal of what the other side edits.
+  - Admitted per batch:
+    - w430 listing_merges 12
+    - w431 clause_merges 14
+    - w432 settings_merges 10
+    - w433 itinerary_merges 12
+    - w434 ticket_merges 10
+    - w435 repair_loops 12
+    - w436 settling_revisions 12
+    - w437 verified_folder_edits 12
+    - w438 selected_drafts 12
+- **Supply `natlang-rl-task-supply-20261123sfp3`** (promoted to grpo-pool):
+  - 73 train rows in 9 new families; 38 of them are merge programs.
+  - 52 programs, 24 structures (16.6 effective). Nothing is shared with the 37,546-row pool (instructions, programs,
+    structures, functional programs).
+  - 33 held rows are in `natlang-rl-authored-{dev,confirmation}-20261123sfp3`.
+  - Custody 0; held-v3 verify 0/0 with and without exposure.
+- **Not checked:**
+  - No model has run these tasks.
+  - Collection of std tasks needs a policy pin at or after c93124ec1; the aei1 driver's current pin predates it.
+  - Floors never bite in replay (confidence 1).
+  - The structure count is low (24): every program shares a TS-helper-plus-std shape. Diversity lives in the
+    programs (52) and the worlds.
