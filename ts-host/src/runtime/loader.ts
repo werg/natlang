@@ -633,6 +633,14 @@ function resolveUsesTarget(specifier: string, fromPath: string, root: string, fi
   return target;
 }
 
+/**
+ * The file each `uses:` alias of a record resolved to (normalized path), kept beside the record rather than on it so a
+ * record's content (and every identity hashed from it) does not depend on where the package sits on this machine. The
+ * compiler's `.d.nl.ts` emit reads it to reference a used function's own declaration (`import type`).
+ */
+const USES_TARGETS = new WeakMap<NatlangRecord, Record<string, string>>();
+export function usesTargetsOf(record: NatlangRecord): Readonly<Record<string, string>> | undefined { return USES_TARGETS.get(record); }
+
 /** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users. */
 const ATTACHING: string[] = [];
 /** Functions of callable folders whose load is still running, by normalized file path: a `uses` naming one shares that record. */
@@ -676,6 +684,7 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
         throw new NatlangSourceError(path, `uses ${item}, but its folder already has an item named ${name}; rename one of them`);
       const target = resolveUsesTarget(item, path, root, files);
       const normTarget = normalizePath(target);
+      USES_TARGETS.set(record, { ...USES_TARGETS.get(record), [name]: normTarget });
       if (normTarget === normPath || ATTACHING.includes(normTarget)) {
         const at = ATTACHING.indexOf(normTarget);
         const chain = at >= 0 ? [...ATTACHING.slice(at), normTarget] : [normPath, normTarget];
@@ -951,8 +960,9 @@ export function parseModule(path: string, text: string, inherited: Record<string
     catch { /* TypeScript types outside the portable grammar are checked by the compiler, not here. */ }
   }
   const source = files.relative?.(path) ?? path;
-  return { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {},
+  const moduleRecord: ModuleRecord = { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {},
     ...(Object.keys(declared.declarations).length ? { declarations: declared.declarations } : {}) };
+  return moduleRecord;
 }
 
 const isSource = (name: string) => (name.endsWith('.nl') || (name.endsWith('.ts') && !name.endsWith('.d.ts'))) &&

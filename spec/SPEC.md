@@ -141,7 +141,9 @@ type, `args: { q: string, n?: number }`. A value wrapped entirely in quotes is
 the quoted text, as in YAML, so `"string[]"` is `string[]`; a lone string
 literal type is written `'"yes"'`. The other keys are YAML. Application TypeScript imports a named
 function as a module default export; the build generates its declaration
-(`foo.d.nl.ts`).
+(`foo.d.nl.ts`). A `uses:` item that is itself a named function of the build is
+referenced there by an `import type` of its own declaration, so its type aliases
+stay its own (`NATLANG_INLINE_USES_DECLARATIONS=1` inlines it instead).
 
 ## Contexts
 
