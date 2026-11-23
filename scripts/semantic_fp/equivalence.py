@@ -42,6 +42,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 
 from natlang_neuralese.common.jsonio import read_jsonl  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes  # noqa: E402
 
 SCHEMA = 'natlang.semantic-fp-equivalence/1'
 DESIGN_SOURCE = 'codebases/design_briefs'
@@ -59,10 +60,6 @@ def node_binary():
     if not found:
         raise SystemExit('node is required (set NATLANG_NODE)')
     return found
-
-
-def sha256_bytes(data):
-    return hashlib.sha256(data).hexdigest()
 
 
 def case_seed(seed_base, case_id, sample):
