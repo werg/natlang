@@ -3063,3 +3063,18 @@ not a message.
   relational predicates (`ensures:` with `against:`, `refine(..., { context })`); untrusted text in it is fenced as the
   executor sees it. Judgements without context render byte-identically. The non-scoring judge (`holds` as a call)
   gets a `context` parameter and one more sentence only in that case.
+
+### 2026-11-23 — eval has `NatlangContext`, so a call can bind a function to another context (held-v4 extension)
+
+- Every call's opening names the new built-in: "Eval also has the built-ins nl, iterateOn, transcript, decide and
+  NatlangContext; read_code shows how to use each." (the fifth-layer line likewise). It is one word in the opening
+  message; the system prompt, tool block and `pieces.json` are unchanged. `read_code("NatlangContext")` shows its
+  documentation (`native/runtime.ts` `BUILT_IN_DOCS`): `fn.in(NatlangContext.empty().with({ policy }))` and the context
+  methods. Why: `.in(context)` is the semantic-FP lens construct, and eval had no context value at all (the type
+  existed, the value did not), so a call asked to bind a function could not. Eval uses `NatlangContext` (not `Context`)
+  so a program type named `Context` keeps its name; a scope name of the call wins over the built-in. Opt-out:
+  `NATLANG_PROMPT_REVISION=2026-11-22` restores the old lines byte for byte (the binding stays available).
+- Also: eval's `refine(value, predicate, { context })` passes its options through (the eval wrapper dropped the third
+  argument, so a relational `refine` in eval was judged without its context), and a record built in eval or a module
+  realm is snapshotted into a context like a host record (it was kept by reference, so later mutation reached the bound
+  function).

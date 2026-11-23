@@ -111,6 +111,16 @@ test('refine takes the context of a relational predicate', async () => {
   assert.match(String(error?.message), /refinement-unsatisfied: Revise the value at value so that it is "a lightly edited version of draft" given draft/);
 });
 
+test('refine in eval passes its context through', async () => {
+  const root = program({ 'edit.nl': '---\nargs: { draft: string }\nreturns: string\n---\nLightly edit draft.\n' });
+  const model = scripted([['eval', { code: 'return await refine("short!", "a lightly edited version of draft", { context: { draft } });', finish: true }]],
+    prompt => /<<<draft\nshort\ndraft>>>/.test(prompt) ? 0.9 : 0.2);
+  const runtime = createNatlangRuntime({ model: model.driver });
+  const edit = loadNatlang(join(root, 'edit.nl'), root);
+  assert.equal(await runtime.run(() => edit('short')), 'short!');
+  assert.match(model.judged.at(-1), /Context, the values the property refers to by name:\n<<<draft\nshort\ndraft>>>/, 'the judge saw the context');
+});
+
 test('the items a check names are protected, and an edit cannot change the ensures lines', async () => {
   const root = program({ 'quotes.nl': QUOTES, 'quotes/quoted.ts': QUOTED, 'quotes/helper.ts': 'export default function helper(): number { return 1; }\n' });
   const quotes = loadNatlang(join(root, 'quotes.nl'), root);
