@@ -24,11 +24,21 @@ export type UncertainTrace = {
   confidence: number;
 };
 
+/** One tested commit: whether it reproduced a failure and, when the tester recorded it, its test output. */
+export type BisectObservation = {
+  commit: string;
+  fails: boolean;
+  log?: Untrusted<string>;
+};
+
 /** State tracked during commit bisection. */
 export type BisectState = {
+  trace: FailureTrace;
+  commits: string[];
   low: number;
   high: number;
   tested: string[];
+  observations: BisectObservation[];
   culprit?: string;
   done: boolean;
 };
@@ -53,6 +63,8 @@ export type CiReport = {
   uncertain: UncertainTrace[];
   culpritCommit?: string;
   bisectedCommits: string[];
+  /** Why bisection ended without a culprit: `judged` when bisectSettled.nl stopped it (a different failure or an untestable commit). */
+  bisectStopped?: 'judged';
   fixAccepted: boolean;
   chosenBranch: number | null;
   chosenFix?: FixProposal;

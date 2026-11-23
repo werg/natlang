@@ -25,6 +25,15 @@ is not required (owner, 2026-11-12: that rule did not come from the owner and wa
   become `idiom-review-<kind>` diagnostics. No prompt text changed; these calls now happen from `natlang check`.
 - **Opt-outs.** Plain `natlang check` uses no model and never runs it.
 
+### 2026-11-23 — ci-doctor: a natural-language bisection stop and root-cause clustering (WS6 A5)
+
+- **What changed.** `applications/ci-doctor` asks `bisectSettled.nl` (`readout: decision`, new) after each bisection
+  step whether going on can still find the failure's cause, and clusters failures of one kind with std `semanticMatch`
+  pair decisions (shipped `relates.nl`, relation "the two CI failures have the same root cause: the same defect or
+  fault, even when their logs word it differently"). Before, the stop was the exact range test alone and clusters were
+  the first error line's exact text.
+- **Opt-outs.** `bisectStop: 'crisp'`, `clustering: 'signature'`.
+
 ### 2026-11-23 — `natlang improve DIR` proposes: three built-in improver stages run on the model (WS8 N4)
 
 - **What changed.** Three new built-in natlang programs (`ts-host/src/builtin/improveDiagnose.nl`,
