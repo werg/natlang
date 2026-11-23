@@ -160,6 +160,18 @@ async function trainingScope(receipt, row, root) {
   return selected;
 }
 
+export async function verifyOriginalRejection(packet, proof, root) {
+  const passed=packet.result?.passed,bindings=(proof.evidence??[]).filter(item=>item.role==='original-rejected-review');
+  if(!bindings.length)return passed===false;
+  if(bindings.length!==1 || typeof passed!=='boolean')return false;
+  const review=JSON.parse(await readBound(bindings[0],root)),observed=packet.execution?.diagnostics?.openGoalVerification;
+  const input=observed?.preparedContentProject?.artifact?.semanticReviewInput??observed?.semanticReviewInput;
+  const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
+  const exchanges=[review.exchange,...(Array.isArray(review.exchanges)?review.exchanges:[])];
+  return review.schema==='natlang.live-workflow-review/1' && review.verdict?.accepted===false && object(input) && !Array.isArray(input) && Object.keys(input).length>0 &&
+    isDeepStrictEqual(review.input,input) && exchanges.some(item=>object(item) && object(item.request) && object(item.reply));
+}
+
 async function completedReassessment(receipt, manifest, row, root) {
   const reassessment=receipt.reassessment;
   if (!reassessment) {
@@ -188,7 +200,7 @@ async function completedReassessment(receipt, manifest, row, root) {
   const normalized=value=>({...value,...Object.fromEntries(['evidence','checker_sources'].map(field=>[field,(value[field]??[]).map(({path,...binding})=>binding)]))});
   if(assessment.completed_outcome?.sha256!==validator.completed_outcome.sha256 || !isDeepStrictEqual(normalized(proof),normalized(originalCompleted)))
     throw new Error('completed reassessment differs from bound independent verdict');
-  if(original.passed!==false || !isDeepStrictEqual(original,packet.result) ||
+  if(!await verifyOriginalRejection(packet,proof,root) || !isDeepStrictEqual(original,packet.result) ||
       assessment.schema!=='natlang.live-reassessment/1' || assessment.task_id!==manifest.id || assessment.original_sha256!==digest(raw) ||
       proof?.schema!=='natlang.live-outcome-reassessment/1' || proof.passed!==true || proof.task_id!==manifest.id ||
       proof.original_sha256!==assessment.original_sha256 || proof.goal!==prior.goal ||
@@ -201,7 +213,22 @@ async function completedReassessment(receipt, manifest, row, root) {
   for(const artifact of [...proof.evidence,...proof.checker_sources])await readBound(artifact,root);
 }
 
-function decisionEligibility(record, detail, selected, incorrectReturn) {
+export function reviewedDecisionOrdinals(selectors, record, artifact, matched) {
+  const excluded=new Set();
+  selectors.forEach((item,index)=>{
+    if(item.call_id!==record.call_id)return;
+    const turns=record.model_turns??[];
+    if(item.call_sha256!==artifact.sha256 || !isDeepStrictEqual(item.definition,record.definition) ||
+       !Number.isSafeInteger(item.ordinal) || item.ordinal<0 || turns[item.ordinal]?.kind!=='generation' ||
+       !turns[item.ordinal]?.reply || typeof turns[item.ordinal].reply!=='object' || Array.isArray(turns[item.ordinal].reply) ||
+       typeof item.reason!=='string' || !item.reason.trim() || excluded.has(item.ordinal))
+      throw new Error('decision review differs from captured call bytes or generation');
+    excluded.add(item.ordinal);matched.add(index);
+  });
+  return excluded;
+}
+
+function decisionEligibility(record, detail, selected, incorrectReturn, reviewed) {
   const actual = record.model_turns ?? [];
   const events = detail.events ?? [];
   const failed = new Set();
@@ -237,7 +264,7 @@ function decisionEligibility(record, detail, selected, incorrectReturn) {
         (reply.reasoning ?? '') !== content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n'))
       throw new Error('observed normalized model reply differs from original gateway response');
     return (!selected || selected.has(record.call_id) && (ordinals === null || ordinals.has(index))) &&
-      index !== incorrectReturn && executor && !failed.has(index) &&
+      !reviewed.has(index) && index !== incorrectReturn && executor && !failed.has(index) &&
       originalCalls.every(call => actionEvents.get(call.id)?.length === 1 &&
         ['ok', 'completed'].includes(actionEvents.get(call.id)[0].outcome)) &&
       Boolean(reply.text || originalCalls.length);
@@ -270,6 +297,8 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const evidenceKinds = new Set();
   let incorrectOptionalReturn = false;
   const returnSelectors=[];
+  const decisionSelectors=[];
+  const matchedDecisionSelectors=new Set();
   const applicationReturns=[];
   const matchedReturnSelectors=new Set();
   for (const evidence of receipt.evidence ?? []) {
@@ -280,6 +309,10 @@ export async function verifyObservedWorkspaceEvidence(row) {
       if(Object.hasOwn(payload,"applicationReturn"))applicationReturns.push(payload.applicationReturn);
       const proof=payload.proof??{};
       returnSelectors.push(...declaredReturnSelectors(proof));
+      if(proof.decisionReview!==undefined){
+        if(proof.decisionReview?.schema!=='natlang.live-decision-review/1' || !Array.isArray(proof.decisionReview.excluded))throw new Error('invalid source-bound decision review');
+        decisionSelectors.push(...proof.decisionReview.excluded);
+      }
       const returned = proof.outcomeDimensions?.returnedValue;
       incorrectOptionalReturn ||= returned?.required === false && returned.passed === false;
     }
@@ -340,7 +373,8 @@ export async function verifyObservedWorkspaceEvidence(row) {
     const lastGeneration = selectorMatch || incorrectOptionalReturn && record.parent_call_id === null
       ? actual.findLastIndex(exchange => exchange.kind === 'generation') : -1;
     if (lastGeneration >= 0) returnExclusions.push({invocation_id: call.call_id, ordinal: lastGeneration});
-    const eligible = decisionEligibility(record, original, selected, lastGeneration);
+    const reviewed=reviewedDecisionOrdinals(decisionSelectors,record,call.artifact,matchedDecisionSelectors);
+    const eligible = decisionEligibility(record, original, selected, lastGeneration, reviewed);
     if (projected.length !== actual.length)
       throw new Error('observed trajectory omitted captured exchanges');
     for (const [index, decision] of projected.entries()) {
@@ -370,6 +404,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
     callFiles.delete(call.artifact.path);
     decisions.delete(call.call_id);
   }
+  if(matchedDecisionSelectors.size!==decisionSelectors.length || !equal(row.outcome.excluded_review_decisions??[],decisionSelectors))throw new Error('decision review names an absent captured generation or differs from outcome');
   if (captureScopes.size || callFiles.size || decisions.size || roots.size)
     throw new Error('observed trajectory does not cover the full verified call tree');
   if (returnSelectors.some((item,index)=>item.required!==false&&!matchedReturnSelectors.has(index)))throw new Error('incorrect return binding does not match its actual original invocation');

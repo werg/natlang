@@ -258,9 +258,11 @@ def reserved_programs(reservations):
     return out
 
 
-def package(decision_rows, out, *, reserved=frozenset()):
+def package(decision_rows, out, *, reserved=frozenset(), source_groups=None):
     """One ``natlang.semantic-fp-migration-pair/1`` row per accepted migration: the original and migrated files of the
-    program, its findings, the step kinds and the equivalence comparison. Reserved programs are left out."""
+    program, its findings, the step kinds and the equivalence comparison. Reserved programs are left out.
+    ``source_groups`` (program -> the source groups of its cases) is carried on each row, so held exclusion by source
+    group applies to the pair as to the program's cases."""
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     rows, skipped = [], []
@@ -280,7 +282,8 @@ def package(decision_rows, out, *, reserved=frozenset()):
             else:
                 after[change['path']] = change['after']
         rows.append({'schema': PAIR_SCHEMA, 'id': f"migration:{decision['program']}", 'program': decision['program'],
-                     'split_group': split_group(decision['program']), 'family': 'refactor-to-semantic-fp',
+                     'split_group': split_group(decision['program']),
+                     'source_groups': sorted((source_groups or {}).get(decision['program'], ())), 'family': 'refactor-to-semantic-fp',
                      'findings': decision['findings'], 'model': decision.get('model'),
                      'changes': [{k: change.get(k) for k in ('path', 'role', 'steps', 'repairAttempts')} for change in proposal['changes']],
                      'before': {'files': before, 'sha256': equivalence.files_sha256(before)},
@@ -354,6 +357,7 @@ def main(argv=None):
     k.add_argument('--decisions', type=Path, action='append', required=True)
     k.add_argument('--out', type=Path, required=True)
     k.add_argument('--exclude-reserved', type=Path)
+    k.add_argument('--cases', type=Path, action='append', help="the programs' cases directories (their source groups)")
     t = sub.add_parser('tasks')
     t.add_argument('--cases', type=Path, action='append', required=True, help='a candidate cases directory (cases.jsonl)')
     t.add_argument('--decisions', type=Path, action='append', required=True)
@@ -395,8 +399,19 @@ def main(argv=None):
     elif args.command == 'package':
         rows = [d for path in args.decisions for d in read_jsonl(path)]
         reserved = reserved_programs(args.exclude_reserved) if args.exclude_reserved else frozenset()
-        packed, skipped = package(rows, args.out, reserved=reserved)
-        print(json.dumps({'pairs': len(packed), 'reserved_skipped': skipped, 'out': str(args.out / 'pairs.jsonl')}))
+        groups = collections.defaultdict(set)
+        for directory in args.cases or ():
+            for case in read_jsonl(directory / 'cases.jsonl'):
+                groups[(case.get('equivalence') or {}).get('program')] |= set(case.get('source_groups') or ())
+        packed, skipped = package(rows, args.out, reserved=reserved, source_groups=groups)
+        # A pair embeds its program: a program whose split group any held set holds (held-v3, held-v4) stays out too.
+        from natlang_neuralese.rl import held_eval
+        excluded = held_eval.training_exclusion_ids(packed)
+        if excluded:
+            packed = [row for row in packed if row['id'] not in excluded]
+            (args.out / 'pairs.jsonl').write_text(''.join(json.dumps(row, sort_keys=True) + '\n' for row in packed))
+        print(json.dumps({'pairs': len(packed), 'reserved_skipped': skipped, 'held_excluded': sorted(excluded),
+                          'out': str(args.out / 'pairs.jsonl')}))
     elif args.command == 'tasks':
         cases = [row for directory in args.cases for row in read_jsonl(directory / 'cases.jsonl')]
         decisions = [d for path in args.decisions for d in read_jsonl(path)]

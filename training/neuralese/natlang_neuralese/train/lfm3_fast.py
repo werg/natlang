@@ -30,6 +30,7 @@ from __future__ import annotations
 import os as _os
 import time as _time
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
@@ -1432,24 +1433,89 @@ def _head_logits_chunk(rows, weight, sparse_ids, sparse_rows):
     return logits
 
 
+class HeadMask:
+    """A sampling-law mask on some rows of a head computation (common.tool_grammar): at rows ``rows`` (int64, sorted, into
+    ``h``/``target``) only the tokens of ``table[which]`` (packed int32 bitmask rows, xgrammar's layout) are allowed.
+    The NLL, the nucleus and their gradients are then those of the renormalized law over the allowed set, as the engine
+    drew the token; other rows are unchanged. ``None`` everywhere means no mask."""
+
+    UNPACK_BLOCK = 64
+
+    def __init__(self, rows, table, which):
+        self.rows = torch.as_tensor(rows, dtype=torch.long)
+        self.rows_host = self.rows.cpu().numpy()
+        if len(self.rows_host) > 1 and (self.rows_host[1:] <= self.rows_host[:-1]).any():
+            raise ValueError('HeadMask rows must be strictly increasing')
+        self.table = torch.as_tensor(table, dtype=torch.int32)
+        self.which = torch.as_tensor(which, dtype=torch.long)
+        if self.which.shape != self.rows.shape:
+            raise ValueError('HeadMask rows and table indexes differ in length')
+        self._allowed = {}
+
+    def __len__(self):
+        return int(self.rows.numel())
+
+    def allowed_table(self, width, device):
+        """bool [masks, width] on ``device`` (unpacked once per device and width)."""
+        key = (str(device), int(width))
+        if key not in self._allowed:
+            table = self.table.to(device)
+            shifts = torch.arange(32, device=device, dtype=torch.int32)
+            parts = [((table[i:i + self.UNPACK_BLOCK].unsqueeze(-1) >> shifts) & 1).reshape(
+                min(self.UNPACK_BLOCK, table.shape[0] - i), -1)[:, :width].bool()
+                for i in range(0, table.shape[0], self.UNPACK_BLOCK)]
+            self._allowed[key] = (torch.cat(parts) if parts else
+                                  torch.zeros((0, width), dtype=torch.bool, device=device))
+        return self._allowed[key]
+
+    def apply(self, logits, start, stop):
+        """``logits`` of rows [start, stop) with the disallowed tokens of their masked rows at -inf (in place)."""
+        lo, hi = (int(x) for x in np.searchsorted(self.rows_host, [start, stop]))
+        if lo == hi:
+            return logits
+        local = self.rows[lo:hi].to(logits.device) - start
+        allowed = self.allowed_table(logits.shape[-1], logits.device)[self.which[lo:hi].to(logits.device)]
+        logits[local] = logits[local].masked_fill(~allowed, float('-inf'))
+        return logits
+
+    def allowed_rows(self, start, stop, width, device):
+        """bool [stop - start, width]: the allowed tokens of rows [start, stop) (every token at an unmasked row)."""
+        out = torch.ones(stop - start, width, dtype=torch.bool, device=device)
+        lo, hi = (int(x) for x in np.searchsorted(self.rows_host, [start, stop]))
+        if lo < hi:
+            out[self.rows[lo:hi].to(device) - start] = self.allowed_table(width, device)[self.which[lo:hi].to(device)]
+        return out
+
+    def subset(self, start, stop):
+        """The mask of rows [start, stop), renumbered from 0 (a slice of the rows it covers)."""
+        lo, hi = (int(x) for x in np.searchsorted(self.rows_host, [start, stop]))
+        out = HeadMask(self.rows[lo:hi] - start, self.table, self.which[lo:hi])
+        out._allowed = self._allowed
+        return out
+
+
+def _masked(logits, mask, start, stop):
+    return logits if mask is None else mask.apply(logits, start, stop)
+
+
 class _LinearNLL(torch.autograd.Function):
     """Per-row NLL of ``target`` under logits ``h @ weight.T`` with optional tied trainable sparse rows, in chunks."""
 
     @staticmethod
-    def forward(ctx, h, weight, target, chunk, sparse_ids, sparse_rows):
+    def forward(ctx, h, weight, target, chunk, sparse_ids, sparse_rows, mask=None):
         rows, chunk = h.shape[0], _head_chunk(chunk, h)
         nll = torch.empty(rows, dtype=torch.float32, device=h.device)
         lse = torch.empty(rows, dtype=torch.float32, device=h.device)
         forward_ce = _ce('forward') if h.is_cuda else _ce_forward
         for start in range(0, rows, chunk):
             stop = min(rows, start + chunk)
-            logits = _head_logits_chunk(h[start:stop], weight, sparse_ids, sparse_rows)
+            logits = _masked(_head_logits_chunk(h[start:stop], weight, sparse_ids, sparse_rows), mask, start, stop)
             lse[start:stop], nll[start:stop] = forward_ce(logits, target[start:stop])
         ctx.save_for_backward(h, weight, target, lse,
                               sparse_ids if sparse_ids is not None else torch.empty(0, dtype=torch.long, device=h.device),
                               sparse_rows if sparse_rows is not None else torch.empty(0, dtype=torch.float32, device=h.device))
         ctx.has_sparse = sparse_ids is not None and sparse_rows is not None and sparse_ids.numel() > 0
-        ctx.chunk = chunk
+        ctx.chunk, ctx.mask = chunk, mask
         return nll
 
     @staticmethod
@@ -1467,7 +1533,7 @@ class _LinearNLL(torch.autograd.Function):
         for start in range(0, h.shape[0], ctx.chunk):
             stop = min(h.shape[0], start + ctx.chunk)
             rows = h[start:stop]
-            logits = _head_logits_chunk(rows, weight, s_ids, s_rows)
+            logits = _masked(_head_logits_chunk(rows, weight, s_ids, s_rows), ctx.mask, start, stop)
             d = backward_ce(logits, lse[start:stop], target[start:stop], grad[start:stop], rows.dtype)
             if need_h:
                 chunk_dh = d @ weight
@@ -1482,7 +1548,7 @@ class _LinearNLL(torch.autograd.Function):
             if ds is not None:
                 d_s = d.index_select(1, s_ids)
                 ds += d_s.t().float() @ rows.float()
-        return dh, None if dw is None else dw.to(weight.dtype), None, None, None, ds
+        return dh, None if dw is None else dw.to(weight.dtype), None, None, None, ds, None
 
 
 def _head_rows(weight, trainable_rows):
@@ -1498,14 +1564,15 @@ def _head_rows(weight, trainable_rows):
     return None if model is None else getattr(model, '_lfm3_trainable_rows', None)
 
 
-def linear_nll(h, weight, target, chunk=LOGIT_CHUNK, *, trainable_rows=None):
+def linear_nll(h, weight, target, chunk=LOGIT_CHUNK, *, trainable_rows=None, mask=None):
     """fp32 NLL per row of ``target`` (int64) from hidden rows ``h`` (N, D) and the tied head ``weight`` (V, D).
     ``trainable_rows`` (``_head_rows``: default the owning model's rows, ``False`` none) splices FP32 rows into the head
-    and accumulates gradients directly into them without touching the frozen head weights."""
+    and accumulates gradients directly into them without touching the frozen head weights. ``mask`` (``HeadMask``):
+    rows drawn under a sampling-law mask take the NLL of the renormalized law over their allowed tokens."""
     trainable_rows = _head_rows(weight, trainable_rows)
     s_ids = trainable_rows.token_ids.to(h.device) if trainable_rows is not None else None
     s_rows = trainable_rows.rows if trainable_rows is not None else None
-    return _LinearNLL.apply(h, weight, target, chunk, s_ids, s_rows)
+    return _LinearNLL.apply(h, weight, target, chunk, s_ids, s_rows, mask if mask is not None and len(mask) else None)
 
 
 NUCLEUS_TOP_K = 1024
@@ -1572,14 +1639,14 @@ class _LinearNLLNucleus(torch.autograd.Function):
     """``_LinearNLL`` plus the NLL under the top-p nucleus of each row's own distribution, with optional sparse rows."""
 
     @staticmethod
-    def forward(ctx, h, weight, target, chunk, top_p, top_k, sparse_ids, sparse_rows):
+    def forward(ctx, h, weight, target, chunk, top_p, top_k, sparse_ids, sparse_rows, mask=None):
         rows, chunk = h.shape[0], _head_chunk(chunk, h)
         nll, lse, set_lse, cut = (torch.empty(rows, dtype=torch.float32, device=h.device) for _ in range(4))
         outside = torch.empty(rows, dtype=torch.bool, device=h.device)
         forward_ce = _ce('forward') if h.is_cuda else _ce_forward
         for start in range(0, rows, chunk):
             stop = min(rows, start + chunk)
-            logits = _head_logits_chunk(h[start:stop], weight, sparse_ids, sparse_rows)
+            logits = _masked(_head_logits_chunk(h[start:stop], weight, sparse_ids, sparse_rows), mask, start, stop)
             own = logits.gather(-1, target[start:stop, None])[:, 0].float()
             lse[start:stop], nll[start:stop] = forward_ce(logits, target[start:stop])
             cut[start:stop], inside = _nucleus_cut_lse(logits, lse[start:stop], top_p, top_k)
@@ -1589,7 +1656,7 @@ class _LinearNLLNucleus(torch.autograd.Function):
                               sparse_ids if sparse_ids is not None else torch.empty(0, dtype=torch.long, device=h.device),
                               sparse_rows if sparse_rows is not None else torch.empty(0, dtype=torch.float32, device=h.device))
         ctx.has_sparse = sparse_ids is not None and sparse_rows is not None and sparse_ids.numel() > 0
-        ctx.chunk = chunk
+        ctx.chunk, ctx.mask = chunk, mask
         ctx.mark_non_differentiable(outside)
         return nll, set_lse - (lse - nll), outside
 
@@ -1609,7 +1676,7 @@ class _LinearNLLNucleus(torch.autograd.Function):
         for start in range(0, h.shape[0], ctx.chunk):
             stop = min(h.shape[0], start + ctx.chunk)
             rows = h[start:stop]
-            logits = _head_logits_chunk(rows, weight, s_ids, s_rows)
+            logits = _masked(_head_logits_chunk(rows, weight, s_ids, s_rows), ctx.mask, start, stop)
             d = _nucleus_grad_kernel(rows.device.type)(logits, target[start:stop], lse[start:stop],
                                                        set_lse[start:stop], cut[start:stop], grad[start:stop],
                                                        grad_nucleus[start:stop], rows.dtype)
@@ -1626,27 +1693,31 @@ class _LinearNLLNucleus(torch.autograd.Function):
             if ds is not None:
                 d_s = d.index_select(1, s_ids)
                 ds += d_s.t().float() @ rows.float()
-        return dh, None if dw is None else dw.to(weight.dtype), None, None, None, None, None, ds
+        return dh, None if dw is None else dw.to(weight.dtype), None, None, None, None, None, ds, None
 
 
-def linear_nll_nucleus(h, weight, target, top_p, chunk=NUCLEUS_CHUNK, top_k=NUCLEUS_TOP_K, *, trainable_rows=None):
-    """(nll, nucleus nll, outside): ``linear_nll`` and the NLL of ``target`` under the row's top-p nucleus."""
+def linear_nll_nucleus(h, weight, target, top_p, chunk=NUCLEUS_CHUNK, top_k=NUCLEUS_TOP_K, *, trainable_rows=None,
+                       mask=None):
+    """(nll, nucleus nll, outside): ``linear_nll`` and the NLL of ``target`` under the row's top-p nucleus (of the
+    masked law at ``mask``'s rows, as the engines draw: mask, then temperature, then nucleus)."""
     if not 0. < top_p < 1.:
         raise ValueError(f'top_p must be in (0, 1) for the nucleus NLL, got {top_p} (use linear_nll at 1)')
     trainable_rows = _head_rows(weight, trainable_rows)
     s_ids = trainable_rows.token_ids.to(h.device) if trainable_rows is not None else None
     s_rows = trainable_rows.rows if trainable_rows is not None else None
-    return _LinearNLLNucleus.apply(h, weight, target, chunk, float(top_p), int(top_k), s_ids, s_rows)
+    return _LinearNLLNucleus.apply(h, weight, target, chunk, float(top_p), int(top_k), s_ids, s_rows,
+                                   mask if mask is not None and len(mask) else None)
 
 
 @torch.no_grad()
 def token_logprobs(model, ids, positions, targets, lengths=None, chunk=LOGIT_CHUNK, imports=None, top_p=1.0, *,
-                   adapters=None, trainable_rows=None, fp8_base=None):
-    """Log-probabilities (fp32) of ``targets`` predicted at rows ``positions`` of the packed ``ids``."""
+                   adapters=None, trainable_rows=None, fp8_base=None, mask=None):
+    """Log-probabilities (fp32) of ``targets`` predicted at rows ``positions`` of the packed ``ids`` (``mask``: a
+    ``HeadMask`` over the rows of ``positions``)."""
     resolved_rows = _resolve_trainable_rows(model, trainable_rows) or False
     h = hidden(model, ids, lengths, imports, adapters=adapters, trainable_rows=trainable_rows, fp8_base=fp8_base)
     if top_p >= 1.:
-        return -linear_nll(h[positions], model.lm_head.weight, targets, chunk, trainable_rows=resolved_rows)
+        return -linear_nll(h[positions], model.lm_head.weight, targets, chunk, trainable_rows=resolved_rows, mask=mask)
     nll, nucleus, outside = linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p,
-                                               trainable_rows=resolved_rows)
+                                               trainable_rows=resolved_rows, mask=mask)
     return -nll, -nucleus, outside

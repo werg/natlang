@@ -339,6 +339,9 @@ test('a for...of over a missing value names the loop and the fallback', async ()
   assert.match(missing.text, /\?\? \[\]/);
   const plain = await session.applyAsync('eval', { code: 'const o = { a: 1 };\nlet n = 0;\nfor (const k of o as any) n++;\nn' });
   assert.match(plain.text, /got a plain object; iterate Object\.keys, Object\.values or Object\.entries of it/);
+  const pending = await session.applyAsync('eval', { code: 'const later = async () => [1, 2];\nlet m = 0;\nfor (const k of later() as any) m++;\nm' });
+  assert.equal(pending.kind, 'error');
+  assert.match(pending.text, /but got a Promise: await it first, as in `for \(… of await later\(\)/);
 });
 
 test('a failed natlang child bubbles to eval without leaving a local', async () => {

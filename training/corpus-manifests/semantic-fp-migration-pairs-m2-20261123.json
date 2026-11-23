@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-fp-migration-pairs-m2-20261123",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/pairs",
+  "files": [
+    {
+      "path": "pairs.jsonl",
+      "bytes": 2418308,
+      "sha256": "f83bdd081272335bd6bc245fdd6f9fd45268b44aa0fc2173215bd25cc9592d03",
+      "lines": 14
+    }
+  ],
+  "bytes": 2418308
+}

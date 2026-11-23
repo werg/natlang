@@ -70,3 +70,10 @@ tested with scripted models (`ts-host/test/nldb.test.mjs`). The pure engine's te
 stages: dispatcher, define and design; parse, plan, execute, write, reindex and check; an index lookup chosen by the
 optimizer. The live scenario run is pending; results will be
 recorded here.
+
+## Repository questions (`grep/`)
+
+`grep/ask.ts` `askRepository(question, { files, tables }, { path, run })` loads a repository's files (`files(path,
+sha256, content)`) and its CSV metadata tables into the SQLite database at `path` and answers the question with
+`SqliteDatabase`: exact SQL with conditions on meaning judged once per value and remembered there. `grep/query.ts`
+`runQuery` runs a plan the caller writes, with a content-addressed predicate cache and optional Neuralese views.

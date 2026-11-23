@@ -3,6 +3,22 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — tool calls decode under their schemas on the Python engine and the SGLang actor
+
+- **What changed.** Both training-collection engines constrain every reply to a request with tools by one xgrammar
+  structural tag built from the tools the prompt renders (`common/tool_grammar.py`): free text is unconstrained; after
+  `<tool_call>` the function must be a declared tool and its parameters must follow that tool's JSON schema in the
+  backbone's call format (LFM3: `<parameter=KEY>` values, a string verbatim, anything else JSON). Before, only the
+  managed llama-server and the page constrained arguments; a value of the wrong type reached the runtime's type error.
+  Now the model cannot write `["red", "x"]` for `[string, number]`, an undeclared tool name, a missing required
+  parameter or parameters out of the schema's order. Opt-out: `NATLANG_TOOL_GRAMMAR=0` on the server, or a request's
+  `x_natlang_tool_grammar: false`.
+- **Training law.** The engines record the masked, renormalized log-probability; the capture declares the grammar
+  (`sampling_law.tool_grammar`) and the learner scores every such token under the same mask (`exp0_sft.law_mask`,
+  `lfm3_fast.HeadMask`), so ratios, KL and SFT targets stay unbiased. DECISIONS 2026-11-23 "constrained decoding with
+  an exact learner law".
+- Engine status and the check: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
+
 ### 2026-11-23 — an optional tuple tail is decodable; a tuple result parsed from text is not refused
 
 - **Optional tail.** `[A, B?]` as a `return_result` value schema is `anyOf` one exact tuple per length
@@ -17,6 +33,69 @@ is not required (owner, 2026-11-12: that rule did not come from the owner and wa
   whatever it held. It now validates `prefixItems` by position and `items` after them (JSON Schema 2020-12); captures
   parsed under the previous parser policy (`1b2713ad…`) still authenticate (`NATIVE_XML_POLICY_READS`).
 - Engine status and the smoke: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
+### 2026-11-23 — codemods run the migration loop's stages; repository questions run nldb's SQLite compiler and judge (WS6 A8, A9)
+
+- **What changed.** The codemod semantic stage (now `applications/migration/codemod`) no longer calls
+  `transformFile.nl` (removed: "Migrate the source file at path…, return only the complete updated source text") once
+  per file; the files the verifier rejects go through the migration loop's stages (understand, survey, locate,
+  classify, plan, edit, patch, exact, triage, repair, round, settled, summarize) over an in-memory repository whose
+  checks are the codemod verifier's problems. Repository questions (`applications/nldb/grep/ask.ts`) send the question
+  to nldb's `sqlite/translate.nl` with a `files(path, sha256, content)` table and the metadata tables in its schema, and
+  judge file content with `sqlite/judge.nl`. No prompt text changed.
+- **Opt-outs.** `runQuery` with a caller-written plan keeps `matchesPredicate.nl`/`extractField.nl`; there is no
+  per-file transform path any more.
+
+### 2026-11-23 — `natlang check --idiom` runs the idiom reviewer's decisions on the model (WS3 I2)
+
+- **What changed.** `natlang check --idiom` (and `--idiom-strict`) runs `applications/idiom-reviewer` through
+  `natlang run` on the selected model: `@natlang/std` `stepKind.nl` per instruction step, `isProseInterpreter.nl`,
+  `detectCueWords.nl`, `detectUntypedExternal.nl` (all `readout: decision`, escalated when unsure). Its findings
+  become `idiom-review-<kind>` diagnostics. No prompt text changed; these calls now happen from `natlang check`.
+- **Opt-outs.** Plain `natlang check` uses no model and never runs it.
+
+### 2026-11-23 — ci-doctor: a natural-language bisection stop and root-cause clustering (WS6 A5)
+
+- **What changed.** `applications/ci-doctor` asks `bisectSettled.nl` (`readout: decision`, new) after each bisection
+  step whether going on can still find the failure's cause, and clusters failures of one kind with std `semanticMatch`
+  pair decisions (shipped `relates.nl`, relation "the two CI failures have the same root cause: the same defect or
+  fault, even when their logs word it differently"). Before, the stop was the exact range test alone and clusters were
+  the first error line's exact text.
+- **Opt-outs.** `bisectStop: 'crisp'`, `clustering: 'signature'`.
+
+### 2026-11-23 — `natlang improve DIR` proposes: three built-in improver stages run on the model (WS8 N4)
+
+- **What changed.** Three new built-in natlang programs (`ts-host/src/builtin/improveDiagnose.nl`,
+  `improveShouldRevise.nl` with `readout: decision`, `improveRevise.nl`) are called by `natlang improve DIR --model M`.
+  They see one function's declaration and instructions plus its run evidence (failures with reasons, escalations with
+  the local and fallback answers, postcondition failures, tester feedback, support examples it answers wrongly), and
+  return a diagnosis, whether to revise, and the new instructions. The calls are recorded like any other (training data).
+- **Why (first principles).** Deciding what to change in a program is policy; it runs as natural-language stages on
+  the local model, and exact gates (front matter kept byte-identical, check, split non-regression) decide adoption.
+- **Prompt text.** The three `.nl` bodies; no change to any existing prompt.
+- **Opt-outs.** `--proposal FILE` checks a hand-written change instead and calls none of them.
+
+### 2026-11-23 — the `nl` escalate policy sees the function's own escalation history and tier cost (WS2 R4)
+
+- **What changed.** `shouldEscalate.nl` now receives `history` (`{ totalCalls, escalationRate, disagreementRate }`)
+  and `cost` (`{ local, fallback, ratio }`, milliseconds) read from the call store's `escalation` notes on the
+  function's earlier local calls, where the caller passed nothing before (both were absent). Its text says what they
+  are: "history (when present) summarizes this function's earlier runs: how many there were, how often they
+  escalated, and how often the fallback answered differently from the local model; cost (when present) compares the
+  local and fallback tiers, in milliseconds per call when measured from those runs."
+- **Why (first principles).** The plan's policy reads history and cost; leaving them to every caller meant no caller
+  passed them, so the judgment ran blind to how often its fallback disagreed.
+- **Opt-outs.** `escalate(fn, { history: false, cost: false })`, or explicit values.
+
+### 2026-11-23 — an inline `nl` built in callable-folder TypeScript shows its parameter types from `import type`
+
+- **What changed.** A child call of `nl.with<T>({ … })` built by a callable-folder factory typed from the package's
+  `types.ts` (`import type { Lot } from '../types.js'`) showed `nl@checks.ts:3(lot: unknown): boolean`; it now shows
+  `(lot: Lot): boolean` with `type Lot = …`. A factory returning a saved `const judge = nl…` takes its parameters from
+  the declared result type (`(lot: Lot)` instead of an open `input: {…}` typed from the value).
+- **Why (first principles).** A signature erased to `unknown` hides the argument's shape from the model; the author
+  declared it. Cause: type-only imports were dropped before the module was type-checked, so the type was `any`.
+- **Opt-outs.** None (a fix of what the model sees).
+
 ### 2026-11-23 — a readout without reasoning is read in the reply form the model answers in (`decisionReply: 'auto'`); reasoning samples at T=1 (B14 instant collapse)
 
 - **What changed.** Every profile except a managed stock model now defaults to `decisionReply: 'auto'` (it was `value`
@@ -3207,3 +3286,36 @@ not a message.
   argument, so a relational `refine` in eval was judged without its context), and a record built in eval or a module
   realm is snapshotted into a context like a host record (it was kept by reference, so later mutation reached the bound
   function).
+
+### 2026-11-23 — `await` in a non-async function and a wrong argument count get errors that name the fix (held failure taxonomy)
+
+Found reading the held-v3 failures of sft-v7 and sft-v9 (`plans/neuralese/HELD_FAILURES_20261123.md`):
+- `files.map(f => [f.name, await f.readText()])` in eval parsed, then failed in the engine with
+  "SyntaxError: Unexpected identifier '__natlang_own'" (the name of the lowering's call wrapper) or "await is only valid
+  in async functions". 23 such errors in 13 failed episodes across sft-v6/v7/v9, none in a passing one. The scope
+  compiler now refuses it before running, at the function: "`await` is used inside a function that is not async. Await
+  in the eval code itself, as in `for (const file of files) { const text = await file.readText(); }`, or mark the
+  function async and await all its results: `await Promise.all(files.map(async file => await file.readText()))`."
+  (code `typescript-syntax`, `ts-host/src/scope-compiler.ts`). Only code that already failed is affected.
+- A natural-language function called with the wrong number of arguments said only "read_function expects 3 arguments,
+  got 1"; the model then guessed (18 such errors on `read_function`/`read_file` helper notes in codebase-explore tasks).
+  The error now lists the parameters: "read_function expects 3 arguments (question: string, name: string, source:
+  string), got 1" (`ts-host/src/runtime/kernel.ts`). Every engine sees the same text (the runtime produces it).
+No opt-out: both change only the text of an error that already occurred, never whether a call succeeds. Tests:
+`test/scope-compiler.test.mjs`, `test/runtime.test.mjs`.
+- A `for … of` over an unawaited call (`for (const f of folder.files('notes/*.md'))`) said "but got a plain object;
+  iterate Object.keys, …", which sent the model the wrong way. It now says "…but got a Promise: await it first, as in
+  `for (… of await folder.files('notes/*.md'))`" (`ts-host/src/runtime/lowered.ts`). Test: `test/interpreter.test.mjs`.
+- `refine(value, predicate)` in eval failed under every decision-readout collector (held and RL collection) with
+  "decision readout needs its invocation identity": `runtime/surface.ts` did not pass the calling invocation's trace
+  to the refinement checker, so its scored judge had no invocation id (the kernel's argument, service and return
+  checks already passed it). It does now (`test/refinement-eval.test.mjs`). No opt-out: the old path always failed.
+- **The whole-case request budget counts a reasoned decision once** (`ts-host/src/teacher/collector.ts`). A
+  `readout: decision` call sends k = 4 reasoning samples and k option scorings, and each counted against the 40-request
+  budget, so one `decide()` cost 8 requests. In held-v4 (sft-v6) 94 of 177 scored failures were budget stops, and in
+  `auth:sfp-untrusted-contract` row 087 six `urgency` readouts used 37 of the 40 while the root used 3; a program with
+  five decisions could not finish however well it ran. Now the first reasoning sample counts and the further samples
+  and the scorings do not; an unreasoned decision still counts its one scoring. This changes held scoring (a new
+  scoring series: re-measure the base on it). Opt-out: `NATLANG_BUDGET_EACH_DECISION_REQUEST=1`. Left as is: the
+  runtime's own `limits.maxModelRequests` (`native/model-budget.ts`), a user-declared limit on actual requests.
+  Test: `test/teacher-collector.test.mjs`.

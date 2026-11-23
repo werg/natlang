@@ -19,7 +19,11 @@ One unit replaces the G4 poller (``ops/ei/colab/g4-poll.sh``) and the tunnel hea
 
 A new session is bootstrapped (``bootstrap.py`` at the actor's commit, the SGLang fork shipped as ``git archive``),
 its stale host key removed, the tunnel unit restarted, and the actor served again from the last actor record's own
-arguments (``pop_rl_actor serve-checkpoint``, sized by ``colab_layout``). The fills reach it through the tunnel's
+arguments (``pop_rl_actor serve-checkpoint``, sized by ``colab_layout``): the policy the actor serves now, since an
+in-place rebind (an async round's publication) rewrites the record to the rebound policy's checkpoint
+(``pop_rl_actor.rebound_record``). The driver's remote collector idles while the session is away and resumes when the
+actor serves its policy again; a session served back at an older policy is rebound by the driver
+(``expert_iteration ensure_remote_policy``). The fills reach it through the tunnel's
 fixed DGX ports, so they resume on their own. Nothing here prints a token: ``colab`` output is redacted before it
 is logged.
 
@@ -303,6 +307,8 @@ class Keeper:
         log('bootstrap ready')
         if not serve:
             return True
+        log('serving the recorded policy', policy=serve['policy_id'][:12], checkpoint=serve['checkpoint'],
+            rebound=bool(record.get('rebound')))
         old = Path(self.a.actor_root) / f'colab-actor-{alias}.json'
         if old.exists():   # its pid named a process on the lost VM: never signal that number on the new one
             os.replace(old, old.with_name(old.stem + f'.lost-{int(time.time())}.json'))

@@ -67,14 +67,17 @@ class RLEpisodes:
     """Admitted RL episodes for one trainer input: graphs, the registered objective and their rollouts."""
 
     def __init__(self, engine, rollouts, workdir, *, mode='grpo', min_quality=1., policy_loss=None, privileged=None,
-                 second_close='context'):
+                 second_close='context', decision_reasoning=True):
         """``mode`` 'grpo': the group-relative policy objective under ``policy_loss`` (rl.policy_math declaration;
         clipped-ratio/1 keeps the historical clipped objective; JOLT+ admits every scored group and, with a
         ``privileged`` source, adds each episode's privileged twin); 'rft': global supervision of whole successful
         episodes (quality >= ``min_quality``) through every producer/consumer dependency, Neuralese included,
         whatever the group's spread. ``second_close`` 'context' (default): a reply's second ``</think>`` and what
         follows it up to the action are never reinforced (rl.native_replay.prepare_objective, DECISIONS 2026-11-19);
-        'train' opts out."""
+        'train' opts out. ``decision_reasoning`` (default): a reasoned decision's action reasoning, the sampled
+        reasoning its choice was made after, trains through its ``</think>`` with the choice
+        (``rl.episode_graph.whole_episode_turns``), as GRPO trains it; the readout's other samples stay context. False:
+        the choice only."""
         from ..rl.native_replay import invocation_behavior_policy, prepare_objective
         from ..rl.graph_replay import save_bundle
         from ..model.native_artifact import encode_native_tensor_artifact
@@ -88,7 +91,11 @@ class RLEpisodes:
         self.by_episode = {canonical_json_sha256_hex(record['episode']): record for record in self.rollouts}
         if len(self.by_episode) != len(self.rollouts):
             raise TuneMathError('RL rollouts repeat an identical episode')
-        policy = invocation_behavior_policy(episodes, identity=identity, roles=roles, fetch_block=fetch_block)
+        from ..train.reply_format import second_close_ids
+        close = second_close_ids(engine.tokenizer) if decision_reasoning else None
+        think_close = close[0] if close is not None else None
+        policy = invocation_behavior_policy(episodes, identity=identity, roles=roles, fetch_block=fetch_block,
+                                            think_close=think_close)
         owner = canonical_json_sha256_hex(policy)
         workdir = Path(workdir)
         workdir.mkdir(parents=True, exist_ok=True)
@@ -99,7 +106,8 @@ class RLEpisodes:
                                          block_bundle=workdir / 'bundle' / 'manifest.json', behavior_policy=policy,
                                          mode=mode, min_quality=min_quality,
                                          policy_loss=policy_loss if mode == 'grpo' else None, privileged=privileged,
-                                         second_close=self._second_close_ids(engine, second_close))
+                                         second_close=self._second_close_ids(engine, second_close),
+                                         think_close=think_close)
         path = workdir / 'objective.json'
         path.write_text(json.dumps(spec, sort_keys=True))
         self.objective = {'kind': 'native-policy', 'path': str(path), 'sha256': sha256_file_hex_cached(path)}

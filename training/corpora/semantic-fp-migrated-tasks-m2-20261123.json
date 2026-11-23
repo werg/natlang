@@ -1,0 +1,51 @@
+{
+  "id": "semantic-fp-migrated-tasks-m2-20261123",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/tasks",
+  "include": [
+    "tasks.jsonl"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2",
+  "rows": 42,
+  "license": "repo (natlang design briefs)",
+  "protected": false,
+  "note": "M2 accepted programs' exact gate cases with the migrated root; held exclusion applied",
+  "inputs": [
+    {
+      "id": null,
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/cases-p1-cand"
+    },
+    {
+      "id": null,
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/cases-p2-cand"
+    }
+  ],
+  "producer": {
+    "script": "data_registry.py",
+    "argv": [
+      "record",
+      "--id",
+      "semantic-fp-migrated-tasks-m2-20261123",
+      "--path",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/tasks/tasks.jsonl",
+      "--kind",
+      "rl-tasks",
+      "--format",
+      "natlang.program/2",
+      "--license",
+      "repo (natlang design briefs)",
+      "--note",
+      "M2 accepted programs' exact gate cases with the migrated root; held exclusion applied",
+      "--input",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/cases-p1-cand",
+      "--input",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/semantic-fp/migration/m2-20261123/cases-p2-cand"
+    ],
+    "git_commit": "ba3c37a932ac6a05647dd2a1a2f242a88a76a992",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "c3eecf985e35ba569a73f8ecb83d9d5c9d296e3bda24a5d43ed7e248911e5dc1",
+  "training_admission": "registry-recorded"
+}

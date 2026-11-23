@@ -12,6 +12,7 @@
     "types.ts",
     "refinements.ts",
     "migrate",
+    "codemod",
     "site",
     "loop",
     "tsconfig.json",

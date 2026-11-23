@@ -811,3 +811,36 @@ def test_native_bridge_selected_return_binds_actual_authored_output(tmp_path, mu
             live.load_episode(path)
     else:
         assert len(live.load_episode(path)['turns']) == 1
+
+@pytest.mark.parametrize('mutation',[None,'accepted','input','missing','empty-input','empty-exchange','missing-reply'])
+def test_original_review_rejection_is_bound_separately_from_native_success(tmp_path,mutation):
+    observed={'actual':{'documents':[{'path':'note.md','text':'The checked draft.'}]},'expected':{'goal':'Prepare a draft'},'rubric':'Check content.'}
+    packet={'result':{'passed':True},'execution':{'diagnostics':{'openGoalVerification':{'preparedContentProject':{'artifact':{'semanticReviewInput':observed}}}}}}
+    review={'schema':'natlang.live-workflow-review/1','input':copy.deepcopy(observed),'verdict':{'accepted':False,'verdict':'Content is correct; old handle was mistaken for a new commit.'},'exchange':{'request':{},'reply':{}}}
+    if mutation=='empty-exchange':review['exchange']={}
+    if mutation=='missing-reply':review['exchange']={'request':{}}
+    if mutation=='accepted':review['verdict']['accepted']=True
+    if mutation=='input':review['input']['expected']['goal']='Different goal'
+    if mutation=='empty-input':
+        packet['execution']['diagnostics']['openGoalVerification']['preparedContentProject']['artifact']['semanticReviewInput']=None
+        review['input']=None
+    proof={'evidence':[{**artifact(tmp_path,'original-review.json',review),'role':'original-rejected-review'}]}
+    if mutation=='missing':proof['evidence']=[]
+    assert live.verify_original_rejection(packet,proof,tmp_path) is (mutation is None)
+
+@pytest.mark.parametrize('mutation',[None,'hash','call','ordinal','score','definition','duplicate'])
+def test_exact_generation_quality_review_is_conservative_and_source_bound(tmp_path,mutation):
+    _,spec,detail,_=fixture(tmp_path)
+    item={'call_id':detail['record']['call_id'],'ordinal':0,'definition':copy.deepcopy(detail['record']['definition']),
+          'call_sha256':spec['calls'][0]['sha256'],'reason':'The exact retained decision uses an unsupported premise.'}
+    if mutation=='hash':item['call_sha256']='0'*64
+    if mutation=='call':item['call_id']='absent'
+    if mutation=='ordinal':item['ordinal']=99
+    if mutation=='score':item['ordinal']=1
+    if mutation=='definition':item['definition']['name']='foreign'
+    proof={'decisionReview':{'schema':'natlang.live-decision-review/1','excluded':[item,item] if mutation=='duplicate' else [item]}}
+    if mutation is None:
+        assert live.declared_decision_exclusions([proof],[(spec['calls'][0],detail)])=={('call-one',0):item}
+    else:
+        with pytest.raises(ValueError,match='decision review'):
+            live.declared_decision_exclusions([proof],[(spec['calls'][0],detail)])

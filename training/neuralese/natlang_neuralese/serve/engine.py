@@ -95,6 +95,9 @@ class GenerationRequest:
     guidance_policy: dict | None = None
     native_recording: bool = False
     native_state_modes: dict | None = None
+    # Decode tool calls under their schemas (common.tool_grammar); False (`x_natlang_tool_grammar: false`, or
+    # NATLANG_TOOL_GRAMMAR=0 on the server) leaves the reply unconstrained.
+    tool_grammar: bool = True
 
 
 @dataclass
@@ -168,6 +171,11 @@ class Sequence:
     cuda_memory_measurement_scope: str | None = None
     # Set when an out-of-memory prefill sent the request back to the waiting queue as a fresh sequence (Engine._requeue).
     requeued: bool = False
+    # The reply's tool-call grammar (common.tool_grammar): its matcher over the reply tokens fed so far, the law the
+    # capture declares, and the reply tokens before the guidance anchor (a templated call's opening).
+    tool_grammar: object = None
+    tool_grammar_law: dict | None = None
+    tool_grammar_prefix: list = field(default_factory=list)
 
 
 def selected_span(decode, ids, text):
@@ -267,6 +275,8 @@ class Engine:
                 'natlang_oom_requeues_total': self._oom_requeues,
                 **({'natlang_kv_bytes_per_token': self._kv_bytes_per_token} if self._kv_bytes_per_token else {}),
                 'natlang_prefill_workspace_bytes': self._prefill_workspace_bytes,
+                # replies served unconstrained because the tool grammar refused their templated opening
+                'natlang_tool_grammar_refused_openings_total': getattr(self, 'tool_grammar_refused_openings', 0),
                 **(self.prefix_cache.metrics() if self.prefix_cache is not None else {})}
         device = torch.device(self.device)
         if device.type == 'cuda':
@@ -734,6 +744,9 @@ class Engine:
     @staticmethod
     def _native_record_input(seq, token, *, producing, sample_index=None):
         """Record one actual own-token input; imported KV slots never advance this coordinate."""
+        if seq.tool_grammar is not None and not seq.tool_grammar.accept(token):
+            # a forced token outside the grammar (a templated opening the grammar refuses): no later draw is constrained
+            raise RequestError('tool-grammar', f'reply token {int(token)} is outside the tool grammar')
         if capture_enabled(seq) or seq.guide is not None:
             seq.native_rl_inputs.append({'token_id': int(token),
                 'input_role': 'produce' if producing else 'ordinary', 'sample_index': sample_index})
@@ -861,6 +874,65 @@ class Engine:
             seq.native_template_value_type = value_type
         return template_prefix, template_suffix
 
+    def _tool_grammar_info(self):
+        """(TokenizerInfo, sha256) the tool grammar is compiled over: this engine's tokenizer, its config vocabulary
+        width and EOS ids (common.tool_grammar; the SGLang actor uses its export's, which is the same tokenizer)."""
+        cached = getattr(self, '_tool_grammar_cache', None)
+        if cached is None:
+            from ..common import tool_grammar
+            config = getattr(getattr(self.backbone, 'hf', None), 'config', None) or self.backbone.config
+            generation = getattr(getattr(self.backbone, 'hf', None), 'generation_config', None)
+            info = tool_grammar.tokenizer_info(self.tokenizer, config.vocab_size, tool_grammar.eos_ids(config, generation))
+            cached = self._tool_grammar_cache = (info, tool_grammar.tokenizer_info_sha256(info))
+        return cached
+
+    def _tool_grammar_law(self, request):
+        """The tool-call law of a reply (common.tool_grammar.tool_call_law over the tools its prompt renders), or None:
+        no tools, a call format without a grammar, a teacher-forced reply, a Neuralese write template, or the opt-out
+        NATLANG_TOOL_GRAMMAR=0."""
+        from ..common import tool_grammar
+        template = request.template or {}
+        if (not tool_grammar.enabled() or not request.tool_grammar or not request.tools or request.forced_message is not None
+                or (template and template.get('value') != 'decode')
+                or getattr(self, 'tool_call_format', None) not in tool_grammar.FORMATS):
+            return None
+        from ..data.prompt_rendering import apply_prompt_rendering
+        try:
+            _, tools = apply_prompt_rendering(request.messages, request.tools, self.prompt_rendering,
+                                              keep_supplied_tools=True)
+        except ValueError:
+            return None
+        info, sha = self._tool_grammar_info()
+        return tool_grammar.tool_call_law(tools, self.tool_call_format, info, sha)
+
+    def _tool_grammar_begin(self, seq, template_prefix=None):
+        """Bind the reply's tool grammar before its first token is fed (`_native_record_input` feeds the matcher). A
+        templated opening the grammar refuses (an argument order the schema does not declare) leaves the reply
+        unconstrained, as the capture then declares."""
+        law = self._tool_grammar_law(seq.request)
+        if law is None:
+            return
+        from ..common import tool_grammar
+        info = self._tool_grammar_info()[0]
+        prefix = list(template_prefix or ())
+        if prefix and not tool_grammar.Matcher(law, info).sync(prefix):
+            self.tool_grammar_refused_openings = getattr(self, 'tool_grammar_refused_openings', 0) + 1
+            return
+        seq.tool_grammar_law, seq.tool_grammar_prefix = law, prefix
+        seq.tool_grammar = tool_grammar.Matcher(law, info)
+
+    def _tool_grammar_mask(self, seq, logits):
+        """``logits`` with the tokens the reply's grammar forbids at -inf (unchanged without a grammar)."""
+        if seq.tool_grammar is None:
+            return logits
+        from ..common import tool_grammar
+        if seq.tool_grammar.failed:
+            raise RequestError('tool-grammar', 'the reply left its tool grammar')
+        allowed = tool_grammar.unpack(seq.tool_grammar.bitmask().to(logits.device), logits.shape[-1])
+        if not bool(allowed.any()):
+            raise RequestError('tool-grammar', 'the tool grammar allows no next token')
+        return logits.masked_fill(~allowed, float('-inf'))
+
     def _native_prefill_impl(self, seq):
         seq.native_trace_enabled = seq.request.native_protocol_recovery
         self._validate_native_state_modes(seq.request.native_state_modes,
@@ -925,6 +997,7 @@ class Engine:
             # The completion allowance never exceeds what the context leaves after the prompt (the SGLang actor does the
             # same); the reply then ends with finish_reason "length" instead of decoding past the context window.
             seq.request = dataclass_replace(seq.request, max_tokens=self.context - seq.prompt_positions)
+        self._tool_grammar_begin(seq, template_prefix)
         if template_prefix is not None:
             needed = len(template_prefix) + (1 if seq.request.template.get('value') == 'write' else 0)
             if seq.prompt_positions + seq.generated_positions + needed >= self.context:
@@ -970,7 +1043,8 @@ class Engine:
 
     def _native_token(self, seq):
         from ..common.sampling import masked_log_distribution
-        log_probs = masked_log_distribution(seq.logits[0], seq.request.temperature or 1.0,
+        # The grammar's mask, then guidance bans, temperature and the nucleus: the law SGLang draws from
+        log_probs = masked_log_distribution(self._tool_grammar_mask(seq, seq.logits[0]), seq.request.temperature or 1.0,
             banned=sorted(seq.bans.get(seq.native_own_position, ())))
         if seq.request.temperature and seq.request.temperature > 0:
             if seq.nucleus_applied is not None:
@@ -1930,7 +2004,9 @@ class Engine:
                                      if seq.native_forced_replay else "greedy-argmax"
                                      if seq.request.temperature <= 0 else "post-temperature-untruncated"
                                      if seq.nucleus_applied is not None else "post-processing-normalized"),
-                                 **({"top_p": seq.nucleus_applied} if sampled and seq.nucleus_applied is not None else {})}}
+                                 **({"top_p": seq.nucleus_applied} if sampled and seq.nucleus_applied is not None else {}),
+                                 # every sample was drawn under this tool grammar's mask (common.tool_grammar)
+                                 **({"tool_grammar": seq.tool_grammar_law} if seq.tool_grammar is not None else {})}}
         if seq.native_protocol_failure is not None:
             failure=seq.native_protocol_failure
             response['x_natlang_native_failure']=failure

@@ -15,8 +15,9 @@ types:
 ---
 decision is the local model's answer and probability distribution. floor is the minimum confidence expected for a local
 answer; risk maps high-stakes labels to the probability above which escalation is warranted even when another label won
-argmax. history (when present) summarizes prior escalations for this function and how often the fallback disagreed with
-the local model; cost (when present) compares local and fallback tier costs.
+argmax. history (when present) summarizes this function's earlier runs: how many there were, how often they escalated,
+and how often the fallback answered differently from the local model; cost (when present) compares the local and
+fallback tiers, in milliseconds per call when measured from those runs.
 
 Answer true when the decision should escalate to the fallback model: confidence is below floor, a high-risk label has
 material probability relative to its risk threshold, the distribution is ambiguous on a high-stakes case, or prior

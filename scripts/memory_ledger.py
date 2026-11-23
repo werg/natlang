@@ -443,6 +443,29 @@ def claimed_budget(unit, state_path=None):
     return int(claim.get('cuda_budget') or claim['budget'])
 
 
+def owned_units(state_path=None, now=None):
+    """Read admitted/queued ownership without GPU probes or changing scheduler state.
+
+    Claims also cover the guard's stop-to-requeue transition. A missing ledger is
+    empty; an unreadable/corrupt existing ledger is unknown and must not invite a
+    duplicate launch. Existing waiting-order policy decides transient expiration.
+    """
+    path = state_path or STATE
+    try:
+        with open(path) as stream:
+            state = json.load(stream)
+    except FileNotFoundError:
+        return set()
+    if state.get('schema') != 'natlang.memory-ledger/1':
+        raise ValueError('unsupported ledger ownership snapshot')
+    return set(state.get('claims', {})) | {unit for unit, _ in waiting_order(state, now=now)}
+
+
+def unit_owned(unit, state_path=None, now=None):
+    name = unit if unit.endswith('.service') else unit + '.service'
+    return name in owned_units(state_path, now=now)
+
+
 def own_host_usage(pid='self'):
     """Host memory the guard counts for the cgroup of ``pid`` (cgroup_usage without CUDA); None outside cgroup v2."""
     try:

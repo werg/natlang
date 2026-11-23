@@ -97,7 +97,30 @@ from apparent size. Long scans run outside publication/retention locks.
   Observation is distinct from writer enforcement and full recovery proof.
 - `scripts/storage_sweep.sh` and `scripts/prune_pytest_scratch.py` prune disposable
   scratch with process custody and freshness checks; never delete the shared
-  pytest root or active checkpoint reservation files.
+  pytest root or active checkpoint reservation files. The sweep also removes
+  unreferenced pins and merged clean worktrees (`scripts/prune_stale_checkouts.py`,
+  which walks only the root filesystem and never follows symlinks into the HDD).
+  Every step is time-bounded and a timer start while a run is in flight is skipped,
+  so a slow disk cannot wedge the timer; the archive and retention units carry
+  start timeouts for the same reason.
+- `scripts/recall_to_nvme.py LINK --cold GLOB ...` is the inverse of an archive
+  move: an archived directory that is a hot input again comes back onto the NVMe at
+  its path (hot files copied and SHA-256 verified, cold paths left on the HDD as
+  symlinks, `.keep-on-nvme` written, registry records moved to the NVMe path).
+  Round builds read the teacher pools this way since 2026-11-23.
+- `scripts/drive_tier.py` is the third tier: Google Drive, all under one `natlang` folder (`drive.file` sees only
+  what these tools create).
+  - Hourly, `natlang-drive-tier.timer` moves cold files of natlang's run archives on the HDD to `natlang/hdd`.
+    Eligible: at least 64 MB, untouched for 5 days, not behind any NVMe symlink, not in a data-registry dataset, not
+    open.
+  - It runs at a 3 MiB/s cap, pauses while an rsync/scp to a Colab host shares the uplink, and is bounded by a
+    budget and a timeout; a start is skipped while the previous pass runs.
+  - An HDD copy is deleted only after Drive's md5 and size match the bytes read. It leaves `<file>.ondrive.json`, and
+    `~/data/drive-tier/manifest.jsonl` (mirrored to `natlang/manifest.jsonl`) records every placement:
+    `drive_tier.py restore PATH` brings a file or directory back.
+  - Other projects' data (`bgkit*`, hindsight, megatoken, ComfyUI, Vibestudio) is never moved.
+  - Colab transfers go through `natlang/blobs/<sha256>` (`pop_rl_actor.ship_file`; `NATLANG_COLAB_DRIVE=0` opts out),
+    and VM learners put their state and factors under `natlang/colab/<run>`.
 - `scripts/storage_report.py`, `scripts/storage_retention.py` and
   `training/storage-policy.json` provide older inventory/classification tools.
   Their conservative KEEP/PRUNE-ASK labels and historical cadence text are not

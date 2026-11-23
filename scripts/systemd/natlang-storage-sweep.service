@@ -6,8 +6,12 @@ Type=oneshot
 WorkingDirectory=/home/werg/natlang
 Nice=19
 IOSchedulingClass=idle
+# A run still in flight (its ledger unit active) skips this start cleanly instead of failing with "already holds a
+# claim"; the hard timeout below bounds every run, so no run outlives two timer periods (2026-11-23 wedge).
+ExecCondition=/bin/sh -c '! systemctl --user -q is-active natlang-storage-sweep-run.service'
 # Disk-floor alerts first, outside the ledger (df only), so they fire even when the ledger cannot admit the sweep.
 ExecStartPre=/usr/bin/env SWEEP_ALERTS_ONLY=1 /home/werg/natlang/scripts/storage_sweep.sh
-# The sweep itself under the memory ledger; it waits up to 25 minutes for admission (the timer runs every 30).
-ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-storage-sweep-run --budget-gb 1 --priority low --class service --resumable --wait 1500 -- /home/werg/natlang/scripts/storage_sweep.sh
-TimeoutStartSec=2h
+# The sweep itself under the memory ledger; it waits up to 25 minutes for admission (the timer runs every 30) and
+# runs at most 25 minutes (timeout kills it and the ledger unit ends, which releases its claim).
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-storage-sweep-run --budget-gb 1 --priority low --class service --resumable --wait 1500 -- /usr/bin/timeout -k 60 1500 /home/werg/natlang/scripts/storage_sweep.sh
+TimeoutStartSec=1h

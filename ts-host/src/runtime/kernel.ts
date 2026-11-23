@@ -678,8 +678,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (inputs.length < required || inputs.length > definition.params.length) {
     if (folder?.transaction.open) folder.transaction.abort();
     for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
+    // The parameter list teaches the call's shape: a bare count left executors guessing at the missing values.
+    const parameters = definition.params.map(parameter => `${parameter.name}${parameter.optional ? '?' : ''}: ${parameter.type}`).join(', ');
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
-      `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
+      `${required} to ${definition.params.length}`} arguments (${parameters}), got ${inputs.length}`);
   }
   // Fused hand-offs (runtime/fusion.ts): a planned edge retypes this call's result or one parameter to Neuralese<T>.
   const fusion = engageFusion(frame, definition, inputs, (callFrame, fused, args) => invokeDefinition(callFrame, fused, args, options));

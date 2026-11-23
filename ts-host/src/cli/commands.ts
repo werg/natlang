@@ -591,6 +591,48 @@ function fusionSettings(parsed: Parsed, root: string): FusionSettings {
 }
 
 /** The fusion report for `natlang check`; analysis problems never fail a check. */
+/** The idiom reviewer `natlang check --idiom` runs: NATLANG_IDIOM_REVIEWER, else this checkout's applications/idiom-reviewer. */
+export function idiomReviewerRoot(): string {
+  return resolve(process.env.NATLANG_IDIOM_REVIEWER ?? fileURLToPath(new URL('../../../applications/idiom-reviewer', import.meta.url)));
+}
+
+type IdiomIssue = { file: string; kind: string; stepIndex?: number; excerpt: string; confidence: number; escalated: boolean; suggestion: string };
+
+/**
+ * `natlang check --idiom` (WS3 I2): the natural-language review beyond the crisp floor. It runs the idiom reviewer
+ * (a natlang program, applications/idiom-reviewer: step kinds with `@natlang/std` stepKind, prose interpreters, cue-word
+ * rules, external text typed as trusted) on the configured model as `natlang run`, and reports each finding as a
+ * diagnostic `idiom-review-<kind>`: a warning, or with --idiom-strict an error when its confidence is at least 0.8.
+ */
+async function idiomDiagnostics(parsed: Parsed, project: string): Promise<NatlangDiagnostic[]> {
+  const reviewer = idiomReviewerRoot();
+  if (!existsSync(join(reviewer, 'natlang.json')))
+    throw new CliError(`natlang check --idiom runs the idiom reviewer, a natlang program at ${reviewer}, which this install does not have`,
+      EXIT.unavailable, 'set NATLANG_IDIOM_REVIEWER to the applications/idiom-reviewer directory of a natlang checkout');
+  const root = resolve(project);
+  const selection = ['--profile', '--provider', '--model'].flatMap(name => { const value = option(parsed, name); return value ? [name, value] : []; });
+  const escalateTo = option(parsed, '--escalate');
+  const argv = [fileURLToPath(new URL('./main.js', import.meta.url)), 'run', reviewer, ...selection,
+    ...(parsed.options.has('--yes') ? ['--yes'] : []), '--', root, ...(escalateTo ? ['--escalate-to', escalateTo] : [])];
+  const ran = spawnSync(process.execPath, argv, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } });
+  let report: { issues?: IdiomIssue[] } | undefined;
+  try { report = JSON.parse(ran.stdout.slice(ran.stdout.indexOf('{'))); } catch { report = undefined; }
+  if (!report || !Array.isArray(report.issues) || (ran.status !== 0 && ran.status !== 1))
+    throw new CliError(`the idiom reviewer did not report: ${(ran.stderr || ran.stdout || String(ran.error ?? '')).trim().split('\n').slice(-3).join(' ')}`,
+      EXIT.unavailable);
+  const strict = parsed.options.has('--idiom-strict');
+  return report.issues.map(issue => {
+    const path = join(root, issue.file);
+    const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
+    const probe = issue.excerpt.split('\n').find(line => line.trim())?.trim() ?? '';
+    const at = probe ? text.indexOf(probe) : -1;
+    const line = at >= 0 ? text.slice(0, at).split('\n').length : 1;
+    return { file: issue.file, line, column: 1, start: Math.max(at, 0), end: Math.max(at, 0) + probe.length, code: `idiom-review-${issue.kind}`,
+      severity: strict && issue.confidence >= 0.8 ? 'error' : 'warning',
+      message: `${issue.suggestion} (${issue.kind}, p=${issue.confidence.toFixed(2)}${issue.escalated ? ', escalated' : ''})` } satisfies NatlangDiagnostic;
+  });
+}
+
 async function fusionForCheck(parsed: Parsed, project: string) {
   try {
     const root = resolve(project), settings = fusionSettings(parsed, root);
@@ -1077,7 +1119,7 @@ export async function runCommand(command: string, words: string[], parsed: Parse
   }
   if (command === 'check' || command === 'build') {
     acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json', '--manifest', '--warm', '--profile', '--provider', '--model', '--yes', '--progress'] :
-      ['--json', '--manifest', '--fusion', '--fusion-planner', '--profile', '--provider', '--model', '--yes']);
+      ['--json', '--manifest', '--fusion', '--fusion-planner', '--profile', '--provider', '--model', '--yes', '--idiom', '--idiom-strict', '--escalate']);
     if (words.length > 1) throw usageError(`usage: natlang ${command} [PROJECT]`);
     if (words[0]) existingPath(words[0]);
     noTrailingArguments(parsed);
@@ -1088,6 +1130,12 @@ export async function runCommand(command: string, words: string[], parsed: Parse
       ...(target ? { target: target as 'node' | 'browser' } : {}) });
     // Fused pipelines (plans/FUSED_PIPELINES.md): the candidate hand-offs and the selected planner's plan.
     const fusion = command === 'check' && result.ok ? await fusionForCheck(parsed, words[0] ?? '.') : undefined;
+    // --idiom: the natural-language idiom review beyond the crisp floor (a natlang program on the configured model).
+    if (command === 'check' && (parsed.options.has('--idiom') || parsed.options.has('--idiom-strict'))) {
+      const reviewed = await idiomDiagnostics(parsed, words[0] ?? '.');
+      result.diagnostics.push(...reviewed);
+      if (reviewed.some(item => item.severity === 'error')) result.ok = false;
+    }
     // The compiled program's lock: its model, runtime, tuning and functions, and with --warm its ahead-of-time run.
     const lock = command === 'build' && result.ok && target !== 'browser' ? await buildLock(parsed, projectRoot(resolve(words[0] ?? '.'))) : undefined;
     // check --json is { ok, diagnostics, functions }; build adds where it wrote and the lock; --manifest adds the build manifest.

@@ -132,6 +132,18 @@ const FILE_NODES = new Set<string>();
 /** Resolved package-relative and package-export imports for callable-folder modules, kept off records so records stay JSON-serializable. */
 const MODULE_IMPORTS = new WeakMap<ModuleRecord, Record<string, ItemRecord>>();
 export function moduleResolvedImports(record: ModuleRecord): Record<string, ItemRecord> | undefined { return MODULE_IMPORTS.get(record); }
+/** The relative specifiers a module imports for types only (`import type { Lot } from '../types.js'`); erased at run time. */
+const TYPE_ONLY_IMPORTS = new WeakMap<ModuleRecord, string[]>();
+/**
+ * The package `.ts` sources a callable-folder module imports for types only, by specifier: text and path from the package
+ * root. They are never loaded at run time, but the module's checker needs them: without them an imported type is `any`,
+ * and an inline `nl` typed by it showed its parameter as `unknown` to the model.
+ */
+const MODULE_TYPE_SOURCES = new WeakMap<ModuleRecord, Record<string, string>>();
+/** Text of each package `.ts` file the module imports for types only, by its path from the package root. */
+export function moduleTypeSources(record: ModuleRecord): Readonly<Record<string, string>> | undefined {
+  return MODULE_TYPE_SOURCES.get(record);
+}
 export const nodeKey = (record: NatlangRecord | ModuleRecord): string => `${record.kind}:${record.id}@${record.revision}`;
 export function registerFileRecords(codebase: Record<string, ItemRecord> | ItemRecord): void {
   const seen = new Set<ItemRecord>();
@@ -633,6 +645,14 @@ function resolveUsesTarget(specifier: string, fromPath: string, root: string, fi
   return target;
 }
 
+/**
+ * The file each `uses:` alias of a record resolved to (normalized path), kept beside the record rather than on it so a
+ * record's content (and every identity hashed from it) does not depend on where the package sits on this machine. The
+ * compiler's `.d.nl.ts` emit reads it to reference a used function's own declaration (`import type`).
+ */
+const USES_TARGETS = new WeakMap<NatlangRecord, Record<string, string>>();
+export function usesTargetsOf(record: NatlangRecord): Readonly<Record<string, string>> | undefined { return USES_TARGETS.get(record); }
+
 /** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users. */
 const ATTACHING: string[] = [];
 /** Functions of callable folders whose load is still running, by normalized file path: a `uses` naming one shares that record. */
@@ -676,6 +696,7 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
         throw new NatlangSourceError(path, `uses ${item}, but its folder already has an item named ${name}; rename one of them`);
       const target = resolveUsesTarget(item, path, root, files);
       const normTarget = normalizePath(target);
+      USES_TARGETS.set(record, { ...USES_TARGETS.get(record), [name]: normTarget });
       if (normTarget === normPath || ATTACHING.includes(normTarget)) {
         const at = ATTACHING.indexOf(normTarget);
         const chain = at >= 0 ? [...ATTACHING.slice(at), normTarget] : [normPath, normTarget];
@@ -731,7 +752,9 @@ function siblingHasSpecifier(specifier: string, siblings: Record<string, ItemRec
  */
 function attachModuleImports(record: ModuleRecord, path: string, siblings: Record<string, ItemRecord>,
     files: SourceFiles, seen = new Map<string, ModuleRecord>()): void {
-  if (files === PATH_ONLY || !record.imports.length) return;
+  if (files === PATH_ONLY) return;
+  attachTypeSources(record, path, files);
+  if (!record.imports.length) return;
   const normSelf = normalizePath(path);
   seen.set(normSelf, record);
   const root = packageRoot(files.dirname(path), files);
@@ -791,6 +814,29 @@ function attachModuleImports(record: ModuleRecord, path: string, siblings: Recor
     }
   }
   if (Object.keys(resolved).length) MODULE_IMPORTS.set(record, resolved);
+}
+
+/** Read the package `.ts` files a module imports for types only (MODULE_TYPE_SOURCES), following their own type imports. */
+function attachTypeSources(record: ModuleRecord, path: string, files: SourceFiles): void {
+  const specifiers = TYPE_ONLY_IMPORTS.get(record) ?? [];
+  if (!specifiers.length) return;
+  const root = packageRoot(files.dirname(path), files);
+  const sources: Record<string, string> = {};
+  const fromRoot = (file: string) => normalizePath(file).slice(normalizePath(root).length).replace(/^\/+/, '');
+  const visit = (from: string, specifier: string, depth: number) => {
+    if (depth > 8 || !(specifier.startsWith('./') || specifier.startsWith('../'))) return;
+    const base = normalizePath(files.join(files.dirname(from), ...specifier.replace(/\.js$/, '').split('/')));
+    if (escapesBoundary(path, base, files)) return;
+    const target = resolveTargetFile(base, files, ['ts']);
+    if (!target || target.endsWith('.d.ts')) return;
+    const source = fromRoot(target);
+    if (Object.hasOwn(sources, source)) return;
+    const text = files.read(target);
+    sources[source] = text;
+    for (const match of text.matchAll(/^\s*import\s+type\s[^'"]*['"]([^'"]+)['"]/gm)) visit(target, match[1]!, depth + 1);
+  };
+  for (const specifier of specifiers) visit(path, specifier, 0);
+  if (Object.keys(sources).length) MODULE_TYPE_SOURCES.set(record, sources);
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string,
@@ -875,6 +921,7 @@ export function parseModule(path: string, text: string, inherited: Record<string
   if (policy.length) throw new NatlangSourceError(path, policy.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
   const exports: Record<string, ExportRecord> = {};
   const imports: string[] = [];
+  const typeImports: string[] = [];
   const locals = new Map<string, ts.Node>();
   for (const statement of file.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.name) locals.set(statement.name.text, statement);
@@ -921,6 +968,7 @@ export function parseModule(path: string, text: string, inherited: Record<string
   for (const statement of file.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
       if (!statement.importClause?.isTypeOnly) imports.push(statement.moduleSpecifier.text);
+      else typeImports.push(statement.moduleSpecifier.text);
     } else if (ts.isFunctionDeclaration(statement) && isExported(statement)) {
       const name = isDefault(statement) ? 'default' : statement.name?.text;
       if (!name) throw new NatlangSourceError(path, 'exported functions need names');
@@ -951,8 +999,11 @@ export function parseModule(path: string, text: string, inherited: Record<string
     catch { /* TypeScript types outside the portable grammar are checked by the compiler, not here. */ }
   }
   const source = files.relative?.(path) ?? path;
-  return { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {},
+  const moduleRecord: ModuleRecord = { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {},
     ...(Object.keys(declared.declarations).length ? { declarations: declared.declarations } : {}) };
+  const relativeTypeImports = typeImports.filter(specifier => specifier.startsWith('./') || specifier.startsWith('../'));
+  if (relativeTypeImports.length) TYPE_ONLY_IMPORTS.set(moduleRecord, relativeTypeImports);
+  return moduleRecord;
 }
 
 const isSource = (name: string) => (name.endsWith('.nl') || (name.endsWith('.ts') && !name.endsWith('.d.ts'))) &&

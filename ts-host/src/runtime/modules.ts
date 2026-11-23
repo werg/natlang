@@ -14,7 +14,7 @@ import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { STD_MODULE_FILE, STD_SPECIFIERS } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { typeScriptText } from '../compiler/eval-check.js';
-import { moduleResolvedImports, NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
+import { moduleResolvedImports, moduleTypeSources, NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
 import { joinSourcePath } from './source-path.js';
 import * as lowered from './lowered.js';
 import * as surface from './surface.js';
@@ -127,7 +127,9 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let checker: ts.TypeChecker | undefined;
   const extraImports = moduleResolvedImports(record);
   const relSource = record.source.replace(/\\/g, '/').replace(/^\/+/, '');
-  const usePkgRoot = !!extraImports && Object.keys(extraImports).length > 0 && !!relSource && !relSource.startsWith('..');
+  // Package files imported for types only: present in the checker at their package paths, never loaded at run time.
+  const typeSources = moduleTypeSources(record);
+  const usePkgRoot = (!!extraImports && Object.keys(extraImports).length > 0 || !!typeSources) && !!relSource && !relSource.startsWith('..');
   const path = usePkgRoot ? `/__natlang__/pkg/${relSource.endsWith('.js') ? `${relSource.slice(0, -3)}.ts` : relSource}` : `${FOLDER}/${record.name}.ts`;
   const virtualDir = path.slice(0, path.lastIndexOf('/'));
   const softTypes = JSON.stringify(record.types);
@@ -165,6 +167,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
         else if (item.kind === 'natlang') { files[mapped] = natlangDeclaration(item); extraPaths[specifier] = [mapped]; }
       }
     }
+    if (usePkgRoot) for (const [source, typeText] of Object.entries(typeSources ?? {})) files[`/__natlang__/pkg/${source}`] ??= typeText;
     const known = new Set(Object.keys(record.types));
     files[`${virtualDir}/__types.d.ts`] = Object.entries(record.types)
       .map(([name, text]) => `type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\n';

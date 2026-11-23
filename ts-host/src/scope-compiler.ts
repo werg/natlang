@@ -868,6 +868,25 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
   };
   for (const statement of fn.body.statements) visit(statement);
 
+  // `await` inside a function that is not async (most often an arrow passed to map or forEach) parses, then fails in
+  // the engine with a message about the lowering's own call wrapper. Name the repair at the function instead.
+  const awaitOutsideAsync = new Set<ts.Node>();
+  const findAwait = (node: ts.Node): void => {
+    if (ts.isAwaitExpression(node)) {
+      let owner: ts.Node | undefined = node.parent;
+      while (owner && owner !== fn && !ts.isFunctionLike(owner)) owner = owner.parent;
+      if (owner && owner !== fn && !awaitOutsideAsync.has(owner) &&
+          !ts.getModifiers(owner as ts.FunctionLikeDeclaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)) {
+        awaitOutsideAsync.add(owner);
+        add('typescript-syntax', '`await` is used inside a function that is not async. Await in the eval code itself, ' +
+          'as in `for (const file of files) { const text = await file.readText(); }`, or mark the function async and await ' +
+          'all its results: `await Promise.all(files.map(async file => await file.readText()))`.', owner);
+      }
+    }
+    ts.forEachChild(node, findAwait);
+  };
+  for (const statement of fn.body.statements) if (statement.getStart(file) >= userStart) findAwait(statement);
+
   // Constrained-source policy: finite iteration and no recursion among functions authored here.
   const toRaw = (item: NatlangDiagnostic, wrappedOffsets = false): ScopeCompileDiagnostic => {
     const base = (wrappedOffsets ? PREFIX.length : 0) + helperPrefix.length;

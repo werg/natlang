@@ -67,3 +67,16 @@ def test_check_reports_command_line_references(monkeypatch, capsys, tmp_path):
     assert 'pid 7 cmdline' in capsys.readouterr().out
     monkeypatch.setattr(m, 'process_references', lambda: [])
     assert m.main(['--check', str(target)]) == 0
+
+
+def test_pin_walk_never_follows_symlinks(tmp_path, monkeypatch):
+    """~/data symlinks into the external HDD: the walk must not descend through them (2026-11-23 sweep wedge)."""
+    m = load()
+    data = tmp_path / 'data'
+    real = pin(data / 'run', 'pin-real00000000', 30)
+    elsewhere = tmp_path / 'hdd'
+    pin(elsewhere / 'deep', 'pin-hdd000000000', 30)
+    (data / 'archived').symlink_to(elsewhere / 'deep')
+    (data / 'run' / 'linked').symlink_to(elsewhere)
+    monkeypatch.setattr(m, 'PIN_ROOTS', (data,))
+    assert m.pin_dirs() == [str(real)]

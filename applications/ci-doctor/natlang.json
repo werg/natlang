@@ -6,6 +6,7 @@
   "include": [
     "DECOMPOSITION.md",
     "README.md",
+    "bisectSettled.nl",
     "classifyFailure.nl",
     "doctor.ts",
     "examples.json",
