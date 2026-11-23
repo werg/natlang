@@ -301,17 +301,27 @@ def check_program(case, root=REPO):
     return json.loads(output or '[]')
 
 
-def leaked_answers(candidate, query_cases):
-    """A candidate whose texts contain a query world's expected answer verbatim is refused."""
+def leaked_answers(candidate, query_cases, seen=''):
+    """A candidate whose texts contain a query world's expected answer verbatim is refused, unless that answer also
+    occurs in ``seen``, the text the supervisor is shown anyway (the program files and the support worlds' inputs): a
+    categorical answer such as "mother" in a family-relations program is the program's vocabulary, not a copied answer
+    (2026-11-23: two of four commits refused for naming kin relations every puzzle input names)."""
     blob = '\n'.join([entry['text'] for entry in candidate.get('guidance') or []] +
                      [json.dumps(change, ensure_ascii=False) for change in candidate['files']])
     for case in query_cases:
         expected = (case.get('semantics') or {}).get('expected')
         values = [expected] if isinstance(expected, str) else [
             v for v in (expected.values() if isinstance(expected, dict) else []) if isinstance(v, str)]
-        if any(len(value) >= 6 and value in blob for value in values):
+        if any(len(value) >= 6 and value in blob and value not in seen for value in values):
             return True
     return False
+
+
+def shown_text(spec):
+    """What the supervisor can read without a query world: the program's files and the support worlds' inputs."""
+    return '\n'.join([*spec['program']['files'].values(),
+                      *(json.dumps((case.get('semantics') or {}).get('inputs'), ensure_ascii=False)
+                        for case in spec['support'])])
 
 
 def memetic_reward(query_success, baselines, *, evaluations, budget, cost_weight, committed):
@@ -932,7 +942,7 @@ class Workspace:
             return json.loads(cached.read_text())
         prepared, committed = self.prepared, self.state['committed']
         candidate = self.candidate(committed['ids'] if committed else [])
-        leak = leaked_answers(candidate, self.spec['query'])
+        leak = leaked_answers(candidate, self.spec['query'], shown_text(self.spec))
         if leak:
             query = {'success': 0.0, 'refused': 'candidate text reproduces a query answer verbatim'}
         elif candidate['ids']:

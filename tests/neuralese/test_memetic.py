@@ -711,3 +711,14 @@ def test_family_seconds_are_seeded_from_earlier_collections(tmp_path):
     c.family_seconds = __import__('collections').defaultdict(list)
     c._seed_family_seconds()
     assert c.family_seconds['fam'] == [444.]
+
+
+def test_an_answer_the_program_or_support_inputs_already_name_is_no_leak():
+    query = [{'semantics': {'expected': 'grandmother'}}, {'semantics': {'expected': 'mother'}}]
+    candidate = {'guidance': [{'text': 'Answer with one kin word such as mother or father.'}], 'files': []}
+    assert mw.leaked_answers(candidate, query)
+    shown = mw.shown_text({'program': {'files': {'p.nl': 'Return the relation.'}},
+                           'support': [{'semantics': {'inputs': {'puzzle': 'Ann is the mother of Bob.'}}}]})
+    assert not mw.leaked_answers(candidate, query, shown)
+    copied = {'guidance': [{'text': 'The answer is grandmother.'}], 'files': []}
+    assert mw.leaked_answers(copied, query, shown)

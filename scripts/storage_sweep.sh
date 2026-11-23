@@ -8,7 +8,8 @@
 # SWEEP_PINS=0 opts out). Logs what it removed and the free space afterwards; below a disk floor (root
 # SWEEP_ROOT_FLOOR_GB, external SWEEP_EXTERNAL_FLOOR_GB) it appends a DISK FLOOR line to the ops log
 # (SWEEP_OPS_LOG) and the journal, and writes storage-low.json. The floors are checked first;
-# SWEEP_ALERTS_ONLY=1 stops there (the unit's ExecStartPre, which needs no ledger admission).
+# SWEEP_ALERTS_ONLY=1 stops there (the unit's ExecStartPre, which needs no ledger admission). Every step is bounded
+# (the pin pass by SWEEP_PIN_TIMEOUT, the whole run by the unit's timeout), so a slow disk cannot wedge the timer.
 set -uo pipefail
 AGE=${SWEEP_AGE_MINUTES:-180}
 ALERT_GB=${SWEEP_ALERT_GB:-60}
@@ -72,8 +73,15 @@ while IFS= read -r path; do
 done < <(candidates)
 
 if [ "${SWEEP_PINS:-1}" != 0 ]; then
-  /usr/bin/python3 "$(dirname "$0")/prune_stale_checkouts.py" --apply --min-age-hours "$PIN_AGE_HOURS" \
-    | grep -v '"kept"' >> "$LOG" 2>&1
+  # bounded: a pass that cannot finish in SWEEP_PIN_TIMEOUT seconds is killed and logged; the next sweep retries
+  pins_out=$(mktemp)
+  timeout -k 30 "${SWEEP_PIN_TIMEOUT:-900}" /usr/bin/python3 "$(dirname "$0")/prune_stale_checkouts.py" --apply \
+    --min-age-hours "$PIN_AGE_HOURS" > "$pins_out" 2>&1
+  [ $? = 124 ] && echo "$(date -Is) prune_stale_checkouts timed out after ${SWEEP_PIN_TIMEOUT:-900} s" >> "$LOG"
+  grep -v '"kept"' "$pins_out" >> "$LOG"
+  pin_bytes=$(sed -n 's/.*"summary": true.*"freed_bytes": \([0-9]*\).*/\1/p' "$pins_out" | tail -1)
+  removed=$((removed + ${pin_bytes:-0}))
+  rm -f "$pins_out"
 fi
 
 free_gb=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)

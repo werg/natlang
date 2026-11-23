@@ -9134,3 +9134,163 @@ driver can be restarted mid-round (it joins the learner and starts the remote co
 next publication). The r0001 SFT claim went to 72 GB (`adopt --hold-budget`; peak 64.7 GB at step 19) to admit it.
 The backlog fill was relaunched polite as `colab-g4a-fill-backlog-polite-20261123`. A same-policy rebind of the L4
 over the tunnel attested all routes in 30 s and rewrote the actor record (`rebound`).
+
+**2026-11-23 17:10, storage pipeline restored; teacher pools recalled to the NVMe; Drive tier waits on the owner.**
+- **The sweep wedge.** `natlang-storage-sweep` failed every 30 min with "already holds a claim". There was no stale
+  claim: the ledger counts only active units. A live run had sat 40+ min in disk sleep.
+  - Cause: `prune_stale_checkouts.pin_dirs` globbed `~/data/*/*/*/.natlang-pin.json`, and `Path.glob` followed
+    `~/data`'s 261 symlinks into the HDD (`pool-v1/claims`, 9.5k entries).
+  - Fix: the walk uses `scandir`, never follows symlinks and stays on the root filesystem. The run took 3 s instead
+    of more than 40 min, with the same decisions. The watch-directory lookup has the same fix.
+  - Wedge-proofing: the sweep unit skips a start while its run is still active (`ExecCondition`). Each run is bounded
+    (`timeout 1500`, and the pin pass by `SWEEP_PIN_TIMEOUT`, 900 s). The archive and retention units have start
+    timeouts (55 min and 6 h; both were `infinity`, so one hung run would have blocked its timer for good). The
+    sweep's summary now counts the pins it frees.
+  - First run: 4.8 GB of pins and orphaned worktrees removed (`semantic-fp/pin-382bcb1ab`, `exp1-rft/{code,actor-code}`).
+    Test: `tests/test_prune_stale_checkouts.py::test_pin_walk_never_follows_symlinks`.
+- **`natlang-continuous-storage` removed** (script, test, policy, units, decomposition doc). It guarded the Oct-24
+  `lfm-local-recovery` cycles and the Mellum cache, both gone. Its timer had been stopped since 10-31.
+- **Mechanism state:**
+  - The sweep (30 min) works again. It freed 10.9 GB of scratch in the last week, plus today's 4.8 GB of pins.
+  - The archiver (hourly) moved 17 GB last week, then refused 7 runs at the HDD floor. It now finds no NVMe file of
+    at least 1 GB that is cold: the NVMe's cold data is many-small-file trees (OPEN_ITEMS).
+  - Retention (weekly) is a dry-run report; its 11-22 run took 2 h.
+- **HDD contention behind r0001's "2 h of I/O wait":** the HDD was 97% busy at 150 random reads/s (0.7 MB/s) under
+  three whole-tree walks:
+  - another session's `find / -name llama-server`, running for 2 h 18 min (pid 1852501);
+  - a `find / -name *.gguf` (pid 4131900);
+  - the wedged prune.
+
+  I killed all three by PID (AGENTS: any agent may stop any process). The HDD went idle, and the build, whose mix had
+  been written at 16:42, finished its final registry step within minutes. Its registry step had been in the
+  data-registry full-index fallback (`Registry._find_full` lists every registered directory, including HDD
+  `dgxops/acquired-*` trees). Of r0001's inputs, only the three `teacher-gen-20261115` pools take that fallback,
+  because their registered paths were the HDD spelling (12 s when idle). Search an agent shell's `find /` with
+  `-xdev` or a bounded root: a whole-tree walk of the 3.6 TB HDD runs for hours and starves every reader.
+- **Teacher pools back on the NVMe (OPEN_ITEMS item closed).** The decision is NVMe placement, not a packed file:
+  - None of the pool manifests has admission records, so a build reads only 3 manifests and 27,432 per-group
+    `cases.jsonl` (0.33 GB): random small-file reads, which NVMe removes at no reader change.
+  - A packed file would be a second representation needing new reader code in `teacher_coverage`/`check_record`.
+  - It also gives the pools a lexical NVMe path, so the registry no longer takes the full-index fallback.
+
+  Mechanism: `scripts/recall_to_nvme.py` (new; the inverse of an archive move).
+  - It rebuilds `ops/teacher-gen-20261115` as a real NVMe tree.
+  - It copies 274,683 hot files (1.59 GB) and verifies each by SHA-256.
+  - It leaves `claims/`, `episodes/*/row-*`, `rollouts.jsonl`, `results.jsonl` and the two smoke dirs on the HDD as
+    symlinks (54,907 paths; only `extract` reads rollouts, and these pools are closed).
+  - It writes `.keep-on-nvme` and appends registry records with the NVMe path. The HDD copy stays complete.
+
+  - Done 17:06-17:18, before aei1 r0002's build: r0002-data had started 17:13, and its build follows that stage.
+    0 of 274,683 files mismatched. The registry lookup is now lexical (0.0 s against the 12 s fallback). The build's
+    read set (3 manifests and 27k `cases.jsonl`, 352 MB) now reads in 4.8 s.
+  - The tool now hashes the source while it copies, so the HDD is read once (the first run re-read it to verify).
+
+  Test: `tests/test_recall_to_nvme.py`.
+- **HDD: the retired bf95 trees deleted** (`ops/storage/delete-20261123-external.sh`, exact paths):
+  - `dgx-moved-20261104/bf95-lowlr-1105` (147 GB) and `dgx-ops-archive-20261118/bf95-lowlr-1105` (57 GB), which the
+    11-19 pass missed.
+  - Checked first: process, unit, watch-script and registry references, and the pickled strings of the sft-v7/v8/v9
+    checkpoints.
+  - 218 GB deleted (157.7 + 60.8): the external disk went from 48 to 251 GB free, so the hourly archiver is out of its
+    floor again.
+- **NVMe: `~/hindsight-kb-recovery` relocated, not deleted (37.6 GB).** It is another project's Oct-24 recovery
+  tarballs and model files, untouched for a month. The files of 1 GB or more went to the HDD archive through
+  `archive_to_external.py --root` (verified copy and symlink back), the same relocation the 10-28 pass gave the
+  megatoken scratch. The paths still work.
+- **Drive cold tier: stopped at the credential, as briefed.**
+  - ADC holds `cloud-platform`, `colaboratory`, `userinfo.email` and `openid`, but no Drive scope (Drive API 403).
+  - Colab's `drivemount` uses dfs_ephemeral credential propagation, whose dry run asks for a browser consent: per
+    runtime, so it cannot serve unattended bootstraps.
+  - The owner adds `drive.file` to ADC once, keeping the four scopes Colab needs. In a DGX terminal (it prints a URL
+    and asks for the code):
+    `gcloud auth application-default login --no-launch-browser --scopes=openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/colaboratory,https://www.googleapis.com/auth/drive.file`
+    The DGX then uploads directly, and VMs get short-lived access tokens from the DGX, so no per-VM consent is needed.
+    If Google blocks the gcloud client for the Drive scope, the fallback is an OAuth client of project
+    awareness-481308 (`--client-id-file`).
+- **Drive plan, sized to the measured link:**
+  - Uplink 5.2-5.8 MB/s (2 x 200 MB to Cloudflare's upload sink); Google downlink 11.9 MB/s.
+  - Saturating the uplink would move about 475 GB/day but starve the Colab tunnel (2.4 MB/s up on the same uplink) and
+    teacher traffic. Uploads therefore cap at about 3 MB/s (about 260 GB/day) and pause during Colab transfers.
+  - HDD inflow was about 100 GB/day this week, so the tier keeps up. The backlog starts with HDD-cold natlang data.
+    Other projects' 591 GB (`bgkit-data`) is the owner's call.
+  - Colab: the first DGX -> Drive upload of a 3.4 GB checkpoint is still uplink-bound (about 630 s against the
+    tunnel's 968 s). Every later VM pulls it inside Google's network, and VM-written learner state never crosses the
+    tunnel. The before/after is measured once the scope exists.
+
+
+## 2026-11-23 17:30 Memetic groups under collection load: programs whose runs fit, nested runs take slots (e083ad5e5, 17d837704)
+
+The coordinator's round-1 health report (`ops/ei/aei1/r0001/health.json`) flagged 7 `memetic_improve` tasks without
+episodes after the staged layout (c64d250b2) entered at the 14:26 relaunch on `pin-96a02bd4abe1`.
+
+- **None of them ran the staged layout.** The 7 groups (g000138, g000145, g000216, g000281, g000401, g000605,
+  g000672) were all created before 14:18 on pin d29451b846ca (their `memetic-spec.json` has no `layout`): five ran out
+  the 7200 s clock in preparation (previous entry), and g000605/g000672 were not admitted (every support sample passed;
+  under the old layout the 4 supervisors then fail at `load`: `job:uncoded-error`, `finish:incomplete`). After 14:26
+  the relaunched collection (`--hours 72`, share 0.02, ~140 new groups) drew one memetic group, g000832, at 16:49:06
+  (`layout: staged`); at 16:49:54 the driver's round-1 SFT took over the DGX (`takeover: dgx`, Colab unfit) and stopped
+  the collection, which abandoned g000832's preparation stage (`group abandoned`, `memetic-prepare`, -15) 71 s in.
+  `memverify-dgx3` had been SIGTERMed at 14:42 and again at 16:50, before its first group.
+- **What would still have failed under real load** (aei1, 128 slots, measured over its 3,137 finished episodes):
+  ordinary episodes of the memetic families run median 1,156 s, p90 5,234 s; 44% exceed the staged nested clock of
+  1,440 s (55% of all episodes exceed 900 s). A memetic program whose runs do not fit leaves its nested evaluations
+  truncated, and the runs that finish are the short ones. And nested runs counted against no slot: aei1 serves 160
+  running for 128 slots, and two memetic groups add 30-50 nested streams.
+- **Fix (default, e083ad5e5):** (1) a memetic group only for a program whose family's ordinary episodes finish within
+  its nested clock (`memetic_workspace.fits`: at least 8 measured, the 0.9 quantile <= `nested_case_seconds`;
+  `--memetic-fit-quantile`, 0 opts out). The collector measures them from its own finished groups and seeds from the
+  sibling collections of its WORK (the async driver's earlier collections; `--memetic-seed-collection`); on aei1's
+  measurements 16 families qualify at once and more as families are measured. (2) Memetic nested runs in flight take
+  collector slots (`_nested_slots`, counted every 20 s from the evaluations' journals), so the actor serves about
+  `--slots` episodes (`--no-memetic-nested-slots` opts out). expert_iteration collect/cycle/async-drive pass both.
+- **Verified:** on the Colab L4 actor front (sft-v9 e15b20a86f1c, 128 running, sharing it with the
+  `colab-g4a-fill-backlog-after-v9` fill), a `grpo.Collector` on the VM (pin of e083ad5e5, 16 slots, staged layout,
+  fit 0.9 with aei1's family seconds, nested slots on) with two production memetic rows (support 4, query 6,
+  evaluations 2) beside ordinary episodes of their worlds (the driver made no new ordinary groups after 12 were
+  outstanding, so the second half ran beside the fill only). Both groups were fully scored, every nested run resolved
+  (scored = rollouts in all 21 evaluations; the longest evaluation 523 s of the 1440 s clock):
+  - g000000 `ext_reasoning-gym_family_relationships` (family p90 295 s): prepared in 108 s (support 0.625, admitted),
+    4 of 4 episodes `memetic_scored` (rewards 0.81, 0, 0, 0.76), group 3182 s from creation to score; anchor 0.833
+    (no change 0.833, default 0.833).
+  - g000001 `curriculum_contract_diagnosis` (p90 325 s): prepared in 204 s (support 0.875), 3 `memetic_scored`
+    (0.64, 0.89, 0.70) and 1 scored 0 at the 64-request budget, group 3582 s; anchor 0.917.
+  No commit beat its anchor (no memetic success yet). Supervisors used 1375-2297 s of their 7200 s.
+- **Found and fixed in the run (17d837704):** two of g000000's four commits were refused as leaks (reward 0) for
+  naming "mother", a query answer that is also a support answer and a word of every puzzle input. `leaked_answers` now
+  ignores an answer that occurs in what the supervisor is shown anyway (`shown_text`: program files, support inputs);
+  a copied answer the supervisor could not have read is still refused.
+- **Left:** a round boundary that stops the standing collection abandons every group in flight, memetic ones (up to
+  ~2.4 h) most often; families never measured on the actor get no memetic group until they are.
+
+## 2026-11-23 Tune RL trains the action reasoning of reasoned decisions (follow-up to "GRPO trains the action reasoning")
+
+**Defect, confirmed by a run.** A `readout: decision` root went through `runRollouts` (worktree build at 7e3d18520)
+and then through `validate_rollout_graph`, the check `tune/rl.py` applies through `whole_episode_turns`. Every episode
+was refused: "whole-episode graph model-turn inventory differs from captured turns". The tune rollout recorded k+1
+turns (the 4 reasoning generations plus the action entry) against the graph's 4 scored-entry nodes. So tune RL could
+not train any episode with a reasoned readout. Had the names matched, it would have trained all k reasonings with
+their unused free replies.
+
+**Fix, consistent with GRPO.** Default on; recipe `rl_decision_reasoning: false` opts out (the choice only).
+- `ts-host/src/tune/rollouts.ts`:
+  - Every scored entry is a turn, in the order the graph numbers them (a slot is taken before scoring), as
+    `rl.task_rollouts.rollout_turns` records collector episodes.
+  - Only the action entry carries the sampling receipt. The other entries are context, with no receipt.
+  - Reasoning generations are no longer turns. The action entry keeps its reasoning's exact capture
+    (`decision_reasoning.reasoning_sampling`).
+- `rl/episode_graph.whole_episode_turns(rollout, think_close)` adds that capture as one more sampled turn, cut
+  through its first `</think>` (`action_reasoning_capture`), named `<action turn>:reasoning`.
+- `rl/native_replay.compile_replay` counts its node among the action turn's nodes. The objective's turn inventory is
+  unchanged, and the node is recorded in `graph_nodes`.
+- `invocation_behavior_policy` and `prepare_objective` take the same `think_close`. `tune/rl.RLEpisodes` reads it
+  from the engine tokenizer.
+- The decision turns' choice term and the other samples' context are unchanged.
+
+**Tests.**
+- `tests/neuralese/test_tune_rl_decision_reasoning.py`: compile with and without `think_close`, folding of the
+  reasoning node, cut and refusal rules.
+- `ts-host/test/tune-rollouts.test.mjs` (11/11 with `decision-reasoning.test.mjs`, built and run on Pop while the DGX
+  ledger queue was frozen behind the round SFT): one turn per graph node, graph order under out-of-order scoring, only the
+  action entry has a receipt and a reasoning capture.
+- Also run: `test_rl_episode_graph`, `test_native_rl_replay` and `test_native_invocation_actors` (47 passed together
+  with the new file).

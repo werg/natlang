@@ -21,18 +21,13 @@ An item leaves the register when its fix lands on main. A finding reported by an
 
 ## Reasoned decisions in training
 
-Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"). Owners: the scorer re-tokenization goes to the B10 agent, after its pin move and with the tokenization sum, as one fork release. Tune RL goes to the GRPO-reasoning agent.
+Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"). Owners: the scorer re-tokenization goes to the B10 agent, after its pin move and with the tokenization sum, as one fork release.
 - **The scorers re-tokenize the reasoning.** Every engine scores the options after the reasoning *text*, re-encoded, not
   after the sampled ids. In aei1 r0000 (16 action readouts, groups g000689/696/701/720) the scored prompt leaves the
   sampled ids mid-reasoning in 4 of 16 (after 847 of 3476, 531 of 1051, 535 of 2085 and 953 of 1687 tokens; the decoded
   text is the same). The choice is then scored, and trained, after a tokenization the model never produced. Fix: the
   score item carries the sampled reasoning ids, and every engine (Python native, SGLang, llama.cpp fork, wllama) uses
   them. GRPO's lowering counts it each step (`decision_reasoning_ids_rendered` in `train.jsonl` `lowering`).
-- **Tune RL with reasoned readouts.** `ts-host/src/tune/rollouts.ts` pushes every reasoning generation as an ordinary
-  turn (the `turn` wrapper), and `tune/rl.py` passes them to `native_replay.prepare_objective` unfiltered; only the SFT
-  path (`tune/rows.lower_rows`) skips them. The graph has one node per scored entry, not per reasoning generation, so
-  the turn names cannot match it. Expected effect: such episodes are refused, or all k reasonings and their unused free
-  replies train. Not run. Fix: tune rollouts keep only the action sample's reasoning, as `rl.task_rollouts` does now.
 
 ## Language and runtime gaps
 
@@ -70,8 +65,25 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
   - Move the Colab VM's checkout at the next actor rebind.
   - Install xgrammar in Pop's serving env between held measurements.
   - Owner: coordinator.
-- **Round builds read archived teacher pools file by file from the external HDD:** `/mnt/external/dgx-ops-archive-20261118/teacher-gen-20261115/pool-*`. r0001's build spent about 2 h in I/O wait there. Index the pools once onto NVMe, or pack them as one sequential file per pool, before r0002's prepare. Owner: coordinator, after the r0001 build.
-- **Both disks are below their floors (2026-11-23 16:18; `/` 38G, external 48G).** Run a cold-data pass on `/mnt/external`: write the path list first, never touch other sessions' archives, and run it after the r0001 build so it doesn't compete for the HDD. Owner: coordinator.
+- **Drive cold tier and Colab-via-Drive wait on one owner login (2026-11-23).** The DGX's ADC has no Drive scope, and a
+  Colab `drivemount` needs a browser consent per runtime. The plan is sized to the measured link: uplink 5.2-5.8 MB/s,
+  Google downlink 11.9 MB/s, and an HDD inflow of about 100 GB/day (439 -> 48 GB free from 11-19 to 11-23). After the
+  owner adds `drive.file` to ADC (DECISIONS 2026-11-23 storage), build the third tier:
+  - archive HDD-cold data to Drive at a cap of about 3 MB/s (about 260 GB/day), paused while a Colab transfer runs;
+  - verify the md5 Drive reports against the local file before deleting the HDD copy;
+  - keep a manifest of what lives where, so a restore is one command;
+  - push short-lived access tokens to Colab VMs, so bootstrap pulls checkpoints from Drive and learners write state
+    there.
+  Owner: storage agent, as soon as the scope exists.
+- **NVMe stays near its floor:** the cold NVMe data is many-small-file trees, which the per-file archiver (files of at
+  least 1 GB) never moves:
+  - `ops/ei/sft-v7/collect/groups` 26 GB and `sft-v8/collect/groups` 16 GB;
+  - `ops/grpo-v4/run2/groups` 23 GB.
+
+  Pack each closed run's group directories into one zst per group, which `rl_rollout_files` already reads as
+  `g*.rollouts.jsonl.zst`, or move the trees to the HDD/Drive after checking their readers. Owner: coordinator.
+- **The HDD is dominated by data outside natlang's keep rules:** `bgkit-data` holds 591 GB (another project). It is the
+  first Drive candidate once the tier exists, and the owner's call.
 - **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.
 - **The Colab keeper's real replacement and upgrade path is untested live.** It is watched by the ops watchdog (`colab` checks).
 
