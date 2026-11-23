@@ -59,3 +59,18 @@ execution environment, explicit opt-out, preserved active data scripts, and
 SIGTERM of the actual async run loop followed by phase resume while an independent
 child and optimizer/RNG/checkpoint fixture bytes remain intact. Operational proof
 records real child PIDs/phase/policy and selected pin identities before and after.
+
+A live follow-up found two admitted and four ledger-requeued Vibe fill clients:
+the keeper treated preemption as termination and launched timestamped replacements.
+The Vibe keeper now queries the authoritative ledger's waiting_order, preserving
+requeue ownership, and exactly five duplicate clients were retired while the
+oldest admitted worker and all actor/learner/server units remained intact.
+
+The same lifecycle inventory includes expert_iteration.ledger_queued,
+grpo.unit_active (detached Pop eval), and static_curriculum_campaign.render and
+ensure_teacher_queued. They now use a shared read-only ledger ownership query,
+including admitted claims across the stop-to-requeue transition. It performs no
+GPU probe and changes no priority/backfill/reclaim semantics. Unknown/corrupt
+ledger state raises instead of pretending a job ended. target_set_watcher.ledger_knows
+already fails closed on unknown state (lines93–101), so needs no correction.
+Dashboard/watchdog full status calls need actual memory telemetry and remain.

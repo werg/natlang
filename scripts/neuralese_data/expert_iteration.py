@@ -248,12 +248,9 @@ def held_budget_gb(slots=HELD_SLOTS):
 
 
 def ledger_queued(unit):
-    """Whether the memory ledger holds ``unit`` waiting or requeued (a preempted resumable unit before its relaunch)."""
-    try:
-        status = json.loads(subprocess.run([*LEDGER, 'status'], capture_output=True, text=True, timeout=60).stdout or '')
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return False
-    return any(w.get('unit', '').removesuffix('.service') == unit for w in status.get('waiting') or ())
+    """Whether the ledger retains ownership, including preemption/requeue transitions."""
+    from scripts.memory_ledger import unit_owned
+    return unit_owned(unit)
 
 
 def _pid_alive(pid):

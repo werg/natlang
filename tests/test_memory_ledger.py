@@ -1460,3 +1460,26 @@ def test_the_guard_relaunches_a_requeued_same_priority_unit_only_within_the_head
     with ledger.ledger() as state:
         assert state['claims']['small.service']['backfill'] == 'lent'
         assert state['events'][-1]['backfilled_behind'] == 'held.service'
+
+
+def test_readonly_ownership_survives_requeue_without_gpu_or_state_mutation(tmp_path):
+    import json
+    path=tmp_path/'ledger.json'
+    state={'schema':'natlang.memory-ledger/1','claims':{'admitted.service':{}},'waiting':{
+        'preempted.service':{'priority':'low','since':1,'requeued':True},
+        'fresh.service':{'priority':'low','since':2,'seen':1000},
+        'expired.service':{'priority':'low','since':3,'seen':1}}}
+    path.write_text(json.dumps(state));before=path.read_bytes()
+    assert ledger.owned_units(path,now=1001)=={'admitted.service','preempted.service','fresh.service'}
+    assert ledger.unit_owned('preempted',path,now=1001)
+    assert ledger.unit_owned('admitted.service',path,now=1001)
+    assert not ledger.unit_owned('expired',path,now=1001)
+    assert path.read_bytes()==before
+    assert ledger.owned_units(tmp_path/'missing')==set()
+
+
+def test_ownership_lookup_never_calls_unknown_state_empty(tmp_path):
+    path=tmp_path/'ledger.json';path.write_text('{broken')
+    with pytest.raises(ValueError):ledger.owned_units(path)
+    path.write_text('{"schema":"unrecognized"}')
+    with pytest.raises(ValueError):ledger.unit_owned('future',path)

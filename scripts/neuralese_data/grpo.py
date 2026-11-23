@@ -248,8 +248,9 @@ def held_priors(base_out, held_root, out):
 
 def unit_active(unit):
     """A user unit, or its ledger admission waiter (``memory_ledger run --detach``), is active."""
+    from scripts.memory_ledger import unit_owned
     return any(subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{name}.service']).returncode == 0
-               for name in (unit, unit + '-waiter'))
+               for name in (unit, unit + '-waiter')) or unit_owned(unit)
 
 
 def pop_eval_inflight(directories, active=None):

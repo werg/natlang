@@ -165,3 +165,16 @@ def test_minimum_loader_gate_checks_data_and_fill_not_learner_runtime(tmp_path):
     git('checkout','-q',new);(repo/'.natlang-pin.json').write_text(json.dumps({'commit':new}))
     (repo/'source.py').write_text('unbound modification')
     with pytest.raises(subprocess.CalledProcessError):c.require_data_readers()
+
+
+def test_owner_and_pop_eval_presence_keep_preempted_jobs_without_full_status_probe(tmp_path,monkeypatch):
+    from scripts import memory_ledger
+    import grpo
+    from types import SimpleNamespace
+    path=tmp_path/'ledger.json'
+    path.write_text(json.dumps({'schema':'natlang.memory-ledger/1','claims':{},'waiting':{
+        'owned.service':{'priority':'low','since':1,'requeued':True}}}))
+    monkeypatch.setattr(memory_ledger,'STATE',str(path))
+    monkeypatch.setattr(grpo.subprocess,'run',lambda args,**kwargs:SimpleNamespace(returncode=3))
+    assert ei.ledger_queued('owned') and grpo.unit_active('owned')
+    assert not ei.ledger_queued('other') and not grpo.unit_active('other')
