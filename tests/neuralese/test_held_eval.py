@@ -119,3 +119,13 @@ def test_the_live_registry_keeps_held_v3_as_the_gate():
     assert roles['held-eval'].endswith('held-v3/manifest.json')
     assert 'held-eval-semantic-fp-reservations' in roles
     assert all(name.startswith('held-eval') for name in roles)
+
+
+def test_an_authored_held_set_is_pinned_whole_and_refuses_an_exposed_row(tmp_path):
+    rows = [{**row(f'h{i}', 'shared' if i < 3 else f'g{i}'), 'split': 'dev' if i % 2 else 'train'} for i in range(6)]
+    cases = write(tmp_path / 'cases.jsonl', rows)
+    manifest, held = held_eval.build_manifest(cases, avoid=set(), all_rows=True, reject={'h5'})
+    # every row but the rejected one, whatever its split or split-group siblings
+    assert [t['id'] for t in manifest['tasks']] == ['h0', 'h1', 'h2', 'h3', 'h4'] and len(held) == 5
+    with pytest.raises(ValueError, match='exposed'):
+        held_eval.build_manifest(cases, avoid=set(), avoid_groups={'shared'}, all_rows=True)
