@@ -244,7 +244,7 @@ def test_concurrent_exports_register_and_publish_a_cohort_once(monkeypatch, tmp_
         vibestudio_campaign.export_trajectories(tmp_path, receipt, set(), set())
 
     monkeypatch.setattr(vibestudio_campaign, 'ZstdWriter', Writer)
-    monkeypatch.setattr(vibestudio_campaign, 'verified_episode', lambda *args: {'trajectory_ir': {}})
+    monkeypatch.setattr(vibestudio_campaign, 'verified_episode', lambda *args: {'trajectory_ir': {'outcome': {'status': 'passed', 'task_completed': True}}, 'turns': [1]})
     monkeypatch.setattr(vibestudio_campaign.data_registry, 'record_dataset', register)
     receipt = {'goal': {'status': 'verified', 'manifest': 'goal/manifest.json'}}
     with ThreadPoolExecutor(2) as pool:
@@ -260,4 +260,61 @@ def test_concurrent_exports_register_and_publish_a_cohort_once(monkeypatch, tmp_
         second.result(timeout=3)
     assert len(writers) == len(registrations) == 1
     assert vibestudio_campaign.read(tmp_path / 'exported.json') == {
-        'verified': 1, 'dataset': 'one-cohort'}
+        'verified': 1, 'dataset': 'one-cohort', 'completed_goals': 1,
+        'partial_trajectories': 0, 'supervised_decisions': 1, 'evidence_only': 0}
+
+
+def test_package_bootstrap_failures_do_not_use_teacher_budget_after_no_call_capture(tmp_path):
+    reason = '[build.getBuild] No export ./a-new-helper found for @workspace-skills/a-domain'
+    before = {'status': 'test-failed', 'reason': reason, 'teacher_started': False}
+    after = {**before, 'teacher_started': True}
+    unknown = {'status': 'test-failed', 'reason': reason}
+    assert vibestudio_campaign.infrastructure_failure(before, {})
+    assert not vibestudio_campaign.infrastructure_failure(after, {})
+    assert not vibestudio_campaign.infrastructure_failure(unknown, {})
+    cases = {'before': {'workspace': 'system', 'family': 'bootstrap'}, 'after': {'workspace': 'system', 'family': 'bootstrap'}}
+    rows = vibestudio_campaign.publish_status(tmp_path, cases, {}, [{'before': before, 'after': after}], None, 2, {},
+        attempt_epoch='release', receipt_epochs=['release'])
+    assert rows['before']['attempts'] == 0
+    assert rows['after']['attempts'] == 1
+    assert rows['before']['epoch_infrastructure_failures'] == 1
+
+
+def test_raw_capture_records_teacher_start_evidence_without_rewriting_it(tmp_path):
+    import gzip
+    import json
+    for roots in [[], ['real-root']]:
+        capture = tmp_path / ('before' if not roots else 'after')
+        packet_dir = capture / 'st_example'
+        packet_dir.mkdir(parents=True)
+        raw = packet_dir / 'trajectory-example-full.json.gz'
+        with gzip.open(raw, 'wt') as stream:
+            json.dump({'result': {'passed': False}, 'execution': {'error': '[build.getBuild] Could not resolve a package',
+                'diagnostics': {'natlangTeacher': {'rootCallIds': roots, 'calls': []}}}}, stream)
+        original = raw.read_bytes()
+        outcome = vibestudio_campaign.outcomes(capture, ['example'], None, {}, {'example': {}})['example']
+        assert outcome['teacher_started'] is bool(roots)
+        assert bool(vibestudio_campaign.infrastructure_failure(outcome, {})) is not bool(roots)
+        assert raw.read_bytes() == original
+
+
+def test_export_counts_separate_completed_goals_partial_decisions_and_evidence_only(monkeypatch, tmp_path):
+    episodes = [
+        {'trajectory_ir': {'outcome': {'status': 'passed', 'task_completed': True}}, 'turns': [1, 2]},
+        {'trajectory_ir': {'outcome': {'status': 'partial', 'task_completed': False}}, 'turns': [1]},
+        {'trajectory_ir': {'outcome': {'status': 'passed', 'task_completed': True}}, 'turns': []},
+    ]
+    def episode(path, *args):
+        return episodes[int(path.parent.name)]
+    registered = []
+    monkeypatch.setattr(vibestudio_campaign, 'verified_episode', episode)
+    monkeypatch.setattr(vibestudio_campaign.data_registry, 'record_dataset',
+                        lambda *args, **kwargs: registered.append(kwargs) or {'id': 'mixed'})
+    receipt = {str(index): {'status': 'verified', 'manifest': f'{index}/manifest.json'} for index in range(3)}
+    vibestudio_campaign.export_trajectories(tmp_path, receipt, set(), set())
+    result = vibestudio_campaign.read(tmp_path / 'exported.json')
+    assert result == {'verified': 3, 'dataset': 'mixed', 'completed_goals': 2, 'partial_trajectories': 1,
+                      'supervised_decisions': 3, 'evidence_only': 1}
+    assert registered[0]['rows'] == 3
+    assert registered[0]['extra']['trajectory_counts'] == {key: result[key] for key in
+        ('completed_goals', 'partial_trajectories', 'supervised_decisions', 'evidence_only')}

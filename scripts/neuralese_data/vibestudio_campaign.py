@@ -81,7 +81,7 @@ def outcomes(capture, names, held, training, cases):
             episode = verified_episode(manifest, held, training)
             if episode['task_id'] != cases[name]['taskId']:
                 raise ValueError(f'verified capture identifies another task: {manifest}')
-            results[name] = {'status': 'verified', 'manifest': str(manifest.relative_to(capture)),
+            results[name] = {'status': 'verified', 'teacher_started': True, 'manifest': str(manifest.relative_to(capture)),
                              'decisions': len(episode['turns'])}
         elif raw:
             with gzip.open(raw, 'rt') as stream:
@@ -92,7 +92,9 @@ def outcomes(capture, names, held, training, cases):
             transport = (teacher.get('executionError') or {}).get('message')
             reason = transport or entry.get('error') or test.get('reason')
             results[name] = {'status': 'export-rejected' if test.get('passed') else 'test-failed',
-                             'raw': str(raw.relative_to(capture)), 'reason': reason}
+                             'raw': str(raw.relative_to(capture)), 'reason': reason,
+                             'teacher_started': bool(teacher.get('rootCallIds') or teacher.get('calls'))
+                             if not teacher.get('captureErrors') else None}
         else:
             results[name] = {'status': 'no-capture'}
     return results
@@ -112,6 +114,10 @@ def infrastructure_failure(outcome, case):
     if outcome['status'] == 'no-capture':
         return True
     reason = outcome.get('reason') or ''
+    if outcome.get('teacher_started') is False and (
+            '[build.getBuild]' in reason or 'No export ' in reason or
+            'Could not resolve ' in reason or 'Cannot find package ' in reason):
+        return True
     return case.get('requiresAndroidEmulator') and 'ready disposable Android emulator' in reason
 
 
@@ -212,10 +218,16 @@ def _export_trajectories(archive, receipt, held, training):
     if marker.exists():
         return
     output = ZstdWriter(final)
+    counts = {'completed_goals': 0, 'partial_trajectories': 0, 'supervised_decisions': 0, 'evidence_only': 0}
     try:
         for result in receipt.values():
             if result['status'] == 'verified':
                 episode = verified_episode(archive / 'capture' / result['manifest'], held, training)
+                outcome = episode['trajectory_ir']['outcome']
+                counts['completed_goals'] += outcome.get('task_completed', outcome['status'] == 'passed') is True
+                counts['partial_trajectories'] += outcome['status'] == 'partial'
+                counts['supervised_decisions'] += len(episode['turns'])
+                counts['evidence_only'] += not episode['turns']
                 output.write(episode['trajectory_ir'])
     except BaseException:
         output.close(publish=False)
@@ -226,8 +238,9 @@ def _export_trajectories(archive, receipt, held, training):
         dataset = data_registry.record_dataset(f'vibestudio-{archive.parent.name}-{archive.name}'.lower(), archive,
                                                kind='teacher-demos', format='native Vibestudio Luna trajectories and capture evidence',
                                                include=['capture/**', 'receipt.json', final.name,
-                                                        *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows)
-    publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None})
+                                                        *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows,
+                                               extra={'trajectory_counts': counts})
+    publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None, **counts})
 
 
 def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
