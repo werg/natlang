@@ -57,8 +57,8 @@ export function buildStandardLibrary(options: Omit<Parameters<typeof buildLibrar
 export * from '../runtime/index.js';
 export { compileProject, formatDiagnostics, NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/project.js';
 export type { BuildOptions, BuildResult, ProjectFiles, DefinitionManifest } from '../compiler/project.js';
-export { virtualProjectFiles, virtualSourceFiles } from '../runtime/virtual-project.js';
-export type { VirtualProject, CompiledProject } from '../runtime/virtual-project.js';
+export { compileVirtualProjectProduct, instantiateVirtualProjectProduct, virtualProjectFiles, virtualSourceFiles } from '../runtime/virtual-project.js';
+export type { VirtualProject, VirtualProjectProduct, VirtualProjectProductOptions, CompiledProject } from '../runtime/virtual-project.js';
 export { loadNamedFunction, loadCallableFolder, NatlangSourceError } from '../runtime/loader.js';
 export type { ItemRecord, NatlangRecord, SourceFiles } from '../runtime/loader.js';
 export { EventLoop, EventQueue, KeyedEventLoop } from '../app/event-loop.js';

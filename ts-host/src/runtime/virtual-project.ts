@@ -101,14 +101,37 @@ export type VirtualProjectOptions = { platform: Platform; constrained?: boolean;
  * with `runtime`, so a host binds the project to its one runtime instance by passing it here. `target` says whether
  * awaits restore the natlang task (`browser`); by default the platform's context store decides.
  */
-export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>, options: VirtualProjectOptions): CompiledProject {
+/** A serializable frontend product. It contains no runtime, service, realm or module instance. */
+export type VirtualProjectProduct = {
+  schema: 'natlang.virtual-project-product/1';
+  project: VirtualProject;
+  runtimeSpecifiers: string[];
+  build: BuildResult;
+};
+export type VirtualProjectProductOptions = Omit<VirtualProjectOptions, 'platform' | 'modules' | 'target'> & {
+  /** Explicit: a compiler worker has no runtime platform from which to infer this. */
+  target: 'node' | 'browser';
+};
+
+/** Pure frontend compilation, suitable for an isolated worker and an exact-input shared cache. */
+export function compileVirtualProjectProduct(project: VirtualProject, options: VirtualProjectProductOptions): VirtualProjectProduct {
+  const snapshot = structuredClone(project);
+  const root = snapshot.root ?? '/project';
+  const files = virtualProjectFiles(snapshot.files, root);
+  const specifiers = [...(options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'])];
+  const build = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
+    guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
+    target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
+  return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build };
+}
+
+/** Bind a reusable frontend product to this owner's runtime and fresh module/realm state. */
+export function instantiateVirtualProjectProduct(product: VirtualProjectProduct, runtime: Record<string, unknown>, options: Pick<VirtualProjectOptions, 'platform' | 'modules'>): CompiledProject {
+  // Each consumer owns its data too: mutating diagnostics/outputs cannot poison the shared product.
+  const { project, build: result, runtimeSpecifiers: specifiers } = structuredClone(product);
+  if (product.schema !== 'natlang.virtual-project-product/1') throw new Error('unsupported virtual project product');
   const { platform } = options;
   const root = project.root ?? '/project';
-  const files = virtualProjectFiles(project.files, root);
-  const specifiers = options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'];
-  const result = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
-    guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    target: options.target ?? (moduleTarget(platform) === 'await-restoring' ? 'browser' : 'node'), runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
   const cache = new Map<string, { exports: Record<string, unknown> }>();
   const load = (path: string): Record<string, unknown> => {
     const found = cache.get(path);
@@ -156,4 +179,13 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     }
     exported.set(absolute,bound);return bound;
   } };
+}
+
+/** Default local composition; hosts can offload only the pure first stage. */
+export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>, options: VirtualProjectOptions): CompiledProject {
+  const product = compileVirtualProjectProduct(project, {
+    ...options,
+    target: options.target ?? (moduleTarget(options.platform) === 'await-restoring' ? 'browser' : 'node'),
+  });
+  return instantiateVirtualProjectProduct(product, runtime, options);
 }
