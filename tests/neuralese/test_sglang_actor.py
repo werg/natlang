@@ -340,9 +340,9 @@ def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
 
 
 def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_path, monkeypatch):
-    """A state written from text (write-text) is consumed as its exact tokens in the reader's own context on both
-    engines (`in-context-text`): the out-of-context write was unreadable (2026-11-23, 1 of 87 held read-backs). The
-    reader's logits equal those of the same tokens inline; NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices the stored
+    """A state written from text (write-text) is consumed as its exact tokens inline in the reader's own context on
+    both engines (`in-context-text`, no consume markers): the out-of-context write was unreadable (2026-11-23, 1 of 87
+    held read-backs). The reader's logits equal those of the same tokens inline; NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices the stored
     state as before, and states not written from text still splice exactly."""
     import torch
     from natlang_neuralese.model.shared_state import native_step
@@ -372,10 +372,12 @@ def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_pat
     mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
     assert mine['prompt'] == theirs['prompt'] and _protocol_view(mine) == _protocol_view(theirs)
     assert not [segment for segment in mine['prompt'] if segment['kind'] == 'native_state']
-    span = [roles.consume_open, *tokens, roles.consume_close]
+    # The text's tokens stand inline where the state was declared: no consume markers, no imported placeholders.
     ids = sent[0]['input_ids']
-    at = ids.index(roles.consume_open)
-    assert ids[at:at + len(span)] == span and 'natlang_import' not in sent[0]['sampling_params'].get('custom_params', {})
+    assert roles.consume_open not in ids and roles.consume_close not in ids
+    at = next(i for i in range(len(ids)) if ids[i:i + len(tokens)] == tokens)
+    assert ids[:at] == word('t4') or ids[at - len(word('t4')):at] == word('t4')
+    assert 'natlang_import' not in sent[0]['sampling_params'].get('custom_params', {})
     # The reader's first-token logits are those of the prompt with the text's tokens inline.
     prompt_ids = [token for segment in theirs['prompt'] for token in segment['token_ids']]
     with torch.no_grad():

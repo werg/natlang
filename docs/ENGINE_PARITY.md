@@ -142,8 +142,9 @@ managed backend by default (`tune.softStates: false` opts out; `tune/pipeline.ts
 a value's text from position 0 with nothing before it (no BOS, no call), and a reader that splices that state cannot
 use it: 1 of 87 held read-backs returned the producer's text (DECISIONS 2026-11-23 "Neuralese read-back"). The
 Python native engine and the SGLang actor therefore consume a state they wrote from text (`native_write_text` without
-adapters; recorded in memory and as `text-writes/<id>` in the store) as consume_open, the state's exact token ids
-prefilled in the reader's own context, consume_close. The receipt is `{"mode": "in-context-text",
+adapters; recorded in memory and as `text-writes/<id>` in the store) as the state's exact token ids, inline in the
+reader's own context, with no consume markers (their rows were the base's untrained reserved-token row through sft-v9,
+and the reader echoed them as stray tokens around the text). The receipt is `{"mode": "in-context-text",
 "observed_native_state_id": id}` and the RL capture records the tokens, so learners replay what was computed
 (`engine.py` `text_write_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`;
 `test_sglang_actor.py` `test_text_written_state_is_read_as_its_tokens_in_the_readers_context`).
