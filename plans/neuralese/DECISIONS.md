@@ -9913,3 +9913,66 @@ Owner requested deletion of unwanted DGX bloat, not relocation. Deleted roughly 
 bootstrap/audit/export copies; original captures and registered training inputs remain. Storage guidance
 now retains actual training/evaluation/recovery inputs and minimal consumed metadata, rather than
 archiving uncertain diagnostics. Original earlier Sol captures remain protected; generation stays Luna-only.
+
+## 2026-11-24 00:45 Placement-aware round budgets; rounds stop repeating each other; teacher reasoning as context
+
+**Why.** The round size (12M weighted target tokens, `ROUND_TARGET_TOKENS`) was set for DGX rounds. On the Colab A100
+a round trains about 5x faster: aei1 r0001 measured 30.8k chain tokens/s on the A100 (steps 337-532, 9.4 s/step)
+against 5.9k on the GB10 (steps 1-354, 48.8 s/step). The owner wants A100 rounds to draw more of the accumulated
+data. Measuring r0001 against r0002 also showed that consecutive rounds repeated each other. r0002 held 3,166 of
+r0001's 3,395 filled units, 1,118 of its 1,645 teacher episodes and 186 of its 459 own episodes. There were two causes:
+- a round is prepared while the previous one trains, and that round's mix entered `prefer_unseen` only at publication;
+- `--prefer-unseen` read only `rows.jsonl.zst` (core episodes), so aux parts never counted as trained. The filled
+  reasoning part (18M of r0002's 39.4M uncapped tokens) was drawn at random each round.
+
+The raw-teacher forward budget was also spent on episodes that a filled unit then replaced. In r0002 that was 2,811
+episodes, about 36% of the 180M budget.
+
+**Built (default on, each with an opt-out; tests in `tests/neuralese/test_async_train.py` and `test_sft_sources.py`):**
+- **Placement-aware size** (`expert_iteration.py` async-drive, `--colab-round-hours 2`, `0` opts out). At preparation
+  the driver checks for a reachable session that passes `colab_sft_fit`.
+  - With one, the round is sized to 2 h of that GPU's learner: `sft_sources build --max-forward-tokens` =
+    hours x chain tokens/s. Throughput comes from `round-speed.json` (written after every round per GPU, from its
+    logs), else the r0001 defaults, else GB10 x `sft_speedup`.
+  - The target cap and the teacher forward budget scale by the same factor against the DGX round, never below it.
+  - The decision is recorded in `rNNNN/size.json` and in `round.json` `size` and `expected_hours`.
+- **Forward-token cap** in `cap_target_tokens`: the tighter of the target and forward bounds sets one fraction, and
+  every part keeps that fraction, unseen units first.
+- **DGX fallback**: if a round sized for a session starts on the DGX (the session was lost or turned unfit before
+  its learner began), `sft_sources recap` first bounds its mix to `--round-target-tokens` into `mix-dgx/`.
+  `round.json` `mix_dir`, `chains_path`, `chains_sha256` and `episode_ids` then point at the recapped mix, and the units
+  it leaves out stay unseen. A round whose learner already trained (a session lost mid-round) keeps its step list and
+  resumes on the DGX; the hand-back moves it back when a fit session answers. `--no-dgx-recap` opts out.
+- **In-flight prefer-unseen**: a round prepared ahead prefers unseen over the mix of the round training now
+  (`--no-prefer-inflight` opts out).
+- **Unit-level prefer-unseen**: each build and recap writes `trained-units.json` ((task, round) of every chain, aux
+  parts included). For older builds `trained_units` reads their `chains.pkl`. Share-bounded aux parts and the cap
+  take unseen units first.
+- **Teacher episodes a filled unit stands in for** are not admitted raw, so they spend no forward budget
+  (`--filled-teacher admit` restores the old rule). The fill unit trains as before.
+- **Teacher reasoning as context (owner 2026-11-24).** Owner: "We can handle training data for SFT where there is
+  teacher reasoning. We just don't train on it, but we still allow it to be part of the training data." What changed:
+  - Observed-live teacher episodes without a fill are no longer dropped in rounds: `--unfilled-live-teacher auto` now
+    keeps them, with the think block as zero-weight context and the actions as targets; `drop` opts out. r0002 dropped
+    45 of them.
+  - The treatment table (`teacher-reasoning-audit-20261120/treatment.json`: default `context`, every model `filled`)
+    already renders `filled` without a fill as `context`, and nothing else in admission requires filled reasoning.
+  - AGENTS.md "State" now says so.
+- The round build's ledger budget is now 32 GB: r0001/r0002 peaked at 21.2/17.1 GB under 24, and the aux parts now
+  load earlier.
+
+**Expected round size.**
+
+| Placement | Forward tokens | Weighted target | Steps | Teacher forward budget | Learner time |
+|---|---|---|---|---|---|
+| A100 | 221.8M | ~21M (scale 1.75 at r0002's 10.57 forward per target) | ~700 | 315M | ~2 h |
+| DGX | ~127M | 12M | ~400 | 180M | ~6 h at 48.8 s/step, ~8 h at 74 s/step |
+
+With unit-level prefer-unseen, the A100 round's 21M is mostly units r0001 did not train. The cap kept 61% of r0002's
+uncapped pool instead of 30%.
+
+**Not checked.**
+- No end-to-end `sft_sources build` on real data. The scratch rebuild of r0002 waited on the ledger: headroom was
+  3.5 GB, and I did not preempt aei1's collection. The first real build is the coordinator's r0002/r0003 build.
+- The time model assumes steps cost in proportion to chain tokens. It was measured on one mix per GPU, and a larger
+  raw-teacher share raises forward per loss token.

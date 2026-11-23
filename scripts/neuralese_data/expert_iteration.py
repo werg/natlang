@@ -75,6 +75,17 @@ LEDGER = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py')]
 # of the next round, and twice the new data one round interval adds (own successes, fills, teacher). The uncapped
 # build trains every filled chain ever made (share=all) each round: r0001 was 37.4M (1247 steps, ~12.7 h on the DGX).
 ROUND_TARGET_TOKENS = 12_000_000
+# Placement-aware round size (DECISIONS 2026-11-24 "placement-aware round budgets"): a round prepared while a Colab
+# session fit for SFT (colab_sft_fit) answers is sized to --colab-round-hours of that GPU's learner time, in forward
+# (chain) tokens, since the learner's wall time follows them: sft_sources build --max-forward-tokens, with the target
+# cap and the teacher forward budget scaled alike. Throughput: what this loop measured (ROUND_SPEED_FILE, per GPU name,
+# written after every round), else these defaults (aei1 r0001, sum of chain tokens over sum of step seconds: the A100
+# 337-532 at 9.4 s/step, the GB10 1-354 at 48.8 s/step), else the GB10's times sft_speedup.
+COLAB_ROUND_HOURS = 2.0
+ROUND_SPEED_FILE = 'round-speed.json'
+DEFAULT_CHAIN_TOKENS_PER_S = (('A100', 30_800), ('GB10', 5_900))
+DGX_GPU = 'GB10'
+FORWARD_PER_TARGET = 10.7     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
 FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
@@ -799,7 +810,8 @@ def live_holdout_registry(live_works):
 
 
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
-                      live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None):
+                      live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None,
+                      max_forward_tokens=0, unfilled_live_teacher=None):
     """The mix build (``sft_sources build``) of a cycle or an async round: Ambient frontier build from WORK's replayed
     successes (own first, then teacher; observed-live teacher episodes against ``live_registry``), the teacher pools,
     aux parts and the lineage's prefer-unseen builds."""
@@ -815,7 +827,56 @@ def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_
             *(['--live-holdout-registry', live_registry] if live_registry else []),
             *(['--registry-repo', registry_repo] if registry_repo is not None else []),
             *(['--registry-ref', registry_ref] if registry_ref is not None else []),
-            *(['--max-target-tokens', max_target_tokens] if max_target_tokens else [])]
+            *(['--max-target-tokens', max_target_tokens] if max_target_tokens else []),
+            *(['--max-forward-tokens', max_forward_tokens] if max_forward_tokens else []),
+            *(['--unfilled-live-teacher', unfilled_live_teacher] if unfilled_live_teacher else [])]
+
+
+def chain_tokens_per_s(train_jsonl, first_step=0):
+    """(chain tokens per second, steps) of a learner log's steps from ``first_step`` on: the sum of their chain tokens
+    over the sum of their step seconds (what a round's wall time follows), or (None, 0)."""
+    path = Path(train_jsonl)
+    if not path.exists():
+        return None, 0
+    tokens = seconds = steps = 0
+    for line in path.read_text(errors='replace').splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and r.get('step_seconds') and r.get('chain_tokens') and int(r.get('step', 0)) >= first_step:
+            tokens, seconds, steps = tokens + float(r['chain_tokens']), seconds + float(r['step_seconds']), steps + 1
+    return (round(tokens / seconds) if seconds else None), steps
+
+
+def learner_throughput(gpu_name, measured, hardware=None, measured_speedup=None):
+    """(chain tokens per second of round SFT on ``gpu_name``, source): this loop's measurement (``measured``: the
+    ROUND_SPEED_FILE table), else the defaults by name, else the GB10's times ``sft_speedup`` (None when unknown)."""
+    name = str(gpu_name or '')
+    if measured.get(name, {}).get('chain_tokens_per_s'):
+        return float(measured[name]['chain_tokens_per_s']), 'measured by this loop'
+    known = next((v for key, v in DEFAULT_CHAIN_TOKENS_PER_S if key in name), None)
+    if known:
+        return float(known), 'default (aei1 r0001)'
+    from natlang_neuralese.common.execution_profile import sft_speedup
+    speedup, source = sft_speedup(hardware or {'gpu_name': name}, measured_speedup or {})
+    if not speedup:
+        return None, source
+    dgx, _ = learner_throughput(DGX_GPU, measured)
+    return dgx * speedup, f'GB10 x {speedup} ({source})'
+
+
+def placement_round_size(*, round_target_tokens, teacher_budget, hours, gpu_name, chain_tokens_per_s,
+                         forward_per_target=FORWARD_PER_TARGET):
+    """A round's budgets for a learner on ``gpu_name`` at ``chain_tokens_per_s``: ``hours`` of learner time in forward
+    tokens (``max_forward_tokens``), the target cap and the teacher forward budget scaled by the same factor against
+    the DGX round (``round_target_tokens`` weighted, about ``forward_per_target`` times that forward), never below it."""
+    forward = int(hours * 3600 * chain_tokens_per_s)
+    scale = max(1.0, forward / (round_target_tokens * forward_per_target)) if round_target_tokens else 1.0
+    return {'placement': 'colab', 'gpu': gpu_name, 'hours': hours, 'chain_tokens_per_s': round(chain_tokens_per_s),
+            'max_forward_tokens': forward, 'max_target_tokens': int(round_target_tokens * scale),
+            'teacher_budget': int(teacher_budget * scale), 'scale': round(scale, 3),
+            'forward_per_target': round(forward_per_target, 3)}
 
 
 def judge(vs_start, success_pts, fail_pts):
@@ -2649,8 +2710,76 @@ class AsyncRoundDriver:
         return [d for p in policies for d in sorted(self.collect_dir(p).parent.glob(self.collect_dir(p).name + '*'))
                 if (d / 'runs.jsonl').exists()]
 
-    def prepare_plan(self, round_dir, policies):
-        """(frontier argv, data script lines, build argv) of a round's preparation from ``policies``' collections."""
+    def dgx_round_size(self, why='DGX'):
+        return {'placement': 'dgx', 'why': why, 'max_target_tokens': self.a.round_target_tokens, 'max_forward_tokens': 0,
+                'teacher_budget': self.a.teacher_budget, 'scale': 1.0}
+
+    def measured_round_speed(self):
+        path = self.root / ROUND_SPEED_FILE
+        return json.loads(path.read_text()) if path.exists() else {}
+
+    def forward_per_target(self):
+        """Forward per weighted target token of the newest built round mix (FORWARD_PER_TARGET without one)."""
+        for build in sorted(self.root.glob('r[0-9]*/mix/build.json'), reverse=True):
+            try:
+                mix = json.loads(build.read_text())['mix']
+                return mix['forward_tokens'] / mix['weighted_target_tokens']
+            except (OSError, ValueError, KeyError, ZeroDivisionError):
+                continue
+        return FORWARD_PER_TARGET
+
+    def round_size(self):
+        """A round's budgets by where it is expected to train, decided at preparation: a reachable Colab session fit
+        for SFT (``colab_sft_fit``) -> ``--colab-round-hours`` of its learner time (``placement_round_size``); else
+        (no session, an unfit one, ``--colab-round-hours 0``, a DGX-profile driver) the DGX round
+        (``--round-target-tokens``, ``--teacher-budget``)."""
+        hours = getattr(self.a, 'colab_round_hours', COLAB_ROUND_HOURS)
+        if hours <= 0 or self.a.sft_profile != 'colab' or not self.colab_hosts:
+            return self.dgx_round_size('placement sizing off or no Colab hosts')
+        try:
+            import pop_rl_actor
+            host = next((h for h in pop_rl_actor.reachable_hosts('colab', self.colab_hosts)
+                         if pop_rl_actor.colab_sft_fit(h)[0]), None)
+            if host is None:
+                return self.dgx_round_size('no Colab session fit for SFT answers')
+            hardware = pop_rl_actor.colab_hardware(host)
+        except Exception as error:      # sizing never stops a round: the DGX size is always safe
+            return self.dgx_round_size(f'placement check failed: {repr(error)[:200]}')
+        gpu = hardware.get('gpu_name')
+        tps, source = learner_throughput(gpu, self.measured_round_speed(), hardware, self.measured_sft_speed())
+        if not tps:
+            return self.dgx_round_size(f'{gpu}: no throughput estimate ({source})')
+        return {**placement_round_size(round_target_tokens=self.a.round_target_tokens,
+                                       teacher_budget=self.a.teacher_budget, hours=hours, gpu_name=gpu,
+                                       chain_tokens_per_s=tps, forward_per_target=self.forward_per_target()),
+                'host': host, 'throughput_source': source}
+
+    def round_mix(self, round_dir):
+        """The mix a round trains: round.json ``mix_dir`` (a DGX recap, ``recap_for_dgx``), else ``mix/``."""
+        path = Path(round_dir) / 'round.json'
+        if path.exists():
+            mix = json.loads(path.read_text()).get('mix_dir')
+            if mix:
+                return Path(mix)
+        return Path(round_dir) / 'mix'
+
+    def prefer_unseen_for(self, round_dir):
+        """The builds a round's mix prefers unseen over: the lineage's trained rounds (``prefer_unseen``) and the round
+        training now, when this one is prepared ahead of it (its mix is not published yet; without it the next round
+        repeated most of it: aei1 r0002 held 3,166 of r0001's 3,395 filled units and 1,118 of its 1,645 teacher
+        episodes). ``--no-prefer-inflight`` opts out."""
+        builds = list(self.controller.state['prefer_unseen'])
+        active = (self.controller.state.get('active_round') or {}).get('round_id')
+        if active and active != Path(round_dir).name and not getattr(self.a, 'no_prefer_inflight', False):
+            mix = self.round_mix(self.round_dir(active))
+            if (mix / 'rows.jsonl.zst').exists() and str(mix) not in builds:
+                builds.append(str(mix))
+        return builds
+
+    def prepare_plan(self, round_dir, policies, size=None):
+        """(frontier argv, data script lines, build argv) of a round's preparation from ``policies``' collections,
+        sized by ``size`` (``round_size``; the DGX round without one)."""
+        size = size or self.dgx_round_size()
         cur, prev = policies[-1], (policies[-2] if len(policies) > 1 else None)
         collections_ = self.collections_of(policies)
         frontier = [*self.c.py('expert_iteration.py', 'frontier', '--out', round_dir / 'frontier.json',
@@ -2677,13 +2806,15 @@ class AsyncRoundDriver:
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
         build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
-                                  aux=aux, prefer_unseen=self.controller.state['prefer_unseen'],
-                                  teacher_budget=self.a.teacher_budget, own_share=self.a.own_share,
+                                  aux=aux, prefer_unseen=self.prefer_unseen_for(round_dir),
+                                  teacher_budget=size['teacher_budget'], own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
                                   live_registry=live_holdout_registry(self.a.live_work),
                                   registry_repo=self.c.live_data_owner(),
                                   registry_ref=self.c.live_data_ref(),
-                                  max_target_tokens=self.a.round_target_tokens)
+                                  max_target_tokens=size['max_target_tokens'],
+                                  max_forward_tokens=size['max_forward_tokens'],
+                                  unfilled_live_teacher=getattr(self.a, 'unfilled_live_teacher', None))
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 
     def failed_policies(self):
@@ -2722,7 +2853,16 @@ class AsyncRoundDriver:
         # the live WORKs' extractions so far (the ingester keeps adding waves; each round takes what is there)
         if self.a.live_work:
             self.note(live_links=link_live_works(self.c.work, self.a.live_work))
-        frontier, lines, build = self.prepare_plan(round_dir, policies)
+        # the round's size by its expected placement, decided once (a restarted driver keeps it: the build may run)
+        size_path = round_dir / 'size.json'
+        if size_path.exists():
+            size = json.loads(size_path.read_text())
+        else:
+            size = {**self.round_size(), 'decided_at': round(time.time(), 1)}
+            from natlang_neuralese.common.jsonio import write_json_durable
+            write_json_durable(size_path, size)
+        self.note(round=round_dir.name, round_size=size)
+        frontier, lines, build = self.prepare_plan(round_dir, policies, size)
 
         # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
@@ -2741,14 +2881,18 @@ class AsyncRoundDriver:
             tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
             os.replace(tmp, script)
         step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
-        step('build', 24, build, repo=self.c.data_repo())
+        # 32 GB: r0001/r0002 peaked at 21.2/17.1 GB under 24; the aux parts now load before the teacher admission and
+        # --prefer-unseen reads older mixes' chains.pkl for their trained units (DECISIONS 2026-11-24)
+        step('build', 32, build, repo=self.c.data_repo())
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
             previous_policy_sha=policies[-2]['sha256'] if len(policies) > 1 else None,
             chains_path=round_dir / 'mix' / 'chains.pkl', episode_ids=report.get('admitted_episode_keys') or [],
-            prefer_unseen=self.controller.state['prefer_unseen'], profile=self.a.sft_profile,
-            extra={'frontier_policy': cur['sha256'], 'collections': [str(d) for d in self.collections_of(policies)]})
+            prefer_unseen=self.prefer_unseen_for(round_dir), profile=self.a.sft_profile,
+            extra={'frontier_policy': cur['sha256'], 'collections': [str(d) for d in self.collections_of(policies)],
+                   'size': size, 'mix_dir': str(round_dir / 'mix'),
+                   'expected_hours': self.expected_hours(report)})
         (round_dir / 'stages' / 'prepared.done').write_text(json.dumps({'time': time.time()}) + '\n')
         self.ensure_teacher(round_dir)
         return manifest
@@ -2776,7 +2920,7 @@ class AsyncRoundDriver:
         if vals:
             extra += [*(x for v in vals[1:] for x in ('--val-chains', str(round_dir / 'mix' / v))), '--val-every', '20']
         env = {**{k: v for k, v in os.environ.items() if k not in ('WARMUP', 'BLT', 'VAL', 'EXTRA', 'PREFLIGHT_ONLY')},
-               'CHAINS': str(round_dir / 'mix' / 'chains.pkl'),
+               'CHAINS': str(self.round_mix(round_dir) / 'chains.pkl'),
                'CHAINS_SHA256': (round_dir / 'chains.sha256').read_text().split()[0],
                'CKPT': policy['checkpoint'], 'SHA': policy['sha256'], 'WORK': str(run), 'UNIT': f'{self.a.name}-{round_dir.name}-sft',
                'LR': str(self.a.lr), 'WARMUP': '10', 'BLT': '30000', 'ACT': str(activation_gb),
@@ -2821,6 +2965,7 @@ class AsyncRoundDriver:
             # restarted driver joins a running learner: the round's start just queued the DGX collection again
             self.stop_collections(remote=False)
             if not self.dgx_sft_running(round_dir, unit):
+                self.recap_for_dgx(round_dir)
                 self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
             # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the
             # keeper replaced (and served again) gets its collector back, one that was down at the round's start gets
@@ -2839,6 +2984,7 @@ class AsyncRoundDriver:
         if not (factors / 'policy_manifest.json').exists():
             raise SystemExit(f'round {round_dir.name}: no factors after the SFT ({round_dir}/sft/train.log)')
         self.record_sft_speed(round_dir)
+        self.record_round_speed(round_dir)
         return factors
 
     @staticmethod
@@ -2888,6 +3034,7 @@ class AsyncRoundDriver:
                 away_since = None
                 failures += 1
                 self.launch_sft(round_dir, policy, activation_gb=profile.activation_gib, preflight_only=True)
+                self.record_colab_placement(round_dir, up[0])
                 self.c.session(up[0], profile, True)
                 try:
                     with (round_dir / 'sft-colab.log').open('a') as handle:
@@ -2911,6 +3058,97 @@ class AsyncRoundDriver:
         except Exception as error:
             self.note(stage='wait', unit=unit, between_failed=repr(error)[:300])
         self.sft_handback(round_dir, policy, unit)
+
+    def expected_hours(self, report):
+        """A built mix's learner hours on the DGX and on each GPU with a throughput (measured or default)."""
+        forward = (report.get('mix') or {}).get('forward_tokens') or report.get('forward_tokens') or 0
+        measured = self.measured_round_speed()
+        names = {DGX_GPU, *(k for k, _ in DEFAULT_CHAIN_TOKENS_PER_S), *measured}
+        return {n: round(forward / tps / 3600, 2) for n in sorted(names)
+                for tps in [learner_throughput(n, measured)[0]] if tps}
+
+    def record_colab_placement(self, round_dir, host):
+        """``sft/colab-placement.json``: the session and GPU a round's Colab learner runs on (``record_round_speed``)."""
+        try:
+            import pop_rl_actor
+            gpu = pop_rl_actor.colab_hardware(host).get('gpu_name')
+            from natlang_neuralese.common.jsonio import write_json_durable
+            (round_dir / 'sft').mkdir(parents=True, exist_ok=True)
+            write_json_durable(round_dir / 'sft' / 'colab-placement.json',
+                               {'host': host, 'gpu': gpu, 'at': round(time.time(), 1)})
+        except Exception as error:
+            self.note(round=round_dir.name, colab_placement_failed=repr(error)[:300])
+
+    def record_round_speed(self, round_dir):
+        """After a round: its learner throughput (chain tokens per second) per GPU -> ROUND_SPEED_FILE, the next
+        rounds' placement sizing. The DGX's steps are its logs (``train.dgx-K.jsonl`` before a hand-back, ``train.jsonl``
+        when it finished there); a round that finished on a session gives that session's GPU its ``train.jsonl`` steps
+        from the hand-back's pushed step on. Needs 20 steps."""
+        try:
+            run = round_dir / 'sft'
+            final = json.loads((round_dir / 'round.json').read_text()).get('profile')
+            moves = json.loads((run / 'handback.json').read_text()) if (run / 'handback.json').exists() else []
+            segments = [(DGX_GPU, p, 0) for p in sorted(run.glob('train.dgx-*.jsonl'))]
+            if final == 'dgx':
+                segments.append((DGX_GPU, run / 'train.jsonl', 0))
+            elif (run / 'colab-placement.json').exists():
+                gpu = json.loads((run / 'colab-placement.json').read_text()).get('gpu')
+                if gpu:
+                    segments.append((gpu, run / 'train.jsonl', int(moves[-1]['pushed_step']) if moves else 0))
+            path = self.root / ROUND_SPEED_FILE
+            table = json.loads(path.read_text()) if path.exists() else {}
+            for gpu, log, first in segments:
+                tps, steps = chain_tokens_per_s(log, first)
+                if tps and steps >= 20:
+                    table[gpu] = {'chain_tokens_per_s': tps, 'steps': steps, 'round': round_dir.name,
+                                  'log': str(log), 'at': round(time.time(), 1)}
+                    self.note(round=round_dir.name, round_speed={gpu: table[gpu]})
+            from natlang_neuralese.common.jsonio import write_json_durable
+            write_json_durable(path, table)
+        except (OSError, ValueError, KeyError, IndexError) as error:
+            self.note(round=round_dir.name, round_speed_failed=repr(error)[:300])
+
+    def recap_command(self, round_dir, out):
+        return self.c.data_py('sft_sources.py', 'recap', '--mix', round_dir / 'mix', '--out', out,
+                              '--max-target-tokens', self.a.round_target_tokens,
+                              *[x for b in self.prefer_unseen_for(round_dir) for x in ('--prefer-unseen', b)])
+
+    def recap_for_dgx(self, round_dir):
+        """A round sized for a Colab session that starts on the DGX (the session was lost or turned unfit before
+        its learner began) trains the DGX round size instead: ``sft_sources recap`` bounds its mix to
+        ``--round-target-tokens`` (unseen units first, every part scaled alike) into ``mix-dgx/``, and round.json
+        (``chains_path``, ``chains_sha256``, ``episode_ids``, ``mix_dir``) and ``chains.sha256`` point at it; the units
+        it leaves out stay unseen for the next round. A round whose learner already trained (a learner state or logged
+        steps: a session lost mid-round) keeps its step list and resumes on the DGX (the hand-back moves it back when a
+        fit session answers). ``--no-dgx-recap`` opts out."""
+        path = round_dir / 'round.json'
+        manifest = json.loads(path.read_text()) if path.exists() else {}
+        size = manifest.get('size') or {}
+        if (getattr(self.a, 'no_dgx_recap', False) or size.get('placement') != 'colab'
+                or manifest.get('recap') or self.round_mix(round_dir) != round_dir / 'mix'
+                or (round_dir / 'sft' / 'learner-state' / 'learner_manifest.json').exists()
+                or dgx_sft_progress(round_dir / 'sft' / 'train.jsonl') is not None
+                or chain_tokens_per_s(round_dir / 'sft' / 'train.jsonl')[1] > 0):
+            return False
+        out = round_dir / 'mix-dgx'
+        self.c.ledger(f'{self.a.name}-{round_dir.name}-recap', 16, STAGE_PRIORITY, self.recap_command(round_dir, out),
+                      round_dir / 'recap.log', repo=self.c.data_repo())
+        report = json.loads((out / 'build.json').read_text())
+        from natlang_neuralese.common.hashing import sha256_file_hex
+        sha = sha256_file_hex(out / 'chains.pkl')
+        tmp = round_dir / 'chains.sha256.partial'
+        tmp.write_text(f'{sha}\n')
+        os.replace(tmp, round_dir / 'chains.sha256')
+        cap = report.get('target_cap') or {}
+        update_round_manifest(round_dir, mix_dir=str(out), chains_path=str(out / 'chains.pkl'), chains_sha256=sha,
+                              chains_bytes=(out / 'chains.pkl').stat().st_size,
+                              episode_ids=sorted(report.get('admitted_episode_keys') or []),
+                              recap={'at': round(time.time(), 1), 'max_target_tokens': self.a.round_target_tokens,
+                                     'kept_weighted_target_tokens': cap.get('kept_weighted_target_tokens'),
+                                     'kept_forward_tokens': cap.get('kept_forward_tokens'),
+                                     'expected_hours': self.expected_hours(report)})
+        self.note(round=round_dir.name, recap_for_dgx=str(out), kept_weighted=cap.get('kept_weighted_target_tokens'))
+        return True
 
     def measured_sft_speed(self):
         """{GPU name: round SFT speed against the DGX} this loop measured on rounds that moved (``sft-speed.json``)."""
@@ -3350,7 +3588,7 @@ class AsyncRoundDriver:
                 self.prepare_ahead(self.round_dir(nxt), self.lineage_policies())
                 update_round_manifest(round_dir, trained_from=cur['sha256'], trained_from_version=cur['version'])
                 factors = self.train_sft(round_dir, cur)
-                mix = round_dir / 'mix'
+                mix = self.round_mix(round_dir)
             else:
                 self.stop_collections()
                 factors = self.train_grpo(round_dir, cur)
@@ -3730,6 +3968,17 @@ def main():
     ad.add_argument('--round-target-tokens', type=int, default=ROUND_TARGET_TOKENS,
                     help='a round mix\'s weighted target tokens (sft_sources build --max-target-tokens: every part '
                          'scaled alike, unseen episodes first); 0: the uncapped build (r0001: 37.4M, 1247 steps)')
+    ad.add_argument('--colab-round-hours', type=float, default=COLAB_ROUND_HOURS,
+                    help='a round prepared while a Colab session fit for SFT answers is sized to this many hours of '
+                         'its learner (forward tokens at its measured throughput, round-speed.json; the target cap and '
+                         'teacher budget scaled alike, never below the DGX round); 0: every round is the DGX size')
+    ad.add_argument('--no-dgx-recap', action='store_true',
+                    help='a round sized for a session that starts on the DGX trains its whole mix there (default: '
+                         'recapped to --round-target-tokens first, sft_sources recap)')
+    ad.add_argument('--no-prefer-inflight', action='store_true',
+                    help='a round prepared while another trains does not prefer unseen over that round\'s mix')
+    ad.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default=None,
+                    help='sft_sources build --unfilled-live-teacher (default auto: kept, teacher reasoning as context)')
     ad.add_argument('--fallback-wait-minutes', type=float, default=30.0)
     ad.add_argument('--no-sft-handback', action='store_true',
                     help='a round training on the DGX (a takeover) stays there; by default it moves to a Colab session '
