@@ -124,6 +124,9 @@ def test_open_goal_sft_uses_native_trajectory_and_retains_rejected_actions(tmp_p
     assert ir['version'] == 'natlang.teacher_trajectory.native/1'
     assert ir['task']['interaction'] == interaction
     assert ir['outcome']['invocation_ledger'][0]['events'] == detail['events']
+    assert ir['outcome']['graph_metrics']['invocations'] == 1
+    assert ir['outcome']['graph_metrics']['max_depth'] == 0
+    assert ir['outcome']['graph_metrics']['unique_function_paths']
     assert [turn['training_admission']['approved'] for turn in ir['trajectory']] == [False, True, False]
     assert ir['trajectory'][0]['assistant']['calls'][0]['id'] == 'actual-tool-id'
     assert episode['turns'][0]['target']['tool_calls'][0]['id'] == 'actual-recovery-id'

@@ -64,6 +64,9 @@ async function handle(message: ToWorker): Promise<void> {
     if (message.op === 'write') {
       (store[message.method] as (...args: unknown[]) => void)(...message.args);
       publish();
+    } else if(message.op === 'checkpoint') {
+      store.checkpoint(...message.args);
+      scope.postMessage({type:'reply',id:message.id,ok:true});
     } else if (message.op === 'statistics') {
       const statistics = store.iterationStatistics();
       if (message.action === 'write') void statistics.write(message.key!, message.value!);

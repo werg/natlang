@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import sha256_file_hex
+from observed_graph_metrics import graph_metrics
 
 NATIVE_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1'
 OBSERVED_WORKSPACE = 'observed-live-workspace'
@@ -253,7 +254,7 @@ def observed_graph(details, ancestry, scopes, exclusions):
     """Keep each invocation's own event ordering and original resource receipts."""
     return [
         {'call_id': record['call_id'], 'parent_call_id': record['parent_call_id'],
-         'parent_action_index': record.get('parent_action_index'),
+         'parent_action_index': record.get('parent_action_index'), 'program_root': record.get('program_root'),
          'definition': record['definition'], 'executor': record['executor'], 'outcome': record.get('outcome'),
          'root_call_id': ancestry[record['call_id']][0], 'artifact': binding, 'scope': scopes[record['call_id']],
          'inputs': record.get('inputs'), 'output': record.get('output'), 'effects': record.get('effects') or [],
@@ -503,6 +504,7 @@ def load_episode(path):
                         **({'excluded_return_decisions': [{'invocation_id': call_id, 'ordinal': ordinal}
                              for call_id, ordinal in incorrect_returns.items()]} if incorrect_returns else {}),
                         **({'training_scope': verification['training_scope']} if training_scope is not None else {}),
+                        'graph_metrics': graph_metrics(records.values()),
                         'invocation_ledger': observed_graph(details, ancestry, scopes, exclusions)},
             'trajectory': decisions,
         }

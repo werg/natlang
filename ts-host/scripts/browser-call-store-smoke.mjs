@@ -22,8 +22,10 @@ const price = loadVirtualNatlang({ 'price.nl': '---\\nargs: { id: string }\\nret
 const model = async () => ({ calls: [['return_result', { status: 'success', value: 30 }]] });
 window.smoke = async id => {
   const runtime = createNatlangRuntime({ model });
-  const value = await runtime.run(() => price(id));
   const store = runtime.callStore();
+  // The smoke's temporary origin must not evict its fixtures due to unrelated host disk pressure.
+  try { await store.ready; await store.query('writeSettings',{minFreeBytes:0}); } catch {}
+  const value = await runtime.run(() => price(id));
   let calls = null, record = null, error = null;
   try {
     await store.ready;
@@ -32,6 +34,26 @@ window.smoke = async id => {
   } catch (caught) { error = String(caught.message ?? caught); }
   return { value, calls: calls?.map(call => [call.definition_name, call.outcome]) ?? null,
     input: record ? await store.query('value', record.inputs.id) : null, error };
+};
+window.checkpointSmoke = async () => {
+  const store=createNatlangRuntime({model}).callStore(); await store.ready;
+  const id='unfinished-native-checkpoint';
+  const text=JSON.stringify({receipt:'observed native bytes',revision:7});
+  const bytes=new TextEncoder().encode(text);
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(value=>value.toString(16).padStart(2,'0')).join('');
+  const ref={complete:true,hash,bytes:bytes.length};
+  store.begin({callId:id,parentCallId:null,parentActionIndex:null,taskId:'checkpoint',programId:null,programRoot:null,
+    definition:{id:'native-checkpoint',name:'native-checkpoint',source:null,key:'key',interface:'interface',site:'named'},
+    modelId:null,startedAt:new Date().toISOString(),auditOf:null});
+  await store.checkpoint(id,{version:'natlang.call-checkpoint/1',call_id:id,inputs:{native:ref},effects:[{result:ref}]},new Map([[hash,text]]));
+  await store.close();
+};
+window.readCheckpointSmoke = async () => {
+  const store=createNatlangRuntime({model}).callStore();await store.ready;
+  const rows=await store.query('annotations','unfinished-native-checkpoint');
+  const state=rows.find(row=>row.kind==='call-checkpoint')?.value;
+  return {value:state?await store.query('value',state.effects[0].result):null,
+    completed:!!(await store.query('call','unfinished-native-checkpoint'))};
 };
 </script>`;
 
@@ -60,6 +82,11 @@ try {
   await page.waitForFunction(() => typeof window.smoke === 'function');
   const second = await page.evaluate(() => window.smoke('abcd'));
   check('records survive a reload', second.calls?.length === 2 && second.calls.every(([name, outcome]) => name === 'price' && outcome === 'done'), second);
+  await page.evaluate(()=>window.checkpointSmoke());
+  await page.reload();
+  await page.waitForFunction(()=>typeof window.readCheckpointSmoke==='function');
+  const unfinished=await page.evaluate(()=>window.readCheckpointSmoke());
+  check('unfinished native evidence survives OPFS close/reload without a completed record',unfinished.value?.receipt==='observed native bytes'&&unfinished.value?.revision===7&&!unfinished.completed,unfinished);
   const other = await context.newPage();
   other.on('console', message => console.log(`  [tab 2] ${message.text()}`));
   await other.goto(url);

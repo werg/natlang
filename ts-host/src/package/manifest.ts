@@ -29,7 +29,7 @@ export type NatlangPackageManifest = {
   dependencies?: Record<string, string>;
   engines?: { natlang?: string; node?: string };
   /** What the runtime records of this program's calls (plans/TRACE_SPECIALIZATION.md §3.2). */
-  recording?: { exclude?: string[] };
+  recording?: { exclude?: string[]; checkpoints?: boolean };
   /** How far stored compilations may serve this program's calls; the machine setting still bounds it. */
   specialization?: 'off' | 'shadow' | 'on';
   /** How `Is<T, "predicate">` slots are checked: threshold, uncertainty band, policy, mode (plans/REFINEMENT_TYPES.md). */
@@ -113,8 +113,9 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
   if (raw.recording !== undefined) {
     if (!raw.recording || typeof raw.recording !== 'object' || Array.isArray(raw.recording)) throw new TypeError('recording must be an object');
     const fields = raw.recording as Record<string, unknown>;
-    for (const key of Object.keys(fields)) if (key !== 'exclude') throw new TypeError(`unknown recording field: ${key}`);
-    recording = fields.exclude === undefined ? {} : { exclude: requireStrings(fields.exclude, 'recording.exclude') };
+    for (const key of Object.keys(fields)) if (key !== 'exclude' && key !== 'checkpoints') throw new TypeError(`unknown recording field: ${key}`);
+    if(fields.checkpoints !== undefined && typeof fields.checkpoints !== 'boolean') throw new TypeError('recording.checkpoints must be a boolean');
+    recording = {...(fields.exclude === undefined ? {} : { exclude: requireStrings(fields.exclude, 'recording.exclude') }),...(fields.checkpoints === undefined ? {} : {checkpoints:fields.checkpoints as boolean})};
   }
   if (raw.specialization !== undefined && !['off', 'shadow', 'on'].includes(raw.specialization as string))
     throw new TypeError('specialization must be "off", "shadow" or "on"');

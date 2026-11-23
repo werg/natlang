@@ -1,0 +1,143 @@
+{
+  "id": "natlang-rl-task-supply-20261123sfp2",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-task-supply-20261123sfp2",
+  "include": [
+    "cases.jsonl",
+    "selection.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl) + selection.json",
+  "rows": 187,
+  "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
+  "protected": false,
+  "note": "authored workers 407-428: 187 train rows",
+  "inputs": [
+    {
+      "id": "natlang-rl-authoring-admitted",
+      "path": "data_hdd:natlang-rl-authoring/admitted/cases.jsonl",
+      "sha256": "7e961146dd023f61c451f30c00ea156e4e63629c431803756455d35190de5097"
+    },
+    {
+      "id": "natlang-rl-authoring-admitted",
+      "path": "data_hdd:natlang-rl-authoring/admitted/admissions.jsonl",
+      "sha256": "f400a237ff50a241b69d5b63152f7ac2ab4d4100f326e9f50942712b6bd95171"
+    },
+    {
+      "id": "memetic-program-source-20261105",
+      "path": "data_hdd:natlang-rl-composed-20261103/memetic-program-source-20261105/cases.jsonl",
+      "sha256": "b3fef4c7dcd36e0bedbd03c67353634b5d7323ad0468ac1d0f73533f2e5de966"
+    },
+    {
+      "id": "natlang-rl-bgkit-kr-20261103",
+      "path": "data_hdd:natlang-rl-bgkit-kr-20261103/natlang-rl-bgkit-kr-20261103/cases.jsonl",
+      "sha256": "7e047e956a0f305f34704c854dc409a91b868a4cd552e0a43e6fb50809e3e8b3"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261117",
+      "path": "data_hdd:natlang-rl-task-supply-20261117/cases.jsonl",
+      "sha256": "32a42eff93a4e7cc73358a7b6e392f09bb01c44dc14284c9c823c32e0ca1fc8b"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118",
+      "path": "data_hdd:natlang-rl-task-supply-20261118/cases.jsonl",
+      "sha256": "eaeb163dd848419ea9287d87895b41b9b163c08f09dfb9ecb1400adf6d5bd140"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118b",
+      "path": "data_hdd:natlang-rl-task-supply-20261118b/cases.jsonl",
+      "sha256": "7cb2bbe0a1c005bd6bb2d31e27f63b0e4c5a03adbb92ca6d575f900dfb0d9eed"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118c",
+      "path": "data_hdd:natlang-rl-task-supply-20261118c/cases.jsonl",
+      "sha256": "653f5e188a013018da57d4795d6827f55da1f2962822558437b3d3f3904f748d"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118d",
+      "path": "data_hdd:natlang-rl-task-supply-20261118d/cases.jsonl",
+      "sha256": "c1cb1fe928b67b7be2b8c55167b3a1d920d2531b9f819fd7e6e6f659883b67d3"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118e",
+      "path": "data_hdd:natlang-rl-task-supply-20261118e/cases.jsonl",
+      "sha256": "683d809c968ed728a1900806608a91de04a14db5017f91fad83e4960333cc05b"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118f",
+      "path": "data_hdd:natlang-rl-task-supply-20261118f/cases.jsonl",
+      "sha256": "7ac2f616080a365a13a78ef84d87cf3b77de021ed757cd32edcc965d64245c72"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118g",
+      "path": "data_hdd:natlang-rl-task-supply-20261118g/cases.jsonl",
+      "sha256": "08a41781daf086495284b6cf5ec841c33b90b09868330b8e370a6f86a98c2a8f"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119",
+      "path": "data_hdd:natlang-rl-task-supply-20261119/cases.jsonl",
+      "sha256": "e738c39363027fc08260a3cd47738d387b1f7332ed5138748889516d3ae22ec6"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119b",
+      "path": "data_hdd:natlang-rl-task-supply-20261119b/cases.jsonl",
+      "sha256": "23cdd0d4418b04813b7c2a6b51464a8bcfd0b7966c9ec24c7fb26af03e09448d"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119c",
+      "path": "data_hdd:natlang-rl-task-supply-20261119c/cases.jsonl",
+      "sha256": "4696531231c8ed283a24a45b4896a8d0d3441f581d2461eb5f5de3b29635a46d"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119d",
+      "path": "data_hdd:natlang-rl-task-supply-20261119d/cases.jsonl",
+      "sha256": "331c4aeff464095a56a09ec13aec8178ddc6ed011e9b91485e010e838633b3b8"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120",
+      "path": "data_hdd:natlang-rl-task-supply-20261120/cases.jsonl",
+      "sha256": "226c7742ab8b86be929013c63884bd98627655b51a06129250994c607de7dbf4"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120b",
+      "path": "data_hdd:natlang-rl-task-supply-20261120b/cases.jsonl",
+      "sha256": "304049309cb100ffbbc837c1d866f7ce6f5f8b50dd98d8695a96659e5168af0c"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120c",
+      "path": "data_hdd:natlang-rl-task-supply-20261120c/cases.jsonl",
+      "sha256": "d88bd237032b9e5105db2d8e9c42e976267f56076e373a3f47be761cd2570164"
+    },
+    {
+      "id": "natlang-rl-git-history-20261120",
+      "path": "data_hdd:natlang-rl-git-history-20261120/cases.jsonl",
+      "sha256": "5a51b45a2075a05b42517c4ae5d0c5cb8e0e4cbef87029aaa57d38f54663dbb3"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261123sfp1",
+      "path": "data_hdd:natlang-rl-task-supply-20261123sfp1/cases.jsonl",
+      "sha256": "1e1ba8a5a46f84b0a5bf38e9748e7a69c35ed58878a16a466e728e911d44d941"
+    }
+  ],
+  "producer": {
+    "script": "build_supply.py",
+    "argv": [
+      "runs/natlang-rl-task-supply-20261123sfp2",
+      "--min-worker",
+      "407",
+      "--max-worker",
+      "428"
+    ],
+    "git_commit": "4cfc911991386c9b6a9ec459c880c5fc5757ffd5",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "79acc1a06bbe51d08d6dc67f4666b6e7bc5eca0c3d3090613068b269378c2ad5",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 19,
+      "file": "cases.jsonl"
+    }
+  }
+}

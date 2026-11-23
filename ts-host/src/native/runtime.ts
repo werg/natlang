@@ -825,10 +825,12 @@ export class NativeRuntime {
     // has already wrapped (the kernel records with its own call IDs) are used as given.
     const services = options.services ?? {};
     const observe = options.observeEffect;
-    this.services = isRecording(services) ? services : recordingServices(services, ({ exact, ...event }) => (observe?.({ ...event, exact }), event.phase === 'requested') ?
-      this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }) :
-      graphNode(this.trace, 'effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event },
-        [{ node: invocationNodeId(this.options.runId), port: 'caller' }]));
+    this.services = isRecording(services) ? services : recordingServices(services, ({ exact, ...event }) => {
+      const persisted = observe?.({ ...event, exact });
+      if(event.phase === 'requested') this.trace.emit('effect', {call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event});
+      else graphNode(this.trace,'effect',{call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event},[{node:invocationNodeId(this.options.runId),port:'caller'}]);
+      return persisted;
+    });
     this.declarations = options.declarations ?? {};
     this.neuralese = options.neuralese;
     this.serviceScopes = options.serviceScopes ?? {};

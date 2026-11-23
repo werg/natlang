@@ -1,0 +1,9 @@
+# Observed call graph telemetry
+
+Inventory: Host `export-live-workflow-teacher.mjs` retains original calls, native effects and chronological parent/action custody. `live_teacher_sources.py` validates that retained graph and projects the invocation ledger, but reports no diversity summary. `vibestudio_campaign.py` archives every attempt and exports admitted trajectories/counts; its failures remain raw capture evidence. Existing mixture `max_depth`/`max_branching` labels concern older curated data and are not telemetry of these live captures.
+
+Add descriptive Python metadata only: graph depth (root zero), branching, actual function source paths, observed parent/child edges and skill-source namespace composition. Use all authentic retained calls, including crisp and failed calls; do not count only supervised decisions. Add metrics to the admitted trajectory outcome and a campaign sidecar covering completed, partial and preserved-failure captures separately. Missing/cyclic ancestry is reported as incomplete rather than fabricated depth. Source namespaces describe observed code composition, not guessed user semantics.
+
+No admission rule, route, threshold, reward, Core schema or runtime pin changes. Exported captures remain immutable. The graph sidecar binds source files by their existing archive identity and is included in newly registered cohort data. Historical exported markers remain unchanged; telemetry can be backfilled independently.
+
+Validation: 82 focused loader/campaign/graph tests pass, including native trajectory round-trip, branching/composition, cycle/orphan diagnostics and preserved failed/no-capture cohorts. Quick main gate passes. Read-only telemetry on eight retained wave0027 captures found one completed graph (4 invocations, depth2/branching2) and seven failed graphs (62 invocations, maximum depth7/branching7), with no parent anomalies. Those numbers describe evidence; they do not set any acceptance threshold.
