@@ -157,6 +157,14 @@ Brief E covered only the Neuralese-free capabilities. Open:
 
 ## Operations
 
+- **Data inclusion schedule (coordinator, 2026-11-24; owner: be circumspect about time, have the next round ready promptly):**
+  - **T1, about 01:50 (round 1 publish).** Restart the driver on the newest pin, carrying the Vibestudio session's added arguments (`--data-repo`, `--fill-repo`, `--minimum-data-reader-commit`). It takes:
+    - the read-back, marker-row, produce-span and duplicate-learner fixes;
+    - the new collection v0001 of the round 1 policy, which draws the typed-contract pool and the 242 new tasks from grpo-pool.
+  - **Round 2's mix:** if the round-budget and teacher-as-context changes are pushed by 01:30, remove `r0002/stages/build.done` and `prepared.done` before the restart, so round 2's build reruns under them (about 20 min). Otherwise round 2 trains as prepared (6.2M target tokens).
+  - **Also at T1:** the teacher specs and Pop collector arguments that are ready by then.
+  - **T2, about 02:30–03:00 (during round 2's SFT, before round 3's build finishes).** Restart again only if changes arrived after T1: teacher specs, Pop, the fallow-22 graphs, the budget work. Round 3's build then uses them, with collection v0001 at about 1.5 h of episodes.
+  - **Continuous:** verified teacher episodes accrue in the teacher pool, and each build takes what exists. Program tuning uses A100 gaps and never delays a round SFT.
 - **aei1 remote collector runs old code:** `aei1-collect-v0000-remote0` was started at 19:15 on 2026-11-23 from pin 108cd84. Its ts-host lacks 98651c669, so against an actor serving the read-back fix it throws `neuralese-native-grad-invalid` on in-context reads. Replace it with a collector at the driver pin at the round boundary, or when the A100 actor is served again after round 1's SFT. Owner: coordinator.
 - **aei1 driver controller owned by the Vibestudio session since 22:41 on 2026-11-23:** `resume-semantic-reader-owner.py` replaced the coordinator's driver with the same argv (pin bdf4c8721, variants on), with controller code from 97e82bcd5 on origin/main and `--data-repo`/`--fill-repo` at its reader pin. The coordinator accepted this: the code contains the hand-back. Its unit is `aei1-drive-reader-v14-final-20261123`. Coordinate before restarting it.
 - **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**

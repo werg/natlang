@@ -1,0 +1,1519 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-interruption-0037-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-interruption-0037-20261123",
+  "files": [
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/call-0.json",
+      "bytes": 307563,
+      "sha256": "d25effff96ce810f9bd6ce71d475cfe019c56e0df827b71e8b8e05351c3cb5bc"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/call-1.json",
+      "bytes": 449129,
+      "sha256": "3fd811ac448bfc914ad146a705b4ec8be74d0c24ffe4af76fa1f2bbc8071f7e8"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/call-2.json",
+      "bytes": 314938,
+      "sha256": "9f6855462270835434c2217a7dd548c5e1c17aa5f158a2fe4eff784487e22b28"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/call-3.json",
+      "bytes": 334599,
+      "sha256": "2fd6a651814b9e0ec844b23bddd335d5bbdc6775667138505f5f3d211f7daa84"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/call-4.json",
+      "bytes": 987847,
+      "sha256": "3c523bba299dd678849498ec3d0401170d8eb185ed1e24047099f3c8b330842f"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/manifest.json",
+      "bytes": 2991,
+      "sha256": "b0b2d064f670b1945b959998b331c1ff4b1ff573123052d796209ad495e4c053"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/open-goal-content-archive-managed.ts",
+      "bytes": 23633,
+      "sha256": "f16666d4cd6bee7c8954d34f2e9537f68a2325a98ba95e1acf3d01bbf4043d6f"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/verification.json",
+      "bytes": 3195,
+      "sha256": "98ad79c0532f841fd98cddbf5589b48953a07d0103880adbcb3fda67c4fc0f91"
+    },
+    {
+      "path": "capture/0037-open-goal-content-archive-same-current-edition-does-not-create-edit/workspace.json",
+      "bytes": 20489,
+      "sha256": "455b55ce4a67d5c649f80a1dcd190ae51e304467549365c2f47780121bf16d39"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/call-0.json",
+      "bytes": 300041,
+      "sha256": "3381cbf265677fdc90cf5834989a9db2894ab8b09b2b33530ee2de2acbced1bf"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/call-1.json",
+      "bytes": 324283,
+      "sha256": "de9fae5f4e7820b55382f6fc92a5f8cacfac86269648341effb55859edf45b01"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/call-2.json",
+      "bytes": 302478,
+      "sha256": "456270aca1adc1c726e3ebec4a73946a44242d0e7d2455ddac9f1055585195e6"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/call-3.json",
+      "bytes": 347919,
+      "sha256": "b4af05327b9a38f0ef3e6825102930aa29295528585cd5c01688c82c89163434"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/manifest.json",
+      "bytes": 2871,
+      "sha256": "6deab8946f239b8c32b787780fa2b74c5bb4f64db8e4ebf9b3348ed2ff902ede"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/open-goal-delivery-wake-managed.ts",
+      "bytes": 20908,
+      "sha256": "799097ac18d02408b75029b08f2452cd3deea92e491d0c02880a5a59acef518a"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/verification.json",
+      "bytes": 2992,
+      "sha256": "c467e11d9eb3c6d4df3f38676ff10647585218e95f46001681dcefeb8291f7b8"
+    },
+    {
+      "path": "capture/0037-open-goal-delivery-wake-pre-wake-progress-is-no-terminal/workspace.json",
+      "bytes": 13673,
+      "sha256": "e910140a259c1e53d7c04ba415f43e8c658e55684ddca49a59ec39f38da28254"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-0.json",
+      "bytes": 314879,
+      "sha256": "8674533332344bc8d4b10b609932444a2847d30b50fd1848e31189fffd15dfb1"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-1.json",
+      "bytes": 373549,
+      "sha256": "2f7b2209ef7f446320d901d52b3ff8523ecc41eaff2f4143c3b5a8187678f36f"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-2.json",
+      "bytes": 271463,
+      "sha256": "d36f162363ae1b4fcbd6c234cc7eeaf852cbd95b18d487735ba7d117ea418e3f"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-3.json",
+      "bytes": 284417,
+      "sha256": "723d84b99f84070d80c307a50cb6588604277098251d77b54d93b13e0a2e95dc"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-4.json",
+      "bytes": 268251,
+      "sha256": "e1fd6c5400f790add3e682856ed16c1ebc1d0ce1db76a83debe5a8143bbace7f"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-5.json",
+      "bytes": 298184,
+      "sha256": "9d943a761236e17823e8160a055016b3cd35057b3fd61464e9841cda65efb00d"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-6.json",
+      "bytes": 599778,
+      "sha256": "fe3a8fbbd4da343a5490ae0bf6e4e5a202ee3c42ce0163e98229f7c0b0a3adbb"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-7.json",
+      "bytes": 464531,
+      "sha256": "0554d4369d2e424fa95936c6430dea1d0838f775d4d733134ae7847a72f7a793"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/call-8.json",
+      "bytes": 1330371,
+      "sha256": "0edc82b9627c71e0a220ec2c03399eaeca059cb935a4b5451184bfa6d63e8c9c"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/manifest.json",
+      "bytes": 3723,
+      "sha256": "140e2a82e95ea24c3411bdc42f0a5ac9df7dd90089dc4aacc18c73dbeecef373"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/open-goal-deployed-interface-managed.ts",
+      "bytes": 20676,
+      "sha256": "3ea2ae6de445f7540e4855e35a13ed428719668bc27ec966cc1f31a31ec63b8b"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/verification.json",
+      "bytes": 4453,
+      "sha256": "cc7d8edec181b754f72dcff924436fa6f4d50e93609647a6f7e1b4ce24ed32d4"
+    },
+    {
+      "path": "capture/0037-open-goal-deployed-interface-do-not-let-projection-own-history/workspace.json",
+      "bytes": 16273,
+      "sha256": "a6501e6a2f88e68e66fda6fcd4cf5e8ff71bcf14f2a5388d6ab1d078870cb377"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-0.json",
+      "bytes": 312220,
+      "sha256": "13ea527dfbb385308bc318343309e91f163d5b1b1dc93c32edf6bb31bbb0b42f"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-1.json",
+      "bytes": 291681,
+      "sha256": "26ea51db511826f649a6b4868536a8aed378e388c3dd5e9ec70b77129418e30e"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-10.json",
+      "bytes": 341432,
+      "sha256": "01919450d55d4489ec8712c81d23d800809cdfc862f7f6769f72064f22e235f1"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-11.json",
+      "bytes": 361572,
+      "sha256": "07aa755db6ecc89e50481c889dcac409eac95dfe11524cc2a3c5186e189a018d"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-12.json",
+      "bytes": 815456,
+      "sha256": "e56ead93b2add7576be18abe0ba8c5a3b718399196eaed6ac5f2e661068d704e"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-2.json",
+      "bytes": 301791,
+      "sha256": "c564857a47105fac96921e8109bf4a468ddb56299c700d1817b1e681bf2a2a0d"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-3.json",
+      "bytes": 316732,
+      "sha256": "09abd158a52ae1cbbc07bd9667d1b89e62d2edadfe9a055d394da1b6a8c01b9b"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-4.json",
+      "bytes": 279344,
+      "sha256": "4c462b888c1ea85ccc4825cc80715b4f4ad8b9ffaf6a55e81499af9739e6d82c"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-5.json",
+      "bytes": 284135,
+      "sha256": "92670b0e7fe117a0f2c75537aadec36490ff7b7a1ceb1d803f19489c2c5c2381"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-6.json",
+      "bytes": 294702,
+      "sha256": "85ebce8d79357d445131e04a0a3baa86578408884625e5396c51252ad3a4d518"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-7.json",
+      "bytes": 281086,
+      "sha256": "de13ad8a110a2e51d22990460570ddf34325328a8b33ce50658be1073dbe45ed"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-8.json",
+      "bytes": 297549,
+      "sha256": "af61a9728fa93539354ce5e3652b6508942c305b83e0d05cc5dbd53a4e8a8acf"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/call-9.json",
+      "bytes": 318527,
+      "sha256": "c1b9b6f9a0ea452e77b7e3d95edf8059e8567326838c3c35e506fd60941d8ca1"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/manifest.json",
+      "bytes": 4135,
+      "sha256": "9f75675377ba74949f9b537c0f9751d418075a7f45c44d258289cf9d3c6e0b8b"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/open-goal-desktop-readiness-managed.ts",
+      "bytes": 17910,
+      "sha256": "e871b255371ecd09de9cbbe616b3cd958c979f6539f2d0250c7703b413d54d0a"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/verification.json",
+      "bytes": 5358,
+      "sha256": "57f76aa6c2ff7e0bc08db3dd60c92445202fb81fc4f640ba1c4869fbd689946e"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-lease-review-pending/workspace.json",
+      "bytes": 23733,
+      "sha256": "5d27ad76def987eb5769dbe60a267643ccc782b83f6b2d80a1885f4eb7e3a94f"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-0.json",
+      "bytes": 315034,
+      "sha256": "19a41cd92421ca71d529150f5fca772ccaa4882e1d4794d7c96a6e59302fde03"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-1.json",
+      "bytes": 291837,
+      "sha256": "151804ee3e3a7768fddaf847390ae642f785d940341918cf840dc3afa6c96862"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-10.json",
+      "bytes": 341161,
+      "sha256": "9bf2012bb79bcf0ea3b6a3e5ae4069900a30bc095e7ab2e73accf9927d6f4a9f"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-11.json",
+      "bytes": 361912,
+      "sha256": "bf5a76d9b12ff1ba5d8a494f34effbff5e8ce75e3393c62ef08a6f1f486cc968"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-12.json",
+      "bytes": 613031,
+      "sha256": "61b1edc7e2b2b7dc87e096462bb169888c8006545ac50ae9ebd121210cf114b2"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-2.json",
+      "bytes": 301776,
+      "sha256": "ad9250330ffc2e8cec7e86656b3c19b332cc7d9a7391947ca5650357519d7bcb"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-3.json",
+      "bytes": 305720,
+      "sha256": "62a15e9dc0bbd72b3211ad2d92c35e1d2d405bdb88a7e7155317bf0c9032af8d"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-4.json",
+      "bytes": 381454,
+      "sha256": "537928f920ed492db3ed773ca34dcea6fb57743face0cc78c91a43b38326c68b"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-5.json",
+      "bytes": 283548,
+      "sha256": "37ded02e338f1b0f8404f66f02573f9aecc888aea3ec4b649adc245bc8056cbe"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-6.json",
+      "bytes": 294597,
+      "sha256": "aecfb3db1fee734faf9ae6309f31bf76bfca7f4fd85ec53624a7021d081e5639"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-7.json",
+      "bytes": 280902,
+      "sha256": "5a43b09d16580a1106c3402a9e9a9cb6f323e0dcb49be109f5e543a39cba672e"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-8.json",
+      "bytes": 297941,
+      "sha256": "e71ceac01ec1b2c0a248b8911def9d966d4824b3bf67bf85b18cc170864ca2d1"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/call-9.json",
+      "bytes": 318603,
+      "sha256": "8ef7d642724f29b2cdaeb09730c54b2f6bd3ea933b44e9db7454d96841a8c7c3"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/manifest.json",
+      "bytes": 4089,
+      "sha256": "1ad3145d54906f5604d7b4898c07f4e1ab05197c116d822a300061508ef6b659"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/open-goal-desktop-readiness-managed.ts",
+      "bytes": 17910,
+      "sha256": "e871b255371ecd09de9cbbe616b3cd958c979f6539f2d0250c7703b413d54d0a"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/verification.json",
+      "bytes": 5296,
+      "sha256": "ce6563e0310e6df01fea3a709bfa7bbf080bbb2743d363bf101375d90f3f1754"
+    },
+    {
+      "path": "capture/0037-open-goal-desktop-readiness-script-edit-before-new-build/workspace.json",
+      "bytes": 23741,
+      "sha256": "c8cf4b293d6f0e3e58ff022e5c2d11a71af20cf17fc37ab9a4040ac29656b5fe"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/call-0.json",
+      "bytes": 117516,
+      "sha256": "fb8ecfeb1bbbff62600eeef44033095c1487e23a9e4e1e9faf90a1e6b2e4331f"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/call-1.json",
+      "bytes": 128293,
+      "sha256": "e2bd3d2e0df2c93dc185f8ad4b35caf7969bf748a9963507cc7e6683a423784b"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/call-2.json",
+      "bytes": 149913,
+      "sha256": "6556e6dc1923b31ab1f5f8167bc4a0de3968fc0447ea41d83710331d1cad7dd0"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/call-3.json",
+      "bytes": 760884,
+      "sha256": "3f4dc879c6fca7ca116eb834a76603b94d849e73877cf5571818cf5f5f2a91aa"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/call-4.json",
+      "bytes": 864628,
+      "sha256": "3967e9b15967b71808de57f8a3a709e894c8c883b4b5ade92852d6ddf91a40ba"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/call-5.json",
+      "bytes": 873364,
+      "sha256": "ee0a6bd2165b2cda4b6468c64ffccde1bdda3475d9dee00030e236968a9e7c01"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/manifest.json",
+      "bytes": 3401,
+      "sha256": "3b65d3a82557328080fe8b3d7f79849eeccc58641eb32fa2c20d0b7ef59d4f73"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/open-goal-recovery-managed.ts",
+      "bytes": 13540,
+      "sha256": "77c10034156ca1fb952d1a892b062d0a8911ceeb8e2f6a6a6913224ebc0ea89c"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/verification.json",
+      "bytes": 3736,
+      "sha256": "5f8f8d27f9064883d603690db9438aef8aee23eda0dc95d114614301eed1e4d8"
+    },
+    {
+      "path": "capture/0037-open-goal-distinguish-copied-tour-release-from-museum-hold/workspace.json",
+      "bytes": 10199,
+      "sha256": "cfa77d0af1aaddaab116aada18293dec33c7ed371db726632dc80c15f543eece"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-0.json",
+      "bytes": 340596,
+      "sha256": "0f71fecb3bcf9a59f55fc763c00408d5a623a87030f1bd84646f96930510d771"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-1.json",
+      "bytes": 313528,
+      "sha256": "b4d62e45ed5b1e96850b92bb0f7cef0c12bcc6205e9787a60cecc77a2d18e75c"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-2.json",
+      "bytes": 456926,
+      "sha256": "ea0d14ef3890b79eda2708de7216cb1087d69d326194a70a23854d225e6f5761"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-3.json",
+      "bytes": 291967,
+      "sha256": "30c1ba34befb939a1ff6aa264313b0d049366b280efe14f9f70bf4a64e776ca2"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-4.json",
+      "bytes": 264368,
+      "sha256": "73bee28c4001348a872df676d81a4ef1ec10e76592ba093f306683b5958d11c7"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-5.json",
+      "bytes": 271227,
+      "sha256": "2b0807b9a9325854f0a2ed5f3b13acbf32ed6b253e4677f124b1739089a6dc85"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-6.json",
+      "bytes": 917453,
+      "sha256": "c9ea49275d767909e8734cf0aed8f521fb2a6de63243db133a2a826cba1afe97"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-7.json",
+      "bytes": 297673,
+      "sha256": "4261801eb6c796508ad37dbfdbf9349ebf508aeefcd09d185a4959706321b7d2"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-8.json",
+      "bytes": 485916,
+      "sha256": "0d47bf52eda165f68e58efdefdde084b122f92136e9813bd767a2c3eaa2b8c7a"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/call-9.json",
+      "bytes": 1681092,
+      "sha256": "6845de29eb10d085a3edffe3df8d6152a00a7e2e74e2878db6f22526485ce948"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/manifest.json",
+      "bytes": 3896,
+      "sha256": "53bb1d75d9415555e7006ceea5cfb2b4f18c7c648d49022fb330ac2a5348a11a"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/open-goal-extension-dossier-managed.ts",
+      "bytes": 25019,
+      "sha256": "126420782e42394944d361e03a4f13bc8ca7238f16627d9da7c98a4a79c01fb7"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/verification.json",
+      "bytes": 4769,
+      "sha256": "24fa8d7b9bf88838be3f855ffdb89fa998f10e018c5940432bafda3b6ad1f92e"
+    },
+    {
+      "path": "capture/0037-open-goal-extension-dossier-image-dependency-separate-runtime-and-candidate/workspace.json",
+      "bytes": 17019,
+      "sha256": "52ede4bc334314d545244978bc0f5ad378062d5789f69f49c941ac6cf86391d4"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-0.json",
+      "bytes": 257230,
+      "sha256": "4489aca89275cdbab5ba25612f6ba68a4e879349a790c71d378eef823496f850"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-1.json",
+      "bytes": 263864,
+      "sha256": "3b8254ccbcb3812ef5bf178c726d873772d6f324cd7c659a454abc0d27bffdc8"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-2.json",
+      "bytes": 275171,
+      "sha256": "3ac3b1467f0eb7d6bfa144c6681cb6e95058ad6256a9edeeabff631b92ce1bac"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-3.json",
+      "bytes": 323545,
+      "sha256": "badf924414385fac777cb46bf18c250dd8f3db0eb1916b82f756343f084e72a4"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-4.json",
+      "bytes": 340289,
+      "sha256": "35898b827dc4b380d6c94409829ab2be89081c6baeb88ad2a2ebb45cd68fd517"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-5.json",
+      "bytes": 350482,
+      "sha256": "1ed4f841322825f3fed3bd421ce85a6add1ccb706d8f1a09cf1de781c2009399"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-6.json",
+      "bytes": 301050,
+      "sha256": "1004b45be508ba3921d732da97ef07a21f38274c3cdb699e549f92e1f02f2e65"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-7.json",
+      "bytes": 341253,
+      "sha256": "0e057835e0a71afcf3cd8ae3c767cc6aa6b3d03606f2b73cc9023dc3767cf12d"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/call-8.json",
+      "bytes": 1657628,
+      "sha256": "331487e8effed43965644c1b08f41075e2065672c5f79e17a3247f8740a9f75e"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/manifest.json",
+      "bytes": 3735,
+      "sha256": "783fa883a52e8e1751afba0495747275777bbfd03768f4afea3fe7b933bc1fea"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/open-goal-installed-package-managed.ts",
+      "bytes": 24189,
+      "sha256": "6bb43a6980754a0285bf3d6e8b3ab36a64df632238f6fa84cca93779ea6eaae3"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/verification.json",
+      "bytes": 4444,
+      "sha256": "2f42590c9545e6c6a0cb4608da913e23c2ad4daec9debd0840508286c7abd17d"
+    },
+    {
+      "path": "capture/0037-open-goal-installed-package-records-runtime-store-semantic-restore/workspace.json",
+      "bytes": 23954,
+      "sha256": "450289d6e2447e336e50dd435a7455d8dab33190761621c3299e59f7f9d320e4"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-0.json",
+      "bytes": 104580,
+      "sha256": "180858b26e8d40aeb4862e15750c243323d3986b4d66c0e0196a434b8d6aaff3"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-1.json",
+      "bytes": 279418,
+      "sha256": "1628cb10352c60b1a333d3426b1bf0c7e698fa0a88eacb439d8ebfb28ff7dcae"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-10.json",
+      "bytes": 316086,
+      "sha256": "b65999531bfc301f2028e5de755e86bf759aae0d96c5f35e651f9ff5ee27156d"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-11.json",
+      "bytes": 120323,
+      "sha256": "d061877effd34a3f0190db9146a3db3b8535b52a72e93cbfef2b29bc28b4ec80"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-12.json",
+      "bytes": 276121,
+      "sha256": "f1e1180bdf7c5560f6f86aaa144241281cb6897be262eb3d81ea2def6b2aa97e"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-13.json",
+      "bytes": 104941,
+      "sha256": "024f4017071762702380078d0db55b6ecf29984ca2983299d9021ca0d62f9955"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-14.json",
+      "bytes": 105918,
+      "sha256": "8f2f32468d64174a78f39d4223bbb54883afbef40b957c9b008488f07436be92"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-15.json",
+      "bytes": 104655,
+      "sha256": "be979eba0cbd9363357931861aa48022e103bdedc02a681f0d7587c871140381"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-16.json",
+      "bytes": 101235,
+      "sha256": "c55f227549251ab1e88c400ee38fb5224e58b30d40df904414256273db11975a"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-17.json",
+      "bytes": 102366,
+      "sha256": "65f52ba3ad041f3669bc1f90fd73be2a4e462ae3ca57bcf7ddedcd3425ad38cb"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-18.json",
+      "bytes": 103641,
+      "sha256": "035dddf7f0574c39727925afc71fe4cd905566389656fe3995a1bea9cdeb2bfb"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-19.json",
+      "bytes": 723596,
+      "sha256": "91ca9417880df6ce8e2eb00d50daf2da961295a61cfa2fff583e8bd55f006f1d"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-2.json",
+      "bytes": 285995,
+      "sha256": "af93bffb5f76c4fddf7aeb01193e01fb0f9ef2287501d00891430bc5dcebd00a"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-20.json",
+      "bytes": 869629,
+      "sha256": "ed8d6bb6b84b94d06b4ba2d2cf56395099300f0fa8d146443195261571ab2587"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-3.json",
+      "bytes": 106494,
+      "sha256": "d92f91c9ba4c1b9a9a6ae1b686ceea892c9356c7be12d930bfff52eec57b83e7"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-4.json",
+      "bytes": 281745,
+      "sha256": "1cd1b28b28175425ca2bd6815ad5abaa66e8504f5e6616f864d5c760f34a1197"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-5.json",
+      "bytes": 288255,
+      "sha256": "9cde2106b5dd8866a66fc11380952d23dda5e3f7bc4034c8bd1d8406568759f7"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-6.json",
+      "bytes": 101008,
+      "sha256": "0ad40eeef33f00df1118cc3cf07c543ab0f0562940db9d890c916b697fb3c306"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-7.json",
+      "bytes": 279412,
+      "sha256": "8895d2bf3549c4f5e3bcad0b013c11129812b084f8eb2d860e1449aa8553ff9a"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-8.json",
+      "bytes": 287037,
+      "sha256": "ce84e4c8d9799840be20136be31fa14e3cdb1a4df8e12190c40152fc167784d2"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/call-9.json",
+      "bytes": 315829,
+      "sha256": "65427101e24c5b53337af53d6e01cfac273723eae6cd34fbe51ab7bae8c6df50"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/manifest.json",
+      "bytes": 5103,
+      "sha256": "6ce8fb0ee13fa7d6792b66333f31b707e507519c49ac83fea0abacfd7dae6061"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/open-goal-live-local-inventory-managed.ts",
+      "bytes": 4365,
+      "sha256": "306b25e31d93fd6e1e449a373b6aff0f05c38e9d28efaa49673cf72dfb383703"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/verification.json",
+      "bytes": 7358,
+      "sha256": "71deb75d0ce03411a66b6d38c8bda0b3209216c5c5dc1d7ba4da6b0fb3607913"
+    },
+    {
+      "path": "capture/0037-open-goal-live-local-inventory-address-list-reconciliation/workspace.json",
+      "bytes": 9892,
+      "sha256": "71b341bd112b5e2aa06da7bf2697172653faa483135f2e202df29f0e10dde7f1"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-0.json",
+      "bytes": 258319,
+      "sha256": "34e5b0d75506d0fcaf9c11a5a99f5a50a5b7c76575d3f821ccc038f6293a959d"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-1.json",
+      "bytes": 378846,
+      "sha256": "3be34f2b2f38bb04deb24851ce65030ac8a3c9ce7929333e2673678f79274185"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-2.json",
+      "bytes": 258269,
+      "sha256": "65befbfad45ffac9a5f40a04ecb3fa98cb2c8dd26bedd0f8e6b12e24c60379b2"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-3.json",
+      "bytes": 279725,
+      "sha256": "fcc591d4fdbcea710d604ed208c2e4121e15a72f633fe96fc41e9db13bd3be48"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-4.json",
+      "bytes": 465182,
+      "sha256": "3fa8ac459e5cc51710a0e362ac67523537bcd6e14d8b29158427a34d9be52060"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-5.json",
+      "bytes": 289490,
+      "sha256": "7be19e14b1df4b6a2995e697b5ac3a06379333e724465ad4736f09cb2795f5f9"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/call-6.json",
+      "bytes": 954723,
+      "sha256": "82b028f818b1be41506ac0669d113ab862f45a839449fdae894c3ba551e5be3c"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/manifest.json",
+      "bytes": 3115,
+      "sha256": "d1a813415b2e2f6796f98d0a67d69928b3846de8b48581cbb7c25f5074300bfd"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/open-goal-local-method-managed.ts",
+      "bytes": 18019,
+      "sha256": "9f00bef13fe9aa29477712d31a635630e070dd38c63ef633249c7d7b1fa186f1"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/verification.json",
+      "bytes": 3544,
+      "sha256": "6fa2fcbab5266704937811b0ce9da29718dfcd88a33acb8784eb29453bb9988b"
+    },
+    {
+      "path": "capture/0037-open-goal-local-method-compare-draft-names/workspace.json",
+      "bytes": 9450,
+      "sha256": "e5cc18b9df91b13910edf5535578be3e8f8dabe2b0e84249c0549bf7a1e07e27"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/call-0.json",
+      "bytes": 295705,
+      "sha256": "6e04c6591a9cf8aa592d80a09f4ba9b7a07e1aea1c9b4ce6e3430e52377b2259"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/call-1.json",
+      "bytes": 538658,
+      "sha256": "ce677de82400edd56db6b5cc3f00d22156113551e29b36774b6357f7bf446ebd"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/call-2.json",
+      "bytes": 290698,
+      "sha256": "1521c3a11f6385f9a25b7bba2f2f07ed46015b15db13cc9e6e1d8ccc6f8b2835"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/call-3.json",
+      "bytes": 1029655,
+      "sha256": "ba37b16a61673e6353856f3eb8c76f3f93ff6f00ae8bff29eccf2b1c5733425e"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/manifest.json",
+      "bytes": 2994,
+      "sha256": "33d7ae5ff2b567c1acde257e550615af98b124d517536ba12d890a71f0a5a2c8"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/open-goal-local-width-managed.ts",
+      "bytes": 19394,
+      "sha256": "6004d1d2b4f48d6b8c5dd238efd47119c65cd8907bdf6ba48b6f5c6874ae5f4a"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/verification.json",
+      "bytes": 3105,
+      "sha256": "989955d1555d5e31e2d323ef10b17b7e35fc01d093da9da07334c386fc62df4c"
+    },
+    {
+      "path": "capture/0037-open-goal-local-width-faceplate-expansive-but-serial/workspace.json",
+      "bytes": 15025,
+      "sha256": "eddefea5f6d4f7a0f1e29b7bcfe8faa5dde60cdbd5aeb9787aa348a5ac7a0589"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-0.json",
+      "bytes": 371476,
+      "sha256": "6daedfe4e061a741dd0e78d33b796eedfe098a4b4a887047a9f8160e18ed2481"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-1.json",
+      "bytes": 256335,
+      "sha256": "c3a2aba93d730f190500bfed034fdacb1f4045c8580f1a59369f09ebfbabb6bf"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-10.json",
+      "bytes": 777971,
+      "sha256": "87cf1b249333d5bf0d99a182e2918533bbb9d069dcf72540a7c005f5bfaa6305"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-2.json",
+      "bytes": 385438,
+      "sha256": "c6cdc95e18ac8f5cc914d9a1c0ffc732546555ba950d2ebb105d12d6b9460c86"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-3.json",
+      "bytes": 129513,
+      "sha256": "6e3622b030bf2f051f085a7a32df32fcd99e1f289fd6f23a0931bc21b5aaa65e"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-4.json",
+      "bytes": 140173,
+      "sha256": "c49eab0d4e80d9c8d3759a207f3167d8cbef239c9a1f2488df040f3c1ac63e73"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-5.json",
+      "bytes": 137985,
+      "sha256": "3b440faa73f9188a80736194134fc77e55d958b4580aba63468a3e5114a2164b"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-6.json",
+      "bytes": 278149,
+      "sha256": "050a70961a43ab804f69165e1e7337e87f235594901abe810f5d196638de536a"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-7.json",
+      "bytes": 538369,
+      "sha256": "bd999bd3053dccc280726220f8f70ea211c11eada6760783f4d977aa5ac49b01"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-8.json",
+      "bytes": 621155,
+      "sha256": "e49ebad5d960806d69871b69887f31fe1a5ab06c2adc58e25da16046803f9ec4"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/call-9.json",
+      "bytes": 716216,
+      "sha256": "db3f4d35ca16c59a40a30b07956d4ff0a7b4563283b2f35f1f391ef102d76d83"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/manifest.json",
+      "bytes": 3816,
+      "sha256": "9e1870dc7c8d39085f6b92095b37f43b7a5a03f576816209668c40c84702da14"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/open-goal-notification-state-managed.ts",
+      "bytes": 11550,
+      "sha256": "500823ca8a6582dd0749768f44dc576605222909e16cc894905d056ea539e998"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/verification.json",
+      "bytes": 4729,
+      "sha256": "0d552129de92e5bb4ac7c7809933a96084000e4e032123ffcfa32f7122a90a46"
+    },
+    {
+      "path": "capture/0037-open-goal-notification-state-identical-printer-retry/workspace.json",
+      "bytes": 13758,
+      "sha256": "d47de03740d0bcdf6cdee4a6e0904084f274e496f4f70f185537b0c3bac81042"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-0.json",
+      "bytes": 272606,
+      "sha256": "4afd2d33e2c0b9235edbf8eaf3658cd29cd0824f61536e4eca6f3e001365a506"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-1.json",
+      "bytes": 298604,
+      "sha256": "5b6e8bd2d41291af209c5c9c1f02764477fda0d6f193d0d7967f95a6b94f6f8c"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-10.json",
+      "bytes": 278616,
+      "sha256": "4e395889495c65680c0d39bdc5d18d51571c5723dd2e54c8c340809bfbc195f1"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-11.json",
+      "bytes": 268780,
+      "sha256": "4aa392d767ede45b1a64497736393ada2e6a340b42ba98ad63e0e44b7595cc2e"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-12.json",
+      "bytes": 763935,
+      "sha256": "f1211e8cfda4aeb03f16bad20b38f6e2b28563890f747f24a691724d5ec11865"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-13.json",
+      "bytes": 691187,
+      "sha256": "4173822384e6b461998e73cab6a66b95bbb8bc98812b3b99a28e59e4be529d7f"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-14.json",
+      "bytes": 198416,
+      "sha256": "6617985df5c933991b9c912697e1d979365979c191e7725f1c1d21b57ebf62a6"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-15.json",
+      "bytes": 1035592,
+      "sha256": "cebfd2f2176aa0d7aed3b8d0e61f0102e220ec473372e926411ccf69c31cad4f"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-2.json",
+      "bytes": 108822,
+      "sha256": "7958a35560799f3974faed55160d12b8bf3890d4852ca0dca126cd299d775a67"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-3.json",
+      "bytes": 104152,
+      "sha256": "d82bdb8773c7761b46bf3c30cdbd7e59a3bf43fa44e1fd66be1f8e100287d419"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-4.json",
+      "bytes": 106804,
+      "sha256": "017d8c97db5f2d43fa29bbd73d35b43437505cfe11d2d0d511e95a8d6f797dc4"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-5.json",
+      "bytes": 112024,
+      "sha256": "bf6a9d9fa307cfd0db39aeae00a0eea6145e74539e84937b869058e2728b7024"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-6.json",
+      "bytes": 107839,
+      "sha256": "5dbd5a4d1c4ca7ebd11c1c233260b9787aba848b28cd5ab827c26a20a62dfe9a"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-7.json",
+      "bytes": 115024,
+      "sha256": "c12d16b26bd54aa201f131a76ad687d9487fb330cb075187201f691ce5dad52c"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-8.json",
+      "bytes": 101119,
+      "sha256": "4223970bfb38e227a39759587d915b430385a3177896eb38fb04b60de55685bc"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/call-9.json",
+      "bytes": 278877,
+      "sha256": "f4cfca0acc440e4ceccc690445558ef709833212dd7342fa9d871e73b1f4a213"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/manifest.json",
+      "bytes": 4488,
+      "sha256": "477adfd00b787e16df9e2d5fdf62e57f7f963d2a4057f832e5e47fcf293c8069"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/open-goal-owned-operations-managed.ts",
+      "bytes": 12019,
+      "sha256": "772055e1a8fdcaf0bc8ff983f00250301537d90468e97d445e1a66f72f42b9c2"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/verification.json",
+      "bytes": 6049,
+      "sha256": "599ab037c14c4223a9517a8380d457404594d1bdaa49ead48fed9ea22d3905ab"
+    },
+    {
+      "path": "capture/0037-open-goal-owned-operations-delivery-window-recovery/workspace.json",
+      "bytes": 16425,
+      "sha256": "a3828a141bf8980a3e5c901076695a1066d8e71ef5253146eee97dee2273ada5"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/call-0.json",
+      "bytes": 294485,
+      "sha256": "381be7a3dcdddbbbac9ee0e18561740ba3c842a08b0cb2bf7dd7af257bf1f2ed"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/call-1.json",
+      "bytes": 407919,
+      "sha256": "34ec6775b02b92cf280797d2b06de8e7e153469e6e027e21e74cd89acaf5f963"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/call-2.json",
+      "bytes": 448479,
+      "sha256": "4b4229e276178ae0db62d9d4d55caaacc144c3627381d2b36a862d992bcf915b"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/call-3.json",
+      "bytes": 309160,
+      "sha256": "3128da6e1cf86675f88c20b029a4d7b12955eb23b4e02c4bc25fdd21cc7751b9"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/call-4.json",
+      "bytes": 1980416,
+      "sha256": "4e5e2ba134fcfcd98ff1209bfad2ef39a3616f2611a6bb6f92c83681bfacfbcd"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/manifest.json",
+      "bytes": 3116,
+      "sha256": "d41acf950ce50ac3da6774ce1854a061de06c8f4ed67110daa35e15336e7a054"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/open-goal-panel-source-migration-managed.ts",
+      "bytes": 31659,
+      "sha256": "614607bb736928bdf655986e00f5cec90ca9d695cb402bff608efdb80880cb23"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/verification.json",
+      "bytes": 3305,
+      "sha256": "71bd8aab9855a52bf19b2716b81d1658cb93640e3ed4b2594215838d8f5cffc7"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-field-shelf-links-staged-before-source/workspace.json",
+      "bytes": 39534,
+      "sha256": "53c5bf8096c3b4cc0f6081cf73eaae4a4e35388b0e0589398b70b3feebe0a60b"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/call-0.json",
+      "bytes": 295626,
+      "sha256": "4f55fd0b11d0ba68759955943585216232dd16e98a925071211b3a6ee9c4a048"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/call-1.json",
+      "bytes": 304654,
+      "sha256": "c9dd8a3478263a6b594c2290f34d1bec45777263dc21018b05f0fa4b4a3dcbc9"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/call-2.json",
+      "bytes": 441409,
+      "sha256": "482d91c8615c38650ae0d1a031092f129c5b20efface3241f73c55f927d11698"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/call-3.json",
+      "bytes": 309868,
+      "sha256": "46e73aa9dde2e6052a4400771914a1a58546dab740fe2f5c7d472f57686c7a82"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/call-4.json",
+      "bytes": 1266752,
+      "sha256": "ae02db7c9f2bb2f3508a9e8c2312edd84ed9cea8c91b4a63e930638e8643b558"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/manifest.json",
+      "bytes": 3093,
+      "sha256": "3dbdfb212c755d0849fcc2b2130c0ac5c1b5f8a89803b06297d190cc6518371e"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/open-goal-panel-source-migration-managed.ts",
+      "bytes": 31659,
+      "sha256": "614607bb736928bdf655986e00f5cec90ca9d695cb402bff608efdb80880cb23"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/verification.json",
+      "bytes": 3274,
+      "sha256": "0b6631beefce3f6ae24420d92088a66a25fe7603eb6da433c0b3373e47d3ff88"
+    },
+    {
+      "path": "capture/0037-open-goal-panel-source-migration-program-rehearsal-cutover-already-complete/workspace.json",
+      "bytes": 20228,
+      "sha256": "3e5f685022311230a37cee6b69f06d506d6218032b4db60611d6165c37ff8523"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/call-0.json",
+      "bytes": 284276,
+      "sha256": "25f229cd0943cfb41311d4f4b787d99e765eb0a8028b345a2f689c6a21e2d2fb"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/call-1.json",
+      "bytes": 461840,
+      "sha256": "7d9ef9c7b2e5c53950e5919998b889848b5292be15dc2e880904cf426ff9e0c4"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/call-2.json",
+      "bytes": 362706,
+      "sha256": "e32252153edee60c7a348de5c3ea489cb84fe4c7c875f779797f9e26c8ef7f78"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/call-3.json",
+      "bytes": 506182,
+      "sha256": "5471cb42c3dcc1652393b2cb641de4dfe74d8e78f1198ca032222b4dcdb15374"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/manifest.json",
+      "bytes": 2945,
+      "sha256": "c5a3b8465e91ada17e6adecb253c92efa92e39905eae0043c7152ad81cb51e8b"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/open-goal-phone-first-run-managed.ts",
+      "bytes": 17381,
+      "sha256": "1c4e64b04dd24de00f9170732df3ade16cb3c35ff31f862321a1e7f1359ba0b3"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/verification.json",
+      "bytes": 3031,
+      "sha256": "d8473770a551e072aa8da17c5ea1ac7dacc929847979355624324403463c6ea6"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-not-the-assigned-workspace/workspace.json",
+      "bytes": 9327,
+      "sha256": "37801b4740e8d206757278eace363ee46c161bd0640eee8bbc92a1666828bdcf"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/call-0.json",
+      "bytes": 283744,
+      "sha256": "32e447c41eecfbd48b35e9c30bf85a05d45f25622fd871e72ebccc9cdab3cb65"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/call-1.json",
+      "bytes": 304437,
+      "sha256": "b0d61bca8b7b820319380643cc690fc9ac05df65e75c72e85a1e848a3d92d745"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/call-2.json",
+      "bytes": 475158,
+      "sha256": "ddab07d41c21e48f8206c27d4a73e3385b749f6445fb09a2c0c067a6becbfe54"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/call-3.json",
+      "bytes": 505433,
+      "sha256": "4fd5f6265e034631ee95fadbad43a1613beb2d1e4000c4890c55517ac1360292"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/manifest.json",
+      "bytes": 2980,
+      "sha256": "ab80ec211e89222bcb5a08cae03e401cc20f49d1dc8a023a825f031c7425e235"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/open-goal-phone-first-run-managed.ts",
+      "bytes": 17381,
+      "sha256": "1c4e64b04dd24de00f9170732df3ade16cb3c35ff31f862321a1e7f1359ba0b3"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/verification.json",
+      "bytes": 3074,
+      "sha256": "efffa73a187d481d2e9dc1b9964cd5fbfd04244df4d32d440ddd9aa061236b53"
+    },
+    {
+      "path": "capture/0037-open-goal-phone-first-run-retained-foreign-phone/workspace.json",
+      "bytes": 9838,
+      "sha256": "33b06f6dae6d2fe7a525a64d01cabbe6d69443afac48cb0921b976ad4bed9979"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-0.json",
+      "bytes": 128958,
+      "sha256": "6bd2620b3888d24deac35ef327ae3df183a51d5d8ad030d36d6fed68815ded2f"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-1.json",
+      "bytes": 1050198,
+      "sha256": "2211f570e452491ee6b69fb9129924e31a4824ac56a8810db196e177e8c4488d"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-10.json",
+      "bytes": 984809,
+      "sha256": "2dc4b22f79172a9c2de006e45dca6209ee8b7440cb6ed2b0ea831ba25e8a12ed"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-2.json",
+      "bytes": 158445,
+      "sha256": "019b7c57064bf99412374310264a28a557fcb0121f40c532c715ca91edc7c2bb"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-3.json",
+      "bytes": 363639,
+      "sha256": "2364c98974814a5e3483556161f988987d2b73a3b3577716ce3e6f778d71b930"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-4.json",
+      "bytes": 113170,
+      "sha256": "15a8a062a57ca3caddb34de6ac874f4af964e42361e748ddabbbd540746ea70c"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-5.json",
+      "bytes": 113161,
+      "sha256": "1d9d4629387d065431a5852ce4727198b0e5cc8ebdf17c57ab514c870bfa48c3"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-6.json",
+      "bytes": 117961,
+      "sha256": "438adba7ffdd85f031bcb40f2330299954c90575b41860ffd8fb852b3a302ca1"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-7.json",
+      "bytes": 226308,
+      "sha256": "c14690dcaba1d5c79313ee121b83cdb6f7d0cc283d5a149bebd6b9ab24ee5c8e"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-8.json",
+      "bytes": 1017141,
+      "sha256": "065cf737b395d6b703a98499b0d72a518dddb1553d0f86453e8ea5e9c139128f"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/call-9.json",
+      "bytes": 374344,
+      "sha256": "9d5bb072172e459b99c3b24fcbd761edfc226ce34ed35dfdec60770b147f1bb3"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/manifest.json",
+      "bytes": 3912,
+      "sha256": "931f362e3f2d96ef2184c41ef98c11e6d4f3cb75d389b3a883b143a0f34238d0"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/open-goal-scheduled-recovery-managed.ts",
+      "bytes": 28499,
+      "sha256": "ce38e09465f2173152627969b8492a8129aa8812dc92d51d172833a459c4a49d"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/verification.json",
+      "bytes": 5009,
+      "sha256": "c90baaee8cd59af3642d3a48760324323139e5a986c2d19dc821411757502845"
+    },
+    {
+      "path": "capture/0037-open-goal-scheduled-recovery-retime-without-release/workspace.json",
+      "bytes": 23512,
+      "sha256": "bdc923ae87894354a9447afaaee32698c6b70a2cc673231fb005cdb1efd21af9"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/call-0.json",
+      "bytes": 263793,
+      "sha256": "4d452a36bb1e5f4f88bbcacc3cfcc6ff2a9bbcccb47aa9a222760af4f3e6885e"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/call-1.json",
+      "bytes": 292192,
+      "sha256": "f57c9cf6339080ef23f7504484c3ae96cac96d96a441c6a8f4afd6fd5e253219"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/call-2.json",
+      "bytes": 781669,
+      "sha256": "869a41c0cf4a1ef77db97a2f6952e79087cf16814d7ce1ffe4ff99b7b3c5a989"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/call-3.json",
+      "bytes": 639930,
+      "sha256": "394d8779ce0ada2994b4872babded50aa235e94ab74c0923b8a2b8bdd3d946d4"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/call-4.json",
+      "bytes": 752166,
+      "sha256": "80168de13196eb285693067fec7c4a6d07d205ea234d5b96e5feac51e6d04122"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/manifest.json",
+      "bytes": 3003,
+      "sha256": "99b9c182976c3c7138ef8779157576aac0b3bf6b43014cfc21f4bb4fd89d5e8d"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/open-goal-system-candidate-managed.ts",
+      "bytes": 24689,
+      "sha256": "aeedd8bcb46cc4272dc73b09192fa9a443202772433bd6fa66c4cb4df43bd41c"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/verification.json",
+      "bytes": 3208,
+      "sha256": "3be1952e7371fc5b81dfdc4d82d927ea3b09b54efe34f5b3cbda3edcffc97a22"
+    },
+    {
+      "path": "capture/0037-open-goal-system-candidate-shared-mobile-label/workspace.json",
+      "bytes": 20632,
+      "sha256": "961f781c788dd61c8ec97722ed599f796971ba5e918281ce38278b269fb6f854"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/call-0.json",
+      "bytes": 299793,
+      "sha256": "4dfde90ec52fc34c741406b40d35f3e767b2f04f6eec4b974eca8a2331674d2b"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/call-1.json",
+      "bytes": 308121,
+      "sha256": "c0b067e935383596be5b9486c660a3212e22f2d8e033fdc58989999cf8e22d5d"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/call-2.json",
+      "bytes": 293777,
+      "sha256": "2c4f9db3dcbbd3be7f5310519100402d6355bc3e592161225848c26409e3e25c"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/call-3.json",
+      "bytes": 448636,
+      "sha256": "f00c2d1942eb63563fb87c99dc71045786bdca042dd1d33bace8f278fbe9c17d"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/call-4.json",
+      "bytes": 1116860,
+      "sha256": "564576683b7b713d6b357cf811ecedfde8ea284d9dd2acf599d458da2ce92aed"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/manifest.json",
+      "bytes": 3184,
+      "sha256": "d40b0e8d3008b85f9199f66c91011875d7ae56f09773e13cf65c50c0fc7c970e"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/open-goal-system-release-managed.ts",
+      "bytes": 19346,
+      "sha256": "041e32cad4d6f0e84ef2ffb2cb53fb4ed69ace2fc6ae0add2a3cc0c1923c9cd9"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/verification.json",
+      "bytes": 3369,
+      "sha256": "ce52162a959c8221971241298372ea6ccb8a6e24ab97e96e075f2b697cd0819e"
+    },
+    {
+      "path": "capture/0037-open-goal-system-release-confirm-current-retry-failed-despite-earlier-green/workspace.json",
+      "bytes": 15796,
+      "sha256": "068fd310ecc05ea50bc4637a49fef82c4928ed3465bb29a88faf8b97d8330a33"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/call-0.json",
+      "bytes": 409431,
+      "sha256": "7c362a5eefd7e69bf23f35bdb02ae2d6009d4edc43536e39f7d6a02f00dee545"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/call-1.json",
+      "bytes": 291354,
+      "sha256": "539ce39c6480e9d5c438413ca98b7ee2f5dbd597718a3099cc02a5675209854e"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/call-2.json",
+      "bytes": 297002,
+      "sha256": "2488062ab621845d9d2dd77154267d9b7977b5d8c9ff52ee96cfc26368a5da9c"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/call-3.json",
+      "bytes": 295981,
+      "sha256": "032fd0affb924c30066f2534172fe1fa3fb18e342cd179165a289fece2922693"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/call-4.json",
+      "bytes": 287527,
+      "sha256": "82a9bf2e2b37dd8dd3c46e5120b93478392e9e933c04bca45a6d04e1812c2594"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/call-5.json",
+      "bytes": 1510834,
+      "sha256": "4ef74aea0d35c8677b58f1f5abd6820c0a8db0b55bf7997a2b186711df65329e"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/manifest.json",
+      "bytes": 3153,
+      "sha256": "962b9f1cb2cebf610057b1b95663ed2e39348a88dcb1c9227c93bfd9921d284c"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/open-goal-transcript-surface-managed.ts",
+      "bytes": 19361,
+      "sha256": "4bffe8d01c8318e1435fa34c063c8acf4732c276628f1b5d2abb53140e63722e"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/verification.json",
+      "bytes": 3478,
+      "sha256": "f3e5f78f56ada3cb030d7e1c6810c054a9f17cba4fb094ee9f91f2793791dd05"
+    },
+    {
+      "path": "capture/0037-open-goal-transcript-surface-projector-lineup-not-mirror/workspace.json",
+      "bytes": 19316,
+      "sha256": "59aedb19b932fdcfd8a9d2607a1f45303fb287d4ac9ae584f715c28c13d33889"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/call-0.json",
+      "bytes": 622990,
+      "sha256": "fb5f0f635c86e59da18aac02fca8c958f753254da7b502e612677f8e14dd6d7b"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/call-1.json",
+      "bytes": 288806,
+      "sha256": "f5e4f58da1bbd11f9f524931881ed3bd7611c4ea952f921cae520e086fe8e360"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/call-2.json",
+      "bytes": 461016,
+      "sha256": "5fafea315d922839b08584c44cc0bf9795464a7ca82f29c656cf9a982dc95e38"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/call-3.json",
+      "bytes": 322456,
+      "sha256": "7bc279a97556374476e91e764a6265ec21a0c215eb6c343005d12234b4c85b3e"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/call-4.json",
+      "bytes": 623952,
+      "sha256": "9506870196bbedb00331301c77b0acf59df60f5e48602ccb2e40ea94c35980ed"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/manifest.json",
+      "bytes": 2995,
+      "sha256": "cf8830f6686f60b2d7be11406dafd9228aac3dc97fe7a89256af9439e8d4c1ac"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/open-goal-webhook-admission-managed.ts",
+      "bytes": 18168,
+      "sha256": "2289a87b72d814fa067c46bea01ca56e1ad41d0645c63edf980d6fe979e41fba"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/verification.json",
+      "bytes": 3211,
+      "sha256": "06f6f593cc02b30dbbd99dab3cfac5a281a8b3817412f6a51c7ae358fab4257c"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-read-current-only-without-scratch-note/workspace.json",
+      "bytes": 16082,
+      "sha256": "a4698effc1fdefa80a5c947d90a37790fd449d3098a6fa20a056a19769cdfb8e"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/call-0.json",
+      "bytes": 278799,
+      "sha256": "9470ec6314f29601ff627375ef3d77209f785745e99a3ca5a4946230da5c4eb2"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/call-1.json",
+      "bytes": 344108,
+      "sha256": "8795f3fa1e832a4358bfae65e0f2eca7708908ebb659f8e717c896271d943004"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/call-2.json",
+      "bytes": 350997,
+      "sha256": "ab9520f6993edcbe06641af4af0f5baff3ad1506e7936a54a09d168a0e82a9e9"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/call-3.json",
+      "bytes": 1364932,
+      "sha256": "db5375ae09e60be7a4de3090d25fd59ae180cde83ca8782c0076e61436c9d498"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/manifest.json",
+      "bytes": 3025,
+      "sha256": "a065d021b56cb496aa03c1b06eda49e8abd20db187e25c4918e556d4f3ad80c8"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/open-goal-webhook-admission-managed.ts",
+      "bytes": 18168,
+      "sha256": "2289a87b72d814fa067c46bea01ca56e1ad41d0645c63edf980d6fe979e41fba"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/verification.json",
+      "bytes": 3116,
+      "sha256": "9f48ae0aae181a0e81862b31be3c355dcd95fca70fe2654ef3af7e185e16066b"
+    },
+    {
+      "path": "capture/0037-open-goal-webhook-admission-revoked-prior-with-active-replacement/workspace.json",
+      "bytes": 22469,
+      "sha256": "db7edde9e37eea497b0548d88a67207ae83c835fe64fbc50353d4d7279dc0e59"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/call-0.json",
+      "bytes": 305723,
+      "sha256": "72eecd0bbed53a374a5eae4e18413675498c10b5cff535110fcde389daa7c612"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/call-1.json",
+      "bytes": 420056,
+      "sha256": "f7e3785272083260982a63df82a3ad6751122d2423b44793ff263be67f6e6ef9"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/call-2.json",
+      "bytes": 471638,
+      "sha256": "7977a245f55e92d405aadd13747359eb70e0d80520aff6578de822761824849a"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/call-3.json",
+      "bytes": 701701,
+      "sha256": "3ec0ca5172015a2734c6bceb3b060daf174131c01b6887e0b292c6b2d63f3601"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/manifest.json",
+      "bytes": 2905,
+      "sha256": "86e14cced42be6daa6e2bb6c183762fbd4c4110c307b6584e5d6d5cb4e910f27"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/open-goal-workspace-share-managed.ts",
+      "bytes": 18762,
+      "sha256": "7849a0e9e31d39ff285fb0d7411a0e7b1a55cf97992285da39ba4864df30a754"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/verification.json",
+      "bytes": 3008,
+      "sha256": "9b57443c5457c300903b9de3b155e3d7c75185ba09aef5312651a1cdaba4c2a2"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-invited-reader-ready-with-own-scope/workspace.json",
+      "bytes": 14631,
+      "sha256": "9c96d2dc40c8089b78494f1d52c42a00de64f15f24cd257ff1d2847b17e27222"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/call-0.json",
+      "bytes": 305695,
+      "sha256": "ce52e2ece920c634578a9b27039f81b9ab76e769c99ef7ee6563fa345a573751"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/call-1.json",
+      "bytes": 549719,
+      "sha256": "110eb50a236ad664fb965b0892785378a7eb1bf3dce5d2d53443c676981299b7"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/call-2.json",
+      "bytes": 318948,
+      "sha256": "fa4ab6625f3b4496749e8458618b256158b890c97003d5f44b0d833cf222704a"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/call-3.json",
+      "bytes": 875747,
+      "sha256": "6c626a78af9ee6bb29a32455e019cc3dc66b9e06e26e6384c680862dbf9efd2d"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/manifest.json",
+      "bytes": 2951,
+      "sha256": "147f9e6e54862672d7bd1eb57a0baf71801cec04b66ef03953c84249176d5316"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/open-goal-workspace-share-managed.ts",
+      "bytes": 18762,
+      "sha256": "7849a0e9e31d39ff285fb0d7411a0e7b1a55cf97992285da39ba4864df30a754"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/verification.json",
+      "bytes": 3046,
+      "sha256": "81edf25ce7c71ff62c57e92262fcc45352174924d01c2b2ba6647b3cef8f80ed"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-share-reviewer-role-bound-to-current-revision/workspace.json",
+      "bytes": 14674,
+      "sha256": "ad04e139281f7d1eb6f6100a81cc822c9e6896f7d5d8dff050d7bdbe5a86f0c2"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/call-0.json",
+      "bytes": 278959,
+      "sha256": "2fc6c9871dbe0cf75a03886e1a153cfe11df33dbf28c6c15c0009556ba026fde"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/call-1.json",
+      "bytes": 283013,
+      "sha256": "aa66080ccea38783d0a2241a53ad7826425b3bc59eb0fbecd377e8a6d2f4a34d"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/call-2.json",
+      "bytes": 312416,
+      "sha256": "743791206a09f878b4c2b0bbebc118601c9849bd4fe3a2ae1d7d8d1e5ca7c168"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/call-3.json",
+      "bytes": 301856,
+      "sha256": "7bd3b1a2bdbba3a19e59079b3ebdced6c9216407c39fa7cb695fad673ef3fd18"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/call-4.json",
+      "bytes": 1380089,
+      "sha256": "ac53bf3feb61186a7baa6213545739936ece4ed2d86c98916e3771e566fd3e8a"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/manifest.json",
+      "bytes": 3007,
+      "sha256": "e89bd25c97ef8d1588d3e424fe64e17c65f9fd9287ae0b2ab528f6c5fd81352e"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/open-goal-workspace-smoke-managed.ts",
+      "bytes": 16652,
+      "sha256": "56f39fa57c7079f2f45eb7b3d93fbed8a8bd1158e48895a0ea48e61fc56c966b"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/verification.json",
+      "bytes": 3249,
+      "sha256": "b2d548f90db3b28673a863f73ea9c853005e96ce32c727556b121eeec15ceba6"
+    },
+    {
+      "path": "capture/0037-open-goal-workspace-smoke-free-text-not-just-first-token/workspace.json",
+      "bytes": 22963,
+      "sha256": "3749d076cb77cc815d7e6e361e01809e1f88845d3ed5437fd4fda996e3a4f989"
+    },
+    {
+      "path": "graph-metrics.json",
+      "bytes": 132380,
+      "sha256": "9d605442b527fdb6cd2700dd1f71f07d457e24b308e3afcc928ce75879a44c20"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 9683,
+      "sha256": "998f684da483994f957cae8ec3cd26bc64595e1280e06627a78d71f675fcb108"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 737583,
+      "sha256": "9fb9dfa19b6fe24ec6d349cb0075f60b5fd2f0cd7204fcb117175bface1bffe5"
+    }
+  ],
+  "bytes": 83962840
+}
