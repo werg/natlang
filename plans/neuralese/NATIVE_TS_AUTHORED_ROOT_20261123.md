@@ -41,3 +41,26 @@ an already accepted compiler product. Re-export accessors remain live.
 Reference fixtures use scripted model replies only and are not training data.
 The frozen corpus release is unchanged; this Core fix can enter a later vendor
 update independently of collection from existing NL entries.
+
+## Overlap regression
+
+Two native TS host roots now run concurrently on the same runtime and loaded
+module. Their NL children finish in reverse order. Both node and workerd tests
+assert each typed input/result, actual root/child relationship and child custody,
+native before/after service effects on the correct root, and NL service effects
+on the correct child. They also assert the deliberately interleaved observation
+order; a serial implementation cannot satisfy the test accidentally.
+
+This check exposed a separate boundary omission: the emitted virtual-project
+loader did not resolve `natlang:services`, although callable-folder modules did.
+Both now reuse `runtime/modules.ts`'s same dynamic services namespace. Each service
+access resolves the active invocation frame; no module-cached per-task service
+object is introduced. All model engines share this Core module loader.
+
+The real production ProgramLoader + RecordsStore + SQLite reference repeated
+that overlap with explicit scoped service bindings and retained two actual model
+exchanges. Four original call records, reverse completion, each native effect and
+NL effect, owner/task/parent identities and custody all passed. Artifact:
+`/home/werg/vibe-ts-root-concurrency-proof/actual-reference.json`; fixture source:
+`/home/werg/vibe-ts-root-concurrency-proof.ts`. These are reference-only data.
+Full node/core/browser build, thirteen targeted tests and quick gate passed.

@@ -9,7 +9,7 @@ import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { loadCallableFolder, loadNamedFunction, parseModule, type SourceFiles } from './loader.js';
 import { joinSourcePath } from './source-path.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
-import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm } from './modules.js';
+import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm, servicesModule } from './modules.js';
 import type { Platform } from './platform.js';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 
@@ -141,6 +141,7 @@ export function instantiateVirtualProjectProduct(product: VirtualProjectProduct,
     const module = { exports: {} as Record<string, unknown> };
     cache.set(path, module);
     const require = (specifier: string): unknown => {
+      if (specifier === 'natlang:services') return servicesModule;
       if (specifiers.includes(specifier) || specifier === NEUTRAL_RUNTIME_SPECIFIER) return runtime;
       if (options.modules && Object.hasOwn(options.modules, specifier)) return options.modules[specifier];
       if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
