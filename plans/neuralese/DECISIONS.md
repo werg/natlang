@@ -7430,3 +7430,55 @@ pairing.
   `mix.decisions`; `train.log`: `decision_objective` at start, per step `decisions`, `decision_ce`,
   `decision_accuracy`, `decision_loss_share`, and `val_decision_ce:*`/`val_decision_accuracy:*` for validation sets
   holding decisions.
+
+## 2026-11-23 02:30 Memetic groups in expert-iteration collection; every guided memetic evaluation had failed (B15; e89558c2b)
+
+Brief B15 (`plans/semantic-fp/09_FIRST_BATCH.md`): expert-iteration collection forced `--memetic-share 0`. Owner
+2026-11-18: memetic stays on; the gap is telemetry, not a gate.
+
+- **Found: no guided memetic evaluation ever ran.** `memetic_workspace.guidance_binding` wrote `program_guidance` as
+  the bare state id; `ts-host/src/guidance/program.ts` (since 214f3ad2a, 2026-10-31) accepts only the native-state
+  sentinel `<id>`. Every guided nested run exited in 0.6 s with "invalid
+  natlang.memetic-program-guidance/1 binding" (grpo-v4 run2: 84 in one shared collector log; the 20 recorded bindings
+  all fail under today's runtime). The evaluator scored those collections (0 of 12 scored) as success 0, so
+  `baseline-query-default` was 0 in every group and each supervisor's guided support evaluation read 0. The grpo-v4
+  `memetic_groups` gap (15 groups, all <= 0) measured a broken channel, not memetic learning: any change set holding
+  guidance scored 0 on support and query (file changes such as instruction patches and skills did run), and the GRPO
+  memetic advantages trained on those scores. Fixed: the sentinel
+  (`NATIVE_SENTINEL_OPEN/CLOSE`); an evaluation with no scored run reports `success: None` (the anchor ignores it, the
+  supervisor's `evaluate` answers that it is not counted against the budget, a group whose support runs all failed is
+  not admitted, a committed set whose query runs all failed leaves the episode unmeasured); the shared collector
+  writes an invocation's error into the invocation's own log (`run_bonsai_queue.SharedChild`; it reached only the
+  server log, which hid this). MODEL_FACING_CHANGES entry.
+- **Memetic groups in collection by default.** `expert_iteration.MEMETIC_SHARE = 0.02` on `collect`, `cycle` and
+  `async-drive` (`--memetic-share 0` opts out; `collect_command` passes it), tasks from the role `grpo-memetic-tasks`.
+  At most `MEMETIC_MAX_GROUPS = 2` memetic groups run at once (each sample runs ~30 nested rollouts beside its slot:
+  bounded actor and host-memory load), and none starts when its wall clock (`world.case_seconds`, 7200 s) no longer
+  fits before the collection deadline (the collection would wait for it). No JOLT+ teacher attempts of a memetic group
+  (its reward is graded against its anchor; the `== 1.0` rule made every memetic group "failing").
+- **Success and the SFT mix.** `task_rollouts.memetic_success`: committed, not leak-refused, workspace scored, and
+  quality (query success minus evaluation cost) > anchor (best of no change / mechanical default on the same query
+  worlds and seeds): the condition under which GRPO gives a positive advantage. Rollout and rewards rows carry
+  `memetic_success`; `expert_iteration.group_outcomes` (frontier, select) and `sft_sources extract` read it, so a
+  memetic success enters as `rl-own`. Targets are the supervisor's own calls (its replies, including the guidance text
+  it writes through `workspace.propose`); prompts, workspace evidence and tool outputs are zero-weight context; the
+  nested runs of the guided program live under the group's `memetic/evals/` and are never extracted.
+- **Separate invocations and leaks.** Support worlds are the supervisor's evidence and evaluations; query worlds score
+  the commit and are never shown (`memetic_tasks.split`, one world per related component). `leaked_answers` refuses a
+  commit reproducing a query answer (>= 6 chars) verbatim. New: the collector leaves out memetic rows any of whose
+  support/query worlds is in the held closure of `--held-manifest`/`--exclude-manifest` (`grpo.memetic_rows_held_free`;
+  the 11-18 set was built against held-v3, a later held set must also apply), and the SFT build drops a memetic row
+  whose `curriculum.world_ids` meet the held ids. B1 (held-v4): route `memetic_rows_held_free` through
+  `training_exclusion_ids` when it lands.
+- **Replay.** `sft_sources replay` re-runs a memetic success from its recorded evaluations: the group's spec copied
+  with `recorded_only` (prepared evidence and every `evals/*/summary.json`, by name), so the replayed supervisor sees
+  the same evidence and scores, and any evaluation the recording lacks fails the replay instead of sampling a model;
+  a spec with `refine` is refused. Replayed success is re-derived (`memetic_success`) from the replayed score.
+- **aei1:** no argv change (the default carries it). It picks this up at its next start or restart on a pin at or after
+  this commit; `--memetic-share 0` on `async-drive` opts out.
+- **Not checked:** a live collection with memetic groups on a real actor (the DGX ledger was full: sft-v9-sft 100 GB),
+  so neither the guided runtime path after the sentinel fix (native-state import on the actor), nor actor/host-memory
+  load with memetic groups in an EI collection, nor a real replay of a memetic success through the node runtime has
+  run. The grpo-v4 run2 groups have no rollouts files left (only `memetic/`), so no recorded memetic success could be
+  replayed either. `teacher_gen` student rates still count a memetic episode by `reward >= 1` (memetic task ids are
+  outside its task universe).
