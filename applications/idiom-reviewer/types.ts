@@ -1,4 +1,4 @@
-/** What one instruction step asks the model to do (`stepKind.nl`; the migrator's StepKind). */
+/** What one instruction step asks the model to do (`@natlang/std` `stepKind`). */
 export type StepKind = 'judgment' | 'mechanism' | 'guard-for-type' | 'redundant';
 
 export type KindedStep = { text: string; kind: StepKind };

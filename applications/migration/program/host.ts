@@ -8,8 +8,7 @@ import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { semanticRepair } from '@natlang/node/std';
-import stepKind from './stepKind.nl';
+import { instructionsOf, semanticRepair, stepKind, stepsOf } from '@natlang/node/std';
 import worthKeeping from './worthKeeping.nl';
 import nextAttempt from './nextAttempt.nl';
 import rewriteLeaf from './rewriteLeaf.nl';
@@ -53,29 +52,13 @@ export function checkProgram(directory: string): Promise<CheckResult> {
   });
 }
 
-/** The front matter (between the opening and closing `---` lines, without them) and the body of a `.nl` file. */
+/** The front matter (between the `---` lines) and the body of a `.nl` file (`@natlang/std` `instructionsOf`). */
 export function splitSource(text: string): { front: string, body: string } {
-  const normalized = text.replace(/\r\n/g, '\n');
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(normalized);
-  if (!match) throw new Error('a .nl file starts with front matter between --- lines');
-  return { front: match[1]!, body: match[2]! };
+  const { front, body } = instructionsOf(text);
+  return { front, body };
 }
 
-/** The body's steps: its numbered items when it has them (text before the first one is a step of its own), else its
- * paragraphs. A fenced block stays inside the step it belongs to. */
-export function stepsOf(body: string): string[] {
-  const lines = body.replace(/\s+$/, '').split('\n');
-  const numbered = lines.some(line => /^\d+\.\s/.test(line));
-  const steps: string[][] = [];
-  let fenced = false;
-  for (const line of lines) {
-    const opens = !fenced && (numbered ? /^\d+\.\s/.test(line) : line.trim() !== '' && (steps.length === 0 || steps.at(-1)!.at(-1)?.trim() === ''));
-    if (opens || steps.length === 0) steps.push([]);
-    steps.at(-1)!.push(line);
-    if (/^\s*```/.test(line)) fenced = !fenced;
-  }
-  return steps.map(step => step.join('\n').trim()).filter(Boolean);
-}
+export { stepsOf };
 
 /** The file with `readout: decision` added to its front matter (unchanged when it has a readout already) and `body`. */
 export function assemble(front: string, body: string, readout: boolean): string {
@@ -84,7 +67,7 @@ export function assemble(front: string, body: string, readout: boolean): string 
 }
 
 /** The front matter without its `readout:` line: what must not change, since the cases call the function as declared. */
-const declaration = (front: string) => front.split('\n').filter(line => !/^readout:/.test(line)).join('\n').trim();
+const declaration = (front: string) => instructionsOf(`---\n${front}\n---\n`).declaration;
 
 function stripFence(text: string): string {
   const fenced = /^\s*```[a-z]*\n([\s\S]*?)\n```\s*$/.exec(text);

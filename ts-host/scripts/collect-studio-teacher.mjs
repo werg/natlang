@@ -56,12 +56,6 @@ function portableSchema(value) {
   if (!value || typeof value !== 'object') return value;
   const out = {};
   for (const [key, child] of Object.entries(value)) if (!key.startsWith('x-')) out[key] = portableSchema(child);
-  if (Array.isArray(value.prefixItems)) {
-    // llama-server's tool renderer does not preserve tuple item schemas. The
-    // runtime still validates arity, ordering, path existence, and types.
-    out.items = { type: 'string' };
-    delete out.prefixItems;
-  }
   return out;
 }
 

@@ -2,7 +2,7 @@
  * program does the same way every time (set operations, counting, copying fields, calling a fixed sequence of
  * functions, assembling a record); guard-for-type: restates what the declared types already guarantee; redundant:
  * repeats another step or asks again for what is already known. */
-export type StepKind = "judgment" | "mechanism" | "guard-for-type" | "redundant";
+export type StepKind = "judgment" | "mechanism" | "guard-for-type" | "redundant"; // @natlang/std StepKind, named here for the .nl signatures
 
 /** Whether a legacy program is migrated into the new style or deleted. */
 export type Keep = "migrate" | "delete";

@@ -6,6 +6,7 @@
  * never changes what is served) and writes the profile.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { connect } from 'node:net';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,10 +125,37 @@ async function servedCheckpoint(endpoint: string): Promise<Served> {
   } catch { return { reachable: false }; }
 }
 
+/**
+ * Whether a server still listens at `endpoint`'s port. The kernel completes a TCP handshake into the listen backlog
+ * without the server process, so this answers for a server too busy to answer HTTP: busy-but-alive (true) is told
+ * apart from gone (connection refused, false). A handshake that times out (a full backlog) counts as alive.
+ */
+export function nativeListening(endpoint: string, timeoutMs = 5000): Promise<boolean> {
+  const url = new URL(endpoint);
+  return new Promise(resolveListening => {
+    const socket = connect({ host: url.hostname, port: Number(url.port) || 80 });
+    const done = (value: boolean) => { socket.destroy(); resolveListening(value); };
+    socket.setTimeout(timeoutMs, () => done(true));
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+  });
+}
+
+/** Wait while a server at `endpoint` accepts connections but does not answer (busy, or still binding its routes). */
+async function waitWhileBusy(endpoint: string, deadline: number): Promise<Served> {
+  let served = await servedCheckpoint(endpoint);
+  while (!served.reachable && Date.now() < deadline && await nativeListening(endpoint)) {
+    await new Promise(resolveWait => setTimeout(resolveWait, 2000));
+    served = await servedCheckpoint(endpoint);
+  }
+  return served;
+}
+
 /** Whether a server at the profile's port is serving its exact checkpoint now. */
-export async function nativeServing(native: NativeModelSettings): Promise<'serving' | 'other' | 'stopped'> {
+export async function nativeServing(native: NativeModelSettings): Promise<'serving' | 'other' | 'busy' | 'stopped'> {
   const served = await servedCheckpoint(nativeEndpoint(native));
-  return served.checkpointSha256 === native.sha256 ? 'serving' : served.reachable ? 'other' : 'stopped';
+  return served.checkpointSha256 === native.sha256 ? 'serving' : served.reachable ? 'other'
+    : await nativeListening(nativeEndpoint(native)) ? 'busy' : 'stopped';
 }
 
 /** The identity a pin's server reported (recorded in the pin index when the server is first seen serving it). */
@@ -182,9 +210,12 @@ function mismatch(native: NativeModelSettings, endpoint: string, served: Served)
 }
 
 async function start(native: NativeModelSettings, endpoint: string, environment: NodeJS.ProcessEnv, error: NodeJS.WritableStream): Promise<void> {
-  const current = await servedCheckpoint(endpoint);
+  // A server that is too busy to answer is still the server at this port: wait for it rather than starting a second one.
+  const current = await waitWhileBusy(endpoint, Date.now() + (native.startTimeoutMs ?? 15 * 60_000));
   if (current.checkpointSha256 === native.sha256) { rememberIdentity(current, environment); return; }
   if (current.reachable) throw mismatch(native, endpoint, current);
+  if (await nativeListening(endpoint))
+    throw new Error(`a server at ${endpoint} accepts connections but has not answered within the start timeout; stop it or set native.port in the profile`);
   if (!existsSync(native.checkpoint)) throw new Error(`native checkpoint ${native.checkpoint} is missing; run natlang setup --native ${native.source ?? 'SOURCE'}`);
   if (native.actorView && !existsSync(native.actorView.path)) {
     error.write(`natlang: actor view ${native.actorView.path} is missing; loading the complete checkpoint (natlang setup --native prepares it again)\n`);

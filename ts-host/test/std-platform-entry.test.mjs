@@ -34,3 +34,23 @@ test('isPlainObject: plain records from any realm, nothing else', () => {
   for (const value of [[], null, 'x', new Date(), new (class A {})(), vm.runInNewContext('[1]'), vm.runInNewContext('new Date()')])
     assert.equal(isPlainObject(value), false);
 });
+
+test('a program outside any checkout or install type-checks against the CLI runtime and its standard library', async () => {
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { buildProject } = await import('../dist/compiler/project.js');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-outside-std-'));   // no node_modules above it
+  try {
+    writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2023', module: 'NodeNext',
+      moduleResolution: 'NodeNext', strict: true, skipLibCheck: true, rootDir: '.', outDir: 'dist', types: [] }, include: ['*.ts'] }));
+    writeFileSync(join(root, 'package.json'), '{"type":"module"}');
+    writeFileSync(join(root, 'main.ts'), `import { nl } from '@natlang/node';\nimport { escalate } from '@natlang/node/std';\n` +
+      `export const used = [typeof nl, typeof escalate];\n`);
+    const result = buildProject({ project: root, emit: false,
+      runtimeTypes: { specifiers: ['@natlang/node'], types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)) } });
+    assert.deepEqual(result.diagnostics.map(d => d.message ?? String(d)), []);
+    assert.equal(result.ok, true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

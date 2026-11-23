@@ -1,25 +1,5 @@
 [
   {
-    "name": "classification step is a judgment",
-    "function": "stepKind.nl",
-    "inputs": {
-      "step": "Classify the customer message into billing, technical, or spam by the underlying issue it describes.",
-      "signature": "args:\n  ticket: Untrusted<string>\nreturns: \"billing\" | \"technical\" | \"spam\"",
-      "file": "triage/classify.nl"
-    },
-    "expected": "judgment"
-  },
-  {
-    "name": "sorting and counting step is mechanism",
-    "function": "stepKind.nl",
-    "inputs": {
-      "step": "2. Sort the rows alphabetically by id, count each status in a map, and format the totals as Markdown bullets.",
-      "signature": "args:\n  rows: Row[]\nreturns: string",
-      "file": "legacy/report.nl"
-    },
-    "expected": "mechanism"
-  },
-  {
     "name": "support email is external text",
     "function": "detectUntypedExternal.nl",
     "inputs": {

@@ -32,8 +32,14 @@ def truncated_rollout(rollout: dict) -> bool:
     """Whether any model call of a captured episode stopped at a token cap (sampling ``finish_reason`` 'length'). Such
     an episode ended for the cap, not for what the policy did; ranking it in its group would push the cut reply down
     ("stop sooner"), so learners leave it out of advantages and training by default (overlong filtering, DECISIONS
-    2026-11-19). A request budget (max model requests) is a task outcome and is not a truncation."""
-    return any((turn.get('sampling') or {}).get('finish_reason') == 'length' for turn in rollout.get('turns') or ())
+    2026-11-19). A request budget (max model requests) is a task outcome and is not a truncation. A reasoned decision's
+    action reasoning (``decision_reasoning.reasoning_sampling``, rl.task_rollouts.rollout_turns) is a sampled call too:
+    cut by the cap, it ends its episode the same way."""
+    def cut(turn):
+        reasoned = turn.get('decision_reasoning') if isinstance(turn.get('decision_reasoning'), dict) else {}
+        return any((sampling or {}).get('finish_reason') == 'length'
+                   for sampling in (turn.get('sampling'), reasoned.get('reasoning_sampling')))
+    return any(cut(turn) for turn in rollout.get('turns') or ())
 
 
 def budget_stopped_rollout(rollout: dict) -> bool:

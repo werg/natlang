@@ -53,11 +53,11 @@ function is one task a small model can finish.
 
 ## Layout
 
-`migrate.nl` is the driver; `migrate/` holds its own stages (understand, survey, plan, round, settled, summarize).
-Units that two callers need live in folders without a driver of their own and are listed in `uses:`: `site/` (locate,
-classify, edit with patch and exact), used by the driver, survey and repair; `loop/` (triage, repair), used by round.
-Putting them under `migrate/` fails the load, because a function that `uses` a child of its own ancestor reaches itself
-(`migrate/repair.nl: uses migrate/locate, which uses this function in turn`).
+The driver is TypeScript (`index.ts` `migrate`): the order of the stages is fixed, so it is code, and every decision
+is a stage. (Until 2026-11-23 it was `migrate.nl`, numbered prose steps the model interpreted in eval; the idiom floor
+flagged it, and the program migrator's driver path writes exactly this shape.) `migrate/` holds the driver's stages
+(understand, survey, plan, round, settled, summarize); `site/` (locate, classify, edit with patch and exact) and `loop/`
+(triage, repair) are units that several stages list in `uses:`.
 
 ## Parts
 
@@ -79,7 +79,7 @@ Putting them under `migrate/` fails the load, because a function that `uses` a c
 | Repair: findings to patches on top of the candidate (locate, classify, patch, exact for each finding) | fn | `loop/repair` | The same units as the first proposal, driven by evidence. |
 | Repair round: triage, repair, apply (a rejection is data), validate, new state | fn | `migrate/round` | One step of the loop. |
 | Stop: checks pass, budget spent, nothing repairable, or a candidate repeats | pluggable | `migrate/settled` | A hot path of every round. Natural language (default): `settled`, the loop's stopping judgment. Crisp: `settledCrisp`. |
-| The loop | inline | `migrate.nl` | `round.iterateOn(state).withMeasure(...).until(stop)`; an exhausted measure keeps the last state. |
+| The driver: stages in order, first candidate, the loop, the report | crisp | `index.ts` `migrate` | Fixed sequencing is mechanism; `round.iterateOn(state).withMeasure(...).until(stop)`, an exhausted measure keeps the last state. |
 | Report: changed files with digests, check results | service | `repository.report` | Exact digests of the candidate against the base. |
 | Closing words: what changed, what is left, what to review | fn | `migrate/summarize` | Prose for the reviewer. |
 | Command line | crisp | `main.ts` | The outside world. |
@@ -131,7 +131,7 @@ The second entry migrates a legacy prose program (a design brief in `codebases/d
 application in `applications/`) into idiomatic semantic FP, or deletes it (`plans/semantic-fp/07_CORPUS_MIGRATION.md`
 §3). It is a TypeScript host (`program/host.ts`) over small typed judgments, as `examples/refunds/desk.ts` is: the
 sequencing is exact and lives in code, every decision is a `.nl` function the local model runs, and the exact checks
-are crisp. Unlike `migrate.nl` it is not a prose driver: the order of its stages is fixed, so it is mechanism.
+are crisp. Like `migrate`, its driver is code: the order of its stages is fixed, so it is mechanism.
 
 ## What decides, what checks
 

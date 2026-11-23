@@ -1,18 +1,18 @@
 # migration: repository migrations in natural language
 
-A request ("rename sum to add") becomes a reviewable candidate. The stages are natural language from end to end:
+A request ("rename sum to add") becomes a reviewable candidate. Every decision is a natural-language stage:
 understand the request, survey every site that mentions the old thing, classify each usage, plan, write one exact
 patch per site, check each patch, apply them, run the repository's checks, triage failures, and repair in a bounded
-loop with a natural-language stopping judgment. Crisp code is the outside world (the `repository` service) and the
-command line. [DECOMPOSITION.md](DECOMPOSITION.md) records the decision for every part.
+loop with a natural-language stopping judgment. Crisp code is the fixed order of the stages (the driver in `index.ts`),
+the outside world (the `repository` service) and the command line. [DECOMPOSITION.md](DECOMPOSITION.md) records the decision for every part.
 
 ```
-migrate.nl                the migration: understand, survey, classify, plan, edit, first candidate, repair loop, report
+index.ts migrate          the driver (TypeScript): understand, survey, classify, plan, edit, first candidate, repair loop, report
 migrate/understand.nl       planning from the manifest: old and new thing, search queries, invariants
 migrate/survey.nl           search evidence merged into sites (one per place)
 migrate/plan.nl             which sites to edit and in what order, which to leave, risks
 migrate/round.nl            one repair round: triage, repair, apply (a rejection is data), validate
-migrate/settled.nl          the loop's stopping judgment             pluggable: or settledCrisp.ts
+migrate/settled.nl          the loop's stopping judgment (decision)  pluggable: or settledCrisp.ts
 migrate/summarize.nl        closing words for the reviewer
 site/locate.nl              one hit widened to the statement around it, exact lines from the service
 site/classify.nl            the usage pattern (declaration, call, import, ...) and edit or leave

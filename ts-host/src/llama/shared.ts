@@ -88,11 +88,13 @@ export function listSharedServers(host: LlamaHost): SharedServer[] {
   });
 }
 
-/** A live published server for `key` that answers its health check. */
-async function healthy(host: LlamaHost, directory: string, key: string): Promise<SharedServer | undefined> {
+/** The live published server for `key`: `ready` once it answers its health check, `busy` while its supervisor (which
+ * exits with the server) is alive but the server does not answer yet (loading, or too busy to answer). A busy server is
+ * waited for, never started a second time. */
+async function published(host: LlamaHost, directory: string, key: string): Promise<{ server: SharedServer; ready: boolean } | undefined> {
   const record = readSharedServerAt(sharedPaths(directory, key).record);
   if (!record || !alive(record.pid)) return undefined;
-  try { return (await host.fetch(record.endpoint + '/health')).ok ? record : undefined; } catch { return undefined; }
+  try { return { server: record, ready: (await host.fetch(record.endpoint + '/health')).ok }; } catch { return { server: record, ready: false }; }
 }
 
 let leaseCounter = 0;
@@ -141,9 +143,10 @@ export async function acquireSharedServer(host: LlamaHost, key: string, spec: ()
     let supervisor: number | undefined;
     for (;;) {
       options.signal?.throwIfAborted();
-      const server = await healthy(host, directory, key);
-      if (server) return { server, started: supervisor !== undefined, release };
-      if (supervisor === undefined) {
+      const found = await published(host, directory, key);
+      if (found?.ready) return { server: found.server, started: supervisor !== undefined, release };
+      if (found) { /* alive but not answering: wait for it */ }
+      else if (supervisor === undefined) {
         if (!host.supervise) { release(); return null; }
         if (tryLock(paths.lock)) {
           locked = true;
