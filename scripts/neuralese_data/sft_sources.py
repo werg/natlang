@@ -341,9 +341,9 @@ def extract(args):
                     c['success_without_task_row'] += 1
                     continue
                 c['successes'] += 1
-                if role == 'teacher':
                 if row.get('outcome') == MEMETIC:
                     c['memetic_successes'] += 1
+                if role == 'teacher':
                     # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
                     # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
                     # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
@@ -1097,11 +1097,11 @@ def replay_episode(args, server, episode, env):
         rows = list(read_jsonl(directory / 'rollouts.jsonl'))
         if rows:
             outcome, turns = rows[0].get('outcome'), len(rows[0].get('turns') or [])
-    except Exception as error:   # a scoring failure is this episode's verdict, never the whole replay's
             if outcome == MEMETIC:   # verified again from the recorded evaluations: a success replays as one
                 memetic_outcome = {'memetic_success': bool(rows[0].get('memetic_success')),
                                    'quality': (rows[0].get('reward') or {}).get('quality')}
                 outcome = SUCCESS if episode_success(rows[0]) else 'memetic_not_improved'
+    except Exception as error:   # a scoring failure is this episode's verdict, never the whole replay's
         outcome = 'score_error: ' + repr(error)[:300]
     kinds = collections.Counter(e['kind'] for e in replay.log)
     record = {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
@@ -1111,8 +1111,8 @@ def replay_episode(args, server, episode, env):
               'siblings_resolved': True,   # reworded/drifted matches chose the closest opening (ReplayEpisode.closest)
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
-              'log': replay.log[:64]}
-              **({'memetic': memetic_outcome} if memetic else {}),
+              'log': replay.log[:64],
+              **({'memetic': memetic_outcome} if memetic else {})}
     # exact: every recorded call served to the same visible history, its opening message at most reworded by the runtime
     matched = {k: v for k, v in kinds.items() if k != 'scoring-declined'}
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
@@ -1124,9 +1124,6 @@ def replay_episode(args, server, episode, env):
     return record
 
 
-def replay(args):
-    """Replay the extracted episodes that have no verdict in WORK/replay.jsonl yet: a periodic re-extraction of a growing
-    teacher pool replays only its new episodes and appends each verdict once."""
 def is_memetic(task):
     return ((task.get('semantics') or {}).get('world') or {}).get('kind') == 'memetic'
 
@@ -1166,6 +1163,9 @@ def memetic_replay_task(task, directory):
     return task, None
 
 
+def replay(args):
+    """Replay the extracted episodes that have no verdict in WORK/replay.jsonl yet: a periodic re-extraction of a growing
+    teacher pool replays only its new episodes and appends each verdict once."""
     path = Path(args.work) / 'replay.jsonl'
     done = {json.loads(line).get('key') for line in path.open() if line.strip()} if path.exists() else set()
     return replay_episodes(args, (e for e in all_episodes(Path(args.work)) if e['key'] not in done))
@@ -1331,12 +1331,12 @@ def held_closure(manifest_path):
         ids |= more[0]
         groups |= more[1]
         sources |= more[2]
+        reservations += more[3]
     groups.discard(None)
     closure = HeldClosure((ids, groups, sources))
     closure.reservations = tuple(reservations)
     return closure
 
-        reservations += more[3]
 
 def live_holdout_registry(path, held):
     """Add the predeclared Vibestudio holdouts to the learner's source-group closure."""
@@ -1575,6 +1575,9 @@ def held_excluded_ids(held_manifest, tasks, held):
         groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
         if held_hit(task_id, task.get('source_ids') or (), groups, held):
             excluded.add(task_id)
+        # a memetic row's support and query worlds (memetic_tasks.episode_case): none may be a held task
+        if set((task.get('curriculum') or {}).get('world_ids') or ()) & held[0]:
+            excluded.add(task_id)
     return excluded
 
 
@@ -1613,9 +1616,6 @@ def core_candidates(args, work, funnel, held):
     total, missing = teacher_coverage(args.teacher_pool, extracted)
     funnel['teacher']['manifest_successes_now'] = total
     funnel['teacher']['manifest_successes_not_extracted'] = len(missing)
-        # a memetic row's support and query worlds (memetic_tasks.episode_case): none may be a held task
-        if set((task.get('curriculum') or {}).get('world_ids') or ()) & held[0]:
-            excluded.add(task_id)
     if missing and not args.allow_stale_teacher:
         raise SystemExit(f'{len(missing)} of {total} teacher successes in the pool manifests are not extracted yet '
                          f'(e.g. {missing[0]}): run extract --teacher POOL --out-name episodes-teacher and replay first')
