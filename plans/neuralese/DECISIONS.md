@@ -8478,8 +8478,12 @@ all 5 memetic groups, 20 episodes, unresolved; ordinary groups pass 0.60 with 1.
   at once); its preparation stage took 1314 s (4 of 4 support runs resolved, success 0.75, admitted) and released the
   supervisors at once; the query baselines ran beside them in 1442 s: no change 5 of 6 scored (0.60); the mechanical
   default 0 of 6: every guided run on Pop timed out with no reply, because that front serves native-state turns on its
-  CPU native engine (the front at 200% CPU; today's SGLang actor imports and writes states on SGLang). Stopped there;
-  a DGX run with its own small actor (pin 7100bed43, 2 groups at once) waits for ledger room: see the next entry.
+  CPU native engine (the front at 200% CPU; today's SGLang actor imports and writes states on SGLang). Stopped there.
+  A DGX run with its own small actor (ledger unit `memverify-dgx3`, low priority so aei1's units go first; pin
+  `/home/werg/data/memetic-verify-20261123/pin-7100bed43`, one group, results in `.../collect-dgx`: the `memetic group
+  prepared` event, `groups/g000000/score.json` and `rewards.jsonl`) was queued and had not been admitted at 12:50
+  (the ledger held aei1's collection, a held-v4 measurement and aei1's round build ahead of it); remove the pin with
+  `scripts/pin_checkout.py remove` once it has run.
 - **Not checked / left:** a production-size group under aei1's load (the DGX ledger was full and the Colab front was
   down; the verification ran a support 2 / query 3 build on the idle Pop held actor); nested runs still count against
   no collector slot, so a memetic group adds up to ~30-50 concurrent streams to the actor beyond `--slots` (aei1 serves
