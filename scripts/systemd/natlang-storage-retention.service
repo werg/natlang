@@ -12,3 +12,5 @@ IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 CPUQuota=50%
 MemoryMax=3G
+# Bounded (a full scan takes about 2 h; a hung scan is killed instead of blocking next week's run).
+TimeoutStartSec=6h

@@ -63,8 +63,26 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 
 ## Operations
 
-- **Round builds read archived teacher pools file by file from the external HDD:** `/mnt/external/dgx-ops-archive-20261118/teacher-gen-20261115/pool-*`. r0001's build spent about 2 h in I/O wait there. Index the pools once onto NVMe, or pack them as one sequential file per pool, before r0002's prepare. Owner: coordinator, after the r0001 build.
-- **Both disks are below their floors (2026-11-23 16:18; `/` 38G, external 48G).** Run a cold-data pass on `/mnt/external`: write the path list first, never touch other sessions' archives, and run it after the r0001 build so it doesn't compete for the HDD. Owner: coordinator.
+- **Drive cold tier and Colab-via-Drive wait on one owner login (2026-11-23).** The DGX's ADC has no Drive scope, and a
+  Colab `drivemount` needs a browser consent per runtime. The plan is sized to the measured link: uplink 5.2-5.8 MB/s,
+  Google downlink 11.9 MB/s, and an HDD inflow of about 100 GB/day (439 -> 48 GB free from 11-19 to 11-23). After the
+  owner adds `drive.file` to ADC (DECISIONS 2026-11-23 storage), build the third tier:
+  - archive HDD-cold data to Drive at a cap of about 3 MB/s (about 260 GB/day), paused while a Colab transfer runs;
+  - verify the md5 Drive reports against the local file before deleting the HDD copy;
+  - keep a manifest of what lives where, so a restore is one command;
+  - push short-lived access tokens to Colab VMs, so bootstrap pulls checkpoints from Drive and learners write state
+    there.
+  Owner: storage agent, as soon as the scope exists.
+- **NVMe stays near its floor:** the cold NVMe data is many-small-file trees, which the per-file archiver (files of at
+  least 1 GB) never moves:
+  - `ops/ei/sft-v7/collect/groups` 26 GB and `sft-v8/collect/groups` 16 GB;
+  - `ops/grpo-v4/run2/groups` 23 GB;
+  - `~/hindsight-kb-recovery` 39 GB (another project).
+
+  Pack each closed run's group directories into one zst per group, which `rl_rollout_files` already reads as
+  `g*.rollouts.jsonl.zst`, or move the trees to the HDD/Drive after checking their readers. Owner: coordinator.
+- **The HDD is dominated by data outside natlang's keep rules:** `bgkit-data` holds 591 GB (another project). It is the
+  first Drive candidate once the tier exists, and the owner's call.
 - **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.
 - **The Colab keeper's real replacement and upgrade path is untested live.** It is watched by the ops watchdog (`colab` checks).
 

@@ -137,8 +137,10 @@ def state_files(days: float, now: float) -> list[Path]:
         except OSError:
             return []
     first = subdirs(OPS)
-    dirs = [OPS, *first, *(d for f in first for d in subdirs(f))]
-    dirs += [w for w in OPS.glob('*/*/*/watch') if w.is_dir()]
+    second = [d for f in first for d in subdirs(f)]
+    dirs = [OPS, *first, *second]
+    # watch directories three levels down, found without following symlinks into the HDD
+    dirs += [w for s in second for t in subdirs(s) for w in subdirs(t) if w.name == 'watch']
     for directory in dirs:
         try:
             entries = list(directory.iterdir())
@@ -181,13 +183,42 @@ def worktrees() -> dict[str, dict]:
     return found
 
 
-def pin_dirs() -> list[str]:
+def pin_dirs(roots=None, max_depth: int = 3) -> list[str]:
+    """Directories holding ``.natlang-pin.json`` at most MAX_DEPTH levels under the roots, on the root filesystem.
+
+    The walk never follows symlinks and never leaves the root filesystem: ``~/data`` holds hundreds of symlinks into
+    the external HDD, and ``Path.glob`` followed them into directories of tens of thousands of entries, which kept a
+    sweep in disk sleep past the next timer start (2026-11-23)."""
     found = []
-    for root in PIN_ROOTS:
-        if not root.is_dir():
+    try:
+        root_dev = os.stat('/').st_dev
+    except OSError:
+        return found
+    for root in PIN_ROOTS if roots is None else roots:
+        try:
+            if root.is_symlink() or not root.is_dir() or os.stat(root).st_dev != root_dev:
+                continue
+        except OSError:
             continue
-        for depth in ('*/.natlang-pin.json', '*/*/.natlang-pin.json', '*/*/*/.natlang-pin.json'):
-            found += [str(marker.parent) for marker in root.glob(depth)]
+        level = [str(root)]
+        for _ in range(max_depth):
+            following = []
+            for directory in level:
+                try:
+                    with os.scandir(directory) as entries:
+                        for entry in entries:
+                            try:
+                                if not entry.is_dir(follow_symlinks=False) \
+                                        or entry.stat(follow_symlinks=False).st_dev != root_dev:
+                                    continue
+                            except OSError:
+                                continue
+                            if os.path.lexists(os.path.join(entry.path, '.natlang-pin.json')):
+                                found.append(entry.path)
+                            following.append(entry.path)
+                except OSError:
+                    continue
+            level = following
     return sorted(set(found))
 
 

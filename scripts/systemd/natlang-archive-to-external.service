@@ -10,3 +10,5 @@ Nice=19
 IOSchedulingClass=idle
 CPUQuota=50%
 MemoryMax=1G
+# Bounded (the timer runs hourly; a run stuck on the HDD is killed (each file move is copy-verify-swap, so an interrupted move leaves the source in place) instead of blocking the timer forever).
+TimeoutStartSec=55min
