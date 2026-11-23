@@ -9,7 +9,9 @@ Used by:
 Parameterization (`lora+rows`):
 - Frozen BF16 base weights (no dense merge during training; FP8 frozen-base GEMMs on Blackwell by default).
 - Canonical unscaled FP32 LoRA leaves (A ~ N(0, 1/sqrt(d_in)), B = 0) across the 9 LFM3 projection families.
-- Trainable FP32 embedding/head rows for the Neuralese marker and token-override ids only.
+- Trainable FP32 embedding/head rows for the Neuralese marker and token-override ids only, in their own optimizer group
+  at ``build_optimizer(row_lr_scale=)`` x the LR, the four role markers initialised from text when they are still the
+  base's generic reserved row (``from_model(marker_init=)``).
 - Frozen head, all other embeddings, norms, conv kernels, and attention gate (unless `gate_rank` <= 16).
 - Resident FP32 AdamW state strictly over trainable leaves (zero frozen tensors in optimizer param groups).
 """
@@ -32,6 +34,63 @@ import torch
 from ..common.hashing import canonical_json_sha256_hex
 from ..tune.targets import LFM3_LORA_FAMILIES, resolve_lfm3_lora_targets
 from . import lfm3_fast
+
+
+# The Neuralese role-marker rows start from text (AGENTS.md: every span and operator starts from text). Through sft-v9 the
+# four rows were the base model's generic reserved-token row, bit-identical to each other (the pre-c9932d915 trainer
+# froze them), so nothing marked where a value starts or ends, and a reader echoed them as stray tokens (DECISIONS
+# 2026-11-23 "Neuralese read-back"). Each row becomes the mean embedding of a short phrase saying what it marks, its
+# deviation from the mean ordinary row rescaled to an ordinary row's deviation (an ordinary token in norm and in its
+# shared component, so the tied head scores it like one).
+MARKER_INIT = 'text-v1'
+MARKER_PHRASES = {
+    '<|neuralese_produce|>': ' Write the value:',
+    '<|/neuralese_produce|>': ' (value written)',
+    '<|neuralese_consume|>': ' Quoted value:',
+    '<|/neuralese_consume|>': ' (quote ends)',
+}
+# Rows that are all this close (pairwise cosine) are still the untrained reserved row; text initialisation applies to
+# them only, so trained rows are never reset.
+MARKER_DEGENERATE_COSINE = 0.999
+# The trainable rows' learning rate over the factors': AdamW steps every coordinate by about the LR, and an embedding
+# row's coordinates are ~0.02 (norm ~1 over 2048), so at the SFT LR 5e-5 a row needs ~500 consistent steps to move by
+# its own size (a round is ~190); x10 makes that ~50.
+ROW_LR_SCALE = 10.0
+
+
+def marker_rows_degenerate(rows: torch.Tensor) -> bool:
+    """Whether the marker rows are indistinguishable (every pairwise cosine above ``MARKER_DEGENERATE_COSINE``)."""
+    if rows.shape[0] < 2:
+        return False
+    unit = torch.nn.functional.normalize(rows.detach().float(), dim=-1)
+    cosine = unit @ unit.T
+    off = cosine[~torch.eye(rows.shape[0], dtype=torch.bool, device=rows.device)]
+    return bool((off > MARKER_DEGENERATE_COSINE).all())
+
+
+@torch.no_grad()
+def text_marker_rows(embedding: torch.Tensor, tokenizer, names, *, ordinary_stop: int) -> torch.Tensor:
+    """FP32 rows [len(names), D] for the role markers ``names`` (``MARKER_PHRASES``): the mean embedding of each phrase's
+    tokens, re-centred on the mean ordinary row (ids below ``ordinary_stop``) with its deviation scaled to the mean
+    ordinary deviation."""
+    total = torch.zeros(embedding.shape[1], dtype=torch.float64, device=embedding.device)
+    for start in range(0, ordinary_stop, 16384):
+        total += embedding[start:min(ordinary_stop, start + 16384)].double().sum(0)
+    mean = (total / ordinary_stop).float()
+    spread = 0.0
+    for start in range(0, ordinary_stop, 16384):
+        spread += float((embedding[start:min(ordinary_stop, start + 16384)].float() - mean).norm(dim=1).double().sum())
+    spread /= ordinary_stop
+    rows = []
+    for name in names:
+        if name not in MARKER_PHRASES:
+            raise ValueError(f'no initialisation phrase for role marker {name!r}')
+        ids = tokenizer(MARKER_PHRASES[name], add_special_tokens=False)['input_ids']
+        if not ids or max(ids) >= ordinary_stop:
+            raise ValueError(f'the phrase of {name!r} does not tokenize into ordinary tokens')
+        deviation = embedding[torch.tensor(ids, device=embedding.device)].float().mean(0) - mean
+        rows.append(mean + deviation * (spread / float(deviation.norm())))
+    return torch.stack(rows)
 
 
 @dataclass(frozen=True)
@@ -222,10 +281,19 @@ def load_base_model(checkpoint, base, *, device='cuda', dtype=torch.bfloat16):
     sparse = [(marker_ids, interface['input_rows'])]
     if override_ids:
         sparse.append((override_ids, interface['extra_input_rows']))
-    special = []
+    special, exact_rows = [], {}
     for ids, rows in sparse:
         merged[torch.tensor(list(ids), dtype=torch.long)] = rows.to(merged.dtype)
         special.extend(ids)
+        exact_rows.update({int(i): row.detach().clone() for i, row in zip(ids, rows)})
+    # the FP32 master rows a merged checkpoint carries (``master_rows``), where they still round to its interface rows
+    master = state.get('trainable_rows_fp32')
+    if master is not None:
+        for token, row in zip(master['token_ids'].tolist(), master['rows']):
+            stored = exact_rows.get(int(token))
+            if stored is not None and torch.equal(row.to(stored.dtype), stored):
+                exact_rows[int(token)] = row.detach().float().clone()
+    exact_rows = {token: row.float() for token, row in exact_rows.items()}
     backbone['model.embed_tokens.weight'] = merged
     missing = model.load_state_dict({k: v.to(dtype) for k, v in backbone.items()}, strict=False)
     if missing.unexpected_keys or [k for k in missing.missing_keys if k != 'lm_head.weight']:
@@ -233,6 +301,9 @@ def load_base_model(checkpoint, base, *, device='cuda', dtype=torch.bfloat16):
     # Drop unused legacy optimizer state from source checkpoint to keep host RAM lean.
     trimmed_state = {k: v for k, v in state.items() if k != 'training'}
     model.to(device=device, dtype=dtype)
+    # the interface rows at the checkpoint's own precision (FP32 in merged checkpoints): the learner's trainable rows
+    # start from these, not from their cast into the BF16 embedding
+    model._natlang_interface_rows = exact_rows
     return model, trimmed_state, special, marker_ids, override_ids
 
 
@@ -275,8 +346,15 @@ class Lfm3Learner:
     def from_model(cls, model, spec: AdapterSpec, *, special_ids=(), marker_ids=(), override_ids=(),
                    state: dict | None = None, base_checkpoint_path: str | None = None,
                    base_weights_sha256: str = '', compile_layers: bool = True,
-                   fp8_base: bool | None = None, seed: int = 0) -> 'Lfm3Learner':
-        """Attach frozen BF16 base + FP32 LoRA leaves + optional FP32 trainable Neuralese rows onto ``model``."""
+                   fp8_base: bool | None = None, seed: int = 0, tokenizer=None,
+                   marker_names=None, marker_init: str = MARKER_INIT) -> 'Lfm3Learner':
+        """Attach frozen BF16 base + FP32 LoRA leaves + optional FP32 trainable Neuralese rows onto ``model``.
+
+        The trainable rows start from the checkpoint's interface rows at their own precision; with ``marker_init``
+        'text-v1' (default; 'none' keeps them), role-marker rows that are still the base's indistinguishable reserved row start from text
+        (``text_marker_rows``; ``tokenizer`` required then; ``marker_names`` in ``marker_ids`` order, default
+        ``shared_state.ROLE_MARKERS``). The frozen embedding keeps the source rows, so a reference
+        view of the start rows (``ref_rows=None``) is the policy that was served."""
         for p in model.parameters():
             p.requires_grad_(False)
         device = model.model.embed_tokens.weight.device
@@ -304,6 +382,23 @@ class Lfm3Learner:
             unique_ids = list(dict.fromkeys(int(i) for i in special_ids))
             id_tensor = torch.tensor(unique_ids, dtype=torch.long, device=device)
             init_rows = model.model.embed_tokens.weight.detach().index_select(0, id_tensor).float().clone()
+            exact = getattr(model, '_natlang_interface_rows', None) or {}
+            for index, token in enumerate(unique_ids):
+                if token in exact:
+                    init_rows[index] = exact[token].to(device=device)
+            markers = [unique_ids.index(int(i)) for i in marker_ids]
+            if marker_init not in ('text-v1', 'none'):
+                raise ValueError(f"marker_init must be 'text-v1' or 'none', got {marker_init!r}")
+            if marker_init == 'text-v1' and markers and marker_rows_degenerate(init_rows[markers]):
+                if tokenizer is None:
+                    raise ValueError('text initialisation of the role-marker rows needs the tokenizer')
+                from ..model.shared_state import ROLE_MARKERS
+                names = list(marker_names or ROLE_MARKERS)
+                if len(names) != len(markers):
+                    raise ValueError(f'{len(markers)} role-marker ids but marker names {names}')
+                init_rows[markers] = text_marker_rows(model.model.embed_tokens.weight.detach(), tokenizer, names,
+                                                      ordinary_stop=min(unique_ids)).to(init_rows.device)
+                model._natlang_marker_init = {'init': 'text-v1', 'markers': dict(zip(names, map(int, marker_ids)))}
             init_rows.requires_grad_(True)
             t_rows = TrainableRows(
                 token_ids=id_tensor,
@@ -320,13 +415,21 @@ class Lfm3Learner:
     @classmethod
     def from_checkpoint(cls, checkpoint, base, spec: AdapterSpec, *, device='cuda', dtype=torch.bfloat16,
                         compile_layers: bool = True, fp8_base: bool | None = None, seed: int = 0,
-                        base_weights_sha256: str = '') -> 'Lfm3Learner':
+                        base_weights_sha256: str = '', marker_init: str = MARKER_INIT) -> 'Lfm3Learner':
         model, state, special, marker_ids, override_ids = load_base_model(checkpoint, base, device=device, dtype=dtype)
+        from transformers import AutoTokenizer
         return cls.from_model(
             model, spec, special_ids=special, marker_ids=marker_ids, override_ids=override_ids,
             state=state, base_checkpoint_path=str(checkpoint), base_weights_sha256=base_weights_sha256,
             compile_layers=compile_layers, fp8_base=fp8_base, seed=seed,
+            tokenizer=AutoTokenizer.from_pretrained(base, trust_remote_code=False) if marker_init == 'text-v1' else None,
+            marker_names=(state.get('interface_state') or {}).get('marker_names'), marker_init=marker_init,
         )
+
+    @property
+    def marker_init(self) -> dict | None:
+        """{'init', 'markers'} when this learner's role-marker rows started from text (``from_model``), else None."""
+        return getattr(self.model, '_natlang_marker_init', None)
 
     @property
     def device(self) -> torch.device:
@@ -407,7 +510,8 @@ class Lfm3Learner:
         }
 
     def build_optimizer(self, lr: float, *, betas=(0.9, 0.95), eps: float = 1e-8,
-                        weight_decay: float = 0.0, fused: bool | None = None) -> torch.optim.AdamW:
+                        weight_decay: float = 0.0, fused: bool | None = None,
+                        row_lr_scale: float = ROW_LR_SCALE) -> torch.optim.AdamW:
         """Resident FP32 AdamW strictly over trainable leaves; verifies zero frozen tensors in param groups."""
         params = self.trainable_parameters()
         if not params:
@@ -419,10 +523,18 @@ class Lfm3Learner:
         if any(id(p) in frozen_ids for p in params):
             raise RuntimeError('frozen base parameter leaked into trainable optimizer set')
         use_fused = (self.device.type == 'cuda') if fused is None else bool(fused)
-        return torch.optim.AdamW(
-            [{'params': params, 'weight_decay': float(weight_decay)}],
-            lr=float(lr), betas=betas, eps=float(eps), fused=use_fused,
-        )
+        # Two groups when rows train: the factors, then the rows at ``row_lr_scale`` x the LR. ``lr_scale`` stays
+        # in each group so a schedule sets ``group['lr'] = lr * group['lr_scale']``.
+        rows = [] if self.trainable_rows is None else [self.trainable_rows.rows]
+        factors = [p for p in params if all(p is not r for r in rows)]
+        groups = [{'params': factors, 'weight_decay': float(weight_decay), 'lr': float(lr), 'lr_scale': 1.0}]
+        if rows:
+            scale = float(row_lr_scale)
+            if not math.isfinite(scale) or scale <= 0:
+                raise ValueError(f'row_lr_scale must be positive and finite, got {scale}')
+            groups.append({'params': rows, 'weight_decay': float(weight_decay), 'lr': float(lr) * scale,
+                           'lr_scale': scale})
+        return torch.optim.AdamW(groups, lr=float(lr), betas=betas, eps=float(eps), fused=use_fused)
 
     def zero_grad(self, *, set_to_none: bool = True) -> None:
         for p in self.trainable_parameters():
@@ -521,6 +633,22 @@ class Lfm3Learner:
         tensors, scales = self.factor_tensors()
         backbone, interface, _changed = merge_policy_state(self.state, tensors, scales, dtype=dtype)
         return backbone, interface
+
+
+def master_rows(tensors: dict) -> dict | None:
+    """The FP32 master copy of the trainable rows a merged checkpoint carries beside its interface rows
+    (``trainable_rows_fp32``: {'token_ids': int64 [K], 'rows': FP32 [K, D]}), or None without trainable rows or with
+    NATLANG_MERGED_ROW_DTYPE=source. Engines load the interface rows at the checkpoint's row dtype (BF16 for LFM3: the
+    native engine's bf16 profile, the SGLang and GGUF exports cast them anyway); the next learner starts its rows from
+    this copy (``load_base_model``), so a round's row update is no longer rounded to BF16 between rounds."""
+    import os
+    choice = os.environ.get('NATLANG_MERGED_ROW_DTYPE', 'float32')
+    if choice not in ('float32', 'source'):
+        raise ValueError(f"NATLANG_MERGED_ROW_DTYPE must be 'float32' or 'source', not {choice!r}")
+    if choice == 'source' or 'trainable_rows.rows' not in tensors:
+        return None
+    return {'token_ids': tensors['trainable_rows.token_ids'].detach().to('cpu', torch.int64).clone(),
+            'rows': tensors['trainable_rows.rows'].detach().to('cpu', torch.float32).clone()}
 
 
 def merge_policy_state(state: dict, tensors: dict, scales: dict, *, dtype=torch.bfloat16) -> tuple[dict, dict, int]:

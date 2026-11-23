@@ -16,7 +16,7 @@ checkpoint with a block store, so a collector fetches its stored blocks over HTT
 checkpoint SHA (the transport receipt binds it) and binds ``actor_export`` in every capture (arithmetic on another GPU
 differs from the learner's). stop removes the container and keeps the block store.
 
-serve-checkpoint serves a pruned native checkpoint (``exp0_sft.write_checkpoint`` / GRPO's ``step-N/checkpoint.pt``:
+serve-checkpoint serves a pruned native checkpoint (``learner_state.export_merged_checkpoint`` / GRPO's ``step-N/checkpoint.pt``:
 already model-only BF16, so no view or transport is prepared) with the same SGLang engine and export format: the file
 goes to Pop as is (rsync, sha256-checked by the driver), and the actor runs an exported copy of commit C on Pop
 (``git archive``, no worktree), so a pinned experiment's held evaluations on Pop serve its own code. Pop keeps the
