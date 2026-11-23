@@ -101,3 +101,22 @@ def test_dry_run_moves_nothing(tmp_path, monkeypatch):
 def test_colab_transfer_detection_reads_rsync_argv(monkeypatch, tmp_path):
     m = load()
     assert m.colab_transfer_active() in (True, False)
+
+
+def test_rearchiving_a_restored_file_reuses_its_drive_copy(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'MANIFEST', tmp_path / 'manifest.jsonl')
+    monkeypatch.setattr(m, 'registered', lambda path: False)
+    monkeypatch.setattr(m, 'held_paths', lambda: set())
+    monkeypatch.setattr(m, 'mirror_manifest', lambda drive: None)
+    f = old_file(hdd / 'natlang-grpo-v3' / 'a.bin', b'q' * 2048)
+    drive = FakeDrive()
+    args = SimpleNamespace(apply=True, root=['natlang-grpo-v3'], budget_gb=1, max_minutes=5, rate_mb=0, min_mb=0,
+                           min_age_days=-1, links=[])
+    m.archive(args, drive)
+    m.restore(SimpleNamespace(path=str(f), token_file=None), drive)
+    assert f.exists() and drive.next == 1
+    m.archive(args, drive)
+    assert not f.exists() and drive.next == 1          # no second upload: the restored copy is still on Drive

@@ -435,9 +435,9 @@ def archive(args, drive=None) -> int:
             n += 1
             continue
         record = latest.get(str(path))
-        if record and record.get('op') == 'put' and record.get('bytes') == st.st_size \
+        if record and record.get('op') in ('put', 'restored') and record.get('bytes') == st.st_size \
                 and abs(record.get('mtime', 0) - st.st_mtime) < 1:
-            done = record          # uploaded and verified before; the delete did not happen
+            done = record          # on Drive and verified before (the delete did not happen, or it was restored)
         else:
             done = drive.upload(path, key, rate=rate, pause=colab_transfer_active,
                                 properties={'natlang_path': str(path)[-100:]})
