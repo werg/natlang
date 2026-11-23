@@ -1,5 +1,5 @@
 // End-to-end tests for Tier 3 Flagship Semantic-FP Applications (WS6 §3 A8-A10):
-// applications/sem-grep-sql, applications/codemod-studio, and applications/diligence.
+// nldb's repository questions (applications/nldb/grep, formerly sem-grep-sql), the codemods of applications/migration (formerly codemod-studio), and applications/diligence.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildProject, CallStore, checkProject, createNatlangRuntime } from '../dist/index.js';
 import { modelTurnsSoFar } from '../dist/native/agent.js';
-import { scriptedModel } from './support/natlang.mjs';
+import { scriptedModel, withGeneratedDecisions } from './support/natlang.mjs';
+import { migrationModel, renameStages } from './support/migration-stages.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const runtimeModule = {
@@ -42,7 +43,7 @@ const textOf = req => req.messages.flatMap(m => [
 ]).join('\n');
 
 test('all three Tier 3 flagships pass natlang check cleanly and include examples', async () => {
-  for (const app of ['sem-grep-sql', 'codemod-studio', 'diligence']) {
+  for (const app of ['nldb', 'diligence']) {
     const project = join(repo, 'applications', app);
     const checked = checkProject(project, { write: false });
     assert.equal(checked.ok, true, `${app}: ${JSON.stringify(checked.diagnostics)}`);
@@ -53,9 +54,9 @@ test('all three Tier 3 flagships pass natlang check cleanly and include examples
   }
 });
 
-test('A8 applications/sem-grep-sql: exact CSV join + semantic filter + 100% SHA cache hit on repeat + Neuralese view hook', async () => {
-  const load = await buildApp('sem-grep-sql');
-  const { createRepoFile, parseCsv, PredicateCache, runQuery } = await load('query.js');
+test('A8 applications/nldb/grep: exact CSV join + semantic filter + 100% SHA cache hit on repeat + Neuralese view hook', async () => {
+  const load = await buildApp('nldb');
+  const { createRepoFile, parseCsv, PredicateCache, runQuery } = await load('grep/query.js');
 
   const ownersCsv = [
     'file,team,tier,rpm',
@@ -172,131 +173,106 @@ test('A8 applications/sem-grep-sql: exact CSV join + semantic filter + 100% SHA 
   assert.equal(predicateCalls, callsAfterFirst, 'view hook answered predicate without calling raw matchesPredicate');
 });
 
-test('A9 applications/codemod-studio: crisp rules run with 0 LLM calls, semantic remainder repairs via proposeAndVerify, mined rule covers new files', async () => {
-  const load = await buildApp('codemod-studio');
-  const { createSourceFile, migrateRepository, verifyMinedRule } = await load('studio.js');
+test('A8 nldb/grep: a question in words over files and metadata compiles to SQL; meaning is judged once per file and remembered', async () => {
+  const load = await buildApp('nldb');
+  const { createRepoFile } = await load('grep/query.js');
+  const { askRepository } = await load('grep/ask.js');
+  const files = [
+    createRepoFile('src/pay.ts', 'export async function charge() { for (const attempt of [1, 2, 3]) { /* retry with backoff */ } }'),
+    createRepoFile('src/log.ts', 'export const log = (m: string) => console.log(m);'),
+    createRepoFile('src/ship.ts', 'export async function ship() { /* retries the carrier call twice */ }'),
+  ];
+  const owners = [{ path: 'src/pay.ts', team: 'payments' }, { path: 'src/log.ts', team: 'platform' }, { path: 'src/ship.ts', team: 'logistics' }];
+  const sql = "SELECT f.path, o.team FROM files f JOIN owners o ON o.path = f.path WHERE meets(f.content, 'retries a failed call') ORDER BY f.path";
+  const translated = [];
+  const model = scriptedModel(opening => {
+    if (!opening.includes('Compile request for the SQLite database')) return null;
+    translated.push(opening);
+    assert.match(opening, /CREATE TABLE (IF NOT EXISTS )?files/);
+    assert.match(opening, /CREATE TABLE [^\n]*owners[^\n]*team/);
+    return `return ${JSON.stringify({ kind: 'question', statements: [sql], semantic: [{ criterion: 'retries a failed call', table: 'files', column: 'content' }],
+      clarification: '', explanation: 'Files that retry, with their owners.', assumptions: [] })};`;
+  });
+  const judged = [];
+  const runtime = createNatlangRuntime({ model: withGeneratedDecisions(model.driver, inputs => { judged.push(inputs.value); return /retr/.test(inputs.value); }), calls: false });
+  const root = mkdtempSync(join(tmpdir(), 'natlang-nldb-grep-'));
+  const options = { path: join(root, 'repo.sqlite'), run: fn => runtime.run(fn), today: () => '2026-11-23' };
+  const first = await askRepository('Which files retry failed calls, and who owns them?', { files, tables: { owners } }, options);
+  assert.deepEqual(first.answer?.rows, [['src/pay.ts', 'payments'], ['src/ship.ts', 'logistics']], JSON.stringify(first));
+  assert.equal(judged.length, 3, 'each file judged once');
+  const again = await askRepository('Which files retry failed calls, and who owns them?', { files, tables: { owners } }, options);
+  assert.deepEqual(again.answer.rows, first.answer.rows);
+  assert.equal(judged.length, 3, 'the verdicts are kept in the database: nothing judged again');
+  assert.equal(translated.length, 2);
+});
+
+test('A9 codemods (applications/migration/codemod): crisp rules with 0 model calls, the semantic remainder through the migration loop, a mined rule covers new files', async () => {
+  const load = await buildApp('migration');
+  const { createSourceFile, migrateRepository, verifyMinedRule } = await load('codemod/studio.js');
 
   const spec = {
     id: 'logger-v3',
-    title: 'Migrate legacy logger API to structured logger v3',
-    description: 'Replace log.infoText(msg) with log.info({ msg }) and log.warnMessage(msg) with log.warn({ message: msg }).',
-    guidance: 'Ensure every migrated file imports { log } from "./logger.js" and removes all deprecated logger methods.',
+    title: 'Migrate the legacy logger API',
+    description: 'Rename log.infoText to log.info and log.warnMessage to log.warn.',
+    guidance: 'Keep every argument as it is.',
   };
-
-  // Initial crisp rule covers log.infoText -> log.info, leaving log.warnMessage for semantic migration.
-  const initialCrispRules = [
-    {
-      id: 'crisp-info-text',
-      description: 'Replace log.infoText(arg) with log.info({ msg: arg })',
-      find: 'log\\.infoText\\(([^)]+)\\)',
-      replace: 'log.info({ msg: $1 })',
-      regex: true,
-      origin: 'initial',
-    },
-  ];
-
+  // The initial crisp rule covers log.infoText; log.warnMessage is the semantic remainder.
+  const initialCrispRules = [{ id: 'crisp-info-text', description: 'log.infoText -> log.info', find: 'log.infoText(', replace: 'log.info(', origin: 'initial' }];
   // Exact verifier simulating `tsc + unit tests`.
-  const verify = (_path, content) => {
-    const problems = [];
-    if (content.includes('log.infoText(')) problems.push('TS2339: Property infoText does not exist on type Logger.');
-    if (content.includes('log.warnMessage(')) problems.push('TS2339: Property warnMessage does not exist on type Logger.');
-    if (content.includes('log.warn(') && !content.includes('log.warn({ message:'))
-      problems.push('Test failure: log.warn must receive a structured { message: ... } object.');
-    return problems;
-  };
-
+  const verify = (_path, content) => [
+    ...(content.includes('log.infoText(') ? ['TS2339: Property infoText does not exist on type Logger.'] : []),
+    ...(content.includes('log.warnMessage(') ? ['TS2339: Property warnMessage does not exist on type Logger.'] : []),
+  ];
   const repoWave1 = [
-    createSourceFile('src/already-clean.ts', 'import { log } from "./logger.js";\nexport const ok = () => log.info({ msg: "ready" });\n'),
+    createSourceFile('src/already-clean.ts', 'import { log } from "./logger.js";\nexport const ok = () => log.info("ready");\n'),
     createSourceFile('src/crisp-a.ts', 'import { log } from "./logger.js";\nexport const a = () => log.infoText("started");\n'),
     createSourceFile('src/crisp-b.ts', 'import { log } from "./logger.js";\nexport const b = () => log.infoText(status);\n'),
     createSourceFile('src/sem-a.ts', 'import { log } from "./logger.js";\nexport const warnA = (err: string) => log.warnMessage(err);\n'),
     createSourceFile('src/sem-b.ts', 'import { log } from "./logger.js";\nexport const warnB = (note: string) => log.warnMessage(note);\n'),
   ];
 
-  let semAAttempt = 0;
-  let transformCalls = 0;
   let mineCalls = 0;
-
-  const model = scriptedModel(opening => {
-    if (opening.includes('Migrate the source file at path')) {
-      transformCalls++;
-      if (opening.includes('src/sem-a.ts')) {
-        semAAttempt++;
-        if (semAAttempt === 1) {
-          // First attempt omits structured { message: ... } -> fails verifier -> triggers proposeAndVerify repair!
-          return 'return `import { log } from "./logger.js";\\nexport const warnA = (err: string) => log.warn(err);\\n`;';
-        }
-        return 'return `import { log } from "./logger.js";\\nexport const warnA = (err: string) => log.warn({ message: err });\\n`;';
-      }
-      if (opening.includes('src/sem-b.ts')) {
-        return 'return `import { log } from "./logger.js";\\nexport const warnB = (note: string) => log.warn({ message: note });\\n`;';
-      }
-    }
-    if (opening.includes('Inspect the verified before and after code pairs')) {
-      mineCalls++;
-      return `return {
-        description: 'Replace log.warnMessage(arg) with structured log.warn({ message: arg })',
-        find: 'log\\\\.warnMessage\\\\(([^)]+)\\\\)',
-        replace: 'log.warn({ message: $1 })',
-        regex: true
-      };`;
-    }
-    return null;
+  const model = migrationModel(renameStages('warnMessage', 'warn'), opening => {
+    if (!opening.includes('Inspect the verified before and after code pairs')) return null;
+    mineCalls++;
+    return `return { description: 'log.warnMessage -> log.warn', find: 'log.warnMessage(', replace: 'log.warn(' };`;
   });
+  const runtime = createNatlangRuntime({ model: { driver: model.driver, decisionSamples: 0 }, calls: false });
 
-  const calls = openTempCallStore('natlang-codemod-studio-calls-');
-  const runtime = createNatlangRuntime({ model: model.driver, calls });
-
-  const report1 = await runtime.run(() =>
-    migrateRepository(repoWave1, spec, {
-      crispRules: initialCrispRules,
-      verify,
-      attempts: 2,
-      minPairsToMine: 2,
-    }),
-  );
-
+  const report1 = await runtime.run(() => migrateRepository(repoWave1, spec, { runtime, crispRules: initialCrispRules, verify, attempts: 1, minPairsToMine: 2 }));
   assert.equal(report1.unchangedFiles, 1);
-  assert.equal(report1.crispFiles, 2, 'crisp rules handle crisp-a.ts and crisp-b.ts with 0 LLM calls');
-  assert.equal(report1.semanticFiles, 2, 'semantic remainder migrated green via proposeAndVerify');
+  assert.equal(report1.crispFiles, 2, 'crisp rules handle crisp-a.ts and crisp-b.ts with 0 model calls');
+  assert.equal(report1.semanticFiles, 2, JSON.stringify(report1.results));
   assert.equal(report1.failedFiles, 0);
-  assert.equal(semAAttempt, 2, 'proposeAndVerify repaired the failing first proposal on src/sem-a.ts');
-  assert.equal(transformCalls, 3, '2 attempts for sem-a.ts + 1 for sem-b.ts (0 for crisp/unchanged)');
-  assert.equal(mineCalls, 1, 'mineCrispRule ran once after 2 verified semantic pairs');
+  assert.ok(['understand', 'survey', 'plan', 'edit', 'summarize'].every(stage => model.seen.includes(stage)),
+    `the semantic remainder ran the migration loop's stages: ${model.seen}`);
+  assert.ok(!model.openings.some(opening => opening.includes('crisp-a.ts') && opening.includes('Edit the site')), 'crisp files never reach the loop');
+  assert.match(report1.results.find(r => r.path === 'src/sem-a.ts').migrated, /log\.warn\(err\)/);
+  assert.match(report1.migrationSummary, /^reviewable/);
+  assert.equal(report1.llmCalls, 2, 'one migration run and one mining call');
+  assert.equal(mineCalls, 1);
   assert.equal(report1.admittedRules.length, 1, 'verified mined rule admitted');
-  assert.equal(report1.minedRules[0].admitted, true);
   assert.equal(report1.minedRules[0].verifiedPairs, 2);
   assert.equal(report1.minedRules[0].regressions, 0);
 
-  // Negative check: a buggy mined rule that breaks verification is rejected before admission.
-  const badRuleCheck = await verifyMinedRule(
-    { description: 'Bad rule', find: 'log\\.warnMessage\\(([^)]+)\\)', replace: 'log.warn($1)', regex: true },
-    [{ path: 'src/sem-a.ts', before: repoWave1[3].content, after: report1.results.find(r => r.path === 'src/sem-a.ts').migrated }],
-    new Map(report1.results.map(r => [r.path, r.migrated])),
-    verify,
-    'bad-mined-rule',
-    1,
-  );
+  // A mined rule that breaks verification is refused before admission.
+  const badRuleCheck = await verifyMinedRule({ description: 'Bad rule', find: 'log.info(', replace: 'log.infoText(' },
+    [{ path: 'src/crisp-a.ts', before: repoWave1[1].content, after: report1.results.find(r => r.path === 'src/crisp-a.ts').migrated }],
+    new Map(report1.results.map(r => [r.path, r.migrated])), verify, 'bad-mined-rule', 1);
   assert.equal(badRuleCheck.admitted, false);
   assert.ok(badRuleCheck.regressions >= 1);
 
-  // Wave 2: apply initial + mined crisp rules to new similar files -> 100% crisp, 0 LLM calls!
+  // Wave 2: the initial and mined crisp rules cover new similar files with no model call at all.
   const repoWave2 = [
     createSourceFile('src/new-warn-1.ts', 'import { log } from "./logger.js";\nexport const w1 = () => log.warnMessage("disk full");\n'),
     createSourceFile('src/new-warn-2.ts', 'import { log } from "./logger.js";\nexport const w2 = (x: string) => log.warnMessage(x);\n'),
   ];
-  const callsBeforeWave2 = transformCalls + mineCalls;
-  const report2 = await runtime.run(() =>
-    migrateRepository(repoWave2, spec, {
-      crispRules: [...initialCrispRules, ...report1.admittedRules],
-      verify,
-    }),
-  );
+  const stagesBefore = model.seen.length;
+  const report2 = await runtime.run(() => migrateRepository(repoWave2, spec, { crispRules: [...initialCrispRules, ...report1.admittedRules], verify }));
   assert.equal(report2.crispFiles, 2, 'mined crisp rule covers both new similar files');
   assert.equal(report2.semanticFiles, 0);
-  assert.equal(report2.failedFiles, 0);
   assert.equal(report2.llmCalls, 0);
-  assert.equal(transformCalls + mineCalls, callsBeforeWave2, '0 LLM calls on Wave 2');
+  assert.equal(model.seen.length, stagesBefore, 'no migration stage ran in wave 2');
 });
 
 test('A10 applications/diligence: recursive digestSection enforces verbatim citationsMatch, asymmetric dealbreaker escalates, semanticRank ranks candidates', async () => {

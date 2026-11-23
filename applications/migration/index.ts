@@ -82,12 +82,26 @@ export class RepositoryMigration {
   private readonly root: string;
   private readonly files: string[];
   private readonly checks: CheckCommand[];
+  private readonly contentsGiven?: Record<string, string>;
+  private readonly validator?: (contents: Readonly<Record<string, string>>) => Promise<Check[]> | Check[];
   private readonly revisions = new Map<string, Record<string, string>>();
   private readonly events: Record<string, unknown>[] = [];
 
-  constructor(root: string, { files, checks = [], policy = {} }: { files: string[], checks?: CheckCommand[], policy?: Partial<Record<PolicyPoint, Implementation>> }) {
+  /**
+   * A repository on disk (`root`, `files`, check commands), or in memory: `contents` gives the files' texts instead of
+   * reading `root`, and `validator` judges a revision's texts instead of running commands (a caller's exact verifier,
+   * such as codemod's typecheck and tests).
+   */
+  constructor(root: string, { files, checks = [], policy = {}, contents, validator }: { files: string[], checks?: CheckCommand[],
+      policy?: Partial<Record<PolicyPoint, Implementation>>, contents?: Record<string, string>,
+      validator?: (contents: Readonly<Record<string, string>>) => Promise<Check[]> | Check[] }) {
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.root = resolve(root); this.files = [...files]; this.checks = checks;
+    if (contents) {
+      if (files.some(path => typeof contents[path] !== 'string')) throw new Error('in-memory contents must hold every manifest file');
+      this.contentsGiven = Object.fromEntries(files.map(path => [path, contents[path]!]));
+    }
+    this.validator = validator;
     if (!this.files.length || this.files.some(path => !safe(path)) || new Set(this.files).size !== this.files.length)
       throw new Error('invalid file manifest');
     if (checks.some(check => !Array.isArray(check.argv) || !check.argv.length || check.argv.some(arg => typeof arg !== 'string') ||
@@ -95,8 +109,8 @@ export class RepositoryMigration {
   }
 
   async open(): Promise<RepoSnapshot> {
-    const contents: Record<string, string> = {};
-    for (const path of this.files) {
+    const contents: Record<string, string> = { ...this.contentsGiven };
+    if (!this.contentsGiven) for (const path of this.files) {
       const absolute = resolve(this.root, path);
       if (!absolute.startsWith(`${this.root}${sep}`)) throw new Error('path escape');
       contents[path] = await readFile(absolute, 'utf8');
@@ -181,6 +195,12 @@ export class RepositoryMigration {
 
   async validate(revision: string): Promise<Validation> {
     const contents = this.contents(revision);
+    if (this.validator) {
+      const results = await this.validator(contents);
+      const status = results.every(row => row.status === 'passed') ? 'passed' : 'failed';
+      this.events.push({ operation: 'repository.validate', revision, status, checks: results.map(row => ({ id: row.id, status: row.status })) });
+      return { revision, status, checks: results };
+    }
     const directory = await mkdtemp(join(tmpdir(), 'natlang-migration-'));
     try {
       for (const [path, text] of Object.entries(contents)) {

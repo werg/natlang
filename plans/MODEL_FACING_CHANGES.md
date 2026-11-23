@@ -17,6 +17,18 @@ is not required (owner, 2026-11-12: that rule did not come from the owner and wa
   whatever it held. It now validates `prefixItems` by position and `items` after them (JSON Schema 2020-12); captures
   parsed under the previous parser policy (`1b2713ad…`) still authenticate (`NATIVE_XML_POLICY_READS`).
 - Engine status and the smoke: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
+### 2026-11-23 — codemods run the migration loop's stages; repository questions run nldb's SQLite compiler and judge (WS6 A8, A9)
+
+- **What changed.** The codemod semantic stage (now `applications/migration/codemod`) no longer calls
+  `transformFile.nl` (removed: "Migrate the source file at path…, return only the complete updated source text") once
+  per file; the files the verifier rejects go through the migration loop's stages (understand, survey, locate,
+  classify, plan, edit, patch, exact, triage, repair, round, settled, summarize) over an in-memory repository whose
+  checks are the codemod verifier's problems. Repository questions (`applications/nldb/grep/ask.ts`) send the question
+  to nldb's `sqlite/translate.nl` with a `files(path, sha256, content)` table and the metadata tables in its schema, and
+  judge file content with `sqlite/judge.nl`. No prompt text changed.
+- **Opt-outs.** `runQuery` with a caller-written plan keeps `matchesPredicate.nl`/`extractField.nl`; there is no
+  per-file transform path any more.
+
 ### 2026-11-23 — `natlang check --idiom` runs the idiom reviewer's decisions on the model (WS3 I2)
 
 - **What changed.** `natlang check --idiom` (and `--idiom-strict`) runs `applications/idiom-reviewer` through
