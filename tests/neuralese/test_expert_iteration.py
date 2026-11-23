@@ -18,6 +18,12 @@ import expert_iteration as ei  # noqa: E402
 import sft_sources  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_live_ledger(monkeypatch):
+    """Cycle.present asks the memory ledger whether a unit is requeued: tests never read the live DGX ledger."""
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: False)
+
+
 def write_group(root, name, task_id, rewards, role='student'):
     directory = root / 'groups' / name
     directory.mkdir(parents=True)
@@ -848,3 +854,41 @@ def test_select_never_takes_a_held_v4_task_or_sibling_and_the_gate_stays_held_v3
     assert grpo.default_held() == v3
     eligible, excluded = grpo.load_tasks(ei.pool_args(args), None)
     assert [r['id'] for r in eligible] == ['c'] and excluded == 3
+
+
+def test_cycle_stages_outrank_its_collection_and_a_requeued_unit_is_joined(tmp_path, monkeypatch):
+    """The cycle's frontier, data and build run at the stage priority (above every collection's), and a preempted,
+    requeued unit is not over: ``wait`` and the collect loop join it, ``ledger`` never launches it a second time."""
+    argv = ['--dir', str(tmp_path / 'sft-v10'), '--name', 'sft-v10', '--start', '/v9.pt', '--start-sha', 'bbb',
+            '--commit', 'c' * 40, '--pin', str(tmp_path / 'pin')]
+    cycle = ei.Cycle(_cycle_args(argv))
+    (cycle.dir / 'stages').mkdir(parents=True, exist_ok=True)
+    seen = []
+
+    def ledger(self, unit, budget, priority, command, log, **kw):
+        seen.append((unit, priority))
+        cycle.mix.mkdir(parents=True, exist_ok=True)
+        (cycle.mix / 'chains.pkl').write_bytes(b'x')
+        (cycle.mix / 'build.json').write_text(json.dumps({'episodes': 1, 'tasks': 1, 'forward_tokens': 1,
+                                                          'mix': {'parts': {}}}))
+    monkeypatch.setattr(ei.Cycle, 'ledger', ledger)
+    monkeypatch.setattr(ei.Cycle, 'build_command', lambda self: (cycle.pin, ['build']))
+    cycle.build_stage()
+    assert seen == [('sft-v10-build', ei.STAGE_PRIORITY)] and ei.STAGE_PRIORITY == 'high'
+    assert ei.COLLECTION_PRIORITY == 'medium'
+    # a requeued unit: joined until the ledger relaunched it and it ended
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    states = iter([True, True, False])
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: next(states, False))
+    calls = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: calls.append(argv) or
+                        argparse.Namespace(returncode=1))
+    cycle.wait('sft-v10-collect')
+    assert next(states, 'drained') == 'drained'
+    monkeypatch.undo()
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: True)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei.Cycle, 'wait', lambda self, unit, poll=60: None)
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: pytest.fail(f'launched again: {argv}'))
+    cycle.ledger('sft-v10-collect', 74, ei.COLLECTION_PRIORITY, ['collect'], tmp_path / 'c.log', detach=True)
