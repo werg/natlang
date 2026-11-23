@@ -555,8 +555,11 @@ def make_handler(engine: Engine):
                     or not isinstance(guidance_policy['sha256'], str) or body.get('x_natlang_rl_capture') is not True):
                 raise RequestError('bad-request', 'x_natlang_guidance_policy is {function: writeGuidance|writeHint|'
                                    'selectGuidanceFacts, sha256} alongside x_natlang_rl_capture')
+            tool_grammar = body.get('x_natlang_tool_grammar', True)
+            if type(tool_grammar) is not bool:
+                raise RequestError('bad-request', 'x_natlang_tool_grammar must be a boolean')
             request = GenerationRequest(
-                messages=body.get("messages") or [], tools=body.get("tools"),
+                messages=body.get("messages") or [], tools=body.get("tools"), tool_grammar=tool_grammar,
                 max_tokens=completion_limit(body),
                 temperature=float(body.get("temperature") or 0.0), top_p=top_p, seed=body.get("seed"),
                 template=body.get("neuralese_template"),

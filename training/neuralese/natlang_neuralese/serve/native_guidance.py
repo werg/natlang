@@ -154,6 +154,9 @@ def check(engine,seq):
             seq.native_capture_ids.extend(ids)
         seq.native_own_position+=len(ids);cursor=end
     seq.generated_positions=anchor['generated']+len(retained)
+    if seq.tool_grammar is not None:
+        # the reply's grammar stands where the retained reply ends (common.tool_grammar.Matcher.sync)
+        seq.tool_grammar.sync(list(seq.tool_grammar_prefix)+[entry['token_id'] for entry in seq.native_rl_inputs[anchor['inputs']:position]])
     seq.native_rl_inputs=seq.native_rl_inputs[:position]
     seq.rl_samples=[sample for sample in seq.rl_samples if sample['query_own_position']<own-1]
     seq.native_rl_writes=[write for write in seq.native_rl_writes if write['own_end']<=own]

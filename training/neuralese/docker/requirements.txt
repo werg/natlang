@@ -10,5 +10,8 @@ pytest
 py-spy
 tree-sitter==0.26.0
 tree-sitter-typescript==0.23.2
+# tool-call grammar (common/tool_grammar.py): engines constrain and the learner replays the same masks; the SGLang
+# fork venv pins the same version
+xgrammar==0.2.7
 boto3>=1.42.5
 zstandard==0.25.0

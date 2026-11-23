@@ -5151,7 +5151,10 @@ def train(args):
                 [chains[index] for index, _ in items], 'cuda', not args.no_neuralese_passthrough, stored_states(net),
                 starts=[start for _, start in items])
             counts = [exp0_sft.chain_loss_tokens(chains[index]) for index, _ in items]
-            return ids, positions, targets, imports, lengths, counts
+            # the masks the actor drew these targets under (a tool grammar, guidance bans): the policy, the reference and
+            # hence rho and the KL score the same renormalized law (exp0_sft.law_mask)
+            law = exp0_sft.law_mask([chains[index] for index, _ in items], model.lm_head.weight.shape[0])
+            return ids, positions, targets, imports, lengths, counts, law
 
         def run_tree(leaf, backward=True, *, adapters=None, trainable_rows=None, cur_pack=None, cur_act=None):
             return lfm3_fast_train.run_prefix_tree(
@@ -5195,9 +5198,10 @@ def train(args):
             t = time.time()
 
             def reference_leaves(items, run):
-                ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
+                ids, positions, targets, imports, lengths, counts, law = batch_inputs(model, items)
+                law_kw = {} if law is None else {'mask': law}
                 logp = -exp0_sft.token_nll(model, run(ids, lengths, imports), positions, targets,
-                                           trainable_rows=ref_rows).detach()
+                                           trainable_rows=ref_rows, **law_kw).detach()
                 for (index, _), part in zip(items, logp.split(counts)):
                     refs[index] = part
                 note_peak('reference', len(ids), len(items))
@@ -5230,11 +5234,14 @@ def train(args):
 
             def train_leaves(items, run):
                 nonlocal rho_pre_max, rho_post_max, forward_tokens, progress_mark
-                ids, positions, targets, imports, lengths, counts = batch_inputs(model, items)
+                ids, positions, targets, imports, lengths, counts, law = batch_inputs(model, items)
                 h = run(ids, lengths, imports)
+                law_kw = {} if law is None else {'mask': law}
+                if law is not None:
+                    sums['law_masked_tokens'] += len(law)
                 if args.top_p < 1:
                     nll, nucleus_nll, outside = exp0_sft.token_nll_nucleus(
-                        model, h, positions, targets, args.top_p, trainable_rows=learner.trainable_rows)
+                        model, h, positions, targets, args.top_p, trainable_rows=learner.trainable_rows, **law_kw)
                     logp_rows, policy_rows = -nll, -nucleus_nll
                     sums['outside_nucleus'] += int(outside.sum())
                     sums['nucleus_log_mass'] += (logp_rows.detach() - policy_rows.detach()).sum().item()
@@ -5245,7 +5252,7 @@ def train(args):
                         sums['non_student_tokens'] += int((~sampled).sum())
                 else:
                     logp_rows = policy_rows = -exp0_sft.token_nll(
-                        model, h, positions, targets, trainable_rows=learner.trainable_rows)
+                        model, h, positions, targets, trainable_rows=learner.trainable_rows, **law_kw)
                 p_close_rows = (close_probability(h, positions, model.lm_head.weight, targets, logp_rows, think_close,
                                                   trainable=head_override(learner.trainable_rows))
                                 if args.close_push and think_close is not None else None)
@@ -5550,6 +5557,7 @@ def train(args):
             mean_logp=round(sums['logp'] / max(1, loss_tokens), 4),
             grad_moment_cosine=None if cosine is None else round(cosine, 5),
             top_p=args.top_p, non_student_tokens=int(sums['non_student_tokens']), outside_nucleus_fraction=round(sums['outside_nucleus'] / max(1, loss_tokens), 6),
+            law_masked_fraction=round(sums['law_masked_tokens'] / max(1, loss_tokens), 6),
             nucleus_mass_mean=round(math.exp(sums['nucleus_log_mass'] / max(1, loss_tokens)), 5),
             tail_logp_floor=args.tail_logp_floor, tail_masked_fraction=round(sums['tail_masked'] / max(1, loss_tokens), 6),
             tail_masked_decisions=sums['tail_masked_decisions'],
@@ -6077,6 +6085,8 @@ def main():
         args.pool = args.pool or default_pools()
         args.held_manifest = args.held_manifest or default_held()
         args.memetic_tasks = args.memetic_tasks or default_memetic_tasks()
+        import exp0_sft
+        exp0_sft.LAW_BASE['path'] = args.base   # the tokenizer tool-grammar calls are replayed over (exp0_sft.law_mask)
         # a split group (dynamic sampling) holds as few as 2 slots: room for slots / 2 groups in flight
         args.max_outstanding = args.max_outstanding or args.max_groups + -(-args.slots // (
             2 if args.dynamic_sampling_max_spread > 0 else args.group))

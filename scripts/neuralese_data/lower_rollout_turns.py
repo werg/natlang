@@ -182,7 +182,18 @@ def sampled_call(invocation, index, sampling, stats, states=None, sources=None, 
     sample = np.array([item['token_id'] for item in samples], dtype=np.int32)
     logp = np.array([item['logp'] for item in samples], dtype=np.float32)
     law = sampling.get('sampling_law') or {}
-    return {'invocation': invocation, 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
+    # The draw's masks (common.tool_grammar; the learner scores the same law): the declared tool grammar over the reply
+    # from its first token (`grammar_prefix`: the forced opening before the first sample), and guidance bans per sample.
+    masks = {}
+    if law.get('tool_grammar') is not None:
+        stats['tool_grammar_calls'] += 1
+        masks['tool_grammar'] = law['tool_grammar']
+        masks['grammar_prefix'] = np.array([item['token_id'] for item in inputs[:lead]], dtype=np.int32)
+    bans = {i: sorted(int(t) for t in item['banned_token_ids']) for i, item in enumerate(samples)
+            if item.get('banned_token_ids')}
+    if bans:
+        masks['bans'] = bans
+    return {'invocation': invocation, 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp, **masks,
             'imports': imports, 'sources': used, 'policy': sampling['policy']['checkpoint_sha256'],
             # the weights actually served: after in-place updates ``policy`` still names the start checkpoint
             'served': (sampling.get('actor_export') or {}).get('sha256'),

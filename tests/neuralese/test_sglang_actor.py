@@ -542,7 +542,7 @@ def test_decide_scores_on_sglang_with_the_native_decision_capture(tmp_path, monk
     native, front, roles, word, block, messages = _import_fixture(tmp_path)
     # The fixture's chat template renders no assistant text, so each option's continuation is its own words here.
     rendered = native_learning.decision_items
-    monkeypatch.setattr(native_learning, 'decision_items', lambda renderer, messages, tools, options, open_reply=False: (
+    monkeypatch.setattr(native_learning, 'decision_items', lambda renderer, messages, tools, options, open_reply=False, reasoning=None: (
         rendered(renderer, messages, tools, options)[0], [word(option) for option in options]))
     body = {'messages': messages, 'options': ['t6', 't7 t8'], 'native_recording': True}
     expected = decide_native(native, body)
@@ -587,7 +587,7 @@ def test_decisions_warm_the_shared_opening_once_before_scoring(tmp_path, monkeyp
     from natlang_neuralese.serve.targets import _items, opening_items
     native, front, roles, word, stored = _span_fixture(tmp_path)
 
-    def decision_items(renderer, messages, tools, options, open_reply=False):  # the prompt as served; each option its own words
+    def decision_items(renderer, messages, tools, options, open_reply=False, reasoning=None):  # the prompt as served; each option its own words
         prompt = renderer.render_request(messages, tools)
         return _items(renderer, prompt.segments, prompt.blocks, prompt.escape_nonce), [word(o) for o in options]
     monkeypatch.setattr(native_learning, 'decision_items', decision_items)

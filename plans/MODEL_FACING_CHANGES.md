@@ -3,6 +3,22 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — tool calls decode under their schemas on the Python engine and the SGLang actor
+
+- **What changed.** Both training-collection engines constrain every reply to a request with tools by one xgrammar
+  structural tag built from the tools the prompt renders (`common/tool_grammar.py`): free text is unconstrained; after
+  `<tool_call>` the function must be a declared tool and its parameters must follow that tool's JSON schema in the
+  backbone's call format (LFM3: `<parameter=KEY>` values, a string verbatim, anything else JSON). Before, only the
+  managed llama-server and the page constrained arguments; a value of the wrong type reached the runtime's type error.
+  Now the model cannot write `["red", "x"]` for `[string, number]`, an undeclared tool name, a missing required
+  parameter or parameters out of the schema's order. Opt-out: `NATLANG_TOOL_GRAMMAR=0` on the server, or a request's
+  `x_natlang_tool_grammar: false`.
+- **Training law.** The engines record the masked, renormalized log-probability; the capture declares the grammar
+  (`sampling_law.tool_grammar`) and the learner scores every such token under the same mask (`exp0_sft.law_mask`,
+  `lfm3_fast.HeadMask`), so ratios, KL and SFT targets stay unbiased. DECISIONS 2026-11-23 "constrained decoding with
+  an exact learner law".
+- Engine status and the check: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
+
 ### 2026-11-23 — an optional tuple tail is decodable; a tuple result parsed from text is not refused
 
 - **Optional tail.** `[A, B?]` as a `return_result` value schema is `anyOf` one exact tuple per length
