@@ -501,6 +501,9 @@ def collect(args):
     g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
     g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
     g.memetic_layout = getattr(args, 'memetic_layout', 'staged')
+    g.memetic_fit_quantile = float(getattr(args, 'memetic_fit_quantile', 0.9))
+    g.memetic_nested_slots = bool(getattr(args, 'memetic_nested_slots', True))
+    g.memetic_seed_collection = getattr(args, 'memetic_seed_collection', None)
     g.max_outstanding = args.slots // 2 + 8
     tasks, excluded = grpo.load_tasks(g, work)
     code = grpo.git_pin()
@@ -510,7 +513,8 @@ def collect(args):
            'argv': sys.argv, 'checkpoint': args.checkpoint, 'checkpoint_sha256': sha, 'k': args.k, 'hours': args.hours,
            'tasks_file': args.tasks, 'tasks_sha256': sha256_file_hex_cached(Path(args.tasks)), 'eligible': len(tasks),
            'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups,
-                       'layout': g.memetic_layout},
+                       'layout': g.memetic_layout, 'fit_quantile': g.memetic_fit_quantile,
+                       'nested_slots': g.memetic_nested_slots},
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
@@ -1213,6 +1217,9 @@ class Cycle:
                        '--collect-weight-dtype', collect_w_dtype, '--teacher-attempts', teacher_attempts,
                        '--memetic-share', getattr(self.a, 'memetic_share', MEMETIC_SHARE),
                        '--memetic-layout', getattr(self.a, 'memetic_layout', 'staged'),
+                       '--memetic-fit-quantile', getattr(self.a, 'memetic_fit_quantile', 0.9),
+                       '--memetic-nested-slots' if getattr(self.a, 'memetic_nested_slots', True)
+                       else '--no-memetic-nested-slots',
                        '--slots', slots, '--unit-prefix', unit, *actor)
 
     def serve_colab(self, hosts, start, sha, profile):
@@ -2427,7 +2434,9 @@ class AsyncRoundDriver:
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
             memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE),
-            memetic_layout=getattr(a, 'memetic_layout', 'staged'), held_profile=getattr(a, 'held_profile', 'pop'),
+            memetic_layout=getattr(a, 'memetic_layout', 'staged'),
+            memetic_fit_quantile=getattr(a, 'memetic_fit_quantile', 0.9),
+            memetic_nested_slots=getattr(a, 'memetic_nested_slots', True), held_profile=getattr(a, 'held_profile', 'pop'),
             held_pin=a.held_pin, held_series_host=getattr(a, 'held_profile', 'pop'), held_samples=a.held_samples,
             held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
@@ -3152,6 +3161,12 @@ def main():
                        help="a memetic group's layout (grpo --memetic-layout; rl/memetic_workspace.py bind_layout): "
                             'staged (default) prepares it as a collector stage and fits its nested runs in the '
                             "episode's wall clock; inline is the layout before 2026-11-23")
+        p.add_argument('--memetic-fit-quantile', type=float, default=0.9,
+                       help="grpo --memetic-fit-quantile: a memetic group only for a program whose family's ordinary "
+                            'episodes in the collection finish within its nested wall clock at this quantile (0: every '
+                            'program)')
+        p.add_argument('--memetic-nested-slots', action=argparse.BooleanOptionalAction, default=True,
+                       help='grpo --memetic-nested-slots: memetic nested runs in flight take collector slots')
     s = sub.add_parser('select')
     pool_flags(s)
     s.add_argument('--out', required=True)
@@ -3185,6 +3200,8 @@ def main():
     c.add_argument('--teacher-max-successes', type=int, default=0)
     memetic_flags(c)
     c.add_argument('--memetic-tasks', help="memetic task rows (default: the registry role grpo-memetic-tasks)")
+    c.add_argument('--memetic-seed-collection', action='append',
+                   help="grpo --memetic-seed-collection (default: the sibling collections of --work)")
     c.add_argument('--memetic-max-groups', type=int, default=MEMETIC_MAX_GROUPS,
                    help='memetic groups running at once (each sample runs ~30 nested rollouts beside its slot)')
     c.add_argument('--unit-prefix', default='ei-collect')

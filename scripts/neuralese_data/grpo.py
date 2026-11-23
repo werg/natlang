@@ -508,6 +508,12 @@ class Collector:
             from natlang_neuralese.common.jsonio import read_jsonl
             self.memetic_rows = memetic_rows_held_free(list(read_jsonl(args.memetic_tasks)), args)
             random.Random(args.seed).shuffle(self.memetic_rows)
+        # per family: wall seconds of this collection's finished ordinary episodes (``_memetic_row``: a memetic group
+        # only for a program whose runs fit its nested wall clock); a resumed collection reads its earlier groups
+        self.family_seconds = collections.defaultdict(list)
+        self.nested_seen = (0., 0)   # (time, count) of memetic nested runs in flight (``_nested_slots``)
+        if self.memetic_rows and getattr(args, 'memetic_fit_quantile', 0) > 0:
+            self._seed_family_seconds()
         # the memetic world's Python (ts-host world-bridge.ts kind memetic): this interpreter, not the pin's missing venv
         self.env['NATLANG_MEMETIC_PYTHON'] = sys.executable
         if getattr(args, 'teacher_attempts', 0) > 0:   # JOLT+ teacher attempts (``_teachers``)
@@ -524,10 +530,9 @@ class Collector:
         from natlang_neuralese.common.jsonio import read_jsonl
         a = self.args
         memetic = bool(self.memetic_rows) and self._memetic_open() and self.rng.random() < a.memetic_share
-        if memetic:
-            row = self.memetic_rows[self.memetic_cursor % len(self.memetic_rows)]
-            self.memetic_cursor += 1
-        else:
+        row = self._memetic_row() if memetic else None
+        memetic = row is not None
+        if not memetic:
             row = self._pick()
             variant = self.variants.get(row['id'])
             if variant is not None and self.rng.random() < self.args.neuralese_variant_share:
@@ -567,6 +572,69 @@ class Collector:
     def _memetic_open(self):
         """Whether a new group may be a memetic one (always here; expert-iteration collection bounds them)."""
         return True
+
+    def _memetic_row(self):
+        """The next memetic row whose program's runs fit its nested wall clock on this actor
+        (``memetic_workspace.fits`` over this collection's ordinary episodes of the program's family, staged layout,
+        ``--memetic-fit-quantile``), or None when none fits yet. aei1 (2026-11-23): 44% of the memetic families' ordinary
+        episodes ran past the 1440 s nested clock at 128 slots, so their evaluations would measure the short runs."""
+        from natlang_neuralese.rl.memetic_workspace import fits, row_nested_seconds
+        a = self.args
+        quantile = getattr(a, 'memetic_fit_quantile', 0)
+        for _ in range(len(self.memetic_rows)):
+            row = self.memetic_rows[self.memetic_cursor % len(self.memetic_rows)]
+            self.memetic_cursor += 1
+            if quantile <= 0 or getattr(a, 'memetic_layout', 'staged') != 'staged':
+                return row
+            family = (row.get('curriculum') or {}).get('program_family')
+            if fits(self.family_seconds.get(family, ()), row_nested_seconds(row, getattr(a, 'case_seconds', 0)),
+                    quantile=quantile):
+                return row
+        return None
+
+    def _record_seconds(self, directory, family):
+        """Add an ordinary group's finished episodes' wall seconds to its family's (``_memetic_row``)."""
+        from natlang_neuralese.rl.memetic_workspace import finish_seconds
+        for journal in sorted(Path(directory, 'workers').glob('s7-task-*.journal.jsonl')):
+            seconds = finish_seconds(journal)
+            if seconds is not None:
+                self.family_seconds[family].append(seconds)
+
+    def _seed_family_seconds(self):
+        """Family wall seconds from this collection's earlier groups and from earlier collections on the same actor
+        (``--memetic-seed-collection``; default: the sibling collections of WORK, as the async driver lays them out),
+        so a new collection's memetic groups need not wait for their families to be measured again."""
+        families = {(row.get('curriculum') or {}).get('program_family') for row in self.memetic_rows}
+        seeds = getattr(self.args, 'memetic_seed_collection', None)
+        works = [Path(path) for path in seeds] if seeds else sorted(
+            path for path in self.work.parent.glob('*') if path.is_dir() and path != self.work
+            and (path / 'groups').is_dir())
+        directories = [d for work in [*works, self.work] for d in sorted((Path(work) / 'groups').glob('g*'))]
+        for directory in directories:
+            try:
+                with open(directory / 'cases.jsonl') as handle:
+                    family = json.loads(handle.readline()).get('family')
+            except (OSError, ValueError):
+                continue
+            if family in families and not (directory / 'memetic-spec.json').exists():
+                self._record_seconds(directory, family)
+
+    def _nested_slots(self):
+        """Slots the memetic groups' nested runs take (``--memetic-nested-slots``): each runs an episode on the actor
+        beside the slots, so ordinary slots wait while they run and the actor serves about ``--slots`` episodes
+        (aei1 served 160 running for 128 slots; nested runs on top queued and slowed every episode). Counted at most
+        every 20 s."""
+        if not getattr(self.args, 'memetic_nested_slots', True):
+            return 0
+        seen, count = self.nested_seen
+        if time.time() - seen < 20:
+            return count
+        from natlang_neuralese.rl.memetic_workspace import nested_in_flight
+        with self.lock:
+            outs = [info['dir'] / 'memetic' for info in self.groups.values() if info.get('memetic')]
+        count = sum(nested_in_flight(out) for out in outs)
+        self.nested_seen = (time.time(), count)
+        return count
 
     def _wave(self, task_id, size):
         """Dynamic sampling: the first-wave size of a new group of ``task_id`` (``wave_plan`` on its ``PassRatePrior``),
@@ -745,7 +813,8 @@ class Collector:
     def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
-            if index >= self.active_slots:   # fewer slots while the learner computes (they share the GPU)
+            # fewer slots while the learner computes (they share the GPU) and while memetic nested runs use the actor
+            if index >= self.active_slots - (self._nested_slots() if getattr(self, 'memetic_rows', None) else 0):
                 time.sleep(2)
                 continue
             item = self._take()
@@ -880,6 +949,14 @@ class Collector:
         print(json.dumps({'event': 'memetic group dropped', 'group': group, 'task_id': info['task_id'],
                           'reason': reason, **detail}), flush=True)
 
+    @staticmethod
+    def _case_family(directory):
+        try:
+            with open(Path(directory) / 'cases.jsonl') as handle:
+                return json.loads(handle.readline()).get('family')
+        except (OSError, ValueError):
+            return None
+
     def _abandon(self, group, key, returncode):
         """An episode killed by a signal (a unit stop signals every process of the cgroup, so the episodes die before this
         process's SIGTERM handler runs while the learner holds the main thread; or the kernel's OOM killer) has no verdict.
@@ -909,6 +986,9 @@ class Collector:
         (directory / 'versions.json').write_text(json.dumps(info['versions']) + '\n')
         with self.lock:
             self._record_outcome(directory)
+        if getattr(self, 'memetic_rows', None) and not info.get('memetic'):
+            row = self.by_id.get(info['task_id']) if hasattr(self, 'by_id') else None
+            self._record_seconds(directory, (row or {}).get('family') or self._case_family(directory))
         if self._teachers(group):
             return   # scored again with its teacher attempts once they finish
         self.ready.put(group)
@@ -5786,6 +5866,16 @@ def build_parser():
                         'supervisors, every run of an evaluation at once, a nested run\'s wall clock the episode\'s / '
                         '(evaluations + 3) (rl/memetic_workspace.py bind_layout); inline: the layout before 2026-11-23 '
                         '(preparation inside each supervisor\'s clock, the built 900 s and 4 runs at a time)')
+    t.add_argument('--memetic-fit-quantile', type=float, default=0.9,
+                   help='staged layout: a memetic group only for a program whose family\'s ordinary episodes in this '
+                        'collection (at least 8) finish within its nested wall clock at this quantile '
+                        '(memetic_workspace.fits; 0 opts out: every program)')
+    t.add_argument('--memetic-seed-collection', action='append',
+                   help='earlier collection WORK dirs whose ordinary episodes seed the families\' wall seconds for '
+                        '--memetic-fit-quantile (default: the sibling collections of --work)')
+    t.add_argument('--memetic-nested-slots', action=argparse.BooleanOptionalAction, default=True,
+                   help='memetic nested runs in flight take collector slots, so the actor serves about --slots '
+                        'episodes (--no-memetic-nested-slots opts out)')
     t.add_argument('--memetic-group', type=int, default=4)
     t.add_argument('--memetic-model-requests', type=int, default=64)
     t.add_argument('--reward', choices=('graded', 'binary'), default='graded',
