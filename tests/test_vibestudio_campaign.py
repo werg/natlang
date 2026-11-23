@@ -402,3 +402,23 @@ def test_storage_capture_errors_are_retained_and_classified_as_infrastructure(tm
     assert vibestudio_campaign.infrastructure_failure(result, {})
     assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 1)['infrastructure_failures'] == ['owned']
     assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 0) is None
+
+
+def test_recorded_teacher_failure_is_not_capture_corruption(tmp_path):
+    import gzip
+    import json
+    directory = tmp_path / 'st_owned'; directory.mkdir()
+    errors = ['Assigned authored root did not complete successfully']
+    with gzip.open(directory / 'trajectory-owned-full.json.gz', 'wt') as stream:
+        json.dump({'result': {'passed': False}, 'execution': {'diagnostics': {'natlangTeacher': {
+            'rootCallIds': ['root'], 'calls': [], 'captureErrors': errors,
+            'executionError': {'message': 'quiesced: requested operation could not be completed'}}}}}, stream)
+    result = vibestudio_campaign.outcomes(tmp_path, ['owned'], None, {}, {'owned': {}})['owned']
+    assert result['capture_errors'] == errors
+    assert result['teacher_started'] is True
+    assert result['status'] == 'test-failed'
+    assert not vibestudio_campaign.infrastructure_failure(result, {})
+    assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 1) is None
+    result['capture_errors'].append({'message': 'ENOSPC writing model exchange'})
+    assert vibestudio_campaign.infrastructure_failure(result, {})
+    assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 1)
