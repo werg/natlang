@@ -1,0 +1,25 @@
+{
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-wave0033-goal-return-roles-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-wave0033-goal-return-roles-20261123",
+  "include": [
+    "capture/**",
+    "receipt.json",
+    "trajectory.native.jsonl.zst",
+    "graph-metrics.json",
+    "wave.json"
+  ],
+  "kind": "teacher-demos",
+  "format": "native Vibestudio Luna trajectories and capture evidence",
+  "rows": 3,
+  "protected": false,
+  "producer": {
+    "script": "export-goal-return-recoveries-on-tick.py",
+    "argv": [],
+    "git_commit": "00ab72d28dbc0b4c60e3619744d31393254709cf",
+    "dirty": false,
+    "host": "tick"
+  },
+  "manifest_sha256": "21b90f8f591159ce70be3dcb96aab8dbc083e7fb31a1815e9a68a39307557b34",
+  "training_admission": "registry-recorded"
+}
