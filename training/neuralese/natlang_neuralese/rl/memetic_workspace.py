@@ -660,6 +660,58 @@ def group_seconds(episode_seconds, evaluations, layout='staged'):
     return int(episode_seconds) + (nested_case_seconds(episode_seconds, evaluations) if layout == 'staged' else 0)
 
 
+def finish_seconds(journal):
+    """Wall seconds of a finished collector episode (its journal's ``finish`` event; the tail is read, journals grow
+    to megabytes), or None while it runs."""
+    try:
+        with open(journal, 'rb') as handle:
+            handle.seek(0, 2)
+            handle.seek(max(0, handle.tell() - 16384))
+            tail = handle.read().decode('utf-8', 'replace')
+    except OSError:
+        return None
+    for line in reversed(tail.splitlines()):
+        if '"finish"' in line:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get('event') == 'finish' and isinstance(event.get('elapsed_seconds'), (int, float)):
+                return float(event['elapsed_seconds'])
+    return None
+
+
+FIT_QUANTILE, FIT_MINIMUM = 0.9, 8
+
+
+def fits(seconds, limit, *, quantile=FIT_QUANTILE, minimum=FIT_MINIMUM):
+    """Whether a program's runs fit a nested wall clock of ``limit`` s: at least ``minimum`` measured episodes of its
+    family on this actor, and their ``quantile`` within the limit. A program whose runs do not fit would leave its
+    nested evaluations truncated (an unresolved run measures nothing, and those that finish are the short ones)."""
+    seconds = sorted(seconds)
+    if len(seconds) < minimum:
+        return False
+    return seconds[min(len(seconds) - 1, int(quantile * len(seconds)))] <= limit
+
+
+def row_nested_seconds(row, run_seconds):
+    """The staged nested wall clock of a memetic task row bound in a run whose episodes get ``run_seconds``."""
+    semantics = row.get('semantics') or {}
+    world = semantics.get('world') or {}
+    evaluations = (((semantics.get('inputs') or {}).get('program') or {}).get('budget') or {}).get('evaluations', 2)
+    return nested_case_seconds(max(int(run_seconds or 0), int(world.get('case_seconds') or 0)), evaluations)
+
+
+def nested_in_flight(out):
+    """Nested runs of one memetic group's evaluations (``OUT/evals/*/collection``) that have started and not finished:
+    each is an episode on the actor beside the collector's slots."""
+    count = 0
+    for journal in Path(out).glob('evals/*/collection/workers/*.journal.jsonl'):
+        if finish_seconds(journal) is None:
+            count += 1
+    return count
+
+
 def prepare_stage(spec_path, stdout=None):
     """The collector's preparation stage of one group: ``prepared.json`` (the collector starts the supervisors, or
     drops a group that is not admitted, as soon as it appears), then the query baselines while the supervisors work."""
