@@ -8958,3 +8958,51 @@ under load (fake-server tests only).
 - **Why merge packages.** Application TypeScript cannot import another package's sources in a per-package build (the
   project compiler lowers only files under its root), and the plan wants flagships to extend their seeds rather than
   fork them. Merging is one implementation without a new cross-package mechanism.
+## 2026-11-23 16:40 GRPO trains the action reasoning of reasoned decisions
+
+**Decision (GRPO-reasoning agent, brief from the coordinator; default on, `grpo.py --no-decision-reasoning` opts out;
+commit 91b26036f).** A reasoned readout (`readout: decision`, DECISIONS "reasoned decisions") samples k reasonings and,
+in RL collection, takes the choice of one seeded action sample. GRPO trained that choice but not the reasoning that
+produced it. The action sample's reasoning is now a trained per-call sequence like any other action. It uses the actor's
+exact prompt ids, sampled ids and behaviour log-probabilities, carries the episode's group-normalized advantage, is
+kept through its first `</think>` (the free reply after it was never used), and enters ratio, KL, tail floor, loss
+units and the SD replay as ordinary sampled tokens. The other k-1 samples stay untrained. Their choices were never
+executed, so the episode's reward says nothing about them, and giving them its advantage would bias the gradient.
+
+- **Mechanism inventory.**
+  - *Capture* (no change needed). Both collecting engines already record the reasoning turns with the full RL capture,
+    because the collector requests `x_natlang_rl_capture` on every turn (`ts-host/src/model/local-server.ts:158`). The
+    Python native engine builds it in `serve/engine.py` ~1790-1820 (prompt, samples with logp, `sampling_law`,
+    `finish_reason`). The SGLang actor delegates only generation and builds the same capture (`sglang_actor.py`
+    header). In aei1 r0000 the reasoning turns show T=1, top-p 0.95 and `post-temperature-untruncated`.
+    llama-server and wllama don't collect RL.
+  - *Rollouts* (`rl.task_rollouts.rollout_turns`). The action entry keeps `decision_reasoning.reasoning_sampling`.
+  - *Lowering* (`lower_rollout_turns.decision_reasoning_turns`, sharing `sampled_call` with `episode_turns`).
+  - *Learner* (`grpo.load_group`). The scored-group exchange `pack_scored_group` goes through it too.
+  - *Overlong filter* (`rollout_math.truncated_rollout`). An action reasoning cut by the cap ends its episode.
+  - *JOLT+ student form* (`jolt.student_form`). Guidance is stripped from the reasoning prompt too.
+  - *SFT* is unchanged. It already trains agreeing samples' reasoning (`exp0_sft`), and `sft_sources`' own-call path
+    uses `episode_turns`, which does not add these rows, so nothing trains twice.
+  - *Left out: tune RL* (`tune/rl.py`, `ts-host/src/tune/rollouts.ts`). It records every reasoning generation as an
+    ordinary turn, which does not match the graph's scored-entry nodes. This is a separate whole-graph objective and
+    is recorded in OPEN_ITEMS.
+  - *Not applicable:* held eval and the behaviour probe, which don't train.
+- **Telemetry.** `train.jsonl` `lowering` counts `decision_reasoning_rows`, `_tokens`, `_unclosed`, and whether the
+  action's scored prompt continues the reasoning's own prompt with exactly the kept ids (`_ids_exact` / `_ids_rendered`).
+- **Finding: the scorers re-tokenize the reasoning.** In aei1 r0000 (the 16 action readouts of g000689, g000696,
+  g000701 and g000720) the scored prompt left the sampled ids mid-reasoning in 4 of 16 readouts, after 847/3476,
+  531/1051, 535/2085 and 953/1687 tokens, with identical decoded text. Every engine scores after the reasoning *text*
+  re-encoded, so the choice was scored, and trains, after a tokenization the model never sampled. The GRPO choice term
+  stays self-consistent, because it uses the scored prompt that the behaviour scores came from, and the reasoning row
+  trains on the exact sampled ids. The fix is a cross-engine score-item field carrying the sampled ids (OPEN_ITEMS).
+- **Tests.** `tests/neuralese/test_grpo_decision_reasoning.py` (5). Also run and passing:
+  `test_reasoned_decision_training`, `test_grpo_jolt`, `test_grpo_replay_corpus`, `test_grpo_exchange` and
+  `test_rl_task_rollouts`. The quick gate passed.
+- **Learner bench: not completed.** The bench replays one aei1 group with spread (g000696, rewards 1/0/1/1, 4 reasoned
+  readouts, 6078 action-reasoning tokens) for one step from sft-v9, at pin 91b26036f. It compares arm A (default)
+  with arm B (`--no-decision-reasoning`) on `lowering`, `loss_tokens`, `sequences` and `grad_norm`. It was preempted
+  twice by `aei1-r0001-sft` (high priority, 100 GB) before step 1, and is stopped so as not to delay the round. The
+  script, the re-emitted rollouts and the pin are kept for a rerun once the DGX has about 20 GB free:
+  `ops/gdr-bench/pin-91b26036f` and the agent's `scratchpad/gdr/scripts/bench.sh`. The coordinator reruns it, or reads
+  the first real GRPO step's `lowering.decision_reasoning_*` counters. The offline lowering of the same groups with the
+  real tokenizer gives 16 rows and 22,988 reasoning tokens, all closed by `</think>` (`decision_reasoning_turns`).
