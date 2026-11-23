@@ -29,6 +29,8 @@ Values pass through by reference: a combinator never serialises, clones or reads
 | | `compileRule(rule, { examples?, check?, attempts? })` | concurrent example validation + `semanticRepair` loop | shipped `compileRule.nl` returning `(item) => Promise<O>` |
 | Workspace | `proposeAndVerify(folder, reducer, { verify, attempts, args })` | `folder.propose`, exact `verify`, `semanticRepair` over draft continuation, `folder.accept` | caller's reducer |
 | | `branchAndSelect(folder, branches, { verify?, goal?, select?, debiased? })` | concurrent `folder.propose`, exact `verify`, `semanticRank` over passing branches, `folder.accept` | caller's branches + shipped `beats.nl` |
+| Instructions | `instructionsOf(source)`, `stepsOf(body)` | front matter, declaration (without `readout:`), numbered items else paragraphs, fenced blocks kept | none |
+| | `stepKind(step, signature, file)` | — | shipped `stepKind.nl` (`readout: decision`): `judgment` / `mechanism` / `guard-for-type` / `redundant`; examples in `std/examples.json`; read by the idiom reviewer and the program migrator |
 
 ## Traces
 

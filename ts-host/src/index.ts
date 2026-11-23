@@ -55,8 +55,8 @@ export type { OpenAICompatibleOptions, OpenAICompatibleExchange, ChatTransport, 
   LoadedModelConfiguration, ModelSelectionOverrides, LlamaRuntimeArtifact, LlamaRuntimeRelease,
   LlamaServerInspection, LlamaRuntimeDiscovery } from './model/index.js';
 export * from './package/index.js';
-export { virtualProjectFiles, virtualSourceFiles } from './runtime/virtual-project.js';
-export type { VirtualProject, CompiledProject } from './runtime/virtual-project.js';
+export { compileVirtualProjectProduct, instantiateVirtualProjectProduct, virtualProjectFiles, virtualSourceFiles } from './runtime/virtual-project.js';
+export type { VirtualProject, VirtualProjectProduct, VirtualProjectProductOptions, CompiledProject } from './runtime/virtual-project.js';
 
 export * from './adaptation/index.js';
 // A runtime configured like `natlang run`: profile, tuned release on its own checkpoint, managed servers, escalation.

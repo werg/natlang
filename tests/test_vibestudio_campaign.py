@@ -465,3 +465,6 @@ def test_cohort_exports_are_resumable_for_ledger_backfill(monkeypatch, tmp_path)
     assert '--resumable' in launched
     assert '--no-resumable' not in launched
     assert '--budget-gb 1.5' in launched and '--reserve-gb 15' in launched
+    assert 'NATLANG_REPO=/repo' in launched
+    assert '/repo/scripts/neuralese_data/vibestudio_campaign.py' in launched
+    assert '/archive/vibestudio_campaign.py' not in launched

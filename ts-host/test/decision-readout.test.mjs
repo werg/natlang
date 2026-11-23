@@ -81,6 +81,7 @@ test('a call store counts a scored readout as one model request with the prompt 
   const { openCallStore } = await import('../dist/calls/store.js');
   const root = mkdtempSync(join(tmpdir(), 'natlang-decision-cost-'));
   const store = openCallStore(root);
+  store.writeSettings({ minFreeBytes: 0 }); // Disposable test evidence must survive a low-disk host.
   try {
     const driver = Object.assign(async () => { throw new Error('the tool loop must not run'); }, {
       decide: async () => ({ log_probs: [Math.log(0.3), Math.log(0.7)], tokens: [2, 2], prompt_tokens: 812 }) });

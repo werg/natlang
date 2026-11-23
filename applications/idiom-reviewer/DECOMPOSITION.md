@@ -12,8 +12,8 @@ it has findings. `natlang check --idiom` (plan 03 §3.1) does not call it yet.
 | Part | Form | Why |
 |---|---|---|
 | Read a program's `.nl` sources and whether each has TypeScript helpers | crisp (`main.ts` `programFiles`) | file system |
-| Split a source into front matter and steps (numbered items, else paragraphs) | crisp (`splitSource`, `stepsOf`) | exact text structure; same code as the migrator |
-| What each step asks for: `judgment`, `mechanism`, `guard-for-type`, `redundant` | fn `stepKind.nl` (`readout: decision`), mapped with `semanticMap`, `escalate` when unsure | judgment; the migrator's `stepKind.nl` contract |
+| Split a source into front matter and steps (numbered items, else paragraphs) | crisp (`@natlang/std` `instructionsOf`) | exact text structure; one implementation with the migrator |
+| What each step asks for: `judgment`, `mechanism`, `guard-for-type`, `redundant` | fn `@natlang/std` `stepKind` (`readout: decision`), mapped with `semanticMap`, `escalate` when unsure | judgment; shared with the migrator |
 | Is the function as a whole a prose interpreter? | fn `isProseInterpreter.nl` (`readout: decision`) over the kinded steps and `hasHelpers` | judgment over the whole function, not a count threshold |
 | Does the body route on trigger words instead of meaning? | fn `detectCueWords.nl` (`readout: decision`) | judgment |
 | Is a parameter external text typed as trusted? | fn `detectUntypedExternal.nl` (`readout: decision`) per parameter not already `Untrusted<...>` | judgment; reading `args:` is crisp (`argsOf`) |
@@ -21,6 +21,6 @@ it has findings. `natlang check --idiom` (plan 03 §3.1) does not call it yet.
 
 ## One implementation
 
-`stepKind.nl`, `splitSource` and `stepsOf` are copies of `applications/migration/program`'s, because a package cannot
-import another package's sources yet. Both tools should call one shared function (plan 03 §3.1); its home is
-`@natlang/std`.
+The step judgment and the step splitter are `@natlang/std`'s (`stepKind`, `instructionsOf`, `stepsOf`;
+ts-host/std/stepKind.nl), shared with the program migrator (`applications/migration/program`). Their examples moved
+with them (`ts-host/std/examples.json`).

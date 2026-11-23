@@ -255,7 +255,7 @@ function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>, t
   compiled.set(key, code); return code;
 }
 
-const servicesModule = new Proxy(Object.create(null), {
+export const servicesModule = new Proxy(Object.create(null), {
   get: (_, name) => typeof name === 'string' && name !== '__esModule' && name !== 'then' ? lowered.service(name) : undefined,
 });
 function selectedServicesModule(record: ModuleRecord): object {

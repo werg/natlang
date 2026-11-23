@@ -421,6 +421,12 @@ export declare const meets: NatlangFunction<[criterion: string, item: unknown], 
 export declare const relates: NatlangFunction<[relation: string, left: unknown, right: unknown], boolean>;
 export declare const compileRuleFn: NatlangFunction<[rule: string, problems?: string[]], (item: unknown) => Promise<unknown>>;
 export declare const shouldEscalate: NatlangFunction<[decision: any, floor?: number, risk?: Record<string, number>, history?: EscalationHistory, cost?: TierCost], boolean>;
+export type StepKind = 'judgment' | 'mechanism' | 'guard-for-type' | 'redundant';
+export type KindedStep = { text: string; kind: StepKind };
+export type Instructions = { front: string; body: string; declaration: string; steps: string[] };
+export declare const stepKind: NatlangFunction<[step: string, signature: string, file: string], StepKind>;
+export declare function instructionsOf(source: string): Instructions;
+export declare function stepsOf(body: string): string[];
 `;
 /** Module form of the standard library, resolved for `@natlang/<runtime>/std` imports in virtual programs. */
 export const STD_MODULE_FILE = '/__natlang__/std.d.ts';

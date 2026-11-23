@@ -4,12 +4,10 @@
  * what each instruction step asks for (`stepKind.nl`), whether a function as a whole is a prose interpreter, cue-word
  * rules, and external text typed as trusted. Every decision is a `readout: decision` function, escalated when unsure.
  *
- * `stepKind.nl`, `splitSource` and `stepsOf` are the migrator's (applications/migration/program): the same contract,
- * copied because a package cannot import another package's sources yet. Plan 03 §3.1 wants one implementation; the
- * shared home is `@natlang/std` once both tools move to it.
+ * The step judgment (`stepKind`) and the step splitter (`instructionsOf`) are `@natlang/std`'s, shared with the program
+ * migrator (applications/migration/program).
  */
-import { escalate, semanticMap } from '@natlang/node/std';
-import stepKind from './stepKind.nl';
+import { escalate, instructionsOf, semanticMap, stepKind } from '@natlang/node/std';
 import detectCueWords from './detectCueWords.nl';
 import detectUntypedExternal from './detectUntypedExternal.nl';
 import isProseInterpreter from './isProseInterpreter.nl';
@@ -23,32 +21,6 @@ export type ReviewOptions = {
   /** Maximum concurrent decision calls (default `8`). */
   concurrency?: number;
 };
-
-/** The front matter and body of a `.nl` source (applications/migration/program/host.ts `splitSource`). */
-export function splitSource(text: string): { front: string; body: string } {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text.replace(/\r\n/g, '\n'));
-  if (!match) throw new Error('a .nl file starts with front matter between --- lines');
-  return { front: match[1]!, body: match[2]! };
-}
-
-/** The body's steps: its numbered items when it has them, else its paragraphs; a fenced block stays in its step
- * (applications/migration/program/host.ts `stepsOf`). */
-export function stepsOf(body: string): string[] {
-  const lines = body.replace(/\s+$/, '').split('\n');
-  const numbered = lines.some(line => /^\d+\.\s/.test(line));
-  const steps: string[][] = [];
-  let fenced = false;
-  for (const line of lines) {
-    const opens = !fenced && (numbered ? /^\d+\.\s/.test(line) : line.trim() !== '' && (steps.length === 0 || steps.at(-1)!.at(-1)?.trim() === ''));
-    if (opens || steps.length === 0) steps.push([]);
-    steps.at(-1)!.push(line);
-    if (/^\s*```/.test(line)) fenced = !fenced;
-  }
-  return steps.map(step => step.join('\n').trim()).filter(Boolean);
-}
-
-/** The declaration the step classifier reads: the front matter without `readout:` (as the migrator passes it). */
-const declarationOf = (front: string) => front.split('\n').filter(line => !/^readout:/.test(line)).join('\n').trim();
 
 /** The `args:` of a front matter, by name (block form `args:\n  name: Type` or flow form `args: { name: Type }`). */
 export function argsOf(front: string): Record<string, string> {
@@ -88,8 +60,8 @@ export async function reviewProgramIdioms(files: ProgramFile[], options: ReviewO
   const judgeExternal = escalate(detectUntypedExternal, { to, floor });
 
   const parsed = files.filter(f => f.path.endsWith('.nl')).map(file => {
-    const { front, body } = splitSource(file.content);
-    return { file, front, body: body.trim(), signature: declarationOf(front), steps: stepsOf(body) };
+    const { front, body, declaration, steps } = instructionsOf(file.content);
+    return { file, front, body: body.trim(), signature: declaration, steps };
   });
   const issues: IdiomIssue[] = [];
 

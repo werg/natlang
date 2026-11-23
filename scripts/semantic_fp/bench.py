@@ -234,6 +234,8 @@ def run_program_unit(app, work, arm, row, sample, *, timeout):
         try:
             output = json.loads(stdout)
         except json.JSONDecodeError:
+            # kept for diagnosis: B14's and the instant re-measure's 'stdout is not JSON' units exited 0 and passed on rerun
+            (unit / 'stdout.txt').write_text(stdout)
             error = 'stdout is not JSON'
     else:
         error = f'exit {code}: ' + (stderr.strip().splitlines() or [''])[-1][:300]

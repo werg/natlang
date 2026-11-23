@@ -8,6 +8,7 @@ import type { NatlangFunction } from '../runtime/surface.js';
 import type { Decision } from '../runtime/runtime.js';
 import type { NeuraleseRef } from '../native/neuralese.js';
 import { STD_SOURCES } from './sources.generated.js';
+import type { StepKind } from './instructions.js';
 
 const FILES = Object.fromEntries(Object.entries(STD_SOURCES).map(([name, text]) => [`@natlang/std/${name}`, text]));
 const load = <A extends unknown[], R>(name: string) => loadVirtualNatlang(FILES, `/@natlang/std/${name}.nl`, '') as unknown as NatlangFunction<A, R>;
@@ -40,3 +41,5 @@ export const compileRuleFn = load<[rule: string, problems?: string[]], (item: un
 /** `shouldEscalate(decision, floor?, risk?, history?, cost?)` (`readout: decision`): whether a local decision should escalate. */
 export const shouldEscalate = load<[decision: Decision<unknown>, floor?: number, risk?: Record<string, number>,
   history?: EscalationHistory, cost?: TierCost], boolean>('shouldEscalate');
+/** `stepKind(step, signature, file)` (`readout: decision`): what one step of a function's instructions asks for. */
+export const stepKind = load<[step: string, signature: string, file: string], StepKind>('stepKind');

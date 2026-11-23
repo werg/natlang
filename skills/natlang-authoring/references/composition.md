@@ -203,7 +203,9 @@ a `semanticMap` or `Promise.all` map.
 
 The standard library (`@natlang/node/std`, in the browser `@natlang/browser/std`) provides typed TypeScript combinators
 around named `.nl` judgments shipped with the package (`meets`, `relates`, `beats`, `intentOf`, `compatible`, `combine`,
-`settled`, `compileRuleFn`). Every shipped judgment is an ordinary natlang function you can call, `decide`, `.in`, `.on`,
+`settled`, `compileRuleFn`, `stepKind`). `instructionsOf(source)` reads a `.nl` source as its front matter, declaration
+and steps, and `stepKind(step, signature, file)` says what one step asks for (`judgment`, `mechanism`,
+`guard-for-type` or `redundant`): tools that review or rewrite programs read them this way. Every shipped judgment is an ordinary natlang function you can call, `decide`, `.in`, `.on`,
 trace and specialise. Every combinator nests its child calls under a `std:<name>` span and passes values by reference so
 `Neuralese<T>` states flow untouched.
 
