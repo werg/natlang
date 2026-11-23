@@ -791,3 +791,23 @@ def test_reassessment_roles_cannot_drop_checks_or_rewrite_optional_observations(
         mutate(candidate)
         with pytest.raises(ValueError):
             live.validate_reassessment_check_roles(candidate, original, tmp_path)
+
+@pytest.mark.parametrize('mutation', [None, 'output', 'selected', 'root', 'json'])
+def test_native_bridge_selected_return_binds_actual_authored_output(tmp_path, mutation):
+    path, spec, detail, verification = fixture(tmp_path)
+    selected = {'question': 'A source-backed question', 'statements': []}
+    value = {'results': [{'kind': 'domain', 'report': selected}], 'remaining': []}
+    text = json.dumps(value, separators=(',', ':'))
+    detail['record']['output'] = {'complete': True, 'bytes': len(text.encode()), 'hash': hashlib.sha256(text.encode()).hexdigest()}
+    binding = {'root_call_id': 'call-one', 'valueJson': text, 'selectedResult': selected}
+    if mutation == 'output': detail['record']['output']['hash'] = '0' * 64
+    if mutation == 'selected': binding['selectedResult'] = {'question': 'forged'}
+    if mutation == 'root': binding['root_call_id'] = 'foreign'
+    if mutation == 'json': binding['valueJson'] = '{'
+    verification['evidence'] = [{**artifact(tmp_path, 'bound-return.json', {'applicationReturn': binding}), 'kind': 'workspace'}]
+    rewrite(tmp_path, spec, detail, verification)
+    if mutation:
+        with pytest.raises(ValueError, match='application return|domain return'):
+            live.load_episode(path)
+    else:
+        assert len(live.load_episode(path)['turns']) == 1

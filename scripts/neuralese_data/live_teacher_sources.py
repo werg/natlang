@@ -161,6 +161,29 @@ def verify_entry(interaction, root, *, partial=False):
             raise ValueError('open goal application input differs from the actual root invocation')
 
 
+def verify_application_return(binding, records, roots):
+    """Validate a selected domain value against the actual authored return bytes."""
+    if not isinstance(binding, dict) or binding.get('root_call_id') not in roots or len(roots) != 1:
+        raise ValueError('application return does not identify its actual authored root')
+    text = binding.get('valueJson')
+    if not isinstance(text, str):
+        raise ValueError('application return needs exact native JSON')
+    try:
+        value = json.loads(text, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+    except ValueError as error:
+        raise ValueError('invalid application return JSON') from error
+    output = records[binding['root_call_id']].get('output') or {}
+    encoded = text.encode('utf-8')
+    if output.get('complete') is not True or output.get('bytes') != len(encoded) or output.get('hash') != hashlib.sha256(encoded).hexdigest():
+        raise ValueError('application return differs from original root output')
+    selected = binding.get('selectedResult')
+    results = value.get('results') if isinstance(value, dict) else None
+    if ('selectedResult' not in binding or not (same_json_value(value, selected) or
+            isinstance(results, list) and len(results) == 1 and isinstance(results[0], dict) and
+            'report' in results[0] and same_json_value(results[0]['report'], selected))):
+        raise ValueError('selected domain return differs from actual application result')
+
+
 def verified_training_scope(verification, records, root):
     """Admit independently attested invocations while retaining the complete original graph."""
     scope = verification.get('training_scope')
@@ -400,11 +423,15 @@ def load_episode(path):
     kinds = set()
     incorrect_optional_return = False
     workspace_proofs = []
+    application_returns = []
     for evidence in verification.get('evidence') or []:
         evidence_path = bound_file(evidence, path.parent)
         kinds.add(evidence.get('kind'))
         if evidence.get('kind') == 'workspace':
-            proof = json.loads(evidence_path.read_text()).get('proof') or {}
+            payload = json.loads(evidence_path.read_text())
+            if 'applicationReturn' in payload:
+                application_returns.append(payload['applicationReturn'])
+            proof = payload.get('proof') or {}
             workspace_proofs.append(proof)
             returned = (proof.get('outcomeDimensions') or {}).get('returnedValue') or {}
             if returned.get('required') is False and returned.get('passed') is False:
@@ -451,6 +478,8 @@ def load_episode(path):
     if (not isinstance(attested_roots, list) or not attested_roots or
             len(attested_roots) != len(set(attested_roots)) or roots != set(attested_roots)):
         raise ValueError('live call roots differ from independently verified roots')
+    for binding in application_returns:
+        verify_application_return(binding, records, roots)
     interaction = spec.get('interaction')
     if interaction != verification.get('interaction'):
         raise ValueError('live task interaction differs from independent verification')
