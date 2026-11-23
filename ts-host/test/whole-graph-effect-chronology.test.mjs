@@ -61,7 +61,7 @@ test('real nested calls record task-wide service request chronology and child cu
   const { tmpdir }=await import('node:os');
   const { join }=await import('node:path');
   const { createNatlangRuntime,loadVirtualNatlang,CallStore }=await import('../dist/index.js');
-  const dir=mkdtempSync(join(tmpdir(),'natlang-graph-order-'));const store=CallStore.open(dir);
+  const dir=mkdtempSync(join(tmpdir(),'natlang-graph-order-'));const store=CallStore.open(dir);store.writeSettings({minFreeBytes:0});
   try {
     const files={'root.nl':'---\nargs: { id: string }\nreturns: number\n---\nAsk the child.\n',
       'root/price.nl':'---\nargs: { id: string }\nreturns: number\n---\nLook up order.\n'};
@@ -86,7 +86,7 @@ test('recorded repeated once-only service results remain exact across replay',as
   const { mkdtempSync,rmSync }=await import('node:fs');const { tmpdir }=await import('node:os');
   const { join }=await import('node:path');const { ONCE_EFFECTS }=await import('../dist/native/effects.js');
   const { createNatlangRuntime,loadVirtualNatlang,CallStore }=await import('../dist/index.js');
-  const dir=mkdtempSync(join(tmpdir(),'natlang-graph-once-'));const store=CallStore.open(dir);let calls=0,turn=0;
+  const dir=mkdtempSync(join(tmpdir(),'natlang-graph-once-'));const store=CallStore.open(dir);store.writeSettings({minFreeBytes:0});let calls=0,turn=0;
   try {
     const service={ [ONCE_EFFECTS]:['lookup'], lookup:async()=>{calls++;return {value:'recorded'};} };
     const model=async()=>({calls:[turn++===0?['eval',{code:"const a = await orders.lookup(); const b = await orders.lookup(); return a.value + b.value"}]:

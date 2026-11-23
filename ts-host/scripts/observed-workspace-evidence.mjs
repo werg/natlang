@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, posix } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { graphCustodyMatches } from '../dist/calls/graph-custody.js';
 
@@ -41,6 +41,111 @@ export function verifyObservedCallTree(records, root) {
   if (seen.size !== records.length) throw new Error('observed call graph contains unreachable invocations');
 }
 
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+
+function verifyEntry(interaction, record, partial) {
+  const entry = interaction.entry ?? {program: 'skills/open-user-goal/runUserGoal.nl',
+    callable: 'runUserGoal', arguments: {goal: interaction.goal}};
+  if (typeof entry.program !== 'string' || !/\.(nl|ts)$/u.test(entry.program) ||
+      entry.program.startsWith('/') || entry.program.split('/').includes('..') ||
+      interaction.program !== entry.program || typeof entry.callable !== 'string' || !entry.callable ||
+      !entry.arguments || typeof entry.arguments !== 'object' || Array.isArray(entry.arguments) ||
+      record.definition?.name !== entry.callable || (!partial && record.outcome !== 'done') ||
+      !isDeepStrictEqual(Object.keys(record.inputs ?? {}).sort(), Object.keys(entry.arguments).sort()))
+    throw new Error('observed root differs from its actual application entry');
+  if (interaction.entry) {
+    const {program_root: programRoot, definition: {source}} = record;
+    if (typeof programRoot !== 'string' || typeof source !== 'string' ||
+        programRoot.startsWith('/') || source.startsWith('/') ||
+        programRoot.split('/').includes('..') || source.split('/').includes('..') ||
+        posix.join(programRoot, source) !== entry.program ||
+        !entry.argumentJson || !isDeepStrictEqual(Object.keys(entry.argumentJson).sort(), Object.keys(entry.arguments).sort()))
+      throw new Error('observed application entry needs its actual source and exact native argument JSON');
+  }
+  for (const [name, value] of Object.entries(entry.arguments)) {
+    const text = interaction.entry ? entry.argumentJson[name] : JSON.stringify(value);
+    if (typeof text !== 'string' || !isDeepStrictEqual(JSON.parse(text), value))
+      throw new Error('observed application argument JSON differs from its declared value');
+    const bytes = Buffer.from(text), input = record.inputs[name];
+    if (input?.complete !== true || input.bytes !== bytes.length || input.hash !== digest(bytes))
+      throw new Error('observed application input differs from the captured invocation');
+  }
+}
+
+async function trainingScope(receipt, row, root) {
+  const scope = receipt.training_scope;
+  if (!scope) {
+    if (receipt.status !== 'passed' || row.outcome.training_scope != null)
+      throw new Error('partial observed decisions require independently attested training scope');
+    return null;
+  }
+  if (receipt.status !== 'partial' || scope.schema !== 'natlang.training-scope/1' ||
+      !isDeepStrictEqual(scope, row.outcome.training_scope) ||
+      JSON.parse(await readBound(scope.original_outcome, root)).passed !== false ||
+      !Array.isArray(scope.invocations) || !scope.invocations.length)
+    throw new Error('invalid independent partial training scope');
+  const selected = new Map();
+  for (const invocation of scope.invocations) {
+    if (typeof invocation.call_id !== 'string' || selected.has(invocation.call_id) ||
+        !invocation.checks || !Object.keys(invocation.checks).length ||
+        Object.values(invocation.checks).some(value => value !== true) ||
+        !Array.isArray(invocation.evidence) || !invocation.evidence.length ||
+        (invocation.ordinals != null && (!Array.isArray(invocation.ordinals) || !invocation.ordinals.length ||
+          new Set(invocation.ordinals).size !== invocation.ordinals.length ||
+          invocation.ordinals.some(index => !Number.isSafeInteger(index) || index < 0))))
+      throw new Error('partial invocation lacks independently verified decision evidence');
+    for (const evidence of invocation.evidence) {
+      if (!['workspace', 'cdp'].includes(evidence.kind)) throw new Error('partial decisions require native workspace evidence');
+      await readBound(evidence, root);
+    }
+    selected.set(invocation.call_id, invocation.ordinals == null ? null : new Set(invocation.ordinals));
+  }
+  return selected;
+}
+
+function decisionEligibility(record, detail, selected, incorrectReturn) {
+  const actual = record.model_turns ?? [];
+  const events = detail.events ?? [];
+  const failed = new Set();
+  for (const event of events.filter(event => event.kind === 'action' && ['error', 'rejected', 'blocked', 'budget'].includes(event.outcome))) {
+    const owners = actual.flatMap((exchange, index) => exchange.kind === 'generation' &&
+      exchange.reply?.raw_calls?.some(call => call.id === event.tool_call_id) ? [index] : []);
+    if (!event.tool_call_id || owners.length !== 1) throw new Error('failed action lacks exact captured generation ownership');
+    failed.add(owners[0]);
+  }
+  const actionEvents = Map.groupBy(events.filter(event => event.kind === 'action'), event => event.tool_call_id);
+  const ordinals = selected?.get(record.call_id);
+  if (selected?.has(record.call_id) && ((ordinals === null && record.outcome !== 'done') ||
+      (ordinals !== null && [...ordinals].some(index => actual[index]?.kind !== 'generation'))))
+    throw new Error('partial scope names an invalid invocation or generation');
+  const executor = Boolean(record.executor?.kind !== 'crisp' && (record.outcome === 'done' ||
+    selected?.has(record.call_id) && ordinals !== null));
+  return actual.map((exchange, index) => {
+    if (exchange.schema !== 'natlang.model-exchange/1') throw new Error('unsupported captured model exchange');
+    if (exchange.kind !== 'generation' || exchange.error) return false;
+    const reply = exchange.reply, gateway = reply?.raw_response?.vibestudio;
+    const content = gateway?.response?.content;
+    if (!Array.isArray(exchange.request?.messages) || !gateway?.model || !gateway.api || !gateway.turnId ||
+        !gateway.attribution?.callerId || !gateway.attribution?.callerKind || !gateway.context ||
+        gateway.response?.role !== 'assistant' || !Array.isArray(content) || !Array.isArray(reply.raw_calls))
+      throw new Error('observed generation lacks its original gateway exchange');
+    const originalCalls = content.filter(block => block.type === 'toolCall');
+    if (reply.raw_calls.length !== originalCalls.length || originalCalls.some((call, offset) => {
+      const raw = reply.raw_calls[offset];
+      return !call.id || raw.id !== call.id || raw.function?.name !== call.name ||
+        !isDeepStrictEqual(JSON.parse(raw.function?.arguments ?? 'null'), call.arguments);
+    }) || !isDeepStrictEqual(reply.calls ?? [], originalCalls.map(call => [call.name, call.arguments])) ||
+        (reply.text ?? '') !== content.filter(block => block.type === 'text').map(block => block.text).join('') ||
+        (reply.reasoning ?? '') !== content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n'))
+      throw new Error('observed normalized model reply differs from original gateway response');
+    return (!selected || selected.has(record.call_id) && (ordinals === null || ordinals.has(index))) &&
+      index !== incorrectReturn && executor && !failed.has(index) &&
+      originalCalls.every(call => actionEvents.get(call.id)?.length === 1 &&
+        ['ok', 'completed'].includes(actionEvents.get(call.id)[0].outcome)) &&
+      Boolean(reply.text || originalCalls.length);
+  });
+}
+
 /** Verify the on-disk artifacts before allowing the generic native exporter to use an observed capture. */
 export async function verifyObservedWorkspaceEvidence(row) {
   const binding = row.provenance.source_manifest;
@@ -49,10 +154,14 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const attestation = manifest.verification;
   const receipt = JSON.parse(await readBound(attestation, root));
   const equal = isDeepStrictEqual;
-  if (manifest.schema !== 'natlang.live-teacher-task/1' || receipt.schema !== 'natlang.live-task-verification/1' ||
+  if (row.provenance.execution_kind !== 'observed-live-workspace' || row.task.source !== 'observed-live-workspace' ||
+      row.outcome.accepted !== true || manifest.split !== 'train' || !equal(manifest.learner_kinds, ['natlang-executor']) ||
+      manifest.schema !== 'natlang.live-teacher-task/1' || receipt.schema !== 'natlang.live-task-verification/1' ||
       !equal(attestation, row.provenance.verification) || receipt.task_id !== row.task.id ||
       (receipt.split ?? manifest.split) !== manifest.split ||
-      receipt.run_id !== row.outcome.world.run_id || receipt.status !== 'passed' ||
+      receipt.run_id !== row.outcome.world.run_id || !['passed', 'partial'].includes(receipt.status) ||
+      receipt.status !== row.outcome.status || (receipt.status === 'partial' ? row.outcome.task_completed !== false : row.outcome.task_completed === false) ||
+      !receipt.checks || !Object.keys(receipt.checks).length || Object.values(receipt.checks).some(value => value !== true) ||
       !['id', 'family', 'split', 'source_namespace', 'source_ids', 'source_groups', 'source_revisions', 'interaction'].every(
         key => equal(manifest[key], row.task[key])) ||
       !equal(receipt.interaction, row.task.interaction) || !equal(manifest.world, receipt.world) ||
@@ -61,31 +170,45 @@ export async function verifyObservedWorkspaceEvidence(row) {
       !equal(manifest.code, row.provenance.code) || manifest.code?.dirty !== false)
     throw new Error('observed workspace trajectory differs from the independently verified manifest');
   const evidenceKinds = new Set();
+  let incorrectOptionalReturn = false;
   for (const evidence of receipt.evidence ?? []) {
-    await readBound(evidence, root);
+    const evidenceBytes = await readBound(evidence, root);
     evidenceKinds.add(evidence.kind);
+    if (evidence.kind === 'workspace') {
+      const returned = JSON.parse(evidenceBytes).proof?.outcomeDimensions?.returnedValue;
+      incorrectOptionalReturn ||= returned?.required === false && returned.passed === false;
+    }
   }
   if (!Array.isArray(manifest.required_effect_kinds) || !manifest.required_effect_kinds.length ||
-      manifest.required_effect_kinds.some(kind => !evidenceKinds.has(kind)))
+      manifest.required_effect_kinds.some(kind => !['workspace', 'cdp'].includes(kind) || !evidenceKinds.has(kind)))
     throw new Error('observed workspace outcome evidence is incomplete');
   await readBound(receipt.validator, root);
 
+  const selected = await trainingScope(receipt, row, root);
   const decisions = Map.groupBy(row.trajectory, item => item.invocation_id);
+  const returnExclusions = [];
+  const capturedRecords = new Map();
   const captureScopes = new Map(receipt.calls.map(scope => [scope.call_id, scope]));
   const callFiles = new Map(manifest.calls.map(artifact => [artifact.path, artifact]));
+  if (captureScopes.size !== receipt.calls.length || callFiles.size !== manifest.calls.length)
+    throw new Error('observed capture repeats an attested call or artifact');
   const roots = new Set(receipt.root_call_ids);
   const goal = row.task.interaction?.goal;
   const records = [];
-  if (roots.size !== 1 || typeof goal !== 'string' || !goal.trim())
-    throw new Error('observed open goal requires one verified goal-only root');
+  if (row.task.interaction?.kind !== 'open-user-goal' || roots.size !== 1 || typeof goal !== 'string' || !goal.trim())
+    throw new Error('observed open goal requires one independently attested application root');
   for (const call of row.outcome.invocation_ledger) {
     const original = JSON.parse(await readBound(call.artifact, root));
     const record = original.record;
+    capturedRecords.set(record.call_id, record);
     records.push({
       call_id: record.call_id, parent_call_id: record.parent_call_id, task_id: record.task_id,
       graph_custody: record.graph_custody, effects: record.effects,
     });
-    if (!equal(call.artifact, callFiles.get(call.artifact.path)) ||
+    if (record.call_id !== call.call_id || record.version !== 'natlang.calls/1' ||
+        original.summary.definition_id !== record.definition?.id ||
+        !['agent', 'crisp', 'crisp-agent'].includes(record.executor?.kind) ||
+        !equal(call.artifact, callFiles.get(call.artifact.path)) ||
         original.callId !== call.call_id || !equal(call.scope, captureScopes.get(call.call_id)) ||
         ['call_id', 'owner_kind', 'owner_key', 'run_id'].some(key => original.summary[key] !== call.scope[key]) ||
         original.summary.parent_call_id !== call.parent_call_id ||
@@ -93,23 +216,28 @@ export async function verifyObservedWorkspaceEvidence(row) {
         !equal(record.parent_call_id, call.parent_call_id) || record.outcome !== call.outcome ||
         !equal(record.inputs ?? null, call.inputs) || !equal(record.output ?? null, call.output) ||
         !equal(record.graph_custody ?? null, call.graph_custody) ||
+        ['parent_action_index', 'started_at', 'ended_at'].some(key => !equal(record[key] ?? null, call[key] ?? null)) ||
         !equal(original.events ?? [], call.events) || !equal(record.effects ?? [], call.effects))
       throw new Error('observed invocation differs from its captured call or verified scope');
     if (record.parent_call_id === null) {
-      const input = record.inputs?.goal;
-      const goalBytes = Buffer.from(JSON.stringify(goal));
-      if (!roots.delete(call.call_id) || record.definition.name !== 'runUserGoal' ||
-          record.outcome !== 'done' || Object.keys(record.inputs ?? {}).length !== 1 || input?.complete !== true ||
-          input.bytes !== goalBytes.length || input.hash !== createHash('sha256').update(goalBytes).digest('hex'))
-        throw new Error('observed root invocation differs from its attested user goal');
+      if (!roots.delete(call.call_id)) throw new Error('observed root was not independently attested');
+      verifyEntry(row.task.interaction, record, selected !== null);
     }
+
     const actual = record.model_turns ?? [];
     const projected = decisions.get(call.call_id) ?? [];
+    const lastGeneration = incorrectOptionalReturn && record.parent_call_id === null
+      ? actual.findLastIndex(exchange => exchange.kind === 'generation') : -1;
+    if (lastGeneration >= 0) returnExclusions.push({invocation_id: call.call_id, ordinal: lastGeneration});
+    const eligible = decisionEligibility(record, original, selected, lastGeneration);
     if (projected.length !== actual.length)
       throw new Error('observed trajectory omitted captured exchanges');
     for (const [index, decision] of projected.entries()) {
       const exchange = actual[index];
-      if (index !== decision.live_exchange.ordinal ||
+      if (decision.training_admission?.approved !== eligible[index] ||
+          index !== decision.live_exchange.ordinal ||
+          !equal(decision.live_exchange.call_artifact, call.artifact) ||
+          decision.parent_invocation_id !== record.parent_call_id ||
           decision.function !== record.definition.name || decision.definition_id !== record.definition.id ||
           !equal(decision.context, exchange.request?.messages ?? null) ||
           !equal(decision.tools_offered, exchange.request?.tools ?? []) ||
@@ -117,11 +245,14 @@ export async function verifyObservedWorkspaceEvidence(row) {
           decision.phase !== (exchange.kind === 'generation' ? 'action' : exchange.kind) ||
           !equal(decision.error, exchange.error ?? null))
         throw new Error('observed decision differs from the recorded model exchange');
-      if (decision.training_admission.approved &&
-          (!Array.isArray(exchange.reply?.raw_calls) ||
+      if (exchange.kind === 'generation' && !exchange.error &&
+          (!decision.assistant || !Array.isArray(exchange.reply?.raw_calls) ||
            !equal(decision.assistant.raw_calls, exchange.reply.raw_calls) ||
            decision.assistant.content !== (exchange.reply.text ?? '') ||
-           decision.assistant.reasoning !== (exchange.reply.reasoning ?? '')))
+           decision.assistant.reasoning !== (exchange.reply.reasoning ?? '') ||
+           !equal(decision.assistant.calls, exchange.reply.raw_response.vibestudio.response.content
+             .filter(block => block.type === 'toolCall')
+             .map(call => ({id: call.id, source_tool: call.name, arguments: call.arguments})))))
         throw new Error('observed decision target differs from the model reply');
     }
     captureScopes.delete(call.call_id);
@@ -130,5 +261,16 @@ export async function verifyObservedWorkspaceEvidence(row) {
   }
   if (captureScopes.size || callFiles.size || decisions.size || roots.size)
     throw new Error('observed trajectory does not cover the full verified call tree');
+  if ((selected && [...selected.keys()].some(id => !capturedRecords.has(id))) ||
+      row.outcome.excluded_return_decisions !== undefined && !equal(row.outcome.excluded_return_decisions, returnExclusions))
+    throw new Error('observed decision admission differs from independent training scope or return evidence');
   verifyObservedCallTree(records, receipt.root_call_ids[0]);
+  for (const decision of row.trajectory) {
+    const chain = [];
+    let record = capturedRecords.get(decision.invocation_id);
+    while (record) { chain.unshift(record.call_id); record = capturedRecords.get(record.parent_call_id); }
+    if (!equal(chain, decision.live_exchange.call_ancestry) || decision.live_exchange.root_call_id !== chain[0] ||
+        decision.live_exchange.target_source !== 'actual-model-reply' || decision.live_exchange.student_sampling_claimed !== false)
+      throw new Error('observed decision ancestry differs from the complete captured tree');
+  }
 }

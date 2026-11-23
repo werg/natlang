@@ -444,6 +444,8 @@ def load_episode(path):
             'outcome': {'accepted': True, 'status': verification['status'], 'world': world, 'checks': checks,
                         'task_completed': verification['status'] == 'passed',
                         'root_call_ids': attested_roots,
+                        **({'excluded_return_decisions': [{'invocation_id': call_id, 'ordinal': ordinal}
+                             for call_id, ordinal in incorrect_returns.items()]} if incorrect_returns else {}),
                         **({'training_scope': verification['training_scope']} if training_scope is not None else {}),
                         'invocation_ledger': observed_graph(details, ancestry, scopes, exclusions)},
             'trajectory': decisions,

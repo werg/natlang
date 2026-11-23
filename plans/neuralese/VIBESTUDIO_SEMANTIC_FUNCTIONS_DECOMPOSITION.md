@@ -12,6 +12,8 @@ Application functions own judgment and return application values. Callable folde
 | System testing and domain managed verifiers | Final envelope plus exact call counts, route checks and independent state checks | Express requested outcomes and scope protection separately from execution conventions. Answers remain required when the user asks for them. |
 | Host scripts/export-live-workflow-teacher.mjs | Catalog pins runUserGoal and admission repeats route shape checks | Bind declared task entry, typed result and independent evidence, with no required generic report or fixed child sequence. |
 | Natlang scripts/neuralese_data/live_teacher_sources.py | Admission hardcodes runUserGoal path and goal-only input | Bind actual declared entry, input hashes, trace identity and application result. Preserve older captures under their recorded program identity. |
+| Native disk verifier `ts-host/scripts/observed-workspace-evidence.mjs`, called before rendering by `ts-host/scripts/materialize-native-teacher.mjs:135` | Independent JS admission also hardcoded passed-only, runUserGoal and one goal input, and trusted projected approval flags | Re-read SHA-bound manifests, calls, native argument JSON, partial evidence and original failures. Recompute each decision's eligibility and optional failed root-return exclusion before native materialization. Historical router captures retain their original entry. |
+| Native TS projection `ts-host/src/teacher/observed-workspace.ts`, dispatched by `ts-host/src/teacher/native-materializer.ts:2014` | Passed-only outcome and completed-invocation restriction excluded independently proved partial decisions; empty-target evidence was rejected | Admit exactly scope-proved generations in later-failed invocations, preserve unapproved failed children, enforce explicit return exclusions, and retain valid evidence-only rows with zero learner targets. This path consumes observed trajectory IR directly; it never replays a workspace program or requires Program IR. |
 | Natlang scripts/neuralese_data/vibestudio_campaign.py | Collection, receipt, deferred native trajectory export | Preserve data, recheck rejected captures with recorded verification provenance, expose meaningful corpus coverage. |
 | Runtime engines and learner | Consume regular typed calls and native trajectory IR | No language or engine protocol change. spec/SPEC.md describes typed return values. live_teacher_sources.py converts captured model exchanges into native graph and decisions. Training consumes those decisions without a Vibe Studio report contract. |
 
@@ -41,3 +43,31 @@ Runtime authority review: ambient .d.ts inclusion only changes compiler type
 roots. ProgramLoader still narrows explicit service bindings; NativeSession still
 filters services per actual frame scope. No engine, serving or learner protocol
 change is needed because all consume ordinary typed calls and trajectory IR.
+
+
+The independent JS materializer is a separate data-admission implementation,
+not a runtime engine. Its disk verifier authenticates originals before the pure
+TS renderer projects learner targets. Cross-language tests generate native IR
+through the Python loader and run the actual JS CLI for typed multiple inputs,
+partial scopes, failed invocations, optional incorrect returns, evidence-only
+captures and forged approvals. An archived Luna capture exercises the same path
+offline when its manifest is supplied. Ordinary serving engines consume the
+resulting model calls; they do not interpret the Vibe Studio task descriptor.
+
+Other direct calls to the pure materializer keep their existing source dialect:
+`ts-host/scripts/rewrite-student-trajectories.mjs:68`,
+`project-student-trajectories.mjs:71` and `rewrite-student-chunks.mjs:34`
+require an exact `task.program_ir` and pinned source closure before rendering;
+observed workspace trajectories have no such Program IR and cannot enter those
+paths. Static reference and recurrence producers construct their own Program IR
+rows (`inline-curriculum/replay-demonstrations.mjs:38` and
+`verify-recurrence-pool.mjs:22`). These do not consume workspace entry descriptors
+or partial live receipts. The actual live Python training and reasoning-fill
+paths use `sft_sources.candidate_turns` and `filled_reasoning.Renderer.chains`,
+which re-read original captures and project the same decision masks.
+
+Cohort export retains the historical `verified` row count for existing readers,
+while separately recording `completed_goals`, `partial_trajectories`,
+`supervised_decisions` and `evidence_only` in its marker and registry metadata.
+A recovered partial remains an unfinished goal even when its checked decisions
+are usable training targets.

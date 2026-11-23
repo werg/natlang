@@ -2017,7 +2017,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           options.decisionApprovals?.some(approval => approval.trajectory_id === row.id))
         throw new Error('observed workspace decisions use the independent live outcome admission');
       turns.push(...materializeObservedWorkspace(row, rowDigest));
-      acceptedRows++;
+      if (row.outcome.status === 'partial') partialRows++; else acceptedRows++;
       continue;
     }
     const reviewedHolds = new Map<number, NativeDecisionHold>();

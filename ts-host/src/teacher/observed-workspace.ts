@@ -21,7 +21,7 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
   const checks = Object.values(object(row.outcome.checks));
   const source = object(row.provenance.source_manifest);
   const verification = object(row.provenance.verification);
-  if (row.outcome.accepted !== true || row.outcome.status !== 'passed' ||
+  if (row.outcome.accepted !== true || !['passed', 'partial'].includes(String(row.outcome.status)) ||
       !checks.length || checks.some(value => value !== true) ||
       [source, verification].some(binding => typeof binding.path !== 'string' ||
         !/^[a-f\d]{64}$/u.test(String(binding.sha256 ?? ''))) ||
@@ -35,6 +35,34 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
     if (typeof call.call_id !== 'string' || calls.has(call.call_id) || !Array.isArray(call.events))
       throw new Error('invalid observed invocation ledger');
     calls.set(call.call_id, call);
+  }
+  const selected = new Map<string, Set<number> | null>();
+  if (row.outcome.status === 'partial') {
+    const scope = object(row.outcome.training_scope);
+    if (row.outcome.task_completed !== false || scope.schema !== 'natlang.training-scope/1' ||
+        !Array.isArray(scope.invocations) || !scope.invocations.length)
+      throw new Error('partial observed decisions require independent training scope');
+    for (const value of scope.invocations) {
+      const invocation = object(value);
+      const checks = Object.values(object(invocation.checks));
+      const indexes = invocation.ordinals;
+      if (typeof invocation.call_id !== 'string' || !calls.has(invocation.call_id) || selected.has(invocation.call_id) ||
+          !checks.length || checks.some(value => value !== true) || !Array.isArray(invocation.evidence) ||
+          !invocation.evidence.length || indexes != null && (!Array.isArray(indexes) || !indexes.length ||
+            new Set(indexes).size !== indexes.length || indexes.some(index => !Number.isSafeInteger(index) || index < 0)))
+        throw new Error('invalid partial observed invocation scope');
+      selected.set(invocation.call_id, indexes == null ? null : new Set(indexes as number[]));
+    }
+  } else if (row.outcome.task_completed === false || row.outcome.training_scope != null) {
+    throw new Error('completed observed outcome contradicts partial scope');
+  }
+  const excludedReturns = new Set<string>();
+  for (const value of (row.outcome.excluded_return_decisions ?? []) as unknown[]) {
+    const exclusion = object(value);
+    const call = typeof exclusion.invocation_id === 'string' ? calls.get(exclusion.invocation_id) : undefined;
+    if (!call || call.parent_call_id !== null || !Number.isSafeInteger(exclusion.ordinal) || Number(exclusion.ordinal) < 0)
+      throw new Error('invalid independently excluded application return');
+    excludedReturns.add(`${exclusion.invocation_id}:${exclusion.ordinal}`);
   }
   const ordinals = new Map<string, number>();
   const decisions: Fields[] = [];
@@ -60,7 +88,12 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
       observed.set(event.tool_call_id, events);
     }
     const rawCalls = assistant.raw_calls;
-    if (decision.phase !== 'action' || decision.error || call.outcome !== 'done' ||
+    const selectedOrdinals = selected.get(invocationId);
+    const scoped = selected.has(invocationId) && (selectedOrdinals === null || selectedOrdinals!.has(Number(exchange.ordinal)));
+    if (row.outcome.status === 'partial' && !scoped || excludedReturns.has(`${invocationId}:${exchange.ordinal}`))
+      throw new Error('observed decision is outside independent admission scope');
+    if (decision.phase !== 'action' || decision.error ||
+        call.outcome !== 'done' && !(scoped && selectedOrdinals !== null) ||
         object(call.executor).kind === 'crisp' || !Array.isArray(decision.context) ||
         !Array.isArray(decision.tools_offered) || !Array.isArray(rawCalls) ||
         typeof assistant.content !== 'string' || typeof assistant.reasoning !== 'string' ||
@@ -99,10 +132,10 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
       decision: { ...decision, action_receipts: actionReceipts },
       teacher_trajectory_id: row.id,
       teacher_trajectory_digest: digest,
-      outcome: { accepted: true, status: row.outcome.status },
+      outcome: { accepted: true, status: row.outcome.status,
+        ...(row.outcome.task_completed !== undefined ? {task_completed: row.outcome.task_completed} : {}) },
       training_admission: { kind: 'independent-observed-workspace-outcome', approved: true },
     });
   }
-  if (!decisions.length) throw new Error('verified observed workspace has no supervised decisions');
   return decisions;
 }
