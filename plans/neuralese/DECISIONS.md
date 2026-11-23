@@ -8653,6 +8653,12 @@ Continuation: wave0035 finished its nine cases in402s, retaining every capture; 
     one.
   - Output from `colab` is redacted before it is logged.
   - First live cycle (13:37): A100 and G4 were refused ("Service Unavailable") and the L4 kept serving.
+- **Follow-up (14:30).**
+  - The backlog fill on the L4 made 264 episodes (728 calls) between 13:33 and 14:29, about 280 episodes an hour.
+    The A100 made ~700 an hour on 11-22 afternoon.
+  - The keeper's upgrade requests at 13:38, 13:59 and 14:19 were refused.
+  - aei1's driver was restarted at 14:26 on pin 96a02bd4abe1 (this work), with its argv otherwise unchanged. Its r0001
+    build unit kept running. The pin-e65d0f16d driver would have sent r0001's SFT to the L4.
 - **Not checked:**
   - a real replacement or upgrade end to end (only the refusals ran live; the request/stop/rename sequence is tested
     against a fake `colab`);
