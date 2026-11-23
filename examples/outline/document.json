@@ -1,0 +1,19 @@
+{
+  "title": "Incident review: checkout outage",
+  "text": "Checkout failed for 42 minutes on Tuesday because a configuration change disabled the payment provider's fallback.",
+  "sections": [
+    {
+      "title": "Timeline",
+      "text": "The change shipped at 09:10, errors began at 09:12, and the change was reverted at 09:54.",
+      "sections": [
+        { "title": "Detection", "text": "An alert on checkout errors paged the on-call engineer at 09:15.", "sections": [] },
+        { "title": "Recovery", "text": "Reverting the change restored checkout; queued orders were replayed by 10:20.", "sections": [] }
+      ]
+    },
+    {
+      "title": "Follow-ups",
+      "text": "Configuration changes to payments now need a second reviewer and a canary stage.",
+      "sections": []
+    }
+  ]
+}

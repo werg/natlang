@@ -46,7 +46,7 @@ failures separately from incorrect or blocked execution outcomes.
 
 - `nl-unknown-return` or `nl-ambiguous-signature`: add the missing annotation or `nl<T>`; do not widen to `any` to silence it.
 - `capture-conflict`: another task changed a captured `let` during the call. The model retries its eval; if it recurs, make the state a parameter or a returned value instead of a shared variable.
-- `called itself without a smaller argument`: the recursive call must get a part of the input, a shorter array or string, or a smaller non-negative integer. Pass depth or a path as its own argument rather than in a new object; a graph reached by ID needs a bounded loop or `iterateOn` over a frontier. A natural-language function reached from its own call: split the responsibility.
+- `called itself without a smaller argument`: the recursive call must get a part of the input, a shorter array or string, or a smaller non-negative integer. Pass depth or a path as its own argument rather than in a new object; a graph reached by ID needs a bounded loop or `iterateOn` over a frontier. A `.nl` function that calls itself declares `recursive: structural` (or `measure:` for a quantity that falls); one reached from its own call without either fails with "called itself, and its frontmatter does not declare recursion".
 - Loop policy error in callable-folder code: rewrite as `for...of`, a counted loop, an array method, or `iterateOn`.
 - Correct type, wrong answer: improve instructions, evidence access, or decomposition; structural validation is working.
 - Growing prompts: inspect repeated data and live-value previews, not just source length.

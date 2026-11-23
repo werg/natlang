@@ -145,10 +145,13 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `nl-undeclared-type` (in eval) | Declare the type in that eval's scope or write the structure in the annotation. |
 | `no-such-function` from a child | The callee is a sibling, not in the caller's folder: nest it (`root/inspect/decide.nl`) or list it in `uses:`. |
 | `` `while` loops are not allowed here `` (`callable-scope`) | Rewrite as `for...of`, a counted loop, an array method or `iterateOn`; the message gives the file and position. |
-| `called itself without a smaller argument` | Recurse on part of the input, a shorter array or string, or a smaller non-negative integer; a function may not appear in its own chain of callers. |
+| `called itself without a smaller argument` | Recurse on part of the input, a shorter array or string, or a smaller non-negative integer. A `.nl` function declares `recursive: structural` to allow it. |
+| `called itself, and its frontmatter does not declare recursion` | Declare `recursive: structural` (descent on part of an argument) or `measure: "<expression over the arguments>"` in the function's frontmatter. |
+| `called itself with measure M, which is not smaller than N` | Make the self-call advance what the measure counts, or change the measure to the quantity that does fall. |
+| `Revise the result so that ...` (an `ensures:` clause) | The result breaks a postcondition: produce one that meets the clause's message; past the repair budget the call fails `refinement-unsatisfied`, so say in the instructions how to meet it. |
 | `invalid-binding` | A name reused for a result (`const plan = await plan(x)`): keep the result under another name (`planResult`). |
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
-| `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, `types.ts`, a `protect:` list): leave it as it is and fix the code that produces the value it rejects. |
+| `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, an item an `ensures:` check names, `types.ts`, the `protect:`, `ensures:`, `measure:` and `recursive:` lines): leave it as it is and fix the code that produces the value it rejects. |
 | `capture-conflict` | Another task changed a captured `let` mid-call; if it recurs, make the state a parameter or a returned value. |
 | `function-signature-mismatch` | The function passed does not have the slot's function type: pass one whose parameters take what the slot passes, by position, and whose result fits (bind extra leading parameters with `fn.partial(...)`). |
 | `type X is not in the natlang type grammar` (load) | Rewrite alias `X` in `types.ts` with records, unions, literals, arrays and `Record`, or keep it out of natlang signatures. |

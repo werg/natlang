@@ -209,7 +209,10 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })),
     returns: record.returns, ...(record.declaredParameters ? { declaredParameters: true as const } : {}), ...(record.generic ? { generic: record.generic } : {}), types: record.types, codebase: record.codebase as Record<string, unknown>,
     subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}),
-    ...(record.withhold ? { withhold: record.withhold } : {}), ...(record.protect ? { protect: record.protect } : {}), ...(record.budget ? { budget: record.budget } : {}), description: record.description, source: record.source, revision: record.revision };
+    ...(record.withhold ? { withhold: record.withhold } : {}), ...(record.protect ? { protect: record.protect } : {}), ...(record.budget ? { budget: record.budget } : {}),
+    ...(record.recursive ? { recursive: record.recursive } : {}), ...(record.measure ? { measure: record.measure } : {}),
+    ...(record.ensures ? { ensures: record.ensures } : {}), ...(record.recursive || record.measure ? { self: record } : {}),
+    description: record.description, source: record.source, revision: record.revision };
 }
 
 /**

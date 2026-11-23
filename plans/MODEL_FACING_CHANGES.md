@@ -3009,3 +3009,25 @@ opt-out for the refusal itself (a program that wants an item editable does not p
 `withhold: [edit_code]` stay as before. Successful calls now also record their committed revisions (`code_revisions`
 in the call record, from a new `code_revision` trace event), which renderers of recorded prompts ignore: the event is
 not a message.
+
+### 2026-11-23 — the recursion sentence says what the runtime does; recursive `.nl` functions see themselves; `ensures:` failures teach the fix (semantic-FP B12, WS1 L7)
+
+- `TOOLS_PROMPT`: "functions may not call themselves recursively" was false (eval and callable-folder TypeScript have
+  recursed structurally since the termination work) and now reads "a function may call itself only on a smaller
+  argument". One sentence of the stable system prefix changes; the tool block does not. Opt-out:
+  `NATLANG_PROMPT_REVISION=2026-11-22` restores the old texts byte for byte. Fixtures and `pieces.json` regenerated
+  (the old sentence stays a historical piece, so recorded prompts still render).
+- A `.nl` function with `recursive: structural` or `measure:` is listed in its own call's function listing under its
+  name (it is in its eval scope). Other functions' openings are unchanged.
+- New refusals the model can see: "`f` called itself, and its frontmatter does not declare recursion; declare
+  `recursive: structural` ...", "`f` called itself with measure M, which is not smaller than N ...", and the
+  existing "called itself without a smaller argument" for `.nl` self-calls. `edit_code` refuses an edit that changes a
+  function's `ensures:`, `measure:` or `recursive:` lines, and the items a `check:` names (`protected`).
+- An `ensures:` failure reaches the executing call as the tool result of its `return_result` (or finishing eval), as a
+  refined return's failure does: "refinement-unsatisfied: Revise the result so that MESSAGE (the postcondition `EXPR`
+  is false)." or, for a judged predicate, "Revise the value at return so that it is "P" given ARGS (...)". Only
+  programs that declare `ensures:` see it.
+- The refinement judge's user message gains a "Context, the values the property refers to by name:" block only for
+  relational predicates (`ensures:` with `against:`, `refine(..., { context })`); untrusted text in it is fenced as the
+  executor sees it. Judgements without context render byte-identically. The non-scoring judge (`holds` as a call)
+  gets a `context` parameter and one more sentence only in that case.

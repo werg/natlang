@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildProject, createNatlangRuntime, Folder } from '../dist/index.js';
+import { CallStore, buildProject, createNatlangRuntime, Folder, untrusted } from '../dist/index.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -164,6 +164,26 @@ test('examples/screening: checks bound with partial and a judgment written for t
     'fit_for.nl is told how to return a function');
   // Each requirement's check is meets with the requirement bound: the scored prompts name it.
   for (const requirement of requirements) assert.ok(local.decisions.some(decision => decision.prompt.includes(requirement)), requirement);
+});
+
+test('examples/outline: a recursive .nl digests each section and every digest is held to its postconditions', async () => {
+  const load = await build('outline');
+  const { outline } = await load('outline.js');
+  const marked = section => ({ ...section, text: untrusted(section.text, `section ${section.title}`), sections: section.sections.map(marked) });
+  const document = marked(JSON.parse(readFileSync(join(repo, 'examples/outline/document.json'), 'utf8')));
+  const local = localModel(opening => opening.includes('Write the gist of section') ?
+    'const parts = await Promise.all(section.sections.map(child => digest(child)));\n' +
+    'return { title: section.title, gist: section.text.split(". ")[0], parts };' : null, () => [0.5, 0.5]);
+  // Its own call store: judged verdicts of earlier runs would answer the judge from the machine's store.
+  const calls = CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-outline-calls-')));
+  const { contents } = await createNatlangRuntime({ model: local.driver, calls }).run(() => outline(document));
+  assert.deepEqual(contents.map(line => line.split(':')[0]), ['Incident review', '  Timeline', '    Detection', '    Recovery', '  Follow-ups']);
+  assert.equal(local.openings.length, 5, 'one call per section: digest called itself on each subsection');
+  // Each digest's judged postcondition saw its section beside it, with the section's text fenced as outside data.
+  const judged = local.decisions.filter(decision => /Property: the value is a digest whose gist/.test(decision.prompt));
+  assert.equal(judged.length, 5);
+  assert.ok(judged.every(decision => /Context, the values the property refers to by name:\n<<<section\n/.test(decision.prompt)));
+  assert.ok(judged.some(decision => decision.prompt.includes('```untrusted data from section Detection')));
 });
 
 /**

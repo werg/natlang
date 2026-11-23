@@ -7876,3 +7876,47 @@ Inventory and what is not applicable: engines receive only rendered prompt text 
 (`native/agent.ts:280-297`) emits `{}` for function types as before, so no engine (llama-server, wllama, Python native,
 SGLang) changes. Python renderers replay recorded system messages; `serving-request.ts` composes the new note via
 `callNotes`. Browser: same sources through `platformDefaults` (`browser/index.ts:52`), tested in higher-order.test.mjs.
+
+## 2026-11-23 Structural recursion in `.nl` and `ensures:` postconditions (semantic-FP B12, WS1 L7)
+
+Shipped on main (opt-in per function by frontmatter; the prompt sentence fix is the default, off under
+`NATLANG_PROMPT_REVISION=2026-11-22`):
+- **Recursion.** `recursive: structural` or `measure: "<TS over the arguments>"` in a `.nl` frontmatter. The kernel
+  (`runtime/kernel.ts` `runDefinitionBody`) keeps a chain of active recursive `.nl` calls (`Frame.nlActive`) and admits
+  a re-entry when the arguments descend by the same guard TypeScript functions use (`runtime/context.ts` `descend`,
+  now exported) or the measure (a non-negative whole number, evaluated in a synthetic callable-folder module) falls.
+  Undeclared re-entry, a non-descending argument and a non-falling measure are `NatlangRecursionError`s with one
+  sentence each. The function is bound under its own name in its calls' scope (`definitionNode` adds `self`).
+  Decision: the descent guard also counts an equal copy of a proper part of plain acyclic data as a part, for
+  TypeScript too, because an `.nl` call receives its arguments as realm copies (identity never matched); size strictly
+  falls along such a chain, so termination holds. `MAX_AD_HOC_NL_DEPTH` stays 5; no size heuristic (v1's) was built.
+- **`ensures:`** (`runtime/ensures.ts` parse/validate, `runtime/contracts.ts` run): `check:` clauses (TS over `result`,
+  arguments, companion items, standard globals) run first on read-only copies, compiled through the normal module
+  lowering; `predicate:` clauses with `against:` are judged by the refinement checker with the named arguments as
+  context (the judge message gains a context block, untrusted text fenced at any depth; the verdict key includes the
+  context; crisp checkers skip relational obligations). Failures are `refinement-unsatisfied`/`-undecided` at `return`:
+  the agent's return gate and staged-result check ask `lam.ensures` after the refined slots, so they re-enter the
+  refinement repair budget; the kernel checks again after any path (memoized per result). Items a `check:` names are
+  protected via `loader.ts` `recordProtectedSources` (inside `treeProtectedSources`, B8's one place) and
+  `definitionNode`; `edit_code` refuses edits that change `ensures:`/`measure:`/`recursive:`. `refine(value, p,
+  { context })` uses the same path (lowering passes options after the type-argument predicate). `natlang check` lists
+  `ensures` clauses with the refined slots. Load errors: shape, parse, unknown name, `against` not an argument, an
+  argument named `result`.
+- **Fixed on the way:** SPEC's frontmatter-keys sentence was duplicated (B8 merge); `signatureFits` (B9) treated an
+  alias the slot's scope does not define as foreign and refused `(text) => Draft` against itself (interpreter test
+  "a type alias from an earlier eval ..." was red at fb20452d1); `loadNamedFunction` checked names before attaching
+  `uses:`. Test hygiene: verdicts persist in the machine call store, so tests that count judge passes open their own
+  `CallStore`.
+- **Docs/example:** `examples/outline` (recursive `digest.nl` with a check helper and a judged predicate), built and run
+  in `authoring-examples.test.mjs` and quoted in composition.md; SPEC (Postconditions; Iteration and termination),
+  ERRORS, refinements ext, authoring skill (language, refinements, verification, SKILL error table), integration
+  refinements recovery table. Tests: `nl-recursion.test.mjs`, `relational-refinements.test.mjs`.
+
+Inventory: engines receive only prompt text (the system sentence; the judge's user message when context is present)
+through the existing scoring and tool protocol, so llama-server, wllama, Python native and SGLang need no change
+(`decisionJudge`, `native/refinement.ts`, is the one client that builds the judge request). Python renderers replay
+recorded system messages (`pieces.json` regenerated with history). Training consumers (`scripts/rl_tasks/*`) load `.nl`
+through the TS loader, so the new keys parse there. Browser: same sources; the contract module uses
+`moduleInstanceAsync` where the realm is async. Not done: a `readout: decision` result that breaks `ensures:` fails the
+call (no re-pick of the next option); `natlang check` checks the names in `check:`/`measure:` expressions, not their
+types.

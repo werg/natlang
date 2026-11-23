@@ -1589,6 +1589,8 @@ export class NativeToolAgent {
         { phase: 'return', judge: options.judge, escalation: options.escalation, callId, signal: session.runtime.signal,
           trace: session.runtime.trace, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }) : [];
     if (options.returnGuard) failures.push(...await options.returnGuard(session.runtime.options.runId));
+    // The definition's postconditions (`ensures:`) once the refined slots hold.
+    if (!failures.length && lam.ensures) failures.push(...await lam.ensures(value));
     return failures.length ? failures : undefined;
   }
 
@@ -1926,6 +1928,7 @@ export class NativeToolAgent {
           signal: session.runtime.signal, trace: session.runtime.trace, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
       if (path === 'return' && refinement.returnGuard)
         failures.push(...await refinement.returnGuard(session.runtime.options.runId));
+      if (path === 'return' && !failures.length && session.lam.ensures) failures.push(...await session.lam.ensures(value));
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();

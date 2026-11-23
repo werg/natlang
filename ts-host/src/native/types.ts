@@ -634,7 +634,12 @@ function mapChildTypes(type: Type, child: (inner: Type) => Type): Type {
  */
 export function signatureFits(signature: FunctionSignature, wanted: Type, env: TypeEnv): boolean {
   const own = signature.types;
-  const foreign = new Set(Object.keys(own).filter(name => JSON.stringify(env.lookup(name)) !== JSON.stringify(own[name])));
+  // An alias is foreign when the slot's scope defines the same name differently; a name the slot's scope does not
+  // define (an eval's own alias, seen from a binding checked without it) means what the definer's scope says.
+  const foreign = new Set(Object.keys(own).filter(name => {
+    const there = env.lookup(name);
+    return there !== undefined && JSON.stringify(there) !== JSON.stringify(own[name]);
+  }));
   if (!foreign.size) return fitsType(signature.type, wanted, env.child({ ...own }));
   const rename = (name: string) => foreign.has(name) ? `${name}\u0000signature` : name;
   const names = Object.fromEntries(Object.entries(own).map(([name, type]) => [rename(name), renameTypeNames(type, rename)]));

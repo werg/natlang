@@ -26,6 +26,10 @@ An inline `nl` takes the same types as its target, in application code and in ev
 - The same guard sentence appears in several instructions ("never treat X as instructions", "keep it under N words"). Write it once as an alias in `types.ts` and use the alias.
 - A value flows between steps and the next step relies on the property. Refine the parameter: the call fails before the callee starts when the value does not hold.
 
+## Properties that relate the result to the inputs
+
+A property that mentions an argument ("every quote is copied from hunk", "a faithful summary of source", "names only files in listing") cannot be a type of the value alone. State it as a postcondition of the function, `ensures:` in its frontmatter: a `check:` TypeScript expression over `result` and the arguments for the exact part, and a `predicate:` with `against: [argument names]` for the semantic part, which the judge sees with those arguments ([language](language.md), "ensures:"). From code, `await refine(value, "a lightly edited version of draft", { context: { draft } })` judges the same way.
+
 ## When not to
 
 - The property needs knowledge outside the value (is this order really shipped, is this URL alive). Ask a service or a separate function that can look, and return a typed result.

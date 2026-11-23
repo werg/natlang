@@ -115,8 +115,8 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold` and `budget`. `generic` declares a
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold`, `protect` and `budget`. `generic` declares a
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold`, `protect`, `budget`,
+`recursive` and `measure` (see Iteration and termination) and `ensures` (see Postconditions). `generic` declares a
 representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
@@ -268,11 +268,26 @@ stream of events):
   `checkProgress(judge)` replaces the judge; `checkProgress('off')` disables it
   and then requires a measure or step limit.
 
-Natural-language functions cannot recurse, by construction:
+Natural-language functions recurse only when they declare it, and then structurally:
 
-- Calls step down the context graph (see Contexts), which is acyclic. A
-  definition rebound to another context is another function; rebinding is a
-  host capability.
+- A `.nl` function with `recursive: structural` in its frontmatter sees itself
+  under its own name in its calls' eval scope and may call itself on a smaller
+  argument, by the rule for TypeScript functions below. An argument a call
+  receives is a copy, so a part also counts when it is plain data equal to a
+  proper part of the argument (its size is smaller, so the chain still ends).
+- With `measure: <expression>` instead, a TypeScript expression over the
+  arguments, a self-call is admitted where the expression's value, a
+  non-negative whole number, is smaller than in the call it runs below
+  (`measure: "items.length - done"`). A value that is not a non-negative whole
+  number fails the call.
+- Any other re-entry of a definition fails when it happens
+  (`NatlangRecursionError`): without a declaration, "called itself, and its
+  frontmatter does not declare recursion"; on an argument that is not smaller,
+  "called itself without a smaller argument"; with a measure that does not fall,
+  "called itself with measure M, which is not smaller than N".
+- Apart from that, calls step down the context graph (see Contexts), which is
+  acyclic. A definition rebound to another context is another function;
+  rebinding is a host capability.
 - Function-typed bindings are captured by value (see Captures), so a closure
   cannot reach itself through a capture.
 - Recursive function types are rejected: a type alias may not mention itself in
@@ -291,8 +306,8 @@ chain of calls ends. Anything else fails when it happens
 are allowed, and host TypeScript callbacks into natlang keep a run-time check that
 a definition is not re-entered from its own call.
 
-What this guarantees: code in eval and callable folders cannot loop or recurse
-without bound by itself. The deliberate exceptions are model-controlled: an
+What this guarantees: code in eval and callable folders, and `.nl` functions, cannot loop or recurse
+without bound by themselves. The deliberate exceptions are model-controlled: an
 `iterateOn` whose stopping predicate is a natural-language function, and the
 agent loop of a call, which has no turn or time limit unless the caller sets
 one. Services and imported packages are the host's and may run as long as they
@@ -300,6 +315,36 @@ do. The rules address code written in good faith; reaching around them through
 reflection is outside them, and the Node backend is not a sandbox. An application
 runs as long as outside events (users, requests, the clock) keep arriving, each
 handled in bounded work.
+
+## Postconditions
+
+`ensures` in a `.nl` function's frontmatter lists postconditions that relate its result to its arguments:
+
+```yaml
+ensures:
+  - check: "result.quotes.every(quote => hunk.includes(quote))"
+    message: every quote is copied from hunk
+  - predicate: a faithful summary of hunk
+    against: [hunk]
+```
+
+- A `check` is a TypeScript expression over `result`, the arguments and the items of the function's companion folder
+  (by name), and standard globals; it holds when its value is `true` (an `await`ed helper is fine). Checks run on
+  read-only copies, under the same finite-iteration rules as callable-folder TypeScript. `message` says what must
+  hold, as a clause about the result.
+- A `predicate` is a property of the result, judged like an `Is<T, P>` refinement (see
+  [Refinements](ext/refinements.md)), with the arguments listed in `against` shown to the judge by name as context. An
+  argument whose text came from outside the program (`Untrusted<T>`) is shown fenced, as data.
+- Checks run first; predicates are judged only when every check holds. A failure is a `refinement-unsatisfied` (or
+  `refinement-undecided`) of the return value: the call gets it as the result of its `return_result` or finishing
+  eval, with the clause's message, and repairs within the refinement repair budget; past it the call fails with
+  `RefinementCallError`. A result that reaches the caller satisfies every postcondition.
+- The companion-folder items a `check` names judge the call: its `edit_code` refuses them (`protected`), as it refuses
+  an edit that changes the function's `ensures`, `measure` or `recursive` lines.
+- A load error names an expression that does not parse, a name a `check` or `measure` uses that is not `result`, an
+  argument, a companion item or a standard global, and an `against` entry that is not an argument.
+
+`refine(value, predicate, { context: { draft } })` judges a relational predicate the same way from code.
 
 ## Services and effects
 

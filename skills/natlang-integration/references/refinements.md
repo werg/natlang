@@ -31,13 +31,14 @@
 | --- | --- | --- |
 | `refinement-unsatisfied` | `RefinementCallError` (a call's result), `RefinementError` (an argument, a service result, `refine`) | The value does not hold the predicate. The executor has already had its repair budget on a return. Fix the producer: tighten the instruction or the predicate wording, give the function the evidence the predicate refers to, or check the argument before calling. Do not retry the identical call. |
 | `refinement-undecided` | the same | The probability is inside the uncertainty band under `reject`, or no judge was available. Add a crisp checker, set the band policy to `escalate`, or make the predicate sharper. |
+| `refinement-unsatisfied` from an `ensures:` clause | `RefinementCallError`, message `Revise the result so that MESSAGE (the postcondition EXPR is false).` or `... given ARGUMENTS` for a judged predicate | The result broke the function's postcondition in its last repair. Read the `ensures_check` and `refinement_check` events of the call: give the function the evidence the clause refers to, say in its instructions how to meet it, or fix the check if it is wrong (outside the call: calls cannot edit what a check names). |
 | `refinement-predicate-invalid` | `TypeSyntaxError` when the type is read; `RefinementError` from `refine`/`assume` | `P` must be a nonempty string literal, as in `Is<string, "one line of at most 60 characters">`. |
 
 On a return the executing model gets the failure as a tool error naming the predicate and the fix, so a refined return that fails once usually costs one more turn, not a failed call. A call that must not spend extra turns can set `repairs: 0` and catch the error.
 
 ## Trace
 
-Each check emits `refinement_check` (`phase`: `return`, `argument`, `service`, `refine`; `outcome`: `pass`, `fail`, `undecided`; `source`: `crisp`, `judge`, `cache`, `escalation`; predicate, value, probability, judge). `assume` emits `refinement_assumed`. A result an eval finishes (`finish: true`) skips the in-loop repair and is checked when the call completes, so its failure is final.
+Each `ensures:` check emits `ensures_check` (`check`, `outcome`, and the value or error of a failing one); a judged `ensures:` predicate or a `refine(..., { context })` emits `refinement_check` with `context`, the names of the arguments the judge saw (its verdict cache key includes their values). Each check emits `refinement_check` (`phase`: `return`, `argument`, `service`, `refine`; `outcome`: `pass`, `fail`, `undecided`; `source`: `crisp`, `judge`, `cache`, `escalation`; predicate, value, probability, judge). `assume` emits `refinement_assumed`. A result an eval finishes (`finish: true`) skips the in-loop repair and is checked when the call completes, so its failure is final.
 
 ## `Untrusted<T>`: provenance and the compile error
 

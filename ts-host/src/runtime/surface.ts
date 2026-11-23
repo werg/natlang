@@ -9,7 +9,7 @@ import { decideInFrame, resolveFrame, type Decision } from './runtime.js';
 import { traceFor } from '../native/graph.js';
 import { RefinementError, canonicalValue, failureError } from '../native/refinement.js';
 import { hexDigest } from '../native/hash.js';
-import { hostUntrusted } from '../native/untrusted.js';
+import { hostUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { normalizePredicate } from '../native/types.js';
 export { Deopt } from '../calls/dispatch.js';
 
@@ -143,21 +143,27 @@ const emitRefinement = (frame: ReturnType<typeof resolveFrame>, kind: string, da
   if (trace) trace.emit(kind, data); else frame.task.refinementEvents.push({ kind, data });
 };
 
+/** `refine`'s options: `context` names the values a relational predicate refers to (judged with the value). */
+export type RefineOptions = { context?: Record<string, unknown> };
+
 /**
  * Check `value` against `predicate` with the judge and return it as an `Is<T, P>`; throws `refinement-unsatisfied` (or
  * `refinement-undecided` inside the uncertainty band). Must run inside a natlang task. `refine<Is<T, "p">>(value)` is
  * lowered by the compiler to `refine(value, "p")`.
  * @natlangIntrinsic refine
  */
-export async function refine<T, P extends string>(value: T, predicate: P): Promise<Is<T, P>>;
-export async function refine<R extends Is<unknown, string>>(value: unknown): Promise<R>;
-export async function refine(value: unknown, predicate?: string): Promise<unknown> {
+export async function refine<T, P extends string>(value: T, predicate: P, options?: RefineOptions): Promise<Is<T, P>>;
+export async function refine<R extends Is<unknown, string>>(value: unknown, options?: RefineOptions): Promise<R>;
+export async function refine(value: unknown, predicate?: string | RefineOptions, options?: RefineOptions): Promise<unknown> {
   const text = checkedPredicate(predicate);
   const frame = resolveFrame();
   const task = frame.task;
-  const failures = await task.refinementChecker().check([{ path: 'value', predicate: text, value }],
+  const context = options?.context;
+  if (context !== undefined && (!context || typeof context !== 'object' || Array.isArray(context)))
+    throw new TypeError('refine takes { context: { name: value, ... } }: the values the predicate refers to by name');
+  const failures = await task.refinementChecker().check([{ path: 'value', predicate: text, value, ...(context ? { context } : {}) }],
     { phase: 'refine', ...task.refinementJudges(task.model(), frame), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
-      emit: (kind, data) => emitRefinement(frame, kind, data) });
+      untrusted: scopedUntrusted(task), emit: (kind, data) => emitRefinement(frame, kind, data) });
   if (failures.length) throw failureError(failures[0]!);
   return value;
 }

@@ -26,14 +26,14 @@ for the codes it answers. Each code was checked with `grep` against those source
 | `type-recursive-function` | A type alias may not mention itself in a function parameter or result position ([SPEC](SPEC.md#iteration-and-termination)) | plan time | `compiler/neuralese.ts`, `native/types.ts` |
 | `undeclared-field` | Eval reads a field the declared type lacks ([SPEC](SPEC.md#types)) | eval time (checked before the eval runs) | `compiler/eval-check.ts` |
 | `invalid-binding` | An eval binding that would shadow or read itself before it exists (`const plan = plan(...)`) | eval time (before the eval runs) | `scope-compiler.ts` |
-| `protected` | `edit_code` of an item that judges the call: a `protect:` entry, `types.ts`, or a change to a `protect:` list ([SPEC](SPEC.md#natural-language-functions)). The message names the item and says to fix the code that produces the value it rejects | eval time (edit_code) | `native/runtime.ts` |
+| `protected` | `edit_code` of an item that judges the call: a `protect:` entry, an item an `ensures:` check names, `types.ts`, or a change to a `protect:` list or to the `ensures:`, `measure:` or `recursive:` lines ([SPEC](SPEC.md#postconditions)). The message names the item and says to fix the code that produces the value it rejects | eval time (edit_code) | `native/runtime.ts` |
 | `function-signature-mismatch` | A natlang function at a function-typed slot whose signature does not fit the slot's: parameters by position, then the result ([SPEC](SPEC.md#types)). The message names both types | call time (arguments and results crossing a typed slot) | `native/values.ts` |
 | `capture-conflict` | A `let` capture changed under the eval; the write-back is version-checked ([SPEC](SPEC.md#captures)) | eval time (write-back) | `native/runtime.ts` |
 | `context-interface-mismatch` | A rebound or replaced context does not satisfy the function's context interface ([SPEC](SPEC.md#contexts)) | load/bind time | `runtime/contexts.ts` |
 | `context-new-executable` | Rebinding may not add an executable node | load/bind time | `runtime/contexts.ts` |
 | `iteration-unbounded` | An `iterateOn` with a TypeScript predicate needs a measure or step limit ([SPEC](SPEC.md#iteration-and-termination)) | call time, before the first step (`IterationLimitError`) | `runtime/iterate.ts` |
 | `iteration-measure-exhausted` | The measure reached 0 with `until` still false (`IterationLimitError`) | call time | `runtime/iterate.ts` |
-| `refinement-unsatisfied` | The predicate was judged false ([refinements](ext/refinements.md)) | call time | `native/refinement.ts` |
+| `refinement-unsatisfied` | The predicate was judged false ([refinements](ext/refinements.md)), or an `ensures:` postcondition failed: a `check` that is not `true` ("Revise the result so that MESSAGE (the postcondition `EXPR` is false)."), or a `predicate` judged false given its `against` arguments ([SPEC](SPEC.md#postconditions)) | call time | `native/refinement.ts`, `runtime/contracts.ts` |
 | `refinement-undecided` | The probability fell in the band under the `reject` policy, or no judge was available | call time | `native/refinement.ts` |
 | `refinement-predicate-invalid` | `P` in `Is<T, P>` is empty or not a string literal | plan time (type read); call time for `assume` | `native/types.ts`, `native/refinement.ts`, `runtime/surface.ts` |
 | `untrusted-instruction` | An `Untrusted<T>` value interpolated into an inline `nl` template | plan time | `compiler/inline.ts` |
@@ -118,7 +118,11 @@ Answered by the reference server as `{"error": {"code", "message"}}` with the st
 These are exceptions rather than codes. `NatlangCallError` carries `outcome` (`quiesced` or `failed`) and `detail`
 ([SPEC](SPEC.md#natural-language-functions)); `RefinementCallError` is a `NatlangCallError` with a refinement code;
 `RefinementError` is thrown for a rejected argument, service result or `refine`; `NatlangRecursionError`
-(call time) is a recursive call that is not on a smaller argument; `IterationDivergedError`, `IterationStepError`
+(call time) is a recursive call that is not on a smaller argument ("`f` called itself without a smaller argument"), a
+`.nl` function reached from its own call without `recursive:` or `measure:` ("`f` called itself, and its frontmatter
+does not declare recursion; declare `recursive: structural` ..."), a self-call whose `measure:` does not fall ("`f`
+called itself with measure M, which is not smaller than N ..."), or a measure that is not a non-negative whole number;
+`ensures:`, `measure:` and `recursive:` errors in a `.nl` file are load errors that name the clause; `IterationDivergedError`, `IterationStepError`
 and `IterationLimitError` (call time) carry `lastState` and the trajectory; `NzFileError` carries the
 `neuralese-*` file codes above. All exist in `ts-host/src` (`runtime/kernel.ts`, `runtime/index.ts`,
 `runtime/iterate.ts`, `native/nz-file.ts`).

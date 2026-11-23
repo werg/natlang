@@ -20,7 +20,10 @@ predicate is an obligation checked where a value enters a refined slot:
   `maxFailureRepairs`, else `refinements.repairs`, default 3; past it the call fails with the refinement's code);
 - an argument into a refined parameter, checked at the caller (a failure throws and the callee does not start);
 - a service result whose type is declared in `refinements.services`;
-- `refine(value, predicate)`, which checks and returns an `Is<T, P>`, and `assume(value, predicate)`, which
+- `refine(value, predicate, { context })`, which checks and returns an `Is<T, P>` (`context` names the values a
+  relational predicate refers to; the judge sees them beside the value, untrusted text fenced, and the verdict is
+  cached with them; a `.nl` function states such properties of its result as `ensures:`
+  [postconditions](../SPEC.md#postconditions)), and `assume(value, predicate)`, which
   returns one without checking and records the assumption in the trace.
 
 Records, arrays and dictionaries check each refined position; the checks of one value are issued together.

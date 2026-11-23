@@ -17,7 +17,7 @@ import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
 import { decisionScorer } from '../native/decision.js';
 import { readerDialect } from '../native/neuralese.js';
-import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, callJudge, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
+import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, JUDGE_CALL_CONTEXT_INSTRUCTIONS, callJudge, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
 import { ModelBudget } from '../native/model-budget.js';
 
 /** How far stored compilations may serve calls: not at all, compared in the background only, or served. */
@@ -451,12 +451,14 @@ export class NatlangTask {
       const scorer = this.modelBudget.maxRequests === undefined && this.modelBudget.maxTokens === undefined ? decisionScorer(driver) : undefined;
       if (scorer) return decisionJudge(scorer, { id });
       // No scoring: run `holds` as an ordinary natural-language call on that model (needs the calling frame).
-      return frame ? callJudge(async (value, predicate, signal) => {
+      return frame ? callJudge(async (value, predicate, signal, context) => {
         const { invokeDefinition } = await import('./kernel.js');
+        // A relational property (an `ensures:` predicate) also takes the values it names, as `context`.
         // model-call-kind: runtime-authored-call (refinement:holds without a scoring driver) -- training/model-call-kinds.json
-        const result = await invokeDefinition({ ...frame, ...(signal ? { signal } : {}) }, { id: 'refinement:holds', name: 'holds',
-          body: JUDGE_CALL_INSTRUCTIONS, params: [{ name: 'value', type: 'unknown' }, { name: 'predicate', type: 'string' }], returns: 'boolean',
-          types: {}, codebase: {}, subtype: 'function', ...(name ? { model: name } : {}) }, [value, predicate], { manifest: { internal: true } });
+        const result = await invokeDefinition({ ...frame, ...(signal ? { signal } : {}) }, { id: context ? 'refinement:holds-given' : 'refinement:holds', name: 'holds',
+          body: context ? JUDGE_CALL_CONTEXT_INSTRUCTIONS : JUDGE_CALL_INSTRUCTIONS, params: [{ name: 'value', type: 'unknown' }, { name: 'predicate', type: 'string' },
+            ...(context ? [{ name: 'context', type: 'unknown' }] : [])], returns: 'boolean',
+          types: {}, codebase: {}, subtype: 'function', ...(name ? { model: name } : {}) }, context ? [value, predicate, context] : [value, predicate], { manifest: { internal: true } });
         return result === true;
       }, `call:${id}`) : undefined;
     };

@@ -634,6 +634,8 @@ export const protectedEditError = (source: string): string =>
   `${source} decides whether this call succeeded, so it cannot be edited here; fix the code that produces the value it rejects.`;
 export const PROTECTED_TYPES_ERROR = 'types.ts declares the types this call\'s result is checked against, so it cannot be edited here; ' +
   'fix the code that produces the value they reject.';
+const CONTRACT_EDIT_ERROR = (source: string): string =>
+  `The ensures:, measure: and recursive: lines of ${source} judge its calls, so an edit cannot change them; fix the code that produces the value they reject.`;
 const PROTECT_LIST_ERROR = (source: string): string =>
   `The protect: list of ${source} names what judges its calls, so an edit cannot change it; fix the code that produces the value they reject.`;
 
@@ -2117,6 +2119,11 @@ export class NativeSession {
     if (record.kind === 'natlang' && updated.kind === 'natlang' &&
         JSON.stringify(record.protect ?? []) !== JSON.stringify(updated.protect ?? []))
       throw new Reject([{ path: requested, code: 'protected', text: PROTECT_LIST_ERROR(record.source) }]);
+    // Postconditions and termination measures judge the calls too: an edit cannot weaken them.
+    if (record.kind === 'natlang' && updated.kind === 'natlang' &&
+        JSON.stringify([record.ensures ?? [], record.measure ?? null, record.recursive ?? null]) !==
+        JSON.stringify([updated.ensures ?? [], updated.measure ?? null, updated.recursive ?? null]))
+      throw new Reject([{ path: requested, code: 'protected', text: CONTRACT_EDIT_ERROR(record.source) }]);
     let inlineRevision: { original: InlineLambdaPlan[]; previous: InlineLambdaPlan[]; current: InlineLambdaPlan[] } | undefined;
     if (updated.kind === 'module' && record.kind === 'module') {
       // Validate and compile before committing: existing closures retain their live cells and slots,

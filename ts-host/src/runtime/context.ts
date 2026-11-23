@@ -24,6 +24,8 @@ export type Frame = Readonly<{
   chain: readonly string[];
   /** The authored TypeScript functions currently active above this point, innermost first. */
   active?: ActiveCall;
+  /** The recursive `.nl` definitions (`recursive: structural` or `measure:`) active above this point, innermost first. */
+  nlActive?: ActiveCall;
   /** Call ID of the natlang invocation that created this frame, if any. */
   parentCallId?: string;
   programOwner?: string;
@@ -73,8 +75,12 @@ export type ActiveCall = {
   readonly descent?: readonly Descent[];
   /** Direct parts of an argument, collected the first time a re-entry is checked against it. */
   parts?: Map<number, Set<unknown>>;
+  /** The canonical texts of an argument's proper parts, when it is plain acyclic data (an equal copy of a part). */
+  shapes?: Map<number, Set<string> | null>;
+  /** A `.nl` definition's `measure:` value for this call: a non-negative whole number that each re-entry lowers. */
+  readonly measure?: number;
 };
-type Descent = { readonly position: number; readonly kind: 'part' | 'length' | 'integer' };
+export type Descent = { readonly position: number; readonly kind: 'part' | 'length' | 'integer' };
 
 /**
  * Natural-language call promises that eval code passed to Promise.race or Promise.any. A raced call still running when
@@ -240,7 +246,7 @@ export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [],
 }
 
 /** The argument positions on which a re-entry is smaller than `previous`, among those still decreasing. */
-function descend(previous: ActiveCall, args: readonly unknown[]): Descent[] {
+export function descend(previous: ActiveCall, args: readonly unknown[]): Descent[] {
   const candidates: readonly Descent[] = previous.descent ?? Array.from({ length: Math.min(previous.args.length, args.length) },
     (_, position) => (['part', 'length', 'integer'] as const).map(kind => ({ position, kind }))).flat();
   return candidates.filter(({ position, kind }) => {
@@ -251,7 +257,10 @@ function descend(previous: ActiveCall, args: readonly unknown[]): Descent[] {
       (now as { length: number }).length < (before as { length: number }).length : false;
     // A part may be a primitive leaf (which has no parts of its own, so the chain ends there); an object part may not
     // repeat, which keeps a cyclic structure from being walked round and round.
-    if (!isObject(before) || now === before || !partOf(previous, position, now)) return false;
+    if (!isObject(before) || now === before) return false;
+    // A part is reachable by identity, or (plain acyclic data, which a natural-language call receives as a copy) is an
+    // equal copy of a proper part: its size is smaller, so a chain of such parts ends too.
+    if (!partOf(previous, position, now)) return copyOfPart(previous, position, now);
     if (isObject(now)) for (let entry: ActiveCall | undefined = previous; entry; entry = entry.same) if (entry.args[position] === now) return false;
     return true;
   });
@@ -264,6 +273,50 @@ function partsOf(value: object): unknown[] {
   if (value instanceof Map) return [...value.keys(), ...value.values()];
   if (value instanceof Set) return [...value];
   return Array.isArray(value) ? value : Object.values(value);
+}
+
+/** Plain acyclic data as canonical text (keys sorted), or undefined for anything else (class instances, cycles). */
+function plainText(value: unknown, path: Set<object> = new Set()): string | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value);
+  if (!value || typeof value !== 'object') return undefined;
+  if (path.has(value)) return undefined;
+  // A plain object of any realm (eval code runs in its own): its prototype is that realm's Object.prototype, or null.
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== null && Object.getPrototypeOf(prototype) !== null) return undefined;
+  path.add(value);
+  try {
+    const parts: string[] = [];
+    if (Array.isArray(value)) for (const item of value) { const text = plainText(item, path); if (text === undefined) return undefined; parts.push(text); }
+    else for (const key of Object.keys(value).sort()) {
+      const text = plainText((value as Record<string, unknown>)[key], path);
+      if (text === undefined) return undefined;
+      parts.push(`${JSON.stringify(key)}:${text}`);
+    }
+    return Array.isArray(value) ? `[${parts.join(',')}]` : `{${parts.join(',')}}`;
+  } finally { path.delete(value); }
+}
+
+/** Whether `part` is plain data equal to a proper part of the argument at `position` (both plain acyclic data). */
+function copyOfPart(call: ActiveCall, position: number, part: unknown): boolean {
+  call.shapes ??= new Map();
+  let shapes = call.shapes.get(position);
+  if (shapes === undefined) {
+    shapes = null;
+    const whole = call.args[position];
+    if (plainText(whole) !== undefined) {
+      const found = new Set<string>();
+      const visit = (value: unknown) => {
+        if (!value || typeof value !== 'object') return;
+        for (const inner of partsOf(value)) { found.add(plainText(inner)!); visit(inner); }
+      };
+      visit(whole);
+      shapes = found;
+    }
+    call.shapes.set(position, shapes);
+  }
+  if (!shapes) return false;
+  const text = plainText(part);
+  return text !== undefined && shapes.has(text);
 }
 
 /** Whether `part` is reachable from the argument at `position` of an active call, checking its direct parts first. */

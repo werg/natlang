@@ -548,7 +548,10 @@ export function compileProject(options: BuildOptions): BuildResult {
   const refinedSlots: RefinedSlot[] = [];
   const collectSlots = (level: Record<string, ItemRecord>) => {
     for (const item of Object.values(level)) {
-      if (item.kind === 'natlang') refinedSlots.push(...refinedSlotsOf(item.source, item.name, item.args, item.returns, item.types));
+      if (item.kind === 'natlang') refinedSlots.push(...refinedSlotsOf(item.source, item.name, item.args, item.returns, item.types),
+        // Postconditions (`ensures:`) are checked at run time too: crisp checks first, then judged predicates.
+        ...(item.ensures ?? []).map(clause => ({ source: item.source, function: item.name, slot: 'ensures',
+          predicate: 'check' in clause ? clause.check : clause.predicate + (clause.against?.length ? ` (given ${clause.against.join(', ')})` : '') })));
       collectSlots(item.codebase);
     }
   };

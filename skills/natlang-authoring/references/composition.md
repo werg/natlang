@@ -240,6 +240,37 @@ export type Reply = Is<string, 'two to four polite sentences that state the deci
 Text read from a file or a request becomes `Untrusted` where it enters the program:
 `untrusted(request.text, 'customer request r1')` labels it with its source. More in [refinements](refinements.md).
 
+## Recurse on the data; hold every result to its contract
+
+A nested input (a document's sections, a thread's replies, a spec's sub-specs, a directory tree) is handled one
+level per call: the function calls itself on each part and assembles the results. `recursive: structural` lets it,
+and its `ensures:` states what every result must satisfy in terms of the argument, so each level is checked before its
+caller sees it:
+
+<!-- from: examples/outline/digest.nl -->
+```yaml
+---
+description: The digest of a section and of each of its subsections.
+args:
+  section: Section
+returns: Digest
+recursive: structural
+ensures:
+  - check: "covers(result, section)"
+    message: the digest keeps the section's title and has one part per subsection, in order
+  - predicate: a digest whose gist states the main point of the section's own text in one sentence
+    against: [section]
+---
+```
+
+The call sees `digest` by name and runs `Promise.all(section.sections.map(child => digest(child)))`: each
+subsection is part of its argument, so each self-call is admitted, and a self-call on anything not smaller is refused
+when it happens. The `check` runs first, in code: `covers` is a helper in `digest/`, and naming it in a check protects
+it from the call's own edits. The `predicate` is judged only after the check holds, with `section` shown to the judge
+beside the result (its `Untrusted` text fenced). A result that fails either goes back to the call as `Revise the result
+so that the digest keeps the section's title ...`, and the call repairs it. When what shrinks is a count rather than a
+part (a position that advances through a fixed list), declare `measure: "items.length - done"` instead.
+
 ## Neuralese between stages
 
 A chain of typed stages can carry its intermediate values as Neuralese (compressed model state) instead of text,

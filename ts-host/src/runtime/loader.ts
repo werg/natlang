@@ -15,6 +15,7 @@ import { finiteValues } from '../native/decision.js';
 import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
 import { closestName } from '../compiler/suggest.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
+import { checkItems, expressionError, parseEnsures, unknownName, type EnsuresClause } from './ensures.js';
 import { loadNzSync, registerImportedNativeArtifacts } from '../native/nz-file.js';
 import { genericResult, type GenericResult } from '../native/representation.js';
 import { readTypesFile } from './linked-types.js';
@@ -68,6 +69,12 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   protect?: string[];
   /** `budget: { maxTurns: 8 }` in the frontmatter: the model work one call may take, instead of its model's own budget. */
   budget?: CallBudget;
+  /** `recursive: structural` in the frontmatter: the function may call itself on a smaller argument (runtime/context.ts). */
+  recursive?: 'structural';
+  /** `measure: <TypeScript over the arguments>`: the function may call itself where this non-negative whole number falls. */
+  measure?: string;
+  /** `ensures:` in the frontmatter: postconditions relating the result to the arguments (runtime/ensures.ts). */
+  ensures?: EnsuresClause[];
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -137,7 +144,8 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold', 'protect', 'budget']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold', 'protect', 'budget',
+  'recursive', 'measure', 'ensures']);
 /** What a `budget:` frontmatter map may bound: a call's turns, the reply tokens of one turn, all its tokens, its context window. */
 export const CALL_BUDGET_KEYS = ['maxTurns', 'turnTokens', 'maxTokens', 'contextTokens'] as const;
 export type CallBudget = Partial<Record<typeof CALL_BUDGET_KEYS[number], number>>;
@@ -309,6 +317,22 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
       throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"',
         frontmatterLine(text, 'returns'));
   }
+  const params = Object.keys(args).map(raw => raw.replace(/\?$/, ''));
+  if (meta.recursive !== undefined && meta.recursive !== 'structural')
+    throw new NatlangSourceError(path, 'recursive must be structural: the function may call itself on a part of an argument, ' +
+      'a shorter array or string, or a smaller non-negative integer', frontmatterLine(text, 'recursive'));
+  if (meta.measure !== undefined) {
+    const problem = typeof meta.measure !== 'string' || !meta.measure.trim() ? 'it must be one string' : expressionError(meta.measure);
+    if (problem) throw new NatlangSourceError(path, `measure is a TypeScript expression over the arguments whose value falls at each ` +
+      `self-call, such as measure: "items.length"; ${problem}`, frontmatterLine(text, 'measure'));
+  }
+  let ensures: EnsuresClause[] | undefined;
+  if (meta.ensures !== undefined) {
+    if (params.includes('result')) throw new NatlangSourceError(path, 'an argument named result hides the result in ensures checks; rename the argument',
+      frontmatterLine(text, 'args', 'result'));
+    try { ensures = parseEnsures(meta.ensures, params); }
+    catch (error) { throw new NatlangSourceError(path, (error as Error).message, frontmatterLine(text, 'ensures')); }
+  }
   const source = files.relative?.(path) ?? path;
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
     description: String(meta.description ?? ''), args, returns,
@@ -318,7 +342,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}),
     ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}),
     ...(Array.isArray(meta.protect) && meta.protect.length ? { protect: [...new Set(meta.protect as string[])] } : {}),
-    ...(budget ? { budget } : {}) };
+    ...(budget ? { budget } : {}), ...(meta.recursive === 'structural' ? { recursive: 'structural' as const } : {}),
+    ...(typeof meta.measure === 'string' ? { measure: meta.measure.trim() } : {}), ...(ensures ? { ensures } : {}) };
 }
 
 /**
@@ -336,18 +361,39 @@ export function isProtectedSource(source: string, protectedList: readonly string
   const stem = source.replace(/\.(?:nl|ts|js|mjs|mts)$/, '');
   return protectedList.some(entry => stem === entry || stem.startsWith(`${entry}/`));
 }
-/** Every source a record tree protects: its natural-language functions' `protect:` lists, resolved. */
+/**
+ * Everything one function's frontmatter protects: its `protect:` list and the items its `ensures:` checks name (they
+ * judge its calls, so a call's edits can never weaken a postcondition), as sources (protectedSources).
+ */
+export function recordProtectedSources(record: Pick<NatlangRecord, 'source' | 'protect' | 'ensures' | 'args' | 'codebase'>): string[] {
+  const params = Object.keys(record.args).map(raw => raw.replace(/\?$/, ''));
+  return [...protectedSources(record.source, record.protect), ...protectedSources(record.source, checkItems(record.ensures, params, record.codebase))];
+}
+/** Every source a record tree protects: its natural-language functions' `protect:` lists and `ensures:` checks, resolved. */
 export function treeProtectedSources(codebase: Record<string, ItemRecord>): string[] {
   const found: string[] = [];
   const visit = (item: ItemRecord) => {
-    if (item.kind === 'natlang') found.push(...protectedSources(item.source, item.protect));
+    if (item.kind === 'natlang') found.push(...recordProtectedSources(item));
     for (const child of Object.values(item.codebase)) visit(child);
   };
   for (const item of Object.values(codebase)) visit(item);
   return found;
 }
-/** A `protect:` entry must name an item of the function's companion folder: a misspelt one would protect nothing. */
+/**
+ * A `protect:` entry must name an item of the function's companion folder: a misspelt one would protect nothing. The
+ * names an `ensures:` check or a `measure:` uses must be `result`, an argument, an item of that folder or a standard global.
+ */
 function checkProtect(record: NatlangRecord, path: string): void {
+  const params = Object.keys(record.args).map(raw => raw.replace(/\?$/, ''));
+  const items = Object.keys(record.codebase);
+  const expressions: [string, string, boolean][] = [...(record.ensures ?? []).flatMap(clause => 'check' in clause ?
+    [['ensures', clause.check, true] as [string, string, boolean]] : []), ...(record.measure ? [['measure', record.measure, false] as [string, string, boolean]] : [])];
+  for (const [key, expression, withResult] of expressions) {
+    const unknown = unknownName(expression, params, items, withResult);
+    if (unknown) throw new NatlangSourceError(path, `${key} uses ${unknown}, which is not ${withResult ? 'result, ' : ''}an argument, ` +
+      `an item of ${record.name}/ or a standard global; name the arguments (${params.join(', ') || 'none'}) or put a helper in ${record.name}/`,
+      frontmatterLine(record.text, key));
+  }
   if (!record.protect?.length) return;
   const sources: string[] = [];
   const visit = (item: ItemRecord) => { sources.push(item.source); for (const child of Object.values(item.codebase)) visit(child); };
@@ -685,12 +731,12 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
   const record = parseNatlang(path, files.read(path), packageTypes(dir, files), files);
   const companion = files.join(dir, record.name);
   record.codebase = loadCallableFolder(companion, files, record.types);
-  checkProtect(record, path);
   if (files.isDirectory(companion)) {
     const data = folderNzData(companion, files, record.codebase);
     if (Object.keys(data).length) record.contextData = data;
   }
   attachUses(record, path, files);
+  checkProtect(record, path);
   registerFileRecords(record);
   return record;
 }

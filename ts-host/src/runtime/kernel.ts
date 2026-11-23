@@ -12,12 +12,14 @@ import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseAliases, parseTypeCa
 import { NeuraleseDialectError, NeuraleseUnsupportedError, dialectBinding, readerDialect } from '../native/neuralese.js';
 import { CRISP, representationType, type GenericResult, type Representation } from '../native/representation.js';
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
-import { RefinementError, checkServiceResults, failureError, refinementCodeOf, type RefinementCode } from '../native/refinement.js';
+import { RefinementError, canonicalValue, checkServiceResults, failureError, refinementCodeOf, type RefinementCode, type RefinementFailure } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
-import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
+import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, runInFrame, type ActiveCall, type Descent, type Frame } from './context.js';
 import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { protectedSources } from './loader.js';
+import { checkItems } from './ensures.js';
+import { checkEnsures, measureOf } from './contracts.js';
 import { engageFusion } from './fusion.js';
 import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, producerScopeForTrace, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '../calls/recorder.js';
@@ -60,6 +62,14 @@ export type CallableDefinition = {
   protect?: readonly string[];
   /** The model work one call may take (`budget:` frontmatter); each bound replaces its model's own. */
   budget?: import('./loader.js').CallBudget;
+  /** `recursive: structural`: a call may run below itself on a smaller argument (runtime/context.ts `descend`). */
+  recursive?: 'structural';
+  /** `measure:`: a call may run below itself where this expression over the arguments, a non-negative whole number, falls. */
+  measure?: string;
+  /** `ensures:` postconditions over the result and the arguments (runtime/ensures.ts), judged before a result is accepted. */
+  ensures?: readonly import('./ensures.js').EnsuresClause[];
+  /** The record of a recursive definition: bound under its own name in its calls' eval scope. */
+  self?: import('./loader.js').NatlangRecord;
   revision?: string;
   description?: string;
   /** Source path for named definitions. */
@@ -345,11 +355,15 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   const node = buildPending({ $lambda: { type, instructions: options.instructions ?? definition.body,
     types: definition.types, function: definition.name,
     ...(definition.subtype !== 'function' ? { subtype: definition.subtype } : {}) } }) as LambdaNode;
-  node.codebase = definition.codebase;
+  // A recursive definition calls itself by its name; a companion item of that name keeps it.
+  node.codebase = definition.self && !Object.hasOwn(definition.codebase, definition.name) ?
+    { ...definition.codebase, [definition.name]: definition.self } : definition.codebase;
   node.hostClasses = options.classes;
   if (definition.readout) node.readout = definition.readout;
   if (definition.withhold?.length) node.withheldTools = [...definition.withhold];
-  if (definition.protect?.length && definition.source) node.protectedSources = protectedSources(definition.source, definition.protect);
+  if ((definition.protect?.length || definition.ensures?.length) && definition.source)
+    node.protectedSources = [...protectedSources(definition.source, definition.protect),
+      ...protectedSources(definition.source, checkItems(definition.ensures, definition.params.map(parameter => parameter.name), definition.codebase))];
   const env = new TypeEnv(node.types);
   env.classes = options.classes;
   env.dialects = options.dialects;
@@ -510,7 +524,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     definition = { ...definition, body: record.instructions, revision: record.revision,
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
       returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase,
-      withhold: record.withhold, protect: record.protect, budget: record.budget };
+      withhold: record.withhold, protect: record.protect, budget: record.budget, recursive: record.recursive, measure: record.measure,
+      ensures: record.ensures, self: record.recursive || record.measure ? record : undefined };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.
@@ -546,7 +561,33 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // callbacks, where the structural rule cannot see the chain.
   const baseIdentity = definition.programId ? JSON.stringify([definition.programId, definition.id]) : definition.id;
   const callIdentity = definition.contextId ? `${baseIdentity}#${definition.contextId}` : baseIdentity;
-  if (frame.chain.includes(callIdentity)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
+  // A definition that declares its recursion (`recursive: structural`, `measure:`) may run below itself on a smaller
+  // argument, or where its measure falls: the guard TypeScript functions use (runtime/context.ts `descend`).
+  const declared = !!(definition.recursive || definition.measure);
+  let same: ActiveCall | undefined;
+  for (let entry = frame.nlActive; entry; entry = entry.parent) if (entry.id === callIdentity) { same = entry; break; }
+  let measure: number | undefined, descent: Descent[] | undefined;
+  if (definition.measure) {
+    const value = await measureOf(frame, definition, positional);
+    if (typeof value === 'string') throw new NatlangRecursionError(definition.id, frame.chain, definition.name, value);
+    measure = value;
+  }
+  if (frame.chain.includes(callIdentity)) {
+    const name = definition.name;
+    if (!declared || !same) throw new NatlangRecursionError(definition.id, frame.chain, name, `\`${name}\` called itself, and its ` +
+      'frontmatter does not declare recursion; declare `recursive: structural` to allow descent on part of an argument, or solve this part in the call itself.');
+    if (measure !== undefined) {
+      if (!(measure < same.measure!)) throw new NatlangRecursionError(definition.id, frame.chain, name, `\`${name}\` called itself with ` +
+        `measure ${measure}, which is not smaller than ${same.measure} in the call it runs below; recurse only where ${JSON.stringify(definition.measure)} falls.`);
+    } else {
+      descent = descend(same, positional);
+      if (!descent.length) throw new NatlangRecursionError(definition.id, frame.chain, name, `\`${name}\` called itself without a smaller ` +
+        'argument. Recurse only on a part of the input, a shorter array or string, or a smaller non-negative integer; otherwise use a ' +
+        'bounded loop or iterateOn.');
+    }
+  }
+  const nlActive: ActiveCall | undefined = declared ? { id: callIdentity, args: positional, parent: frame.nlActive, same, descent,
+    ...(measure !== undefined ? { measure } : {}) } : frame.nlActive;
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)
     throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', [], 'refused');
@@ -670,6 +711,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
+    ...(nlActive ? { nlActive } : {}),
     typeAliases: definition.types,
     signal: frame.signal, abort: frame.abort,
     ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
@@ -769,7 +811,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
       definitionId: definition.id, name: definition.name }) } : {}),
-    ...(signature?.refinedReturns ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
+    ...(signature?.refinedReturns || definition.ensures?.length ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
   }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
@@ -832,6 +874,20 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         text: kept, reason: 'the text differs from the one its soft state was primed from; it stays text' });
     }
     if (handoff) node.handoff = handoff;
+    if (definition.ensures?.length) {
+      // Postconditions over the result and the arguments (`ensures:`): the executor's return gate asks them like refined
+      // slots, and so does the check below whatever path produced the value. One verdict per distinct result.
+      const verdicts = new Map<string, Promise<RefinementFailure[]>>();
+      const input = { frame: childFrame, owner: definition, inputs, checker: task.refinementChecker(), judges: task.refinementJudges(model, frame),
+        callId, signal: frame.signal ?? task.signal, trace: runtime.trace, untrusted: scopedUntrusted(task),
+        emit: (kind: string, data: Record<string, unknown>) => { runtime!.trace.emit(kind, data); } };
+      node.ensures = value => {
+        const result = toHost(value), key = canonicalValue(result);
+        let verdict = verdicts.get(key);
+        if (!verdict) verdicts.set(key, verdict = checkEnsures(input, result));
+        return verdict;
+      };
+    }
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
     if (extraTransactions.length) node.extraTransactions = extraTransactions;
     const result = await runInFrame(childFrame, () => runtime!.run(node));
@@ -849,6 +905,13 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       const failures = await task.refinementChecker().checkValue(result.value, signature.returns, signature.env,
         { phase: 'return', ...task.refinementJudges(model, frame), callId, signal: frame.signal ?? task.signal,
           trace: runtime!.trace, emit: (kind, data) => { runtime!.trace.emit(kind, data); } });
+      if (failures.length) {
+        outcome = 'failed'; detail = `${failures[0]!.code}: ${failures[0]!.message}`;
+        throw new RefinementCallError(failures[0]!.code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
+      }
+    }
+    if (node.ensures) {
+      const failures = await node.ensures(result.value);
       if (failures.length) {
         outcome = 'failed'; detail = `${failures[0]!.code}: ${failures[0]!.message}`;
         throw new RefinementCallError(failures[0]!.code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);

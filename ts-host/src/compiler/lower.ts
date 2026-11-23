@@ -489,13 +489,15 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           const args = node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression);
           return f.createCallExpression(runtime('readNeuralese'), undefined, args);
         }
-        // refine<Is<T, "p">>(value) and assume<R>(value): the predicate of the type argument becomes the second argument.
-        const refinement = options.checker && source.typeArguments?.length === 1 && source.arguments.length === 1 ?
-          resolveIntrinsic(options.checker, callee) : undefined;
-        if (options.checker && (refinement === 'refine' || refinement === 'assume')) {
+        // refine<Is<T, "p">>(value[, options]) and assume<R>(value): the predicate of the type argument becomes the second
+        // argument (refine's options, `{ context }`, the third).
+        const refinement = options.checker && source.typeArguments?.length === 1 && (source.arguments.length === 1 ||
+          source.arguments.length === 2) ? resolveIntrinsic(options.checker, callee) : undefined;
+        if (options.checker && (refinement === 'refine' || (refinement === 'assume' && source.arguments.length === 1))) {
           const predicates = refinementPredicates(options.checker, source.typeArguments![0]!);
           if (predicates.length) return f.createCallExpression(ts.visitNode(callee, visit) as ts.Expression, undefined,
-            [ts.visitNode(node.arguments[0]!, visit) as ts.Expression, f.createStringLiteral(predicates.join('; and '))]);
+            [ts.visitNode(node.arguments[0]!, visit) as ts.Expression, f.createStringLiteral(predicates.join('; and ')),
+              ...node.arguments.slice(1).map(argument => ts.visitNode(argument, visit) as ts.Expression)]);
         }
         const isMethod = ts.isPropertyAccessExpression(callee) && callee.name.text === 'iterateOn';
         const isFree = !isMethod && options.checker && resolveIntrinsic(options.checker, callee) === 'iterateOn';

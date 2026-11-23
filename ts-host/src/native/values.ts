@@ -47,7 +47,9 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   withheldTools?: string[];
   /** Sources of the codebase this call can read but not edit: its definition's `protect:` frontmatter, resolved
    * (runtime/loader.ts protectedSources). */
-  protectedSources?: string[] };
+  protectedSources?: string[];
+  /** The definition's `ensures:` postconditions on a proposed result (runtime/contracts.ts): empty when they hold. */
+  ensures?: (value: Value) => Promise<import('./refinement.js').RefinementFailure[]> };
 export type Pending = LambdaNode;
 /** `text`, when set, is the whole model-facing line (a sentence without the `path: code` prefix); `code` stays for traces. */
 export type Diagnostic = { path: string; code: string; expected?: string; got?: string; text?: string };

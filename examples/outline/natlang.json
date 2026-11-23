@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "natlang-outline-example",
+  "version": "0.1.0",
+  "description": "Digest a nested document: one call per section, recursing on its subsections, held to postconditions on every result.",
+  "include": [
+    "README.md",
+    "digest.nl",
+    "digest/covers.ts",
+    "document.json",
+    "main.ts",
+    "outline.ts",
+    "package.json",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "targets": {
+    "outline": {
+      "entry": "main.ts",
+      "description": "Digest the bundled document.json, section by section."
+    }
+  },
+  "model": {
+    "stock": "lfm3-1.7b-q8_0"
+  }
+}
