@@ -8585,3 +8585,7 @@ symlink presented for source rehashing. No live capture or training state change
   relaunches) was restarted; `run` waiters launched from pinned or archived copies of the script keep the old rule
   until they end. Tests: `tests/test_memory_ledger.py` (lent/large/spare/reclaimable fixtures, guard relaunch within
   the allowance, run + status, starvation simulation under both modes).
+- **Storage sweep:** `natlang-storage-sweep-run` is now `--resumable` (it is a rerunnable deletion pass): as a low
+  job behind a medium/high head it backfills as `reclaimable` whenever 1+1 GiB fits, instead of only within a lent
+  allowance (at 13:29 the allowance was used up by legacy same-priority backfills behind `aei1-r0001-build`). Unit file
+  updated in `scripts/systemd/` and `~/.config/systemd/user/`; admitted at 13:30 as `reclaimable`.
