@@ -9925,6 +9925,130 @@ Deployment: pull the commit in the DGX canonical checkout, restart only the ledg
 
 Validation: actual Tick ledger unit `vibe-ledger-dgx-reserve-tests-a`, 0.5 GiB budget/7.5 GiB reserve, passed all 98 ledger tests in 3.19 s (127.8 MiB peak). Tests cover implicit old specs and queued relaunches, explicit zero/small overrides, non-DGX proportional admission, machine-identity caching and known-DGX policy with unavailable GPU discovery.
 
+## 2026-11-24 00:30 Program tuning on the A100: tenants beside the actor between rounds; the 11-20 fit chain never ran (program-tuning strand, fallow T1-T3)
+
+Owner (11-24): "move forward with all of that comprehensively": real LFM3 program fits, a bank meta-learned from them,
+held programs adapted from the bank, serving parity on every engine, measured outcomes, on the Colab A100 between
+aei1's round SFTs without ever delaying one.
+
+**State found.**
+- **None of the 8 queued fits ran a step.** `progtune-fit-seq-4` (11-20) logged "3 runs without a step" for every
+  program. `program_tune.py plan` wrote `rows` with `.resolve()`. That followed the 11-18 archive symlink of the programs
+  root to the HDD archive, and the archive copy was gone after the directory moved back to the NVMe. Only
+  `ext_decisions_route` (fitted 11-18) has a release. Its dev base arm (Pop, 81.3%) is the only measurement.
+- `progdev-route-window-2` / `-yield-2` had been polling since 11-20 for a guard script (`pop_free.py`) whose
+  grpo-v5 inputs no longer exist (orphaned): stopped. Pop now runs held-v3 every round, so the Pop-window design is
+  retired. The dev arms move to the A100.
+- The A100 runs aei1's round SFT at about 7.5 s/step (r0001: 1,150 steps, from ~22:57). Its actor alone claims 70.5 of
+  78 GiB (mem fraction 0.88), so nothing fits beside it.
+
+**Fixes (defaults, tests).**
+- `program_tune.py plan`/`bank` record paths as written, with symlinks kept (`logical`). The 8 plans were regenerated.
+  verdict resumes from its step 8 (`tune.build` resumes from state.json alone).
+- **Tenants** (`scripts/colab/admission.py --preemptible`). A tenant is admitted only beside a live actor claim
+  (`--beside-label actor-`), so never in the gap after the actor yields to a round. It yields when any normal
+  admission request is waiting: SIGTERM to its process group, SIGKILL after 60 s. Waiting requests are read from the
+  process table, because a round's learner admitted by an older checkout (`run-sft` checks the session out at the
+  driver's pin) writes no waiting record and evicts nobody. With current code a normal claim that does not fit also
+  evicts tenants, newest first. Tenants run under MPS with `CUDA_MPS_ACTIVE_THREAD_PERCENTAGE` 50
+  (`NATLANG_COLAB_TENANT_MPS_PERCENT`), so the actor keeps at least half the SMs.
+- **The actor alone caps its KV at 24 GB on large GPUs** (`ACTOR_ALONE_KV_CAP_GB`; `NATLANG_COLAB_ACTOR_FULL=1` opts
+  out). 128 running used 20% of the L4's 11.2 GB pool (11-23 13:50), so 24 GB is ~10x what the sequences use. The
+  A100 actor then claims 34 GiB and leaves 43 GiB for tenants (`colab_layout(...)['tenants']`: a fit at 12 GiB and a
+  measurement actor at 8 GB KV / 18 GiB). The L4's pool is below the cap and unchanged. This enters the A100 when aei1
+  next starts on a commit that has it (an actor restore runs the driver's pin), or when the keeper serves a
+  replacement session.
+- `program_tune.py colab-fit` runs a fit as a tenant at a tenant commit. The code is ROOT/natlang-tenant, a detached
+  worktree: the session's own checkout belongs to the round. The checkpoint and rows are shipped through Drive, the
+  release is made on the VM and pulled back verified. The fit resumes after an eviction, and only a whole release
+  lands. `fit/colab-claim.json` makes the DGX chain skip the program.
+- `program_tune.py colab-measure` runs a held_eval dev arm on the DGX (ledger, pin) against a tenant measurement actor
+  (`pop_rl_actor.serve_colab_tenant_actor`: base, or base + release on one SGLang adapter slot, port 8571 -> DGX 18732;
+  the policy id comes from the attested binding). A lost actor stops the measure, and its unscored episodes are left
+  out. The driver is `program-tune-20261117/colab-seq.sh COMMIT PIN fits|arms PROGRAM ...`.
+- Commits 62003deb8, ba275577b, 58343e0e6; check-main --quick exit 0.
+
+**Experiment progtune-a100-1 (declared before it runs).**
+- Pin 58343e0e6. Start policy: the untouched base 5ff07638 (no exposure to any program's dev or confirmation tasks).
+- 9 programs: route, verdict, tally, tree, retail, pubmed, searchqa, multihop, neuralese_iterate.
+- Fits: free LoRA rank 16 on every LFM3 target family, 60 steps x 8 support rows, Adam 2e-3, BF16 base / FP32
+  adapter. The DGX chain (`progtune-fit-seq-6`, low priority, 13 GB, 15-step segments) takes them from the decisions
+  end, and A100 tenants from the large end.
+- Arms: held_eval on each program's dev split, 2 samples per task. Engine: SGLang, BF16 weights, FP8 KV, the tenant
+  actor (64 running). Base on every program, then base + the program's release. The pairs are `compare`d (mean
+  per-task change, permutation p, task-bootstrap CI).
+- **Success** per program: a positive change with p < 0.05. **Failure:** a regression with p < 0.05. That starts a
+  diagnosis (row masking, template parity between the fit's rendering and the actor's, served-adapter parity (T3))
+  before the method is judged.
+- Bank: `program_tune.py bank` over the meta-train fits, with 2 programs held out of the meta-train set entirely.
+  Their bank inner-fit releases are measured like a fit (bank vs base, bank vs the program's own LoRA). Success:
+  bank > base on the pooled held programs with p < 0.05.
+- T3 (adapter parity on the four engines) runs as its own strand on the route release (DGX only).
+
+## 2026-11-24 00:45 Placement-aware round budgets; rounds stop repeating each other; teacher reasoning as context
+
+**Why.** The round size (12M weighted target tokens, `ROUND_TARGET_TOKENS`) was set for DGX rounds. On the Colab A100
+a round trains about 5x faster: aei1 r0001 measured 30.8k chain tokens/s on the A100 (steps 337-532, 9.4 s/step)
+against 5.9k on the GB10 (steps 1-354, 48.8 s/step). The owner wants A100 rounds to draw more of the accumulated
+data. Measuring r0001 against r0002 also showed that consecutive rounds repeated each other. r0002 held 3,166 of
+r0001's 3,395 filled units, 1,118 of its 1,645 teacher episodes and 186 of its 459 own episodes. There were two causes:
+- a round is prepared while the previous one trains, and that round's mix entered `prefer_unseen` only at publication;
+- `--prefer-unseen` read only `rows.jsonl.zst` (core episodes), so aux parts never counted as trained. The filled
+  reasoning part (18M of r0002's 39.4M uncapped tokens) was drawn at random each round.
+
+The raw-teacher forward budget was also spent on episodes that a filled unit then replaced. In r0002 that was 2,811
+episodes, about 36% of the 180M budget.
+
+**Built (default on, each with an opt-out; tests in `tests/neuralese/test_async_train.py` and `test_sft_sources.py`):**
+- **Placement-aware size** (`expert_iteration.py` async-drive, `--colab-round-hours 2`, `0` opts out). At preparation
+  the driver checks for a reachable session that passes `colab_sft_fit`.
+  - With one, the round is sized to 2 h of that GPU's learner: `sft_sources build --max-forward-tokens` =
+    hours x chain tokens/s. Throughput comes from `round-speed.json` (written after every round per GPU, from its
+    logs), else the r0001 defaults, else GB10 x `sft_speedup`.
+  - The target cap and the teacher forward budget scale by the same factor against the DGX round, never below it.
+  - The decision is recorded in `rNNNN/size.json` and in `round.json` `size` and `expected_hours`.
+- **Forward-token cap** in `cap_target_tokens`: the tighter of the target and forward bounds sets one fraction, and
+  every part keeps that fraction, unseen units first.
+- **DGX fallback**: if a round sized for a session starts on the DGX (the session was lost or turned unfit before
+  its learner began), `sft_sources recap` first bounds its mix to `--round-target-tokens` into `mix-dgx/`.
+  `round.json` `mix_dir`, `chains_path`, `chains_sha256` and `episode_ids` then point at the recapped mix, and the units
+  it leaves out stay unseen. A round whose learner already trained (a session lost mid-round) keeps its step list and
+  resumes on the DGX; the hand-back moves it back when a fit session answers. `--no-dgx-recap` opts out.
+- **In-flight prefer-unseen**: a round prepared ahead prefers unseen over the mix of the round training now
+  (`--no-prefer-inflight` opts out).
+- **Unit-level prefer-unseen**: each build and recap writes `trained-units.json` ((task, round) of every chain, aux
+  parts included). For older builds `trained_units` reads their `chains.pkl`. Share-bounded aux parts and the cap
+  take unseen units first.
+- **Teacher episodes a filled unit stands in for** are not admitted raw, so they spend no forward budget
+  (`--filled-teacher admit` restores the old rule). The fill unit trains as before.
+- **Teacher reasoning as context (owner 2026-11-24).** Owner: "We can handle training data for SFT where there is
+  teacher reasoning. We just don't train on it, but we still allow it to be part of the training data." What changed:
+  - Observed-live teacher episodes without a fill are no longer dropped in rounds: `--unfilled-live-teacher auto` now
+    keeps them, with the think block as zero-weight context and the actions as targets; `drop` opts out. r0002 dropped
+    45 of them.
+  - The treatment table (`teacher-reasoning-audit-20261120/treatment.json`: default `context`, every model `filled`)
+    already renders `filled` without a fill as `context`, and nothing else in admission requires filled reasoning.
+  - AGENTS.md "State" now says so.
+- The round build's ledger budget is now 32 GB: r0001/r0002 peaked at 21.2/17.1 GB under 24, and the aux parts now
+  load earlier.
+
+**Expected round size.**
+
+| Placement | Forward tokens | Weighted target | Steps | Teacher forward budget | Learner time |
+|---|---|---|---|---|---|
+| A100 | 221.8M | ~21M (scale 1.75 at r0002's 10.57 forward per target) | ~700 | 315M | ~2 h |
+| DGX | ~127M | 12M | ~400 | 180M | ~6 h at 48.8 s/step, ~8 h at 74 s/step |
+
+With unit-level prefer-unseen, the A100 round's 21M is mostly units r0001 did not train. The cap kept 61% of r0002's
+uncapped pool instead of 30%.
+
+**Not checked.**
+- No end-to-end `sft_sources build` on real data. The scratch rebuild of r0002 waited on the ledger: headroom was
+  3.5 GB, and I did not preempt aei1's collection. The first real build is the coordinator's r0002/r0003 build.
+- The time model assumes steps cost in proportion to chain tokens. It was measured on one mix per GPU, and a larger
+  raw-teacher share raises forward per loss token.
+
+
 ## 2026-11-24 00:30 Pop is a standing aei1 collection actor whenever no held measurement holds it
 
 Pop's GPU had been idle for hours (held moved to the DGX series; an idle held server was stopped at 00:05). It now

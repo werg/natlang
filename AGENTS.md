@@ -165,8 +165,9 @@ and keeps the roster `ops/watchdog.json` to the experiments in flight.
 
 **State.** The method is **expert iteration** (owner-approved 2026-11-20; DECISIONS "expert iteration"): one loop in
 which every source feeds a per-task pool of verified trajectories in the student's own distribution (own best-of-k
-successes first, then leak-checked `jolt-guided` successes, then teacher trajectories with student-filled reasoning;
-never teacher reasoning or empty think blocks as targets), weighted by the student's measured pass rate per task,
+successes first, then leak-checked `jolt-guided` successes, then teacher trajectories: student-filled reasoning where
+it exists, else the teacher's reasoning as zero-weight context (owner 2026-11-24); teacher reasoning and empty think
+blocks are never trained as targets), weighted by the student's measured pass rate per task,
 trained by Ambient LoRA SFT and gated by held-v3 on the DGX series (`dgx-held`: BF16 weights, FP8 KV, 4 samples,
 preemptible; collections yield slots to it). Production runs discrete pipelined cycles (`expert_iteration.py cycle`,
 sft-v7..v10: collect 6 h, teacher, build, SFT, held on the adaptive interval, next cycle speculative). The round driver

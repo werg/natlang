@@ -1018,7 +1018,7 @@ def test_round_stages_preempt_the_standing_collection_which_resumes_on_its_polic
     rd = d.root / 'r0001'
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
     launched.clear()
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, policies: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, policies, size=None: (['frontier'], [['data']], ['build']))
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
     monkeypatch.setattr(ei, 'write_round_manifest', lambda *a, **kw: {})
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
@@ -1065,7 +1065,7 @@ def test_a_restarted_driver_resumes_prepare_after_its_last_finished_step(tmp_pat
     d.collect_dir(cur).mkdir(parents=True)
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols, size=None: (['frontier'], [['data']], ['build']))
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
     monkeypatch.setattr(d.c, 'present', lambda unit: False)  # simulated ledger owns no real systemd jobs
     rd = d.root / 'r0001'
@@ -1103,7 +1103,7 @@ def test_prepare_never_rewrites_the_data_script_beneath_a_running_data_unit(tmp_
     d.collect_dir(cur).mkdir(parents=True)
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['new-data']], ['build']))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols, size=None: (['frontier'], [['new-data']], ['build']))
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
     rd = d.root / 'r0002'
     (rd / 'stages').mkdir(parents=True)
@@ -1387,7 +1387,7 @@ def test_the_next_rounds_snapshot_waits_for_the_remote_collection_while_the_dgx_
     monkeypatch.setattr(ei.time, 'sleep', sleep)
     monkeypatch.setattr(d.c, 'present', lambda u: u in present)
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (_ for _ in ()).throw(StopIteration('snapshot taken')))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols, size=None: (_ for _ in ()).throw(StopIteration('snapshot taken')))
     with pytest.raises(StopIteration):
         d.prepare(d.root / 'r0002', [cur])
     assert len(slept) == 1                      # waited one poll: 2 h after the DGX collection's start
@@ -1529,6 +1529,190 @@ def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, mo
     assert argv[argv.index('--work') + 1].endswith('-remote0')
     assert argv[argv.index('--checkpoint-sha256') + 1] == d.controller.current['sha256']
     assert plan['sft_dgx'] == {'activation_gb': 56, 'budget_gb': 80}
+
+
+# -- placement-aware round budgets (DECISIONS 2026-11-24) -------------------------------------------------------------
+
+def _colab_driver(tmp_path, monkeypatch, *argv, gpu='NVIDIA A100-SXM4-80GB', fit=True):
+    ei, d = _remote_driver(tmp_path, monkeypatch, '--sft-profile', 'colab', '--colab-hosts', 'colab-g4', *argv)
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'reachable_hosts', lambda profile, hosts: list(hosts))
+    monkeypatch.setattr(pop_rl_actor, 'colab_sft_fit', lambda host: (fit, 'test'))
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: {'gpu_name': gpu, 'vram_total_gib': 80})
+    d.colab_hosts = ['colab-g4']
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    return ei, d
+
+
+def test_a_round_for_a_fit_session_is_sized_to_its_hours_and_a_dgx_round_keeps_the_dgx_size(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    size = d.round_size()
+    # 2 h at the A100's 30.8k chain tokens/s: 221.8M forward tokens, 1.73x the 12M-target DGX round (x10.7 forward)
+    assert size['placement'] == 'colab' and size['max_forward_tokens'] == 2 * 3600 * 30_800
+    assert size['scale'] == round(2 * 3600 * 30_800 / (12_000_000 * 10.7), 3)
+    assert abs(size['max_target_tokens'] - 12_000_000 * size['scale']) < 12_000 and size['teacher_budget'] > 180_000_000
+    _, _, build = d.prepare_plan(d.root / 'r0001', [d.controller.current], size)
+    assert build[build.index('--max-forward-tokens') + 1] == str(size['max_forward_tokens'])
+    assert build[build.index('--teacher-forward-budget') + 1] == str(size['teacher_budget'])
+    # measured throughput wins over the default; a GPU with neither uses the GB10's times sft_speedup
+    (d.root / ei.ROUND_SPEED_FILE).write_text(json.dumps({'NVIDIA A100-SXM4-80GB': {'chain_tokens_per_s': 40_000}}))
+    assert d.round_size()['max_forward_tokens'] == 2 * 3600 * 40_000
+    _, unfit = _colab_driver(tmp_path / 'unfit', monkeypatch, fit=False)
+    assert unfit.round_size()['placement'] == 'dgx'
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--colab-round-hours', '0')
+    assert off.round_size()['placement'] == 'dgx'
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert '--max-forward-tokens' not in build and build[build.index('--max-target-tokens') + 1] == '12000000'
+    assert build[build.index('--teacher-forward-budget') + 1] == '180000000'
+    # never smaller than the DGX round
+    small = ei.placement_round_size(round_target_tokens=12_000_000, teacher_budget=180_000_000, hours=0.1,
+                                    gpu_name='x', chain_tokens_per_s=30_800)
+    assert small['scale'] == 1.0 and small['max_target_tokens'] == 12_000_000
+
+
+def test_a_round_prepared_ahead_prefers_unseen_over_the_round_training_now(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    trained = d.root / 'r0001' / 'mix'
+    trained.mkdir(parents=True)
+    (trained / 'rows.jsonl.zst').write_bytes(b'')
+    d.controller.state['active_round'] = {'round_id': 'r0001', 'base_sha256': 'a' * 64, 'phase': 'sft'}
+    assert d.prefer_unseen_for(d.root / 'r0002')[-1] == str(trained)
+    assert str(trained) not in d.prefer_unseen_for(d.root / 'r0001')
+    _, _, build = d.prepare_plan(d.root / 'r0002', [d.controller.current])
+    assert build[len(build) - 1 - build[::-1].index('--prefer-unseen') + 1] == str(trained)
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-prefer-inflight')
+    off.controller.state['active_round'] = {'round_id': 'r0001'}
+    (off.root / 'r0001' / 'mix').mkdir(parents=True)
+    (off.root / 'r0001' / 'mix' / 'rows.jsonl.zst').write_bytes(b'')
+    assert off.prefer_unseen_for(off.root / 'r0002') == off.controller.state['prefer_unseen']
+
+
+def test_a_round_sized_for_a_session_that_starts_on_the_dgx_is_recapped_first(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'mix' / 'chains.pkl').write_bytes(b'full')
+    ei.write_round_manifest(rd, round_id='r0001', base_policy_sha='a' * 64, previous_policy_sha=None,
+                            chains_path=rd / 'mix' / 'chains.pkl', episode_ids=['e1', 'e2'],
+                            extra={'size': {'placement': 'colab'}, 'mix_dir': str(rd / 'mix')})
+    ran = []
+
+    def ledger(unit, budget, priority, argv, log, **kw):
+        ran.append(list(map(str, argv)))
+        out = Path(argv[argv.index('--out') + 1])
+        out.mkdir(parents=True)
+        (out / 'chains.pkl').write_bytes(b'capped')
+        (out / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e1'], 'mix': {'forward_tokens': 1},
+                                                    'target_cap': {'kept_weighted_target_tokens': 5}}))
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    # a learner that already trained keeps its step list
+    (rd / 'sft' / 'learner-state').mkdir(parents=True)
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').write_text('{}')
+    assert not d.recap_for_dgx(rd) and not ran
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').unlink()
+    assert d.recap_for_dgx(rd)
+    argv = ran[0]
+    assert 'recap' in argv and argv[argv.index('--max-target-tokens') + 1] == '12000000'
+    manifest = json.loads((rd / 'round.json').read_text())
+    assert manifest['mix_dir'] == str(rd / 'mix-dgx') and manifest['episode_ids'] == ['e1']
+    assert manifest['chains_sha256'] == hashlib.sha256(b'capped').hexdigest() == (rd / 'chains.sha256').read_text().strip()
+    assert d.round_mix(rd) == rd / 'mix-dgx'
+    assert d.sft_env(rd, d.controller.current, activation_gb=56, preflight_only=False)['CHAINS'] == \
+        str(rd / 'mix-dgx' / 'chains.pkl')
+    assert not d.recap_for_dgx(rd) and len(ran) == 1               # once
+    # a DGX-sized round and the opt-out are never recapped
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-dgx-recap')
+    assert not off.recap_for_dgx(rd)
+
+
+def test_round_learner_throughput_is_recorded_per_gpu(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'sft').mkdir(parents=True)
+    ei.write_round_manifest(rd, round_id='r0001', base_policy_sha='a' * 64, previous_policy_sha=None,
+                            chains_path=_touch(rd / 'mix' / 'chains.pkl'), episode_ids=[], profile='colab')
+    steps = lambda first, n, sec: ''.join(json.dumps({'step': first + i, 'of': 100, 'step_seconds': sec,
+                                                      'chain_tokens': 300_000}) + '\n' for i in range(n))
+    (rd / 'sft' / 'train.dgx-1.jsonl').write_text(steps(1, 30, 50.0))
+    (rd / 'sft' / 'train.jsonl').write_text(steps(31, 40, 10.0))
+    (rd / 'sft' / 'handback.json').write_text(json.dumps([{'pushed_step': 31}]))
+    (rd / 'sft' / 'colab-placement.json').write_text(json.dumps({'host': 'colab-g4', 'gpu': 'NVIDIA A100'}))
+    d.record_round_speed(rd)
+    table = json.loads((d.root / ei.ROUND_SPEED_FILE).read_text())
+    assert table['GB10']['chain_tokens_per_s'] == 6000 and table['NVIDIA A100']['chain_tokens_per_s'] == 30_000
+    assert ei.learner_throughput('NVIDIA A100', table)[0] == 30_000
+    assert d.expected_hours({'mix': {'forward_tokens': 30_000 * 3600}})['NVIDIA A100'] == 1.0
+
+
+def _touch(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b'x')
+    return path
+
+
+def test_the_round_cap_binds_on_forward_tokens_and_prefers_unseen_aux_units(tmp_path, monkeypatch):
+    import numpy as np
+    import pickle
+    import sft_sources
+
+    def chain(part, task, round_, n, forward):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(forward, dtype=np.int32),
+                'segs': [(4, n, {'sample': np.zeros(n)})]}
+    chains = [chain('filled', 't1', 'filled:a', 100, 1000), chain('filled', 't2', 'filled:b', 100, 1000),
+              chain('operators', 'op1', '0', 100, 1000), chain('operators', 'op2', '0', 100, 1000)]
+    kept, report = sft_sources.cap_target_tokens(chains, 0, max_forward=2000,
+                                                 trained_unit_keys={('t1', 'filled:a'), ('op1', '0')})
+    assert report['binding'] == 'forward' and report['fraction'] == 0.5
+    assert [(c['task'], c['round']) for c in kept] == [('t2', 'filled:b'), ('op2', '0')]
+    assert report['parts']['filled']['unseen_episodes'] == 1 and report['parts']['filled']['kept_trained_before'] == 0
+    # the tighter bound wins
+    assert sft_sources.cap_target_tokens(chains, 100, max_forward=3000)[1]['binding'] == 'target'
+    # trained units: the sidecar, else the build's chains.pkl (aux parts included, which rows.jsonl.zst lacks)
+    legacy, new = tmp_path / 'legacy', tmp_path / 'new'
+    legacy.mkdir()
+    with (legacy / 'chains.pkl').open('wb') as handle:
+        pickle.dump({'chains': chains[:1]}, handle)
+    new.mkdir()
+    sft_sources.write_trained_units(new, chains[2:3])
+    assert sft_sources.trained_units([legacy, new]) == {('t1', 'filled:a'), ('op1', '0')}
+
+
+def test_recap_bounds_a_built_mix_and_records_what_it_left_out(tmp_path, monkeypatch):
+    import numpy as np
+    import pickle
+    import sft_sources
+    monkeypatch.setenv('NATLANG_ALLOW_UNREGISTERED_DATA', '1')
+    monkeypatch.setattr(sft_sources.data_registry, 'record_dataset', lambda *a, **k: None)
+    src = tmp_path / 'mix'
+    src.mkdir()
+
+    def chain(part, task, round_, n):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(n, dtype=np.int32),
+                'segs': [(0, n, {'sample': np.zeros(n)})]}
+    chains = [chain('rl-own', 't1', 'own:1', 100), chain('rl-own', 't2', 'own:2', 100),
+              chain('filled', 't3', 'filled:3', 100), chain('filled', 't4', 'filled:4', 100)]
+    with (src / 'chains.pkl').open('wb') as handle:
+        pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle)
+    out = sft_sources.ZstdWriter(src / 'rows.jsonl.zst')
+    for key, task in (('own:1', 't1'), ('own:2', 't2')):
+        out.write({'episode': key, 'task_id': task})
+    out.close()
+    (src / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['own:1', 'own:2'], 'target_cap': {}}))
+    seen = tmp_path / 'seen'
+    seen.mkdir()
+    sft_sources.write_trained_units(seen, [chains[0], chains[2]])
+    sft_sources.ZstdWriter(seen / 'rows.jsonl.zst').close()
+    dst = tmp_path / 'mix-dgx'
+    sft_sources.recap(SimpleNamespace(mix=str(src), out=str(dst), max_target_tokens=200, max_forward_tokens=0,
+                                      prefer_unseen=[str(seen)]))
+    with (dst / 'chains.pkl').open('rb') as handle:
+        assert [c['round'] for c in pickle.load(handle)['chains']] == ['own:2', 'filled:4']
+    report = json.loads((dst / 'build.json').read_text())
+    assert report['admitted_episode_keys'] == ['own:2'] and report['target_cap']['dropped_episode_keys'] == ['own:1']
+    assert sft_sources.trained_in([dst]) == ({'own:2'}, {'t2'})
+    assert sft_sources.trained_units([dst]) == {('t2', 'own:2'), ('t4', 'filled:4')}
 
 
 def _pop_driver(tmp_path, monkeypatch):

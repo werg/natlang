@@ -1832,22 +1832,76 @@ def trained_in(builds):
     return frozenset(keys), frozenset(tasks)
 
 
-def cap_target_tokens(chains, cap, trained_keys=frozenset()):
+TRAINED_UNITS = 'trained-units.json'      # a build's trained (task, round) units, every part (``trained_units``)
+
+
+def trained_units(builds):
+    """The (task, round) units an earlier build trained, every part included (own, teacher and the aux parts: filled
+    reasoning, operators, Neuralese graphs), for ``--prefer-unseen`` beyond the core episodes ``trained_in`` reads from
+    rows.jsonl.zst: OUT/trained-units.json (written by every build and recap), else the build's chains.pkl (written
+    after the round cap and the fill replacement, so its units are exactly what trained)."""
+    import pickle
+    units = set()
+    for build in builds:
+        path = Path(build) / TRAINED_UNITS
+        if path.exists():
+            units.update((str(t), str(r)) for t, r in json.loads(path.read_text())['units'])
+            continue
+        chains = Path(build) / 'chains.pkl'
+        if chains.exists():
+            import gc
+            with chains.open('rb') as handle:
+                payload = pickle.load(handle)
+            units.update(unit_key(c)[1:] for c in payload['chains'])
+            del payload
+            gc.collect()
+    return frozenset(units)
+
+
+def write_trained_units(out, chains):
+    """OUT/trained-units.json: the (task, round) units of the chains a build or recap wrote (``trained_units``)."""
+    units = sorted({unit_key(c)[1:] for c in chains})
+    tmp = Path(out) / (TRAINED_UNITS + '.partial')
+    tmp.write_text(json.dumps({'schema': 'natlang.sft-trained-units/1', 'units': units}) + '\n')
+    os.replace(tmp, Path(out) / TRAINED_UNITS)
+
+
+def unit_key(chain):
+    """(part, task, round) of a chain: one episode of one part (an aux part's unit, an own or teacher episode)."""
+    return str(chain.get('part')), str(chain.get('task')), str(chain.get('round'))
+
+
+def unit_seen(key, trained_keys, trained_unit_keys):
+    """Whether an earlier build trained this unit: its episode key (rows.jsonl.zst) or its (task, round)."""
+    return key[2] in trained_keys or key[1:] in trained_unit_keys
+
+
+def cap_target_tokens(chains, cap, trained_keys=frozenset(), trained_unit_keys=frozenset(), max_forward=0):
     """(kept chains, report) of a mix bounded to ``cap`` weighted target tokens (``--max-target-tokens``; the
-    async round size): every part (``chain['part']``: own, teacher, each aux part) keeps the same fraction cap / total
-    of its weighted target tokens, so the mix's composition (own and aux shares) is the uncapped build's. Whole
-    episodes (a part's chains sharing task and round) are kept or dropped. Within a part the episodes a
-    ``--prefer-unseen`` build trained go last, otherwise the admission order stands (own and teacher: the build's
-    priority, breadth-first over tasks; aux parts: their shuffle); an episode that would overshoot its part's budget
-    is skipped for a smaller one. A mix at or under the cap is returned whole."""
-    from exp0_sft import chain_mass
+    async round size) and to ``max_forward`` forward tokens (``--max-forward-tokens``: the learner's wall time follows
+    its forward tokens; a placement-aware round sets it from the learner GPU's measured throughput); the tighter bound
+    sets one fraction. Every part (``chain['part']``: own, teacher, each aux part) keeps that fraction of its weighted
+    target tokens, so the mix's composition (own and aux shares) is the uncapped build's. Whole episodes (a part's
+    chains sharing task and round) are kept or dropped. Within a part the units an earlier build trained
+    (``--prefer-unseen``: an episode key in ``trained_keys`` or a (task, round) in ``trained_unit_keys``) go last,
+    otherwise the admission order stands (own and teacher: the build's priority, breadth-first over tasks; aux parts:
+    their shuffle); a unit that would overshoot its part's budget is skipped for a smaller one. A mix within both
+    bounds is returned whole."""
+    from exp0_sft import chain_mass, source_tokens
     total = sum(chain_mass(c) for c in chains)
-    if not cap or total <= cap:
-        return chains, {'cap': cap, 'total_weighted_target_tokens': int(total), 'applied': False}
-    fraction = cap / total
+    total_forward = sum(len(c['ids']) + source_tokens(c) for c in chains)
+    fractions = {k: v for k, v in (('target', cap / total if cap and total else None),
+                                   ('forward', max_forward / total_forward if max_forward and total_forward else None))
+                 if v is not None}
+    base = {'cap': cap, 'max_forward_tokens': max_forward, 'total_weighted_target_tokens': int(total),
+            'total_forward_tokens': int(total_forward)}
+    if not fractions or min(fractions.values()) >= 1:
+        return chains, {**base, 'applied': False}
+    binding = min(fractions, key=fractions.get)
+    fraction = fractions[binding]
     units, order = {}, []
     for chain in chains:
-        key = (str(chain.get('part')), str(chain.get('task')), str(chain.get('round')))
+        key = unit_key(chain)
         if key not in units:
             units[key] = []
             order.append(key)
@@ -1858,18 +1912,20 @@ def cap_target_tokens(chains, cap, trained_keys=frozenset()):
     kept_units, parts = set(), {}
     for part, keys in by_part.items():
         mass = {k: sum(chain_mass(c) for c in units[k]) for k in keys}
+        seen = {k: unit_seen(k, trained_keys, trained_unit_keys) for k in keys}
         budget, taken = fraction * sum(mass.values()), 0.
-        for k in sorted(keys, key=lambda k: k[2] in trained_keys):      # stable: unseen first, then admission order
+        for k in sorted(keys, key=seen.get):      # stable: unseen first, then admission order
             if taken + mass[k] <= budget:
                 kept_units.add(k)
                 taken += mass[k]
         parts[part] = {'weighted_target_tokens': int(sum(mass.values())), 'kept_weighted_target_tokens': int(taken),
                        'episodes': len(keys), 'kept_episodes': sum(k in kept_units for k in keys),
-                       'kept_trained_before': sum(k in kept_units and k[2] in trained_keys for k in keys)}
-    kept = [c for c in chains if (str(c.get('part')), str(c.get('task')), str(c.get('round'))) in kept_units]
-    return kept, {'cap': cap, 'total_weighted_target_tokens': int(total), 'applied': True,
-                  'fraction': round(fraction, 4), 'kept_weighted_target_tokens': int(sum(chain_mass(c) for c in kept)),
-                  'parts': parts}
+                       'unseen_episodes': sum(not seen[k] for k in keys),
+                       'kept_trained_before': sum(k in kept_units and seen[k] for k in keys)}
+    kept = [c for c in chains if unit_key(c) in kept_units]
+    return kept, {**base, 'applied': True, 'binding': binding, 'fraction': round(fraction, 4),
+                  'kept_weighted_target_tokens': int(sum(chain_mass(c) for c in kept)),
+                  'kept_forward_tokens': int(sum(len(c['ids']) + source_tokens(c) for c in kept)), 'parts': parts}
 
 
 PREFER_UNSEEN_SCOPES = ('family', 'global')
@@ -2462,12 +2518,13 @@ def mark_open_goal(chains, goal, turns):
 
 
 def drop_unfilled_live(chains, mode, aux_parts):
-    """(chains, episodes dropped): ``mode`` drop leaves out the observed-live teacher episodes (rounds ``live:...``,
-    a live campaign's: no usable teacher reasoning) that no filled-reasoning unit replaced, so they train only with the
-    student's filled reasoning, never after an empty or teacher think block; ``auto`` drops when a ``replaces=teacher``
-    part is in the build (an expert-iteration round), else trains them (``train``) like other teacher episodes."""
-    if mode == 'auto':
-        mode = 'drop' if any(part.get('replaces') == 'teacher' for part in aux_parts) else 'train'
+    """(chains, episodes dropped) for the observed-live teacher episodes (rounds ``live:...``) that no filled-reasoning
+    unit replaced. ``train`` and ``auto`` (default) keep them: the teacher's think block (or an empty one) stays
+    zero-weight context and its actions are targets, while a filled unit (``replaces=teacher``) still stands in for
+    its episode where one exists (owner 2026-11-24: teacher reasoning may be in the data as context; never a target;
+    filling every trace is not required). ``drop`` (the opt-out, the rule before) leaves them out so they train only
+    with the student's filled reasoning."""
+    del aux_parts       # auto once dropped when a replaces=teacher part was given (every expert-iteration round)
     if mode != 'drop':
         return chains, 0
     unfilled = {str(c.get('round')) for c in chains if c.get('part') == 'teacher' and str(c.get('round')).startswith('live:')}
@@ -2640,6 +2697,7 @@ def build(args):
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
     trained_keys, trained_before = trained_in(getattr(args, 'prefer_unseen', None) or [])
+    trained_unit_keys = trained_units(getattr(args, 'prefer_unseen', None) or [])
     # the student's own distribution: unguided own successes and leak-checked JOLT+ guided successes share one per-task
     # cap, one family share and one wrapper share (own first under each); a frontier build drops a task's guided
     # successes where it has unguided ones (``frontier_drop``: own > jolt-guided > teacher, async-train §8)
@@ -2826,6 +2884,18 @@ def build(args):
         return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy),
                 not bool(constructs.get(c['task_id'], ((), False))[0]), 0.5 if p is None else p, rng.random())
 
+    # the prebuilt parts (``--aux``), loaded before the teacher admission: a teacher episode that a share=all part
+    # stands in for (``replaces=teacher``: filled_reasoning.py rows, the student's filled reasoning before the same
+    # teacher actions) trains as that unit, so its raw rendering is not admitted and does not spend the teacher forward
+    # budget (``--filled-teacher skip``, default); ``admit`` (the old rule) admits it and drops it again in step 3,
+    # after it took budget from teacher episodes that have no fill (r0002: 2,811 such episodes, ~36% of 180M)
+    aux_parts = [parse_aux(spec) for spec in args.aux]
+    loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
+    filled_keys = frozenset(
+        key for part, units in loaded if part.get('replaces') == 'teacher' and part['share'] == 'all'
+        for key in (replaced_round(part, unit) for unit in units) if key is not None) \
+        if getattr(args, 'filled_teacher', 'skip') == 'skip' else frozenset()
+
     # teacher successes, breadth-first under the forward-token budget (0: all of the capped pool)
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
     left_over = collections.defaultdict(list)    # candidates a budget or share left out: validation sets
@@ -2853,6 +2923,9 @@ def build(args):
         task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
 
     for c in ordered:
+        if c['key'] in filled_keys:
+            funnel[c['source']]['filled_instead'] += 1      # its fill unit trains (step 3), budget-free here
+            continue
         if c['task_id'] in guided_tasks:
             deferred['teacher'].append(c)
             continue
@@ -2947,11 +3020,9 @@ def build(args):
     # 3. the loss shares: the teacher and October actions are the rest after the student's own share and each prebuilt
     #    part's share (``--aux``), all in weighted target tokens (the loss is token-normalized)
     actions_tokens = sum(e['weighted_target_tokens'] for e in sft_episodes)
-    aux_parts = [parse_aux(spec) for spec in args.aux]
     fixed_share = args.own_loss_share + sum(part['share'] for part in aux_parts if part['share'] != 'all')
     if fixed_share >= 1:
         raise SystemExit(f'own and aux loss shares sum to {fixed_share} >= 1')
-    loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
     all_tokens = sum(sum(u['weighted'] for u in units) for part, units in loaded if part['share'] == 'all')
     total_tokens = (actions_tokens + all_tokens) / (1 - fixed_share)
     aux_report, replaced_rounds = {}, {}
@@ -2972,6 +3043,8 @@ def build(args):
             return
         per_task[unit['task']] += unit['weighted']
         state['taken'] += unit['weighted']
+        if unit_seen((part['name'], unit['task'], unit['round']), trained_keys, trained_unit_keys):
+            used['trained_before'] += 1
         taken_rounds.add((unit['task'], unit['round']))
         replaced = replaced_round(part, unit)
         if replaced is not None:
@@ -2988,6 +3061,10 @@ def build(args):
                                    'taken': 0, 'used': collections.Counter(), 'per_task': collections.Counter(),
                                    'units': len(units)}
         rng.shuffle(units)
+        # unseen units first (``--prefer-unseen``: a share-bounded part takes the units no earlier build trained before
+        # repeats; stable, so the shuffle orders each group)
+        units.sort(key=lambda unit: unit_seen((part['name'], unit['task'], unit['round']), trained_keys,
+                                              trained_unit_keys))
         for unit in units:
             if frontier and part.get('replaces'):
                 why = frontier_drop(unit['task'], tiers, own_tasks)
@@ -3036,6 +3113,9 @@ def build(args):
     for c in replaced:
         funnel[c['source']]['frontier_jolt_guided'] += 1
     for c in trains:
+        if c['key'] in filled_keys:
+            funnel[c['source']]['filled_instead'] += 1
+            continue
         if args.teacher_forward_budget and teacher_forward >= 0.995 * args.teacher_forward_budget:
             funnel[c['source']]['over_forward_budget'] += 1
             left_over['teacher'].append(c)
@@ -3074,9 +3154,12 @@ def build(args):
     all_chains[:], unfilled = drop_unfilled_live(all_chains, getattr(args, 'unfilled_live_teacher', 'auto'), aux_parts)
     if unfilled:
         funnel['teacher']['unfilled_live_dropped'] += unfilled
+    funnel['teacher']['unfilled_live_kept'] += len({str(c.get('round')) for c in all_chains if c.get('part') == 'teacher'
+                                                     and str(c.get('round')).startswith('live:')})
     # the round size (``--max-target-tokens``): every part scaled alike, unseen episodes first; an episode the cap
     # dropped is not trained (admitted_episode_keys, round.json, and the next build's prefer-unseen leave it out)
-    all_chains[:], target_cap = cap_target_tokens(all_chains, getattr(args, 'max_target_tokens', 0) or 0, trained_keys)
+    all_chains[:], target_cap = cap_target_tokens(all_chains, getattr(args, 'max_target_tokens', 0) or 0, trained_keys,
+                                                  trained_unit_keys, getattr(args, 'max_forward_tokens', 0) or 0)
     if target_cap['applied']:
         kept_rounds = {str(c.get('round')) for c in all_chains}
         target_cap['dropped_episode_keys'] = sorted(e['round'] for e in sft_episodes if str(e['round']) not in kept_rounds)
@@ -3100,6 +3183,7 @@ def build(args):
                      **({'minimum_open_goal_share': minimum_open_goal_share, 'open_goal_scope': open_goal_scope}
                         if minimum_open_goal_share is not None else {})}, handle, protocol=4)
     os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
+    write_trained_units(out, chains)
 
     # validation sets: up to --val-episodes left-over successes per kind on tasks the build does not train (own:
     # the student's reasoning, whose NLL rising shows drift; teacher: actions on unseen tasks)
@@ -3164,7 +3248,9 @@ def build(args):
                    'exclude_run': args.exclude_run, 'guided': args.guided,
                    'prefer_unseen': {'builds': list(getattr(args, 'prefer_unseen', None) or []),
                                      'episodes': len(trained_keys), 'tasks': len(trained_before),
-                                     'scope': unseen_scope},
+                                     'units': len(trained_unit_keys), 'scope': unseen_scope},
+                   'filled_teacher': getattr(args, 'filled_teacher', 'skip'),
+                   'max_forward_tokens': getattr(args, 'max_forward_tokens', 0) or 0,
                    'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
                    'max_task_target_tokens': args.max_task_target_tokens, 'aux': args.aux,
@@ -3201,6 +3287,54 @@ def build(args):
     record_built(out, args, 'natlang.sft-sources-build/1')
     print(json.dumps({k: report[k] for k in ('funnel', 'stats', 'episodes', 'tasks', 'chains', 'forward_tokens',
                                              'target_tokens')}, indent=1))
+
+
+def recap(args):
+    """A built mix bounded again (``cap_target_tokens``) into OUT: an async round prepared for a fast session that
+    trains on the DGX instead (the session was lost before the round started) keeps the DGX round size. OUT gets
+    chains.pkl, rows.jsonl.zst (the kept episodes' rows: the next build's ``--prefer-unseen`` reads what trained),
+    trained-units.json and build.json (the source build's report with the recap's ``target_cap``: its
+    ``dropped_episode_keys`` hold every admitted episode the recap left out)."""
+    import pickle
+    src, out = Path(args.mix), Path(args.out)
+    data_registry.require_registered([src, *(args.prefer_unseen or [])],
+                                     **registry_options(getattr(args, 'registry_repo', None),
+                                                        ref=getattr(args, 'registry_ref', None)))
+    out.mkdir(parents=True, exist_ok=True)
+    with (src / 'chains.pkl').open('rb') as handle:
+        payload = pickle.load(handle)
+    trained_keys, _ = trained_in(args.prefer_unseen or [])
+    chains, cap = cap_target_tokens(payload['chains'], args.max_target_tokens, trained_keys,
+                                    trained_units(args.prefer_unseen or []), args.max_forward_tokens)
+    report = json.loads((src / 'build.json').read_text())
+    kept_rounds = {str(c.get('round')) for c in chains}
+    admitted = report.get('admitted_episode_keys') or []
+    dropped = sorted(set((report.get('target_cap') or {}).get('dropped_episode_keys') or ())
+                     | {k for k in admitted if k not in kept_rounds})
+    report.update({'admitted_episode_keys': [k for k in admitted if k in kept_rounds],
+                   'target_cap': {**cap, 'dropped_episode_keys': dropped, 'source_target_cap': {
+                       k: v for k, v in (report.get('target_cap') or {}).items() if k != 'dropped_episode_keys'}},
+                   'recap': {'of': str(src), 'argv': sys.argv, 'chains_in': len(payload['chains']),
+                             'chains_out': len(chains), 'prefer_unseen': list(args.prefer_unseen or [])},
+                   'chains': len(chains), 'forward_tokens': int(sum(len(c['ids']) for c in chains))})
+    payload['chains'] = chains
+    with (out / 'chains.pkl.partial').open('wb') as handle:
+        pickle.dump(payload, handle, protocol=4)
+    os.replace(out / 'chains.pkl.partial', out / 'chains.pkl')
+    write_trained_units(out, chains)
+    rows = ZstdWriter(out / 'rows.jsonl.zst')
+    for line in zstd_lines(src / 'rows.jsonl.zst'):
+        if line.strip() and json.loads(line)['episode'] in kept_rounds:
+            rows.write(json.loads(line))
+    rows.close()
+    (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')
+    data_registry.record_dataset(data_registry.dataset_id(out, 'sft-rows'), out, kind='sft-rows',
+                                 format='natlang.sft-sources-build/1 (recap): chains.pkl (exp0_sft --chains), '
+                                        'rows.jsonl.zst, trained-units.json, build.json',
+                                 inputs=[str(src), *(args.prefer_unseen or [])], license=DERIVED_LICENSE,
+                                 **registry_options(getattr(args, 'registry_repo', None),
+                                                    ref=getattr(args, 'registry_ref', None), writer=True))
+    print(json.dumps({'event': 'recap', **{k: v for k, v in cap.items() if k != 'parts'}}), flush=True)
 
 
 def neuralese_parts(messages):
@@ -3574,9 +3708,9 @@ def main():
                         'historical Vibestudio assignments, not against every other part) or all (every chain)')
     b.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default='auto',
                    help='observed-live teacher episodes without a filled reasoning unit (--aux ...,replaces=teacher): '
-                        'drop (they train only with the student\'s filled reasoning), train (their actions after the '
-                        'teacher\'s think block as context, like other teacher episodes) or auto (default: drop when '
-                        'a replaces=teacher part is given, else train)')
+                        'train or auto (default: their actions train after the teacher\'s think block as zero-weight '
+                        'context, like other teacher episodes; a filled unit still replaces its episode) or drop (the '
+                        'opt-out: they train only with the student\'s filled reasoning)')
     b.add_argument('--open-goals-only', action='store_true',
                    help='assemble only independently verified open user goal trajectories')
     b.add_argument('--base-rates', default=resolve_str(*OPS, 'exp1-rft', 'base-pass-rates.json'))
@@ -3625,6 +3759,13 @@ def main():
     b.add_argument('--max-target-tokens', type=int, default=0,
                    help='bound the mix to this many weighted target tokens (the async round size): every part keeps '
                         'the same fraction, whole episodes, unseen ones first (0: no bound)')
+    b.add_argument('--max-forward-tokens', type=int, default=0,
+                   help='bound the mix to this many forward tokens as well (a placement-aware round: the learner GPU\'s '
+                        'wall time); the tighter of the two bounds sets the fraction (0: no bound)')
+    b.add_argument('--filled-teacher', choices=('skip', 'admit'), default='skip',
+                   help='a teacher episode a share=all replaces=teacher part (filled reasoning) stands in for: skip '
+                        '(default) its raw rendering, which the fill unit replaces anyway, so it spends no teacher '
+                        'forward budget; admit: the old rule (admitted, budget charged, then dropped for the fill)')
     b.add_argument('--max-task-target-tokens', type=int, default=0,
                    help='per task cap on weighted target tokens that own successes may fill up to (0: none)')
     b.add_argument('--prefer-unseen', action='append', default=[], metavar='BUILD_OUT',
@@ -3666,6 +3807,13 @@ def main():
     b.add_argument('--workers', type=int, default=default_workers(),
                    help='processes rendering candidates ahead of the sequential selection (RenderAhead; the output is '
                         'identical for every value); 1: the serial build')
+    rc = sub.add_parser('recap', help='bound a built mix again (an async round prepared for a fast session that '
+                                      'trains on the DGX): unseen units first, every part scaled alike')
+    rc.add_argument('--mix', required=True, help='the built mix (sft_sources build OUT)')
+    rc.add_argument('--out', required=True)
+    rc.add_argument('--max-target-tokens', type=int, default=0)
+    rc.add_argument('--max-forward-tokens', type=int, default=0)
+    rc.add_argument('--prefer-unseen', action='append', default=[], metavar='BUILD_OUT')
     n = sub.add_parser('neuralese-text', help='text rows (producers, calls before an import) of Neuralese successes')
     n.add_argument('--work', required=True)
     n.add_argument('--workers', type=int, default=default_workers(), help='processes reading replays and episodes')
@@ -3687,7 +3835,7 @@ def main():
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
-    for parser in (e, r, c, b, n, g):
+    for parser in (e, r, c, b, rc, n, g):
         parser.add_argument('--registry-repo', default=None, help='explicit live dataset registry owner; default pinned snapshot')
         parser.add_argument('--registry-ref', default=None, help='published Git snapshot for explicit live admission')
     args = p.parse_args()
@@ -3695,7 +3843,7 @@ def main():
         args.held_manifest = data_registry.role_path('held-eval')
     if args.command == 'build' and args.teacher_pool is None:
         args.teacher_pool = [] if args.no_default_teacher_pool else [resolve_str(*OPS, 'teacher-gen-20261115', 'pool-v1')]
-    {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build,
+    {'extract': extract, 'replay': replay, 'check-render': check_render, 'build': build, 'recap': recap,
      'neuralese-text': neuralese_text, 'neuralese-graph': neuralese_graph}[args.command](args)
 
 
