@@ -58,16 +58,18 @@ export async function validateReassessmentCheckRoles(proof, originalChecks, root
 }
 
 export function declaredReturnSelectors(proof) {
-  const incidental=proof.outcomeDimensions?.incidentalValues;
-  if(incidental?.passed!==false)return [];
-  if(!Array.isArray(incidental.incorrectReturns))throw new Error('incorrect incidental returns need exact original value bindings');
+  const incidental=proof.outcomeDimensions?.incidentalValues,returned=proof.outcomeDimensions?.returnedValue;
+  if(incidental?.passed!==false&&returned?.passed!==false)return [];
+  if(incidental?.passed===false&&!Array.isArray(incidental.incorrectReturns))throw new Error('incorrect incidental returns need exact original value bindings');
+  const values=[...(incidental?.incorrectReturns??[])];
+  for(const item of returned?.incorrectReturns??[])if(!values.some(existing=>isDeepStrictEqual(existing,item)))values.push(item);
   const contains=(value,wanted)=>isDeepStrictEqual(value,wanted)||value!==null&&typeof value==='object'&&Object.values(value).some(item=>contains(item,wanted));
-  for(const item of incidental.incorrectReturns){
+  for(const item of values){
     if(!item.definition?.name||!item.definition?.source||typeof item.valueJson!=='string'||createHash('sha256').update(item.valueJson).digest('hex')!==item.sha256)throw new Error('incorrect return value identity/hash differs');
     if(item.contribution){
       const c=item.contribution,roles=proof.outcomeDimensions??{};
       const failed={...roles.returnedValue?.checks,...roles.incidentalValues?.checks};
-      if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection'].includes(c.kind) ||
+      if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection','uncertain-projection'].includes(c.kind) ||
          typeof c.root_call_id!=='string'||typeof c.producer_call_id!=='string'||typeof c.root_value_json!=='string'||
          digest(c.root_value_json)!==c.root_sha256||!isDeepStrictEqual(JSON.parse(c.root_value_json),proof.actualResult)||
          !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>typeof check!=='string'||failed[check]!==false)||
@@ -76,7 +78,7 @@ export function declaredReturnSelectors(proof) {
         throw new Error('invalid authored application return contribution');
     }else if(!contains(proof.actualResult,JSON.parse(item.valueJson)))throw new Error('incorrect return value is outside the actual application result');
   }
-  return incidental.incorrectReturns;
+  return values;
 }
 
 
@@ -85,30 +87,76 @@ export function validateReturnContribution(item, records, roots) {
   const c=item.contribution;if(!c)return;
   const root=records.get(c.root_call_id),producer=records.get(c.producer_call_id);
   const matches=(record,text,hash)=>record?.outcome==='done'&&record.output?.complete===true&&record.output.hash===hash&&record.output.bytes===Buffer.byteLength(text);
+  const sampled=record=>record?.outcome==='done'&&['agent','crisp-agent'].includes(record.executor?.kind)&&record.definition?.source?.endsWith('.nl')&&
+    (record.model_turns??[]).some(turn=>turn.kind==='generation'&&turn.reply&&!turn.error);
+  const chainOf=record=>{
+    const chain=[],seen=new Set();let current=record;
+    while(current){if(seen.has(current.call_id))return null;seen.add(current.call_id);chain.unshift(current.call_id);
+      if(current===root)return chain;current=records.get(current.parent_call_id);}
+    return null;
+  };
+  const crispChain=record=>{const chain=chainOf(record);return chain&&chain.slice(0,-1).every(id=>records.get(id)?.executor?.kind==='crisp'&&records.get(id)?.outcome==='done')?chain:null;};
+  const at=(value,path)=>{for(const key of path){const valid=Array.isArray(value)?Number.isSafeInteger(key)&&key>=0&&key<value.length:value!==null&&typeof value==='object'&&typeof key==='string';if(!valid||!Object.hasOwn(value,key))return {found:false};value=value[key];}return {found:true,value};};
   if(roots.length!==1||roots[0]!==c.root_call_id||!root||!producer||
      !matches(root,c.root_value_json,c.root_sha256)||!matches(producer,item.valueJson,item.sha256)||
      producer.definition?.name!==item.definition.name||producer.definition?.source!==item.definition.source||
-     c.lineage[0]!==root.call_id||c.lineage.at(-1)!==producer.call_id)
+     !isDeepStrictEqual(chainOf(producer),c.lineage))
     throw new Error('application return contribution differs from actual captured outputs');
-  const at=(value,path)=>{for(const key of path){const valid=Array.isArray(value)?Number.isSafeInteger(key)&&key>=0&&key<value.length:value!==null&&typeof value==='object'&&typeof key==='string';if(!valid||!Object.hasOwn(value,key))throw new Error('application return projection path is absent');value=value[key];}return value;};
-  if(!isDeepStrictEqual(at(JSON.parse(c.root_value_json),c.root_path),at(JSON.parse(item.valueJson),c.producer_path)))
-    throw new Error('application return projection differs from actual producer value');
+  const rootPart=at(JSON.parse(c.root_value_json),c.root_path),producerPart=at(JSON.parse(item.valueJson),c.producer_path);
   if(c.kind==='root'){
     if(producer!==root||c.lineage.length!==1||c.root_path.length||c.producer_path.length)
       throw new Error('root contribution must identify its whole actual root return');
     return;
   }
-  if(producer===root||!['agent','crisp-agent'].includes(producer.executor?.kind)||!producer.definition?.source?.endsWith('.nl')||
-     !(producer.model_turns??[]).some(turn=>turn.kind==='generation'&&turn.reply&&!turn.error))
-    throw new Error('forwarded or projected contribution needs an actual sampled NL producer');
-  for(let index=0;index<c.lineage.length-1;index++){
-    const ancestor=records.get(c.lineage[index]),child=records.get(c.lineage[index+1]);
-    if(!ancestor||!child||ancestor.executor?.kind!=='crisp'||ancestor.outcome!=='done'||child.parent_call_id!==ancestor.call_id)
-      throw new Error('application return contribution crosses a non-crisp or unrelated ancestor');
-    if(c.kind==='forwarded'&&([...records.values()].filter(record=>record.parent_call_id===ancestor.call_id).length!==1||
-       !matches(ancestor,item.valueJson,item.sha256)))throw new Error('forwarding contribution must preserve the sole child whole return');
+  if(producer===root||!sampled(producer)||!crispChain(producer))
+    throw new Error('forwarded or projected contribution needs an actual sampled NL producer and crisp ancestry');
+  if(c.kind==='forwarded'){
+    if(c.root_path.length||c.producer_path.length)throw new Error('forwarding contribution cannot project values');
+    for(const id of c.lineage.slice(0,-1)){
+      const ancestor=records.get(id);
+      if([...records.values()].filter(record=>record.parent_call_id===id).length!==1||!matches(ancestor,item.valueJson,item.sha256))
+        throw new Error('forwarding contribution must preserve the sole child whole return');
+    }
+    return;
   }
-  if(c.kind==='forwarded'&&(c.root_path.length||c.producer_path.length))throw new Error('forwarding contribution cannot project values');
+  if(typeof c.producer_source_suffix!=='string'||!c.producer_source_suffix||!producer.definition.source.endsWith(c.producer_source_suffix)||!Array.isArray(c.candidates))
+    throw new Error('projection needs its authored source suffix and complete actual candidate returns');
+  const eligible=[...records.values()].filter(record=>sampled(record)&&record.definition.source.endsWith(c.producer_source_suffix)&&crispChain(record));
+  if(new Set(c.candidates.map(candidate=>candidate.call_id)).size!==c.candidates.length||
+     !isDeepStrictEqual(c.candidates.map(candidate=>candidate.call_id).sort(),eligible.map(record=>record.call_id).sort()))
+    throw new Error('projection candidates differ from the complete actual source inventory');
+  const matching=[];
+  for(const candidate of c.candidates){
+    if(typeof candidate.value_json!=='string'||digest(candidate.value_json)!==candidate.sha256||!matches(records.get(candidate.call_id),candidate.value_json,candidate.sha256))
+      throw new Error('projection candidate differs from actual captured return bytes');
+    const part=at(JSON.parse(candidate.value_json),c.producer_path);
+    if(rootPart.found&&part.found&&isDeepStrictEqual(rootPart.value,part.value))matching.push(candidate.call_id);
+    if(candidate.call_id===producer.call_id&&(candidate.value_json!==item.valueJson||candidate.sha256!==item.sha256))
+      throw new Error('selected producer differs from the actual candidate return');
+  }
+  if(c.kind==='projection'){
+    if(matching.length!==1||matching[0]!==producer.call_id||!rootPart.found||!producerPart.found)
+      throw new Error('application return projection is absent, ambiguous or differs from actual producer value');
+  }else{
+    const reason=matching.length>1?'ambiguous-actual-producer':matching.length===0?'no-verified-actual-producer':null;
+    const uncertain=matching.length?matching:eligible.map(record=>record.call_id);
+    if(!reason||c.uncertainty!==reason||!uncertain.includes(producer.call_id))
+      throw new Error('uncertain contribution does not bind an actual ambiguous or unbound return');
+  }
+}
+
+
+export function validateReturnContributions(items,records,roots){
+  for(const item of items)validateReturnContribution(item,records,roots);
+  for(const item of items){
+    const c=item.contribution;if(c?.kind!=='uncertain-projection')continue;
+    const chosen=items.filter(other=>other.contribution&&isDeepStrictEqual({...other.contribution,producer_call_id:null,lineage:null},{...c,producer_call_id:null,lineage:null})).map(other=>other.contribution.producer_call_id);
+    const at=(value,path)=>{for(const key of path){const valid=Array.isArray(value)?Number.isSafeInteger(key)&&key>=0&&key<value.length:value!==null&&typeof value==='object'&&typeof key==='string';if(!valid||!Object.hasOwn(value,key))return {found:false};value=value[key];}return {found:true,value};};
+    const root=at(JSON.parse(c.root_value_json),c.root_path);
+    const matching=c.candidates.filter(candidate=>{const part=at(JSON.parse(candidate.value_json),c.producer_path);return root.found&&part.found&&isDeepStrictEqual(root.value,part.value);}).map(candidate=>candidate.call_id);
+    const needed=matching.length?matching:c.candidates.map(candidate=>candidate.call_id);
+    if(needed.some(id=>!chosen.includes(id)))throw new Error('uncertain return contribution omitted an actual possible producer');
+  }
 }
 
 async function readBound(binding, root) {
@@ -394,7 +442,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
     if(capturedRecords.has(call.call_id))throw new Error('observed capture repeats an invocation');
     capturedRecords.set(call.call_id,original.record);
   }
-  for(const item of returnSelectors)validateReturnContribution(item,capturedRecords,receipt.root_call_ids);
+  validateReturnContributions(returnSelectors,capturedRecords,receipt.root_call_ids);
   for (const call of row.outcome.invocation_ledger) {
     const original = JSON.parse(await readBound(call.artifact, root));
     const record = original.record;

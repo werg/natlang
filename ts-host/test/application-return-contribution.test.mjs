@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {declaredReturnSelectors,validateReturnContribution} from '../scripts/observed-workspace-evidence.mjs';
+import {declaredReturnSelectors,validateReturnContribution,validateReturnContributions} from '../scripts/observed-workspace-evidence.mjs';
 const hash=text=>createHash('sha256').update(text).digest('hex');
 const output=value=>{const text=JSON.stringify(value);return {complete:true,bytes:Buffer.byteLength(text),hash:hash(text)};};
 function fixture(kind='projection'){
@@ -13,6 +13,7 @@ function fixture(kind='projection'){
  const valueJson=JSON.stringify(value),rootJson=JSON.stringify(actual);
  const selector={definition:structuredClone(records.get('producer').definition),valueJson,sha256:hash(valueJson),required:false,
  contribution:{schema:'natlang.application-return-contribution/1',kind,root_call_id:'root',producer_call_id:'producer',root_value_json:rootJson,root_sha256:hash(rootJson),root_path:kind==='forwarded'?[]:['answer'],producer_path:kind==='forwarded'?[]:['answer'],checks:['answerCorrect'],lineage:['root','producer']}};
+ if(kind==='projection')Object.assign(selector.contribution,{producer_source_suffix:'judge.nl',candidates:[{call_id:'producer',value_json:valueJson,sha256:hash(valueJson)}]});
  const proof={actualResult:actual,outcomeDimensions:{returnedValue:{checks:{answerCorrect:false}},incidentalValues:{passed:false,checks:{},incorrectReturns:[selector]}}};
  return {selector,proof,records};
 }
@@ -53,8 +54,32 @@ test('projection witnesses use JSON keys and indices, never JS coercions or arra
  for(const [value,path,actual] of [[{answer:['wrong']},['answer','length'],{answer:1}],[{answer:['wrong']},['answer','0'],{answer:'wrong'}],[{answer:{'0':'wrong'}},['answer',0],{answer:'wrong'}]]){
   const f=fixture(),text=JSON.stringify(value),rootText=JSON.stringify(actual);
   f.proof.actualResult=actual;f.records.get('root').output=output(actual);f.records.get('producer').output=output(value);
-  f.selector.valueJson=text;f.selector.sha256=hash(text);Object.assign(f.selector.contribution,{producer_path:path,root_value_json:rootText,root_sha256:hash(rootText)});
-  assert.throws(()=>check(f),/projection path/);
+  f.selector.valueJson=text;f.selector.sha256=hash(text);f.selector.contribution.candidates=[{call_id:'producer',value_json:text,sha256:hash(text)}];Object.assign(f.selector.contribution,{producer_path:path,root_value_json:rootText,root_sha256:hash(rootText)});
+  assert.throws(()=>check(f),/projection/);
  }
- const valid=fixture(),value={answer:['wrong']},text=JSON.stringify(value);valid.selector.valueJson=text;valid.selector.sha256=hash(text);valid.selector.contribution.producer_path=['answer',0];valid.records.get('producer').output=output(value);check(valid);
+ const valid=fixture(),value={answer:['wrong']},text=JSON.stringify(value);valid.selector.valueJson=text;valid.selector.sha256=hash(text);valid.selector.contribution.producer_path=['answer',0];valid.selector.contribution.candidates=[{call_id:'producer',value_json:text,sha256:hash(text)}];valid.records.get('producer').output=output(value);check(valid);
+});
+
+test('projection uniqueness rechecks all actual candidate outputs and conservatively holds ambiguous returns',()=>{
+ const f=fixture(),siblingValue={answer:'wrong',diagnostics:'second actual result'},text=JSON.stringify(siblingValue);
+ f.records.set('sibling',{...structuredClone(f.records.get('producer')),call_id:'sibling',output:output(siblingValue)});
+ f.selector.contribution.candidates.push({call_id:'sibling',value_json:text,sha256:hash(text)});
+ assert.throws(()=>check(f),/ambiguous/);
+ const second=structuredClone(f.selector);second.valueJson=text;second.sha256=hash(text);second.contribution.producer_call_id='sibling';second.contribution.lineage=['root','sibling'];
+ for(const item of [f.selector,second])Object.assign(item.contribution,{kind:'uncertain-projection',uncertainty:'ambiguous-actual-producer'});
+ f.proof.outcomeDimensions.incidentalValues.incorrectReturns=[f.selector,second];
+ const selected=declaredReturnSelectors(f.proof);validateReturnContributions(selected,f.records,['root']);
+ assert.throws(()=>validateReturnContributions([f.selector],f.records,['root']),/omitted/);
+ for(const item of selected)item.contribution.candidates.pop();
+ assert.throws(()=>validateReturnContributions(selected,f.records,['root']),/inventory/);
+});
+test('unique projection retains a sibling with a different projected result; unbound returns hold all possible producers',()=>{
+ const f=fixture(),good={answer:'good'},text=JSON.stringify(good);
+ f.records.set('sibling',{...structuredClone(f.records.get('producer')),call_id:'sibling',output:output(good)});
+ f.selector.contribution.candidates.push({call_id:'sibling',value_json:text,sha256:hash(text)});check(f);
+ const actual={answer:'unbound'},rootText=JSON.stringify(actual);f.proof.actualResult=actual;f.records.get('root').output=output(actual);
+ Object.assign(f.selector.contribution,{kind:'uncertain-projection',uncertainty:'no-verified-actual-producer',root_value_json:rootText,root_sha256:hash(rootText)});
+ const second=structuredClone(f.selector);second.valueJson=text;second.sha256=hash(text);second.contribution.producer_call_id='sibling';second.contribution.lineage=['root','sibling'];
+ f.proof.outcomeDimensions.incidentalValues.incorrectReturns=[f.selector,second];validateReturnContributions(declaredReturnSelectors(f.proof),f.records,['root']);
+ assert.throws(()=>validateReturnContributions([f.selector],f.records,['root']),/omitted/);
 });
