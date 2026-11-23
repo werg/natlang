@@ -7886,3 +7886,48 @@ Inventory and what is not applicable: engines receive only rendered prompt text 
 (`native/agent.ts:280-297`) emits `{}` for function types as before, so no engine (llama-server, wllama, Python native,
 SGLang) changes. Python renderers replay recorded system messages; `serving-request.ts` composes the new note via
 `callNotes`. Browser: same sources through `platformDefaults` (`browser/index.ts:52`), tested in higher-order.test.mjs.
+
+## 2026-11-23 05:40 held-v4 built: every held-eval* role is out of training; 164 tasks pinned (semantic-FP B1)
+
+- **Code (e8dbf721e, 53d6f4fa6, 1c9ceafa4).**
+  - Every registry role named `held-eval*` is a held set that training excludes. `held_eval.training_exclusion_ids`
+    unites the run's `--held-manifest`, every such role and extra manifests, and also excludes pool rows that share a
+    source group with any held set's own cases.
+  - `sft_sources.held_closure` / `held_hit` do the same for the SFT, filled-reasoning, live and vibestudio paths.
+  - Applied in `grpo.load_tasks` (so `expert_iteration select` and `teacher_gen`), Neuralese variants, replay corpora,
+    the EI frontier leak check, `program_tune`, exp1, `hindsight` and `memetic_tasks`.
+  - `grpo.default_held()` is unchanged: held-v3 is the gate. aei1 picks this up at its next pin.
+  - Cost on the live pools: 7.9 s per selection. It excludes 336 more of 37,546 rows than held-v3 alone did: the
+    reservations, plus held-v3 source-group siblings outside grpo's own sibling rule.
+- **Reservations** (`ops/held-v4/reservations.json`, registry entry `held-v4`, role
+  `held-eval-semantic-fp-reservations`; `scripts/neuralese_data/held_v4.py reserve`).
+  - 20 design briefs, seed `held-v4-design-briefs`. They are drawn only from the 40 briefs outside the gate packet's
+    train split, unexposed briefs first: 14 have no pool row at all, and 6 have 13-39 codebase rows that are now
+    excluded.
+  - Astra `treaty-obligation-ledger` and Sol `field-gloss-workbench` (seed `held-v4-astra`), both unexposed.
+  - A 20% split-group share of every flagship fixture pack (split group `flagship:<app>:<group>`, rule
+    `held_eval.reservation_share_held`, WS6 §1.4).
+- **Set** (`ops/held-v4/manifest.json` sha 2cddfa0a; entry `held-v4-set`, role `held-eval-semantic-fp`; pinned with
+  the new `held_eval pin --all-rows`; `also_excludes` held-v3 and the reservations).
+  - 164 tasks: 104 authored construct tasks and 60 exact gates of the reserved briefs.
+  - Authored tasks per family: inline-lambda 13, decision-calibrated 13, convergence 14, folder transaction 14,
+    library discovery 14, higher-order/.in 12, untrusted contract 11, Neuralese pipeline 13.
+  - Levels: 0: 5, 1: 79, 2: 44, 3: 36.
+  - Each family was authored by a separate agent from `ops/held-v4/authoring/BRIEF.md` and qualified on main's ts-host
+    build (reference replay, all wrong answers rejected, smoke replay, custody, lint).
+  - An independent blind solve (Sonnet, packets only) agreed on 111 of 112 tasks. 8 tasks were dropped: 5 ambiguous,
+    3 that failed qualification (`source/dropped.json`). The blind solve also flagged confidence-floor routing in the
+    decision family, which its author made fact-driven.
+  - `held_eval verify`: 0 id and 0 group overlaps against the exposure collection (43,844 ids, 60,729 groups;
+    `collect_exposure.py` now reads its pools from the registry and adds the EI collections and selections). Also 0
+    against every row of all 21 pool files (37,798 ids, 62,221 groups).
+- **Fact corrections to the plan.** A brief's 8 cases are 3 exact gates and 5 rubric-judged workflows, so the exact
+  stratum is 60, not 160. The 100 workflows and the 2 reserved apps join held-v4 with B6's verifier oracle as a
+  versioned update, bringing it to about 256.
+- **Authoring pitfalls found.**
+  - `invented:<domain>` groups (such as `invented:customer_service`) are ProtectedWorlds identities, and the current
+    lint rejects groups on invented worlds.
+  - Qualification needs 4 GB: at 1.3 GB the protection closure is OOM-killed.
+- **Measurement.** Base (5ff07638) and current policy (sft-v6, dc95f29d) on the DGX series: `ops/held-v4/runs/`
+  (`measure.sh`: held pin d3ad57fb21db, 4 samples, 16 slots, medium and resumable). It starts only when no other held
+  measurement holds the held-priority claim. Results are appended below when complete.
