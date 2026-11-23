@@ -1,3 +1,4 @@
+import {invokeNativeEntry} from './native-entry.js';
 /**
  * Compile and execute a project held in memory (browser playground, Studio workers, tests).
  * The project compiles to CommonJS and runs through a small module loader in this realm, so it
@@ -5,10 +6,10 @@
  */
 import { compileProject, type BuildResult, type ProjectFiles } from '../compiler/project.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
-import { loadCallableFolder, loadNamedFunction, type SourceFiles } from './loader.js';
+import { loadCallableFolder, loadNamedFunction, parseModule, type SourceFiles } from './loader.js';
 import { joinSourcePath } from './source-path.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
-import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm } from './modules.js';
+import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm, servicesModule } from './modules.js';
 import type { Platform } from './platform.js';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 
@@ -100,14 +101,37 @@ export type VirtualProjectOptions = { platform: Platform; constrained?: boolean;
  * with `runtime`, so a host binds the project to its one runtime instance by passing it here. `target` says whether
  * awaits restore the natlang task (`browser`); by default the platform's context store decides.
  */
-export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>, options: VirtualProjectOptions): CompiledProject {
+/** A serializable frontend product. It contains no runtime, service, realm or module instance. */
+export type VirtualProjectProduct = {
+  schema: 'natlang.virtual-project-product/1';
+  project: VirtualProject;
+  runtimeSpecifiers: string[];
+  build: BuildResult;
+};
+export type VirtualProjectProductOptions = Omit<VirtualProjectOptions, 'platform' | 'modules' | 'target'> & {
+  /** Explicit: a compiler worker has no runtime platform from which to infer this. */
+  target: 'node' | 'browser';
+};
+
+/** Pure frontend compilation, suitable for an isolated worker and an exact-input shared cache. */
+export function compileVirtualProjectProduct(project: VirtualProject, options: VirtualProjectProductOptions): VirtualProjectProduct {
+  const snapshot = structuredClone(project);
+  const root = snapshot.root ?? '/project';
+  const files = virtualProjectFiles(snapshot.files, root);
+  const specifiers = [...(options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'])];
+  const build = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
+    guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
+    target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
+  return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build };
+}
+
+/** Bind a reusable frontend product to this owner's runtime and fresh module/realm state. */
+export function instantiateVirtualProjectProduct(product: VirtualProjectProduct, runtime: Record<string, unknown>, options: Pick<VirtualProjectOptions, 'platform' | 'modules'>): CompiledProject {
+  // Each consumer owns its data too: mutating diagnostics/outputs cannot poison the shared product.
+  const { project, build: result, runtimeSpecifiers: specifiers } = structuredClone(product);
+  if (product.schema !== 'natlang.virtual-project-product/1') throw new Error('unsupported virtual project product');
   const { platform } = options;
   const root = project.root ?? '/project';
-  const files = virtualProjectFiles(project.files, root);
-  const specifiers = options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'];
-  const result = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
-    guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    target: options.target ?? (moduleTarget(platform) === 'await-restoring' ? 'browser' : 'node'), runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
   const cache = new Map<string, { exports: Record<string, unknown> }>();
   const load = (path: string): Record<string, unknown> => {
     const found = cache.get(path);
@@ -117,6 +141,7 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     const module = { exports: {} as Record<string, unknown> };
     cache.set(path, module);
     const require = (specifier: string): unknown => {
+      if (specifier === 'natlang:services') return servicesModule;
       if (specifiers.includes(specifier) || specifier === NEUTRAL_RUNTIME_SPECIFIER) return runtime;
       if (options.modules && Object.hasOwn(options.modules, specifier)) return options.modules[specifier];
       if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
@@ -130,9 +155,38 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     platformModuleRealm(platform).evaluateModule(text, { exports: module.exports, require, module });
     return module.exports;
   };
+  const exported = new Map<string,Record<string,unknown>>();
   return { ...result, require: (path: string) => {
     const absolute = path.startsWith('/') ? path : `${root}/${path}`;
     const emitted = `${root}/.natlang/build/${absolute.slice(root.length + 1)}`.replace(/\.m?ts$/, '.js');
-    return load(emitted);
+    const prior=exported.get(absolute);if(prior)return prior;
+    const raw=load(emitted),source=project.files[absolute]??project.files[absolute.slice(root.length+1)];
+    if(source===undefined)return raw;
+    const record=parseModule(absolute,source,{},virtualSourceFiles(project.files,root),{compiled:true});
+    const bound=Object.create(Object.getPrototypeOf(raw)),wrappers=new Map<string,WeakMap<Function,Function>>();
+    const wrap=(key:string,value:unknown)=>{
+      if(typeof value!=='function')return value;
+      let cache=wrappers.get(key);if(!cache){cache=new WeakMap();wrappers.set(key,cache);}
+      let wrapped=cache.get(value);if(!wrapped){wrapped=new Proxy(value,{apply(fn,thisArg,args){return invokeNativeEntry(record,key,args,()=>Reflect.apply(fn,thisArg,args));}});cache.set(value,wrapped);}
+      return wrapped;
+    };
+    for(const key of Reflect.ownKeys(raw)){
+      const descriptor=Object.getOwnPropertyDescriptor(raw,key)!;
+      if(typeof key==='string'){
+        if('value' in descriptor)descriptor.value=wrap(key,descriptor.value);
+        else if(descriptor.get){const get=descriptor.get;descriptor.get=function(){return wrap(key,Reflect.apply(get,this,[]));};}
+      }
+      Object.defineProperty(bound,key,descriptor);
+    }
+    exported.set(absolute,bound);return bound;
   } };
+}
+
+/** Default local composition; hosts can offload only the pure first stage. */
+export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>, options: VirtualProjectOptions): CompiledProject {
+  const product = compileVirtualProjectProduct(project, {
+    ...options,
+    target: options.target ?? (moduleTarget(options.platform) === 'await-restoring' ? 'browser' : 'node'),
+  });
+  return instantiateVirtualProjectProduct(product, runtime, options);
 }

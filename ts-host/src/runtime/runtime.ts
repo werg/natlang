@@ -191,7 +191,7 @@ export type NatlangRuntimeOptions = {
   /** The program's directory on this machine, recorded with each call so offline work can reload its definitions. */
   programRoot?: string;
   /** The program's `recording` settings (`natlang.json`): definitions (`dir/*.nl`) or arguments (`name.arg`) recorded by type only. */
-  recording?: { exclude?: string[]; checkpoints?: boolean };
+  recording?: { exclude?: string[]; checkpoints?: boolean; nativeRoots?: boolean };
   /** How far compilations may serve this runtime's calls; the machine setting bounds it (default: the machine setting). */
   specialization?: SpecializationMode;
   /** The tiered execution engine (plans/TIERED_ENGINE.md): functions it names run on a ladder of tiers. Absent: no change. */
