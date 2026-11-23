@@ -88,3 +88,11 @@ test('optional returned-value masks work without inventing an incidental outcome
  const f=fixture();delete f.proof.outcomeDimensions.incidentalValues;
  f.proof.outcomeDimensions.returnedValue.incorrectReturns=[f.selector];check(f);
 });
+
+test('independently checked wrong incidental child binds actual bytes without a false root projection',()=>{
+ const f=fixture();f.selector.contribution.kind='incidental-child';f.selector.contribution.root_path=[];f.selector.contribution.producer_path=[];
+ f.proof.outcomeDimensions.incidentalValues.checks={answerCorrect:false};f.proof.outcomeDimensions.returnedValue={passed:true,checks:{}};
+ f.records.get('root').executor={kind:'agent',model_id:'offline-reference'};check(f);
+ f.proof.outcomeDimensions.incidentalValues.checks={};f.proof.outcomeDimensions.returnedValue={passed:false,checks:{answerCorrect:false}};
+ assert.throws(()=>check(f),/incidental checks/);
+});

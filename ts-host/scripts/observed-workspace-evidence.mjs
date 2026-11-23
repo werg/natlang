@@ -69,13 +69,14 @@ export function declaredReturnSelectors(proof) {
     if(item.contribution){
       const c=item.contribution,roles=proof.outcomeDimensions??{};
       const failed={...roles.returnedValue?.checks,...roles.incidentalValues?.checks};
-      if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection','uncertain-projection'].includes(c.kind) ||
+      if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection','uncertain-projection','incidental-child'].includes(c.kind) ||
          typeof c.root_call_id!=='string'||typeof c.producer_call_id!=='string'||typeof c.root_value_json!=='string'||
          digest(c.root_value_json)!==c.root_sha256||!isDeepStrictEqual(JSON.parse(c.root_value_json),proof.actualResult)||
          !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>typeof check!=='string'||failed[check]!==false)||
          ![c.root_path,c.producer_path].every(path=>Array.isArray(path)&&path.every(key=>typeof key==='string'||Number.isSafeInteger(key)&&key>=0))||
          !Array.isArray(c.lineage)||!c.lineage.length||c.lineage.some(id=>typeof id!=='string')||new Set(c.lineage).size!==c.lineage.length)
         throw new Error('invalid authored application return contribution');
+      if(c.kind==='incidental-child'&&c.checks.some(check=>roles.incidentalValues?.checks?.[check]!==false))throw new Error('incidental child contribution needs actual failed incidental checks');
     }else if(!contains(proof.actualResult,JSON.parse(item.valueJson)))throw new Error('incorrect return value is outside the actual application result');
   }
   return values;
@@ -106,6 +107,11 @@ export function validateReturnContribution(item, records, roots) {
   if(c.kind==='root'){
     if(producer!==root||c.lineage.length!==1||c.root_path.length||c.producer_path.length)
       throw new Error('root contribution must identify its whole actual root return');
+    return;
+  }
+  if(c.kind==='incidental-child'){
+    if(producer===root||!sampled(producer)||c.root_path.length||c.producer_path.length)
+      throw new Error('incidental child contribution needs an actual sampled child return');
     return;
   }
   if(producer===root||!sampled(producer)||!crispChain(producer))
