@@ -170,7 +170,8 @@ if [ $ts = 1 ]; then
     step ts-browser-types sh -c 'cd ts-host && npm run --silent check:browser-types'
     step ts-layering sh -c 'cd ts-host && npm run --silent check:layering'
     step ts-tests sh -c "cd ts-host && node scripts/test-files.mjs --concurrency ${CHECK_MAIN_TS_CONCURRENCY:-2}"
-    step ts-conformance sh -c 'cd ts-host && npm run --silent test:conformance'
+    # The learning cases run a Python native engine: give them the interpreter the Python checks selected.
+    step ts-conformance env NATLANG_PYTHON="${PY:-}" sh -c 'cd ts-host && npm run --silent test:conformance'
   fi
 fi
 

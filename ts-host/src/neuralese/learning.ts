@@ -663,9 +663,10 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     throw new LearningError('learning-native-target', 'recorded gradients need at least one archived native state or coefficient target');
   const targetInfo = nativeLeaves.length ? await nativeLearningTargets(service, nativeLeaves) : undefined;
   const rec = new Recorder();
-  // An inner first-order gradient's own inner computations are constants to it: they are not recorded.
-  const derived: DerivationTrace | undefined = order === 2 ? { nodes: [],
-    ...(targetInfo ? { native: nativeDerivativeContext(targetInfo.targets) } : {}) } : undefined;
+  // The inner gradient sessions and optimiser steps `f` runs, in order. Order 2 differentiates through them; order 1
+  // (the default) treats each inner gradient as a constant, so an inner update s' = step(s, g) still carries the outer
+  // gradient back to s (with Jacobian of the step at constant g).
+  const derived: DerivationTrace | undefined = targetInfo ? { nodes: [], native: nativeDerivativeContext(targetInfo.targets) } : undefined;
   const outer = derivations.getStore();
   if (order === 2 && outer) throw new LearningError('learning-grad-order', 'native learning supports derivatives through order 2, not nested order-3 programs');
   const loss = await derivations.run(derived, () => recording.run(rec, () => boundService.run(service, () => f(a))));
@@ -694,7 +695,9 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     const nativeStateModes = recordedNativeStateModes(exactTurns);
     const objective = { turns: exactTurns, events, terms: loss.terms, ...(nativeStateModes ? { nativeStateModes } : {}) };
     let gradientArtifacts: Record<string, NativeTensorArtifact>, derivativeExecution: string | undefined;
-    if (order === 2) {
+    if (order === 2 || derived?.nodes.length) {
+      if (order !== 2 && outer)
+        throw new LearningError('learning-grad-order', 'a gradient whose loss updates its argument cannot itself run inside another gradient');
       const context = derived?.native;
       if (!context) throw new LearningError('learning-native-order2', 'native derivative program roots were not declared');
       const program = { schema: 'natlang.native-derivative-program/1' as const,
@@ -705,7 +708,8 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
           ...(nativeStateModes ? { native_state_modes: nativeStateModes } : {}) },
           bindings: Object.fromEntries(context.currentByRoot) },
         wrt: requestTargets.map(target => target.root),
-        arithmetic: { schema: 'natlang.native-reference-arithmetic/1' as const, query_chunk_tokens: 16 } };
+        arithmetic: { schema: 'natlang.native-reference-arithmetic/1' as const, query_chunk_tokens: 16 },
+        ...(order === 2 ? {} : { order: 1 as const }) };
       const result = await nativeDerivativeProgramGradient(service.endpoint, service.store!, program, service.headers);
       loss.value = Number(result.loss); gradientArtifacts = result.gradients; derivativeExecution = result.execution_id;
     } else {
@@ -806,7 +810,9 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
               optimizer: { name, ...(typeof hyper.lr === 'number' ? { learning_rate: hyper.lr } : {}),
                 ...(typeof hyper.weightDecay === 'number' ? { weight_decay: hyper.weightDecay } : {}),
                 ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}),
-                ...(typeof hyper.momentum === 'number' ? { momentum: hyper.momentum } : {}) }, optimizer_state: previousState ?? null });
+                ...(typeof hyper.momentum === 'number' ? { momentum: hyper.momentum } : {}) }, optimizer_state: previousState ?? null,
+              // Later recorded turns import this step's own artifact; the program's recomputed update stands for it.
+              recorded: newId });
             trace.native.valueById.set(newId, node); trace.native.rootById.set(newId, root); trace.native.currentByRoot.set(root, node);
           } else if (trace) {
             throw new LearningError('learning-native-order2', 'native updates inside order-2 learning need native checkpoint roots');

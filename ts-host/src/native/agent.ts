@@ -1105,6 +1105,10 @@ export class NativeToolAgent {
       if (declared !== undefined) {
         // Keep the actual episode recorder's cross-invocation writers and the
         // task-scoped inference index. Neither can borrow another task's state.
+        // A value whose writer ran outside this record (an earlier task, a
+        // context item, a .nz file) has no writer here: its read is external,
+        // as blockInput (graph.ts) binds it.
+        if (!writers.length && !hasProducerOccurrence(block, declared, producerScopeForTrace(trace)!)) return 'external';
         if (!writers.includes(declared) &&
             !hasProducerOccurrence(block, declared, producerScopeForTrace(trace)!))
           throw new Error(`neuralese-native-grad-invalid: native read ${block} names no matching in-episode writer ${declared}`);
@@ -1116,7 +1120,9 @@ export class NativeToolAgent {
     };
     const scopedReads = response.raw_response?.__natlang_native_read_occurrences;
     const preparedMessageOffset = Array.isArray(scopedReads) ? 1 : 0;
-    const reads: { node: string; port: string; block: string; source: string; stop: boolean }[] = [];
+    // `declared` is the occurrence the request named; `source` is what it resolved to here (`external` for a writer
+    // outside this record), and the server's captured prompt echoes the declared one.
+    const reads: { node: string; port: string; block: string; source: string; declared?: string; stop: boolean }[] = [];
     type Use={block:string;stop?:true;source?:string};
     const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
@@ -1184,7 +1190,7 @@ export class NativeToolAgent {
                 tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
                 embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
               positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
-            if (node) reads.push({ node, port: 'read', block, source, stop: !!use.stop });
+            if (node) reads.push({ node, port: 'read', block, source, ...(use.source ? { declared: use.source } : {}), stop: !!use.stop });
           }
         }
       }
@@ -1212,7 +1218,8 @@ export class NativeToolAgent {
           tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
           embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 }, positions: [messageIndex, partIndex] },
         [blockInput(item.id, 'block', source, producerScopeForTrace(trace))]);
-      if (node) reads.push({ node, port: 'read', block: item.id, source, stop: item.stop_gradient === true });
+      if (node) reads.push({ node, port: 'read', block: item.id, source,
+        ...(typeof item.source_occurrence === 'string' ? { declared: item.source_occurrence } : {}), stop: item.stop_gradient === true });
     }
     // The model server's captured prompt is the authoritative record of what
     // entered the model. A caller can supply context outside `messages`, so
@@ -1235,7 +1242,7 @@ export class NativeToolAgent {
         if (sourceBlock !== segment.id)
           throw new Error('neuralese-native-grad-invalid: captured native input differs from its source state');
         const candidates = remaining.filter(read => read.block === sourceBlock && read.stop === (segment.stop_gradient === true) &&
-          (segment.source_occurrence === undefined || read.source === segment.source_occurrence));
+          (segment.source_occurrence === undefined || read.source === segment.source_occurrence || read.declared === segment.source_occurrence));
         if (candidates.length) {
           if (segment.source_occurrence === undefined && new Set(candidates.map(read => read.source)).size !== 1)
             throw new Error('neuralese-native-grad-invalid: captured native input has multiple possible graph origins');

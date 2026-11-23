@@ -60,7 +60,9 @@ function finiteProgramDependencies(value:unknown):string[]{
   type Obj=Record<string,unknown>;
   const object=(item:unknown):item is Obj=>!!item&&typeof item==='object'&&!Array.isArray(item);
   const fail=():never=>{throw new RangeError('native derivative program has invalid finite topology or executable dependencies');};
-  if(!object(value)||keys(value)!=='arithmetic,inputs,nodes,outer,schema,wrt'||value.schema!=='natlang.native-derivative-program/1')return fail();
+  // `order` 1: the inner gradient nodes are constants (first-order nesting); absent or 2: they are differentiated.
+  if(!object(value)||!['arithmetic,inputs,nodes,outer,schema,wrt','arithmetic,inputs,nodes,order,outer,schema,wrt'].includes(keys(value))||
+    value.order!==undefined&&value.order!==1&&value.order!==2||value.schema!=='natlang.native-derivative-program/1')return fail();
   const arithmetic=value.arithmetic;
   if(!object(arithmetic)||keys(arithmetic)!=='query_chunk_tokens,schema'||arithmetic.schema!=='natlang.native-reference-arithmetic/1'||
       !Number.isSafeInteger(arithmetic.query_chunk_tokens)||(arithmetic.query_chunk_tokens as number)<1)return fail();
@@ -153,7 +155,11 @@ function finiteProgramDependencies(value:unknown):string[]{
         else gradients.set(node.name,gradientTargets[0]!.value as string);
       }
     }else if(node.kind==='optimizer'){
-      if(keys(node)!=='gradient,kind,name,optimizer,optimizer_state,value'||typeof node.value!=='string'||!available.has(node.value)||
+      // `recorded`: the artifact the host's own step produced while recording; the program's recomputed update
+      // stands for it in every later request (the recorded turns import it by that ID).
+      if(!['gradient,kind,name,optimizer,optimizer_state,value','gradient,kind,name,optimizer,optimizer_state,recorded,value'].includes(keys(node))||
+        node.recorded!==undefined&&(typeof node.recorded!=='string'||!(STATE.test(node.recorded)||TENSOR.test(node.recorded)))||
+        typeof node.value!=='string'||!available.has(node.value)||
         typeof node.gradient!=='string'||gradients.get(node.gradient)!==node.value||!object(node.optimizer)||
         Object.keys(node.optimizer).some(key=>!['name','learning_rate','weight_decay','beta1','beta2','eps','momentum'].includes(key))||
         !['sgd','adam'].includes(node.optimizer.name as string))return fail();

@@ -2,8 +2,11 @@
  * Conformance programs: small projects of `.nl` and callable-folder `.ts` files, each run through
  * the runtime with a scripted reference agent in place of a model.
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 import YAML from 'yaml';
 import { NatlangCallError, createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 import { dump } from '../dist/native/values.js';
@@ -87,5 +90,68 @@ for (const name of readdirSync(folder).filter(x => x.endsWith('.yaml')).sort()) 
     console.log(`PASS ${name}`); passed++;
   } catch (error) { console.log(`FAIL ${name}: ${error.message}`); failed++; }
 }
-console.log(JSON.stringify({ passed, failed, skipped }));
+
+// Behavioural Neuralese cases (conformance/neuralese/cases): an implemented case names its runnable form. A case whose
+// form is a test file runs with the ts-host tests; a case whose form is a conformance module (test/conformance/) runs
+// here, against a real Python native engine when its `engines` name one.
+const caseFolder = resolve(root, 'conformance/neuralese/cases');
+const only = process.env.NATLANG_CONFORMANCE_CASES?.split(',').filter(Boolean);
+let pending = 0, server;
+const environments = new Map();
+/** One learning environment per case module, over one shared engine. */
+const environment = (by, module) => {
+  if (!environments.has(by)) environments.set(by, (async () => module.learningEnvironment(await (server ??= startNativeServer())))());
+  return environments.get(by);
+};
+try {
+  for (const name of readdirSync(caseFolder).filter(x => x.endsWith('.yaml')).sort()) {
+    for (const entry of YAML.parse(readFileSync(resolve(caseFolder, name), 'utf8')).cases ?? []) {
+      if (only && !only.includes(entry.id)) continue;
+      if (entry.status !== 'implemented') { pending++; continue; }
+      const label = `${name}#${entry.id}`;
+      try {
+        const by = entry.implemented_by;
+        const paths = typeof by === 'string' ? by.split(',').map(path => path.trim().split('#')[0]) : [];
+        if (!paths.length || paths.some(path => !existsSync(resolve(root, path)))) throw new Error(`implemented_by ${by} does not exist`);
+        if (!by.startsWith('ts-host/test/conformance/')) { skipped++; continue; }
+        const module = await import(pathToFileURL(resolve(root, by.split('#')[0])).href);
+        const run = module.cases?.[entry.id];
+        if (typeof run !== 'function') throw new Error(`${by} exports no case ${entry.id}`);
+        const env = (entry.engines ?? []).includes('python-native') ? await environment(by, module) : {};
+        const started = Date.now();
+        await run(env);
+        console.log(`PASS ${label} (${((Date.now() - started) / 1000).toFixed(1)} s)`); passed++;
+      } catch (error) { console.log(`FAIL ${label}: ${error.stack ?? error.message}`); failed++; }
+    }
+  }
+} finally { (await server?.catch(() => undefined))?.stop(); }
+
+/**
+ * The conformance engine (tests/neuralese/learning_conformance_server.py) on a tiny real backbone. Python comes from
+ * NATLANG_PYTHON, else the repository's .venv-neuralese. A missing interpreter fails the cases that need it.
+ */
+async function startNativeServer() {
+  const python = process.env.NATLANG_PYTHON || resolve(root, '.venv-neuralese/bin/python');
+  if (!existsSync(python)) throw new Error(`the python-native conformance engine needs ${python} (set NATLANG_PYTHON)`);
+  const child = spawn(python, [resolve(root, 'tests/neuralese/learning_conformance_server.py')], {
+    cwd: root, stdio: ['pipe', 'pipe', 'inherit'],
+    env: { ...process.env, PYTHONPATH: [resolve(root, 'training/neuralese'), root, process.env.PYTHONPATH].filter(Boolean).join(':'),
+      OMP_NUM_THREADS: process.env.OMP_NUM_THREADS ?? '1', MKL_NUM_THREADS: process.env.MKL_NUM_THREADS ?? '1' } });
+  const lines = createInterface({ input: child.stdout });
+  const waiting = [];
+  let exited;
+  lines.on('line', line => waiting.shift()?.resolve(line));
+  child.on('exit', code => { exited = new Error(`the conformance engine exited (${code})`); for (const item of waiting.splice(0)) item.reject(exited); });
+  const next = () => new Promise((resolve, reject) => exited ? reject(exited) : waiting.push({ resolve, reject }));
+  const ready = JSON.parse(await next());
+  const command = async name => {
+    child.stdin.write(name + '\n');
+    const reply = JSON.parse(await next());
+    if (reply.error) throw new Error(reply.error);
+    return Object.values(reply)[0];
+  };
+  return { ...ready, command, stop: () => { child.stdin.end(); } };
+}
+
+console.log(JSON.stringify({ passed, failed, skipped, pending }));
 if (failed) process.exitCode = 1;

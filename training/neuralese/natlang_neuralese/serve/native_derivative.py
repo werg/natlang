@@ -27,6 +27,8 @@ class Value:
     source:dict
     moments:dict|None=None
     history_id:str|None=None
+    # The host-recorded artifact this recomputed value stands for (an optimizer node's `recorded`).
+    recorded:str|None=None
 
 
 def _root(engine,declaration,owner):
@@ -76,6 +78,9 @@ def _rewrite_request(request,bindings,values,roots):
     selected={name:values[bindings.get(name,name)] for name in roots}
     if any(value.kind!=roots[name].kind for name,value in selected.items()):raise ValueError('native derivative binding changes input kind')
     replacements={roots[name].ident:value.ident for name,value in selected.items() if roots[name].kind in ('adapter','native-state')}
+    # A request recorded after an update imports the host's own updated artifact; the recomputed value replaces it,
+    # so the derivative reaches the roots through the update. Every earlier update's recorded artifact maps as well.
+    replacements.update({value.recorded:value.ident for value in values.values() if value.recorded and value.kind in ('adapter','native-state')})
     def adapters(entries):
         if entries is None:return None
         return [replacements.get(entry,entry) if isinstance(entry,str) else {**entry,'id':replacements.get(entry['id'],entry['id'])} for entry in entries]
@@ -216,6 +221,10 @@ def execute_derivative_program(engine,program,owner=None):
         actor_ids=[(value.kind,value.ident) for value in roots.values() if value.kind!='model-parameters']
         if len(set(actor_ids))!=len(actor_ids):raise ValueError('native derivative actor inputs must uniquely bind each complete coefficient or state artifact')
         values=dict(roots);gradients={};outputs={};optimizer_states={};receipts=[]
+        # First order (`order` 1): an inner gradient is a constant, so an update s' = step(s, g) passes the outer
+        # gradient through s alone (spec/NEURALESE_GRAPH.md, "Replay").
+        first_order=program.get('order',2)==1
+        def constant(tensor):return tensor.detach() if first_order else tensor
         bound=copy.deepcopy(program)
         for name,value in roots.items():bound['inputs'][name]['id']=value.ident
         text=json.dumps(bound,ensure_ascii=False,sort_keys=True,separators=(',',':'))
@@ -245,7 +254,7 @@ def execute_derivative_program(engine,program,owner=None):
                         selected=groups
                         tensors=(torch.autograd.grad(loss,tuple(selected.values()),create_graph=True,retain_graph=True,allow_unused=True)
                             if loss.requires_grad else (None,)*len(selected))
-                        live={key:gradient if gradient is not None else selected[key]*0 for key,gradient in zip(selected,tensors)}
+                        live={key:constant(gradient if gradient is not None else selected[key]*0) for key,gradient in zip(selected,tensors)}
                         record=engine.store.put_native_tensor_artifact(NativeTensorArtifact(
                             {'adapter':'adapter-gradient','native-state':'state-gradient','model-parameters':'parameter-gradient'}[target_value.kind],
                             engine.native_identity,live,target_value.ident if target_value.kind!='model-parameters' else None,
@@ -261,7 +270,7 @@ def execute_derivative_program(engine,program,owner=None):
                         retain_graph=True,allow_unused=True) if loss.requires_grad else (None,)*len(entries))
                     live_by_alias={alias:{} for alias in root_for_alias}
                     for (alias,key,tensor,_),gradient in zip(entries,raw):
-                        live_by_alias[alias][key]=gradient if gradient is not None else tensor*0
+                        live_by_alias[alias][key]=constant(gradient if gradient is not None else tensor*0)
                     records={}
                     for alias,root_name in root_for_alias.items():
                         target_value=groups[alias]['value'];live=live_by_alias[alias]
@@ -291,7 +300,7 @@ def execute_derivative_program(engine,program,owner=None):
                     value=values[targets[0]['value']]
                     gradients[alias]=(record,live,value.ident);outputs[alias]=record.id;record_ids={alias:record.id}
             elif kind=='optimizer':
-                if set(node)!={'kind','name','value','gradient','optimizer','optimizer_state'} or node['value'] not in values or node['gradient'] not in gradients:
+                if set(node)-{'recorded'}!={'kind','name','value','gradient','optimizer','optimizer_state'} or node['value'] not in values or node['gradient'] not in gradients:
                     raise ValueError('native derivative update references unavailable earlier values or gradients')
                 previous=values[node['value']];record,live_gradient,gradient_parent=gradients[node['gradient']]
                 if gradient_parent!=previous.ident:raise ValueError('native derivative gradient belongs to another exact earlier value')
@@ -324,6 +333,7 @@ def execute_derivative_program(engine,program,owner=None):
                         {'scope':PROGRAM,'optimizer':options['name'],'derivative_program_id':declaration.id,'gradient_id':record.id,
                          'optimizer_state_parent_id':history_id,'step':int(moments['optimizer.step'].item())}),owner)
                     value=Value(previous.kind,tensors,saved.id,previous.names,artifact,moments,state.id)
+                value.recorded=node.get('recorded')
                 values[name]=value;outputs[name]=value.ident;optimizer_states[name]=value.history_id
             else:raise ValueError('native derivative node kind must be gradient or optimizer')
             receipts.append({'name':name,'kind':kind,'artifact_id':outputs.get(name),

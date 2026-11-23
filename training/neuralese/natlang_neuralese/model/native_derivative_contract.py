@@ -111,7 +111,9 @@ def derivation_dependencies(value):
 
 def validate_finite_program(program,*,bound=False):
     required={'schema','inputs','nodes','outer','wrt','arithmetic'}
-    if not isinstance(program,dict) or set(program)!=required or program.get('schema')!=PROGRAM:
+    # `order` 1: the inner gradient nodes are constants (first-order nesting); absent or 2: they are differentiated.
+    if (not isinstance(program,dict) or set(program)-{'order'}!=required or program.get('schema')!=PROGRAM
+            or 'order' in program and (type(program['order']) is not int or program['order'] not in (1,2))):
         raise ValueError('native derivative program needs its exact versioned finite input/node/outer contract')
     arithmetic=program['arithmetic']
     if (not isinstance(arithmetic,dict) or set(arithmetic)!={'schema','query_chunk_tokens'}
@@ -200,7 +202,10 @@ def validate_finite_program(program,*,bound=False):
                     raise ValueError('native derivative gradient aliases must be globally unique')
                 gradients[item['name']]=item['value']
         elif kind=='optimizer':
-            if (set(node)!={'kind','name','value','gradient','optimizer','optimizer_state'}
+            # `recorded`: the artifact the host's own step produced while recording; the recomputed update stands
+            # for it in every later request.
+            if (set(node)-{'recorded'}!={'kind','name','value','gradient','optimizer','optimizer_state'}
+                    or 'recorded' in node and not (native_id(node['recorded'],'nzs1_') or native_id(node['recorded'],'nnt1_'))
                     or node['value'] not in values or gradients.get(node['gradient'])!=node['value']):
                 raise ValueError('native derivative update gradient belongs to another exact earlier value')
             optimizer_binding(node['optimizer'])
