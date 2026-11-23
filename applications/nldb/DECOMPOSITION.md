@@ -129,3 +129,33 @@ and `sqlite/` it is host code (exact storage), not a natural-language part.
 - Binary search, sorted insertion and page formatting become crisp helpers.
 - The SQL expression rules move from five operators into the `Condition` and `Expression` type docs, and they are
   spelled out in full.
+
+## Repository questions (`grep/`, formerly applications/sem-grep-sql)
+
+WS6 §3 A8, nldb generalised to a repository: files and their metadata tables answered in words.
+
+| Part | Decision | Unit | Why |
+|---|---|---|---|
+| A question in words to exact SQL with conditions on meaning | fn (nldb's) | `sqlite/translate.nl` via `SqliteDatabase.ask` | The same compiler as any nldb SQLite question. |
+| Whether a file's content meets a criterion | fn, decision (nldb's) | `sqlite/judge.nl` | Judged once per distinct stored value; the verdicts stay in the database (`_nl_semantic`), so repeats and other questions with the criterion judge nothing new. |
+| Files and metadata as tables | crisp | `grep/ask.ts` `loadDataset` | `files(path, sha256, content)` and one table per CSV; exact plumbing. |
+| Joins, exact filters, grouping, ordering | crisp (SQLite) | `SqliteDatabase` | Exact. |
+| A caller-written plan over files and CSV, with a content-addressed predicate cache and Neuralese views | as below | `grep/query.ts` `runQuery` | Kept for callers that write the plan. |
+
+### Caller-written plans (`grep/query.ts`)
+
+- **Exact mechanism (TypeScript, `query.ts`):**
+  - Content hashing (`sha256Hex`, `createRepoFile`) marking every file body as `Untrusted<string>`.
+  - Exact CSV parsing (`parseCsv`), hash joins (`inner` / `left`), exact filter pushdown (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `includes`), ordering, limiting, and relational aggregations (`count`, `sum`, `avg`, `min`, `max` with `groupBy`).
+  - Content-addressed `PredicateCache` keyed by `(sha256, predicate)` and `(sha256, question)`, deduplicating identical content within a batch and hitting ≥ 80% (100% on identical repeats) with zero redundant LLM calls.
+  - Concurrency control via `semanticFilter` and `semanticMap` from `@natlang/node/std`, plus optional `Neuralese<string>` view hooks (`NeuraleseViewHook`) so native compact views can replace raw text reads per content SHA.
+- **Typed semantic policy (`.nl` leaves):**
+  - `matchesPredicate.nl` (`readout: decision`, returns `boolean`): judges whether an untrusted file genuinely satisfies a natural-language predicate.
+  - `extractField.nl` (returns `string`): extracts a concise factual answer to a follow-up question from a matching untrusted file.
+
+### Safety & Custody
+
+- Every repository file body crosses the boundary as `Untrusted<string>`, fenced from prompt injection.
+
+File content keeps its `Untrusted<string>` fence through the SQLite table (the fence is keyed by text): `judge.nl` sees
+it fenced. Not built: `askRepository` has no Neuralese views of files (only `runQuery` has).

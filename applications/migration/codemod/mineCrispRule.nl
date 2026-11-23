@@ -1,7 +1,7 @@
 ---
 description: Synthesize a reusable deterministic crisp find-and-replace rule from verified semantic file migrations.
 args:
-  spec: MigrationSpec
+  spec: CodemodSpec
   pairs: VerifiedMigrationPair[]
 returns: MinedRuleCandidate
 ---

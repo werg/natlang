@@ -9,6 +9,7 @@ import { canonicalValue } from '../native/refinement.js';
 import {SYSTEM_PROMPT} from '../native/prompt.js';
 import { isProtectedSource, loadNamedFunction, protectedSources, type SourceFiles } from '../runtime/loader.js';
 import { adoptSource, type AdoptionRecord, type SourceManifest } from './adoption.js';
+import { trustedCallOutput } from './run-evidence.js';
 import { OperationJournal } from './operations.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { Folder, FolderSnapshot } from '../native/scoped-fs.js';
@@ -200,12 +201,17 @@ export type DirectoryCallStoreLike = {
   calls(filter?: { program?: string; outcome?: string; limit?: number }): readonly { call_id: string }[];
   call(callId: string): {
     call_id: string;
+    parent_call_id?: string | null;
     outcome: string;
+    detail?: string;
     definition: { source: string | null };
     inputs: Record<string, { complete: boolean; hash?: string }>;
     output: { complete: boolean; hash?: string } | null;
   } | undefined;
   value(ref: { complete: boolean; hash?: string } | null | undefined): unknown;
+  /** Read when present: escalation notes and tester feedback decide which recorded outputs are expected results. */
+  events?(callId: string): Record<string, unknown>[] | undefined;
+  annotations?(callId: string): { kind: string; value: unknown }[];
 };
 
 export type ImproveDirectoryOptions = {
@@ -297,6 +303,14 @@ function programProtectedSources(directory: string, overrides: Record<string, st
   };
   visit(directory);
   return { protected: found, lists };
+}
+
+/** Paths of `directory` an improvement may not change: `types.ts` files and every `.nl` file's `protect:` items. */
+export function protectedProgramPaths(directory: string): Set<string> {
+  const root = resolve(directory);
+  const files = Object.keys(readProgramFiles(root));
+  const { protected: listed } = programProtectedSources(root, {});
+  return new Set(files.filter(path => /(^|\/)types\.ts$/.test(path) || isProtectedSource(path, listed)));
 }
 
 /** Materialize a temporary copy of `directory` with `changes` applied (`node_modules` symlinked). */
@@ -415,7 +429,11 @@ export function buildDirectoryCasePack(
       const rel = relative(root, resolvedSource).split(sep).join('/');
       if (!rel || rel.startsWith('..') || !existsSync(resolvedSource)) continue;
       if (!record.output?.complete) continue;
-      const expected = options.store.value(record.output);
+      // The local half of an escalated decision and a call a tester marked bad are not expected results; a fixed
+      // call's expected value is the tester's (run-evidence.ts trustedCallOutput).
+      const trust = trustedCallOutput(options.store, record);
+      if (!trust.trusted) continue;
+      const expected = Object.hasOwn(trust, 'expected') ? trust.expected : options.store.value(record.output);
       if (expected === undefined) continue;
       const inputEntries = Object.entries(record.inputs);
       if (inputEntries.some(([, ref]) => !ref.complete)) continue;
@@ -496,7 +514,7 @@ export function buildDirectoryCasePack(
 }
 
 /** Default split evaluator: loads each `.nl` function in `directory` and checks exact output equality against `expected`. */
-async function evaluateDirectorySplitWithModel(
+export async function evaluateDirectorySplitWithModel(
   directory: string,
   cases: readonly DirectoryImprovementCase[],
   model: ModelDriver,

@@ -16,7 +16,8 @@ export type NatlangDiagnostic = SourceSpan & {
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | `TS${number}` | 'nl-undeclared-type' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-untyped-literal' |
     'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'decision-compare' | 'untrusted-instruction' | 'iteration-unbounded' |
-    'nl-sequential-loop' | 'idiom-decision-readout' | 'idiom-fixed-cursor-iterate' | 'idiom-code-in-prose';
+    'nl-sequential-loop' | 'idiom-decision-readout' | 'idiom-fixed-cursor-iterate' | 'idiom-code-in-prose' |
+    `idiom-review-${string}`;
   /** One line: what is wrong. */
   message: string;
   /** The explanation beneath it (TypeScript's elaboration chain), when there is one. */
@@ -641,7 +642,23 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
             type: uniqueType(calls.map(item => widen(checker.getTypeAtLocation(item.arguments[index]!))), node,
               `parameter ${index + 1} type`) ?? checker.getAnyType() }));
         }
-        if (!signature.parameters && !calls.length) signature.open = true;
+        if (!signature.parameters && !calls.length) {
+          // `const judge = nl`...`; return judge;` in a function whose declared result is a function type: that type
+          // declares the parameters, as it would for `return nl`...`` itself.
+          const returned = laterUses(holder).map(use => unwrapParentheses(use)).find(use => !!use.parent && ts.isReturnStatement(use.parent));
+          const context = returned ? checker.getContextualType(returned as ts.Expression) : undefined;
+          const callable = (context?.isUnion() ? context.types : context ? [context] : [])
+            .filter(member => member.getCallSignatures().length === 1);
+          const only = callable.length === 1 ? callable[0]!.getCallSignatures()[0]! : undefined;
+          if (only && returned && only.getParameters().every(parameter => {
+            const declaration = parameter.valueDeclaration;
+            return !(declaration && ts.isParameter(declaration) && declaration.dotDotDotToken);
+          })) {
+            signature.declaredParameters = true;
+            signature.parameters = only.getParameters().map(parameter => ({ name: parameter.name,
+              type: checker.getTypeOfSymbolAtLocation(parameter, returned) }));
+          } else signature.open = true;
+        }
       }
     }
 

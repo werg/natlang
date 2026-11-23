@@ -8867,3 +8867,142 @@ wrapper only); field-by-field record readouts under `auto` (they keep the bare v
 form beyond 5ff07638 and
 e15b20a8; C-reasoned after the T=1 change (its result moves: reasoning is now sampled); whether the stale `lfm-latest`
 profile should be refreshed to sft-v6 (left as is: B14's arms are defined on it).
+
+## 2026-11-23 16:30 Reference engine: memory-bounded admission, busy-tolerant supervision; lfm-latest = sft-v9; B14 triage rerun
+
+**Observations (B14, DECISIONS "B14 flagship benchmark harness").** The Python reference engine OOMed at its CUDA cap
+(9 GB policy server, 4 concurrent `natlang call`s: 10 OOMs in 7 min, all 74-92 MiB allocations with 8.0-8.3 GB
+allocated), and `natlang serve` killed it after one 10 s health timeout (14:27). Every `natlang call` then found no
+answer at the port and launched its own duplicate server (two ledger launchers for the same unit, the queue head at
+18.9 GB for 35 min), which left arm D's driver stalled on old code. Stopped: `d-driver.sh` (PID 860045),
+`bench-prepd-8`, the stale queued `natlang-native-dc95f29dd5a0-18471` claim.
+
+**Fixes (41fa2c044, a2ecee97f; default on, opt-out `--unbounded-admission`).**
+- Admission (`serve/engine.py`): queued requests wait in a FIFO and join the batch only while the running batch's
+  worst-case KV (bytes per token measured from finished prefills' caches, buffer headroom included, x prompt + remaining
+  allowance clamped to the context), the largest measured prefill workspace and the prefix cache's unspent budget fit
+  both the `--memory-gb` cap and the device's free memory, minus a 10% watermark; the oldest always runs; cancelled
+  waiters leave the queue. An OOM prefill that produced nothing is requeued as a fresh sequence (same request and seed)
+  while others run, and fails alone. Metrics: waiting, deferrals, OOM requeues, measured bytes/token and workspace.
+  Engine parity: llama-server admits by fixed slots, SGLang by its KV pool, wllama serves one sequence; only the
+  reference engine was unbounded.
+- Supervision: `natlang serve` ends only when the port stops listening (TCP connect; the kernel completes the
+  handshake for a process too busy to answer); an unanswered /health logs "busy" and keeps serving. A command that finds
+  a listening but unanswering server at its port waits instead of launching a duplicate; `natlang status` says `busy`.
+  Same flaw on the managed llama-server path: the shared supervisor counted an unanswered `/slots` as idle (could stop a
+  busy server once leases lapsed) and an acquirer that saw a live record fail /health started a second server; both
+  fixed. SGLang is not launched by `natlang serve` (`serveCommand` requires `managedNative`; `nativeServerCommand` always
+  runs `natlang_neuralese.serve`), so it has no such supervisor.
+- `natlang build`/`check` of a program outside a checkout resolves `@natlang/node/std` to the CLI's declarations (the
+  bench's copy of triage failed TS2307 after it began importing `escalate`/`semanticRepair`).
+- Health route: it never touched the engine (shown by a test with a blocked engine thread). The stall's root cause is
+  not established; under the rerun's load the probe answered 1,206/1,206 within 0.57 s (max), with 0 deferrals and 0
+  OOM requeues at concurrency 4 (7 active sequences peak, 4.4 GB allocated, 153.6 KB/token measured).
+
+**lfm-latest = sft-v9 (coordinator).** `ops/current-policy.json` now names sft-v9 (e15b20a86f1c, ops/ei/sft-v9/sft):
+held-v3 verdict neutral vs its start sft-v7 (+0.59 pts, p 0.85), +10.9 pts vs base (p 0.0005), adopted by the driver
+(`stages/verdict.done`); the sft-v6 pointer is kept as `current-policy.sft-v6.json`. `natlang setup --native lfm-latest`
+refreshed `lfm-latest` and `lfm-latest-gguf` (q8_0 44fca2f0); the setup removed the 5ff07638 pin, archived first to
+`/mnt/external/dgx-moved-20261123/native-pins/` (identical). sft-v9 has no compact actor view (it lacks a resumable
+native source); its server loads the full checkpoint.
+
+**B14 triage rerun** (program after 8e586c02e, pin 5fdccb128, WORK `/home/werg/data/semantic-fp-bench/triage-20261123b`,
+`examples/triage/bench/results/2026-11-23.json` regenerated; 28 held units):
+
+| arm | pass | vs A (CI, p) | p50 / p95 latency | $ / 100 units |
+|---|---|---|---|---|
+| A Luna loop (2 samples) | 55/56 = 0.982 | | 1.9 / 2.7 s | 0.006 |
+| B program on Luna (2 samples) | 56/56 = 1.000 | +1.8 [0, +5.4], p 1.0 | 2.9 / 29 s | 0.048 |
+| C program on sft-v9, reasoned | 27/28 = 0.964 | -1.8 [-10.7, +5.4], p 1.0 | 142 / 765 s | 1.38 (49.5 GPU-s/unit) |
+| C program on sft-v9, instant | 22/28 = 0.786 | -19.6 [-35.7, -7.1], p 0.0025 | 26 / 496 s | 0.67 (24.2 GPU-s/unit) |
+| D sft-v9 + specialize/tune + escalate | not measured yet | | | |
+
+Arm C is sft-v9, not base LFM3 (the first reading's "base" was 5ff07638). No arm beats A. C-instant's failures are 6
+labels and 1 urgency; not investigated here (instant readout owner). Arm D: `WORK/driver.sh` runs prepare-d (record,
+specialize, tune at 24 GB) and both D modes on sft-v9 once the policy server's ledger claim (18.9 GB, learned) is
+admitted, then writes `WORK/results-ABCD.json`.
+
+**Not checked:** the original health stall's cause (no py-spy capture of a stalled server; the 14:27 kill came after
+OOM storms); admission under a load that actually defers (the bench's concurrency 4 never filled the 10 GB cap);
+memory-bounded admission on a CPU device (bounded only on CUDA); the llama-server fixes against a real llama-server
+under load (fake-server tests only).
+
+## 2026-11-23 17:30 Semantic-FP language gaps and applications closed (language-gaps agent)
+
+- **`natlang improve DIR` proposes (WS8 N4).** Without `--proposal`, a natural-language improver on `--model` (three
+  built-in programs: `improveDiagnose.nl`, `improveShouldRevise.nl` with `readout: decision`, `improveRevise.nl`) reads
+  the program's own recorded runs (`improvement/run-evidence.ts`: failures with reasons, escalations with the
+  fallback's answer, `ensures:`/refinement repairs, testers' bad/fix verdicts) plus the support examples it answers
+  wrongly, and rewrites the instructions of at most `--max-functions` (3) functions, front matter byte-identical; the
+  existing gate checks and adopts. Found and fixed on the way: the case pack took an escalated decision's local answer
+  and a bad-marked call as expected results; now the fallback's answer and the tester's expected value stand.
+- **`escalate` reads its history (WS2 R4).** Each run leaves an `escalation` note on its local call; the `nl` policy gets
+  `{ totalCalls, escalationRate, disagreementRate }` and measured tier cost (ms) from those notes. Found and fixed:
+  std spans are never stored rows, so `natlang profile`'s escalation rate from the store was always 0 (it read
+  `std:escalate` rows that do not exist); it counts the notes now.
+- **`.d.nl.ts` `import type` for `uses:` (WS1 L6).** A used function of the build is referenced by its own declaration.
+- **`nl.with<T>` in a callable-folder factory showed `unknown`.** Cause: `import type` of package files (`../types.js`)
+  was dropped before the module was type-checked, so the type was `any`. Type-only imports now reach the checker (and
+  their own type imports); a factory returning a saved `nl` function takes its declared parameters.
+- **`natlang check --idiom` / `--idiom-strict`** run `applications/idiom-reviewer` (on M2's std `stepKind`) through
+  `natlang run` on the selected model; findings are `idiom-review-<kind>` diagnostics.
+- **Applications.** codemod-studio is now `applications/migration/codemod`: its semantic stage is the migration loop
+  (`migrate` over an in-memory `RepositoryMigration` with `contents` and a `validator`); `transformFile.nl` and the
+  separate package are gone. sem-grep-sql is now `applications/nldb/grep`: `askRepository` loads files and metadata
+  tables into SQLite and answers with nldb's `SqliteDatabase` (translate, judge once per value, verdicts kept);
+  `runQuery` stays for caller-written plans. ci-doctor: `bisectSettled.nl` stops a bisection that cannot find the
+  failure's cause (pluggable, default nl), and failures cluster by root cause with std `semanticMatch`.
+- **Found on the way.** The nldb folder-database test counted the 4 reasoning samples `readout: decision` draws since
+  fc842c0f9 as stages (its fixture now answers them); repository-question file content keeps its `Untrusted` fence
+  through SQLite (the fence is keyed by text), asserted in the test.
+- **Why merge packages.** Application TypeScript cannot import another package's sources in a per-package build (the
+  project compiler lowers only files under its root), and the plan wants flagships to extend their seeds rather than
+  fork them. Merging is one implementation without a new cross-package mechanism.
+## 2026-11-23 16:40 GRPO trains the action reasoning of reasoned decisions
+
+**Decision (GRPO-reasoning agent, brief from the coordinator; default on, `grpo.py --no-decision-reasoning` opts out;
+commit 91b26036f).** A reasoned readout (`readout: decision`, DECISIONS "reasoned decisions") samples k reasonings and,
+in RL collection, takes the choice of one seeded action sample. GRPO trained that choice but not the reasoning that
+produced it. The action sample's reasoning is now a trained per-call sequence like any other action. It uses the actor's
+exact prompt ids, sampled ids and behaviour log-probabilities, carries the episode's group-normalized advantage, is
+kept through its first `</think>` (the free reply after it was never used), and enters ratio, KL, tail floor, loss
+units and the SD replay as ordinary sampled tokens. The other k-1 samples stay untrained. Their choices were never
+executed, so the episode's reward says nothing about them, and giving them its advantage would bias the gradient.
+
+- **Mechanism inventory.**
+  - *Capture* (no change needed). Both collecting engines already record the reasoning turns with the full RL capture,
+    because the collector requests `x_natlang_rl_capture` on every turn (`ts-host/src/model/local-server.ts:158`). The
+    Python native engine builds it in `serve/engine.py` ~1790-1820 (prompt, samples with logp, `sampling_law`,
+    `finish_reason`). The SGLang actor delegates only generation and builds the same capture (`sglang_actor.py`
+    header). In aei1 r0000 the reasoning turns show T=1, top-p 0.95 and `post-temperature-untruncated`.
+    llama-server and wllama don't collect RL.
+  - *Rollouts* (`rl.task_rollouts.rollout_turns`). The action entry keeps `decision_reasoning.reasoning_sampling`.
+  - *Lowering* (`lower_rollout_turns.decision_reasoning_turns`, sharing `sampled_call` with `episode_turns`).
+  - *Learner* (`grpo.load_group`). The scored-group exchange `pack_scored_group` goes through it too.
+  - *Overlong filter* (`rollout_math.truncated_rollout`). An action reasoning cut by the cap ends its episode.
+  - *JOLT+ student form* (`jolt.student_form`). Guidance is stripped from the reasoning prompt too.
+  - *SFT* is unchanged. It already trains agreeing samples' reasoning (`exp0_sft`), and `sft_sources`' own-call path
+    uses `episode_turns`, which does not add these rows, so nothing trains twice.
+  - *Left out: tune RL* (`tune/rl.py`, `ts-host/src/tune/rollouts.ts`). It records every reasoning generation as an
+    ordinary turn, which does not match the graph's scored-entry nodes. This is a separate whole-graph objective and
+    is recorded in OPEN_ITEMS.
+  - *Not applicable:* held eval and the behaviour probe, which don't train.
+- **Telemetry.** `train.jsonl` `lowering` counts `decision_reasoning_rows`, `_tokens`, `_unclosed`, and whether the
+  action's scored prompt continues the reasoning's own prompt with exactly the kept ids (`_ids_exact` / `_ids_rendered`).
+- **Finding: the scorers re-tokenize the reasoning.** In aei1 r0000 (the 16 action readouts of g000689, g000696,
+  g000701 and g000720) the scored prompt left the sampled ids mid-reasoning in 4 of 16 readouts, after 847/3476,
+  531/1051, 535/2085 and 953/1687 tokens, with identical decoded text. Every engine scores after the reasoning *text*
+  re-encoded, so the choice was scored, and trains, after a tokenization the model never sampled. The GRPO choice term
+  stays self-consistent, because it uses the scored prompt that the behaviour scores came from, and the reasoning row
+  trains on the exact sampled ids. The fix is a cross-engine score-item field carrying the sampled ids (OPEN_ITEMS).
+- **Tests.** `tests/neuralese/test_grpo_decision_reasoning.py` (5). Also run and passing:
+  `test_reasoned_decision_training`, `test_grpo_jolt`, `test_grpo_replay_corpus`, `test_grpo_exchange` and
+  `test_rl_task_rollouts`. The quick gate passed.
+- **Learner bench: not completed.** The bench replays one aei1 group with spread (g000696, rewards 1/0/1/1, 4 reasoned
+  readouts, 6078 action-reasoning tokens) for one step from sft-v9, at pin 91b26036f. It compares arm A (default)
+  with arm B (`--no-decision-reasoning`) on `lowering`, `loss_tokens`, `sequences` and `grad_norm`. It was preempted
+  twice by `aei1-r0001-sft` (high priority, 100 GB) before step 1, and is stopped so as not to delay the round. The
+  script, the re-emitted rollouts and the pin are kept for a rerun once the DGX has about 20 GB free:
+  `ops/gdr-bench/pin-91b26036f` and the agent's `scratchpad/gdr/scripts/bench.sh`. The coordinator reruns it, or reads
+  the first real GRPO step's `lowering.decision_reasoning_*` counters. The offline lowering of the same groups with the
+  real tokenizer gives 16 rows and 22,988 reasoning tokens, all closed by `</think>` (`decision_reasoning_turns`).

@@ -7,7 +7,7 @@
  */
 import { Context } from '../runtime/contexts.js';
 import { decideInFrame, type Decision } from '../runtime/runtime.js';
-import { isNatlangCallable } from '../runtime/callable.js';
+import { callableMeta, isNatlangCallable } from '../runtime/callable.js';
 import type { NatlangFunction } from '../runtime/surface.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { stableHash } from '../runtime/iterate.js';
@@ -42,11 +42,82 @@ export type EscalateOptions<R> = {
   /** Replacement for the shipped `shouldEscalate.nl` judgment when `policy` is `'nl'` or `'shadow'`. */
   nlPolicy?: (decision: Decision<R>, floor?: number, risk?: Record<string, number>,
     history?: EscalationHistory, cost?: TierCost) => Maybe<boolean>;
-  /** Optional prior escalation statistics supplied to the `nl` policy. */
-  history?: EscalationHistory;
-  /** Optional local vs fallback tier cost metadata supplied to the `nl` policy. */
-  cost?: TierCost;
+  /**
+   * Prior escalation statistics for the `nl` policy. By default the policy reads them from the call store itself: this
+   * function's earlier escalate runs (how often it escalated, how often the fallback disagreed with the local answer),
+   * plus this wrapper's own runs since. Pass statistics to use yours, or `false` for none.
+   */
+  history?: EscalationHistory | false;
+  /** Local vs fallback tier cost for the `nl` policy. By default, the mean milliseconds per call measured in those runs. */
+  cost?: TierCost | false;
 };
+
+/** What the recorded escalate runs of one function say: the `nl` policy's history and measured tier cost. */
+export type EscalationRecord = { history: EscalationHistory; cost?: TierCost };
+
+/**
+ * What one escalate run records on its local call (annotation kind `escalation`, not pinned): the history the `nl`
+ * policy reads, `natlang profile` counts and `natlang improve DIR` reads as a labelled hard case.
+ */
+export type EscalationNote = { function: string; escalated: boolean; unavailable?: true; reason?: string; to?: string;
+  agreed?: boolean; fallback_call?: string; local_ms: number; fallback_ms?: number };
+
+type HistoryStore = { annotationsOf(kind: string, options?: { limit?: number }): readonly { call_id: string; value: unknown }[] };
+const isHistoryStore = (store: unknown): store is HistoryStore =>
+  !!store && typeof (store as HistoryStore).annotationsOf === 'function';
+
+/** Running totals of escalate runs of one function. */
+type Tally = { runs: number; escalated: number; disagreed: number; localMs: number; localTimed: number; fallbackMs: number; fallbackTimed: number };
+const emptyTally = (): Tally => ({ runs: 0, escalated: 0, disagreed: 0, localMs: 0, localTimed: 0, fallbackMs: 0, fallbackTimed: 0 });
+
+function tallyOf(note: EscalationNote): Tally {
+  const tally = emptyTally();
+  tally.runs = 1;
+  if (typeof note.local_ms === 'number') { tally.localMs = note.local_ms; tally.localTimed = 1; }
+  if (note.escalated) {
+    tally.escalated = 1;
+    if (note.agreed === false) tally.disagreed = 1;
+    if (typeof note.fallback_ms === 'number') { tally.fallbackMs = note.fallback_ms; tally.fallbackTimed = 1; }
+  }
+  return tally;
+}
+
+const addTally = (into: Tally, more: Tally): Tally => {
+  for (const key of Object.keys(into) as (keyof Tally)[]) into[key] += more[key];
+  return into;
+};
+
+function recordOf(tally: Tally): EscalationRecord {
+  const round = (value: number) => Math.round(value * 1e4) / 1e4;
+  const history: EscalationHistory = { totalCalls: tally.runs, ...(tally.runs ? { escalationRate: round(tally.escalated / tally.runs) } : {}),
+    ...(tally.escalated ? { disagreementRate: round(tally.disagreed / tally.escalated) } : {}) };
+  const local = tally.localTimed ? tally.localMs / tally.localTimed : undefined;
+  const fallback = tally.fallbackTimed ? tally.fallbackMs / tally.fallbackTimed : undefined;
+  const cost: TierCost | undefined = local !== undefined || fallback !== undefined ? { ...(local !== undefined ? { local: Math.round(local) } : {}),
+    ...(fallback !== undefined ? { fallback: Math.round(fallback) } : {}),
+    ...(local && fallback !== undefined ? { ratio: round(fallback / local) } : {}) } : undefined;
+  return { history, ...(cost ? { cost } : {}) };
+}
+
+/**
+ * The escalation history of the function `functionId` (a definition id) in a call store, from the `escalation` notes
+ * on its local calls: its most recent `limit` escalate runs, how many escalated, how many of those the fallback answered differently, and the mean milliseconds
+ * of the local and the fallback call. Undefined when the store cannot be read this way.
+ */
+export function escalationHistoryFromStore(store: unknown, functionId: string, limit = 500): EscalationRecord | undefined {
+  const tally = tallyFromStore(store, functionId, limit);
+  return tally && recordOf(tally);
+}
+
+function tallyFromStore(store: unknown, functionId: string, limit = 500): Tally | undefined {
+  if (!isHistoryStore(store)) return undefined;
+  const tally = emptyTally();
+  for (const row of store.annotationsOf('escalation', { limit })) {
+    const note = row.value as EscalationNote | undefined;
+    if (note && typeof note === 'object' && note.function === functionId) addTally(tally, tallyOf(note));
+  }
+  return tally;
+}
 
 export type Escalated<R> = Decision<R> & {
   /** Whether the stronger model settled this call. */
@@ -89,10 +160,29 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
     return undefined;
   };
   const nlJudge = options.nlPolicy ?? (shippedShouldEscalate as unknown as NonNullable<EscalateOptions<R>['nlPolicy']>);
-  const decidePolicy = pluggable<[Decision<R>], string | undefined>(
+  // The nl policy reads this function's escalation history from the call store once, then counts this wrapper's runs.
+  const functionId = callableMeta(fn)?.definition.id;
+  let stored: Tally | undefined;
+  const live = emptyTally();
+  const recorded = (frame: StdSpan['frame']): EscalationRecord | undefined => {
+    if (!functionId) return undefined;
+    stored ??= tallyFromStore(frame.task.runtime.callStore(), functionId) ?? emptyTally();
+    return recordOf(addTally({ ...stored }, live));
+  };
+  const policyFacts = (frame: StdSpan['frame']): { history?: EscalationHistory; cost?: TierCost } => {
+    const wantHistory = options.history === undefined, wantCost = options.cost === undefined;
+    const measured = wantHistory || wantCost ? recorded(frame) : undefined;
+    const history = options.history === false ? undefined : options.history ?? measured?.history;
+    const cost = options.cost === false ? undefined : options.cost ?? measured?.cost;
+    return { ...(history ? { history } : {}), ...(cost ? { cost } : {}) };
+  };
+  const decidePolicy = pluggable<[Decision<R>, StdSpan['frame']], string | undefined>(
     {
       crisp: decision => crispReason(decision),
-      nl: async decision => (await nlJudge(decision, floor, options.risk, options.history, options.cost)) ? 'policy' : undefined,
+      nl: async (decision, frame) => {
+        const facts = policyFacts(frame);
+        return (await nlJudge(decision, floor, options.risk, facts.history, facts.cost)) ? 'policy' : undefined;
+      },
     },
     options.policy,
     { default: 'crisp', serve: 'crisp', name: 'std.escalate', same: (a, b) => Boolean(a) === Boolean(b) },
@@ -102,22 +192,41 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
   return async (...args: A): Promise<Escalated<R>> => {
     const span = new StdSpan('escalate');
     return span.around(async () => {
+      const localStarted = Date.now();
       const decision = await decideInFrame(span.frame, fn, args);
-      span.stage('local', { confidence: decision.confidence, scored: decision.scored });
+      const localMs = Date.now() - localStarted;
+      const [localCall] = span.stage('local', { confidence: decision.confidence, scored: decision.scored, ms: localMs }).slice(-1);
       const reason = options.shouldEscalate
         ? ((await span.run(() => options.shouldEscalate!(decision))) ? 'policy' : undefined)
-        : await span.run(() => decidePolicy(decision));
-      if (!reason) return { ...decision, escalated: false };
+        : await span.run(() => decidePolicy(decision, span.frame));
+      // This run joins the history once the store has been read (earlier runs are read from the store itself).
+      // The run's note goes on its local call; it joins this wrapper's live history once the store has been read
+      // (earlier runs are read from the store itself).
+      const note = (fields: Omit<EscalationNote, 'function' | 'local_ms'>) => {
+        if (!functionId) return;
+        const value: EscalationNote = { function: functionId, local_ms: localMs, ...fields };
+        if (stored) addTally(live, tallyOf(value));
+        if (localCall) try { span.frame.task.runtime.callStore()?.annotate?.(localCall, 'escalation', value, 'std', false); }
+        catch { /* recording never fails the call */ }
+      };
+      if (!reason) { note({ escalated: false }); return { ...decision, escalated: false }; }
       // `fn.on({ model })` runs a name the runtime lacks on the default model: that would be the same answer again,
       // reported as escalated. Without the model the local answer stands, marked unavailable (a local run of a program
       // written for a fallback still works).
       if (!span.frame.task.runtime.options.models?.[to]) {
         span.emit('decision_escalate', { to, reason, unavailable: true, confidence: decision.confidence, initial_value: decision.value });
+        note({ escalated: false, unavailable: true, reason, to });
         return { ...decision, escalated: false, reason: `unavailable: this runtime has no model ${to} (${reason})` };
       }
       span.emit('decision_escalate', { to, reason, confidence: decision.confidence, initial_value: decision.value });
+      const fallbackStarted = Date.now();
       const value = await span.run(() => fallback(...args));
-      span.stage('escalate', { to, reason });
+      const fallbackMs = Date.now() - fallbackStarted;
+      // Whether the fallback agreed with the local answer: the history the nl policy reads (a disagreement is a
+      // labelled hard case for this function).
+      const agreed = stableHash(value) === stableHash(decision.value);
+      const [fallbackCall] = span.stage('escalate', { to, reason, agreed, ms: fallbackMs }).slice(-1);
+      note({ escalated: true, reason, to, agreed, fallback_ms: fallbackMs, ...(fallbackCall ? { fallback_call: fallbackCall } : {}) });
       return { ...decision, value, escalated: true, reason, initialValue: decision.value };
     }, result => result.escalated ? `escalated to ${to} (${result.reason})` : `local (p=${result.confidence.toFixed(2)})`);
   };

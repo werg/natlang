@@ -215,6 +215,8 @@ test('A5 applications/ci-doctor: crisp flake detector, semanticPartition, iterat
         : { flake: 0.03, env: 0.05, regression: 0.92 };
       return { log_probs: req.options.map(o => Math.log(p[JSON.parse(o)])) };
     }
+    // bisectSettled.nl: every tested commit failed the same way or passed, so the bisection goes on.
+    if (prompt.includes('bisection')) return { log_probs: req.options.map(o => Math.log(JSON.parse(o) === false ? 0.9 : 0.1)) };
     return { log_probs: req.options.map(() => Math.log(1 / req.options.length)) };
   };
 
@@ -241,6 +243,48 @@ test('A5 applications/ci-doctor: crisp flake detector, semanticPartition, iterat
   assert.equal(report.rejectedCandidates[0].index, 0);
   assert.match(report.rejectedCandidates[0].problems.join('\n'), /Assertion count decreased/);
   assert.match(await repoFolder.readText('src/pricing.ts'), /price \* \(1 - rate\)/);
+});
+
+test('A5 ci-doctor: semantic root-cause clustering and a natural-language bisection stop', async () => {
+  const { bisectCommits, clusterFailures } = await (await buildApp('ci-doctor'))('doctor.js');
+  const trace = (id, log) => ({ id, job: 'unit', log, commits: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'] });
+  const traces = [
+    trace('a', 'AssertionError: expected discount(100, 0.2) to equal 80, got 20'),
+    trace('b', 'TypeError: cannot read properties of undefined (reading "rate") in applyCoupon'),
+    trace('c', 'FAIL test/cart.test.ts > total applies 20% off: expected 160, received 40'),
+  ];
+  const sameCause = (left, right) => [left, right].every(text => /discount|% off/.test(text));
+  const driver = async () => ({ text: 'false', calls: [] });
+  driver.decide = async req => {
+    const prompt = textOf(req);
+    if (prompt.includes('bisection')) {
+      // Stop once a tested commit failed with a build error instead of this failure.
+      const stop = prompt.includes('Cannot find module');
+      return { log_probs: req.options.map(o => Math.log(JSON.parse(o) === stop ? 0.9 : 0.1)) };
+    }
+    const shown = traces.filter(item => prompt.includes(String(item.log).slice(0, 30))).map(item => String(item.log));
+    const same = shown.length === 2 && sameCause(shown[0], shown[1]);
+    return { log_probs: req.options.map(o => Math.log(JSON.parse(o) === same ? 0.9 : 0.1)) };
+  };
+  const runtime = createNatlangRuntime({ model: driver, calls: false });
+
+  const clusters = await runtime.run(() => clusterFailures('regression', traces));
+  assert.deepEqual(clusters.map(cluster => cluster.traces.map(item => item.id)), [['a', 'c'], ['b']],
+    'the two discount failures share a root cause though their logs differ');
+  const bySignature = await runtime.run(() => clusterFailures('regression', traces, { clustering: 'signature' }));
+  assert.equal(bySignature.length, 3);
+
+  // The tester's output at c4 is a different breakage: the judged stop ends the bisection without blaming a commit.
+  const outcome = commit => commit === 'c4' ? { fails: true, log: "Error: Cannot find module './legacy-config'" } :
+    { fails: ['c5', 'c6', 'c7', 'c8'].includes(commit), log: 'AssertionError: expected 80, got 20' };
+  const judged = await runtime.run(() => bisectCommits(traces[0].commits, outcome, { trace: traces[0] }));
+  assert.equal(judged.stopped, 'judged');
+  assert.equal(judged.culprit, undefined);
+  assert.deepEqual(judged.tested, ['c4']);
+  // The crisp stop narrows to a commit whatever the outputs say.
+  const crisp = await runtime.run(() => bisectCommits(traces[0].commits, outcome, { trace: traces[0], stop: 'crisp' }));
+  assert.equal(crisp.culprit, 'c4');
+  assert.equal(crisp.stopped, undefined);
 });
 
 test('A6 applications/sem-merge: crisp 3-way merge (0 LLM calls), compatible semanticRepair merge, incompatible conflict markers', async () => {

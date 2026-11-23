@@ -173,3 +173,54 @@ test('WS2 R4: escalate to a model the runtime does not have keeps the local answ
   assert.equal(result.value, 'allow');
   assert.match(result.reason, /^unavailable: this runtime has no model teacher \(confidence\)/);
 });
+
+test('WS2 R4: the nl escalate policy reads the function\'s escalation history and tier cost from the call store itself', async () => {
+  const { CallStore } = await import('../dist/index.js');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-escalate-history-'));
+  const store = CallStore.open(root);
+  store.writeSettings({ minFreeBytes: 0 });
+  try {
+    const fn = loadVirtualNatlang({ 'verdict.nl': '---\nargs:\n  x: string\nreturns: "allow" | "block"\nreadout: decision\n---\nChoose.\n' }, 'verdict.nl');
+    const other = loadVirtualNatlang({ 'other.nl': '---\nargs:\n  x: string\nreturns: "allow" | "block"\nreadout: decision\n---\nOther.\n' }, 'other.nl');
+    const driver = async () => ({ text: '"allow"', calls: [] });
+    driver.decide = async req => ({ log_probs: req.options.map(o => Math.log(JSON.parse(o) === 'allow' ? 0.9 : 0.1)) });
+    const frontier = async () => ({ text: '"block"', calls: [] });
+    frontier.decide = async req => ({ log_probs: req.options.map(o => Math.log(JSON.parse(o) === 'block' ? 0.9 : 0.1)) });
+    const runtime = createNatlangRuntime({ model: driver, models: { frontier }, calls: store });
+
+    const seen = [];
+    const policy = escalateEvery => async (_decision, _floor, _risk, history, cost) => { seen.push({ history, cost }); return escalateEvery; };
+    // First run: nothing recorded yet; this wrapper's own runs join its history as they happen.
+    const first = escalate(fn, { fallback: 'frontier', policy: 'nl', nlPolicy: policy(true) });
+    await runtime.run(async () => { await first('a'); await first('b'); });
+    assert.deepEqual(seen[0].history, { totalCalls: 0 });
+    assert.equal(seen[1].history.totalCalls, 1);
+    assert.equal(seen[1].history.escalationRate, 1);
+    assert.equal(seen[1].history.disagreementRate, 1, 'the fallback answered block where the local model said allow');
+    // An unrelated function's escalations are not this function's history.
+    await runtime.run(() => escalate(other, { fallback: 'frontier', policy: 'nl', nlPolicy: policy(false) })('c'));
+    assert.deepEqual(seen[2].history, { totalCalls: 0 });
+
+    // A new wrapper (another process, a later run) reads the recorded runs from the store.
+    seen.length = 0;
+    await runtime.run(() => escalate(fn, { fallback: 'frontier', policy: 'nl', nlPolicy: policy(false) })('d'));
+    assert.equal(seen[0].history.totalCalls, 2);
+    assert.equal(seen[0].history.escalationRate, 1);
+    assert.equal(seen[0].history.disagreementRate, 1);
+    assert.equal(typeof seen[0].cost.local, 'number');
+    assert.equal(typeof seen[0].cost.fallback, 'number');
+
+    // Given statistics win; false opts out.
+    seen.length = 0;
+    await runtime.run(() => escalate(fn, { fallback: 'frontier', policy: 'nl', nlPolicy: policy(false), history: { totalCalls: 9 }, cost: false })('e'));
+    await runtime.run(() => escalate(fn, { fallback: 'frontier', policy: 'nl', nlPolicy: policy(false), history: false })('f'));
+    assert.deepEqual(seen[0], { history: { totalCalls: 9 }, cost: undefined });
+    assert.equal(seen[1].history, undefined);
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

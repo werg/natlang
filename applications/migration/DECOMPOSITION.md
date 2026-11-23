@@ -176,3 +176,21 @@ The equivalence run is batched across programs rather than called per program fr
 programs' cases pairs every version seed for seed and keeps the actor busy. So `migrateProgram` has two calls, `propose`
 (per program, before measurement) and `settle` (per program, after it), and `migrate_corpus.py` runs the measurement
 between them. The loop over attempts is bounded by a count the driver lowers every round.
+
+## Codemods (`codemod/`, formerly applications/codemod-studio)
+
+WS6 §3 A9: repository-scale code migrations where deterministic rules handle the files they cover with zero model
+calls and the rest goes through this package's migration loop. One implementation of the edit/validate/repair loop:
+codemod no longer has its own (`transformFile.nl` inside `proposeAndVerify` was removed).
+
+| Part | Decision | Unit | Why |
+|---|---|---|---|
+| Apply the codemod rules (literal or regex find/replace), in order | crisp | `codemod/studio.ts` `applyCrispRules` | Exact text work. |
+| Which files need the semantic stage | crisp (the caller's exact `verify`) | `migrateRepository` | Only the verifier knows what the migration has not reached; a file it accepts is done. |
+| Migrate the semantic remainder | the migration loop | `migrate` over an in-memory `RepositoryMigration` (`contents`, `validator` = `verify` per remaining file) | The same stages, stop and report as any repository migration; the request is the spec's title, description, guidance and examples (`migrationRequest`). |
+| Which of the loop's results to keep | crisp | `migrateRepository` | A file is `semantic` when its check passed in the loop's last candidate, else `failed` with the verifier's problems. |
+| Mine a reusable rule from verified pairs | fn | `codemod/mineCrispRule.nl` | A judgment over examples. |
+| Admit a mined rule | crisp | `verifyMinedRule` | Replays the rule on verified pairs and clean files through `verify`; any regression refuses it. |
+
+Not built: a site excerpt or an edited revision of an untrusted codemod file is new text and is not marked
+`Untrusted` (the original texts keep their fence, which is keyed by text).

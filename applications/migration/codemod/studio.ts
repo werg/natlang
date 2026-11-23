@@ -1,23 +1,26 @@
 /**
- * Codemod Studio (WS6 §3 A9): repository migrations where deterministic AST/regex crisp codemods cover most files
- * with zero LLM calls, remaining files are repaired against an exact `typecheck + tests` verifier through
- * `proposeAndVerify` (folder transactions + `semanticRepair`), and repeated verified semantic edits are mined into
- * new crisp rules that are checked against already-migrated pairs before admission.
+ * Codemods (WS6 §3 A9), part of the migration package: deterministic regex/literal codemod rules cover most files with
+ * zero model calls; the semantic remainder runs through this package's migration loop (`migrate`: understand, survey,
+ * classify, plan, edit, validate, triage and repair with the natural-language stopping judgment) over an in-memory
+ * repository whose validation is the caller's exact `verify`; and repeated verified semantic edits are mined into new
+ * crisp rules that are checked against already-migrated pairs before admission.
  */
-import { Folder, untrusted, type FolderHandle, type FolderProposal } from '@natlang/node';
-import { proposeAndVerify } from '@natlang/node/std';
+import { untrusted, type NatlangRuntime } from '@natlang/node';
+import { RepositoryMigration, migrate } from '../index.js';
+import type { Check } from '../types.js';
 import mineCrispRule from './mineCrispRule.nl';
-import transformFile from './transformFile.nl';
 import type {
+  CodemodReport,
+  CodemodSpec,
   CrispRule,
   FileResult,
   MinedRuleCandidate,
   MinedRuleOutcome,
-  MigrationReport,
-  MigrationSpec,
   SourceFile,
   VerifiedMigrationPair,
 } from './types.js';
+
+export type * from './types.js';
 
 /** Exact verifier callback (typecheck + tests): returns a list of problems, empty when the migrated file is green. */
 export type VerifyFile = (
@@ -26,12 +29,14 @@ export type VerifyFile = (
   workspaceFiles: ReadonlyMap<string, string>,
 ) => string[] | Promise<string[]>;
 
-export type MigrationOptions = {
+export type CodemodOptions = {
+  /** The runtime the migration loop runs its natural-language stages on (required when a file needs the semantic stage). */
+  runtime?: NatlangRuntime;
   /** Initial deterministic crisp codemod rules (including any previously mined rules). */
   crispRules?: readonly CrispRule[];
   /** Exact verifier (`tsc` + unit tests). */
   verify: VerifyFile;
-  /** Maximum semantic repair re-proposals per uncovered file (default `2`). */
+  /** Repair rounds of the migration loop after its first candidate (default `2`). */
   attempts?: number;
   /** Minimum number of green semantic migrations before attempting to mine a reusable crisp rule (default `2`). */
   minPairsToMine?: number;
@@ -163,19 +168,25 @@ export async function verifyMinedRule(
   };
 }
 
+/** The request the migration loop reads for a codemod spec: what to change and how. */
+export function migrationRequest(spec: CodemodSpec): string {
+  const examples = (spec.examples ?? []).map(example => `Before:\n${example.before}\nAfter:\n${example.after}`).join('\n\n');
+  return [spec.title, spec.description, spec.guidance, examples && `Examples:\n${examples}`].filter(Boolean).join('\n\n');
+}
+
 /**
  * Migrate a repository:
- * 1. Crisp rules run first on every file (0 LLM calls on covered or already-clean files).
- * 2. Uncovered files run through `proposeAndVerify` on an isolated `Folder` workspace using `transformFile.nl`,
- *    repairing against the exact verifier until green or out of attempts.
+ * 1. Crisp rules run first on every file (0 model calls on covered or already-clean files).
+ * 2. Files the verifier still rejects run through the migration loop (`migrate`) as one in-memory repository whose
+ *    validation is `verify` on each of them; the loop's last candidate is kept for the files it made green.
  * 3. Once repeated semantic migrations pass, `mineCrispRule.nl` proposes a reusable crisp rule, which is verified
  *    against already-migrated pairs before admission.
  */
 export async function migrateRepository(
   files: readonly SourceFile[],
-  spec: MigrationSpec,
-  options: MigrationOptions,
-): Promise<MigrationReport> {
+  spec: CodemodSpec,
+  options: CodemodOptions,
+): Promise<CodemodReport> {
   const activeRules: CrispRule[] = [...(options.crispRules ?? [])];
   const attempts = options.attempts ?? 2;
   const minPairsToMine = options.minPairsToMine ?? 2;
@@ -184,7 +195,7 @@ export async function migrateRepository(
   const workingContents = new Map<string, string>();
   for (const file of files) workingContents.set(file.path, file.content);
 
-  // Stage 1: Deterministic crisp pass (0 LLM calls).
+  // Stage 1: Deterministic crisp pass (0 model calls).
   const crispDrafts = new Map<string, { output: string; ruleIds: string[]; changed: boolean }>();
   for (const file of files) {
     const draft = applyCrispRules(file.content, activeRules);
@@ -193,95 +204,52 @@ export async function migrateRepository(
   }
 
   const results: FileResult[] = [];
-  const remaining: { file: SourceFile; draftOutput: string; ruleIds: string[]; initialProblems: string[] }[] = [];
-
+  const remaining: { file: SourceFile; ruleIds: string[] }[] = [];
   for (const file of files) {
     const draft = crispDrafts.get(file.path)!;
     const problems = await options.verify(file.path, draft.output, workingContents);
     if (problems.length === 0) {
-      results.push({
-        path: file.path,
-        status: draft.changed ? 'crisp' : 'unchanged',
-        original: file.content,
-        migrated: draft.output,
-        ruleIds: draft.ruleIds,
-        attempts: 0,
-        problems: [],
-      });
+      results.push({ path: file.path, status: draft.changed ? 'crisp' : 'unchanged', original: file.content, migrated: draft.output,
+        ruleIds: draft.ruleIds, attempts: 0, problems: [] });
     } else {
-      remaining.push({ file, draftOutput: draft.output, ruleIds: draft.ruleIds, initialProblems: problems });
+      remaining.push({ file, ruleIds: draft.ruleIds });
     }
   }
 
-  // Stage 2: Semantic migration via `proposeAndVerify` inside a transactional `Folder` workspace.
+  // Stage 2: the migration loop over the semantic remainder, validated by the exact verifier.
   let llmCalls = 0;
-  const workspaceSeed: Record<string, string> = {};
-  for (const [path, content] of workingContents.entries()) workspaceSeed[path] = content;
-  const workspace = Folder.fromFiles(workspaceSeed, 'write');
-
+  let migrationSummary: string | undefined;
   const semanticPairs: VerifiedMigrationPair[] = [];
-
-  for (const item of remaining) {
-    const filePath = item.file.path;
-    const reducer = async (
-      draft: FolderHandle,
-      path: string,
-      migrationSpec: MigrationSpec,
-      problems: string[],
-    ): Promise<string> => {
-      const currentText = await draft.file(path).readText();
-      const effectiveProblems = problems.length > 0 ? problems : item.initialProblems;
-      llmCalls++;
-      const migrated = await transformFile(
-        path,
-        untrusted(currentText, `repo file ${path}`),
-        migrationSpec,
-        effectiveProblems,
-      );
-      await draft.file(path).writeText(migrated);
-      return migrated;
+  if (remaining.length) {
+    if (!options.runtime) throw new Error('migrateRepository needs options.runtime to run the migration loop on the files crisp rules did not fix');
+    const targets = remaining.map(item => item.file.path);
+    const validator = async (contents: Readonly<Record<string, string>>): Promise<Check[]> => {
+      const workspace = new Map(Object.entries(contents));
+      return Promise.all(targets.map(async path => {
+        const problems = await options.verify(path, contents[path]!, workspace);
+        const output = problems.join('\n');
+        return { id: path, status: problems.length ? 'failed' as const : 'passed' as const, output, output_bytes: output.length, truncated: false };
+      }));
     };
-
-    const verifyProposal = async (proposal: FolderProposal<string>): Promise<string[]> => {
-      const candidateText = await proposal.folder.readText(filePath);
-      const trialMap = new Map(workingContents);
-      trialMap.set(filePath, candidateText);
-      return options.verify(filePath, candidateText, trialMap);
-    };
-
-    const outcome = await proposeAndVerify<string>(workspace, reducer, {
-      args: [filePath, spec],
-      verify: verifyProposal,
-      attempts,
-    });
-
-    if (outcome.accepted) {
-      const finalText = await workspace.readText(filePath);
-      workingContents.set(filePath, finalText);
-      semanticPairs.push({
-        path: filePath,
-        before: item.file.content,
-        after: finalText,
-      });
-      results.push({
-        path: filePath,
-        status: 'semantic',
-        original: item.file.content,
-        migrated: finalText,
-        ruleIds: item.ruleIds,
-        attempts: outcome.attempts + 1,
-        problems: [],
-      });
-    } else {
-      results.push({
-        path: filePath,
-        status: 'failed',
-        original: item.file.content,
-        migrated: outcome.value,
-        ruleIds: item.ruleIds,
-        attempts: outcome.attempts + 1,
-        problems: outcome.problems,
-      });
+    const repository = new RepositoryMigration('.', { files: [...workingContents.keys()], contents: Object.fromEntries(workingContents), validator });
+    await repository.open();
+    llmCalls++;
+    const migration = await migrate(options.runtime, repository, migrationRequest(spec), { attempts, checks: targets });
+    migrationSummary = migration.summary;
+    const checks = new Map(migration.report.checks.map(check => [check.id, check]));
+    for (const item of remaining) {
+      const path = item.file.path;
+      const migrated = repository.read(path, migration.report.revision);
+      const check = checks.get(path);
+      if (check?.status === 'passed') {
+        workingContents.set(path, migrated);
+        semanticPairs.push({ path, before: item.file.content, after: migrated });
+        results.push({ path, status: 'semantic', original: item.file.content, migrated, ruleIds: item.ruleIds,
+          attempts: migration.rounds + 1, problems: [] });
+      } else {
+        results.push({ path, status: 'failed', original: item.file.content, migrated, ruleIds: item.ruleIds, attempts: migration.rounds + 1,
+          problems: check ? check.output.split('\n').filter(Boolean) : ['the migration loop reported no check for this file'] });
+      }
     }
   }
 
@@ -317,6 +285,7 @@ export async function migrateRepository(
     unchangedFiles,
     failedFiles,
     llmCalls,
+    ...(migrationSummary !== undefined ? { migrationSummary } : {}),
     results,
     admittedRules,
     minedRules,

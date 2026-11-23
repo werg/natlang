@@ -31,12 +31,13 @@ export class StdSpan {
     this.events.push({ kind, call_id: this.callId, combinator: this.name, ...data });
   }
 
-  /** Close a stage: the child calls recorded since the previous stage under this span, and the stage's facts. */
-  stage(stage: string, data: Record<string, unknown> = {}): void {
+  /** Close a stage: the child calls recorded since the previous stage under this span, and the stage's facts. Returns those calls' IDs. */
+  stage(stage: string, data: Record<string, unknown> = {}): string[] {
     const traces = this.parentFrame.task.traces;
     const calls = traces.slice(this.mark).filter(trace => trace.parentCallId === this.callId).map(trace => trace.callId);
     this.mark = traces.length;
     this.events.push({ kind: 'std_stage', call_id: this.callId, combinator: this.name, stage, call_ids: calls, ...data });
+    return calls;
   }
 
   end(outcome: 'done' | 'error', detail: string): void {

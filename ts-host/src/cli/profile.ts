@@ -1,7 +1,7 @@
 /**
  * `natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--profile NAME] [--json]` (WS2 R5):
  * aggregates per-function metrics from the CallStore (volume, p50 latency, avg tokens, compiled share,
- * decision confidence p10/p50, escalation rate from `decision_escalate` events, failure classes) and
+ * decision confidence p10/p50, escalation rate from the `escalation` notes escalate leaves on local calls, failure classes) and
  * invokes the pluggable `nextOptimization` policy to recommend the next optimization step.
  */
 import { existsSync } from 'node:fs';
@@ -81,14 +81,9 @@ export async function profileStore(
   const programDir = options.dir ? resolve(options.dir) : undefined;
   const rows = store.calls({ program: programDir, limit: options.limit ?? 10_000 });
 
-  // Index escalation spans (e.g. `std:escalate`) whose events carry `decision_escalate` for child calls.
-  const escalatedParents = new Set<string>();
-  for (const row of rows) {
-    if (row.definition_id === 'std:escalate' || row.definition_name === 'std escalate') {
-      const events = store.events(row.call_id) ?? [];
-      if (events.some(event => event.kind === 'decision_escalate')) escalatedParents.add(row.call_id);
-    }
-  }
+  // An escalate run leaves an `escalation` note on its local call (std/policy.ts); std spans are not stored rows.
+  const escalatedCall = (callId: string): boolean => (store.annotations(callId) ?? []).some(row => row.kind === 'escalation' &&
+    (row.value as { escalated?: unknown; unavailable?: unknown } | null)?.escalated === true && (row.value as { unavailable?: unknown }).unavailable !== true);
 
   type Bucket = {
     name: string;
@@ -101,7 +96,6 @@ export async function profileStore(
     compiledCalls: number;
     confidences: number[];
     escalations: number;
-    countedEscalationParents: Set<string>;
     failures: number;
     failureClasses: Record<string, number>;
     hasDecisionReadout: boolean;
@@ -132,7 +126,6 @@ export async function profileStore(
         compiledCalls: 0,
         confidences: [],
         escalations: 0,
-        countedEscalationParents: new Set(),
         failures: 0,
         failureClasses: {},
         hasDecisionReadout: false,
@@ -165,12 +158,7 @@ export async function profileStore(
       bucket.hasDecisionReadout = true;
       bucket.confidences.push(...confs);
     }
-    if (events.some(event => event.kind === 'decision_escalate')) {
-      bucket.escalations++;
-    } else if (row.parent_call_id && escalatedParents.has(row.parent_call_id) && !bucket.countedEscalationParents.has(row.parent_call_id)) {
-      bucket.countedEscalationParents.add(row.parent_call_id);
-      bucket.escalations++;
-    }
+    if (escalatedCall(row.call_id) || events.some(event => event.kind === 'decision_escalate')) bucket.escalations++;
   }
 
   const functions: ProfileEntry[] = [];

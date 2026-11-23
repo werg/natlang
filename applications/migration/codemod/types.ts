@@ -1,5 +1,5 @@
 /** Specification of a repository-wide code migration. */
-export type MigrationSpec = {
+export type CodemodSpec = {
   id: string;
   title: string;
   description: string;
@@ -63,15 +63,18 @@ export type FileResult = {
   problems: string[];
 };
 
-/** Aggregate migration report with crisp-vs-semantic coverage and admitted mined rules. */
-export type MigrationReport = {
+/** Aggregate codemod report with crisp-vs-semantic coverage and admitted mined rules. */
+export type CodemodReport = {
   specId: string;
   totalFiles: number;
   crispFiles: number;
   semanticFiles: number;
   unchangedFiles: number;
   failedFiles: number;
+  /** Natural-language runs: one migration over the semantic remainder (when there is one), plus one per mining attempt. */
   llmCalls: number;
+  /** The migration loop's closing words for the semantic remainder, when it ran. */
+  migrationSummary?: string;
   results: FileResult[];
   admittedRules: CrispRule[];
   minedRules: MinedRuleOutcome[];
