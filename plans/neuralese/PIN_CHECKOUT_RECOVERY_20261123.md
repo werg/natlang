@@ -22,3 +22,12 @@ an existing marker claims readiness. Ignored-state copying and shared links must
 be repeatable. Rebuild and revalidate before fsync + atomic completion publication.
 The lock is inherited by preparation/build children so killing their parent cannot
 let another helper modify/remove a still-building pin. No active pins are edited.
+
+DGX retry exposed a second interrupted-state case: a correct preexisting link
+whose canonical source itself is dangling has exists()==false. All LINKED leaf/
+root and SHARED link creation now uses one non-dereferencing lexical target join.
+Correct dangling links survive retry; foreign targets and conflicting files or
+directories fail without replacement. Tracked runs/data root directories remain
+containers for their ignored child links. Actual failed-build/retry tests cover
+both dangling leaves, a dangling venv root, and a dangling native-model store.
+17 targeted tests and the ledgered quick gate passed; no active pin was touched.

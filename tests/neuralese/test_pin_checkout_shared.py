@@ -220,3 +220,57 @@ def test_build_cannot_publish_modified_tracked_sources(repository, tmp_path, mon
     with pytest.raises(SystemExit, match='modified tracked'):
         module.create('HEAD', dest)
     assert not (dest / '.natlang-pin.json').exists()
+
+
+def test_interrupted_build_reuses_dangling_leaf_root_and_shared_links(repository, tmp_path, monkeypatch):
+    module = load(repository)
+    with (repository / '.gitignore').open('a') as stream:
+        stream.write('runs/\ndata/\n.venv/\n')
+    for name in ('runs', 'data'):
+        (repository / name).mkdir()
+        (repository / name / 'README').write_text('tracked root container')
+        module.git('add', '-f', f'{name}/README')
+        (repository / name / 'missing').symlink_to(repository / f'unavailable-{name}')
+    module.git('add', '.gitignore')
+    module.git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked data containers')
+    (repository / '.venv').symlink_to(repository / 'unavailable-venv')
+    models = repository / '.natlang/packages/native-models'
+    models.parent.mkdir(parents=True)
+    models.symlink_to(repository / 'unavailable-models')
+    builds = 0
+    def build(**kwargs):
+        nonlocal builds
+        builds += 1
+        if builds == 1:
+            raise subprocess.CalledProcessError(143, ['npm'])
+    npm_stub(module, monkeypatch, build)
+    dest = tmp_path / 'pin'
+    with pytest.raises(subprocess.CalledProcessError):
+        module.create('HEAD', dest)
+    paths = ('runs/missing', 'data/missing', '.venv', '.natlang/packages/native-models')
+    for name in paths:
+        assert (dest / name).is_symlink() and not (dest / name).exists()
+    module.create('HEAD', dest)
+    for name in paths:
+        assert (dest / name).readlink() == repository / name
+    assert builds == 2 and (dest / '.natlang-pin.json').exists()
+
+
+@pytest.mark.parametrize('conflict', ['foreign-link', 'directory', 'file'])
+def test_shared_links_reject_conflicting_paths_without_replacing_them(tmp_path, conflict):
+    module = load(tmp_path)
+    target, intended = tmp_path / 'link', tmp_path / 'intended'
+    if conflict == 'foreign-link':
+        target.symlink_to(tmp_path / 'wrong-dangling-target')
+    elif conflict == 'directory':
+        target.mkdir()
+    else:
+        target.write_text('foreign bytes')
+    with pytest.raises(SystemExit, match='intended shared'):
+        module.ensure_link(intended, target)
+    if conflict == 'foreign-link':
+        assert target.readlink() == tmp_path / 'wrong-dangling-target'
+    elif conflict == 'directory':
+        assert target.is_dir()
+    else:
+        assert target.read_text() == 'foreign bytes'

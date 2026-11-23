@@ -90,6 +90,21 @@ def publish_marker(marker, recorded):
 
 
 
+def ensure_link(source, target):
+    """Preserve the intended link, including when its source is dangling."""
+    if target.is_symlink():
+        # Compare link destinations lexically, without dereferencing either side:
+        # canonical shared roots may themselves intentionally be dangling links.
+        actual = os.path.abspath(target.parent / os.readlink(target))
+        if actual != os.path.abspath(source):
+            raise SystemExit(f'{target} points to {actual}, not the intended shared path {source}')
+        return
+    if os.path.lexists(target):
+        raise SystemExit(f'{target} conflicts with the intended shared link to {source}')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(source)
+
+
 def create(commit, dest):
     dest = destination(dest)
     commit = git('rev-parse', '--verify', f'{commit}^{{commit}}').strip()
@@ -117,22 +132,26 @@ def create_locked(commit, dest, lock_fd):
         source, target = REPO / path, dest / path
         target.parent.mkdir(parents=True, exist_ok=True)
         if top in LINKED:                  # data under a tracked data root (runs/, data/, models/): linked, never copied
-            if '/' in path.rstrip('/') and not target.exists():
-                target.symlink_to(source)
+            if '/' in path.rstrip('/'):
+                ensure_link(source, target)
             continue
         inner = [s for s in SHARED if s.startswith(path.rstrip('/') + '/')]
         subprocess.run(['rsync', '-a', *[f'--exclude=/{s[len(path.rstrip("/")) + 1:]}' for s in inner],
                         str(source).rstrip('/') + ('/' if source.is_dir() else ''), str(target).rstrip('/')], check=True, pass_fds=(lock_fd,))
         for s in inner:
-            if (REPO / s).exists():
-                (dest / s).parent.mkdir(parents=True, exist_ok=True)
-                if not (dest / s).is_symlink():
-                    (dest / s).symlink_to(REPO / s)
-                elif (dest / s).resolve() != (REPO / s).resolve():
-                    raise SystemExit(f'{dest / s} points outside the shared model store')
+            if os.path.lexists(REPO / s):
+                ensure_link(REPO / s, dest / s)
     for name in LINKED:
-        if (REPO / name).exists() and not (dest / name).exists():
-            (dest / name).symlink_to(REPO / name)
+        source, target = REPO / name, dest / name
+        if not os.path.lexists(source):
+            continue
+        # Tracked root directories contain tracked files plus the ignored child
+        # links prepared above. They are containers, rather than whole-root links.
+        if target.is_dir() and not target.is_symlink():
+            if not git('ls-files', '--', name, cwd=dest).strip():
+                raise SystemExit(f'{target} conflicts with the intended shared root link')
+            continue
+        ensure_link(source, target)
     node = sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin'))
     env = {**os.environ, 'PATH': f'{node[-1]}:{os.environ["PATH"]}'} if node else None
     subprocess.run(['npm', 'run', '--silent', 'build:node'], cwd=dest / 'ts-host', env=env, check=True,
