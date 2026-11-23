@@ -154,6 +154,13 @@ run) waiting on memory or GPU that a job holds? Then stop that job. Every run le
 diagnostics and probes. Stopping a run also stops its Pop eval actor. The heartbeat prompt names the experiments
 actually in flight; fix a stale list in the same cycle.
 
+**Ops watchdog** (`scripts/ops_watchdog.py`, timer `natlang-ops-watchdog`, every 5 min, outside the ledger): disk
+floors and fast falls, Colab session hardware, tunnel restarts and idle credit burn, idle GPUs (DGX, Pop, Colab over
+its ControlMaster), unit failure storms and experiment-unit failures, ledger headroom and a stuck queue head, driver
+stalls and collection-health flags go to `ops/alerts.jsonl`. The supervisor keeps
+`scripts/ops_watchdog.py wait` running as a background command at all times (re-launch it after handling each alert)
+and keeps the roster `ops/watchdog.json` to the experiments in flight.
+
 # Current approach (revisable; each item stands on its rationale)
 
 **State.** The method is **expert iteration** (owner-approved 2026-11-20; DECISIONS "expert iteration"): one loop in

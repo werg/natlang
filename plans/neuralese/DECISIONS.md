@@ -8523,3 +8523,35 @@ tests, including four Node regressions) and `review-unpushed-quick-20261123`
 unjournaled commits/writes, a reported snapshot differing from either its write
 receipt or readback, a substituted file descriptor with identical bytes, and a
 symlink presented for source rehashing. No live capture or training state changed.
+
+## 2026-11-23 13:15 Ops watchdog: operational failures reach the supervising agent within minutes
+
+- **Why:** on 2026-11-23 the Colab A100 session was replaced by a CPU-only VM (~09:45) and `colab-g4a-tunnel`
+  failed/restarted for ~3 h with every Colab fill failing; DGX `/` fell from 70G to 14G in ~5 h while the storage
+  sweep's `DISK FLOOR` lines went to `ops/storage-alerts.log`, which nobody reads; 36 identical fill-unit failures ran
+  one a minute; all memetic groups of a collection scored nothing for 6+ h; and the supervisor's hourly heartbeat had
+  expired. Alerts written to logs reach no one.
+- **What:** `scripts/ops_watchdog.py check` (stdlib, crisp checks only) runs from the user timer
+  `natlang-ops-watchdog.timer` every 5 minutes with host `/usr/bin/python3`, outside the memory ledger (a full ledger
+  cannot block it), and appends deduplicated JSON alert lines (re-alert every 60 min while a condition holds; at once
+  when it clears and returns) to `ops/alerts.jsonl`. Checks: disk floors (`/` 40G, `/mnt/external` 50G) and a fall >= 8
+  GiB/h; `colab --auth=adc sessions` (a configured session missing or not a GPU, stray assignments), the tunnel unit's
+  restart counter rising or the unit down, `colab usage` burn while the session GPU is idle or unreachable and a
+  balance under 24 h; GPU idle (< 10 %) or unreachable for 20 min on DGX (`nvidia-smi`), Pop (ssh) and Colab (only over
+  the tunnel's existing ControlMaster, `ProxyCommand=/bin/false`, never a second connection) while an experiment that
+  lists the GPU has an active unit; journal unit failures (> 3 under one unit-name prefix in 30 min; any failure of an
+  experiment's unit, with the unit's journal tail); `memory_ledger.py status` headroom < 15 GB or the queue head waiting
+  > 1 h (status now reports `waiting_s`); an experiment's drive log without a new stage line for 3 h while its units
+  run; new flags in `rN/health.json` and new `COLLECTION HEALTH` lines. The roster and thresholds are
+  `ops/watchdog.json` (the heartbeat edits it). Delivery: `scripts/ops_watchdog.py wait`, a gapless cursor
+  (`~/.cache/natlang-watch/ops-watchdog-wait.json`, the `watch_events.py` pattern) that blocks until unseen alerts exist,
+  prints them and exits; it also reports a watchdog whose timer stopped (> 15 min since its last run). The supervisor
+  runs it as a background command and re-launches it after each alert.
+- **First live run (13:10):** `aei1-drive-1795435291` failed at 13:01 (FileNotFoundError in
+  `data_registry.snapshot` digesting `collect/.../jobs/*.partial.json` that the live collection renamed away; the
+  driver was relaunched as `aei1-drive-1795435389` at 13:03); 119 `colab-g4a-tunnel` failures in 30 min; ledger
+  headroom 13 GB < 15; ledger queue head `heldv4-measure-v2-sft-v6` (32 GB) waiting 252 min behind aei1's collection.
+- **Not covered:** the supervisor's own heartbeat (the watchdog cannot reach an agent that is not running `wait`; it
+  only reports its own stale timer to the next `wait`); Pop's disk and Pop/Colab host memory; collection health within
+  a round (`health.json` is written once per round, so a collection whose groups score nothing shows only at the round
+  boundary unless the drive stalls); SGLang actor liveness and throughput.

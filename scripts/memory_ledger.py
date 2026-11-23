@@ -946,6 +946,7 @@ def status(args):
                       'claims': claims,
                       'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
                                    'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
+                                   'waiting_s': round(time.time() - w['since']) if w.get('since') else None,
                                    **({'cuda_budget_gb': round((w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget')) / GIB, 1),
                                        'cuda_fits': cuda_fits_entry(w, cuda_free)}
                                       if w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget') else {}),
