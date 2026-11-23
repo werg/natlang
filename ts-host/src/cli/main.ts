@@ -122,12 +122,19 @@ it ahead of time. See docs/NATIVE_MODELS.md.`;
 
 const CHECK = `Check or compile a project:
   natlang check [PROJECT] [--json] [--manifest] [--fusion] [--fusion-planner crisp|nl|shadow]
+                [--idiom | --idiom-strict] [--escalate MODEL] [--profile NAME | --provider ID --model ID]
   natlang build [PROJECT] [--out DIR] [--target node|browser] [--warm] [--profile NAME] [--json]
 
 PROJECT is a directory or tsconfig.json (default: .). Both commands write a
 typed foo.d.nl.ts beside every foo.nl so editors and tsc see typed imports.
 check --json prints { ok, diagnostics: [{ file, line, column, code, message, hint? }],
 functions: [{ source, signature }] }; --manifest adds the full build manifest.
+check uses no model; --idiom adds the natural-language idiom review on the selected
+model (the idiom reviewer program, applications/idiom-reviewer, or the directory in
+NATLANG_IDIOM_REVIEWER): steps that are mechanism, prose interpreters, cue-word
+rules and external text typed as trusted, as idiom-review-* warnings; --idiom-strict
+makes a finding with confidence 0.8 or more an error. --escalate MODEL sends its
+unsure decisions to that model.
 
 build also writes .natlang/build/natlang.lock.json: the model the program runs
 with (natlang.json "model", else the selected profile; a stock model pinned by

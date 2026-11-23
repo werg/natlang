@@ -29,7 +29,7 @@ export class CliError extends Error {
 export const usageError = (message: string) => new CliError(message, EXIT.usage);
 
 export type Parsed = { words: string[]; options: Map<string, string | true>; rest: string[] };
-const BOOLEAN = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh', '--lines', '--jsonl',
+const BOOLEAN = new Set(['--idiom', '--idiom-strict', '--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh', '--lines', '--jsonl',
   '--filter', '--no-adaptation', '--no-weights', '--fusion', '--default', '--warm', '--open', '--cuda', '--no-cuda', '--claude', '--codex',
   '--manifest']);
 const VALUED = new Set(['--progress', '--target', '--export', '--profile', '--provider', '--model', '--escalate', '--workspace', '--state',

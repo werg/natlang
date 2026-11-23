@@ -17,6 +17,14 @@ is not required (owner, 2026-11-12: that rule did not come from the owner and wa
   whatever it held. It now validates `prefixItems` by position and `items` after them (JSON Schema 2020-12); captures
   parsed under the previous parser policy (`1b2713ad…`) still authenticate (`NATIVE_XML_POLICY_READS`).
 - Engine status and the smoke: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
+### 2026-11-23 — `natlang check --idiom` runs the idiom reviewer's decisions on the model (WS3 I2)
+
+- **What changed.** `natlang check --idiom` (and `--idiom-strict`) runs `applications/idiom-reviewer` through
+  `natlang run` on the selected model: `@natlang/std` `stepKind.nl` per instruction step, `isProseInterpreter.nl`,
+  `detectCueWords.nl`, `detectUntypedExternal.nl` (all `readout: decision`, escalated when unsure). Its findings
+  become `idiom-review-<kind>` diagnostics. No prompt text changed; these calls now happen from `natlang check`.
+- **Opt-outs.** Plain `natlang check` uses no model and never runs it.
+
 ### 2026-11-23 — `natlang improve DIR` proposes: three built-in improver stages run on the model (WS8 N4)
 
 - **What changed.** Three new built-in natlang programs (`ts-host/src/builtin/improveDiagnose.nl`,
