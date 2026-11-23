@@ -943,6 +943,19 @@ class Cycle:
             preferred = resolve_profile(preferred, hosts=self.colab_hosts)
         hosts = (self.colab_hosts if preferred.name == 'colab' else
                  [pop_rl_actor.POP] if preferred.name == 'pop' and pop_rl_actor.POP else ())
+        if stage == 'sft' and preferred.name == 'colab':
+            # an answering session slower than the DGX for SFT (an L4) is no SFT host: without another the stage
+            # falls back to the DGX at once instead of waiting for a session that will not get faster
+            unfit = {h: pop_rl_actor.colab_sft_fit(h) for h in hosts if pop_rl_actor.host_reachable(h)}
+            unfit = {h: reason for h, (ok, reason) in unfit.items() if not ok}
+            if unfit:
+                self.note(stage=stage, unfit_sessions=unfit)
+                hosts = [h for h in hosts if h not in unfit]
+                if not hosts:
+                    fallback = resolve_profile('dgx')
+                    self.note(stage=stage, profile_fallback='every answering Colab session is slower than the DGX '
+                                                            'for SFT', active_profile=fallback.name)
+                    return fallback, ['local']
         active, hosts, reason = select_stage_profile(preferred, reachable_fn=pop_rl_actor.host_reachable, hosts=hosts)
         if reason:
             self.note(stage=stage, profile_fallback=reason, active_profile=active.name)
@@ -2673,6 +2686,15 @@ class AsyncRoundDriver:
             away_since, failures = None, 0
             while not (factors / 'policy_manifest.json').exists():
                 up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
+                fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
+                if up and not any(ok for ok, _ in fit.values()):
+                    # an answering session slower than the DGX (an L4) keeps its actor; the round trains here now
+                    record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
+                                          reason='Colab session slower than the DGX for SFT: '
+                                                 + '; '.join(reason for _, reason in fit.values()))
+                    self.note(round=round_dir.name, takeover='dgx', unfit_sessions=up)
+                    break
+                up = [h for h in up if fit[h][0]]
                 if up and failures >= 3:       # the session answers but the learner keeps failing there
                     record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
                                           reason='the Colab learner failed 3 times')

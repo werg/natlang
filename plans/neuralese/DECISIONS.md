@@ -8589,3 +8589,61 @@ symlink presented for source rehashing. No live capture or training state change
   job behind a medium/high head it backfills as `reclaimable` whenever 1+1 GiB fits, instead of only within a lent
   allowance (at 13:29 the allowance was used up by legacy same-priority backfills behind `aei1-r0001-build`). Unit file
   updated in `scripts/systemd/` and `~/.config/systemd/user/`; admitted at 13:30 as `reclaimable`.
+
+## 2026-11-23 13:50 Colab: the L4 serves the fills, round SFT stays off it, and a keeper replaces and upgrades sessions
+
+- **Incident.** About 09:45 the A100 session `g4a` was replaced by a CPU-only VM, and every fill on the Colab ports
+  failed after that. A100 and G4 requests answer "Service Unavailable", and H100 answers 400 (no entitlement). The
+  owner created `g4a` on an L4 (24 GB, Standard). The replaced CPU VM was still assigned with no local name (`[?]`,
+  billed): it is unassigned (2.02 to 1.94 CU/h). The stale `colab-g4` host key is removed from
+  `~/.ssh/known_hosts.colab`, and the tunnel reconnected.
+- **L4 bootstrapped** at e65d0f16d (the driver's commit) with the SGLang fork ec27f0809a shipped as `git archive`. The
+  bootstrap took 168 s. The L4 has 22.5 GiB VRAM, 53 GB host RAM and sm_89.
+  - The actor serves e15b20a8, sft-v9's candidate and aei1's current policy, the policy the live fill already used.
+    It runs BF16 weights with FP8 KV.
+  - The checkpoint shipped in 968 s (3.46 GB, ~3.6 MB/s).
+  - The SGLang pool is 11.2 GB and holds 1.8M tokens, because LFM3's KV is mostly conv state.
+  - At 21 running: ~900 tok/s decode, 3% of the pool in use. At 128 running (the `colab_layout` default, kept for
+    every session size): 800-2050 tok/s, 20% of the pool.
+  - The backlog fill (`colab-g4a-fill-backlog-after-v9-20261123`, ports 18731/19731) resumed by itself.
+  - The live Vibestudio fill stays on the DGX student actor (8470), where its keeper config put it at 11:xx. An L4
+    shared with the 128-in-flight backlog fill would give it less.
+- **Round SFT is not sent to an L4** (`colab_layout(...)['sft_beats_dgx']`, `pop_rl_actor.colab_sft_fit`). Reasoning
+  from hardware specs:
+  - The learner is compute bound: the A100 (312 TFLOPS) measured 9 s/step against the GB10's 36.8 s.
+  - The L4 has ~121 TFLOPS dense BF16 and 300 GB/s, the GB10's class, with ~10 GiB of activations. The DGX learner
+    keeps 56 GiB, so on the L4 most layers would recompute and long chains would split. It would be slower than the
+    DGX fallback before counting the transfers.
+  - Rule: a session trains rounds when its GPU has at least 2x the GB10's dense BF16 throughput (125 TFLOPS) and at
+    least 16 GiB of activations for a learner alone. This passes the A100 80/40 GB, H100 and G4. It fails the L4, the
+    T4 and any GPU the table does not name.
+  - `run-sft` refuses an unfit session before anything moves, so its actor never yields. The async driver records a
+    DGX takeover at once instead of waiting `--fallback-wait-minutes`. The cycle's `choose_profile` drops unfit
+    sessions for the SFT stage.
+  - Opt-out: `NATLANG_COLAB_SFT_ANY_GPU=1`.
+  - The running aei1 driver (pin e65d0f16d) predates this check. Its r0001 SFT would still try the L4 until the driver
+    restarts on a pin with this commit.
+- **Session keeper** (`scripts/colab/session_keeper.py`, unit `colab-g4a-keeper`, log
+  `ops/ei/colab/session-keeper.log`, state `ops/ei/colab/session-keeper.json`) replaces `g4-poll.sh` and the
+  `colab-g4a-tunnel-heal` unit (stopped). It checks once a minute and acts on one decision (`decide`, pure):
+  - **lost**: the session is missing, runs on a CPU or unranked hardware, or SSH has failed for 15 min. The keeper
+    stops what is left and requests `g4a` again in the order A100 `--high-mem`, G4, L4, at most every 5 min.
+  - **upgrade**: while on G4 or L4, every 20 min it requests each better tier as `g4a-next`. Not while a `run-sft`
+    learner targets the session. Colab has no capacity probe: the assignment GET succeeds for every entitled GPU, and
+    only the POST that assigns reports capacity. So the old session is stopped as soon as the new one is assigned
+    (an overlap of seconds), and the new one is renamed `g4a` in the CLI's own store.
+  - **heal**: on HTTP 429s, the 2026-11-22 healer (`scripts/colab/end_stale_sshd.py` through `colab exec`). Missing
+    forwards are re-added over the master.
+  - A new session gets its stale host key removed, the tunnel restarted, the bootstrap at the actor record's commit,
+    and the actor served again from the record's own `serve_args`. The record of the lost VM is moved aside, so its pid
+    is never signalled on the new VM.
+  - Unnamed CPU assignments are unassigned. When another GPU session exists, the keeper waits instead of requesting
+    one.
+  - Output from `colab` is redacted before it is logged.
+  - First live cycle (13:37): A100 and G4 were refused ("Service Unavailable") and the L4 kept serving.
+- **Not checked:**
+  - a real replacement or upgrade end to end (only the refusals ran live; the request/stop/rename sequence is tested
+    against a fake `colab`);
+  - `colab exec -s g4a -f` on the new session (the healer path);
+  - FP8 weights on the L4 (sm_89; FP8 on Colab hardware is still unmeasured);
+  - the L4 SFT speed itself (not measured, following the "don't measure what first principles settle" rule).

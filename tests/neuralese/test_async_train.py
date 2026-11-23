@@ -554,6 +554,33 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
         assert 'memory_ledger.py run --unit "$UNIT"' in text and '--epochs 1' in text and 'exp0_sft.py $ARGS' in text
 
 
+def test_a_round_skips_an_answering_session_slower_than_the_dgx_and_trains_on_the_dgx_at_once(tmp_path, monkeypatch):
+    """An L4 session answers (its actor keeps serving fills) but trains slower than the DGX: the round does not run
+    run-sft there and does not wait --fallback-wait-minutes; it records the takeover and launches the DGX learner."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--sft-profile', 'colab', '--colab-hosts', 'colab-g4'])
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    (rd / 'round.json').write_text('{}')
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'reachable_hosts', lambda profile, hosts: ['colab-g4'])
+    monkeypatch.setattr(pop_rl_actor, 'colab_sft_fit', lambda host: (False, 'NVIDIA L4: 0.97x'))
+    launched = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: launched.append(argv) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: (_ for _ in ()).throw(AssertionError('waited for a session')))
+    def finished(unit, poll=60):
+        (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
+        (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    monkeypatch.setattr(d.c, 'wait', finished)
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: None)
+    assert d.train_sft(rd, d.controller.current) == rd / 'sft' / 'factors'
+    assert not any('run-sft' in argv for argv in launched)
+    assert launched and launched[-1][:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')]
+    changes = json.loads((rd / 'round.json').read_text())['profile_changes']
+    assert changes[-1]['to_profile'] == 'dgx' and 'slower than the DGX' in changes[-1]['reason']
+
+
 def test_a_round_prepares_from_the_lineages_collections_with_frontier_and_previous_policy(tmp_path, monkeypatch):
     ei, d = _driver(tmp_path, monkeypatch, argv=['--aux', 'x=/a.pkl,share=0.1'])
     cur = d.controller.current
