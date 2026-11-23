@@ -9193,6 +9193,10 @@ over the tunnel attested all routes in 30 s and rewrote the actor record (`rebou
     checkpoints.
   - 218 GB deleted (157.7 + 60.8): the external disk went from 48 to 251 GB free, so the hourly archiver is out of its
     floor again.
+- **NVMe: `~/hindsight-kb-recovery` relocated, not deleted (37.6 GB).** It is another project's Oct-24 recovery
+  tarballs and model files, untouched for a month. The files of 1 GB or more went to the HDD archive through
+  `archive_to_external.py --root` (verified copy and symlink back), the same relocation the 10-28 pass gave the
+  megatoken scratch. The paths still work.
 - **Drive cold tier: stopped at the credential, as briefed.**
   - ADC holds `cloud-platform`, `colaboratory`, `userinfo.email` and `openid`, but no Drive scope (Drive API 403).
   - Colab's `drivemount` uses dfs_ephemeral credential propagation, whose dry run asks for a browser consent: per

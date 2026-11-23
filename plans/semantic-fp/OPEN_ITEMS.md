@@ -83,8 +83,7 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 - **NVMe stays near its floor:** the cold NVMe data is many-small-file trees, which the per-file archiver (files of at
   least 1 GB) never moves:
   - `ops/ei/sft-v7/collect/groups` 26 GB and `sft-v8/collect/groups` 16 GB;
-  - `ops/grpo-v4/run2/groups` 23 GB;
-  - `~/hindsight-kb-recovery` 39 GB (another project).
+  - `ops/grpo-v4/run2/groups` 23 GB.
 
   Pack each closed run's group directories into one zst per group, which `rl_rollout_files` already reads as
   `g*.rollouts.jsonl.zst`, or move the trees to the HDD/Drive after checking their readers. Owner: coordinator.
