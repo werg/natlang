@@ -897,7 +897,7 @@ def test_teacher_specs_come_from_the_ops_file_at_each_launch(tmp_path, monkeypat
     import json
     import pytest
     path = tmp_path / 'teachers.json'
-    monkeypatch.setattr(expert_iteration, 'TEACHERS_FILE', path)
+    monkeypatch.setattr(ei, 'TEACHERS_FILE', path)
     assert ei.teachers() == ei.TEACHERS
     specs = [{'model_id': 'm', 'endpoint': 'https://integrate.api.nvidia.com/v1', 'api_key_env': 'NVIDIA_API_KEY', 'slots': 1}]
     path.write_text(json.dumps(specs))
