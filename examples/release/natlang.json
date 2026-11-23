@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "natlang-release-example",
+  "version": "0.1.0",
+  "description": "Write a release: notes repaired against exact rules, a summary revised to a fixed point, a three-way merge of the release record judged by intent, and files written through verified and selected transactions (@natlang/node/std).",
+  "include": ["README.md", "changes.json", "main.ts", "merge.ts", "notes.ts", "package.json", "publish.ts", "release.json", "tsconfig.json", "types.ts"],
+  "targets": {
+    "release": {
+      "entry": "main.ts",
+      "description": "Draft, merge and publish the release for changes.json and release.json into the project folder in the program's state directory."
+    }
+  },
+  "model": { "stock": "lfm3-1.7b-q8_0" }
+}

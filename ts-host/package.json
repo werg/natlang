@@ -57,6 +57,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./std": {
+      "types": "./dist/std/index.d.ts",
+      "default": "./dist/std/index.js"
+    },
     "./browser": {
       "types": "./dist/browser/index.d.ts",
       "default": "./dist/browser/natlang.js"

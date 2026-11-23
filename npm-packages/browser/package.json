@@ -8,8 +8,12 @@
   },
   "exports": {
     ".": {
-    "types": "./dist/types/browser/index.d.ts",
+      "types": "./dist/types/browser/index.d.ts",
       "default": "./dist/natlang.js"
+    },
+    "./std": {
+      "types": "./dist/types/std/index.d.ts",
+      "default": "./dist/std.js"
     }
   },
   "files": [

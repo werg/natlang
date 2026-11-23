@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { INTRINSICS_FILE, INTRINSICS_GLOBAL_DTS, INTRINSICS_MODULE_DTS, SURFACE_MODULE_FILE } from './intrinsics.js';
+import { INTRINSICS_FILE, INTRINSICS_GLOBAL_DTS, INTRINSICS_MODULE_DTS, STD_MODULE_DTS, STD_MODULE_FILE, SURFACE_MODULE_FILE } from './intrinsics.js';
 
 /** Minimal file access the compiler needs. Node supplies `ts.sys`; browsers supply virtual files. */
 export interface CompilerFiles {
@@ -54,6 +54,7 @@ export function createNatlangCompilerHost(config: NatlangCompilerHostOptions): t
   const virtual = new Map(config.virtual ?? []);
   virtual.set(INTRINSICS_FILE, INTRINSICS_GLOBAL_DTS);
   virtual.set(SURFACE_MODULE_FILE, INTRINSICS_MODULE_DTS);
+  virtual.set(STD_MODULE_FILE, STD_MODULE_DTS);
   const files: CompilerFiles | undefined = config.files ?? (ts.sys as CompilerFiles | undefined);
   // Library declarations come from an explicit provider, the bundle's embedded ones (browsers, workerd), or the TypeScript install.
   const system = ts.sys as CompilerFiles | undefined;

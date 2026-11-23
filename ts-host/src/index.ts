@@ -1,5 +1,7 @@
 /** @natlang/node: natural-language functions in TypeScript applications on Node. */
 export * from './runtime/node.js';
+/** The standard library, also importable as `@natlang/node/std`; loading it registers it for in-memory programs. */
+export * as std from './std/index.js';
 export { builtin } from './runtime/builtin.js';
 export { vllmLoad, waitForExecutorIdle } from './runtime/executor-load.js';
 export type { ExecutorIdleWait } from './runtime/executor-load.js';

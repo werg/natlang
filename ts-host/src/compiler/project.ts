@@ -19,7 +19,7 @@ import { checkConstrainedSource } from './policy.js';
 import { fusionCallSites } from './call-flow.js';
 import { analysisLowering, natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
-import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, SURFACE_MODULE_FILE } from './intrinsics.js';
+import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, STD_MODULE_FILE, SURFACE_MODULE_FILE } from './intrinsics.js';
 import { createNatlangCompilerHost } from './host.js';
 import { loadNzSync, nzDeclaration, toBase64 } from '../native/nz-file.js';
 import { compileModule } from '../runtime/modules.js';
@@ -92,7 +92,9 @@ export type BuildOptions = {
    * emitted as `url`, so the compiled app shares one runtime instance with its launcher. The neutral specifier
    * (`NEUTRAL_RUNTIME_SPECIFIER`) is always bound with them.
    */
-  runtimeModule?: { specifiers: string[]; url: string; types: string; path?: string };
+  runtimeModule?: { specifiers: string[]; url: string; types: string; path?: string;
+    /** The standard library bound with it (`<specifier>/std`); by default `std/index.js` beside an `index.js` runtime. */
+    std?: { url: string; types: string; path?: string } };
   /** Type these runtime specifiers, and the neutral one, against the built-in surface declarations (virtual projects). */
   surfaceSpecifiers?: string[];
   /** Type-check these specifiers against a runtime's declaration file when the project cannot resolve them. */
@@ -413,6 +415,13 @@ export function compileProject(options: BuildOptions): BuildResult {
     !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
   const withNeutral = (specifiers: readonly string[]) => [...new Set([...specifiers, NEUTRAL_RUNTIME_SPECIFIER])];
   const bound = options.runtimeModule && { ...options.runtimeModule, specifiers: withNeutral(options.runtimeModule.specifiers) };
+  // `@natlang/node/std` is emitted as the library module of the same build as the bound runtime, so both share one instance.
+  const sibling = (path: string | undefined, from: RegExp, to: string) => path && from.test(path) ? path.replace(from, to) : undefined;
+  const stdModule = bound && (bound.std ?? (() => {
+    const url = sibling(bound.url, /\/index\.js$/, '/std/index.js'), types = sibling(bound.types, /([\\/])index\.d\.ts$/, '$1std$1index.d.ts');
+    return url && types && fs.isFile(types) ? { url, types, path: sibling(bound.path, /([\\/])index\.js$/, '$1std$1index.js') } : undefined;
+  })());
+  const stdSpecifiers = stdModule ? options.runtimeModule!.specifiers.map(specifier => `${specifier}/std`) : [];
   if (options.runtimeTypeRoots?.length) {
     const resolutionHost = ts.sys ?? { fileExists: (path: string) => fs.isFile(path), readFile: (path: string) => fs.isFile(path) ? fs.read(path) : undefined };
     const missing = (compilerOptions.types ?? ['node']).some(name =>
@@ -425,9 +434,11 @@ export function compileProject(options: BuildOptions): BuildResult {
     if (!resolved.resolvedModule) compilerOptions.paths = { ...(compilerOptions.paths ?? {}), [specifier]: [options.runtimeTypes.types] };
   }
   if (options.surfaceSpecifiers?.length) compilerOptions.paths = { ...(compilerOptions.paths ?? {}),
-    ...Object.fromEntries(withNeutral(options.surfaceSpecifiers).map(specifier => [specifier, [SURFACE_MODULE_FILE]])) };
+    ...Object.fromEntries(withNeutral(options.surfaceSpecifiers).map(specifier => [specifier, [SURFACE_MODULE_FILE]])),
+    ...Object.fromEntries(options.surfaceSpecifiers.map(specifier => [`${specifier}/std`, [STD_MODULE_FILE]])) };
   if (bound) compilerOptions.paths = { ...(compilerOptions.paths ?? {}),
-    ...Object.fromEntries(bound.specifiers.map(specifier => [specifier, [bound.types]])) };
+    ...Object.fromEntries(bound.specifiers.map(specifier => [specifier, [bound.types]])),
+    ...Object.fromEntries(stdSpecifiers.map(specifier => [specifier, [stdModule!.types]])) };
   const runtimeSpecifier = bound?.url ?? options.runtimeSpecifier ?? detectRuntimeSpecifier(fs, rootNames) ?? '@natlang/node';
   const declarationSpecifier = bound?.specifiers[0] ?? runtimeSpecifier;
   const rewrite = new Map((bound?.specifiers ?? []).map(specifier => [specifier, bound!.url]));
@@ -624,7 +635,8 @@ export function compileProject(options: BuildOptions): BuildResult {
       const filePlans = plans.get(source) ?? [];
       const fileReadouts = readouts.get(source) ?? [];
       const commonjs = source.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS;
-      const rewriteFor = new Map([...rewrite.keys()].map(specifier => [specifier, specifierFor(commonjs)]));
+      const rewriteFor = new Map([...[...rewrite.keys()].map(specifier => [specifier, specifierFor(commonjs)] as const),
+        ...stdSpecifiers.map(specifier => [specifier, commonjs && stdModule!.path ? stdModule!.path : stdModule!.url] as const)]);
       return natlangTransformer({
         ...analysisLowering({ plans: filePlans, readouts: fileReadouts, instantiations: instantiations.get(source) ?? [] },
           item => `${rel(file.fileName)}:${item.line}`),

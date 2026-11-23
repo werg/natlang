@@ -26,6 +26,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./std": {
+      "types": "./dist/std/index.d.ts",
+      "default": "./dist/std/index.js"
+    },
     "./terminal": {
       "types": "./dist/terminal/index.d.ts",
       "default": "./dist/terminal/index.js"

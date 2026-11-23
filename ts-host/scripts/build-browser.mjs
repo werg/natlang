@@ -29,7 +29,8 @@ function copy(source, target) {
 const libDir = dirname(fileURLToPath(import.meta.resolve('typescript/lib/lib.es2022.d.ts')));
 const libs = Object.fromEntries(readdirSync(libDir).filter(name => /^lib\.(es5|es20\d\d(\.[a-z0-9]+)*|decorators(\.legacy)?|dom(\.[a-z]+)?|webworker\.importscripts|scripthost)\.d\.ts$/.test(name))
   .map(name => { inputs.push(join(libDir, name)); return [name, readFileSync(join(libDir, name), 'utf8')]; }));
-await build({ entryPoints: { natlang: resolve(root, 'src/browser/index.ts') }, bundle: true,
+// std.js (`@natlang/browser/std`) shares its chunks with natlang.js, so both hold one runtime instance.
+await build({ entryPoints: { natlang: resolve(root, 'src/browser/index.ts'), std: resolve(root, 'src/std/index.ts') }, bundle: true,
   platform: 'browser', format: 'esm', target: 'es2022', splitting: true,
   outdir: resolve(root, 'dist/browser'), chunkNames: 'chunks/[name]-[hash]',
   // undici is only loaded under Node (fetchModel); browsers use plain fetch.

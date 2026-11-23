@@ -55,6 +55,8 @@ export function buildStandardLibrary(options: Omit<Parameters<typeof buildLibrar
 }
 
 export * from '../runtime/index.js';
+/** The standard library, also importable as `@natlang/browser/std`; loading it registers it for in-memory programs. */
+export * as std from '../std/index.js';
 export { compileProject, formatDiagnostics, NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/project.js';
 export type { BuildOptions, BuildResult, ProjectFiles, DefinitionManifest } from '../compiler/project.js';
 export { virtualProjectFiles, virtualSourceFiles } from '../runtime/virtual-project.js';

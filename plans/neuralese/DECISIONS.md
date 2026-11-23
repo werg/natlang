@@ -7974,3 +7974,61 @@ types.
 - **Measurement.** Base (5ff07638) and current policy (sft-v6, dc95f29d) on the DGX series: `ops/held-v4/runs/`
   (`measure.sh`: held pin d3ad57fb21db, 4 samples, 16 slots, medium and resumable). It starts only when no other held
   measurement holds the held-priority claim. Results are appended below when complete.
+
+## 2026-11-23 07:00 `@natlang/std` skeleton: convergence and workspace combinators with shipped `.nl` judgments (semantic-FP B13, WS3 S2)
+
+**Shipped.** `@natlang/node/std` / `@natlang/browser/std` (also `std` from `@natlang/node`): `semanticRepair`,
+`fixedPoint`, `semanticMerge`, `proposeAndVerify`, `branchAndSelect` (`ts-host/src/std/`). Their own judgments are
+`.nl` files in `ts-host/std/` (`intentOf`, `compatible`, `combine`, `settled`, `beats`; the three finite ones are
+`readout: decision`), embedded byte for byte by `scripts/generate-builtin.mjs` (`src/std/sources.generated.ts`),
+loaded as ordinary named functions under `@natlang/std/<name>.nl` and exported so programs can `decide`, `.in`, `.on`
+and replace them. Decomposition: `ts-host/std/DECOMPOSITION.md`. Every run records a `std:<name>` trace with one
+`std_stage` event per stage naming that stage's call IDs (nested combinators appear by reference).
+
+**Decisions.**
+- Bounds: `semanticRepair` needs `attempts` and `fixedPoint` with an exact `settled` needs `maxSteps`, the same rule
+  `iterateOn` has for TypeScript predicates (`iteration-unbounded`). `fixedPoint`'s default stop is the shipped
+  `settled` judgment, which needs no bound (progress judge). At the bound both return their closest value
+  (`ok`/`settled: false`) instead of throwing: a deliberate answer.
+- `proposeAndVerify` is `semanticRepair` over proposals (one repair loop); each retry starts from the failed draft
+  (`draft.select(previous.folder)` inside an `APPLY_TO_FOLDER` reducer, so there is no nested transaction).
+- `semanticMerge` keeps `base` at unresolved paths by default (only vetted edits enter); combined values must be the
+  kind of one of the edits and pass the caller's `check`.
+- `beats.nl` is named for S1's `semanticRank` to reuse (one implementation of the pairwise judgment).
+- Import binding everywhere the runtime specifier is bound: `compileProject` binds `<specifier>/std` beside an
+  `index.js` runtime (CLI, `natlang check/test/run`, evaluation suites, tests); virtual projects and callable-folder
+  modules resolve it through a new shipped-module registry (`runtime/modules.ts` `registerShippedModule`) with typed
+  declarations `STD_MODULE_DTS` (`compiler/intrinsics.ts`, held to the exports by a test); the browser bundle has a
+  second entry `std.js` sharing chunks with `natlang.js`; package exports `./std` in ts-host, `@natlang/node`,
+  `@natlang/browser`.
+- `codebases/std/` (two unreferenced helpers, `any_true`, `select_by_flags`; their consumers carry their own copies)
+  removed: filter-by-flags belongs to S1's `semanticFilter`.
+- Not applicable, with reason: engines (the combinators issue ordinary calls and `decide` readouts, no new request
+  field: `src/std/*.ts` calls only `decideInFrame` and natlang functions); learner, held eval, collectors (no new
+  call kind: the std judgments are named natlang functions, `tool-loop-turn` / `decision-readout` in
+  `training/model-call-kinds.json`); improvement targets (`improvement/suite-execution.ts` binds `target-runtime.js`,
+  which has no std; `improvement/host.ts:88` does not admit std imports in a target yet).
+
+**Front door.** `skills/natlang-authoring/references/composition.md` gains two sections quoted (B4 quote test) from
+the new tested program `examples/release` (notes repaired against exact rules, a summary to a fixed point, a merged
+release record, a verified release section, a selected announcement). Errors: `std-check-result`, `std-arguments`,
+`std-select-result`, `iteration-unbounded` extended (`spec/ERRORS.md`, skill error table).
+
+**Live LFM3 run** (`natlang run examples/release`, ledger unit `b13-live-1`, `NATLANG_SERVER` = the Colab
+collection front `native-lfm3` already up at DGX 127.0.0.1:18731, current collection policy; 19 calls, about 25 min,
+most of it long thinking turns). Every combinator ran on the real model and the program exited 0:
+- `semanticRepair`: the draft failed the exact check, three fixes ran, the result came back `ok: false` with the
+  closest draft. Cause: a defect in the example's own check, not the model. `line.split(/\s/)[0]` kept the colon of
+  `#412:`, which LFM3 writes, and the problem text did not say how to fix the line. Fixed: the id is the leading
+  `#\d+`, and the problem now names the ids to start with. A test now holds `#412:` to pass.
+- `fixedPoint`: the summary settled under the shipped `settled` judgment without a step bound, and states all three
+  changes.
+- `semanticMerge`: the three one-sided fields merged exactly. Both conflicts (highlights, version) were judged
+  incompatible (P(compatible) = 0.106 each) and kept `base`, with intents and reasons listed. For the version that is
+  defensible. For highlights it is a model miss: both edits only add a sentence. The intents also carried an invented
+  clause ("so uploads resume ..."). Recorded as tuning evidence for `compatible.nl` / `intentOf.nl`. I did not change
+  the prompt on one sample.
+- `proposeAndVerify`: the first proposal passed the exact section verifier and was accepted (0 re-proposals).
+- `branchAndSelect`: both styles passed `verify`, and `beats` chose the bulleted announcement for the goal "learns
+  first what will break". That choice is arguable, since the breaking change is the second bullet.
+A second live run with the fixed check is queued; its result is appended below when it completes.

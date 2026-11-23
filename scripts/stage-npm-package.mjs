@@ -60,7 +60,7 @@ if (kind === 'node') {
 } else {
   // The single-file bundle and its WASM assets at the package root; declarations keep the build's layout.
   for (const name of readdirSync(join(source, 'browser')))
-    if (['natlang.js', 'wllama-compat.js'].includes(name) || name.endsWith('.wasm')) cpSync(join(source, 'browser', name), join(destination, name));
+    if (['natlang.js', 'std.js', 'wllama-compat.js'].includes(name) || name.endsWith('.wasm')) cpSync(join(source, 'browser', name), join(destination, name));
   cpSync(join(source, 'browser', 'pyodide'), join(destination, 'pyodide'), { recursive: true });
   cpSync(join(source, 'browser', 'chunks'), join(destination, 'chunks'), { recursive: true });
   const types = join(destination, 'types'); mkdirSync(types, { recursive: true });

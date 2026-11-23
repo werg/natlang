@@ -3,6 +3,19 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — `@natlang/std` ships five judgments as `.nl` functions (B13, WS3 S2)
+
+New model-facing text, reached only by programs that use the standard library's combinators; no existing call
+changes. `ts-host/std/intentOf.nl` ("after is before with one edit made to it. Say what the edit is for ..."; result
+`Is<string, "one sentence that names what the edit changes in the value's meaning and why">`), `compatible.nl`
+(`readout: decision`: "Answer true when one value can carry out both purposes at once ..."), `combine.nl` ("Write the
+value that makes both edits ..."), `settled.nl` (`readout: decision`: "Answer true when current says the same as
+previous, so that revising again would only reword it ..."), `beats.nl` (`readout: decision`: "Answer true when first
+serves goal better than second ... not its length or wording"). They run as ordinary named functions under
+`@natlang/std/<name>.nl`, so their calls render through the one ts-host renderer on every engine and enter training
+as own successes like any program's calls. Opt-out: pass a replacement (`intentOf`, `compatible`, `combine`, `judge`,
+`beats` options) or an exact `settled`. Tests: `ts-host/test/std-converge.test.mjs`, `std-folder.test.mjs`.
+
 ### 2026-11-23 — function types are checked signatures; a call whose result is a function is told how to return one (B9, L4)
 
 - **Call note** (`native/prompt.ts` `functionResultNote`, appended to the call notes by `callNotes` for the runtime and

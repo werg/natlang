@@ -1,0 +1,8 @@
+[
+  { "id": "#412", "title": "Retry uploads after a dropped connection", "breaking": false,
+    "description": "Uploads that lose the connection now resume from the last confirmed chunk instead of starting over." },
+  { "id": "#418", "title": "Remove the legacy v1 sync endpoint", "breaking": true,
+    "description": "The /v1/sync endpoint is gone. Clients must call /v2/sync, which has been available since 2.1." },
+  { "id": "#421", "title": "Faster search index rebuild", "breaking": false,
+    "description": "Rebuilding the search index takes about a third of the time it used to on large projects." }
+]

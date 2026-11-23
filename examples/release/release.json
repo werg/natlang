@@ -1,0 +1,5 @@
+{
+  "base": { "version": "2.4.0", "title": "Sync 2.4", "highlights": "Uploads resume after a dropped connection.", "upgrade": "No action needed." },
+  "ours": { "version": "2.5.0", "title": "Sync 2.5", "highlights": "Uploads resume after a dropped connection, and the search index rebuilds three times faster.", "upgrade": "No action needed." },
+  "theirs": { "version": "3.0.0", "title": "Sync 2.4", "highlights": "Uploads resume after a dropped connection. The legacy /v1/sync endpoint is removed.", "upgrade": "Clients must move from /v1/sync to /v2/sync." }
+}

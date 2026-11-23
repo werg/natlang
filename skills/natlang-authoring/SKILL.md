@@ -159,6 +159,8 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `iteration-measure-exhausted` | The measure hit 0 while `until` was false: make `until` true where the measure is 0. |
 | `model_incomplete: repeated_failed_action` | The model repeated one failing action four times: clarify the instruction, split the stage, or use a stronger model. |
 | `model_incomplete: no_action` | The model replied four times in a row without calling a tool or returning a result: say in the instructions exactly what to return, or use a stronger model. |
+| `iteration-unbounded` from `semanticRepair` or `fixedPoint` | Give `semanticRepair` its `attempts`; give `fixedPoint` a `maxSteps` with an exact `settled` test, or leave `settled` out so the shipped judgment decides. |
+| `std-check-result` | Return the list of problems as strings from `check` or `verify`, and an empty list when the value passes. |
 | Correct type, wrong answer | Improve the instructions, the evidence the call can reach, or the decomposition. Every run failing the same way points at the program, not the model. |
 
 More diagnoses, and how to tell wiring evidence from model quality: [verification](references/verification.md).
@@ -170,7 +172,8 @@ Read the one that matches the task:
 
 - [composition.md](references/composition.md): the paradigm in working programs: mapped judgments, inline
   captures, `decide` floors and escalation, `.in(context)`, `pluggable`, `iterateOn` with a natural-language check,
-  folder transactions, `Is`/`Untrusted`, Neuralese between stages, and the ladder from judgment to compiled code.
+  folder transactions, the standard library's repair, fixed-point, merge and verified or selected transactions
+  (`@natlang/node/std`), `Is`/`Untrusted`, Neuralese between stages, and the ladder from judgment to compiled code.
   Read before designing a program.
 - [language.md](references/language.md): front matter, callable folders, `uses:`, services, callable-folder
   TypeScript, types, eval rules, iteration. Read before creating or restructuring code.

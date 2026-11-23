@@ -6,7 +6,8 @@ context, put them behind a setting, iterate them until a check holds, and let th
 transaction the program checks. Each section below quotes a program in the natlang repository, so every form shown
 builds and runs: [`examples/refunds`](https://github.com/werg/natlang/tree/main/examples/refunds) (a refund desk for
 several shops), [`examples/triage`](https://github.com/werg/natlang/tree/main/examples/triage) and the curated
-applications.
+applications, and [`examples/release`](https://github.com/werg/natlang/tree/main/examples/release) (a release
+desk built on the standard library's combinators).
 
 ## Map judgments; keep the exact work in code
 
@@ -53,9 +54,13 @@ template literal.
 
 ## Decisions: probabilities, floors, escalation
 
-A function with `readout: decision` and a finite result (a literal union or `boolean`) is scored in one pass: the
-model rates every allowed value instead of writing one. `decide(fn, ...args)` (from `@natlang/node`, and the same
-name in eval) calls it and returns `{ value, probabilities, confidence, scored }`. Act on the confidence in code.
+A function with `readout: decision` and a finite result (a literal union, `boolean`, a record whose fields are all
+finite, or a union of such records) is scored instead of written: the model rates every allowed value. `decide(fn,
+...args)` (from `@natlang/node`, and the same name in eval) calls it and returns `{ value, probabilities, confidence,
+scored }`, plus `fields` for a record (each field's values with their probabilities). A record type of up to 32 values
+is scored in one pass; a larger one field by field, and its `confidence` is the probability of the record chosen. Act
+on the confidence in code. A field typed `string` or marked optional makes the result open: split the open part into
+its own function, or keep the tool loop.
 
 <!-- from: examples/refunds/desk.ts -->
 ```ts
@@ -188,6 +193,68 @@ or a step limit with a deliberate answer when it is reached:
 
 Use `iterateOn` when each step depends on the previous state. Independent items are a `Promise.all` map.
 
+## Repair, settle and merge: `@natlang/node/std`
+
+The standard library (`@natlang/node/std`, in the browser `@natlang/browser/std`) holds the loops that come back in
+program after program, as TypeScript around judgments. The judgments it supplies itself are `.nl` functions shipped
+with it and exported by name (`intentOf`, `compatible`, `combine`, `settled`, `beats`): call them, `decide` them,
+rebind them with `.in(context)` or move them to another model with `.on({ model })`, and pass the result to the
+combinator's option of the same name. Every run records a `std:<name>` trace listing the calls of each stage, and the
+combinators pass values by reference, so a value they carry reaches your functions unchanged.
+
+`semanticRepair(value, { check, fix, attempts })` runs an exact check (a compiler, a schema, tests) and hands what it
+finds to a fix until the check passes. The release desk drafts its notes, then repairs them against rules written in
+TypeScript:
+
+<!-- from: examples/release/notes.ts -->
+```ts
+export function notesProblems(notes: Notes, changes: Change[]): string[] {
+  const problems: string[] = [];
+  for (const change of changes)
+    if (!notes.some(line => idOf(line) === change.id)) problems.push(`No line starts with ${change.id} (${change.title}).`);
+  ...
+  return problems;
+}
+```
+
+<!-- from: examples/release/notes.ts -->
+```ts
+  const first: Notes = await nl`Write one line of release notes per change in changes: the change's id, then what it means for a user of the project.`();
+  const fix = nl<(notes: Notes, problems: string[]) => Notes>`Rewrite notes so that none of problems applies any more. Keep every line that no problem names.`;
+  const repaired = await semanticRepair(first, { check: notes => notesProblems(notes, changes), fix, attempts: 3 });
+  return { notes: repaired.value, problems: repaired.problems };
+```
+
+The result is `{ ok, value, problems, attempts, history }`. A fix that returns a value seen before ends the repair, and
+after `attempts` fixes `ok` is false and `value` is the value with the fewest problems, so the program decides what to
+do with it.
+
+`fixedPoint(step, initial)` applies a step to its own output until a revision no longer changes what the value says.
+The shipped `settled` judgment (`readout: decision`) makes that call after each step, so the loop needs no step bound;
+`{ settled: (previous, current) => boolean, maxSteps }` replaces it with an exact test.
+
+<!-- from: examples/release/notes.ts -->
+```ts
+  const first: Summary = await nl`Write the paragraph that tells a user of the project what changed, from notes.`();
+  const revise = nl<(summary: Summary) => Summary>`Revise summary so that it states every change in notes that a user notices, and nothing that notes do not say.`;
+  const { value } = await fixedPoint(revise, first);
+```
+
+`semanticMerge(base, ours, theirs, options)` merges two edits of one value. Records merge field by field: a field only
+one side changed takes that edit. Where both changed a field, `intentOf` states what each edit is for, `compatible`
+scores whether one value can keep both, `combine` writes it, and the result must be the same kind of value and pass
+your `check`. Everything else is listed in `unresolved` with both values, both intents and the reason, and the merged
+value keeps `base` there (`keep: 'ours' | 'theirs'` to change that).
+
+<!-- from: examples/release/merge.ts -->
+```ts
+export function mergeRelease(base: Release, ours: Release, theirs: Release): Promise<Merge<Release>> {
+  return semanticMerge(base, ours, theirs, {
+    check: (value, path) => path[0] === 'version' && !/^\d+\.\d+\.\d+$/.test(String(value)) ? [`${String(value)} is not a version number such as 2.4.0.`] : [],
+  });
+}
+```
+
 ## Change files through a transaction
 
 `folder.propose(reducer, ...args)` runs the reducer on a private copy of the folder and returns a proposal: the new
@@ -220,6 +287,42 @@ nldb's `database.nl`, `folder.apply(execute, statement)` keeps a change only if 
 `folder.iterateOn(reducer, initial)` iterates a reducer over the folder; each successful step publishes the folder
 and the state together. The check that
 decides whether a change is good is code or a service the reducer cannot edit.
+
+## Verified and selected changes
+
+`proposeAndVerify(folder, reducer, { verify, attempts, args })` is a transaction with a verifier and a repair loop:
+the reducer writes a proposal on a private copy, `verify` (an exact check the reducer cannot edit) lists its
+problems, and a failed proposal is proposed again from its own draft with the problems as the reducer's last
+argument. Only a proposal with no problems is accepted.
+
+<!-- from: examples/release/publish.ts -->
+```ts
+export async function publish(folder: Folder, version: string, notes: Notes) {
+  return proposeAndVerify<string>(folder, writeSection, { args: [version, notes], attempts: 2,
+    verify: proposal => sectionProblems(proposal, version, notes) });
+}
+```
+
+<!-- from: examples/release/publish.ts -->
+```ts
+  const file = folder.file(`releases/${version}.md`);
+  const previous = await file.exists() ? await file.readText() : '';
+```
+
+`branchAndSelect(folder, branches, { verify, goal })` runs several reducers, each on its own copy, drops the ones
+`verify` rejects, and accepts one of the rest: the one your `select(candidates)` returns, or with a `goal` the winner
+of pairwise `beats` decisions over each branch's result and changed files, or else the first.
+
+<!-- from: examples/release/publish.ts -->
+```ts
+  return branchAndSelect<string>(folder, [
+    { reducer: inStyle('plain sentences, most important change first'), args: [notes] },
+    { reducer: inStyle('a bulleted list, one bullet per note'), args: [notes] },
+  ], {
+    verify: async proposal => (await proposal.folder.readText('ANNOUNCEMENT.md')).trim() ? [] : ['The announcement is empty.'],
+    goal: 'a user who is about to upgrade learns first what will break and what to do about it',
+  });
+```
 
 ## Properties and outside text are types
 
