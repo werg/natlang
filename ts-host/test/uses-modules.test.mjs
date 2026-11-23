@@ -34,7 +34,7 @@ test('WS1 L6: aliased uses: map form and relative specifiers bind under alias ke
   assert.equal(out, 'RUBRIC:hello:40');
 });
 
-test('WS1 L6: uses: refuses unguarded cycles with the cycle path, and admits cycles when recursive: structural is declared', () => {
+test('WS1 L6: uses: refuses cycles with the cycle path, recursive or not; a recursive function calls itself by name', async () => {
   assert.throws(
     () =>
       loadVirtualNatlang(
@@ -47,16 +47,25 @@ test('WS1 L6: uses: refuses unguarded cycles with the cycle path, and admits cyc
       ),
     /leads back to this function \(a\.nl -> b\.nl -> a\.nl\)/i,
   );
-
-  const recursiveLoaded = loadVirtualNatlang(
-    {
-      'natlang.json': '{}',
-      'a.nl': '---\nargs: { n: number }\nreturns: number\nrecursive: structural\nuses: { next: ./b }\n---\nCall next(n).\n',
-      'b.nl': '---\nargs: { n: number }\nreturns: number\nrecursive: structural\nuses: { back: ./a }\n---\nCall back(n).\n',
-    },
-    'a.nl',
+  // Admitting the cycle once cut the second function's own helpers off one level down (a -> b -> a had no `next`).
+  assert.throws(
+    () =>
+      loadVirtualNatlang(
+        {
+          'natlang.json': '{}',
+          'a.nl': '---\nargs: { n: number }\nreturns: number\nrecursive: structural\nuses: { next: ./b }\n---\nCall next(n).\n',
+          'b.nl': '---\nargs: { n: number }\nreturns: number\nrecursive: structural\nuses: { back: ./a }\n---\nCall back(n).\n',
+        },
+        'a.nl',
+      ),
+    /leads back to this function .*a recursive function calls itself by its own name/i,
   );
-  assert.equal(typeof recursiveLoaded, 'function');
+  const countdown = loadVirtualNatlang({
+    'natlang.json': '{}',
+    'count.nl': '---\nargs: { n: number }\nreturns: number\nrecursive: structural\n---\nCount down to 0.\n',
+  }, 'count.nl');
+  const model = scriptedModel(() => 'return n === 0 ? 0 : (await count(n - 1)) + 1;');
+  assert.equal(await createNatlangRuntime({ model: model.driver }).run(() => countdown(3)), 3);
 });
 
 test('WS1 L6: callable-folder TypeScript module imports package-relative helper modules within project root', async () => {

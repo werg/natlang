@@ -633,10 +633,8 @@ function resolveUsesTarget(specifier: string, fromPath: string, root: string, fi
   return target;
 }
 
-/** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users unless recursive. */
+/** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users. */
 const ATTACHING: string[] = [];
-/** Records currently on the `ATTACHING` stack, by normalized path. */
-const ATTACHING_RECORDS = new Map<string, NatlangRecord>();
 /** Functions of callable folders whose load is still running, by normalized file path: a `uses` naming one shares that record. */
 const LOADING = new Map<string, NatlangRecord>();
 /** The `uses` edges between records of folders being loaded, by normalized file path, to find a cycle among siblings. */
@@ -651,16 +649,16 @@ const findEdgePath = (from: string, to: string, seen = new Set<string>()): strin
   }
   return undefined;
 };
-const isRecursiveRecord = (record: NatlangRecord | undefined): boolean =>
-  Boolean(record && (record.recursive === 'structural' || record.measure));
-const acyclicCycleTarget = (target: NatlangRecord): NatlangRecord => ({ ...target, codebase: {} });
+// A codebase is a tree of records built eagerly (callables, declarations, fingerprints), so it holds no cycle. Recursion
+// is a function calling itself by its own name (recursive: structural or measure:); two functions using each other is not.
 const cycleMessage = (item: string, path: string[]) =>
-  `uses ${item}, which leads back to this function (${path.join(' -> ')}); remove one of these uses so that a function cannot reach itself, or declare recursive: structural or measure:`;
+  `uses ${item}, which leads back to this function (${path.join(' -> ')}); remove one of these uses: a recursive function ` +
+  'calls itself by its own name (recursive: structural), so merge functions that call each other into one';
 
 /**
  * Add the items `record.uses` / `record.usesMap` names to its codebase under their aliases (or base names in list form).
  * Supports package-root paths (`harness/cut`), relative specifiers (`./`, `../`), and `natlang.json` package exports.
- * Rejects cyclic `uses:` chains with the cycle path unless the `.nl` declares `recursive: structural` or `measure:`.
+ * Rejects a cyclic `uses:` chain with the cycle path.
  */
 function attachUses(record: NatlangRecord, path: string, files: SourceFiles): void {
   const usesMap = record.usesMap ?? (record.uses?.length
@@ -672,8 +670,6 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
   const base0 = (file: string) => files.relative?.(file) ?? file;
   const pushedSelf = !ATTACHING.includes(normPath);
   if (pushedSelf) ATTACHING.push(normPath);
-  const prevRecord = ATTACHING_RECORDS.get(normPath);
-  ATTACHING_RECORDS.set(normPath, record);
   try {
     for (const [name, item] of Object.entries(usesMap)) {
       if (Object.hasOwn(record.codebase, name))
@@ -681,11 +677,6 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
       const target = resolveUsesTarget(item, path, root, files);
       const normTarget = normalizePath(target);
       if (normTarget === normPath || ATTACHING.includes(normTarget)) {
-        const targetRecord = normTarget === normPath ? record : ATTACHING_RECORDS.get(normTarget);
-        if (isRecursiveRecord(record) || isRecursiveRecord(targetRecord)) {
-          record.codebase[name] = acyclicCycleTarget(targetRecord ?? record);
-          continue;
-        }
         const at = ATTACHING.indexOf(normTarget);
         const chain = at >= 0 ? [...ATTACHING.slice(at), normTarget] : [normPath, normTarget];
         throw new NatlangSourceError(path, cycleMessage(item, chain.map(base0)));
@@ -694,13 +685,7 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
       const live = LOADING.get(normTarget);
       if (live) {
         const backPath = findEdgePath(normTarget, normPath);
-        if (backPath) {
-          if (isRecursiveRecord(record) || isRecursiveRecord(live)) {
-            record.codebase[name] = acyclicCycleTarget(live);
-            continue;
-          }
-          throw new NatlangSourceError(path, cycleMessage(item, [normPath, ...backPath].map(base0)));
-        }
+        if (backPath) throw new NatlangSourceError(path, cycleMessage(item, [normPath, ...backPath].map(base0)));
         LOADING_EDGES.set(normPath, (LOADING_EDGES.get(normPath) ?? new Set()).add(normTarget));
         record.codebase[name] = live;
         continue;
@@ -721,8 +706,6 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
     }
   } finally {
     if (pushedSelf) ATTACHING.pop();
-    if (prevRecord) ATTACHING_RECORDS.set(normPath, prevRecord);
-    else ATTACHING_RECORDS.delete(normPath);
   }
 }
 

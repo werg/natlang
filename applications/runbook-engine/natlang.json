@@ -1,1 +1,21 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/runbook-engine",
+  "version": "0.1.0",
+  "description": "Execute Markdown runbooks with safety gates: a step DAG, risk decisions before effects, confirmation for destructive steps, exactly-once effects and health checks.",
+  "include": [
+    "DECOMPOSITION.md",
+    "README.md",
+    "assessStepRisk.nl",
+    "checkHealth.nl",
+    "engine.ts",
+    "examples.json",
+    "fixtures",
+    "package.json",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  }
+}

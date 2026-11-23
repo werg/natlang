@@ -112,6 +112,10 @@ export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "s
 export const BUILT_INS_LINE = promptRevision() === '2026-11-22' ?
   'Eval also has the built-ins nl, iterateOn, transcript and decide; read_code shows how to use each.' :
   'Eval also has the built-ins nl, iterateOn, transcript, decide and NatlangContext; read_code shows how to use each.';
+/** A call whose codebase is too large to read through (largeCallableScope) is also told of search_code (2026-11-23); under
+ * NATLANG_PROMPT_REVISION=2026-11-22 the line stays the old one. */
+export const SEARCH_BUILT_INS_LINE = promptRevision() === '2026-11-22' ? BUILT_INS_LINE :
+  'Eval also has the built-ins nl, iterateOn, transcript, decide, NatlangContext and search_code; read_code shows how to use each.';
 /** Inline children have the same delegation tools as named calls. */
 export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
 export const NL_DEPTH_LIMIT_BUILT_INS_LINE = (promptRevision() === '2026-11-22' ? 'Eval has iterateOn, transcript and decide; read_code shows how to use each. ' :
@@ -1421,7 +1425,8 @@ export class NativeToolAgent {
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
       ...(noDirectServices ? ['', 'This call has no directly bound host services. Work from its inputs and the callables available here.'] : []),
       ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
-      '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
+      '', !canGenerateNl(session.runtime.frame) ? NL_DEPTH_LIMIT_BUILT_INS_LINE :
+        largeCallableScope(lam.codebase) ? SEARCH_BUILT_INS_LINE : BUILT_INS_LINE,
     ].join('\n');
   }
 

@@ -1,1 +1,31 @@
-{}
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/idiom-reviewer",
+  "version": "0.1.0",
+  "description": "Review natlang programs for idiom beyond the crisp floor of natlang check: what each instruction step asks for, prose interpreters, cue-word rules and external text typed as trusted.",
+  "include": [
+    "DECOMPOSITION.md",
+    "detectCueWords.nl",
+    "detectUntypedExternal.nl",
+    "examples.json",
+    "isProseInterpreter.nl",
+    "main.ts",
+    "package.json",
+    "review.ts",
+    "stepKind.nl",
+    "types.ts"
+  ],
+  "engines": {
+    "natlang": ">=0.1.0",
+    "node": ">=22.13.0"
+  },
+  "targets": {
+    "idiom-reviewer": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "natlang run applications/idiom-reviewer -- DIR [--escalate-to MODEL]"
+    }
+  }
+}

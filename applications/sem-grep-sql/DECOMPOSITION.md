@@ -1,6 +1,8 @@
 # Sem-Grep-SQL (`applications/sem-grep-sql/`): Decomposition
 
-Tier 3 flagship (WS6 §3 A8): cross-cutting semantic + relational queries over repositories, docs, and CSV/SQLite metadata tables, generalizing `applications/nldb` with content-addressed predicate caching and optional `Neuralese<T>` view hooks.
+Tier 3 flagship (WS6 §3 A8): cross-cutting semantic + relational queries over repositories, docs, and CSV/SQLite metadata tables, with content-addressed predicate caching and optional `Neuralese<T>` view hooks.
+
+**Status.** Plan 06 names `applications/nldb` as this flagship's seed; this package does not extend it. nldb is a relational engine whose operators are natural-language functions over its own page files; here the relational part is exact TypeScript over a caller-written `QueryPlan`, and only the per-file predicate and extraction are semantic. Not built yet: turning a natural-language question into a `QueryPlan` (callers write the plan), a persistent predicate cache (the `PredicateCache` lives in memory for one process), SQLite inputs (only CSV is parsed), and a fixture pack with datasets (the earlier `fixtures/cases.json` named queries without the files and tables they run over, so it was removed).
 
 ## Policy vs Mechanism
 
@@ -16,4 +18,3 @@ Tier 3 flagship (WS6 §3 A8): cross-cutting semantic + relational queries over r
 ## Safety & Custody
 
 - Every repository file body crosses the boundary as `Untrusted<string>`, fenced from prompt injection.
-- Fixture rows in `fixtures/cases.json` use `split_group: "flagship:sem-grep-sql:<group>"` for held-v4 reservation custody.

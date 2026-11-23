@@ -9,8 +9,10 @@ you already use.
 `Neuralese<T>` is a typed, opaque compressed state that carries meaning between model calls without re-serializing large
 text payloads on every hop:
 
-- **Creating a view:** use `compactValue` or `compactParams` from `@natlang/node/std` (or `view` from
-  `natlang:neuralese`) to compact a large value into `Neuralese<T>` on a Neuralese-capable runtime.
+- **Where views come from:** with `carry: 'neuralese'` the combinators write each view with the runtime's builtin
+  view operator, the same one that compacts a long argument in a call's opening (faithful without instructions; with
+  `viewInstructions`, it keeps what their purpose needs). It needs a runtime with a Neuralese server; elsewhere
+  `carry: 'neuralese'` is refused (`neuralese-unsupported-backend`), so leave `carry` out or pass your own `view`.
 - **Carrying soft state through combinators:** `semanticReduce`, `semanticMap`, and `fixedPoint` accept
   `{ carry: 'neuralese' }`:
   ```ts
@@ -35,14 +37,16 @@ text payloads on every hop:
    `natlang profile` aggregates the machine's call store per function (calls, p50 latency, average tokens, compiled
    crisp share, decision confidence p10/p50, escalation rate, failure rate) and runs the `nextOptimization` policy to
    recommend the next concrete step (`readout: decision`, `natlang specialize`, `natlang tune`, or `natlang improve`).
-2. **Improve a program directory transactionally:**
+2. **Check and adopt a change set transactionally:**
    ```bash
-   natlang improve ./my-program
+   natlang improve ./my-program --proposal change.json --model MODEL
    ```
-   `natlang improve DIR` builds `support`, `dev`, and `confirmation` splits from `examples.json` and recorded calls,
-   proposes instruction/helper/guidance updates in an isolated snapshot, verifies them with `natlang check` and
-   `natlang test`, rejects any proposal whose confirmation pass rate drops, and installs accepted changes with a
-   byte-identical rollback record (`natlang improve rollback <record>`).
+   `change.json` is `{ "files": { "PATH": "new text" or null } }`. `natlang improve DIR` builds `support`, `dev`, and
+   `confirmation` splits from `examples.json` and recorded calls, runs `natlang check` and the dev and confirmation
+   cases on a copy with the change, rejects it if either pass rate drops (or if it edits `types.ts` or a `protect:`ed
+   source), and installs an accepted change with a byte-identical rollback record (`natlang improve rollback <record>`).
+   `--dry-run` alone prints the splits. To have the improver write the change, use `natlang improve init` and
+   `natlang improve CASE.json --out DIR`.
 3. **Adopt a single call's transactional fix:**
    When a call repairs a non-protected helper via `edit_code`, review and install it with:
    ```bash

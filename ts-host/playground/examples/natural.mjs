@@ -122,7 +122,7 @@ Answer claim using only evidence. If evidence is insufficient, say so plainly.`,
     files: {
       'support/types.ts': `export type Team = 'billing' | 'technical';
 export type Priority = 'urgent' | 'normal';
-export type Triage = { team: Team; priority: Priority; confidence: number };
+export type Triage = { team: Team; priority: Priority; settled: boolean };
 `,
       'support/classify.nl': `---
 description: Route a support ticket to billing or technical.
@@ -150,12 +150,13 @@ import type { Triage } from './types.js';
 export async function main(input: { ticket: string }): Promise<Triage> {
   const safe = untrusted(input.ticket, 'incoming ticket');
   const [team, priority] = await Promise.all([decide(classify, safe), decide(prioritize, safe)]);
-  return { team: team.value, priority: priority.value, confidence: Math.min(team.confidence, priority.confidence) };
+  // settled: both decisions are confident enough to act on without a person (or a stronger model) looking.
+  return { team: team.value, priority: priority.value, settled: Math.min(team.confidence, priority.confidence) >= 0.8 };
 }
 `,
     },
     inputs: { ticket: 'The app is down for all users.' },
-    expected: { team: 'technical', priority: 'urgent', confidence: 1 } }),
+    expected: { team: 'technical', priority: 'urgent', settled: true } }),
   semanticProgram({ id: 'incident-brief', name: 'Incident brief', category: 'Semantic FP',
     level: 'Advanced', description: 'Combine a calibrated severity decision with an inline refined headline.',
     concepts: ['inline nl', 'Is<T, P>', 'readout: decision'], root: 'incident/main.ts',

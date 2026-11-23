@@ -56,8 +56,12 @@ const KNOWN_FLAKE_PATTERNS: ReadonlyArray<{ signature: string; pattern: RegExp }
   { signature: 'flake:runner-lost', pattern: /runner lost communication|agent disconnected unexpectedly/i },
 ];
 
+const DETERMINISTIC_FAILURE = /\bAssertionError\b|\berror TS\d+\b|\bSyntaxError\b|\bReferenceError\b|\bTypeError\b/;
+
 /** Exact crisp detector for well-known transient CI flake signatures (zero model calls). */
 export function detectKnownFlakeSignature(log: string): string | null {
+  // A log that also shows a deterministic failure is not settled here; the semantic classifier weighs both.
+  if (DETERMINISTIC_FAILURE.test(log)) return null;
   for (const entry of KNOWN_FLAKE_PATTERNS) {
     if (entry.pattern.test(log)) return entry.signature;
   }
@@ -122,6 +126,12 @@ export function checkAssertionsPreserved(proposal: FolderProposal<FixProposal>):
         `Assertion count decreased in ${change.path} (${beforeCount} -> ${afterCount}); fixes may not remove or weaken assertions.`,
       );
     }
+    // An edited assertion is a weakened one until a human says otherwise: every existing assertion line must survive verbatim.
+    const afterLines = new Set(assertionLines(afterText));
+    const edited = assertionLines(beforeText).filter(line => !afterLines.has(line));
+    if (edited.length > 0) {
+      problems.push(`Patch changed existing assertion(s) in ${change.path} (${edited[0]}); fix the source code instead.`);
+    }
     const beforeSkips = (beforeText.match(/\b(?:test|it|describe)\.skip\s*\(|\bskip\s*:\s*true\b/g) ?? []).length;
     const afterSkips = (afterText.match(/\b(?:test|it|describe)\.skip\s*\(|\bskip\s*:\s*true\b/g) ?? []).length;
     if (afterSkips > beforeSkips) {
@@ -131,9 +141,18 @@ export function checkAssertionsPreserved(proposal: FolderProposal<FixProposal>):
   return problems;
 }
 
+/** Trimmed source lines that contain an active `assert(...)` / `assert.*(...)` / `expect(...)` call. */
+function assertionLines(source: string): string[] {
+  return source
+    .split('\n')
+    .map(line => line.replace(/\/\/.*$/, '').trim())
+    .filter(line => /\bassert(?:\.\w+)?\s*\(|\bexpect\s*\(/.test(line));
+}
+
 /**
  * Bounded commit bisection using `iterateOn` with a strictly decreasing `withMeasure` interval width.
- * `commits` is ordered oldest-to-newest; returns the earliest failing commit in `commits`.
+ * `commits` is ordered oldest-to-newest and the newest is taken as failing (the trace failed there); returns the earliest
+ * failing commit in `commits`.
  */
 export async function bisectCommits(
   commits: readonly string[],
@@ -192,33 +211,24 @@ export async function diagnoseAndFixCi(
 ): Promise<CiReport> {
   const traces = rawTraces.map(fenceTrace);
 
-  // Pluggable known-flake detector: crisp handles known signatures with 0 LLM calls; nl delegates to classifyFailure.
+  // Pluggable known-flake detector: crisp matches known signatures (0 model calls); nl asks classifyFailure.nl;
+  // shadow runs both, records agreement, and serves crisp. Traces it does not settle go to semanticPartition.
+  const flakeMode = options.flakeMode ?? 'crisp';
   const detectFlake = pluggable(
     {
-      crisp: (trace: FailureTrace): FailureKind | null =>
-        detectKnownFlakeSignature(String(trace.log)) ? 'flake' : null,
-      nl: async (trace: FailureTrace): Promise<FailureKind | null> => {
-        const kind = await classifyFailure(trace);
-        return kind === 'flake' ? 'flake' : null;
-      },
+      crisp: (trace: FailureTrace): boolean => detectKnownFlakeSignature(String(trace.log)) !== null,
+      nl: async (trace: FailureTrace): Promise<boolean> => (await classifyFailure(trace)) === 'flake',
     },
-    options.flakeMode,
-    { default: 'crisp', name: 'ci-known-flake-detector' },
+    flakeMode,
+    { default: 'crisp', serve: 'crisp', name: 'ci-known-flake-detector' },
   );
-
   const crispFlakes: FailureTrace[] = [];
   const remaining: FailureTrace[] = [];
-  const crispActive = (options.flakeMode ?? 'crisp') === 'crisp';
-
   for (const trace of traces) {
-    const matched = await detectFlake(trace);
-    if (matched === 'flake' && crispActive && detectKnownFlakeSignature(String(trace.log))) {
-      crispFlakes.push(trace);
-    } else {
-      remaining.push(trace);
-    }
+    // In nl mode every trace is classified once by semanticPartition below; the fast path is crisp's alone.
+    if (flakeMode !== 'nl' && await detectFlake(trace)) crispFlakes.push(trace);
+    else remaining.push(trace);
   }
-
   const partition = remaining.length > 0
     ? await semanticPartition<FailureTrace, FailureKind>(
         remaining,

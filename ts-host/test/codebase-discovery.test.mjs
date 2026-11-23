@@ -3,6 +3,8 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import ts from 'typescript';
+import { createVirtualProgram } from '../dist/compiler/host.js';
 import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 import { BUILT_IN_DOCS, searchCodebase } from '../dist/native/runtime.js';
 import { scriptedModel } from './support/natlang.mjs';
@@ -140,4 +142,24 @@ test('search_code is exposed in eval when the scope has a codebase and omitted w
   const modelPlain = scriptedModel(() => 'return typeof search_code;');
   const typeofResult = await createNatlangRuntime({ model: modelPlain.driver, calls: false }).run(() => withoutCodebase('hi'));
   assert.equal(typeofResult, 'undefined');
+});
+
+test('the opening names search_code only when the codebase is too large to read through', async () => {
+  const files = { 'solve.nl': '---\nargs: { text: string }\nreturns: string\n---\nAnswer.\n' };
+  const small = loadVirtualNatlang({ ...files, 'solve/one.ts': 'export default function one(x: string): string { return x; }\n' }, 'solve.nl');
+  const smallModel = scriptedModel(() => 'return "ok";');
+  await createNatlangRuntime({ model: smallModel.driver, calls: false }).run(() => small('x'));
+  assert.doesNotMatch(smallModel.openings[0], /search_code/);
+  const many = Object.fromEntries(Array.from({ length: 100 }, (_, i) =>
+    [`solve/item${i}.ts`, `export default function item${i}(x: string): string { return x; }\n`]));
+  const large = loadVirtualNatlang({ ...files, ...many }, 'solve.nl');
+  const largeModel = scriptedModel(() => 'return "ok";');
+  await createNatlangRuntime({ model: largeModel.driver, calls: false }).run(() => large('x'));
+  assert.match(largeModel.openings[0], /built-ins nl, iterateOn, transcript, decide, NatlangContext and search_code; read_code/);
+});
+
+test('search_code is an eval built-in, not a global of compiled programs', () => {
+  const program = createVirtualProgram({ '/scope/main.ts': 'export const found = search_code("x");\n' });
+  const diagnostics = ts.getPreEmitDiagnostics(program, program.getSourceFile('/scope/main.ts'));
+  assert.ok(diagnostics.some(item => /Cannot find name 'search_code'/.test(ts.flattenDiagnosticMessageText(item.messageText, '\n'))));
 });

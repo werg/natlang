@@ -135,6 +135,10 @@ def test_report_reads_a_run(tmp_path):
     assert out['passes'] == 1 and out['scored'] == 2 and out['ran'] == 2 and out['judge_pending'] == 0
     assert out['calls_mean'] == 1.5 and out['prompt_tokens_mean'] == 150.0 and out['wall_seconds_mean'] == 15.0
     assert out['program'] == 'design-brief:001' and out['split'] == 'dev'
+    # A requeued attempt (journal gone) no longer counts its old reward.
+    (run / 'workers' / 's7-task-000-01.journal.jsonl').unlink()
+    [out] = eq.report(run)
+    assert out['scored'] == 1 and out['ran'] == 1 and out['passes'] == 1
 
 
 def test_requeue_forgets_attempts_without_a_result(tmp_path):
@@ -152,3 +156,15 @@ def test_requeue_forgets_attempts_without_a_result(tmp_path):
     assert eq.requeue(run) == ['b', 'c']
     assert (run / 'workers' / 'a.journal.jsonl').exists() and not (run / 'workers' / 'b.journal.jsonl').exists()
     assert not (run / 'row-b').joinpath('sample-00').exists()
+
+
+def test_requeue_timeouts_only_when_asked(tmp_path):
+    run = tmp_path / 'run'
+    (run / 'workers').mkdir(parents=True)
+    out = run / 'row-a' / 'sample-00' / 'results.jsonl'
+    out.parent.mkdir(parents=True)
+    out.write_text('{"x": 1}\n')
+    (run / 'workers' / 'a.journal.jsonl').write_text(json.dumps({'event': 'finish', 'key': 'a', 'status': 'timeout'}) + '\n')
+    (run / 'sealed-queue.jsonl').write_text(json.dumps({'key': 'a', 'output': str(out)}) + '\n')
+    assert eq.requeue(run) == []
+    assert eq.requeue(run, timeouts=True) == ['a']

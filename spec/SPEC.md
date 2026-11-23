@@ -121,8 +121,12 @@ representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
 when the runtime has none. `uses` lists package
-items the function may call besides its companion folder, by path from the package root (`uses: [harness/cut]`); each
-joins its context under its base name, with its own companion folder. `withhold` lists optional tools the
+items the function may call besides its companion folder: by path from the package root (`uses: [harness/cut]`), by
+path relative to the function's file (`./shared/rubric`, `../lib/cut`, inside the package root), or by a specifier a
+`natlang.json` `exports` map resolves (`@scope/pkg/item`, the package's own or an installed one's). The list form
+binds each under its base name; the map form binds each under its key (`uses: { rubric: ./shared/rubric }`). Each
+joins the function's context with its own companion folder. A `uses` chain that leads back to the function is a load
+error naming the cycle; a recursive function calls itself by its own name. `withhold` lists optional tools the
 function's own calls are not offered (`withhold: [delegate]`): `edit_code`, `diff_code` and the folder tools; eval,
 return_result, read_page, compact_history and read_code are always offered. A withheld tool is absent from the call's
 tool schema and prompt, and calling it anyway is refused with a one-sentence error. `protect` lists the items of the function's companion folder that judge its calls (verifiers, checkers, fixtures), by path from that folder (`protect: [checks/citations.ts]`; an entry without extension or a subfolder also matches): its calls can read them but `edit_code` refuses them (`protected`), as it refuses `types.ts` and an edit that changes a `protect` list. An entry that names no item is a load error. `budget` bounds the model work of each of
@@ -213,9 +217,11 @@ implicit and explicit captures alike.
 
 TypeScript files in callable folders are ordinary modules. A default-exported
 function makes the module callable; named exports are callable attributes;
-exported values are typed values. They may import sibling items, declared npm
-packages, `natlang:services`, and the natlang surface module; other local files
-are rejected. They follow the iteration and termination rules below. Application
+exported values are typed values. They may import sibling items, other `.ts`,
+`.js` and `.nl` files of their own package by relative path (inside the package
+root), exports a `natlang.json` `exports` map names, declared npm packages,
+`natlang:services`, and the natlang surface module; a relative import that leaves
+the package root is rejected. They follow the iteration and termination rules below. Application
 TypeScript outside callable folders is unrestricted.
 
 ## Iteration and termination

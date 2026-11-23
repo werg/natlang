@@ -12,20 +12,21 @@ a prose interpreter of deterministic TypeScript recipes, and not to match surfac
   folder transaction checks live in `.ts` files or `@natlang/node/std` combinators.
 - **Natural-language functions own judgment**: meaning, classification, extraction, intent synthesis, policy
   evaluation, conflict resolution, and open-ended planning live in typed `.nl` files and inline `nl<T>` lambdas.
-- **No prose-TS recipes in root `.nl` files**: never write a root `.nl` that dictates step-by-step JavaScript code in
-  backticks (`1. const d = await decide(...); 2. if (d.confidence >= 0.6) ...`). Either put that orchestration in a
-  `.ts` helper/entry, OR give the root a real discovery/synthesis problem over a 10+ item mixed `.ts`/`.nl` library.
+- **Orchestration is TypeScript**: a fixed sequence of calls and thresholds lives in a `.ts` helper or entry. A root
+  `.nl` gets a real discovery or synthesis problem, for example over a 10+ item mixed `.ts`/`.nl` library.
 
 ## 2. Hard Gates Every Task Must Pass
 
 1. **Idiom-clean under `natlang check`**: zero `idiom-decision-readout`, zero `idiom-code-in-prose`, zero
    `idiom-fixed-cursor-iterate`, and zero `untrusted-instruction` findings.
 2. **Real semantic oracle (beat the keyword baseline)**: every `oracle: verifier` task must include a genuine
-   `keyword_baseline` that executes cleanly (`status === 'done'`) and **fails** the verifier, while the reference passes.
-   No cue-word rules (`contains the word`, `by whole words`) in any `.nl` body.
+   `keyword_baseline` that executes cleanly (`status === 'done'`) and **fails** the verifier, while the reference passes
+   (`scripts/rl_tasks/verifier_controls.mjs`, run by `qualify_authored.py`). Every `.nl` body states the judgment by
+   its meaning.
 3. **Executable artifact verifiers over tabular puzzles**: prefer the real-work verifiers under
    `training/semantic_fp_tasks/verifiers/`:
-   - `code_test.mjs` — executes model-generated TypeScript/JS transforms or patches against hidden unit tests.
+   - `code_test.mjs` — executes a model-generated TypeScript/JS function against hidden cases (isolated context,
+     per-case timeout, `forbidden_patterns` against hardcoded outputs).
    - `policy_eval.mjs` — checks higher-order compiled rules (`compileRule` / `.nl` returning a function) over hidden
      cases + metamorphic paraphrase twins (`twins: [[idA, idB]]`).
    - `service_trace.mjs` — checks `ONCE_EFFECTS` idempotency, ordering, and prompt-injection resistance over service
@@ -36,7 +37,8 @@ a prose interpreter of deterministic TypeScript recipes, and not to match surfac
 4. **Custody hygiene**: `groups` holds ONLY real external source items (`<dataset>:<item_id>`). Never invent
    family-wide or theme-wide `invented:*` groups.
 5. **Metamorphic paraphrase twins (O2)**: for semantic judgment tasks, include twin inputs with content-lemma Jaccard
-   `< 0.25` and identical semantic outcome so cue-word shortcuts cannot pass both.
+   `< 0.25` and identical semantic outcome so cue-word shortcuts cannot pass both. No crisp check measures the overlap
+   yet; the author measures it.
 
 ## 3. Target Task Archetypes (Prioritize These Over Mini-Desks)
 
