@@ -25,7 +25,7 @@ import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, STD_MODULE_FILE, SURFACE_MODU
 import { createNatlangCompilerHost } from './host.js';
 import { loadNzSync, nzDeclaration, toBase64 } from '../native/nz-file.js';
 import { compileModule } from '../runtime/modules.js';
-import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError, usesTargetsOf, packageRoot, resolveImportedSource,
+import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError, usesTargetsOf, findPackageRoot, resolveImportedSource,
   type ItemRecord, type NatlangRecord } from '../runtime/loader.js';
 import type { SourceFiles } from '../runtime/loader.js';
 import { joinSourcePath as join, normalizeSourcePath as normalize } from '../runtime/source-path.js';
@@ -59,7 +59,7 @@ const extname = (path: string) => { const base = basename(path); const at = base
 
 function sourceFiles(files: ProjectFiles, root: string): SourceFiles {
   return { join, dirname, basename, extname, isFile: path => files.isFile(path), isDirectory: path => files.isDirectory(path),
-    read: path => files.read(path), list: path => files.list(path), relative: path => relative(root, path) };
+    read: path => files.read(path), list: path => files.list(path), relative: path => relative(root, path), root };
 }
 
 export { NEUTRAL_RUNTIME_SPECIFIER };
@@ -475,7 +475,7 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
       if(scannedRecords.has(record))continue;scannedRecords.add(record);
       if (record.kind === 'module') enqueue(resolve(root, record.source));
       if(record.kind==='natlang'){
-        const path=resolve(root,record.source),owner=packageRoot(dirname(path),files)??root;
+        const path=resolve(root,record.source),owner=findPackageRoot(dirname(path),files)??root;
         let ownedLayout=packageLayouts.get(owner);
         if(!ownedLayout){ownedLayout=callableFolders(fs,owner);packageLayouts.set(owner,ownedLayout);}
         // Public shared dependencies receive their own declaration and lexical
@@ -491,7 +491,7 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
     const source = pendingSources[cursor]!;
     if (visitedSources.has(source) || !fs.isFile(source)) continue;
     visitedSources.add(source);
-    const owner = packageRoot(dirname(source), files);
+    const owner = findPackageRoot(dirname(source), files) ?? root;
     if (owner && !declarationPackages.has(owner)) {
       declarationPackages.add(owner);
       for (const declaration of walkTs(fs, owner)) if (declaration.endsWith('.d.ts')) enqueue(declaration, true);
@@ -502,7 +502,7 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
       if (!target || !/\.(?:ts|nl)$/.test(target) || relative(root, target).startsWith('..')) continue;
       if (target.endsWith('.nl')) {
         if (!compilerSources.has(source) || namedRecords.has(target)) continue;
-        const packageDirectory = packageRoot(dirname(target), files) ?? root;
+        const packageDirectory = findPackageRoot(dirname(target), files) ?? root;
         let targetLayout = packageLayouts.get(packageDirectory);
         if (!targetLayout) { targetLayout = callableFolders(fs, packageDirectory); packageLayouts.set(packageDirectory, targetLayout); }
         // Private NL children remain properties of their actual public parent.

@@ -32,6 +32,7 @@ const files: SourceFiles = {
   },
   list: path => path === ROOT ? builtinNames().map(name => `${name}.nl`) : [],
   relative: path => path.startsWith(`${ROOT}/`) ? `builtin/${path.slice(ROOT.length + 1)}` : path,
+  root: ROOT,
 };
 
 let records: Record<string, ItemRecord> | undefined;

@@ -119,7 +119,7 @@ test('callable-folder modules cannot import local files outside their folder', a
   await writeFile(join(path, 'main', 'twice.ts'), "import { double } from '../helper.mjs';\nexport default function twice(): number { return double(3); }\n");
   const main = loadNatlang(join(path, 'main.nl'));
   const runtime = createNatlangRuntime({ workspace: path });
-  await assert.rejects(() => runtime.run(async () => main.twice()), /may import its sibling items and packages only/);
+  await assert.rejects(() => runtime.run(async () => main.twice()), /cannot import "\.\.\/helper\.mjs": no file of this package matches it/);
 });
 
 test('desktop bindings work as a host service through eval', async () => {
