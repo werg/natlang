@@ -1529,3 +1529,122 @@ def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, mo
     assert argv[argv.index('--work') + 1].endswith('-remote0')
     assert argv[argv.index('--checkpoint-sha256') + 1] == d.controller.current['sha256']
     assert plan['sft_dgx'] == {'activation_gb': 56, 'budget_gb': 80}
+
+
+def _pop_driver(tmp_path, monkeypatch):
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'POP', 'pop-host')
+    monkeypatch.setattr(pop_rl_actor, 'STATE', tmp_path / 'rl-actor.json')
+    ei, d = _remote_driver(tmp_path, monkeypatch, '--rebind-actor', 'pop-host@http://100.1.2.3:18531=24',
+                           '--remote-slots', '64')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind_host=None:
+                        'http://100.1.2.3:18531' if host == 'pop-host' else f'http://127.0.0.1:{port + 10161}')
+    return ei, d, pop_rl_actor
+
+
+def test_rebind_targets_carry_their_own_slots_and_pop_is_a_standing_actor_with_its_own_unit(tmp_path, monkeypatch):
+    ei, d, pop_rl_actor = _pop_driver(tmp_path, monkeypatch)
+    assert ei.parse_remote_target('colab-g4@http://127.0.0.1:8570', 64) == ('colab-g4', 'http://127.0.0.1:8570', 64)
+    assert ei.parse_remote_target('pop-host@http://100.1.2.3:18531=24', 64) == ('pop-host', 'http://100.1.2.3:18531', 24)
+    t = d.remote_targets()
+    assert [(x['host'], x['slots'], x['pop'], x['suffix']) for x in t] == [
+        ('colab-g4', 64, False, '-remote0'), ('pop-host', 24, True, '-pop')]
+    cur = d.controller.current
+    unit = d.collection_unit(cur)
+    assert d.remote_units(unit) == [f'{unit}-remote0', f'{unit}-pop']
+    assert [a[0] for a in d.remote_actors(include_pop=False)] == ['colab-g4']
+    _u, work, argv, budget = d.remote_collect_argv(cur, t[1], 'http://100.1.2.3:18531')
+    assert work.name.endswith('-pop') and argv[argv.index('--slots') + 1] == '24'
+    assert argv[argv.index('--actor') + 1] == 'http://100.1.2.3:18531=24' and budget == 11
+    assert argv[argv.index('--tasks') + 1] == str(d.collect_dir(cur) / 'tasks.json')
+    # the Colab collector only: Pop's is pop_step's
+    started = []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
+    monkeypatch.setattr(d.c, 'present', lambda u: False)
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, *a, **kw: started.append(unit))
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    d.ensure_remote_collection(cur)
+    assert started == [f'{unit}-remote0']
+    # the publication rebinds Colab in place and leaves Pop to pop_step
+    rebinds = []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: False)
+    monkeypatch.setattr(pop_rl_actor, 'rebind_actor', lambda **kw: rebinds.append(kw))
+    d.rebind_remote({'checkpoint_sha256': '1' * 64, 'checkpoint': '/x.pt', 'sglang_export': {'dir': '/x'}}, '/f', 2)
+    assert [r['host'] for r in rebinds] == ['colab-g4'] and rebinds[0]['front_url'] == 'http://127.0.0.1:8570'
+
+
+def test_pop_yields_to_a_held_measurement_and_serves_the_head_again_after_it(tmp_path, monkeypatch):
+    ei, d, pop_rl_actor = _pop_driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    want = d.collection_unit(cur) + '-pop'
+    (d.root / 'collect' / 'v0000-old').mkdir(parents=True)
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    present, stopped, launched, served = {want}, [], [], []
+    monkeypatch.setattr(d.c, 'present', lambda u: u in present)
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), present.discard(u)))
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, *a, **kw: (launched.append(unit), present.add(unit)))
+    busy = {'v': 'held measurement (pid 7)'}
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: busy['v'])
+    state = {}
+    monkeypatch.setattr(pop_rl_actor, 'read_json', lambda path, default=None: dict(state) or default)
+    monkeypatch.setattr(pop_rl_actor, 'attested', lambda endpoint, sha, adapters=None: state.get('policy_id') == sha)
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: state.get('policy_id') == sha)
+
+    def run(argv, **kw):
+        served.append(argv)
+        settings, _ = pop_rl_actor.pop_sglang('fp8_e4m3', 32, weight_dtype='fp8', overlap_schedule=True)
+        state.update(policy_id=argv[argv.index('--policy-id') + 1], sglang=settings, endpoint='http://100.1.2.3:18531')
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    d.pop_step()                                    # a held measurement holds Pop: the collector stops, no serve
+    assert stopped == [want] and not served and not launched
+    busy['v'] = None
+    d.pop_step()                                    # Pop is free: served with the collection law, collector started
+    assert len(served) == 1 and launched == [want]
+    argv = served[0]
+    assert argv[argv.index('--weight-dtype') + 1] == 'fp8' and '--overlap-schedule' in argv
+    assert argv[argv.index('--max-running') + 1] == '32' and argv[argv.index('--commit') + 1] == 'c' * 40
+    d.pop_step()                                    # already serving and collecting: nothing to do
+    assert len(served) == 1 and launched == [want]
+    with d.POP_LOCK:                                # held-v4 here holds Pop: no serve while it does
+        state.clear()
+        present.clear()
+        d.pop_step()
+    assert len(served) == 1
+    d.controller.state['phase'] = 'grpo'            # the GRPO phase: no Pop collection
+    present.add(want)
+    d.pop_step()
+    assert want not in present and len(served) == 1
+
+
+def test_pop_actor_driver_and_serve_pass_the_collection_law(tmp_path):
+    import pop_actor_driver
+    import pop_rl_actor
+    settings, fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 32, weight_dtype='fp8', overlap_schedule=True)
+    assert fmt.endswith('-kv-fp8_e4m3-w-fp8')
+    assert pop_actor_driver.weight_args(settings) == ['--sglang-weight-dtype', 'fp8', '--sglang-overlap-schedule']
+    held, _ = pop_rl_actor.pop_sglang('fp8_e4m3', 20)
+    assert pop_actor_driver.weight_args(held) == [] and 'overlap_schedule' not in held   # held settings unchanged
+
+
+def test_pop_held_processes_are_found_and_the_serve_lock_marks_pop_busy(tmp_path, monkeypatch):
+    import pop_rl_actor
+    proc = tmp_path / 'proc'
+    for pid, argv in ((11, ['/bin/sh', '/ops/grpo-v4/pop-held.sh', '/pin', 'ckpt', '/out', '4', '/c.pt']),
+                      (12, ['/bin/sh', '/ops/grpo-v4/pop-held.sh', '/pin', 'compare', '/a', '/b']),
+                      (13, ['python', '/r/scripts/neuralese_data/pop_rl_actor.py', 'held-eval', '--spec', 's']),
+                      (14, ['python', '/r/scripts/neuralese_data/pop_rl_actor.py', 'serve-checkpoint'])):
+        (proc / str(pid)).mkdir(parents=True)
+        (proc / str(pid) / 'cmdline').write_bytes(b'\0'.join(a.encode() for a in argv) + b'\0')
+    (proc / 'self').mkdir()
+    assert sorted(pop_rl_actor.pop_held_running(proc)) == [11, 13]
+    monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [])
+    assert pop_rl_actor.pop_busy() is None
+    import fcntl
+    with open(tmp_path / 'pop-serve.lock', 'a') as other:     # another process serving (flock is per open file)
+        fcntl.flock(other, fcntl.LOCK_EX)
+        assert 'serve lock' in pop_rl_actor.pop_busy()
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [11])
+    assert 'held measurement' in pop_rl_actor.pop_busy()

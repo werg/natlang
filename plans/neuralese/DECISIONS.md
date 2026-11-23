@@ -9913,3 +9913,43 @@ Owner requested deletion of unwanted DGX bloat, not relocation. Deleted roughly 
 bootstrap/audit/export copies; original captures and registered training inputs remain. Storage guidance
 now retains actual training/evaluation/recovery inputs and minimal consumed metadata, rather than
 archiving uncertain diagnostics. Original earlier Sol captures remain protected; generation stays Luna-only.
+
+## 2026-11-24 00:30 Pop is a standing aei1 collection actor whenever no held measurement holds it
+
+Pop's GPU had been idle for hours (held moved to the DGX series; an idle held server was stopped at 00:05). It now
+collects aei1 episodes for the lineage head.
+
+**Engine.** SGLang through `pop_rl_actor serve-checkpoint` (Pop's supported path), front code at the aei1 runtime commit
+bdf4c8721350 (read-back fixes d16437be8 and f109bedfd on by default), collection law: FP8 weights, FP8 KV, hybrid SWA,
+overlap scheduler, 32 running (KV pool 493k tokens, 0.97 GB GPU headroom after graph capture). Ready in 63-108 s.
+Its `/v1/neuralese/info` equals the DGX collection actor's in capabilities (`decide`, `score`, `native.capture`,
+`native.text-write`, ...), routes, prompt rendering identity, dialects and context; the serving engine differs only in
+`max_running` (32 vs 160).
+
+**Fixed on the way.**
+- Pop's fork checkout was at dbc51ddb72: no tool grammar (tool calls sampled unconstrained) and no FP8 weights. Moved to
+  17e3458c2e (the DGX's head, `sglang-fork.json`) by bundle, with no live Pop actor. Pop's held-v4 series changes engine
+  identity with it (telemetry only; it re-measures on the new engine). ENGINE_PARITY notes the per-host checkout check.
+- `pop_rl_actor serve-checkpoint --weight-dtype fp8` on Pop was dropped twice: `serve_checkpoint` did not pass it to
+  `pop_sglang` and `pop_actor_driver.serve_sglang` never sent `--sglang-weight-dtype`. Both pass it now, so an actor
+  attesting `-w-fp8` serves FP8.
+- `--overlap-schedule` for remote serves (Pop driver; held settings carry no key, so held engines are unchanged).
+- Pop serves are serialized across processes (`pop_serve_lock`): a collection serve and a held serve stopped each
+  other's actors when they overlapped.
+- `test_held_dispatch::test_pop_actor_start_reuses...` ran the real `stop_pop_fills` and stopped live units on the
+  host (it stopped this collector at 00:17); it is mocked now.
+
+**Driver** (`expert_iteration async-drive`, takes effect at a driver restart):
+- `--rebind-actor HOST@FRONT_URL[=SLOTS]`: per-actor collector slots (default `--remote-slots`).
+- A target on Pop's host is a standing Pop actor. `pop_step` (every 2 min, SFT phase only) serves the lineage head with
+  the collection law and starts its collector `<collection unit>-pop`. At a new policy it serves the published
+  checkpoint (copied, not rebound in place: Pop's driver relaunches a dead engine from the checkpoint it was served, so
+  an in-place rebind would revert there). The publication's `rebind_remote` skips Pop.
+- **Yield:** every Pop serve stops `*-collect-*-pop` collectors with the fills (`stop_pop_fills`), so a held
+  measurement from any entry point (driver held-v4 via `pop_held_measure`, `pop-held.sh`, grpo `--held-remote pop`)
+  takes the GPU. `pop_step` serves Pop again only when `pop_busy()` is clear: no `pop-held.sh base|ckpt` or
+  `pop_rl_actor held-eval` process on the DGX, no other serve holding the lock, and not held-v4 here (`POP_LOCK`).
+  The collection runs 32 running, not the held engine's 20, so `pop-held.sh` never reuses it.
+
+Tests: `test_async_train.py` (target parsing and slots, Pop unit naming, Colab-only rebind, yield and re-serve,
+GRPO-phase stop, held process detection and serve lock, collection law passed to the driver).

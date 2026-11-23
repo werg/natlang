@@ -110,14 +110,18 @@ COLAB_MEM_FRACTION = 0.88
 
 
 def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING, profile='pop',
-               weight_dtype='bfloat16'):
+               weight_dtype='bfloat16', overlap_schedule=False):
     """(job['sglang'] settings, actor export format) of a remote SGLang engine (Pop or Colab G4).
-    ``weight_dtype`` is ``'bfloat16'`` (held and GRPO) or ``'fp8'`` (SFT collection actors, async-train §3)."""
+    ``weight_dtype`` is ``'bfloat16'`` (held and GRPO) or ``'fp8'`` (SFT collection actors, async-train §3).
+    ``overlap_schedule``: SGLang's overlapped scheduler (collection actors, as the DGX collection runs it; held engines
+    are pinned without it, so their settings carry no key)."""
     if weight_dtype not in ('bfloat16', 'fp8'):
         raise ValueError(f'weight_dtype must be bfloat16 or fp8, got {weight_dtype!r}')
     fp8 = kv_cache_dtype != 'auto'
     w_suffix = '-w-fp8' if weight_dtype == 'fp8' else ''
     w_extra = {'weight_dtype': 'fp8'} if weight_dtype == 'fp8' else {}
+    if overlap_schedule:
+        w_extra['overlap_schedule'] = True
     if profile_key(profile) == 'colab':
         cap = max_running if max_running is not None else COLAB_MAX_RUNNING
         settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': cap, 'mem_fraction': COLAB_MEM_FRACTION,
@@ -919,16 +923,77 @@ def pop_actor_units():
     return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
 
 
+# Pop as a standing collection actor (expert_iteration async-drive ``--rebind-actor POP_HOST@URL=SLOTS``): the driver
+# serves the lineage head on Pop with the collection law (FP8 weights and KV, POP_COLLECT_RUNNING running) and runs a
+# DGX-side collector unit named ``<collection unit>POP_COLLECT_SUFFIX``. Every Pop serve (a held measurement's
+# included) stops those collectors with the fills, and the driver serves Pop again only when no held measurement runs
+# (``pop_busy``). 32 running: twice the held engine's 20 over the FP8-weight pool (DECISIONS 2026-11-24 Pop collection).
+POP_COLLECT_SUFFIX = '-pop'
+POP_COLLECT_RUNNING = 32
+SERVE_LOCK = ROOT / 'pop-serve.lock'
+
+
 def pop_fill_units():
-    """DGX units drawing fills from Pop's server (expert_iteration ``<cycle>-popfill`` and its tunnel)."""
+    """DGX units drawing on Pop's server: expert_iteration fills (``<cycle>-popfill`` and its tunnel) and async-drive's
+    Pop collectors (``<name>-collect-vNNNN-pop``)."""
     out = subprocess.run(['systemctl', '--user', 'list-units', '*-popfill.service', '*-popfill-tunnel.service',
-                          '--state=active,activating', '--plain', '--no-legend'], capture_output=True, text=True).stdout
+                          f'*-collect-*{POP_COLLECT_SUFFIX}.service', '--state=active,activating', '--plain',
+                          '--no-legend'], capture_output=True, text=True).stdout
     return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+
+
+def pop_held_running(proc=Path('/proc')):
+    """PIDs of DGX processes running a Pop held measurement: ``pop-held.sh PIN base|ckpt ...`` (async-drive's held-v4,
+    ``pop_held``, manual runs) or ``pop_rl_actor.py held-eval`` (grpo ``--held-remote pop``), read from /proc."""
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            argv = [a.decode(errors='replace') for a in (entry / 'cmdline').read_bytes().split(b'\0') if a]
+        except OSError:
+            continue
+        names = [PurePosixPath(a).name for a in argv]
+        if 'pop-held.sh' in names:
+            i = names.index('pop-held.sh')
+            if len(argv) > i + 2 and argv[i + 2] in ('base', 'ckpt'):
+                found.append(int(entry.name))
+        elif 'pop_rl_actor.py' in names and 'held-eval' in argv[names.index('pop_rl_actor.py'):]:
+            found.append(int(entry.name))
+    return found
+
+
+@contextlib.contextmanager
+def pop_serve_lock(blocking=True):
+    """Serialize Pop serves across processes (a driver's collection serve and a held measurement's serve stopped each
+    other's actors when they overlapped). Yields False when ``blocking`` is off and another process holds it."""
+    SERVE_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(SERVE_LOCK, 'a') as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def pop_busy():
+    """Why Pop belongs to something other than the standing collection now (a held measurement runs, or another
+    process is serving on it), else None."""
+    held = pop_held_running()
+    if held:
+        return f'held measurement (pid {held[0]})'
+    with pop_serve_lock(blocking=False) as free:
+        return None if free else 'another serve holds the Pop serve lock'
 
 
 def stop_pop_fills():
     """A cycle's Pop fill runs on until Pop serves something else (DECISIONS 2026-11-22 "Pop fills through build"):
-    every serve stops it first, so no fill draws from a policy it did not start on."""
+    every serve stops it first, so no fill draws from a policy it did not start on. Pop collectors stop the same way
+    (a held measurement takes the GPU; the driver starts them again after it)."""
     for unit in pop_fill_units():
         subprocess.run(['/usr/bin/python3', LEDGER, 'cancel', '--unit', unit], stderr=subprocess.DEVNULL)
         for suffix in ('-waiter', ''):
@@ -1746,11 +1811,18 @@ def run_remote_sft(args):
 
 
 def serve_checkpoint(args):
-    """Serve a pruned native checkpoint on Pop or Colab G4 and wait until it attests."""
+    """Serve a pruned native checkpoint on Pop or Colab G4 and wait until it attests (one Pop serve at a time)."""
     if profile_key(getattr(args, 'host_profile', 'pop')) == 'colab':
         return serve_colab(args)
+    with pop_serve_lock():
+        return _serve_pop(args)
+
+
+def _serve_pop(args):
     sha, commit = args.policy_id, args.commit
-    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
+    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running,
+                                       weight_dtype=getattr(args, 'weight_dtype', 'bfloat16'),
+                                       overlap_schedule=getattr(args, 'overlap_schedule', False))
     release, adapters, rank = adapter_release(args)   # a program fit served by default (TUNING_RESTORE_20261117.md)
     previous = read_json(STATE)
     if (previous and previous['policy_id'] == sha and previous.get('code') == commit and previous.get('sglang') == sglang
@@ -1905,6 +1977,8 @@ def main(argv=None):
                          help='SGLang linear weight dtype (fp8 for SFT collection actors; bfloat16 for held and GRPO)')
         sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='Pop running cap (a Colab actor '
                          'runs 128 alone, 64 with --beside-learner)')
+        sub.add_argument('--overlap-schedule', action='store_true',
+                         help="SGLang's overlapped scheduler (collection actors; held engines are pinned without it)")
         sub.add_argument('--beside-learner', action='store_true',
                          help='Colab: cap the actor (KV a quarter of the GPU, its running cap scaled; colab_layout) to share '
                          'the GPU with the SFT learner under MPS')

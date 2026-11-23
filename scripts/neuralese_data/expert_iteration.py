@@ -264,6 +264,15 @@ def _pid_alive(pid):
 
 
 # ---- collect ---------------------------------------------------------------------------------------------------------
+def parse_remote_target(target, default_slots):
+    """``--rebind-actor HOST@FRONT_URL[=SLOTS]`` -> (host, front URL, collector slots; ``default_slots`` without one)."""
+    host, _, rest = target.rpartition('@')
+    front, sep, slots = rest.rpartition('=')
+    if sep and slots.isdigit():
+        return host, front, int(slots)
+    return host, rest, default_slots
+
+
 def endpoint_alive(url, sha, timeout=10):
     """Whether the actor front at ``url`` answers and still serves policy ``sha``."""
     try:
@@ -2447,6 +2456,11 @@ ROUND_STAGES = ('prepared', 'trained', 'published')
 
 
 class AsyncRoundDriver:
+    # the DGX and remote collection builders share Cycle.collect_dir (the main loop and the Pop loop both build)
+    COLLECT_LOCK = threading.RLock()
+    # Pop serves one thing at a time: the Pop loop's collection serve or held-v4's measurement (held_v4_step)
+    POP_LOCK = threading.Lock()
+    POP_POLL_SECONDS = 120
     """Continuous expert iteration in rounds (async-train §2-§5, §7.4): standing services on the DGX (a collection of
     the newest published policy, filled reasoning on its actor, the teacher campaign on the frontier's rare tasks),
     back-to-back rounds, and the DGX held series beside them.
@@ -2557,8 +2571,9 @@ class AsyncRoundDriver:
         tasks = work / 'tasks.json'
         if not tasks.exists():
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
-        self.c.collect_dir = work
-        argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
+        with self.COLLECT_LOCK:
+            self.c.collect_dir = work
+            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
         argv[argv.index('--tasks') + 1] = str(tasks)
         budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
         self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
@@ -2581,43 +2596,133 @@ class AsyncRoundDriver:
                       repo=self.c.fill_repo())
         self.note(fill_started=f'{unit}-fill', policy=policy['sha256'])
 
+    def remote_targets(self):
+        """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on
+        Pop's host (``pop_rl_actor.POP``) is a standing Pop actor (``pop_step``: served, not rebound in place, and
+        yielding to held measurements); its collector unit ends in ``POP_COLLECT_SUFFIX`` (every Pop serve stops it),
+        the others in ``-remote{index}``."""
+        import pop_rl_actor
+        out = []
+        for i, target in enumerate(self.a.rebind_actor):
+            host, front, slots = parse_remote_target(target, self.a.remote_slots)
+            pop = bool(host) and host == pop_rl_actor.POP
+            out.append({'index': i, 'host': host, 'front': front, 'slots': slots, 'pop': pop,
+                        'suffix': pop_rl_actor.POP_COLLECT_SUFFIX if pop else f'-remote{i}'})
+        return out
+
     def remote_units(self, unit):
         """The remote actors' collector units beside DGX collection unit ``unit`` (one per ``--rebind-actor``)."""
-        return [f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor))]
+        return [unit + t['suffix'] for t in self.remote_targets()]
 
-    def remote_actors(self):
-        """[(host, VM-local front URL, DGX-side endpoint)] of ``--rebind-actor HOST@URL`` targets (Colab actors
-        beside the learner; their fronts reach the DGX through the host's forwarded ports)."""
+    @staticmethod
+    def target_endpoint(target):
         import pop_rl_actor
         from urllib.parse import urlparse
-        out = []
-        for target in self.a.rebind_actor:
-            host, _, front = target.rpartition('@')
-            if host:
-                out.append((host, front, pop_rl_actor.remote_endpoint(host, urlparse(front).port)))
-        return out
+        return pop_rl_actor.remote_endpoint(target['host'], urlparse(target['front']).port)
+
+    def remote_actors(self, include_pop=True):
+        """[(host, VM-local front URL, DGX-side endpoint)] of the hosted targets (Colab actors beside the learner reach
+        the DGX through the host's forwarded ports; Pop over Tailscale)."""
+        return [(t['host'], t['front'], self.target_endpoint(t)) for t in self.remote_targets()
+                if t['host'] and (include_pop or not t['pop'])]
 
     def ensure_remote_collection(self, policy):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
         policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it). An actor
         not serving ``policy`` is rebound to it first (``ensure_remote_policy``)."""
         self.ensure_remote_policy(policy)
-        for i, (host, _front, endpoint) in enumerate(self.remote_actors()):
-            unit = f'{self.collection_unit(policy)}-remote{i}'
-            if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
-                continue
-            work = self.collect_dir(policy).with_name(self.collect_dir(policy).name + f'-remote{i}')
-            work.mkdir(parents=True, exist_ok=True)
-            tasks = self.collect_dir(policy) / 'tasks.json'
-            if not tasks.exists():
-                self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
+        for target in self.remote_targets():
+            if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
+                self.start_remote_collector(policy, target)
+
+    def remote_collect_argv(self, policy, target, endpoint):
+        """(unit, work dir, argv, ledger GB) of ``target``'s DGX-side collector of ``policy``."""
+        unit = self.collection_unit(policy) + target['suffix']
+        work = self.collect_dir(policy).with_name(self.collect_dir(policy).name + target['suffix'])
+        with self.COLLECT_LOCK:
             self.c.collect_dir = work
-            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.remote_slots,
-                                          endpoints=[f'{endpoint}={self.a.remote_slots}'])
-            argv[argv.index('--tasks') + 1] = str(tasks)
-            self.c.ledger(unit, max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4), COLLECTION_PRIORITY, argv,
-                          work / 'collect.log', detach=True)
-            self.note(remote_collection=unit, host=host, endpoint=endpoint)
+            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], target['slots'],
+                                          endpoints=[f'{endpoint}={target["slots"]}'])
+        argv[argv.index('--tasks') + 1] = str(self.collect_dir(policy) / 'tasks.json')
+        return unit, work, argv, max(8, round(target['slots'] * COLLECTOR_SLOT_GB) + 4)
+
+    def start_remote_collector(self, policy, target):
+        """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``."""
+        endpoint = self.target_endpoint(target)
+        unit = self.collection_unit(policy) + target['suffix']
+        if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
+            return
+        unit, work, argv, budget = self.remote_collect_argv(policy, target, endpoint)
+        work.mkdir(parents=True, exist_ok=True)
+        tasks = self.collect_dir(policy) / 'tasks.json'
+        if not tasks.exists():
+            self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
+        self.note(remote_collection=unit, host=target['host'], endpoint=endpoint, slots=target['slots'])
+
+    # -- Pop: a standing collection actor whenever no held measurement holds it -------------------------------------
+    def pop_target(self):
+        return next((t for t in self.remote_targets() if t['pop']), None)
+
+    def pop_loop(self):
+        while True:
+            try:
+                self.pop_step()
+            except Exception as error:      # Pop is an extra actor: note and retry
+                self.note(pop_collect_failed=repr(error)[:300])
+            time.sleep(self.POP_POLL_SECONDS)
+
+    def pop_collector_units(self):
+        """Present Pop collector units of this driver (any policy)."""
+        import pop_rl_actor
+        root = self.root / 'collect'
+        units = {f'{self.a.name}-collect-{d.name.split("-")[0]}{pop_rl_actor.POP_COLLECT_SUFFIX}'
+                 for d in (root.glob('v*') if root.exists() else ())}
+        return sorted(u for u in units if self.c.present(u))
+
+    def pop_step(self):
+        """Pop collects the lineage head in the SFT phase whenever nothing else holds it. A held measurement (any
+        ``pop-held.sh`` / ``held-eval`` process, another serve in progress, or held-v4 here holding POP_LOCK) stops
+        the Pop collector; afterwards Pop is served again with the collection law and its collector restarts. A new
+        policy is served (the checkpoint copied, not rebound in place: Pop's driver relaunches a dead engine from the
+        checkpoint it was served, so an in-place rebind would revert there)."""
+        import pop_rl_actor
+        target = self.pop_target()
+        if target is None:
+            return
+        with self.lock:
+            cur, phase = dict(self.controller.current), self.controller.phase
+        want = self.collection_unit(cur) + target['suffix']
+        busy = 'phase ' + phase if phase != 'sft' else pop_rl_actor.pop_busy()
+        for unit in self.pop_collector_units():
+            if busy or unit != want:
+                self.c.stop_unit(unit)
+                self.note(pop_collector_stopped=unit, reason=busy or 'another policy')
+        if busy or not self.POP_LOCK.acquire(blocking=False):
+            return
+        try:
+            weight_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
+            settings, _ = pop_rl_actor.pop_sglang(pop_rl_actor.POP_KV_CACHE_DTYPE, self.a.pop_max_running,
+                                                  weight_dtype=weight_dtype, overlap_schedule=True)
+            state = pop_rl_actor.read_json(pop_rl_actor.STATE) or {}
+            if not (state.get('policy_id') == cur['sha256'] and state.get('sglang') == settings
+                    and pop_rl_actor.attested(state['endpoint'], cur['sha256'])):
+                if self.c.present(want):
+                    self.c.stop_unit(want)
+                started = time.time()
+                with (self.root / 'pop-serve.log').open('a') as log:
+                    subprocess.run([PY, str(Path(pop_rl_actor.__file__).resolve()), 'serve-checkpoint',
+                                    '--checkpoint', str(cur['checkpoint']), '--policy-id', cur['sha256'],
+                                    '--commit', self.a.commit, '--kv-cache-dtype', pop_rl_actor.POP_KV_CACHE_DTYPE,
+                                    '--weight-dtype', weight_dtype, '--max-running', str(self.a.pop_max_running),
+                                    '--overlap-schedule'], stdout=log, stderr=subprocess.STDOUT, timeout=3600,
+                                   check=True)
+                self.note(pop_served=cur['sha256'], seconds=round(time.time() - started))
+                if pop_rl_actor.pop_busy():
+                    return
+        finally:
+            self.POP_LOCK.release()
+        self.start_remote_collector(cur, target)
 
     def stop_collections(self, *, remote=True):
         """Stop the DGX collections and their fills (they hold the GPU the DGX learner needs) and, with ``remote``,
@@ -3088,11 +3193,11 @@ class AsyncRoundDriver:
         others were tried."""
         import pop_rl_actor
         sha, errors = published['checkpoint_sha256'], []
-        endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors()}
-        for target in self.a.rebind_actor:
-            host, _, front = target.rpartition('@')
-            if endpoint_alive(endpoints.get((host, front), front), sha):
-                continue
+        endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors(include_pop=False)}
+        for t in self.remote_targets():
+            host, front, target = t['host'], t['front'], self.a.rebind_actor[t['index']]
+            if t['pop'] or endpoint_alive(endpoints.get((host, front), front), sha):
+                continue                    # Pop: pop_step serves the new policy
             try:
                 pop_rl_actor.rebind_actor(front_url=front, policy_id=sha, version=version, factors_dir=factors,
                                           host=host or None, host_profile='colab',
@@ -3109,9 +3214,9 @@ class AsyncRoundDriver:
         ``retry_seconds``). Only a round's publication can be rebound (its factors); the start policy is served as
         it is."""
         published = self.round_dir(policy['round_id']) / 'policy' / 'published.json' if policy.get('round_id') else None
-        if not self.a.rebind_actor or published is None or not published.exists():
+        if not any(not t['pop'] for t in self.remote_targets()) or published is None or not published.exists():
             return
-        if all(endpoint_alive(endpoint, policy['sha256']) for _h, _f, endpoint in self.remote_actors()):
+        if all(endpoint_alive(endpoint, policy['sha256']) for _h, _f, endpoint in self.remote_actors(include_pop=False)):
             return
         last = getattr(self, '_rebind_tried', {}).get(policy['sha256'], 0)
         if time.time() - last < retry_seconds:
@@ -3202,8 +3307,10 @@ class AsyncRoundDriver:
         if not job:
             return
         out = self.root / 'held-v4' / f'hv4-{job["sha256"][:12]}'
-        state = pop_held_measure(out, job['checkpoint'], pin=self.c.held_pin, samples=self.a.held_v4_samples,
-                                 manifest=self.held_v4_manifest(), preempt=lambda: self.held_v3_pending() is not None)
+        with self.POP_LOCK:                 # a Pop collection serve finishes first; pop_held_measure stops its collector
+            state = pop_held_measure(out, job['checkpoint'], pin=self.c.held_pin, samples=self.a.held_v4_samples,
+                                     manifest=self.held_v4_manifest(),
+                                     preempt=lambda: self.held_v3_pending() is not None)
         if state == 'preempted':
             self.note(held_v4_preempted=job['sha256'])
             return
@@ -3320,6 +3427,8 @@ class AsyncRoundDriver:
         self.c.pin_stage()
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
+        if self.pop_target() is not None:
+            threading.Thread(target=self.pop_loop, daemon=True).start()
         if getattr(self.a, 'resume_after_hunt', False):
             self.controller.resume_after_hunt()
         completed = 0
@@ -3422,16 +3531,14 @@ class AsyncRoundDriver:
         collect = self.c.collect_command(self.collection_unit(cur), cur['checkpoint'], cur['sha256'], self.a.slots)
         collect[collect.index('--tasks') + 1] = str(self.collect_dir(cur) / 'tasks.json')
         remote = []
-        for i, (host, front, endpoint) in enumerate(self.remote_actors()):
-            unit = f'{self.collection_unit(cur)}-remote{i}'
-            self.c.collect_dir = self.collect_dir(cur).with_name(self.collect_dir(cur).name + f'-remote{i}')
-            argv = self.c.collect_command(unit, cur['checkpoint'], cur['sha256'], self.a.remote_slots,
-                                          endpoints=[f'{endpoint}={self.a.remote_slots}'])
-            argv[argv.index('--tasks') + 1] = str(self.collect_dir(cur) / 'tasks.json')
-            remote.append({'unit': unit, 'host': host, 'front': front, 'endpoint': endpoint,
-                           'serves_policy': endpoint_alive(endpoint, cur['sha256']),
-                           'budget_gb': max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4),
-                           'collect': list(map(str, argv))})
+        for t in self.remote_targets():
+            if not t['host']:
+                continue
+            endpoint = self.target_endpoint(t)
+            unit, _work, argv, budget = self.remote_collect_argv(cur, t, endpoint)
+            remote.append({'unit': unit, 'host': t['host'], 'front': t['front'], 'endpoint': endpoint,
+                           'slots': t['slots'], 'pop': t['pop'], 'serves_policy': endpoint_alive(endpoint, cur['sha256']),
+                           'budget_gb': budget, 'collect': list(map(str, argv))})
         plan = {'phase': self.controller.phase, 'policy': cur, 'pin': str(self.c.pin),
                 'reader_sources': self.reader_sources(),
                 'select': self.select_command(self.collect_dir(cur) / 'tasks.json'), 'collect': collect,
@@ -3723,10 +3830,14 @@ def main():
                     help='where rounds train: colab (a reachable Colab session, DGX takeover after '
                          '--fallback-wait-minutes) or dgx')
     ad.add_argument('--colab-hosts', default=None, help='Colab SSH host aliases (overrides NATLANG_COLAB_HOSTS)')
-    ad.add_argument('--rebind-actor', action='append', default=[], metavar='HOST@FRONT_URL',
+    ad.add_argument('--rebind-actor', action='append', default=[], metavar='HOST@FRONT_URL[=SLOTS]',
                     help='a remote collection actor (its VM-local front URL), rebound to each published policy by '
-                         'factors and collected from through the host\'s forwarded port (repeatable)')
-    ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor')
+                         'factors and collected from through the host\'s forwarded port (repeatable); =SLOTS sets its '
+                         'collector slots. On Pop\'s host (POP_HOST@http://POP_IP:18531=32) a standing Pop actor: served '
+                         'with each new policy and yielding to Pop held measurements')
+    ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor (default)')
+    ad.add_argument('--pop-max-running', type=int, default=32,
+                    help='SGLang running cap of the Pop collection actor (pop_rl_actor.POP_COLLECT_RUNNING)')
     ad.add_argument('--round-target-tokens', type=int, default=ROUND_TARGET_TOKENS,
                     help='a round mix\'s weighted target tokens (sft_sources build --max-target-tokens: every part '
                          'scaled alike, unseen episodes first); 0: the uncapped build (r0001: 37.4M, 1247 steps)')
