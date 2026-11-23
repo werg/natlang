@@ -663,6 +663,31 @@ test('captured prompt reconciles existing native reads and rejects unexplained g
   /request graph contains native reads absent from the captured model prompt/);
 });
 
+test('a text-written state read in context (receipt in-context-text) stays in the graph outside the native inventory', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const {graphNode}=await import('../dist/native/graph.js');
+  graphNode(invocation.runtime.trace,'block_write',{call_id:'writer',turn:'writer#turn1',block:artifact.id},[],'writer#1');
+  const part={type:'native_state',id:artifact.id,source_occurrence:'writer#1'};
+  const receipt={id:artifact.id,mode:'in-context-text',observed_native_state_id:artifact.id,source_occurrence:'writer#1'};
+  // the engine fed the state's tokens inline: the captured prompt has no native-state segment for it
+  await agent.modelTurnNode(invocation,[{role:'user',content:[part]}],{raw_response:{native_state:{imports:[receipt]},
+    x_natlang_rl_capture:{prompt:[{kind:'tokens',token_ids:[1,2,3]}],writes:[],native_state_imports:[receipt]}},text:'',calls:[]},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.format,'in-context-text');
+  assert.equal(read.inputs[0].node,'writer#1','the writer edge is kept');
+  const turn=invocation.runtime.trace.events.find(event=>event.kind==='model_turn');
+  assert.equal(turn.inputs.filter(input=>input.port==='read').length,1);
+  const {nativeCaptureGraphBinding}=await import('../dist/native/model-recording.js');
+  const nodes=new Map(invocation.runtime.trace.events.filter(event=>event.node).map(event=>[event.node,event]));
+  assert.deepEqual(nativeCaptureGraphBinding(turn.node,{prompt:[{kind:'tokens',token_ids:[1,2,3]}],writes:[]},nodes).read_bindings,{});
+  // without the receipt the same capture is still an unexplained read
+  await assert.rejects(()=>agent.modelTurnNode(invocation,[{role:'user',content:[part]}],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'tokens',token_ids:[1,2,3]}],writes:[]}},text:'',calls:[]},2),
+  /request graph contains native reads absent from the captured model prompt/);
+});
+
 test('captured-only native reads bind a unique in-episode writer; an unknown declared writer is external, or refused beside a local writer', async () => {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
   const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;

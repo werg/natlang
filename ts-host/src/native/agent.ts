@@ -1152,7 +1152,27 @@ export class NativeToolAgent {
     const preparedMessageOffset = Array.isArray(scopedReads) ? 1 : 0;
     // `declared` is the occurrence the request named; `source` is what it resolved to here (`external` for a writer
     // outside this record), and the server's captured prompt echoes the declared one.
-    const reads: { node: string; port: string; block: string; source: string; declared?: string; stop: boolean }[] = [];
+    const reads: { node: string; port: string; block: string; source: string; declared?: string; stop: boolean;
+      inContext?: true }[] = [];
+    // A state the engine wrote from text is read as its exact tokens inline in this call's prompt (receipt mode
+    // `in-context-text`): the captured prompt holds those tokens, not a native-state segment. Such a read stays in the
+    // graph (its writer edge is real provenance) as format `in-context-text`, outside the native-state inventory the
+    // captured prompt is reconciled against (and learners bind), like teacher text.
+    const rlCapture = response.raw_response?.x_natlang_rl_capture as { native_state_imports?: unknown } | undefined;
+    const importReceipts = rlCapture?.native_state_imports ??
+      (response.raw_response?.native_state as { imports?: unknown } | undefined)?.imports;
+    const inContextText = (Array.isArray(importReceipts) ? importReceipts : []).flatMap(raw => {
+      const receipt = raw as { id?: unknown; mode?: unknown; source_occurrence?: unknown } | null;
+      return receipt?.mode === 'in-context-text' && typeof receipt.id === 'string' ? [{ id: receipt.id,
+        ...(typeof receipt.source_occurrence === 'string' ? { source: receipt.source_occurrence } : {}) }] : [];
+    });
+    const readInContext = (block: string, declared: string | undefined, source: string) => {
+      const index = inContextText.findIndex(receipt => receipt.id === block &&
+        (receipt.source === undefined || receipt.source === declared || receipt.source === source));
+      if (index < 0) return false;
+      inContextText.splice(index, 1);
+      return true;
+    };
     type Use={block:string;stop?:true;source?:string};
     const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
@@ -1213,14 +1233,16 @@ export class NativeToolAgent {
             const artifact = await this.options.neuralese?.store.getNativeState?.(block);
             if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${block} is unavailable for provenance`);
             const source = resolveReadSource(block, use.source);
+            const inContext = readInContext(block, use.source, source);
             const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
               ...(use.stop?{stop_gradient:true}:{}),
-              format: 'native-state', native_identity: {
+              format: inContext ? 'in-context-text' : 'native-state', native_identity: {
                 architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
                 tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
                 embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
               positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
-            if (node) reads.push({ node, port: 'read', block, source, ...(use.source ? { declared: use.source } : {}), stop: !!use.stop });
+            if (node) reads.push({ node, port: 'read', block, source, ...(use.source ? { declared: use.source } : {}), stop: !!use.stop,
+              ...(inContext ? { inContext: true as const } : {}) });
           }
         }
       }
@@ -1241,15 +1263,17 @@ export class NativeToolAgent {
       const [messageIndex, partIndex] = item.positions[0] as [number, number];
       const artifact = await this.options.neuralese?.store.getNativeState?.(item.id);
       if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${item.id} is unavailable for provenance`);
-      const source = resolveReadSource(item.id, typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined);
+      const declared = typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined;
+      const source = resolveReadSource(item.id, declared);
+      const inContext = readInContext(item.id, declared, source);
       const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block: item.id,
-        ...(item.stop_gradient === true ? { stop_gradient: true } : {}), format: 'native-state', native_identity: {
+        ...(item.stop_gradient === true ? { stop_gradient: true } : {}), format: inContext ? 'in-context-text' : 'native-state', native_identity: {
           architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
           tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
           embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 }, positions: [messageIndex, partIndex] },
         [blockInput(item.id, 'block', source, producerScopeForTrace(trace))]);
       if (node) reads.push({ node, port: 'read', block: item.id, source,
-        ...(typeof item.source_occurrence === 'string' ? { declared: item.source_occurrence } : {}), stop: item.stop_gradient === true });
+        ...(declared !== undefined ? { declared } : {}), stop: item.stop_gradient === true, ...(inContext ? { inContext: true as const } : {}) });
     }
     // The model server's captured prompt is the authoritative record of what
     // entered the model. A caller can supply context outside `messages`, so
@@ -1257,7 +1281,7 @@ export class NativeToolAgent {
     // state from the episode graph.
     const capturedPrompt = response.raw_response?.x_natlang_rl_capture as { prompt?: unknown } | undefined;
     if (Array.isArray(capturedPrompt?.prompt)) {
-      const remaining = [...reads];
+      const remaining = reads.filter(read => !read.inContext);
       for (const [promptIndex, raw] of capturedPrompt.prompt.entries()) {
         if (!raw || typeof raw !== 'object' || (raw as { kind?: unknown }).kind !== 'native_state') continue;
         const segment = raw as { id?: unknown; source_state_id?: unknown; source_occurrence?: unknown;
