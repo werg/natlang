@@ -7,6 +7,7 @@
  * module instances, one per source revision, through the shared lowering.
  */
 import ts from 'typescript';
+import {sourceLoadMemo,withSourceLoadSession} from './source-session.js';
 import YAML from 'yaml';
 import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
@@ -31,6 +32,8 @@ export type SourceFiles = {
   isDirectory(path: string): boolean;
   read(path: string): string;
   list(path: string): string[];
+  /** Opt out of per-load graph sharing; source revisions are never shared across loads. */
+  sourceGraphReuse?: boolean;
   /** Display path relative to the loaded root. */
   relative?(path: string): string;
   /** Binary contents, for `.nz` files. Without it, `.nz` files in callable folders are not loaded. */
@@ -1024,6 +1027,9 @@ const isSource = (name: string) => (name.endsWith('.nl') || (name.endsWith('.ts'
 
 /** Load a callable folder into a record tree. `inherited` holds type aliases from enclosing folders. */
 export function loadCallableFolder(dir: string, files: SourceFiles, inherited: Record<string, string> = {}): Record<string, ItemRecord> {
+  return withSourceLoadSession(files,()=>loadCallableFolderInSession(dir,files,inherited));
+}
+function loadCallableFolderInSession(dir: string, files: SourceFiles, inherited: Record<string, string>): Record<string, ItemRecord> {
   if (!files.isDirectory(dir)) return {};
   const typesFile = files.join(dir, 'types.ts');
   const types = { ...inherited, ...(files.isFile(typesFile) ? readTypesFile(typesFile, files) : {}) };
@@ -1101,6 +1107,9 @@ function folderNzData(dir: string, files: SourceFiles, items: Record<string, Ite
 
 /** Load a named `.nl` function with its companion folder as its callable context. */
 export function loadNamedFunction(path: string, files: SourceFiles): NatlangRecord {
+  return sourceLoadMemo(files,'named:'+normalizePath(path),()=>loadNamedFunctionInSession(path,files));
+}
+function loadNamedFunctionInSession(path: string, files: SourceFiles): NatlangRecord {
   if (!files.isFile(path) || files.extname(path) !== '.nl') throw new NatlangSourceError(path, 'expected a .nl file');
   const dir = files.dirname(path);
   // A child loaded by its own path has the same lexical types as when reached through its owner.

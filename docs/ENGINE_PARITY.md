@@ -260,3 +260,23 @@ then content, `common/chat-auto-parser-generator.cpp` 137-167); Python native an
 generates is a second one. The parser starts from the generation prompt's suffix from `<think>` (`p.prefix(generation_prompt,
 reasoning_start)`, line 133), so the prompt's own `<think></think>` is the parsed (empty) reasoning block and a generated
 close stays in the content there too (read from the code; not run against a page build).
+
+### Source graph loading and generated module ownership
+
+The project compiler, named-function loader and callable-folder loader use one synchronous source-load session
+(`runtime/source-session.ts`). The session shares completed named records and parsed portable type aliases within
+that immutable input, then releases its cache. A later load re-reads its source revision; private callable children
+retain their lexical owner. `SourceFiles.sourceGraphReuse=false` or `NATLANG_SOURCE_GRAPH_REUSE=0` opts out.
+
+Reachable public NL dependencies receive independent declarations rather than repeated inline copies of their
+entire hierarchy. The existing `inlineUses` compiler option / `NATLANG_INLINE_USES_DECLARATIONS=1` retains the
+reference declaration mode. Emitted NL wrappers and inline callable contexts import an owner-local generated record
+graph; shared aliases are transported once and reconstructed into separate record maps. Only serializable frontend
+products can be shared by Host's `NativeCompilerProducts`; runtime services, module instances and model state are
+never shared. `inlineRecords:true` / `NATLANG_INLINE_SOURCE_RECORDS=1` retains inline record emission.
+
+These mechanisms are common compiler/runtime code used by Node, Workerd, browser/wllama, Pi and llama CLI SDKs.
+Managed llama-server, Python native and SGLang receive model requests from that runtime and do not load source
+records or implement compiler emission. The five Vibe SDK vendors must stage the same Core revision. Actual compiled
+Node and Workerd tests exercise diamond dependencies, inline contexts, source edits, lexical types, cycle rejection,
+record opt-outs and exact native child lineage; an actual Node ESM import covers the separate ESM graph module.
