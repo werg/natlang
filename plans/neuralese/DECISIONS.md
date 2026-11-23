@@ -9127,3 +9127,10 @@ unconditionally, and a 64-slot collection beside it would have queued FCFS behin
 test failed on it since 71095362c). A driver restarted during a round's DGX SFT queued the DGX collection again at the
 round start and only a fresh launch stopped it: the SFT stage now stops it before joining a running learner too, so the
 driver can be restarted mid-round (it joins the learner and starts the remote collection at once).
+
+**Applied to r0001 (17:22).** Rather than wait for a driver restart, `aei1-collect-v0000-remote0` runs the driver's own
+`collect --actor http://127.0.0.1:18731=64` command for e15b20a8 from pin-1c177e3fc609 (ledger high, 15 GB) into
+`collect/v0000-e15b20a86f1c-remote0`, the layout `collections_of` reads and the new driver joins (and stops at the
+next publication). The r0001 SFT claim went to 72 GB (`adopt --hold-budget`; peak 64.7 GB at step 19) to admit it.
+The backlog fill was relaunched polite as `colab-g4a-fill-backlog-polite-20261123`. A same-policy rebind of the L4
+over the tunnel attested all routes in 30 s and rewrote the actor record (`rebound`).
