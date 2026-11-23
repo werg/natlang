@@ -18,6 +18,7 @@ from natlang_neuralese.common.code_provenance import code_provenance
 
 from live_teacher_sources import load_episode
 from observed_graph_metrics import graph_metrics, aggregate_graph_metrics
+from retained_state_archive import prepare_retained_state_packs
 from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registry, require_registered_open_goal
 
 
@@ -78,6 +79,12 @@ def outcomes(capture, names, held, training, cases):
         raw = next(directory.glob(f'st_*/trajectory-{name}-full.json.gz'), None)
         if raw is None:
             raw = next(directory.glob(f'st_*/failure-evidence/trajectory-{name}-full.json.gz'), None)
+        packet = None
+        capture_errors = None
+        if raw:
+            with gzip.open(raw, 'rt') as stream:
+                packet = json.load(stream)
+            capture_errors = (((packet.get('execution') or {}).get('diagnostics') or {}).get('natlangTeacher') or {}).get('captureErrors')
         if manifest.is_file():
             episode = verified_episode(manifest, held, training)
             if episode['task_id'] != cases[name]['taskId']:
@@ -85,8 +92,6 @@ def outcomes(capture, names, held, training, cases):
             results[name] = {'status': 'verified', 'teacher_started': True, 'manifest': str(manifest.relative_to(capture)),
                              'decisions': len(episode['turns'])}
         elif raw:
-            with gzip.open(raw, 'rt') as stream:
-                packet = json.load(stream)
             test = packet.get('result') or {}
             entry = packet.get('execution') or {}
             teacher = (entry.get('diagnostics') or {}).get('natlangTeacher') or {}
@@ -98,6 +103,8 @@ def outcomes(capture, names, held, training, cases):
                              if not teacher.get('captureErrors') else None}
         else:
             results[name] = {'status': 'no-capture'}
+        if capture_errors:
+            results[name]['capture_errors'] = capture_errors
     return results
 
 
@@ -110,6 +117,8 @@ def workerd_failure(outcome):
 
 
 def infrastructure_failure(outcome, case):
+    if outcome.get('capture_errors'):
+        return True
     if workerd_failure(outcome):
         return True
     if outcome['status'] == 'no-capture':
@@ -120,6 +129,17 @@ def infrastructure_failure(outcome, case):
             'Could not resolve ' in reason or 'Cannot find package ' in reason):
         return True
     return case.get('requiresAndroidEmulator') and 'ready disposable Android emulator' in reason
+
+
+def wave_infrastructure_hold(receipt, cases, threshold=2):
+    if threshold < 0:
+        raise ValueError('infrastructure hold threshold must be nonnegative')
+    failures = [name for name, outcome in receipt.items() if infrastructure_failure(outcome, cases.get(name, {}))]
+    if not threshold or len(failures) < threshold:
+        return None
+    return {'infrastructure_failures': failures, 'infrastructure_hold_threshold': threshold,
+            'workerd_resets': [name for name, outcome in receipt.items() if workerd_failure(outcome)],
+            'all_captures_missing': bool(receipt) and all(outcome['status'] == 'no-capture' for outcome in receipt.values())}
 
 
 def prerequisite_holds(cases, host):
@@ -156,10 +176,12 @@ def prerequisite_holds(cases, host):
 def transfer(source, remote, destination):
     subprocess.run(['ssh', '-o', 'BatchMode=yes', remote, shlex.join(['mkdir', '-p', str(destination)])], check=True)
     target = f'{remote}:{destination}/'
-    flags = ['rsync', '-a', '--protect-args', f'{source}/', target]
+    exclusions = prepare_retained_state_packs(source)
+    common = ['rsync', '-a', '--protect-args', *[f'--exclude={name}' for name in exclusions]]
+    flags = [*common, f'{source}/', target]
     subprocess.run(flags, check=True)
-    comparison = subprocess.check_output([*flags[:3], '--dry-run', '--checksum', '--itemize-changes',
-                                          '--delete', *flags[3:]], text=True)
+    comparison = subprocess.check_output([*common, '--dry-run', '--checksum', '--itemize-changes',
+                                          '--delete', f'{source}/', target], text=True)
     if comparison.strip():
         raise RuntimeError(f'archive differs after transfer: {comparison[:400]}')
 
@@ -515,11 +537,9 @@ def drive(args):
         completed_waves += 1
         # The remote capture and receipt are durable. Deferred exports read those copies.
         shutil.rmtree(capture)
-        resets = [name for name, outcome in receipt.items() if workerd_failure(outcome)]
-        captures_missing = all(outcome['status'] == 'no-capture' for outcome in receipt.values())
-        if len(resets) >= 2 or captures_missing:
-            publish(root / 'runtime-hold.json', {'wave': started.stem, 'workerd_resets': resets,
-                                                 'all_captures_missing': captures_missing})
+        runtime_hold = wave_infrastructure_hold(receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2))
+        if runtime_hold is not None:
+            publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
             (root / 'stop-after-wave').touch()
 
 
@@ -542,6 +562,8 @@ def main():
     run.add_argument('--review-model')
     run.add_argument('--attempts', type=int, default=2, help='teacher attempts per goal in the current release epoch')
     run.add_argument('--attempt-epoch', help='explicit retry epoch; defaults to the pinned release manifest SHA-256')
+    run.add_argument('--infrastructure-hold-threshold', type=int, default=2,
+                     help='hold after this many infrastructure failures in one wave; 0 disables the hold')
     run.add_argument('--wave-size', type=int, default=6)
     run.add_argument('--max-waves', type=int, help='stop after archiving this many waves and syncing status')
     run.add_argument('--concurrency', type=int, default=1)
@@ -555,7 +577,7 @@ def main():
         export_trajectories(args.archive, read(args.receipt), held, training)
         return
     reviewer = (args.review_model or '').split(':')[-1].lower().split('-')
-    if (args.attempts < 1 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
+    if (args.attempts < 1 or args.infrastructure_hold_threshold < 0 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
             or (args.max_waves is not None and args.max_waves < 1)
             or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer):
         parser.error('provide positive limits, concurrency within the wave size, and an independent non-Sol reviewer when configured')

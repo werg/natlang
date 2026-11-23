@@ -7716,6 +7716,16 @@ edit becomes a proposal the program can adopt instead of dying with the run. The
   true/false, opt-out reproduces undecided). `qualify_authored.py` on `w900-refine` with the fixed runtime: PASS
   (reference admitted, smoke returns expected); with the opt-out: FAIL with the original `refinement-undecided`.
 
+## 2026-11-23 Vibe Studio collection uses application functions and observed graphs
+
+- **Decision.** Replace the universal `runUserGoal`/generic final-report collection contract across the entire Vibe Studio corpus with declared application entries, native typed inputs/results and a shared hierarchical Natlang library. User-requested outcomes and authorization remain checks; incidental child routes, discovery quotas and reread/order conventions do not. Runtime traces provide history. All 2,327 original goals/IDs/source groups/splits remain intact; all 116 entry signatures compile against the final library.
+- **Mechanism.** Migrate the authored runner, service/outcome binders, Host collector/exporter, Python admission, independent JavaScript evidence verifier and native TypeScript materializer together. Preserve historical source identities. Add observed graph telemetry without an admission gate. Remove obsolete unregistered exporter checkers after checking actual registry bindings.
+- **Acted-on defects.** Actual confined Eval CDP needed a kernel-issued socket capability and Workerd-specific inspector acknowledgements. A finite compiler witness had an incidental 30-second global watchdog; it now follows its actual enclosing lifecycle with an explicit timeout option. Completed model replies and running native values previously depended on final call persistence. Default incremental Core checkpoints, Base append-only model-exchange journals and Host ABI3 native emergency custody now acknowledge durable evidence, preserve original failed replies, and survive shared cleanup. Capture attachment epochs prevent teardown races; the resolved Luna identity is fenced before generation and scoring. The actual prepared-release startup also exposed stale generated producer catalogs for the new native archive RPC; regenerate the canonical catalogs, enforce freshness before every Host build/cache reuse and add exhaustive real attester/receiver parity coverage without weakening authorization.
+- **Data.** Keep existing Sol and all raw failures. New teacher generation is Luna only. Additively recovered 14 trajectories/105 supported decisions comprise two completed goals/40 decisions and twelve partial trajectories/65 decisions. Partial decisions never complete a campaign goal. Native trajectory IR is the training representation; workspace replay/Program IR is not imposed. Registry publication is complete; ingestion, student reasoning fill and learner exposure remain separate recorded phases, respecting DGX's 15 GiB reserve and current SFT.
+- **Evidence.** 116 production signatures, all-five clean Core vendors, 75 actual runtime/native SQLite integration tests, 276 Host kernel/real-inspector/lifecycle checks, 82 graph/export tests and a real Chromium OPFS interruption/reload smoke passed. Exact source pins, artifacts, remaining operational steps and limitations are in `VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md`. Full collection uses shared infrastructure, eight workers, a 16 GiB cap and a 7.5 GiB Tick reserve; the fresh prepared release and live receipts determine the operational cutover, not a synthetic route qualification.
+- **Archive throughput.** Actual retained state had 49,617 members/558 MB; the nearly full external HDD stalled checksum reads for minutes. Default lossless gzip-tar packing with member/SHA proofs reduces it to one 172 MB file (18.5 s, 594 MiB). Ordinary training artifacts stay directly readable; originals survive until verified transfer. Twenty-one focused tests and the quick gate passed. This is a Python-only producer change; no runtime/vendor repin.
+- **Limits.** No new held success or learner exposure is claimed by this migration. The separately observed earlier connection reset is not retrospectively explained by the fixed CDP and watchdog defects. Preserve raw interruptions and diagnose new infrastructure failures rather than silently discarding data or indefinitely retrying a broken campaign.
+
 ## 2026-11-23 05:00 Verifier-task supply for the semantic-FP constructs: sfp2, 22 batches, 187 train rows into grpo-pool
 
 Follow-up to B6 (04:30): scale the verifier-oracle supply across the constructs that sfp1 left at 0%.
@@ -7920,3 +7930,47 @@ through the TS loader, so the new keys parse there. Browser: same sources; the c
 `moduleInstanceAsync` where the realm is async. Not done: a `readout: decision` result that breaks `ensures:` fails the
 call (no re-pick of the next option); `natlang check` checks the names in `check:`/`measure:` expressions, not their
 types.
+## 2026-11-23 05:40 held-v4 built: every held-eval* role is out of training; 164 tasks pinned (semantic-FP B1)
+
+- **Code (e8dbf721e, 53d6f4fa6, 1c9ceafa4).**
+  - Every registry role named `held-eval*` is a held set that training excludes. `held_eval.training_exclusion_ids`
+    unites the run's `--held-manifest`, every such role and extra manifests, and also excludes pool rows that share a
+    source group with any held set's own cases.
+  - `sft_sources.held_closure` / `held_hit` do the same for the SFT, filled-reasoning, live and vibestudio paths.
+  - Applied in `grpo.load_tasks` (so `expert_iteration select` and `teacher_gen`), Neuralese variants, replay corpora,
+    the EI frontier leak check, `program_tune`, exp1, `hindsight` and `memetic_tasks`.
+  - `grpo.default_held()` is unchanged: held-v3 is the gate. aei1 picks this up at its next pin.
+  - Cost on the live pools: 7.9 s per selection. It excludes 336 more of 37,546 rows than held-v3 alone did: the
+    reservations, plus held-v3 source-group siblings outside grpo's own sibling rule.
+- **Reservations** (`ops/held-v4/reservations.json`, registry entry `held-v4`, role
+  `held-eval-semantic-fp-reservations`; `scripts/neuralese_data/held_v4.py reserve`).
+  - 20 design briefs, seed `held-v4-design-briefs`. They are drawn only from the 40 briefs outside the gate packet's
+    train split, unexposed briefs first: 14 have no pool row at all, and 6 have 13-39 codebase rows that are now
+    excluded.
+  - Astra `treaty-obligation-ledger` and Sol `field-gloss-workbench` (seed `held-v4-astra`), both unexposed.
+  - A 20% split-group share of every flagship fixture pack (split group `flagship:<app>:<group>`, rule
+    `held_eval.reservation_share_held`, WS6 §1.4).
+- **Set** (`ops/held-v4/manifest.json` sha 2cddfa0a; entry `held-v4-set`, role `held-eval-semantic-fp`; pinned with
+  the new `held_eval pin --all-rows`; `also_excludes` held-v3 and the reservations).
+  - 164 tasks: 104 authored construct tasks and 60 exact gates of the reserved briefs.
+  - Authored tasks per family: inline-lambda 13, decision-calibrated 13, convergence 14, folder transaction 14,
+    library discovery 14, higher-order/.in 12, untrusted contract 11, Neuralese pipeline 13.
+  - Levels: 0: 5, 1: 79, 2: 44, 3: 36.
+  - Each family was authored by a separate agent from `ops/held-v4/authoring/BRIEF.md` and qualified on main's ts-host
+    build (reference replay, all wrong answers rejected, smoke replay, custody, lint).
+  - An independent blind solve (Sonnet, packets only) agreed on 111 of 112 tasks. 8 tasks were dropped: 5 ambiguous,
+    3 that failed qualification (`source/dropped.json`). The blind solve also flagged confidence-floor routing in the
+    decision family, which its author made fact-driven.
+  - `held_eval verify`: 0 id and 0 group overlaps against the exposure collection (43,844 ids, 60,729 groups;
+    `collect_exposure.py` now reads its pools from the registry and adds the EI collections and selections). Also 0
+    against every row of all 21 pool files (37,798 ids, 62,221 groups).
+- **Fact corrections to the plan.** A brief's 8 cases are 3 exact gates and 5 rubric-judged workflows, so the exact
+  stratum is 60, not 160. The 100 workflows and the 2 reserved apps join held-v4 with B6's verifier oracle as a
+  versioned update, bringing it to about 256.
+- **Authoring pitfalls found.**
+  - `invented:<domain>` groups (such as `invented:customer_service`) are ProtectedWorlds identities, and the current
+    lint rejects groups on invented worlds.
+  - Qualification needs 4 GB: at 1.3 GB the protection closure is OOM-killed.
+- **Measurement.** Base (5ff07638) and current policy (sft-v6, dc95f29d) on the DGX series: `ops/held-v4/runs/`
+  (`measure.sh`: held pin d3ad57fb21db, 4 samples, 16 slots, medium and resumable). It starts only when no other held
+  measurement holds the held-priority claim. Results are appended below when complete.

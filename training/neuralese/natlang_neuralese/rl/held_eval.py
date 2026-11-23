@@ -117,16 +117,20 @@ def _source_groups(row):
     return set(row.get('source_groups') or ())
 
 
-def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED, avoid_groups=(), replace=(), reject=()):
+def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=SEED, avoid_groups=(), replace=(), reject=(),
+                   all_rows=False):
     """(manifest, held rows): ``tasks`` pool rows, family- and level-stratified, of which a third carry the effect-state class.
     Deterministic in the pool and the arguments. Rows whose split group or a source group is shared with an avoided task
     (``avoid`` ids, resolved in the pool, and ``avoid_groups``: split/source group names of exposed rows outside it) are
     not candidates. ``include``: task ids held already (an earlier manifest) that the new one keeps. ``replace``: ids of
     ``include`` to drop (a wrong or ambiguous oracle); each gets a fresh task of its family and level, else of its family
     at the nearest level, else the stratified fill. ``reject``: rows that are never candidates (pool errata), without
-    taking their split groups out."""
+    taking their split groups out. ``all_rows``: the cases file is the held set itself (a set authored for holding, such
+    as held-v4): every row not rejected is held, whatever its split, its split group's size or its siblings; an exposed
+    row is an error, never a silent drop."""
     from .curriculum import metadata
     cases = list(read_jsonl(cases_path))
+    tasks = 0 if all_rows else tasks
     replace = set(replace)
     if replace - set(include):
         raise ValueError('replaced held tasks are not in the included manifest: ' + ', '.join(sorted(replace - set(include))[:5]))
@@ -147,8 +151,13 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=S
     for index, row in enumerate(cases):
         meta = metadata(row)
         exposed = _split_group(row) in avoid_groups or bool(_source_groups(row) & avoid_groups)
-        if (row.get('split') == 'train' and row['id'] not in avoid and not exposed and row['id'] not in reject
-                and groups[_split_group(row)] <= MAX_GROUP_ROWS):
+        if all_rows and row['id'] not in reject:
+            if row['id'] in avoid or exposed:
+                raise ValueError(f'held row {row["id"]} was exposed to training (its id or a split/source group)')
+            candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), 'source_family': row.get('family'),
+                               **meta})
+        elif (not all_rows and row.get('split') == 'train' and row['id'] not in avoid and not exposed
+                and row['id'] not in reject and groups[_split_group(row)] <= MAX_GROUP_ROWS):
             candidates.append({'row': index, 'id': row['id'], 'group': _split_group(row), 'source_family': row.get('family'),
                                **meta})
         elif row.get('id') in include_set:
@@ -216,9 +225,12 @@ def build_manifest(cases_path, *, avoid, tasks=DEFAULT_TASKS, include=(), seed=S
                 break
         return picked
 
-    chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in picked_ids], effect)
-    chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in picked_ids],
-                   tasks - len(chosen))
+    if all_rows:
+        chosen, tasks = list(candidates), len(candidates)
+    else:
+        chosen += take([c for c in candidates if c.get('mix_class') == 'effect_state' and c['id'] not in picked_ids], effect)
+        chosen += take([c for c in candidates if c.get('mix_class') != 'effect_state' and c['id'] not in picked_ids],
+                       tasks - len(chosen))
     if len(chosen) < tasks:
         raise ValueError(f'the pool has only {len(chosen)} eligible held tasks (wanted {tasks})')
     chosen.sort(key=lambda c: c['row'])
@@ -1308,7 +1320,9 @@ def main(argv=None):
     p = sub.add_parser('pin', help='build and pin a standalone held manifest (e.g. ops/held-v2) with its exclusion-ids.json')
     p.add_argument('--cases', type=Path, required=True, help='the task pool (cases.jsonl)')
     p.add_argument('--dir', type=Path, required=True, help='directory for manifest.json, cases.jsonl, exclusion-ids.json')
-    p.add_argument('--tasks', type=int, required=True)
+    p.add_argument('--tasks', type=int, help='stratified draw of this many pool rows (or --all-rows)')
+    p.add_argument('--all-rows', action='store_true',
+                   help='the cases file is the held set itself: hold every row not rejected (an exposed row is an error)')
     p.add_argument('--seed', default=SEED)
     p.add_argument('--include-manifest', type=Path, help='an earlier held manifest whose tasks the new one keeps')
     p.add_argument('--avoid-ids', type=Path, action='append', default=[],
@@ -1437,9 +1451,11 @@ def main(argv=None):
     elif args.command == 'pin':
         avoid = _avoid_set(args)
         include = [t['id'] for t in json.loads(args.include_manifest.read_text())['tasks']] if args.include_manifest else ()
+        if not args.all_rows and not args.tasks:
+            raise SystemExit('pin needs --tasks N or --all-rows')
         manifest, rows = build_manifest(args.cases, avoid=avoid, tasks=args.tasks, include=include, seed=args.seed,
                                         avoid_groups=_avoid_group_set(args), replace=read_ids(args.replace_ids),
-                                        reject=read_ids(args.reject_ids))
+                                        reject=read_ids(args.reject_ids), all_rows=args.all_rows)
         if args.include_manifest:
             manifest['included_manifest'] = {'path': str(args.include_manifest), 'sha256': _sha256(args.include_manifest)}
         inputs = [*args.avoid_ids, *args.avoid_groups, *args.replace_ids, *args.reject_ids]
