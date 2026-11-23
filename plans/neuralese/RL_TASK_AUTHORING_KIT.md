@@ -976,8 +976,25 @@ aliases with it as the files the run left. Wrong placements are `wrong_code` (th
   give no `reference` (the default direct return of `expected` is replayed for the controls) and make the smoke a full
   replay (`replay: true`), which runs the producer -> consumer chain with the text Neuralese transport and is judged by
   the verifier. Scripted producer answers are text; the consumer's `$match` matches that text.
-- `refinement_contract` (`Is<T, P>`): **not runnable in qualification yet** (the replay driver has no refinement
-  judge: `refinement-undecided`); do not author it until the replay gets one.
+- `refinement_contract` (`Is<T, P>`): runnable since 4cfc91199 (the collector gives refinements a judge: the
+  driver's decision scorer, else a `holds` call). In the scripted replay the judge is a child call named `holds`
+  (instructions start "Decide whether value satisfies predicate"): reference children match that text plus a fragment
+  of the value; smoke children answer under `holds` with `$match` on the value. A repaired helper is scripted as two
+  turns (`calls: [first return_result, second]`, smoke `$turns`). A `null` refined field is not judged.
+
+**Lessons from the sfp2 authors (w407-w428):**
+- An inline `nl` whose instruction text names a root argument or eval variable by its exact name captures it into
+  every call, which makes every call's opening match the same scripted fragment: rename or reword.
+- Smoke openings escape `"`; a `$match` fragment containing a double quote never matches there.
+- Alias answers are type-checked against the root's `returns`: no string-number or case variants of a typed value.
+- A folder task always needs `expected_folders`, even when the verifier judges the returned value: without it the
+  collector expects the folder unchanged. `Record<string, ...>` folder-task results can come back as text; return
+  rows.
+- A keyword baseline that grows the array it loops over (`for (let i = 0; i < queue.length; i++)` with pushes) is
+  refused as `forbidden-loop` and counts as not rejected: use a fixed bound with a `break`.
+- Neuralese tasks without a reference cannot carry `inline_nl` (it forces `inline: required`, which a direct
+  reference cannot show); `nl_convergence` alone is right for an inline stopping check there.
+- Early `return`s in a reference script break wrong-answer substitution (it replaces the last `return`): keep one.
 
 **Groups are checked**: `authored_checks.py` rejects any group that is not one real source item (`<dataset>:<item
 id>`), and every `invented...` group.

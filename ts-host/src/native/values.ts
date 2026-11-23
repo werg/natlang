@@ -1,4 +1,4 @@
-import { checkHost, DEFAULT_DIALECT, fitsType, formatType, parseType, TypeEnv } from './types.js';
+import { checkHost, DEFAULT_DIALECT, fitsType, formatType, NATLANG_SIGNATURE, parseAliases, parseType, signatureFits, signatureOf, TypeEnv, TypeSyntaxError, UnreadableAliasError } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
 import { isNeuraleseRef, isNativeTensorRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
@@ -166,7 +166,10 @@ function checkBlockDialect(id: string, wanted: Extract<Type, { kind: 'neuralese'
 }
 
 export type CoerceOptions = { /** Keep structurally compatible extra record properties (used for callable inputs only). */
-  preserveRecordExtras?: boolean };
+  preserveRecordExtras?: boolean;
+  /** `keep`: a plain function stays itself at a function-typed slot (an eval's own locals), instead of being wrapped
+   * to check its calls; a natlang callable's signature is still checked. */
+  functions?: 'check' | 'keep' };
 
 export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', options: CoerceOptions = {}): Value {
   const wanted = env.resolve(type);
@@ -199,10 +202,23 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     checkBlockDialect(raw.$neuralese.id, wanted, env, path);
     return raw as unknown as Value;
   }
-  // A function-typed slot holds a live function (for example a natlang callable), never a pending node.
+  // A function-typed slot holds a live function (for example a natlang callable), never a pending node. A natlang
+  // callable carries its signature, which must fit the slot; any other function is wrapped so that each call checks its
+  // arguments and its awaited result against the slot's type.
   if (wanted.kind === 'lambda') {
-    if (typeof raw === 'function') return raw as Value;
-    return reject(path, 'type-mismatch', formatType(type), preview(raw));
+    if (typeof raw !== 'function') return reject(path, 'type-mismatch', formatType(type), preview(raw));
+    const signature = signatureOf(raw);
+    // A natlang callable whose signature is open (an inline function saved without parameters) is checked by its call.
+    if (!signature && Object.hasOwn(raw, Symbol.for('natlang.callable'))) return raw as Value;
+    if (!signature) return options.functions === 'keep' ? raw as Value :
+      checkedFunction(raw as (...args: unknown[]) => unknown, wanted, env, path) as unknown as Value;
+    let fits: boolean;
+    try { fits = signatureFits(signature, wanted, env); } catch (error) { if (!(error instanceof TypeSyntaxError)) throw error; fits = false; }
+    if (!fits) throw new Reject([{ path, code: 'function-signature-mismatch',
+      expected: formatType(wanted), got: formatType(signature.type),
+      text: `${path}: function-signature-mismatch: this slot takes a function ${formatType(wanted)}, but the function given is ` +
+        `${formatType(signature.type)}; pass a function whose parameters accept the slot's arguments and whose result fits its result.` }]);
+    return raw as Value;
   }
   if (wanted.kind === 'union') {
     const misses: Reject[] = [];
@@ -275,18 +291,55 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
 }
 
 
+/** Checked wrappers of plain functions, by the slot type they were checked for, so a function keeps one identity per slot. */
+const checkedFunctions = new WeakMap<Function, Map<string, Function>>();
+
+/**
+ * A plain (crisp) function at a function-typed slot: a function of that type that calls it, checks each argument against
+ * the slot's parameter types and its awaited result against the slot's result type, and carries the slot's signature.
+ * It is asynchronous, as every natlang function is: callers await it.
+ */
+function checkedFunction(raw: (...args: unknown[]) => unknown, wanted: Extract<Type, { kind: 'lambda' }>, env: TypeEnv, path: string): Function {
+  const key = JSON.stringify(wanted);
+  let byType = checkedFunctions.get(raw);
+  const cached = byType?.get(key);
+  if (cached) return cached;
+  const name = raw.name || path.split('/').at(-1) || 'fn';
+  const checked = async function (this: unknown, ...args: unknown[]) {
+    const fields = wanted.params.fields;
+    const passed = args.map((arg, index) => index < fields.length && (arg !== undefined || !fields[index]!.optional) ?
+      toCallerValue(coerce(arg, fields[index]!.type, env, `${name}/${fields[index]!.name}`, { preserveRecordExtras: true })) : arg);
+    const result = await raw.apply(this, passed);
+    return toCallerValue(coerce(result, wanted.returns, env, `${name}/return`, { preserveRecordExtras: true }));
+  };
+  Object.defineProperty(checked, 'name', { value: name });
+  Object.defineProperty(checked, 'length', { value: wanted.params.fields.length });
+  const types: Record<string, Type> = {};
+  for (let scope: TypeEnv | undefined = env; scope; scope = scope.parent)
+    for (const [alias, definition] of Object.entries(scope.names)) if (!Object.hasOwn(types, alias)) types[alias] = definition;
+  Object.defineProperty(checked, NATLANG_SIGNATURE, { value: { type: wanted, types } });
+  if (!byType) checkedFunctions.set(raw, byType = new Map());
+  byType.set(key, checked);
+  return checked;
+}
+/** A checked value as JavaScript code receives it: the missing marker is `undefined`. */
+const toCallerValue = (value: Value): unknown => value === MISSING ? undefined : value;
+
 export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pending {
   const key = wrapper(raw);
   if (!key || key === 'invalid') return reject(path, 'type-mismatch', 'a single pending wrapper');
   const body = (raw as Record<string, unknown>)[key];
   if (!plain(body)) return reject(path, 'type-mismatch', `a mapping for ${key}`);
   const typesSrc = structuredClone((body.types ?? {}) as Record<string, string>);
-  const types = Object.fromEntries(Object.entries(typesSrc).map(([name, text]) => [name, parseType(text)]));
+  // An alias the type grammar cannot read breaks only the signatures that use it (parseAliases).
+  const types = parseAliases(typesSrc, false);
   const inner = env.child(types);
   if (typeof body.type !== 'string') return reject(path, 'type-mismatch', `${key} with a type`);
   const type = parseType(body.type);
   inner.checkNames(type);
-  for (const localType of Object.values(types)) inner.checkNames(localType);
+  for (const localType of Object.values(types)) {
+    try { inner.checkNames(localType); } catch (error) { if (!(error instanceof UnreadableAliasError)) throw error; }
+  }
   const expected = key.slice(1);
   if (type.kind !== expected) return reject(path, 'type-mismatch', `a ${expected} type`, formatType(type));
   const lambdaKeys = new Set(['type', 'types', 'instructions', 'args', 'return', 'status', 'note',

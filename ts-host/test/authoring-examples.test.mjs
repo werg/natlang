@@ -142,6 +142,30 @@ test('examples/triage: scored labels, the unsure ones on the stronger model, a r
   assert.match(asked[0], /Safari/);
 });
 
+test('examples/screening: checks bound with partial and a judgment written for the role, applied to every application', async () => {
+  const load = await build('screening');
+  const { screen } = await load('screen.js');
+  const { role, requirements, applications } = JSON.parse(readFileSync(join(repo, 'examples/screening/applications.json'), 'utf8'));
+  const local = localModel(opening => {
+    // fit_for.nl: the call's result is a function, so the model writes the judgment and finishes with it.
+    if (opening.includes('Write the judgment that decides whether an application fits role'))
+      return 'return nl`Is application from someone who has kept a live payments service running?`';
+    if (opening.includes('kept a live payments service running')) return 'return !application.text.includes("todo app")';
+    return null;
+  }, (options, prompt) => {
+    // meets.nl, scored: a1 shows both requirements, a2 neither, a3 both.
+    const shows = /requirement[^]*PostgreSQL/.test(prompt) ? !/happy to learn/.test(prompt) : !/todo app/.test(prompt);
+    return shows ? [0.9, 0.1] : [0.1, 0.9];
+  });
+  const screening = await createNatlangRuntime({ model: local.driver }).run(() => screen(applications, role, requirements));
+  assert.deepEqual(screening.shortlisted, ['a1', 'a3']);
+  assert.deepEqual(screening.missing, { [requirements[0]]: ['a2'], [requirements[1]]: ['a2'] });
+  assert.ok(local.openings.some(opening => /This call's result is a function of type \(application: Application\) => boolean/.test(opening)),
+    'fit_for.nl is told how to return a function');
+  // Each requirement's check is meets with the requirement bound: the scored prompts name it.
+  for (const requirement of requirements) assert.ok(local.decisions.some(decision => decision.prompt.includes(requirement)), requirement);
+});
+
 /**
  * A fenced block preceded by `<!-- from: PATH -->` quotes PATH: its lines appear in that file in order, contiguously
  * (indentation and `...` elision lines aside). The documents then cannot drift from the programs they teach.

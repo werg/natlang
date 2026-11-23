@@ -83,7 +83,7 @@ test('the dashboard description expands aliases with field docs and reports a de
 test('the manifest rejects arguments that are not data or not natlang types, with the fix', () => {
   const reject = (argument, pattern) => assert.throws(() => parseTargetArguments([argument], 'main'), pattern);
   reject({ name: 'x', type: 'json' }, /json is not a natlang type; use unknown/);
-  reject({ name: 'x', type: '(a: string) => string' }, /lambda types cannot be passed/);
+  reject({ name: 'x', type: '(a: string) => string' }, /function values cannot be written on a command line/);
   reject({ name: 'x', type: 'string', required: true, default: 'a' }, /an argument with a default is optional; remove required/);
   reject({ name: 'x', type: 'number', path: 'file' }, /a path argument has type string/);
   reject({ name: 'x', type: 'string', label: 'X' }, /unknown field label/);

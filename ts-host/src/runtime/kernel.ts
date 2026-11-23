@@ -8,7 +8,7 @@ import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
-import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseTypeCached, type DialectBinding, type Type } from '../native/types.js';
+import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseAliases, parseTypeCached, type DialectBinding, type Type } from '../native/types.js';
 import { NeuraleseDialectError, NeuraleseUnsupportedError, dialectBinding, readerDialect } from '../native/neuralese.js';
 import { CRISP, representationType, type GenericResult, type Representation } from '../native/representation.js';
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
@@ -297,7 +297,7 @@ function refinedSignature(definition: CallableDefinition): { env: TypeEnv; param
   const texts = [definition.returns, ...definition.params.map(parameter => parameter.type), ...Object.values(definition.types)];
   if (!texts.some(text => /\bIs\s*</.test(text))) return undefined;
   try {
-    const env = new TypeEnv(Object.fromEntries(Object.entries(definition.types).map(([name, text]) => [name, parseTypeCached(text)])));
+    const env = new TypeEnv(parseAliases(definition.types));
     const params = definition.params.map(parameter => parseTypeCached(parameter.type)), returns = parseTypeCached(definition.returns);
     if (![...params, returns].some(type => containsRefinement(type, env))) return undefined;
     return { env, params, returns, refinedReturns: containsRefinement(returns, env) };

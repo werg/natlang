@@ -6,7 +6,7 @@ type CaseNote = Is<string, 'one sentence'>;
 /** Record settled requests in the desk's folder as one transaction: a case file for each, and the ledger's counts. */
 export async function record(folder: Folder, outcomes: Outcome[]): Promise<Ledger | undefined> {
   const note = nl<(outcome: Outcome) => CaseNote>`Summarize outcome for the case file.`;
-  const proposal = await folder.propose<[], Ledger>(async (draft: FolderHandle) => {
+  const proposal = await folder.propose(async (draft: FolderHandle) => {
     const notes = await Promise.all(outcomes.map(outcome => note(outcome)));
     const ledger = await draft.file('ledger.json').readJson<Ledger>();
     for (const [index, outcome] of outcomes.entries()) {

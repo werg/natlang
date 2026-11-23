@@ -1,0 +1,9 @@
+{
+  "role": "Backend engineer who keeps a payments service running",
+  "requirements": ["production experience with PostgreSQL", "on-call duty for a live service"],
+  "applications": [
+    { "id": "a1", "text": "Five years on the payments team at a bank: I ran our PostgreSQL clusters and was on the on-call rotation for the card service." },
+    { "id": "a2", "text": "I love databases and would be happy to learn PostgreSQL. I built a todo app in my spare time." },
+    { "id": "a3", "text": "Site reliability engineer: weekly on-call for our checkout API; I migrated its storage from MySQL to PostgreSQL in production." }
+  ]
+}

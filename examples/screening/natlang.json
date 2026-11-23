@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "natlang-screening-example",
+  "version": "0.1.0",
+  "description": "Screen job applications: one judgment per requirement bound with partial, and a fit judgment written for the role.",
+  "include": [
+    "README.md",
+    "applications.json",
+    "fit_for.nl",
+    "main.ts",
+    "meets.nl",
+    "package.json",
+    "screen.ts",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "targets": {
+    "screen": {
+      "entry": "main.ts",
+      "description": "Screen the bundled applications.json for its role and requirements."
+    }
+  },
+  "model": {
+    "stock": "lfm3-1.7b-q8_0"
+  }
+}

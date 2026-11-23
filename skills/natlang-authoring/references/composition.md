@@ -104,6 +104,46 @@ naming the item. `.on` keeps the context, so the escalated call above reads the 
 callable folder binds the same way: `import { Context } from '@natlang/node'` and `import verdict from './verdict.nl'`,
 then a default-exported `under(shop)` returns `verdict.in(Context.empty().with({ policy }))` for its caller to call.
 
+## Functions that take and return judgments
+
+A judgment is a value of a function type, so programs build lists of them, bind their parameters, and get them back
+from other functions. The screening example applies one check per requirement plus a fit judgment written for the
+role:
+
+<!-- from: examples/screening/screen.ts -->
+```ts
+  const checks: Check[] = [...requirements.map(requirement => meets.partial(requirement)), await fitFor(role)];
+  const results = await Promise.all(applications.map(application => Promise.all(checks.map(check => check(application)))));
+```
+
+`meets.partial(requirement)` is `meets` with its first parameter bound, as `bind` binds it: a natlang function of the
+remaining parameters, here `(application) => boolean`, with `on`, `in` and `iterateOn` kept. The bound values are
+checked against their parameter types at once. `fitFor` is a `.nl` function whose result is a function:
+
+<!-- from: examples/screening/fit_for.nl -->
+```yaml
+---
+description: The judgment of fit for a role, written for that role.
+args:
+  role: string
+returns: "(application: Application) => boolean"
+---
+```
+
+Its call writes the judgment in eval and finishes with it (`return nl`...``); the runtime tells the call how. A
+function type in a signature is awaited: `(application: Application) => boolean` and `(application: Application) =>
+Promise<boolean>` are the same type, and TypeScript sees the promise. The same holds for parameters: a `.nl` function
+with `args: { accept: "(t: Ticket) => boolean" }` takes any function of that type, and an inline
+`nl<(judge: (t: Ticket) => Promise<boolean>, all: Ticket[]) => Ticket[]>` does too.
+
+Every natlang function carries its signature, and a slot of function type checks it: parameters by position, each
+able to take what the slot passes, and a result that fits the slot's. A natlang function that does not fit is refused
+with `function-signature-mismatch`, naming both types. A TypeScript function passed there is checked at each call
+instead: its arguments and its awaited result must have the slot's types. An `nl` that returns the function itself is
+fine wherever a function is expected (a factory's `return nl`...``, a field typed as a function, an argument whose
+parameter is a function); a factory without a declared result takes its signature from how the functions it makes are
+called.
+
 ## A rule and a judgment behind one setting: `pluggable`
 
 Where an exact rule and a judgment both answer one question, give them one interface and let a setting choose.
@@ -156,7 +196,7 @@ Use `iterateOn` when each step depends on the previous state. Independent items 
 
 <!-- from: examples/refunds/ledger.ts -->
 ```ts
-  const proposal = await folder.propose<[], Ledger>(async (draft: FolderHandle) => {
+  const proposal = await folder.propose(async (draft: FolderHandle) => {
     const notes = await Promise.all(outcomes.map(outcome => note(outcome)));
     const ledger = await draft.file('ledger.json').readJson<Ledger>();
     for (const [index, outcome] of outcomes.entries()) {

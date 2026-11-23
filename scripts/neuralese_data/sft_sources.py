@@ -1858,8 +1858,10 @@ def render_decision(renderer, turn, prompt):
     record is one decision per field step under teacher forcing of the reply's own choices (``field_path``): {'steps':
     [decision as above, its options the step's open continuations (``decision_items(..., open_reply=True)``) and
     'open_reply': True]}; steps with a single candidate carry no choice and are left out. A reply that is one step's
-    open text (a recorded step, ``open_reply`` capture) is {'field_step': True}: its record's turn trains the step,
-    and its plain row would teach ending the reply mid-record (``admit`` drops it)."""
+    open text (a recorded step, ``open_reply`` capture; the RL collector writes the step's chosen option as the reply) is
+    {'field_step': True}: the turn of its last scored step trains it, and its plain row would teach ending the reply
+    mid-record (``admit`` drops it). The last scored step's reply is the whole record, or an open text whose later
+    steps have one candidate each (the runtime neither scores nor records those): its path completes it."""
     import numpy as np
     from natlang_neuralese.data.decision_graph import (decision_forms, decision_label, decision_replies,
                                                        field_candidates, field_path)
@@ -1892,9 +1894,19 @@ def render_decision(renderer, turn, prompt):
             step = [text for text, complete in field_candidates(forms, chosen) if not complete and reply.startswith(text)]
             if len(step) != 1:
                 return {'error': 'reply-not-a-form'}
-            if step[0] == reply:
-                return {'field_step': True}
             chosen.append(step[0])
+            if step[0] == reply:
+                break
+        # the last scored step: the steps after it have one candidate each (not scored, not recorded) up to the
+        # whole record, which then trains every step; otherwise a later recorded step carries the record
+        while True:
+            following = field_candidates(forms, chosen)
+            if len(following) != 1:
+                return {'field_step': True}
+            chosen.append(following[0][0])
+            if following[0][1]:
+                break
+        path = field_path(forms, chosen[-1])
     steps = [rendered(candidates, label, True) for candidates, label in path if len(candidates) >= 2]
     failed = next((step for step in steps if 'error' in step), None)
     if failed is not None:

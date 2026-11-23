@@ -179,6 +179,38 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
     return convertStructure(candidate, depth);
   };
 
+  /**
+   * An asynchronous function type with one plain signature and portable parameter and result types, such as
+   * `(t: Ticket) => Promise<boolean>` or a natlang function `NatlangFunction<[Ticket], boolean>`: the natlang function
+   * type `(t: Ticket) => boolean`, whose values the runtime checks by signature. Any other function stays a live host
+   * function (`Live<..., "function">`), passed by identity.
+   */
+  const asyncFunctionText = (candidate: ts.Type, depth: number): string | undefined => {
+    if (candidate.isUnion() || !(candidate.flags & ts.TypeFlags.Object || candidate.isIntersection())) return;
+    const signatures = candidate.getCallSignatures();
+    const signature = signatures.length === 1 ? signatures[0]! : undefined;
+    if (!signature || signature.typeParameters?.length || candidate.getConstructSignatures().length) return;
+    const returned = checker.getReturnTypeOfSignature(signature);
+    if (!(returned.isUnion() ? returned.types : [returned]).some(member => isPromiseLike(checker, member))) return;
+    const saved = { ...aliases };
+    try {
+      const parameters = signature.getParameters().map(parameter => {
+        const declaration = parameter.valueDeclaration ?? parameter.declarations?.[0];
+        if (declaration && ts.isParameter(declaration) && declaration.dotDotDotToken) throw new TargetError('a rest parameter');
+        const optional = !!declaration && ts.isParameter(declaration) && (!!declaration.questionToken || !!declaration.initializer);
+        let type = declaration ? checker.getTypeOfSymbolAtLocation(parameter, declaration) : checker.getTypeOfSymbol(parameter);
+        if (optional) type = checker.getNonNullableType(type);
+        const name = IDENTIFIER.test(parameter.name) ? parameter.name : `input${signature.getParameters().indexOf(parameter) + 1}`;
+        return `${name}${optional ? '?' : ''}: ${convert(type, depth + 1)}`;
+      });
+      return `(${parameters.join(', ')}) => ${convert(awaitedType(checker, returned).type, depth + 1)}`;
+    } catch (error) {
+      if (!(error instanceof TargetError) && !(error instanceof HostTarget)) throw error;
+      for (const name of Object.keys(aliases)) if (!Object.hasOwn(saved, name)) delete aliases[name];
+      return;
+    }
+  };
+
   const convertStructure = (candidate: ts.Type, depth: number): string => {
     const flags = candidate.flags;
     if (flags & ts.TypeFlags.StringLiteral) return JSON.stringify((candidate as ts.StringLiteralType).value);
@@ -188,6 +220,8 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
     if (flags & (ts.TypeFlags.Boolean | ts.TypeFlags.BooleanLiteral)) return 'boolean';
     if (flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) return 'null';
     if (flags & ts.TypeFlags.EnumLiteral && candidate.isUnion()) return candidate.types.map(t => convert(t, depth + 1)).join(' | ');
+    const lambda = asyncFunctionText(candidate, depth);
+    if (lambda) return lambda;
     if (candidate.isUnion()) {
       // TypeScript distributes a brand over a union (\`Is<"a" | "b", P>\` is \`("a" & brand) | ("b" & brand)\`, and
       // \`Is<boolean, P>\` brands \`true\` and \`false\` apart): one brand on every member is the brand of the union.

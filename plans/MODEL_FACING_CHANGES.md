@@ -3,6 +3,23 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — function types are checked signatures; a call whose result is a function is told how to return one (B9, L4)
+
+- **Call note** (`native/prompt.ts` `functionResultNote`, appended to the call notes by `callNotes` for the runtime and
+  the training rebuild in `teacher/serving-request.ts`): a call whose declared result resolves to a function type gets,
+  after its instructions, "This call's result is a function of type (t: Ticket) => boolean. Build it in eval and
+  finish with it: eval({ code: "return nl`<what one call of it does>`;", finish: true }) makes a natural-language
+  function with that signature, and a TypeScript function of that type is a result too." Before, such a call had no
+  way to learn that a function is returned from eval (a function is not JSON for `return_result`). No `.nl` in the
+  repository or the pools declares a function result, so no recorded call changes. Opt-out:
+  `NATLANG_PROMPT_REVISION=2026-11-22` (no note).
+- **Signature text**: an inline `nl` parameter or capture of an asynchronous function type
+  (`(t: Ticket) => Promise<boolean>`, a `NatlangFunction`) is now the natlang function type `(t: Ticket) => boolean`
+  in the call heading, instead of `Live<"...", "function">`; eval's TypeScript declarations render natlang function
+  types with a promised result (`(t: Ticket) => Promise<boolean>`), so the checker's view matches what calling them
+  returns. Synchronous function types stay live host functions. Errors: `function-signature-mismatch` names the slot's
+  and the given function's types and says what to pass.
+
 ### 2026-11-23 — collector episodes judge refinements on the policy (refined returns were undecidable)
 
 - **Defect.** `executeProgram` (`ts-host/src/teacher/collector.ts`) builds `NodeNativeRuntime` with `agent:` and no

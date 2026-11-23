@@ -8,7 +8,7 @@ import { canonical, fingerprint } from '../adaptation/identity.js';
 import type { InlineLambdaPlan } from '../compiler/inline.js';
 import { portablePrimitiveLiteral, type TargetDescriptor } from '../compiler/targets.js';
 import { coerce, isPlainRecord } from '../native/values.js';
-import { parseType, refinements as crispTable, TypeEnv } from '../native/types.js';
+import { parseAliases, parseType, refinements as crispTable, TypeEnv } from '../native/types.js';
 import { normalizePredicate } from '../native/refinement-settings.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { currentFrame, guard, runInFrame } from './context.js';
@@ -267,7 +267,7 @@ export type CaptureAccessors = Record<string, readonly [() => unknown, ((value: 
 
 function validateReboundCaptures(plan: InlineLambdaPlan, next: Record<string, unknown>, accessors: CaptureAccessors) {
   const aliases: Record<string, string> = Object.assign({}, ...plan.captures.map(capture => capture.type.aliases));
-  const env = new TypeEnv(Object.fromEntries(Object.entries(aliases).map(([name, text]) => [name, parseType(text)])));
+  const env = new TypeEnv(parseAliases(aliases));
   const classes = new Map<string, Function>();
   env.classes = classes;
   for (const capture of plan.captures) if (!capture.shadowedByParameter && capture.type.host?.kind === 'class') {

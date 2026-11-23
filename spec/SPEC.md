@@ -512,7 +512,15 @@ checked exactly. When the declared result is a record, array or dictionary and
 object/array literal (parsed, never run) and its data is checked instead; a
 string that is neither is refused with the shape to write. A value that misses a union of records is reported at the field
 of the variant it matches (`checkpoint/cutoff: expected number`), not as the
-whole union. Recursive function types are
+whole union. `Record<K, T>` whose key alias `K` is a union of string literals is the record with exactly those
+fields. A function type `(x: A) => R` is the type of a function a caller awaits (`=> Promise<R>` is the same type).
+Every natlang function carries its signature; a function value at a function-typed slot must fit it, parameters by
+position (each takes what the slot passes there; a function may take fewer) and its result covariantly, or it is
+refused with `function-signature-mismatch`. A function without a signature (TypeScript code) is wrapped at the slot so
+that each call checks its arguments and its awaited result against the slot's types. `fn.partial(...values)` binds a
+natlang function's first parameters, checked at once, and returns a natlang function of the rest that keeps `on`, `in`
+and `iterateOn`. An alias of `types.ts` that this grammar cannot read is reported where a signature uses it.
+Recursive function types are
 rejected (see Iteration and termination). The refinement and trust types
 `Is<T, P>` and `Untrusted<T>` belong to the
 [refinements extension](ext/refinements.md).

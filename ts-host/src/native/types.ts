@@ -4,9 +4,12 @@ export type Type =
   | { kind: 'lit'; value: string | number }
   | { kind: 'record'; fields: { name: string; type: Type; optional: boolean }[] }
   | { kind: 'list'; element: Type }
-  | { kind: 'dict'; element: Type }
+  /** A dictionary from string keys. `key` names the alias of `Record<Kind, T>`: when `Kind` resolves to string literals,
+   * the type is the record with exactly those fields (TypeEnv.resolve), as in TypeScript. */
+  | { kind: 'dict'; element: Type; key?: string }
   | { kind: 'union'; members: Type[] }
-  | { kind: 'name'; name: string }
+  /** An alias. `unparsed` marks a definition the type grammar cannot read (parseAliases): using it reports why. */
+  | { kind: 'name'; name: string; unparsed?: string }
   | { kind: 'lambda'; params: Extract<Type, { kind: 'record' }>; returns: Type }
   /** A live host object checked by contract rather than copied as data. `name` is its TypeScript text. */
   | { kind: 'host'; name: string; contract: HostCheck }
@@ -204,7 +207,10 @@ class Parser {
           this.eat(')');
           if (this.peek()?.value === '=>') {
             this.eat('=>');
-            return { kind: 'lambda', params: { kind: 'record', fields }, returns: this.union() };
+            // A natlang function is awaited: `=> Promise<R>` (the TypeScript spelling) is the same type as `=> R`.
+            const promised = this.peek()?.value === 'Promise' && this.tokens[this.index + 1]?.value === '<';
+            if (promised) this.eat();
+            return { kind: 'lambda', params: { kind: 'record', fields }, returns: promised ? this.args(1)[0]! : this.union() };
           }
         }
       }
@@ -223,7 +229,8 @@ class Parser {
       const keys = key?.kind === 'lit' ? [key] : key?.kind === 'union' ? key.members : undefined;
       if (keys?.length && keys.every(item => item.kind === 'lit' && typeof item.value === 'string'))
         return { kind: 'record', fields: keys.map(item => ({ name: String((item as { value: string }).value), type: value!, optional: false })) };
-      if (key?.kind === 'name' || (key?.kind === 'prim' && key.name === 'string')) return { kind: 'dict', element: value! };
+      if (key?.kind === 'name') return { kind: 'dict', element: value!, key: key.name };
+      if (key?.kind === 'prim' && key.name === 'string') return { kind: 'dict', element: value! };
       throw new TypeSyntaxError('Record keys are strings: write Record<string, T>, a union of string literals, or a type name for one');
     }
     if (token.value === 'NativeAdapter') return NATIVE_ADAPTER_TYPE;
@@ -316,6 +323,29 @@ function freezeTypeTree(node: object): void {
 }
 
 /** Parse a static declaration for internal read-only use. The public parser still creates a mutable tree. */
+/** The message for using an alias whose definition the type grammar cannot read. */
+const unreadableAlias = (alias: { name: string; unparsed?: string }) => new UnreadableAliasError(
+  `type ${alias.name} is not in the natlang type grammar (${alias.unparsed}); a signature that uses it cannot be checked, so ` +
+  `rewrite ${alias.name} with records, unions, literals, arrays and Record, or leave it out of natlang signatures`);
+/** A signature names an alias whose definition the type grammar cannot read. */
+export class UnreadableAliasError extends TypeSyntaxError {}
+
+/**
+ * Type alias definitions by name, parsed. A definition the grammar cannot read (a TypeScript-only type in `types.ts`)
+ * becomes a marker that reports why where it is used, so it breaks only the signatures that name it.
+ */
+export function parseAliases(texts: Readonly<Record<string, string>>, cached = true): Record<string, Type> {
+  const names: Record<string, Type> = {};
+  for (const [name, text] of Object.entries(texts)) {
+    try { names[name] = cached ? parseTypeCached(text) : parseType(text); }
+    catch (error) {
+      if (!(error instanceof TypeSyntaxError)) throw error;
+      names[name] = { kind: 'name', name, unparsed: error.message };
+    }
+  }
+  return names;
+}
+
 export function parseTypeCached(text: string): Type {
   if (!typeCacheEnabled || typeof text !== 'string' || text.length > MAX_CACHEABLE_TYPE_CHARACTERS)
     return parseType(text);
@@ -340,7 +370,7 @@ export function formatType(type: Type): string {
     case 'lit': return typeof type.value === 'string' ? JSON.stringify(type.value) : String(type.value);
     case 'record': return type.fields.length ? `{ ${type.fields.map(f => `${/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(f.name) ? f.name : JSON.stringify(f.name)}${f.optional ? '?' : ''}: ${formatType(f.type)}`).join(', ')} }` : '{}';
     case 'list': return (type.element.kind === 'union' ? `(${formatType(type.element)})` : formatType(type.element)) + '[]';
-    case 'dict': return `Record<string, ${formatType(type.element)}>`;
+    case 'dict': return `Record<${type.key ?? 'string'}, ${formatType(type.element)}>`;
     case 'union': return type.members.map(formatType).join(' | ');
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
@@ -376,7 +406,8 @@ export function typeAliasName(type: Type): string | undefined {
 /** Names whose definitions participate in this portable type. */
 export function typeAliasNames(type: Type): string[] {
   const name = typeAliasName(type);
-  return name === undefined ? children(type).flatMap(typeAliasNames) : [name];
+  if (name !== undefined) return [name];
+  return [...(type.kind === 'dict' && type.key ? [type.key] : []), ...children(type).flatMap(typeAliasNames)];
 }
 
 export class TypeEnv {
@@ -454,19 +485,37 @@ export class TypeEnv {
         seen.add(type.name);
         const found = this.lookup(type.name);
         if (!found) throw new TypeSyntaxError(`unknown type name ${type.name}`);
+        if (found.kind === 'name' && found.unparsed !== undefined) throw unreadableAlias(found);
         type = found;
       } else if (type.kind === 'host' && type.contract.kind === 'tag' && type.name === type.contract.tag &&
         this.lookup(type.name)) {
         // A program's own type shadows a platform global of the same name in its scope, as in TypeScript:
         // `type Request = { id: string }` makes `Request` that record, not fetch's Request.
         type = { kind: 'name', name: type.name };
-      } else if (type.kind === 'intersection') type = mergeIntersection(type.members, member => this.resolve(member));
+      } else if (type.kind === 'dict' && type.key) type = this.recordOfKeys(type.key, type.element);
+      else if (type.kind === 'intersection') type = mergeIntersection(type.members, member => this.resolve(member));
       else if (type.kind === 'index') type = indexedType(type.base, type.key, member => this.resolve(member));
       else return type;
     }
   }
+  /** `Record<Kind, T>`: the record with a field for each string literal `Kind` names, or a dictionary for `string`. */
+  private recordOfKeys(key: string, element: Type): Type {
+    const resolved = this.resolve({ kind: 'name', name: key });
+    const members = resolved.kind === 'union' ? resolved.members.map(member => this.resolve(member)) : [resolved];
+    if (members.length === 1 && members[0]!.kind === 'prim' && members[0]!.name === 'string') return { kind: 'dict', element };
+    if (!members.every(member => member.kind === 'lit' && typeof member.value === 'string'))
+      throw new TypeSyntaxError(`Record keys are strings: ${key} is ${formatType(resolved)}; write Record<string, T> or a union of string literals for its keys`);
+    return { kind: 'record', fields: [...new Set(members.map(member => String((member as { value: string }).value)))]
+      .map(name => ({ name, type: element, optional: false })) };
+  }
   checkNames(type: Type): void {
-    if (type.kind === 'name') { if (!this.lookup(type.name)) throw new TypeSyntaxError(`unknown type name ${type.name}`); return; }
+    if (type.kind === 'name') {
+      const found = this.lookup(type.name);
+      if (!found) throw new TypeSyntaxError(`unknown type name ${type.name}`);
+      if (found.kind === 'name' && found.unparsed !== undefined) throw unreadableAlias(found);
+      return;
+    }
+    if (type.kind === 'dict' && type.key && !this.lookup(type.key)) throw new TypeSyntaxError(`unknown type name ${type.key}`);
     if (type.kind === 'record') for (const field of type.fields) this.checkNames(field.type);
     if (type.kind === 'list' || type.kind === 'dict') this.checkNames(type.element);
     if (type.kind === 'refined' || type.kind === 'untrusted') this.checkNames(type.base);
@@ -520,9 +569,76 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   if (b.kind === 'host' && b.contract.kind === 'any') return true;
   if (a.kind === 'neuralese' && b.kind === 'neuralese')
     return env.dialect(a.dialect) === env.dialect(b.dialect) && fitsType(a.element, b.element, env, seen);
-  if (a.kind === 'lambda' && b.kind === 'lambda')
-    return fitsType(a.returns, b.returns, env, seen) && fitsType(b.params, a.params, env, seen);
+  if (a.kind === 'lambda' && b.kind === 'lambda') {
+    // Parameters match by position, as in TypeScript: names are documentation. Each parameter the function takes must
+    // accept what the slot passes there (contravariant), it may take fewer than the slot passes, and the result must
+    // fit the slot's (covariant).
+    const have = a.params.fields, wanted = b.params.fields;
+    if (have.some((field, index) => !field.optional && index >= wanted.length)) return false;
+    return fitsType(a.returns, b.returns, env, seen) &&
+      have.every((field, index) => index >= wanted.length || fitsType(wanted[index]!.type, field.type, env, seen));
+  }
+  // A typed function fits a slot that only asks for some function.
+  if (a.kind === 'lambda' && b.kind === 'host' && b.contract.kind === 'function') return true;
   return false;
+}
+
+/**
+ * The checked signature every natlang callable carries (non-enumerable, under this symbol): its function type and the
+ * type aliases its parameter and result types name, in the scope that defined it.
+ */
+export const NATLANG_SIGNATURE: unique symbol = Symbol.for('natlang.signature') as never;
+export type FunctionSignature = { readonly type: Extract<Type, { kind: 'lambda' }>; readonly types: Readonly<Record<string, Type>> };
+
+/** The signature a function carries, if it is a natlang callable or a function a typed slot already checked. */
+export function signatureOf(value: unknown): FunctionSignature | undefined {
+  if (typeof value !== 'function') return;
+  try { return (value as unknown as Record<symbol, FunctionSignature | undefined>)[NATLANG_SIGNATURE]; } catch { return; }
+}
+
+/** `type` with every alias name replaced by `rename(name)`. */
+export function renameTypeNames(type: Type, rename: (name: string) => string): Type {
+  if (type.kind === 'name') return { ...type, name: rename(type.name) };
+  const mapped = mapChildTypes(type, inner => renameTypeNames(inner, rename));
+  return mapped.kind === 'dict' && mapped.key ? { ...mapped, key: rename(mapped.key) } : mapped;
+}
+
+/**
+ * TypeScript text for a natlang type: a function type's result is a promise, since callers await natlang functions
+ * (`(t: Ticket) => boolean` is `(t: Ticket) => Promise<boolean>`); everything else is written as `formatType` writes it.
+ */
+export function formatTypeScript(type: Type): string {
+  const promised = (inner: Type): Type => inner.kind === 'lambda' ?
+    { ...inner, params: promised(inner.params) as typeof inner.params,
+      returns: { kind: 'host', name: `Promise<${formatTypeScript(inner.returns)}>`, contract: { kind: 'any' } } } :
+    mapChildTypes(inner, promised);
+  return formatType(promised(type));
+}
+
+/** `type` with each direct child type replaced by `child(type)`. */
+function mapChildTypes(type: Type, child: (inner: Type) => Type): Type {
+  switch (type.kind) {
+    case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: child(field.type) })) };
+    case 'list': case 'dict': case 'neuralese': return { ...type, element: child(type.element) };
+    case 'union': case 'intersection': return { ...type, members: type.members.map(child) };
+    case 'index': case 'refined': case 'untrusted': return { ...type, base: child(type.base) };
+    case 'lambda': return { ...type, params: child(type.params) as typeof type.params, returns: child(type.returns) };
+    default: return type;
+  }
+}
+
+/**
+ * Whether a function with `signature` fits a slot of function type `wanted` in `env`. The signature's aliases are its
+ * definer's: one that `env` defines the same way is shared, and one it defines differently (or not at all) is compared
+ * by its own definition.
+ */
+export function signatureFits(signature: FunctionSignature, wanted: Type, env: TypeEnv): boolean {
+  const own = signature.types;
+  const foreign = new Set(Object.keys(own).filter(name => JSON.stringify(env.lookup(name)) !== JSON.stringify(own[name])));
+  if (!foreign.size) return fitsType(signature.type, wanted, env.child({ ...own }));
+  const rename = (name: string) => foreign.has(name) ? `${name}\u0000signature` : name;
+  const names = Object.fromEntries(Object.entries(own).map(([name, type]) => [rename(name), renameTypeNames(type, rename)]));
+  return fitsType(renameTypeNames(signature.type, rename), wanted, env.child(names));
 }
 
 /** The predicates of a (possibly nested) refinement, outermost last, and the unrefined type beneath them. */
