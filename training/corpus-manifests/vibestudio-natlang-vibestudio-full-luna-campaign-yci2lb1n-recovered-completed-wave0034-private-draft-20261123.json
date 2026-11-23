@@ -1,0 +1,191 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-completed-wave0034-private-draft-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-completed-wave0034-private-draft-20261123",
+  "files": [
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-0.json",
+      "bytes": 358324,
+      "sha256": "0ebc17d30ba9979a8fda32f720143f3d06519ab960766d7954070378b22ff773"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-1.json",
+      "bytes": 367084,
+      "sha256": "1e3dedbf4fb497f072b57b81f4912dd6d525c476cb7d0852aa6247897ca0de50"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-10.json",
+      "bytes": 377465,
+      "sha256": "894cb9c6b54e9b4324a40ba87c7ad42ea405d0d123003b8fd07bfa41446cd0bc"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-11.json",
+      "bytes": 365278,
+      "sha256": "6221b410a9d1dccca0489dee98a437c081ae43fe2d099fea2925dc16da3ca937"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-12.json",
+      "bytes": 310254,
+      "sha256": "f5e62a67534fdbe04a19cd78ba71dd8afce3d6a9386962475ac7814d8898c061"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-13.json",
+      "bytes": 322094,
+      "sha256": "e52bf65c979e24198d95a0f2627c20a19083a094f9ddfc1c3b575be52c5d8286"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-14.json",
+      "bytes": 1404848,
+      "sha256": "3658dbc32566cbecf0a2cd3c3d1c4228bd6e71e20f5a8acf724aea97d7c9fbef"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-2.json",
+      "bytes": 682784,
+      "sha256": "bf5f1c20ba4dfd4332f9735c2cfb9b80e2e1a1f30bb7a354ae0a07451e3eeb3f"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-3.json",
+      "bytes": 449088,
+      "sha256": "479d02695178b77e3de55f4f585284aaec4c8bdc56b162ed4eb5fca2acbdb018"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-4.json",
+      "bytes": 414292,
+      "sha256": "69118fe10aedac79e496c77d165e497e3d88cf3308c8c9e1e16780a2a50c9b0d"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-5.json",
+      "bytes": 282872,
+      "sha256": "b9b3a8a4c73aeed1d4d3338acda82f3a46d2af91ea1adb747e3b543b5d7afb45"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-6.json",
+      "bytes": 285371,
+      "sha256": "eb39e8be216b70b23ffe965a3a6ecc638938866ee7ea57aacc88468ea97128df"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-7.json",
+      "bytes": 286998,
+      "sha256": "d33ef8302b2267f0b9c468982c9ebc7b12c2178168e18a5543e3c33ce155d415"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-8.json",
+      "bytes": 318561,
+      "sha256": "8fcb2375470388142cd046b56b4bba7bf261b33b4ee88e9410193f98c98ff2b6"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/call-9.json",
+      "bytes": 318528,
+      "sha256": "9380ab0f4493a7864f63f84bf84172bab5a50261361a0125462bf90ec71a331e"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/completed-outcome-original.json",
+      "bytes": 18721,
+      "sha256": "e08fd85c8e931f613374a092e06ca2ecaa5c40b3b2275bd98a485e68d2684747"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/completed-reassessment.json",
+      "bytes": 18789,
+      "sha256": "86c70eaf4fe72185b9049885e4c2209763eccdd9cc5dd65e3ad6c5b773378f57"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/manifest.json",
+      "bytes": 4240,
+      "sha256": "502a48157eb17d47792f2c48d79e325a9d2c02a7921bd27b84a6ca7fb94457b2"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/native-cli-rows.jsonl",
+      "bytes": 3361052,
+      "sha256": "7f5badf6cd05f5a0e367ca60b611e0236e36d4817becc13e1f9dd088e9e9d08c",
+      "lines": 24
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/original-outcome.json",
+      "bytes": 338,
+      "sha256": "336eb7914b33d090263cd8587364f6898cf76248186dd855df39cde4fba8787c"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-checker_sources-0.ts",
+      "bytes": 24276,
+      "sha256": "dacc8b403148143c5576eeb1dfdbd6767979eb599a6c8b43a290bd5b85d689c6"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-checker_sources-1.ts",
+      "bytes": 24180,
+      "sha256": "d32988d5acfd2eeec068400cf56eb83704d90c13c72946de0e85474c70bd7f8b"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-checker_sources-2.mjs",
+      "bytes": 13199,
+      "sha256": "b81e0c1bcee0b0a1ec4d453004d96ae8bec1a0e638ae16ff0dd2c636e3903d0f"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-checker_sources-3.json",
+      "bytes": 678,
+      "sha256": "f47bfa3acb591f68b956d5926b04a3f8b1b077c7f42b59bfe59dce12e5f8bba5"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-checker_sources-4.ts",
+      "bytes": 1055,
+      "sha256": "3194e29745caed6ae58c06880b34914a668b4c3354e7de5d518dda2f48d2a322"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-evidence-0.json",
+      "bytes": 59709,
+      "sha256": "c2e430cf8b1991210010316989b314800291349ecede6e8b6879405948e5a2d0"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment-validator.json",
+      "bytes": 572,
+      "sha256": "a5b7bfc2dafff8957f2487a76c18f85494da5bbd5b93de4562e69c910ab43024"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/reassessment.json",
+      "bytes": 751,
+      "sha256": "3340a126f8b86fc16873dc44bbe12e19b850519ff5d3c1d128f8514c3630bf04"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/trajectory-open-goal-receipt-draft-branch-full.json.gz",
+      "bytes": 1372624,
+      "sha256": "80dfda8ef916231ecdbea71c6d0b6800c6fae58149356d3f4dac784fa7d46dd3"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/trajectory.native.jsonl",
+      "bytes": 4476109,
+      "sha256": "4bf616a28b6c4a9049007ef69216bba5b9e77cfd9a93d605f494e120dc18f12b",
+      "lines": 1
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/trajectory.native.jsonl.zst",
+      "bytes": 96278,
+      "sha256": "3e4b39ef669b6cd6954caed086a14853f4d05e5b4864714882eaed87453b7b4e"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/verification.json",
+      "bytes": 17484,
+      "sha256": "3d411d1ecb82cadf63fba61f13a0e61ed0821a5c179e7dabde6f9cd87f542459"
+    },
+    {
+      "path": "capture/cases/open-goal-receipt-draft-branch/verified/workspace.json",
+      "bytes": 19466,
+      "sha256": "aea5f7b3faa5b4927516fd4810f99a754f9afc041bb8941d42a1cbec46cc3918"
+    },
+    {
+      "path": "graph-metrics.json",
+      "bytes": 10813,
+      "sha256": "2c0fb5a91ed6d2b6c3e4c7b60671fba611d00d80455ad2403babf572a2540414"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 278,
+      "sha256": "2b130509fb587474dffb7dd7b505c9deec6275711b115cb48535b8a80b606189"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 96457,
+      "sha256": "685ece16b103274d701b2603c586645f74803a3fd441e68daac22e8fba02ecda"
+    }
+  ],
+  "bytes": 16160910
+}
