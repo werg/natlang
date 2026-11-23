@@ -90,7 +90,7 @@ export function validateReturnContribution(item, records, roots) {
      producer.definition?.name!==item.definition.name||producer.definition?.source!==item.definition.source||
      c.lineage[0]!==root.call_id||c.lineage.at(-1)!==producer.call_id)
     throw new Error('application return contribution differs from actual captured outputs');
-  const at=(value,path)=>{for(const key of path){if(value===null||typeof value!=='object'||!Object.hasOwn(value,key))throw new Error('application return projection path is absent');value=value[key];}return value;};
+  const at=(value,path)=>{for(const key of path){const valid=Array.isArray(value)?Number.isSafeInteger(key)&&key>=0&&key<value.length:value!==null&&typeof value==='object'&&typeof key==='string';if(!valid||!Object.hasOwn(value,key))throw new Error('application return projection path is absent');value=value[key];}return value;};
   if(!isDeepStrictEqual(at(JSON.parse(c.root_value_json),c.root_path),at(JSON.parse(item.valueJson),c.producer_path)))
     throw new Error('application return projection differs from actual producer value');
   if(c.kind==='root'){
