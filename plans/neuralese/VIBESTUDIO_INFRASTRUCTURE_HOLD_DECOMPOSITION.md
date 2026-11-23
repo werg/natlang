@@ -1,0 +1,7 @@
+# Hold waves with repeated infrastructure failures
+
+Inventory: `vibestudio_campaign.outcomes` preserves raw packet identity but drops `natlangTeacher.captureErrors`; `infrastructure_failure` already classifies workerd resets, no-capture, pre-teacher package failure and unavailable Android setup for retry accounting in `publish_status`. `drive` instead uses a separate hardcoded reset/all-missing rule, letting mixed waves repeatedly retry uncounted startup/capture failures. Its only control consumer is the next-loop `stop-after-wave` check; `runtime-hold.json` is diagnostic. Repository search found no other readers of its reset/missing fields.
+
+Use the existing typed infrastructure classifier for the wave hold too, preserving old reset/missing diagnostic fields and adding exact infrastructure failure case names. Default threshold2, configurable through `--infrastructure-hold-threshold`; zero opts out. Propagate original nonempty capture error values from raw packets, classify them as infrastructure rather than model failures. Genuine wrong user outcomes stay ordinary counted attempts and do not hold the controller. No changes to teacher generation, admission, Host, Core, vendors or archive cleanup.
+
+Validation:23 focused campaign/packing tests pass, including mixed completed+two missing captures, genuine user outcome failures, original storage capture error preservation/classification and threshold opt-out. The controller remains responsible for archiving/joining a completed wave before writing its hold, so no captured work is discarded.

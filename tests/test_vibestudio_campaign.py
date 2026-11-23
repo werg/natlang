@@ -375,3 +375,30 @@ def test_graph_telemetry_retains_failed_and_missing_captures_separately(tmp_path
     saved = vibestudio_campaign.read(tmp_path / 'graph-metrics.json')
     assert saved['captures'][0]['metrics']['max_depth'] == 1
     assert saved['captures'][0]['source']['sha256'] == hashlib.sha256(raw.read_bytes()).hexdigest()
+
+
+def test_mixed_wave_holds_only_repeated_typed_infrastructure_failures():
+    receipt = {'done': {'status': 'verified'}, 'missing-a': {'status': 'no-capture'},
+               'missing-b': {'status': 'no-capture'}, 'wrong': {'status': 'test-failed', 'reason': 'wrong contents'}}
+    hold = vibestudio_campaign.wave_infrastructure_hold(receipt, {})
+    assert hold == {'infrastructure_failures': ['missing-a', 'missing-b'], 'infrastructure_hold_threshold': 2,
+                    'workerd_resets': [], 'all_captures_missing': False}
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}, 0) is None
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}, 3) is None
+    assert vibestudio_campaign.wave_infrastructure_hold({'wrong-a': receipt['wrong'], 'wrong-b': receipt['wrong']}, {}) is None
+    assert vibestudio_campaign.wave_infrastructure_hold({}, {}) is None
+
+
+def test_storage_capture_errors_are_retained_and_classified_as_infrastructure(tmp_path):
+    import gzip
+    import json
+    directory = tmp_path / 'st_owned'; directory.mkdir()
+    errors = [{'callId': 'root', 'message': 'ENOSPC writing model exchange'}]
+    with gzip.open(directory / 'trajectory-owned-full.json.gz', 'wt') as stream:
+        json.dump({'result': {'passed': False}, 'execution': {'diagnostics': {'natlangTeacher': {
+            'rootCallIds': ['root'], 'calls': [], 'captureErrors': errors}}}}, stream)
+    result = vibestudio_campaign.outcomes(tmp_path, ['owned'], None, {}, {'owned': {}})['owned']
+    assert result['capture_errors'] == errors
+    assert vibestudio_campaign.infrastructure_failure(result, {})
+    assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 1)['infrastructure_failures'] == ['owned']
+    assert vibestudio_campaign.wave_infrastructure_hold({'owned': result}, {}, 0) is None
