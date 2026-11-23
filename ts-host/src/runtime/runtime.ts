@@ -15,7 +15,8 @@ import type { Platform } from './platform.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
-import { decisionScorer } from '../native/decision.js';
+import { decisionScorer, declineScorer } from '../native/decision.js';
+import { decisionDeclined } from '../evaluation/usage.js';
 import { readerDialect } from '../native/neuralese.js';
 import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, JUDGE_CALL_CONTEXT_INSTRUCTIONS, callJudge, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
 import { ModelBudget } from '../native/model-budget.js';
@@ -460,9 +461,8 @@ export class NatlangTask {
       const id = config?.id ?? driverModel ?? (driver.name || (config ? 'model' : 'agent'));
       // A scorer cannot reserve a bounded completion allowance. Route bounded graphs through an ordinary child call.
       const scorer = this.modelBudget.maxRequests === undefined && this.modelBudget.maxTokens === undefined ? decisionScorer(driver) : undefined;
-      if (scorer) return decisionJudge(scorer, { id });
       // No scoring: run `holds` as an ordinary natural-language call on that model (needs the calling frame).
-      return frame ? callJudge(async (value, predicate, signal, context) => {
+      const called = frame ? callJudge(async (value, predicate, signal, context) => {
         const { invokeDefinition } = await import('./kernel.js');
         // A relational property (an `ensures:` predicate) also takes the values it names, as `context`.
         // model-call-kind: runtime-authored-call (refinement:holds without a scoring driver) -- training/model-call-kinds.json
@@ -472,6 +472,20 @@ export class NatlangTask {
           types: {}, codebase: {}, subtype: 'function', ...(name ? { model: name } : {}) }, context ? [value, predicate, context] : [value, predicate], { manifest: { internal: true } });
         return result === true;
       }, `call:${id}`) : undefined;
+      if (!scorer) return called;
+      const scored = decisionJudge(scorer, { id });
+      if (!called) return scored;
+      // A driver may carry a scorer that declines (`decision-unsupported`: an unscoring server or wllama build). Like a
+      // finite readout (agent.ts), the judge then runs as the ordinary call, from then on for that scorer.
+      const declined = () => decisionScorer(driver) !== scorer;
+      return { get id() { return declined() ? called.id : scored.id; }, get kind() { return declined() ? 'call' as const : 'scorer' as const; },
+        async probability(value, predicate, signal, turn, context) {
+          if (!declined()) {
+            try { return await scored.probability(value, predicate, signal, turn, context); }
+            catch (error) { if (!decisionDeclined(error)) throw error; declineScorer(scorer); }
+          }
+          return called.probability(value, predicate, signal, turn, context);
+        } };
     };
     const judge = judgeOf(settings?.judge, settings?.judge ? this.model(settings.judge) : model);
     const escalation = settings?.escalate ? judgeOf(settings.escalate, this.model(settings.escalate)) : undefined;

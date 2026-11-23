@@ -183,6 +183,10 @@ test('any driver may carry the decision capability: a driver whose scorer is uns
   assert.equal(scored, 1); assert.equal(turns, 1);
   const event = traces.flatMap(trace => trace.events).find(item => item.kind === 'decision_readout');
   assert.equal(event.phase, 'unavailable'); assert.match(event.reason, /gateway model has no logprobs/);
+  // a scorer that declined is not asked again: later readouts generate at once (no reasoning sampled for a score)
+  const reasoned = loadVirtualNatlang({ 'verdict.nl': VERDICT.replace('readout: instant', 'readout: decision') }, 'verdict.nl');
+  assert.equal(await runtime.run(() => reasoned('y')), 'knight');
+  assert.equal(scored, 1); assert.equal(turns, 2);
   // any other scorer failure is the call's failure, not a reason to generate instead
   const failing = Object.assign(driver, { decide: async () => { throw new Error('gateway offline'); } });
   await assert.rejects(createNatlangRuntime({ model: { driver: failing }, seed: { mode: 'backend' } }).run(() => fn('x')), /gateway offline/);

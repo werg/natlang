@@ -150,6 +150,11 @@ export function piAssistantContent(reply: PiAssistantMessage) {
   return { calls, text, reasoning, rawCalls };
 }
 
+/** The whole prompt of a Pi reply: uncached input plus cache reads and cache writes (Pi splits them). */
+export const piPromptTokens = (usage: { input: number; cacheRead?: number; cacheWrite?: number }): number =>
+  usage.input + (usage.cacheRead || 0) + (usage.cacheWrite || 0);
+const piCacheReads = (usage: { input: number; cacheRead?: number }): number => usage.cacheRead || 0;
+
 /**
  * A completed Pi assistant message as the model turn natlang's interpreter reads. A reply that ended in `error` or
  * `aborted` is a failed turn: it throws, carrying Pi's message (`provider` names the backend in the fallback text).
@@ -160,7 +165,10 @@ export function piAssistantToTurn(reply: PiAssistantMessage, provider: string): 
     throw new Error(reply.errorMessage ?? `provider ${provider} failed`);
   const { calls, text, reasoning, rawCalls } = piAssistantContent(reply);
   return { calls: calls.map(call => [call.name, call.arguments as Record<string, unknown>]), raw_calls: rawCalls, text,
-    ...(reasoning ? { reasoning } : {}), prompt_tokens: reply.usage.input, completion_tokens: reply.usage.output,
+    // Pi's `input` counts only uncached prompt tokens; a turn's prompt_tokens is the whole prompt (as OpenAI and
+    // llama.cpp report it), with the cache reads also given as cached_tokens.
+    ...(reasoning ? { reasoning } : {}), prompt_tokens: piPromptTokens(reply.usage), completion_tokens: reply.usage.output,
+    ...(piCacheReads(reply.usage) ? { cached_tokens: piCacheReads(reply.usage) } : {}),
     ...(reply.stopReason === 'length' ? { truncated: true } : {}),
     raw_response: { stop_reason: reply.stopReason, usage: reply.usage } };
 }

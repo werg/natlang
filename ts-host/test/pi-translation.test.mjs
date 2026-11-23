@@ -29,6 +29,13 @@ for (const [shape, reply] of [['upstream pi-ai 1.4.0', upstream], ['vibestudio f
   });
 }
 
+test('a Pi turn reports the whole prompt: uncached input plus cache reads and writes, the reads also as cached_tokens', () => {
+  const cached = { ...upstream, usage: { ...usage, input: 11, cacheRead: 3000, cacheWrite: 40 } };
+  const turn = piAssistantToTurn(cached, 'p');
+  assert.equal(turn.prompt_tokens, 3051); assert.equal(turn.cached_tokens, 3000);
+  assert.equal(piAssistantToTurn(upstream, 'p').cached_tokens, undefined);
+});
+
 test('truncated and failed Pi replies', () => {
   assert.equal(piAssistantToTurn({ ...upstream, stopReason: 'length' }, 'p').truncated, true);
   assert.throws(() => piAssistantToTurn({ ...upstream, stopReason: 'error', errorMessage: 'quota' }, 'p'), /quota/);

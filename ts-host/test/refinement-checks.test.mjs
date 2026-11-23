@@ -188,6 +188,28 @@ test('without a scoring driver the judge runs as an ordinary boolean call and is
   assert.equal(asked.length, 2);
 });
 
+test('a scorer that declines (decision-unsupported, e.g. a Pi provider) hands the judge to the ordinary boolean call', async () => {
+  const asked = [];
+  let declines = 0;
+  const driver = Object.assign(async ({ messages }) => {
+    const text = messages.map(message => String(message.content)).join('\n');
+    if (/Decide whether value satisfies predicate/.test(text)) {
+      asked.push(text);
+      return { calls: [['return_result', { status: 'success', value: !/rude/.test(text) }]] };
+    }
+    const rude = !messages.some(message => message.role === 'tool' && /^rejected/.test(String(message.content)));
+    return { calls: [['return_result', { status: 'success', value: rude ? 'rude reply' : 'Hello.' }]] };
+  }, { decide: async () => { declines++; throw new Error('decision-unsupported: Pi provider backends cannot score replies'); } });
+  const t = run({ driver }, { 'reply.nl': REPLY }, { repairs: 2 }, fn => fn('x'));
+  assert.equal(await t.result(), 'Hello.');
+  const checks = events(t.traces, 'refinement_check');
+  assert.ok(checks.length >= 2 && checks.every(check => check.judge === 'call'), JSON.stringify(checks.map(check => check.judge)));
+  assert.deepEqual(checks.slice(0, 2).map(check => check.outcome), ['fail', 'pass']);
+  // The first verdict was asked before the decline was known, under the scorer's cache key: at most one value is asked twice.
+  assert.ok(asked.length >= 2 && asked.length <= 3, String(asked.length));
+  assert.equal(declines, 1, 'a declining scorer is asked once per runtime');
+});
+
 test('service results declared refined are checked like an nl return', async () => {
   const judged = [];
   const driver = Object.assign(async ({ messages }) => {

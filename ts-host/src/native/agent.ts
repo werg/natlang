@@ -48,7 +48,7 @@ import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
-import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionSamples, decisionScorer, domainMatch, domainValues,
+import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionSamples, decisionScorer, declineScorer, domainMatch, domainValues,
   pathValue, scoredJointly, softmax, stepCandidates, type DecisionDomain, type DecisionPath } from './decision.js';
 import { decisionFieldsPrompt } from '../decision-frame.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
@@ -1718,6 +1718,7 @@ export class NativeToolAgent {
         return this.decisionReadout(session, opening);
       }
       if (!message.startsWith('decision-unsupported') && !message.startsWith('decision-open-unsupported')) throw error;
+      if (message.startsWith('decision-unsupported')) declineScorer(decide);
       session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable', reason: message });
       return this.options.decisionGeneration === 'tool-loop' ? false : generate();
     };

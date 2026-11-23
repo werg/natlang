@@ -3,6 +3,23 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — A backend that cannot score replies is no scorer: no reasoning samples for a score that never comes, refinement judges as ordinary calls (B14)
+
+- **What changed.** A Pi provider session (e.g. `openai-codex`, as `natlang run --provider` and teachers use) no longer
+  exposes a decision scorer, and any scorer that declines once (`decision-unsupported`: an unscoring server or wllama
+  build) is no scorer for the rest of the process (`native/decision.ts` `declineScorer`, read by `decisionScorer`).
+  A `readout: decision` call on such a backend generates its value at once on the unchanged decision prompt; before,
+  it first drew `decisionSamples` (4) reasoning replies, then the scorer declined and the value was generated anyway:
+  5 model requests per decision instead of 1 (B14 triage arm B: 10 Luna requests for a two-decision ticket, now 2).
+  A refinement check (`Is<T, "...">` return types) on such a backend runs its judge as the ordinary `holds` call; before,
+  the scored judge's `decision-unsupported` failed the whole call (`examples/triage` failed every urgent ticket on
+  Luna: "nl@triage.ts:31: failed: decision-unsupported").
+- **Why (first principles).** Sampled reasoning whose score cannot be read is discarded work, and a property check
+  that cannot be scored has an ordinary-call judge for exactly this case (`callJudge`); a declined scorer must reach it.
+- **Prompt text.** Unchanged: the generated decision and the `holds` call use their existing prompts.
+- **Accounting.** A Pi turn's `prompt_tokens` is now the whole prompt (Pi's uncached input plus cache reads and writes)
+  with the reads as `cached_tokens`, as OpenAI and llama.cpp report it; before it counted only uncached input.
+
 ### 2026-11-23 — `readout: decision` reasons first; `readout: instant` is the fast mode (DECISIONS "reasoned decisions")
 
 - **What changed.** A `readout: decision` call (and every finite call under `decisionReadout: 'finite-returns'`, and

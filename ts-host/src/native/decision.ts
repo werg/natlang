@@ -214,8 +214,16 @@ export function decisionSamples(configured?: number, temperature?: number): numb
   return temperature === 0 ? Math.min(value, 1) : value;
 }
 
+/** Scorers that declined (`decision-unsupported`: a backend that cannot score replies). */
+const declinedScorers = new WeakSet<DecisionScorer>();
+
+/** Record that a scorer declined: from then on it is no scorer, so readouts generate their value without first sampling
+ * reasoning for a score that never comes, and refinement judges run as ordinary calls. */
+export function declineScorer(scorer: DecisionScorer): void { declinedScorers.add(scorer); }
+
+/** The driver's decision scorer (contracts.ts `DecisionRequest`), if it carries the capability and has not declined it. */
 export function decisionScorer(driver: { decide?: DecisionScorer } | null | undefined): DecisionScorer | undefined {
-  return typeof driver?.decide === 'function' ? driver.decide : undefined;
+  return typeof driver?.decide === 'function' && !declinedScorers.has(driver.decide) ? driver.decide : undefined;
 }
 
 /**

@@ -52,6 +52,8 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   turn(request: ModelTurnRequest, signal?: AbortSignal, options?: SessionTurnOptions): Promise<ModelTurn>;
   /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
   decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionScores>;
+  /** False when the backend can never score replies (a Pi provider): its runtime driver then carries no `decide`. */
+  readonly scoresReplies?: boolean;
   /** The model's context window as its server reports it (undefined when it does not say). */
   contextWindow(): Promise<number | undefined>;
   /** Managed llama.cpp only: start the server and warm the prompt opening this request would send (llama/warm.ts),
@@ -239,6 +241,9 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     neuralese: !!external?.neuraleseServer,
     guidance: !!external?.neuraleseServer || choice.kind === 'managed-local',
     continuesReplies: choice.kind === 'managed-local',
+    // A Pi provider never scores replies: its driver carries no decision scorer, so a readout generates its value
+    // without first sampling reasoning for a score that cannot come, and refinement judges run as ordinary calls.
+    scoresReplies: choice.kind !== 'pi-provider',
     async neuraleseRuntime() {
       if (!external?.neuraleseServer) return undefined;
       await start(); return nativeDriver().neuraleseRuntime();
