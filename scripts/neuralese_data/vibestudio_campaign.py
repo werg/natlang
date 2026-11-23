@@ -18,6 +18,7 @@ from natlang_neuralese.common.code_provenance import code_provenance
 
 from live_teacher_sources import load_episode
 from observed_graph_metrics import graph_metrics, aggregate_graph_metrics
+from retained_state_archive import prepare_retained_state_packs
 from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registry, require_registered_open_goal
 
 
@@ -156,10 +157,12 @@ def prerequisite_holds(cases, host):
 def transfer(source, remote, destination):
     subprocess.run(['ssh', '-o', 'BatchMode=yes', remote, shlex.join(['mkdir', '-p', str(destination)])], check=True)
     target = f'{remote}:{destination}/'
-    flags = ['rsync', '-a', '--protect-args', f'{source}/', target]
+    exclusions = prepare_retained_state_packs(source)
+    common = ['rsync', '-a', '--protect-args', *[f'--exclude={name}' for name in exclusions]]
+    flags = [*common, f'{source}/', target]
     subprocess.run(flags, check=True)
-    comparison = subprocess.check_output([*flags[:3], '--dry-run', '--checksum', '--itemize-changes',
-                                          '--delete', *flags[3:]], text=True)
+    comparison = subprocess.check_output([*common, '--dry-run', '--checksum', '--itemize-changes',
+                                          '--delete', f'{source}/', target], text=True)
     if comparison.strip():
         raise RuntimeError(f'archive differs after transfer: {comparison[:400]}')
 
