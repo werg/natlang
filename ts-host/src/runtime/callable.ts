@@ -222,7 +222,8 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
     subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}),
     ...(record.withhold ? { withhold: record.withhold } : {}), ...(record.protect ? { protect: record.protect } : {}), ...(record.budget ? { budget: record.budget } : {}),
     ...(record.recursive ? { recursive: record.recursive } : {}), ...(record.measure ? { measure: record.measure } : {}),
-    ...(record.ensures ? { ensures: record.ensures } : {}), ...(record.recursive || record.measure ? { self: record } : {}),
+    ...(record.ensures ? { ensures: record.ensures } : {}), ...(record.writes ? { writes: record.writes } : {}),
+    ...(record.recursive || record.measure ? { self: record } : {}),
     description: record.description, source: record.source, revision: record.revision };
 }
 

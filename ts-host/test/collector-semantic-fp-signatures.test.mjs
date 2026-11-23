@@ -80,3 +80,21 @@ test('a .nl helper whose result is a Promise-returning function type returns a c
   const run = await executeProgram(makesJudge, driver, options('promise-result'));
   assert.equal(run.outcome.accepted, true, JSON.stringify(run.outcome).slice(0, 1500) + ' ' + seen.join(','));
 });
+
+// A root's own `ensures:` is checked in collection too (the collector prepares the root node itself; before 2026-11-23
+// only the calls the kernel ran had their postconditions bound, so a root's were never checked).
+test('ensures: on the root is checked in collection, and the call can repair its result', async () => {
+  const row = program('ensures-root', { 'r.nl': '---\nargs:\n  n: number\nreturns: number\nensures:\n  - check: "result > n"\n' +
+    '    message: the result is larger than n\n---\nReturn a number larger than n.\n' }, { n: 5 }, 6);
+  const replies = [];
+  let turn = 0;
+  const driver = async request => {
+    turn += 1;
+    if (turn > 1) replies.push(String(request.messages.at(-1)?.content ?? ''));
+    return succeed(turn === 1 ? 3 : 6);
+  };
+  const run = await executeProgram(row, driver, options('ensures-root'));
+  assert.match(replies[0], /Revise the result so that the result is larger than n/);
+  assert.equal(run.outcome.accepted, true);
+  assert.equal(turn, 2);
+});

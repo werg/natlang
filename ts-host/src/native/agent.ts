@@ -1,4 +1,5 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
+import { aliasDeclaration } from './type-aliases.js';
 import { SECOND_THINK_CLOSE } from './tool-markup.js';
 import { renderAuthoredTextGuidance } from '../guidance/program.js';
 import { fingerprint } from '../adaptation/identity.js';
@@ -338,8 +339,9 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
     }
   };
   for (const signature of signatures) visit(signature);
-  // A class or method-bearing interface is shown as its TypeScript declaration, not its live-value alias.
-  return [...found].map(name => declarations[name] ?? `type ${name} = ${definitions[name]};`);
+  // A class or method-bearing interface is shown as its TypeScript declaration, not its live-value alias. An alias's own
+  // doc comment (type-aliases.ts keeps it at the head of the definition) goes above it, as it is written in types.ts.
+  return [...found].map(name => declarations[name] ?? aliasDeclaration(name, definitions[name]!));
 }
 
 /** A wide or deeply composed scope can exhaust the model context before its first action. */
@@ -1384,17 +1386,19 @@ export class NativeToolAgent {
   }
 
   /** The call's signature line, the type aliases it references, and its instructions. */
-  private callHeading(session: NativeSession): { signature: string; scopeTypes: string[]; program: string } {
+  private callHeading(session: NativeSession): { signature: string; scopeTypes: string[]; program: string; writes?: string } {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') throw new TypeError('callHeading needs a function call');
     const program = (lam.originalBody ?? lam.body).replace(/^\n+|\n+$/g, '');
+    // A directory reducer's declared files (`writes:`) are part of its declaration, shown with the aliases they name.
+    const writes = lam.writes && lam.projectTransaction ? lam.writes : undefined;
     const scopeTypes = referencedTypeAliases([
-      ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns)
+      ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns), ...(writes ? [writes] : [])
     ], lam.typesSrc, {}, !this.compactCallableScope(session));
     const signature = `${lam.functionName || 'run'}(` +
       lam.type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ${formatType(field.type)}`).join(', ') +
       `): ${formatType(lam.type.returns)}`;
-    return { signature, scopeTypes, program };
+    return { signature, scopeTypes, program, ...(writes ? { writes } : {}) };
   }
 
   private compactCallableScope(session: NativeSession): boolean {
@@ -1406,7 +1410,7 @@ export class NativeToolAgent {
   private scopeOpening(session: NativeSession): string {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return 'Scope:';
-    const { signature, scopeTypes, program } = this.callHeading(session);
+    const { signature, scopeTypes, program, writes } = this.callHeading(session);
     const writable = Object.values(lam.captures ?? {}).filter(cell => cell.mutable).map(cell => cell.name);
     const services = session.availableServices();
     const noDirectServices = modelFacing('compact-callable-scope') &&
@@ -1421,6 +1425,7 @@ export class NativeToolAgent {
       ...Object.entries(lam.captures ?? {}).filter(([, cell]) => !isAdapterValue(capturedValue(cell))).map(([name]) => name),
       ...Object.keys(lam.codebase), ...Object.keys(services)];
     return [`You are inside this call: ${signature}`,
+      ...(writes ? [`The files it writes: ${writes}`] : []),
       ...(delegated.length ? ['', 'Host services bound only in the listed callable scopes:', ...delegated] : []),
       ...scopeTypes, '', 'Instructions:', program,
       ...(lam.handoff ? ['', lam.handoff] : []),

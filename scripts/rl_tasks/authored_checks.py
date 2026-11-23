@@ -23,10 +23,12 @@ Round 6 adds the static counterparts of the blind-solve rejection modes of round
 reads a labelled line or quotes a phrase no note contains, a helper instruction that quotes a world entry (the reference child
 matcher is first-match on fragments of the call opening), a move or write whose destination file name is not stated, a sort
 whose tie order is not stated, a reopened / corrected / re-fitted item whose earlier record is not said to be cleared or kept,
-and an ``Output contract:`` paragraph that is missing or whose templates and sort key contradict the numbered steps. Tasks by
-workers numbered ``ROUND6_FIRST_WORKER`` or higher get an error for a missing contract (and the
-scripted-match fragment inside a helper instruction, which is an error for every task); everything else is a ``heuristic:``
-warning, so the old batches can be measured without being failed.
+and a root that writes files without declaring them. The output contract is declared in types (2026-11-23): the files a
+root writes in its ``writes:`` type, each file's format in the doc comment of its field, the return value's meaning in the
+doc comment of its type. A prose ``Output contract:`` paragraph is an error for every task, and so is a file the reference
+writes that ``writes:`` does not cover; tasks by workers numbered ``ROUND6_FIRST_WORKER`` or higher that write files
+without any ``writes:`` get an error (and the scripted-match fragment inside a helper instruction is an error for every
+task); everything else is a ``heuristic:`` warning, so the old batches can be measured without being failed.
 
 The call_depth_3 warnings are heuristics: pass-through means identical argument and return types to its sub-helper, thin
 means under ``THIN_WORDS`` words of its own besides the call; they point the auditor at a task, they do not decide it.
@@ -345,7 +347,6 @@ REOPEN_WORDS = re.compile(r'\b(reopen\w*|re-open\w*|re-?fit\w*|re-?issue\w*|re-?
 CLEAR_WORDS = re.compile(r'\b(clear\w*|reset\w*|keeps?|kept|retain\w*|replac\w*|overwrit\w*|supersed\w*|remov\w*|drop\w*|'
                          r'discard\w*|no longer|still (counts?|stands?|applies)|stands?|stays?|erase\w*|cancel\w*|ignor\w*|'
                          r'wipe\w*|restart\w*|starts? (over|fresh|again)|latest|last (one|entry|line|note) wins)\b', re.I)
-SORT_KEY = re.compile(r'(?:sorted|sort|ordered|order|ranked)\s+(?:ascending|descending|alphabetically|numerically)?\s*by\s+([^.;,\n]+)', re.I)
 CONTRACT = re.compile(r'(?:^|\n)\s*\**Output contract:?\**:?(.*?)(?=\n\s*\n|$)', re.S | re.I)
 
 
@@ -447,25 +448,90 @@ def blind_failure_modes(task, functions):
                     warnings.append(f'heuristic: {path}: "{sentence.strip()[:70]}..." names a reopened / corrected / reversed item '
                                     'without saying whether its earlier record is cleared or kept')
                     break
-    # 6. Output contract present and consistent with the numbered steps (legacy exact desks only; verifier tasks specify
-    # their contract via types, ensures:, and executable verifiers rather than a prose Output contract block).
-    contract = CONTRACT.search(root_body)
-    if not contract:
-        if strict and task.get('oracle') != 'verifier':
-            errors.append('the root has no `Output contract:` paragraph (paths, line templates, separators, number format, '
-                          'empty case, sort key and tie-break, counted cases)')
-    else:
-        text = contract.group(1)
-        steps = root_body[:contract.start()] + root_body[contract.end():]
-        for template in sorted(set(re.findall(r'`([^`\n]*(?:\||<[^>]+>)[^`\n]*)`', text))):
-            if template.strip() and template not in steps and template not in root_body.replace(text, ''):
-                warnings.append(f'heuristic: the output contract template `{template[:50]}` is not the template of any numbered step: '
-                                'contract and steps must give the same line format')
-        keys_contract = [re.sub(r'\W+', ' ', k.lower()).split() for k in SORT_KEY.findall(text)]
-        keys_steps = [re.sub(r'\W+', ' ', k.lower()).split() for k in SORT_KEY.findall(steps)]
-        if keys_contract and keys_steps and not any(set(a) & set(b) for a in keys_contract for b in keys_steps):
-            warnings.append('heuristic: the output contract sorts by a different key than the numbered steps')
+    # 6. The output contract is declared, not written as prose (2026-11-23, DECISIONS "typed output contracts"): a root that
+    # writes files declares them with `writes:` (a record type whose fields are the paths or globs it writes, each with the
+    # type of the file's text and a doc comment saying what the file holds), and what the return value means is the doc
+    # comment of its type. A prose `Output contract:` paragraph teaches the model to look for the format in the author's
+    # instructions instead of the declared types, so it is an error for every task.
+    errors.extend(contract_problems(task, functions))
     return errors, warnings
+
+
+WRITES = re.compile(r'^writes:\s*(.+?)\s*$', re.M)
+
+
+def declared_types(task):
+    """Type alias name -> definition text: the root's frontmatter `types:` (one per line) and any `types.ts` of the task."""
+    found = {}
+    for path, text in task['files'].items():
+        if path.endswith('types.ts'):
+            for match in re.finditer(r'(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*(.*?);\s*(?=\n(?:/\*\*|export|type)|\Z)', text, re.S):
+                found[match.group(1)] = match.group(2)
+    header = split_file(task['files'].get(task['root'], ''))[0]
+    block = re.search(r'^types:\s*\n((?:[ \t]+.*\n?)+)', header, re.M)
+    for line in (block.group(1).splitlines() if block else []):
+        named = re.match(r'\s+([A-Za-z_$][\w$]*)\s*:\s*(.*)$', line)
+        if named:
+            found[named.group(1)] = named.group(2).strip().strip('\'"')
+    return found
+
+
+def writes_patterns(task):
+    """The field names (paths or globs) of the root's `writes:` type, or None when it declares none."""
+    header = split_file(task['files'].get(task['root'], ''))[0]
+    match = WRITES.search(header)
+    if not match:
+        return None
+    text = match.group(1).strip().strip('\'"')
+    text = declared_types(task).get(text, text)
+    text = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
+    return re.findall(r'["\']([^"\']+)["\']\s*\??\s*:', text)
+
+
+def glob_match(pattern, path):
+    regex = ''
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == '*' and pattern[index + 1:index + 2] == '*':
+            regex += '.*'
+            index += 2
+            if pattern[index:index + 1] == '/':
+                index += 1
+            continue
+        regex += '[^/]*' if char == '*' else re.escape(char)
+        index += 1
+    return re.fullmatch(regex, path) is not None
+
+
+def contract_problems(task, functions):
+    """Errors of rule 6: a prose output contract, or files the reference writes that `writes:` does not declare."""
+    errors = []
+    for path, (header, body) in functions.items():
+        if CONTRACT.search(body):
+            errors.append(f'{path} states an `Output contract:` paragraph: declare the contract in types instead. The files '
+                          'the root writes go in `writes:` (a record type whose fields are the paths or globs it writes, '
+                          'each typed `string` or a string literal, with a doc comment saying what the file holds: line '
+                          'templates, separators, number format, empty case, order), and what the return value means in '
+                          'a doc comment on its type alias (types.ts). The numbered steps say how to compute them.')
+    folders = task.get('folders') or {}
+    expected = task.get('expected_folders')
+    if not isinstance(expected, dict):
+        return errors
+    written = sorted(path for path, text in expected.items() if folders.get(path) != text)
+    if not written:
+        return errors
+    patterns = writes_patterns(task)
+    if patterns is None:
+        if round6_worker(task) and task.get('oracle') != 'verifier':
+            errors.append(f'the root writes {", ".join(written[:4])}{" ..." if len(written) > 4 else ""} but declares no '
+                          '`writes:`: declare the files it writes as a record type (see the error for an `Output contract:`)')
+        return errors
+    missing = [path for path in written if not any(glob_match(pattern, path) for pattern in patterns)]
+    if missing:
+        errors.append(f'the reference writes {", ".join(missing[:4])}, which no field of `writes:` ({", ".join(patterns)}) '
+                      'covers: the runtime refuses the reference\'s return; add the path or a glob of its folder')
+    return errors
 
 
 def helper_signature(task):

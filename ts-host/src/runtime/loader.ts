@@ -20,6 +20,7 @@ import { checkItems, expressionError, parseEnsures, unknownName, type EnsuresCla
 import { loadNzSync, registerImportedNativeArtifacts } from '../native/nz-file.js';
 import { genericResult, type GenericResult } from '../native/representation.js';
 import { readTypesFile } from './linked-types.js';
+import { writesFields } from './writes.js';
 
 export { readTypesFile } from './linked-types.js';
 
@@ -81,6 +82,8 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   measure?: string;
   /** `ensures:` in the frontmatter: postconditions relating the result to the arguments (runtime/ensures.ts). */
   ensures?: EnsuresClause[];
+  /** `writes:` of a directory reducer: the type whose fields are the files its calls write (runtime/writes.ts). */
+  writes?: string;
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -172,7 +175,7 @@ export function isFileRecord(record: ItemRecord, seen = new Set<ItemRecord>()): 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold', 'protect', 'budget',
-  'recursive', 'measure', 'ensures']);
+  'recursive', 'measure', 'ensures', 'writes']);
 /** What a `budget:` frontmatter map may bound: a call's turns, the reply tokens of one turn, all its tokens, its context window. */
 export const CALL_BUDGET_KEYS = ['maxTurns', 'turnTokens', 'maxTokens', 'contextTokens'] as const;
 export type CallBudget = Partial<Record<typeof CALL_BUDGET_KEYS[number], number>>;
@@ -190,7 +193,7 @@ function callBudget(path: string, value: unknown, line?: number): CallBudget | u
 export const WITHHOLDABLE_TOOLS: readonly string[] = ['edit_code', 'diff_code', 'list_files', 'search_files', 'read_file',
   'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor'];
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
-const TYPE_KEYS = /^(args|types|generic|returns):(.*)$/;
+const TYPE_KEYS = /^(args|types|generic|returns|writes):(.*)$/;
 
 /** A type written as a YAML-quoted string is its contents, so `"string[]"` and `string[]` are the same type. */
 function unquoteType(text: string): string {
@@ -235,10 +238,10 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
   }
   function readTyped(key: string, inline: string, body: string[]): void {
     if (key in typed) throw new Error(`frontmatter repeats ${key}`);
-    if (key === 'returns') {
+    if (key === 'returns' || key === 'writes') {
       const text = unquoteType([inline, ...body.map(line => line.trim())].join(' '));
-      if (!text) throw new Error('returns needs a type');
-      typed.returns = text;
+      if (!text) throw new Error(`${key} needs a type`);
+      typed[key] = text;
     } else if (inline || body[0]?.trim().startsWith('{')) {
       if (/^["']/.test(inline)) throw new Error(`${key} must map names to types, not be one string`);
       typed[key] = typeLiteralMap(key, [inline, ...body.map(line => line.trim())].join(' ').trim());
@@ -401,6 +404,15 @@ function parseUsesFrontmatter(path: string, value: unknown, text: string): { use
     try { ensures = parseEnsures(meta.ensures, params); }
     catch (error) { throw new NatlangSourceError(path, (error as Error).message, frontmatterLine(text, 'ensures')); }
   }
+  let writes: string | undefined;
+  if (meta.writes !== undefined) {
+    if (subtype !== 'directory-reducer')
+      throw new NatlangSourceError(path, 'writes declares the files a directory reducer writes; add kind: directory-reducer, or remove writes',
+        frontmatterLine(text, 'writes'));
+    writes = String(meta.writes);
+    try { writesFields(writes, new TypeEnv(parseAliases(types))); }
+    catch (error) { throw new NatlangSourceError(path, (error as Error).message, frontmatterLine(text, 'writes')); }
+  }
   const source = files.relative?.(path) ?? path;
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
     description: String(meta.description ?? ''), args, returns,
@@ -412,7 +424,8 @@ function parseUsesFrontmatter(path: string, value: unknown, text: string): { use
     ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}),
     ...(Array.isArray(meta.protect) && meta.protect.length ? { protect: [...new Set(meta.protect as string[])] } : {}),
     ...(budget ? { budget } : {}), ...(meta.recursive === 'structural' ? { recursive: 'structural' as const } : {}),
-    ...(typeof meta.measure === 'string' ? { measure: meta.measure.trim() } : {}), ...(ensures ? { ensures } : {}) };
+    ...(typeof meta.measure === 'string' ? { measure: meta.measure.trim() } : {}), ...(ensures ? { ensures } : {}),
+    ...(writes ? { writes } : {}) };
 }
 
 /**
@@ -546,24 +559,24 @@ function readManifestExports(dir: string, files: SourceFiles, fileName: 'natlang
   } catch { return undefined; }
 }
 
-function exportTargetString(entry: unknown): string | undefined {
+function exportTargetString(entry: unknown, conditions: readonly string[] = ['natlang', 'import', 'default']): string | undefined {
   if (typeof entry === 'string') return entry;
   if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
     const record = entry as Record<string, unknown>;
-    for (const key of ['natlang', 'import', 'default'])
+    for (const key of conditions)
       if (typeof record[key] === 'string') return record[key] as string;
   }
   return undefined;
 }
 
-function matchExportTarget(exportsMap: Record<string, unknown>, key: string): string | undefined {
-  if (Object.hasOwn(exportsMap, key)) return exportTargetString(exportsMap[key]);
+export function packageExportTarget(exportsMap: Record<string, unknown>, key: string, conditions?: readonly string[]): string | undefined {
+  if (Object.hasOwn(exportsMap, key)) return exportTargetString(exportsMap[key], conditions);
   for (const [pattern, rawTarget] of Object.entries(exportsMap)) {
     const star = pattern.indexOf('*');
     if (star < 0 || pattern.indexOf('*', star + 1) >= 0) continue;
     const prefix = pattern.slice(0, star), suffix = pattern.slice(star + 1);
     if (!key.startsWith(prefix) || !key.endsWith(suffix) || key.length < prefix.length + suffix.length) continue;
-    const target = exportTargetString(rawTarget);
+    const target = exportTargetString(rawTarget, conditions);
     if (target) return target.replace('*', key.slice(prefix.length, key.length - suffix.length));
   }
   return undefined;
@@ -601,9 +614,9 @@ function resolvePackageExport(specifier: string, root: string, files: SourceFile
   // 1. Current package's natlang.json exports (direct key, self-package name, or ./subpath).
   const rootManifest = readManifestExports(root, files, 'natlang.json');
   if (rootManifest?.exports) {
-    const mapped = matchExportTarget(rootManifest.exports, specifier)
-      ?? (rootManifest.name === pkgName ? matchExportTarget(rootManifest.exports, subpath) : undefined)
-      ?? (!scoped ? matchExportTarget(rootManifest.exports, `./${specifier}`) : undefined);
+    const mapped = packageExportTarget(rootManifest.exports, specifier)
+      ?? (rootManifest.name === pkgName ? packageExportTarget(rootManifest.exports, subpath) : undefined)
+      ?? (!scoped ? packageExportTarget(rootManifest.exports, `./${specifier}`) : undefined);
     if (mapped) return resolveMapped(root, mapped);
     if (rootManifest.name === pkgName) return { error: `package ${pkgName} does not export ${JSON.stringify(subpath)}` };
   }
@@ -616,7 +629,7 @@ function resolvePackageExport(specifier: string, root: string, files: SourceFile
       const pkgManifest = nlManifest?.exports ? nlManifest : readManifestExports(pkgDir, files, 'package.json');
       const exportsMap = nlManifest?.exports ?? pkgManifest?.exports;
       if (exportsMap) {
-        const mapped = matchExportTarget(exportsMap, subpath);
+        const mapped = packageExportTarget(exportsMap, subpath);
         if (mapped) return resolveMapped(pkgDir, mapped);
         if (nlManifest) return { error: `package ${pkgName} does not export ${JSON.stringify(subpath)}` };
       } else if (nlManifest) {

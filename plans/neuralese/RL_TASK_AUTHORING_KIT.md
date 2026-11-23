@@ -99,6 +99,35 @@ finite union of string literals (or `boolean`), and the parent calls `await deci
 `Record<string, number>`, string-literal unions, `Neuralese<string>`, `Neuralese<{ ...record... }>`. Use optional
 fields or `null`, never `undefined`.
 
+**The output contract is declared in types, never written as prose (2026-11-23).** The model is trained to read the
+declared types of a call, so the exact output format lives there; the instructions say how to compute it. A root that
+writes files (`kind: directory-reducer` with `expected_folders`) declares them with `writes:`, naming a record type whose
+fields are the paths it may write (a glob such as `"done/*.md"` for per-item files and moves), each typed `string` (or a
+string literal), and the doc comment of each field says what that file holds: line template, separators, number format,
+empty case, order and tie-break. What holds for every written file (each line ends with a newline, which files stay
+unchanged) is the doc comment of the alias; what the return value means is the doc comment of its type alias. Put the
+aliases in the task's `types.ts` (beside the root):
+
+```ts
+/** Every line of a written file ends with a newline. */
+export type ApplyFixFiles = {
+  /** One line per applied request in request file name order, `<request id> | herd <herd> | <change>`, the change signed
+   * with one decimal place (`+0.5`); exactly `none` when no request was applied. */
+  "log/applied.md": string;
+  /** The applied requests, under their own file names. */
+  "done/*.md": string;
+  "cows/*.md": string;
+};
+/** The number of cow records changed. */
+export type ApplyFixResult = number;
+```
+
+with `returns: ApplyFixResult` and `writes: ApplyFixFiles` in the root's frontmatter. The runtime shows both under the
+call's signature and refuses a return whose written files are not declared (`writes-unsatisfied`), so every file the
+reference writes must match a field. Declare every file a correct run could write (a conditional file too), not only the
+files of this world's outcome: a declaration that lists only the files the expected outcome writes tells a solver which
+conditions are false. An `Output contract:` paragraph in the instructions is an error (`authored_checks.py`).
+
 ## 3. Constructs (what each tag requires)
 
 | tag | the program must contain |
@@ -660,7 +689,8 @@ about 1 GB; give the ledger unit 3 GB). `authored_child_notes.py mechanical TASK
 file to admitted rows whose program cannot replay (provenance `mechanical:argument-extract`, never `checked`).
 `register_source_held.py` registers an assembled source's `held/` packets as evaluation-only. The round-5 author brief is
 `/mnt/external/natlang-rl-authoring/AUTHOR_BRIEF_ROUND5.md` (every root states an `Output contract:` paragraph: paths, line templates,
-separators, number format, empty case, sort key and tie-break, counted cases). Producer-note backfill brief:
+separators, number format, empty case, sort key and tie-break, counted cases; replaced 2026-11-23 by the typed declaration of
+section 2, "The output contract is declared in types"). Producer-note backfill brief:
 `AUTHOR_BRIEF_NOTES_BACKFILL.md`.
 
 ### Round 5 results (2026-11-04)
@@ -741,7 +771,8 @@ counts from the live selector to confirm the repeated-row behaviour; and program
 
 **Tools.** (1) `authored_checks.py` carries the static blind-failure checks (below); a scripted `$match` fragment of at least 6
 characters that occurs in the helper's own instruction text is an error for every task (first-match child scripting then answers every
-call), a missing `Output contract:` paragraph is an error for workers numbered 136 or higher, the rest are `heuristic:` warnings.
+call), a missing `Output contract:` paragraph is an error for workers numbered 136 or higher, the rest are `heuristic:` warnings
+(2026-11-23: the paragraph itself is now the error; the contract is the root's `writes:` type and its doc comments, section 2).
 (2) `sources/authored.py`: tasks of workers numbered 136 or higher draw their world's split with 30% held (15% dev, 15% confirmation);
 older workers and notes-only backfill copies (which keep their author) keep the 94/3/3 draw, so no existing row changes split.
 (3) `authored_child_notes.py extract` attaches argument-extract notes (`mechanical:argument-extract`: the call's own plain arguments,

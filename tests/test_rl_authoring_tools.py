@@ -288,12 +288,34 @@ def test_blind_failure_modes_are_flagged_statically():
     text = ' | '.join(report['warnings'])
     assert 'destination file name' in text and 'no tie order' in text.replace('states no tie order', 'no tie order')
     assert 'reopened' in text and 'Tool line:' in text and 'quotes world entries' in text
-    assert any('Output contract' in e for e in report['errors'])  # round-6 workers must state it
     old = dict(base, author={'model': 'm', 'worker': 'w12'})
-    assert not any('Output contract' in e for e in findings(old)['desk-0001']['errors'])
     # a scripted match fragment inside the helper's own instruction answers every call: an error for every task
     leaky = dict(old, smoke={'children': {'read': {'$match': [{'match': 'Tool line', 'value': 'x'}]}}})
     assert any('match fragment' in e for e in findings(leaky)['desk-0001']['errors'])
+
+
+def test_output_contracts_are_declared_in_types_not_prose():
+    """2026-11-23: a prose `Output contract:` paragraph is an error for every task; a root that writes files declares
+    them in `writes:` (an error for round-6 workers without it), and every file the reference writes must match a field."""
+    body = 'Move each file from inbox/ to done/ under its own name, then write count.md with the number moved.'
+    head = '---\nkind: directory-reducer\nargs: {}\nreturns: "number"\n'
+    def desk(front='', extra='', files=None, worker='w140'):
+        root = head + front + '---\n' + body + extra + '\n'
+        return task(folders={'inbox/a.md': 'A\n'}, expected_folders={'done/a.md': 'A\n', 'count.md': '1\n'},
+                    files={'desk.nl': root, **(files or {})}, author={'model': 'm', 'worker': worker})
+    def errors(row):
+        return [e for e in findings(row)['desk-0001']['errors'] if 'writes' in e or 'Output contract' in e]
+    prose = desk(extra='\n\nOutput contract: count.md is one line with the number and a newline.')
+    assert any('Output contract' in e for e in errors(prose))
+    assert any('Output contract' in e for e in errors(dict(prose, author={'model': 'm', 'worker': 'w12'})))
+    assert any('declares no `writes:`' in e for e in errors(desk()))
+    assert errors(desk(worker='w12')) == []
+    types = ('/** Every line ends with a newline. */\nexport type DeskFiles = {\n  /** The number moved. */\n  "count.md": string;\n'
+             '  "done/*.md": string;\n};\n')
+    assert errors(desk('writes: DeskFiles\n', files={'types.ts': types})) == []
+    assert errors(desk('writes: \'{ "count.md": string, "done/*.md": string }\'\n')) == []
+    partial = errors(desk('writes: \'{ "count.md": string }\'\n'))
+    assert any('done/a.md' in e and 'no field of `writes:`' in e for e in partial)
 
 
 def test_decision_readouts_are_leaves_that_call_nothing():
