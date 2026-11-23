@@ -131,7 +131,7 @@ async function adoptCallCommand(rest:string[],option:(name:string,fallback?:stri
 }
 
 /**
- * `natlang improve DIR [--proposal FILE] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]` (WS8 N4):
+ * `natlang improve DIR --proposal FILE [--model MODEL] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]` (WS8 N4):
  * builds the deterministic support/dev/confirmation case pack from `<DIR>/examples.json` + recorded calls in CallStore,
  * verifies a proposed change set through a temp-copy check + split evaluation transaction, and installs via adoptSource.
  */
@@ -163,7 +163,8 @@ async function improveDirectoryCommand(directory:string,option:(name:string,fall
     {files:raw.files as Record<string,string|null>,...(typeof raw.summary==='string'?{summary:raw.summary}:{})}:
     {files:raw as Record<string,string|null>};
   }
-  if(!proposal&&!model)throw Error('natlang improve DIR needs --proposal FILE, --dry-run, or --model MODEL');
+  if(!proposal)throw Error('natlang improve DIR checks and adopts a change set it is given: pass --proposal FILE ({ "files": { "PATH": "new text" or null } }) '+
+   '(with --model MODEL to run the case splits), or --dry-run alone to see the splits; to have the improver propose changes, use natlang improve init DIR and natlang improve CASE.json --out OUT');
   await backend?.prepare();
   const driver=model?(backend?(request:ModelTurnRequest,signal?:AbortSignal,options?:ModelTurnOptions)=>backend.turn(request,signal,options):openAICompatibleModelTurn({endpoint:server!,model})):undefined;
   const result=await improveDirectory({directory,store,seed,proposal,model:driver,recordPath,dryRun});

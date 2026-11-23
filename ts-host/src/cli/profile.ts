@@ -1,5 +1,5 @@
 /**
- * `natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--json]` (WS2 R5):
+ * `natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--profile NAME] [--json]` (WS2 R5):
  * aggregates per-function metrics from the CallStore (volume, p50 latency, avg tokens, compiled share,
  * decision confidence p10/p50, escalation rate from `decision_escalate` events, failure classes) and
  * invokes the pluggable `nextOptimization` policy to recommend the next optimization step.
@@ -255,15 +255,22 @@ export function renderProfileReport(report: ProfileReport): string {
   return lines.join('\n');
 }
 
-/** `natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--json]` */
+/** `natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--profile NAME] [--json]` */
 export async function profileCommand(args: string[]): Promise<number> {
   let dir: string | undefined;
   let storePath: string | undefined;
   let policy: PluggableSetting;
   let json = false;
+  let profile: string | undefined;
   for (let index = 0; index < args.length; index++) {
     const item = args[index]!;
     if (item === '--json') { json = true; continue; }
+    if (item === '--profile' || item.startsWith('--profile=')) {
+      const value = item.includes('=') ? item.slice(item.indexOf('=') + 1) : args[++index];
+      if (!value || value.startsWith('--')) throw usageError('--profile needs a model profile name');
+      profile = value;
+      continue;
+    }
     if (item === '--store' || item.startsWith('--store=')) {
       const value = item.includes('=') ? item.slice(item.indexOf('=') + 1) : args[++index];
       if (!value || (!item.includes('=') && value.startsWith('--'))) throw usageError('--store needs a directory path');
@@ -276,7 +283,7 @@ export async function profileCommand(args: string[]): Promise<number> {
       policy = value as PluggableSetting;
       continue;
     }
-    if (item.startsWith('-')) throw usageError(`unknown option ${item} for natlang profile; usage: natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--json]`);
+    if (item.startsWith('-')) throw usageError(`unknown option ${item} for natlang profile; usage: natlang profile [DIR] [--store PATH] [--policy crisp|nl|shadow] [--profile NAME] [--json]`);
     if (dir !== undefined) throw usageError(`unexpected argument ${item}; usage: natlang profile [DIR] [--store PATH] [--json]`);
     dir = item;
   }
@@ -285,7 +292,14 @@ export async function profileCommand(args: string[]): Promise<number> {
   if (!root) throw new Error('the call store is off on this machine (NATLANG_CALL_STORE=off); pass --store PATH to read one');
   const store = openMachineStore(root);
   try {
-    const report = await profileStore(store, { dir, policy });
+    // The natural-language side of nextOptimization is a natlang call: it runs on the configured model.
+    let report: ProfileReport;
+    if (policy === 'nl' || policy === 'shadow') {
+      const { natlangRuntime } = await import('../configured-runtime.js');
+      const configured = await natlangRuntime({ ...(profile ? { profile } : {}), escalate: false });
+      try { report = await configured.runtime.run(() => profileStore(store, { dir, policy })); }
+      finally { await configured.close(); }
+    } else report = await profileStore(store, { dir, policy });
     process.stdout.write(json ? `${JSON.stringify(report, null, 2)}\n` : `${renderProfileReport(report)}\n`);
     return 0;
   } finally {
