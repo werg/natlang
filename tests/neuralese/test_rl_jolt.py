@@ -18,6 +18,16 @@ from natlang_neuralese.common.custody import ProtectedWorlds
 from test_jolt_privileged_context import (CONSUMERS, TEMPERATURE, WRITERS, custody, insertion_blocks, load,
                                           protected_case, rendering, run_episode, train_case)
 
+
+@pytest.fixture(autouse=True)
+def _splice_produced_states(monkeypatch):
+    """These tests exercise the exact splice of text-written and produced states (gradients through the state, capture
+    occurrences, the splice protocol); engines read both as their tokens in the reader's context by default
+    (engine.reads_in_context; covered in test_sglang_actor and test_native_serve), so they opt out here."""
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
+
+
 K = 8
 DECLARATION = {'schema': 'jolt-plus/1', 'beta_s': 0.7, 'beta_t': 0.3,
                'outcome': {'schema': 'score-centered/1', 'k': K, 'importance': 'tis'}}

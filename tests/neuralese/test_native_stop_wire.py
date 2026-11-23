@@ -11,6 +11,16 @@ from natlang_neuralese.model.shared_state import Invocation, compile_graph
 from natlang_neuralese.serve.chat import render_messages, RequestError
 
 
+@pytest.fixture(autouse=True)
+def _splice_produced_states(monkeypatch):
+    """These tests exercise the exact splice of text-written and produced states (gradients through the state, capture
+    occurrences, the splice protocol); engines read both as their tokens in the reader's context by default
+    (engine.reads_in_context; covered in test_sglang_actor and test_native_serve), so they opt out here."""
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
+
+
+
 @pytest.mark.parametrize('family',['lfm'])
 def test_stopped_capture_replay_retains_forward_and_blocks_only_source_gradient(family):
     model,roles,identity,block_id,block,turns=actor_rollout(family)

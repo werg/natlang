@@ -38,7 +38,7 @@ from concurrent.futures import Future
 import numpy as np
 
 from .chat import RequestError
-from .engine import TEXT_IN_CONTEXT_MODE, Engine, Sequence, _insert_privileged, derive_seed
+from .engine import TEXT_IN_CONTEXT_MODE, Engine, Sequence, _insert_privileged, derive_seed, role_bans
 from ..common.sampling import TOP_K_MASS_FIELD
 from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
@@ -347,7 +347,9 @@ class SglangEngine(Engine):
         self._adapter_files, self._adapter_clock = {}, 0
         roles = self.role_tokens
         markers = {int(roles.produce_open), int(roles.produce_close), int(roles.consume_open), int(roles.consume_close)}
-        self.sglang_banned = sorted(int(token) for token in export_manifest['serving']['banned_token_ids'])
+        # the export's bans and the role bans every engine applies (`engine.role_bans`: the consume markers)
+        self.sglang_banned = sorted({int(token) for token in export_manifest['serving']['banned_token_ids']}
+                                    | role_bans(roles))
         if not set(self.sglang_banned) <= markers:
             raise ValueError('the HF export bans tokens other than the role markers')
         if (int(roles.produce_open) not in self.sglang_banned

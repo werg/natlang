@@ -12,6 +12,16 @@ from natlang_neuralese.model.native_adapters import run_native
 from natlang_neuralese.model.native_actor_graph import run_invocation_actors
 
 
+@pytest.fixture(autouse=True)
+def _splice_produced_states(monkeypatch):
+    """These tests exercise the exact splice of text-written and produced states (gradients through the state, capture
+    occurrences, the splice protocol); engines read both as their tokens in the reader's context by default
+    (engine.reads_in_context; covered in test_sglang_actor and test_native_serve), so they opt out here."""
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
+
+
+
 def test_text_result_writer_replay_preserves_policy_and_consumer_gradient(tmp_path, monkeypatch):
     engine=engine_fixture(tmp_path,'lfm')
     model=engine.shared_model

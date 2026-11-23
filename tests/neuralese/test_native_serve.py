@@ -479,7 +479,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             'temperature': 1.0, 'max_tokens': 4, 'x_natlang_rl_capture': True})
         assert guided['x_natlang_guidance'] == {'rejections': []}
         assert guided['x_natlang_rl_capture']['sampling_law']['guidance'] is True
-        assert guided['x_natlang_rl_capture']['samples'][0]['banned_token_ids'] == []
+        assert guided['x_natlang_rl_capture']['samples'][0]['banned_token_ids'] == sorted(  # the role bans only
+            (roles.consume_open, roles.consume_close))
     finally:
         server.shutdown()
         server.server_close()

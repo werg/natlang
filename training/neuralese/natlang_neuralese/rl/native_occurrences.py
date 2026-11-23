@@ -39,6 +39,15 @@ def capture_occurrences(name,capture,nodes):
     for event in writes+reads:
         if not isinstance(event.get('block'),str) or not isinstance(event.get('node'),str):
             raise ValueError('native occurrence requires exact block and graph node identities')
+    # A read the engine fed as the state's own tokens (`in-context-text`) is text in the prompt: no native input to bind
+    # and no state gradient (ts-host `nativeCaptureGraphBinding` drops the same reads).
+    for receipt in capture.get('native_state_imports') or ():
+        if receipt.get('mode')!='in-context-text':continue
+        matches=[event for event in reads if event['block']==receipt.get('id')
+                 and bool(event.get('stop_gradient'))==bool(receipt.get('stop_gradient'))
+                 and (receipt.get('source_occurrence') is None or _source(event)==receipt['source_occurrence'])]
+        if not matches:raise ValueError('an in-context read names no read occurrence of its state')
+        reads.remove(matches[0])
     captured_writes=capture.get('writes',[])
     captured_reads=[segment for segment in capture.get('prompt',[]) if segment.get('kind')=='native_state']
     if len(writes)!=len(captured_writes) or len(reads)!=len(captured_reads):

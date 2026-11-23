@@ -172,3 +172,22 @@ def test_every_engine_export_loads_the_checkpoints_marker_rows(tmp_path):
     assert torch.equal(embedding[markers].to(distinct.dtype), distinct)
     hf, _tied = merged_backbone(model)
     assert torch.equal(hf.get_input_embeddings().weight[markers].detach().to(distinct.dtype), distinct)
+
+
+def test_consume_markers_are_banned_in_every_draw(tmp_path, monkeypatch):
+    """No reply may sample a consume marker (the engine places them around imported state; a sampled one is a protocol
+    error): with text-initialised rows a reader copying a spliced state's markers sampled one at greedy. Both Python
+    engines ban them in the draw's law and record the bans per sample; NATLANG_BAN_CONSUME_MARKERS=0 opts out."""
+    from types import SimpleNamespace
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.common.sampling import masked_log_distribution
+    engine = engine_fixture(tmp_path, 'lfm')
+    roles = engine.role_tokens
+    seq = SimpleNamespace(bans={3: [7]}, native_own_position=3)
+    assert engine._native_bans(seq) == sorted({7, roles.consume_open, roles.consume_close})
+    logits = torch.zeros(engine.backbone.embedding_weight.shape[0])
+    logits[roles.consume_open] = 50.0                       # the marker is the argmax
+    law = masked_log_distribution(logits, 1.0, banned=engine._native_bans(seq))
+    assert int(law.argmax()) not in (roles.consume_open, roles.consume_close, 7)
+    monkeypatch.setenv('NATLANG_BAN_CONSUME_MARKERS', '0')
+    assert engine._native_bans(seq) == [7]

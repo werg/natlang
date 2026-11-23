@@ -143,7 +143,8 @@ def _span_fixture(tmp_path):
                            'layer_kinds': ['attention' if native.backbone.is_attention(i) else 'finite_convolution'
                                            for i in range(native.backbone.num_layers)],
                            'producer_embedding': {'input_id_offset': native.backbone.embedding_weight.shape[0]}}
-    front.sglang_banned = []
+    from natlang_neuralese.serve.engine import role_bans
+    front.sglang_banned = sorted(role_bans(front.role_tokens))   # as the actor sets them at load
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons, front.sglang_state_writes, front.sglang_capture_dir = {}, 0, None
     roles = front.role_tokens
@@ -271,8 +272,12 @@ def test_produce_span_capture_file_is_adopted_into_the_store_and_refused_when_wr
 
 
 @pytest.mark.parametrize('case', ['stop-inside', 'close-without-open', 'nested', 'consume-marker', 'length-inside'])
-def test_protocol_failures_match_the_native_engine(tmp_path, case):
+def test_protocol_failures_match_the_native_engine(tmp_path, case, monkeypatch):
     native, front, roles, word, _ = _span_fixture(tmp_path)
+    if case == 'consume-marker':
+        # consume markers are banned in every draw (engine.role_bans); a sampled one is reachable with the opt-out
+        monkeypatch.setenv('NATLANG_BAN_CONSUME_MARKERS', '0')
+        front.sglang_banned = []
     stop = sorted(front.stop_ids)[0]
     tokens, max_tokens = {
         'stop-inside': (word('t4') + [roles.produce_open] + word('t6') + [stop], 32),
@@ -641,8 +646,10 @@ def test_guidance_rewinds_on_sglang_like_the_native_engine(tmp_path, monkeypatch
     assert actual['choices'][0]['message'] == expected['choices'][0]['message']
     assert len(sent) == 3 and sent[1]['input_ids'] == sent[0]['input_ids'] + [t['t5']]
     assert sent[1]['sampling_params']['max_new_tokens'] == 1
-    assert set(sent[1]['sampling_params']['logit_bias']) == {str(t['t6'])}
-    assert 'logit_bias' not in sent[2]['sampling_params'] and sent[2]['input_ids'] == sent[1]['input_ids'] + [t['t8']]
+    assert set(sent[1]['sampling_params']['logit_bias']) == {str(t['t6'])} | {str(x) for x in front.sglang_banned}
+    # after the rewound draw only the role bans stay (engine.role_bans)
+    assert set(sent[2]['sampling_params'].get('logit_bias') or {}) == {str(x) for x in front.sglang_banned}
+    assert sent[2]['input_ids'] == sent[1]['input_ids'] + [t['t8']]
     assert ''.join(d.get('text', '') for d in deltas['front']) == ''.join(d.get('text', '') for d in deltas['native'])
     assert bool(deltas['native']) == streamed
 
@@ -1017,8 +1024,10 @@ def test_top_p_is_forwarded_to_sglang_and_declared_in_the_sampling_law(tmp_path,
     assert 'top_p' not in law and law['probabilities'] == 'post-processing-normalized'
     greedy = front.generate(GenerationRequest(messages=[{'role': 'user', 'content': 't4'}], top_p=.95, max_tokens=4))
     assert 'top_p' not in bodies[-1]['sampling_params'] and greedy['choices']
-    # the native engine: the same law, the draw from the nucleus
-    law = native.generate(make(top_p=.5))['x_natlang_rl_capture']['sampling_law']
+    # the native engine: the same law, the draw from the nucleus (the tiny random model may draw a produce marker:
+    # a recorded protocol failure still declares its law)
+    law = native.generate(make(top_p=.5, native_recording=True, native_protocol_recovery=True)
+                          )['x_natlang_rl_capture']['sampling_law']
     assert law['top_p'] == .5 and law['probabilities'] == 'post-temperature-untruncated'
     # a path that sampled without the requested nucleus refuses the reply
     consume = SglangEngine._sglang_consume
@@ -1041,7 +1050,8 @@ def test_guided_open_reasoning_streams_on_sglang_like_the_native_engine(tmp_path
     native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
     front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
                                engine_class=SglangEngine)
-    front.sglang_banned = []
+    from natlang_neuralese.serve.engine import role_bans
+    front.sglang_banned = sorted(role_bans(front.role_tokens))   # as the actor sets them at load
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons = {}
     stop = sorted(front.stop_ids)[0]
@@ -1085,7 +1095,8 @@ def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engi
     native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
     front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
                                engine_class=SglangEngine)
-    front.sglang_banned = []
+    from natlang_neuralese.serve.engine import role_bans
+    front.sglang_banned = sorted(role_bans(front.role_tokens))   # as the actor sets them at load
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons = {}
     stop = sorted(front.stop_ids)[0]

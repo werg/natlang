@@ -142,14 +142,24 @@ def main():
                 'prompt_token_ids': prompt, 'reply_token_ids': reply, 'select': text, 'type': 'Neuralese<string>'})['id'])
     rng = random.Random(a.seed)
     rows, hits, marked, modes = [], {arm: 0 for arm in arms}, {arm: 0 for arm in arms}, {arm: {} for arm in arms}
+    refused = {arm: 0 for arm in arms}
     for index, text in enumerate(texts):
         parts = {'state': {'type': 'native_state', 'id': states[index]}, 'inline': {'type': 'text', 'text': text},
                  'shuffled': {'type': 'native_state', 'id': shuffled[index]},
                  **({'captured': {'type': 'native_state', 'id': captured[index]}} if captured else {})}
         for arm in arms:
-            reply = post(a.endpoint, '/v1/chat/completions', {
-                'messages': reader_messages(parts[arm]), 'tools': TOOLS, 'max_tokens': a.max_tokens,
-                'temperature': a.temperature, 'top_p': a.top_p, 'seed': rng.randrange(1 << 30)})
+            try:
+                reply = post(a.endpoint, '/v1/chat/completions', {
+                    'messages': reader_messages(parts[arm]), 'tools': TOOLS, 'max_tokens': a.max_tokens,
+                    'temperature': a.temperature, 'top_p': a.top_p, 'seed': rng.randrange(1 << 30)})
+            except urllib.error.HTTPError as error:
+                # a refused reply (e.g. a protocol error for a sampled role marker) is a miss, recorded with its cause
+                body = error.read().decode('utf-8', 'replace')[:600]
+                refused[arm] += 1
+                rows.append({'arm': arm, 'text': text, 'exact': False, 'error': {'status': error.code, 'body': body}})
+                print(json.dumps({'arm': arm, 'exact': False, 'text': text[:60], 'error': error.code, 'body': body[:300]}),
+                      flush=True)
+                continue
             got = returned(reply)
             hit = same(got, text)
             hits[arm] += hit
@@ -165,7 +175,7 @@ def main():
         with open(a.out, 'w') as stream:
             stream.writelines(json.dumps(row) + '\n' for row in rows)
     summary = {arm: f'{count}/{len(texts)}' for arm, count in hits.items()}
-    print(json.dumps({'summary': summary, 'marker_replies': marked, 'modes': modes, 'endpoint': a.endpoint,
+    print(json.dumps({'summary': summary, 'marker_replies': marked, 'refused': refused, 'modes': modes, 'endpoint': a.endpoint,
                       'temperature': a.temperature, 'top_p': a.top_p}))
     # Acceptance: the state reads back nearly as well as the inline text and clearly above the shuffled state.
     state, inline, floor = hits.get('state', 0), hits.get('inline', 0), hits.get('shuffled', 0)

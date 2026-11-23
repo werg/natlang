@@ -28,7 +28,9 @@ export function verifyNativeStateDerivationRecords(artifact:Omit<NativeStateArti
   if(parent.id!==value.parent_state_id)throw new RangeError('optimized native state parent binding changed');
   const origin=parent.metadata.derivation?.origin_state_ids??[parent.id];
   if(nativeCanonicalJson(origin)!==nativeCanonicalJson(value.origin_state_ids))throw new RangeError('optimized native state changed its original producer provenance');
-  const {derivation:_,...before}=parent.metadata,{derivation:__,...after}=artifact.metadata;
+  // the parent's producer kind does not carry over: optimized values are no longer its tokens' forward
+  const {derivation:_,producer_kind:___,...before}=parent.metadata,
+    {derivation:__,...after}=artifact.metadata;
   if(nativeCanonicalJson(before)!==nativeCanonicalJson(after))throw new RangeError('optimized native state changed text, native basis or adapter provenance');
   const expectedBase=parent.metadata.adapter_binding?.base_native_identity??{
     checkpoint_sha256:parent.metadata.checkpoint_sha256,architecture:parent.metadata.architecture,

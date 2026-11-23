@@ -29,6 +29,17 @@ from .store import TensorStore
 TEXT_IN_CONTEXT_MODE = 'in-context-text'
 
 
+def role_bans(roles):
+    """Tokens no reply may sample: the two consume markers, which only the engine places around an imported state
+    (a sampled one is the protocol error `neuralese-native-state-consume-marker`). Banned in every draw's law and
+    recorded per sample (`banned_token_ids`), so learners score the same law. With text-initialised marker rows
+    (2026-11-23) a reader copying a spliced state's markers sampled one at greedy (1 of 16 probe reads). Opt-out:
+    NATLANG_BAN_CONSUME_MARKERS=0."""
+    if os.environ.get('NATLANG_BAN_CONSUME_MARKERS', '1') == '0':
+        return frozenset()
+    return frozenset((int(roles.consume_open), int(roles.consume_close)))
+
+
 def reads_in_context(block, *, marked=lambda: False):
     """The `in-context-text` rule shared by every Python engine (`Engine.reads_in_context`): an exact state (the caller
     checks) with no adapter binding and no derivation whose header says it is the plain forward of its own tokens
@@ -1125,7 +1136,7 @@ class Engine:
         from ..common.sampling import masked_log_distribution
         # The grammar's mask, then guidance bans, temperature and the nucleus: the law SGLang draws from
         log_probs = masked_log_distribution(self._tool_grammar_mask(seq, seq.logits[0]), seq.request.temperature or 1.0,
-            banned=sorted(seq.bans.get(seq.native_own_position, ())))
+            banned=self._native_bans(seq))
         if seq.request.temperature and seq.request.temperature > 0:
             if seq.nucleus_applied is not None:
                 # top-p: the draw comes from the nucleus; the recorded logp stays the untruncated law (as the SGLang
@@ -1139,6 +1150,10 @@ class Engine:
                 seq.native_sample_top_k = encode_top_k(log_probs, seq.request.rl_top_k)
             return token, float(log_probs[token])
         return int(log_probs.argmax()), None
+
+    def _native_bans(self, seq):
+        """The tokens banned at this draw: guidance bans at this position and the role bans (`role_bans`)."""
+        return sorted(set(seq.bans.get(seq.native_own_position, ())) | role_bans(self.role_tokens))
 
     def _guidance_replay(self, seq, ids, producing):
         """A guidance rewind replays retained reply inputs into the cache; returns the forward output (a producing
@@ -1809,6 +1824,10 @@ class Engine:
             forced=seq.native_forced_replay
             pending, seq.native_spec = seq.native_spec, []
             seq.native_sample_top_k = None
+            if not forced and (bans := role_bans(self.role_tokens)):
+                # the draw's logits carry the role bans, so every sampler and receipt reads the banned law
+                seq.logits = seq.logits.clone()
+                seq.logits[..., sorted(bans)] = float('-inf')
             token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
             top_k_receipt = None
             if seq.request.rl_top_k is not None and not forced and seq.request.temperature > 0:
@@ -1817,7 +1836,7 @@ class Engine:
                     # A sampler that did not record its distribution: the same normalized law over these logits.
                     from ..common.sampling import encode_top_k, masked_log_distribution
                     top_k_receipt = encode_top_k(masked_log_distribution(seq.logits[0], seq.request.temperature,
-                        banned=sorted(seq.bans.get(seq.native_own_position, ()))), seq.request.rl_top_k)
+                        banned=self._native_bans(seq)), seq.request.rl_top_k)
             sample_index = len(seq.rl_samples)
             # The next-token query is the output position of the last own
             # input; imported KV slots do not contribute to this index.
@@ -1829,8 +1848,8 @@ class Engine:
                 seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
                                        **({'forced':True} if forced else {}),
                                        **({'top_k': top_k_receipt} if top_k_receipt is not None else {}),
-                                       **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
-                                          if seq.guide is not None else {}),
+                                       **({'banned_token_ids': self._native_bans(seq)}
+                                          if seq.guide is not None or self._native_bans(seq) else {}),
                                        "input_role": "produce" if producing_input else "ordinary",
                                        "terminal": terminal,
                                        "query_own_position": query_own_position})

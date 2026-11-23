@@ -39,7 +39,8 @@ def _leaf_block(block):
         layers.append(copied)
     # Imported embeddings/token IDs/positions are provenance and logical input
     # metadata; raw KV and hybrid sequence tensors are the consumed state.
-    return replace(block, layers=tuple(layers)), leaves
+    # tensors to differentiate: consumed as stored, never read as tokens in context (state_block.PRODUCER_KINDS)
+    return replace(block, layers=tuple(layers), producer_kind=None), leaves
 
 
 def _parameter_targets(model, requested):

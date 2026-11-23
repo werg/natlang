@@ -1256,6 +1256,16 @@ export class NativeToolAgent {
     const capturedPrompt = response.raw_response?.x_natlang_rl_capture as { prompt?: unknown } | undefined;
     if (Array.isArray(capturedPrompt?.prompt)) {
       const remaining = [...reads];
+      // A state the engine read as its own tokens in this call's context (`in-context-text`: a text write or produce
+      // span) stands in the prompt as tokens; its receipt accounts for the read.
+      const receipts = (response.raw_response?.native_state as { imports?: unknown } | undefined)?.imports;
+      for (const receipt of Array.isArray(receipts) ? receipts as Array<Record<string, unknown>> : []) {
+        if (receipt?.mode !== 'in-context-text') continue;
+        const at = remaining.findIndex(read => read.block === receipt.id && read.stop === (receipt.stop_gradient === true) &&
+          (receipt.source_occurrence === undefined || read.source === receipt.source_occurrence || read.declared === receipt.source_occurrence));
+        if (at < 0) throw new Error('neuralese-native-grad-invalid: an in-context read names no read occurrence of its state');
+        remaining.splice(at, 1);
+      }
       for (const [promptIndex, raw] of capturedPrompt.prompt.entries()) {
         if (!raw || typeof raw !== 'object' || (raw as { kind?: unknown }).kind !== 'native_state') continue;
         const segment = raw as { id?: unknown; source_state_id?: unknown; source_occurrence?: unknown;
