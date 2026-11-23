@@ -8273,3 +8273,7 @@ p 0.40 vs `decline` 16/16), and floors and escalation read its confidence.
   from the sampled ids at the edges (`build.json` `decision_reasoning_ids_exact` counts it; the rendered ids train).
   Stock-model frames (`decision-frame.ts`) score a framed request after reasoning sampled on the unframed one. Not run:
   SGLang end to end with reasoning, the page, a full collection with reasoned readouts, held eval.
+
+### 2026-11-23 — Resume interrupted experiment pin creation
+
+A resumable ledger preemption after `git worktree add` left an exact checkout without its readiness marker; the previous helper retried add and failed. The canonical pin helper now serializes create/remove per destination, resumes only the registered detached requested commit with clean tracked sources, repeats ignored-state/link preparation and rebuilds before atomically publishing the completion marker. Completed pins are validated before reuse. The marker format and all training consumers stay unchanged; no active pins were edited. Targeted interruption, mismatch/dirty/foreign rejection, atomic publication and concurrent create/remove tests:13 passed (189 MiB peak); ledgered quick gate passed (871 MiB peak). Root can now resubmit the interrupted DGX reader pin using the updated helper.
