@@ -2,6 +2,22 @@
 
 The complete corpus now uses ordinary application functions in the shared hierarchical Natlang codebase. The task supplies its declared entry and typed inputs; it does not prescribe the teacher’s child-call sequence. A result is application data. Native calls, effects, model exchanges and source identities supply execution evidence.
 
+## Current continuation after restart
+
+The source and pipeline migration continues after Tick's reboot. All 2,327 original goals and splits remain; the controller is held at the archived wave 0034 boundary while the final seven-suite outcome-contract cutover is built. The older operational paragraphs below are chronological records, not the current launch configuration. Live state is `candidate/pins.json`, `candidate/v9-cutover-state.json`, immutable wave receipts and ledger units.
+
+The successor removes generic workspace-skill envelopes from roughly 50 verifier families across seven templates, including producers, independent decoders and positive/negative fixtures. Application entry functions already return domain values. The shared outcome assessor must remain idempotent when a domain verifier has already applied its contract: it retains original observed dimensions and checks agreement rather than reassessing only the filtered required checks.
+
+A prepared private-draft run exposed an unjustified outcome classification requirement: all five independent native project checks passed, but a truthful `review-needed` result differed from a scripted `draft`. A source-bound additive reassessment preserves that honest return and the original failed packet. It does not turn false optional checks into true ones. The shared Python and independent native readers must agree about source-bound required outcome roles before publication. Other prepared-project failures still have genuine failed native checks and remain retained evidence.
+
+Wave 0034's original 12 captures are checksum-archived on DGX. Two completed goals contain 31 eligible decisions; export/publication is separate from student fill and learner exposure. One public-research answer passed mechanical native checks but omitted the user's requested comparison, so independent review correctly rejected the incomplete answer. Its complete trace is preserved.
+
+The wave's first opaque-state pack was rejected because a source ctime changed; a stable repack produced the identical tar SHA. The packer now reports changed paths/fields and rehashes source contents only for ctime-only drift, with source identity and stable complete inventory rechecks. Changed contents, portable metadata or paths remain errors. Six targeted tests include a real external-hardlink ctime change and a same-size rewrite with restored mtime. The original changed path was not recorded, so the specific writer is unknown.
+
+The prepared release uses the lean system-test health library instead of importing the CLI's fixture/runtime graph. Host canonicalizes equivalent external-module sets in library cache keys and compiler inputs. The original cold-build delay is not causally explained by the faster reproduction; no unproved timeout or transport repair is claimed. The first v10 build hit its 5.5 GiB cap because the wrong concurrency variable left default parallelism enabled. The retry uses the actual `VIBESTUDIO_MAX_CONCURRENT_BUILDS=1` at the same cap, with the failed attempt retained.
+
+The standing DGX reader/ingester pin is `d4cf9acf4855e53c01be9b8d5a21275ad9fa9783`. Three additional completed source-bound recoveries (81 eligible decisions) are registered and actually ingested, bringing the recent published/ingested cohorts to 59 trajectories/871 decisions before wave 0034 publication. Student fill targets the already-running DGX actor on ports 8470/9470 because the former Colab endpoint is offline; no learner or model server was stopped. These counts are neither whole-corpus completion nor proof of learner exposure. New inference remains Luna only; historical Sol and failed raw evidence remain intact.
+
 ## Scope and source identity
 
 - All 2,327 original task IDs, goals, source groups and train/test splits are retained: 1,748 train, 579 test.
