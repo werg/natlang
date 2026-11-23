@@ -8926,3 +8926,35 @@ admitted, then writes `WORK/results-ABCD.json`.
 OOM storms); admission under a load that actually defers (the bench's concurrency 4 never filled the 10 GB cap);
 memory-bounded admission on a CPU device (bounded only on CUDA); the llama-server fixes against a real llama-server
 under load (fake-server tests only).
+
+## 2026-11-23 17:30 Semantic-FP language gaps and applications closed (language-gaps agent)
+
+- **`natlang improve DIR` proposes (WS8 N4).** Without `--proposal`, a natural-language improver on `--model` (three
+  built-in programs: `improveDiagnose.nl`, `improveShouldRevise.nl` with `readout: decision`, `improveRevise.nl`) reads
+  the program's own recorded runs (`improvement/run-evidence.ts`: failures with reasons, escalations with the
+  fallback's answer, `ensures:`/refinement repairs, testers' bad/fix verdicts) plus the support examples it answers
+  wrongly, and rewrites the instructions of at most `--max-functions` (3) functions, front matter byte-identical; the
+  existing gate checks and adopts. Found and fixed on the way: the case pack took an escalated decision's local answer
+  and a bad-marked call as expected results; now the fallback's answer and the tester's expected value stand.
+- **`escalate` reads its history (WS2 R4).** Each run leaves an `escalation` note on its local call; the `nl` policy gets
+  `{ totalCalls, escalationRate, disagreementRate }` and measured tier cost (ms) from those notes. Found and fixed:
+  std spans are never stored rows, so `natlang profile`'s escalation rate from the store was always 0 (it read
+  `std:escalate` rows that do not exist); it counts the notes now.
+- **`.d.nl.ts` `import type` for `uses:` (WS1 L6).** A used function of the build is referenced by its own declaration.
+- **`nl.with<T>` in a callable-folder factory showed `unknown`.** Cause: `import type` of package files (`../types.js`)
+  was dropped before the module was type-checked, so the type was `any`. Type-only imports now reach the checker (and
+  their own type imports); a factory returning a saved `nl` function takes its declared parameters.
+- **`natlang check --idiom` / `--idiom-strict`** run `applications/idiom-reviewer` (on M2's std `stepKind`) through
+  `natlang run` on the selected model; findings are `idiom-review-<kind>` diagnostics.
+- **Applications.** codemod-studio is now `applications/migration/codemod`: its semantic stage is the migration loop
+  (`migrate` over an in-memory `RepositoryMigration` with `contents` and a `validator`); `transformFile.nl` and the
+  separate package are gone. sem-grep-sql is now `applications/nldb/grep`: `askRepository` loads files and metadata
+  tables into SQLite and answers with nldb's `SqliteDatabase` (translate, judge once per value, verdicts kept);
+  `runQuery` stays for caller-written plans. ci-doctor: `bisectSettled.nl` stops a bisection that cannot find the
+  failure's cause (pluggable, default nl), and failures cluster by root cause with std `semanticMatch`.
+- **Found on the way.** The nldb folder-database test counted the 4 reasoning samples `readout: decision` draws since
+  fc842c0f9 as stages (its fixture now answers them); repository-question file content keeps its `Untrusted` fence
+  through SQLite (the fence is keyed by text), asserted in the test.
+- **Why merge packages.** Application TypeScript cannot import another package's sources in a per-package build (the
+  project compiler lowers only files under its root), and the plan wants flagships to extend their seeds rather than
+  fork them. Merging is one implementation without a new cross-package mechanism.

@@ -35,20 +35,25 @@ Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action 
 
 ## Language and runtime gaps
 
-All of these are owned by the language-gaps agent (2026-11-23 15:00):
-- `natlang improve DIR` only checks and adopts a given proposal. It should propose changes from the program's own runs (WS8 N4).
-- The `escalate` NL policy doesn't read escalation history from the call store; the caller passes it (WS2 R4).
-- The `.d.nl.ts` `import type` emit for `uses:` modules is not built (WS1 L6).
-- An inline `nl.with<T>` built inside a callable-folder TypeScript factory shows its parameter as `unknown`.
-- `natlang check --idiom` doesn't call `applications/idiom-reviewer`.
+Closed 2026-11-23 by the language-gaps agent (DECISIONS "Semantic-FP language gaps and applications closed"):
+`natlang improve DIR` proposes from the program's runs; `escalate`'s nl policy reads its history from the call store;
+`.d.nl.ts` `import type` for `uses:`; `nl.with<T>` in callable-folder factories typed from `import type`; `natlang check
+--idiom`. Found while closing them, not changed:
+- **`natlang improve DIR`:** memetic guidance changes are not a transformation yet (WS8 N4 names them); the improver
+  revises `.nl` instructions only. Owner: language-gaps agent's next session, or N5.
+- **`Untrusted<T>` in the migration loop:** codemod file texts stay fenced (the fence is keyed by text), but a site
+  excerpt or an edited revision of an untrusted file is new text and is not marked. Owner: the untrusted-contract
+  follow-up.
+- **Type-only imports in callable-folder TypeScript** that resolve to nothing still make the type `any` silently (the
+  module's TypeScript diagnostics are not reported). Owner: language-gaps agent.
 
 ## Applications
 
-These are owned by the language-gaps agent after the gaps above:
-- codemod-studio re-implements the `applications/migration` edit/check/repair loop. It should call it.
-- sem-grep-sql doesn't build on `applications/nldb`.
-- ci-doctor's bisect has no natural-language stop, and its failures are not clustered semantically.
+codemod-studio (now `applications/migration/codemod`, on the migration loop), sem-grep-sql (now `applications/nldb/grep`,
+on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-cause clustering) are closed. Open:
 - diligence has no Neuralese views or tuning.
+- `ts-host/test/repository-migration.test.mjs` keeps its own copy of the scripted migration stages
+  (`test/support/migration-stages.mjs` is the shared one); fold it in when that test next changes.
 
 ## Held and data
 
