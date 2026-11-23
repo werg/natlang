@@ -1,21 +1,58 @@
 # natlang
 
-natlang is TypeScript with natural-language functions. A natural-language
-function is an ordinary async, typed function whose body is instructions; a
-model — possibly a small local one — executes them in a persistent TypeScript
-scope. Everything else is ordinary TypeScript.
+natlang lets you automate work you would hand to an AI agent with a program you own, running on a small local
+model. TypeScript holds the types, the data and every exact step; each judgment is a typed natural-language
+function. Finite judgments are scored decisions with probabilities, outside text is fenced by its type, results are
+checked against their declared properties, repeated paths compile to plain code, and the program improves from its
+own runs.
 
-```ts
-import { nl } from '@natlang/node';
-import classify from './classify.nl';          // a named natural-language function
-
-export async function triage(tickets: string[], rubric: string): Promise<Report> {
-  const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));
-  const technical = tickets.filter((_, i) => labels[i] === 'technical');
-  const summary: string = await nl`Summarize what is going wrong across technical, most severe first.`(technical);
-  return { technical: technical.length, summary };
-}
+<!-- from: examples/triage/classify.nl -->
+```yaml
+---
+description: Label one ticket using the rubric.
+args:
+  ticket: string
+  rubric: string
+returns: Label
+readout: decision
+---
+Pick the label from rubric that fits ticket.
 ```
+
+<!-- from: examples/triage/types.ts -->
+```ts
+export type Label = "billing" | "technical" | "spam";
+/** What the report says about the urgent tickets. */
+export type Summary = Is<string, "one paragraph that names the most severe problem first">;
+```
+
+<!-- from: examples/triage/triage.ts -->
+```ts
+import { decide, IterationLimitError, iterateOn, nl } from '@natlang/node';
+import classify from './classify.nl';
+import isUrgent from './is_urgent.nl';
+...
+export async function triage(tickets: string[], rubric: string): Promise<Report> {
+  const decisions = await Promise.all(tickets.map(ticket => decide(classify, ticket, rubric)));
+  // Only the tickets the local model is unsure of go to the stronger model.
+  const labels = await Promise.all(decisions.map(({ value, confidence }, i) =>
+    confidence >= 0.8 ? value : classify.on({ model: 'teacher' })(tickets[i]!, rubric)));
+  const real = tickets.filter((_, i) => labels[i] !== 'spam');
+  const flags = await Promise.all(real.map(ticket => isUrgent(ticket)));
+  const urgent = real.filter((_, i) => flags[i]);
+  const by_label: Record<string, number> = {};
+  for (const label of labels) by_label[label] = (by_label[label] ?? 0) + 1;
+  return { urgent: urgent.length, by_label, summary: urgent.length ? await summarize(urgent) : 'Nothing urgent today.' };
+}
+...
+  const draft: Summary = await nl`Write one paragraph saying what is going wrong across tickets, most severe first.`(tickets);
+```
+
+`classify.nl` is a natural-language function with `readout: decision`: the model scores the three labels in one pass,
+and `decide` returns their probabilities. The tickets it is sure of are settled locally; `classify.on({ model:
+'teacher' })` asks a stronger model about the rest (`teacher` is the profile that your model profile names as
+`escalate`; without one the call runs on the default model). Counting is code. The summary's type is a property the
+runtime checks on every draft.
 
 The compiler plans every `nl` call before the model runs — its parameters,
 return type, and the variables its instructions mention — so natural-language
@@ -60,19 +97,21 @@ Work in an empty directory outside the clone:
 
 ```sh
 natlang init my-program && cd my-program
+natlang check                          # the program, without a model
 natlang setup                          # the managed local model, once (a 1.8 GB download)
-natlang run                            # answer.nl on the sample input
-natlang call answer.nl "Your text"     # one call with your own input
+natlang run                            # plan the bundled messages.json
+natlang test                           # the saved route.nl cases on the model
 natlang dev                            # reruns after source or input edits; Ctrl+C stops
-natlang test                           # runs the saved examples on the model
-natlang check                          # checks the source without a model
 ```
 
-`natlang init` writes `answer.nl` (the function), `natlang.json` (the manifest; its `main` target runs `answer.nl`
-with the sample as the default input), `examples.json` (saved tests), `README.md`, `AGENTS.md` and `CLAUDE.md` for
-coding agents, `.gitignore` and `package.json`. `answer.nl` is a classifier with `readout: decision`: the model
-scores the three labels instead of writing an answer, which takes seconds rather than minutes on a CPU. Edit its instructions to change
-behaviour and `examples.json` to save expected results.
+`natlang init` writes an inbox planner, the paradigm in one screen. `types.ts` holds the data: a `Message` whose body
+is `Untrusted<string>` (fenced as data, never followed) and a `Reply` typed `Is<string, "...">` (a property the runtime
+checks on every draft). `route.nl` is a typed function with `readout: decision`: the model scores `reply`, `fyi` and
+`ignore` in one pass. `main.ts` maps it over the messages with `decide(route, message)`, keeps each confidence, and
+drafts a reply with an inline `nl<Reply>` only where one is needed. `examples.json` holds the `route.nl` cases,
+`messages.json` the sample input, `natlang.json` the run target, and `AGENTS.md` (with `CLAUDE.md`) guides coding
+agents. `natlang init DIR --template classifier` writes the one-function program instead: `answer.nl`, a three-label
+classifier.
 
 `natlang setup` is optional: for a hosted model, configure a profile on the dashboard's Models page
 (`natlang dashboard --open`) or pass `--provider ID --model ID`. The CLI can use its managed local model (by default
@@ -124,6 +163,19 @@ Playground experiment into a program. The [user-testing guide](docs/USER_TESTING
 ## Read next
 
 ### Using natlang
+
+Read these programs first; each is the paradigm in working code:
+
+| Program | What it shows |
+|---|---|
+| [`examples/triage`](examples/triage/) | Scored labels with escalation of the unsure ones, exact counts, a summary refined to its type |
+| [`examples/review`](examples/review/) | A named function whose callable folder holds a decision leaf and an exact aggregate |
+| [`examples/refunds`](examples/refunds/) | One verdict function bound per shop with `.in(context)`, a `pluggable` rule, a reply revised until a natural-language check holds, a folder transaction |
+| [`applications/notebook`](applications/notebook/) | A dependency graph run one ready cell per step under a measure, with checked citations |
+| [`applications/helpdesk`](applications/helpdesk/) | Per-ticket event loops whose policies are natural-language functions behind settings |
+| [`applications/nldb`](applications/nldb/) | A relational database whose engine is natural-language stages over a folder format |
+
+The authoring skill's [composition reference](skills/natlang-authoring/references/composition.md) walks through them.
 
 | Guide | Contents |
 |---|---|

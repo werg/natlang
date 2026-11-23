@@ -20,6 +20,10 @@ A prebuilt chain's segments may carry per-token loss weights (`row['weight']`, e
 share); the step loss is then the weighted mean over its targets. Each `--val-chains` set reports its weighted loss every
 `--val-every` steps and at the end (the run's held-out training curve).
 
+A chain with a ``decision`` (a decision readout row with its option set, `sft_sources build`) trains the readout's
+option-normalized log score (`decision_backward`, one target unit of loss mass per decision);
+`--no-decision-objective` trains it as the token CE of the chosen reply instead.
+
 Speed (GB10, 11k-token sequences): the stock HF modelling code runs at about 1.9k fwd+bwd tokens/s because half of the GPU
 time is unfused elementwise work and a fifth dense sliding-window attention; `lfm3_fast_train` (compiled per-kind layers,
 varlen flash attention with the sliding window, shifted-add conv, fused linear NLL) plus partial activation checkpointing
@@ -80,6 +84,15 @@ def chains_of(episodes, max_len=MAX_LEN):
             current = None
             for row in rows:
                 ids, sample = row['prompt'], row['sample']
+                if row.get('decision') is not None:
+                    # a decision readout is one choice over its option set: a chain of its own (``decision_backward``)
+                    if current is not None:
+                        chains.append(current)
+                    current = None
+                    chains.append({'ids': np.concatenate([ids, sample]), 'segs': [(len(ids), len(sample), row)],
+                                   'imports': [], 'sources': {}, 'task': episode['task_id'], 'round': episode['round'],
+                                   'decision': row['decision']})
+                    continue
                 if len(ids) + len(sample) > max_len:
                     if current is not None:
                         chains.append(current)
@@ -462,7 +475,118 @@ def row_inputs(row, device, passthrough=True, fixed=None, starts=None):
 
 
 def chain_mass(chain):
+    if chain.get('decision_objective'):
+        return DECISION_MASS
     return float(sum(row['weight'].sum() if 'weight' in row else length for _, length, row in chain['segs']))
+
+
+# The decision objective (``--no-decision-objective`` opts out; plans/semantic-fp/05 O3). A decision readout (natlang
+# ``decide``, a ``readout: decision`` call) is scored, not sampled: the runtime reads softmax(s) over the options'
+# sequence log-probabilities s_o = sum_t log p(c_{o,t} | prompt, c_{o,<t}) (``serve.native_learning._score_rendered``,
+# the SGLang actor's ``sglang_score``). Its chain trains the proper log score of that readout,
+# -sum_o y_o log softmax(s)_o (``common.decision_objective.decision_loss``, the native-graph trainer's
+# ``train.decision_supervision``), with y the verified choice (own and teacher successes; a teacher distribution where
+# its endpoint returned option log-probabilities). It raises the chosen option and lowers the competing ones; the
+# token CE of the chosen reply alone cannot lower a wrongly preferred option. One decision counts as one target unit of
+# the step's loss mass, like one invocation of the own-output objective.
+DECISION_MASS = 1.
+DECISION_RULE = 'logLoss'
+
+
+def mark_decision_objective(chains, on=True):
+    """Mark the decision chains (``chains_of``: a row with its ``decision`` option set) of ``chains`` for the decision
+    objective (in place; ``on`` False: they train as the plain token CE of the chosen reply). Returns their count."""
+    count = 0
+    for chain in chains:
+        if chain.get('decision') is not None:
+            if on and chain.get('imports'):
+                raise ValueError('a decision chain with imported Neuralese state trains in the native-graph trainer')
+            chain['decision_objective'] = bool(on)
+            count += 1
+    return count
+
+
+def decision_parts(chain):
+    """(prompt ids, option continuation ids, target probabilities) of a decision chain."""
+    start, _, row = chain['segs'][0]
+    decision = chain['decision']
+    options = [np.asarray(ids, np.int64) for ids in decision['options']]
+    if len(options) < 2 or any(not len(ids) for ids in options):
+        raise ValueError('a decision needs at least two nonempty option continuations')
+    if 'probabilities' in decision:
+        target = [float(p) for p in decision['probabilities']]
+    else:
+        target = [1. if index == decision['label'] else 0. for index in range(len(options))]
+    return np.asarray(chain['ids'][:start], np.int64), options, target
+
+
+def decision_tokens(chain):
+    prompt, options, _ = decision_parts(chain)
+    return sum(len(prompt) + len(ids) for ids in options)
+
+
+def decision_backward(model, forward, chains, denominator, pack_tokens, activation_gb, fast=True, mark=None,
+                      backward=True):
+    """Forward and backward of the decision objective over ``chains`` (decision chains), the loss
+    sum(DECISION_MASS * CE) / ``denominator``. Every option is its prompt followed by its closed continuation; a
+    decision's options (and, on the fast path, several decisions up to ``pack_tokens``) run as packed documents of one
+    forward, so its option scores share one graph. Scores use the full softmax, as the readout does. Returns
+    (sum of the weighted loss, tokens computed, {'decisions', 'ce', 'correct'}); ``backward`` False: no backward
+    (validation, under ``torch.no_grad``)."""
+    from natlang_neuralese.common.decision_objective import decision_loss
+    mark = mark or (lambda name, since: time.time())
+    device = model.lm_head.weight.device
+    total, computed, report = 0., 0, {'decisions': 0, 'ce': 0., 'correct': 0}
+    groups, group, size = [], [], 0
+    for chain in chains:
+        n = decision_tokens(chain)
+        if group and (not fast or not pack_tokens or size + n > pack_tokens):
+            groups.append(group)
+            group, size = [], 0
+        group.append(chain)
+        size += n
+    if group:
+        groups.append(group)
+    for group in groups:
+        t = time.time()
+        parts = [decision_parts(chain) for chain in group]
+        documents, positions, targets, spans = [], [], [], []
+        offset = 0
+        for prompt, options, _ in parts:
+            for ids in options:
+                documents.append(np.concatenate([prompt, ids]))
+                positions.append(np.arange(offset + len(prompt) - 1, offset + len(prompt) - 1 + len(ids)))
+                targets.append(ids)
+                spans.append(len(ids))
+                offset += len(prompt) + len(ids)
+        if fast:
+            ids = torch.from_numpy(np.concatenate(documents)).to(device)
+            if getattr(model, '_lfm3_fast', None) is not None:
+                set_checkpointing(model, len(ids), activation_gb)
+            h = forward(model, ids, [len(d) for d in documents])
+            nll = token_nll(model, h, torch.from_numpy(np.concatenate(positions)).to(device),
+                            torch.from_numpy(np.concatenate(targets)).to(device))
+        else:                        # the stock path: one document per forward
+            nll = torch.cat([token_nll(model, forward(model, torch.from_numpy(d).to(device)),
+                                       torch.from_numpy(np.arange(len(d) - len(c) - 1, len(d) - 1)).to(device),
+                                       torch.from_numpy(c).to(device)) for d, c in zip(documents, targets)])
+        sums = -torch.stack([part.sum() for part in nll.split(spans)])
+        t = mark('decision_forward', t)
+        loss, at = sums.new_zeros((), dtype=torch.float32), 0
+        for _, options, target in parts:
+            scores = sums[at:at + len(options)]
+            at += len(options)
+            ce = decision_loss(scores, rule=DECISION_RULE, probabilities=target)
+            loss = loss + DECISION_MASS * ce
+            report['ce'] += float(ce.detach())
+            report['correct'] += int(int(scores.detach().argmax()) == max(range(len(target)), key=target.__getitem__))
+            report['decisions'] += 1
+        if backward:
+            (loss / denominator).backward()
+            mark('decision_backward', t)
+        total += float(loss.detach())
+        computed += sum(len(d) for d in documents)
+    return total, computed, report
 
 
 OPEN_GOAL_SCOPES = ('vibestudio', 'all')
@@ -826,6 +950,39 @@ def validation_loss(model, forward, chains, pack_tokens=0, student_top_p=1.):
     return total / max(mass, 1e-9)
 
 
+def resumed_decision_objective(args, wanted):
+    """Whether this run trains the decision objective: ``wanted``, except that a ``--resume`` keeps the setting its
+    learner state trained with (the objective changes decision chains' loss mass, so the step list a state's batch
+    cursor indexes; a state saved before the objective existed trained without it)."""
+    state_dir = Path(args.state_dir) if args.state_dir else Path(args.out_dir) / 'learner-state'
+    if not (args.resume and (state_dir / 'learner_manifest.json').is_file()):
+        return wanted
+    saved = None
+    if (state_dir / 'trainer_state.pt').is_file():
+        saved = (torch.load(state_dir / 'trainer_state.pt', map_location='cpu', weights_only=False) or {}).get(
+            'decision_objective')
+    saved = bool(saved)
+    if saved != wanted:
+        print(json.dumps({'event': 'decision objective kept from the resumed learner state', 'decision_objective': saved,
+                          'state_dir': str(state_dir)}), flush=True)
+    return saved
+
+
+def decision_validation(model, forward, val_sets, pack_tokens=0, activation_gb=0.):
+    """Per validation set with decision chains: the mean decision log score and the share of decisions whose top
+    option is the target (``decision_backward`` without backward)."""
+    record = {}
+    with torch.no_grad():
+        for name, chains in val_sets.items():
+            decided = [chain for chain in chains if chain.get('decision') is not None]
+            if decided:
+                _, _, report = decision_backward(model, forward, decided, 1., pack_tokens, activation_gb,
+                                                 backward=False)
+                record[f'val_decision_ce:{name}'] = report['ce'] / report['decisions']
+                record[f'val_decision_accuracy:{name}'] = report['correct'] / report['decisions']
+    return record
+
+
 def parity(args):
     episodes = pickle.load(open(args.turns, 'rb'))['episodes']
     chains = [c for c in chains_of(episodes) if len(c['ids']) < args.max_tokens][:args.samples]
@@ -915,6 +1072,16 @@ def train(args):
         print(json.dumps({'context_masks': context_masks(chains, tokenizer, second),
                           **{f'context_masks:{name}': context_masks(c, tokenizer, second) for name, c in val_sets.items()}}),
               flush=True)
+    decision_on = resumed_decision_objective(args, not args.no_decision_objective)
+    decisions = mark_decision_objective(chains, decision_on)
+    print(json.dumps({'decision_objective': {'on': decision_on, 'chains': decisions, 'rule': DECISION_RULE,
+                                             'mass_per_decision': DECISION_MASS,
+                                             'options': int(sum(len(c['decision']['options']) for c in chains
+                                                                if c.get('decision') is not None)),
+                                             'forward_tokens': int(sum(decision_tokens(c) for c in chains
+                                                                       if c.get('decision_objective'))),
+                                             **{f'val:{name}': sum(c.get('decision') is not None for c in v)
+                                                for name, v in val_sets.items()}}}), flush=True)
     print(json.dumps({'episodes': len(episodes), 'sequences': len(chains), 'sequence_tokens': int(sum(len(c['ids']) for c in chains)),
                       'loss_tokens': int(loss_tokens), 'epochs': args.epochs}), flush=True)
     order = 'stratified' if args.batch_order == 'auto' else args.batch_order
@@ -1009,7 +1176,8 @@ def train(args):
     log = open(out_dir / 'train.jsonl', 'a')
     if val_sets and start_step == 0:
         model.eval()
-        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()}}
+        record = {'step': 0, **{f'val_loss:{name}': validation_loss(model, forward, c, pack_tokens, student_top_p) for name, c in val_sets.items()},
+                  **decision_validation(model, forward, val_sets, pack_tokens, args.activation_gb)}
         model.train()
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
@@ -1060,7 +1228,7 @@ def train(args):
             batch_cursor={'next_step': next_step_idx, 'total_steps': total},
             trained_rounds=rounds_now,
             ref_bundles=ref_bundles, ref_rows=ref_rows,
-            trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best,
+            trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best, 'decision_objective': decision_on,
                            'schedule': {'total': total, 'steps': len(steps), 'replanned': replanned}},
         )
         last_state_save = time.time()
@@ -1082,11 +1250,19 @@ def train(args):
         step_started = time.time()
         torch.cuda.reset_peak_memory_stats()
         peak_by_phase.clear()
-        step_chains = [chains[i] for i in group]
+        # decision chains take the decision objective in every step (``decision_backward``); the rest the step's
+        # token loss (plain SFT or Temperature Matching)
+        step_decisions = [chains[i] for i in group if chains[i].get('decision_objective')]
+        step_chains = [chains[i] for i in group if not chains[i].get('decision_objective')]
         is_clean = ambient_clean(args.seed, step, args.ambient_p_clean)
 
         def run_step_body(cur_pack_tokens, cur_act_gib):
-            ambient = None
+            ambient, decided = None, (0., 0, {'decisions': 0, 'ce': 0., 'correct': 0})
+            if step_decisions:
+                decided = decision_backward(model, forward, step_decisions, denominator, cur_pack_tokens, cur_act_gib,
+                                            mark=mark)
+            if not step_chains:
+                return decided[0], decided[1], ambient, decided[2]
             if not is_clean:
                 t_amb = time.time()
                 rows = ambient_teacher_rows_lora(
@@ -1103,9 +1279,9 @@ def train(args):
                 tree_batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb,
                 student_top_p=student_top_p, ambient=ambient,
             )
-            return total_nll_val, computed_val, ambient
+            return total_nll_val + decided[0], computed_val + decided[1], ambient, decided[2]
 
-        total_nll, computed, ambient = run_step_with_oom_retry(run_step_body, learner, oom_plan)
+        total_nll, computed, ambient, decided = run_step_with_oom_retry(run_step_body, learner, oom_plan)
         forward_tokens += computed
         t = time.time()
         norm = torch.nn.utils.clip_grad_norm_(parameters, args.clip).item()
@@ -1119,6 +1295,10 @@ def train(args):
                   'grad_norm': norm, 'family_grad_norms': fam_grads,
                   'loss_kind': 'sft' if ambient is None else 'tm',
                   **({} if ambient is None else {'tm_kl': ambient.get('kl', 0.) / denominator}),
+                  **({'decisions': decided['decisions'], 'decision_ce': decided['ce'] / decided['decisions'],
+                      'decision_accuracy': decided['correct'] / decided['decisions'],
+                      'decision_loss_share': DECISION_MASS * decided['ce'] / max(1e-9, total_nll)}
+                     if decided['decisions'] else {}),
                   'sequences': len(group), 'loss_tokens': denominator, 'elapsed_s': round(time.time() - started, 1),
                   'chain_tokens': int(sum(len(chains[i]['ids']) for i in group)), 'computed_tokens': computed,
                   'forward_tokens_per_s': round(forward_tokens / max(1e-6, time.time() - started)),
@@ -1135,6 +1315,7 @@ def train(args):
         if val_sets and (completed_step % args.val_every == 0 or completed_step == len(steps)):
             model.eval()
             record.update({f'val_loss:{name}': validation_loss(model, forward, c, oom_plan.pack_tokens, student_top_p) for name, c in val_sets.items()})
+            record.update(decision_validation(model, forward, val_sets, oom_plan.pack_tokens, oom_plan.activation_gib))
             model.train()
             if args.keep_best_val:
                 current = record[f'val_loss:{args.keep_best_val}']
@@ -1336,6 +1517,10 @@ def main():
     p.add_argument('--second-close', choices=('context', 'train'), default='context',
                    help="with --context-masks on: a reply's second and later </think> and the tokens after each up to the action "
                         'are context (default; exp0_sft.second_close_mask); train: they train like the rest (before 2026-11-19)')
+    p.add_argument('--no-decision-objective', action='store_true',
+                   help='train decision readout rows (a chain with its option set, sft_sources build) as the plain token '
+                   'CE of the chosen reply instead of the option-normalized log score of the readout (default: the '
+                   'decision objective, exp0_sft.decision_backward)')
     p.add_argument('--context-masks', choices=('on', 'off'), default='on',
                    help='on (default): at load, a target row\'s leading empty think block and anything after its end '
                         'token are context in the training and validation chains (exp0_sft.context_masks); off: the '

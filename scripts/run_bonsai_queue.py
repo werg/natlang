@@ -718,6 +718,7 @@ class SharedChild:
         import socket as socket_module
         import fcntl
         self.returncode, self._buffer, self._accepted = None, b'', False
+        self.log = log    # the invocation's own log: its error (the server's reply) is written there, not only the server's
         key = hashlib.sha256('\0'.join([str(Path(command[2]).resolve()), os.environ.get('INVOCATION_ID', str(os.getppid())),
                                           os.environ.get('NATLANG_MODEL_FACING', '')]).encode()).hexdigest()[:16]
         root = Path(SharedChild.ROOT) / f'natlang-collector-{os.getuid()}' / key   # short: unix socket paths < 108 bytes
@@ -816,6 +817,13 @@ class SharedChild:
         reply = json.loads(line) if line else {}
         self.lost = 'exit' not in reply
         self.returncode = int(reply['exit']) if 'exit' in reply else 1
+        if reply.get('error'):
+            try:
+                self.log.write(json.dumps({'event': 'shared_collector_error', 'exit': self.returncode,
+                                           'error': str(reply['error'])[:2000]}) + '\n')
+                self.log.flush()
+            except (OSError, ValueError):
+                pass
         self.connection.close()
         return self.returncode
 

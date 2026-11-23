@@ -79,6 +79,14 @@ COLLECTOR_SLOT_GB = 0.3
 # packets' data_nvme: paths (fb75ccb78); guided attempts are leak-filtered and guidance-stripped before any pool.
 COLLECT_WEIGHT_DTYPE = 'fp8'
 TEACHER_ATTEMPTS = 2
+# Memetic "improve program P" groups in every collection (owner 2026-11-18: memetic stays on in training; the guided
+# gap is telemetry, not a gate): grpo's --memetic-share default. A memetic sample's own verified success (its committed
+# guidance beat the trivial improvements on private query worlds, task_rollouts.memetic_success) enters the SFT mix as
+# an own success of the supervisor's calls. Each memetic sample runs ~30 nested rollouts beside its own slot, so at most
+# MEMETIC_MAX_GROUPS memetic groups run at once in a collection, and none starts when less than its episode wall clock
+# is left before the collection's deadline (the collection would wait for it). 0 opts out (--memetic-share 0).
+MEMETIC_SHARE = 0.02
+MEMETIC_MAX_GROUPS = 2
 # DGX held series (async-train §1): a held measurement's claim file here makes every DGX collection shrink to
 # HELD_PRIORITY_SHARE of its slots while it runs (held episodes take priority over collection)
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
@@ -101,6 +109,15 @@ def log(record):
 
 
 # ---- rates and tiers (pure, tested) ----------------------------------------------------------------------------------
+def episode_success(row):
+    """One scored rewards.jsonl row's success: a memetic improvement episode's ``memetic_success`` (its committed change
+    set beat the trivial improvements on the private query worlds; ``task_rollouts.memetic_success``), else a binary
+    reward of 1."""
+    if 'memetic_success' in row:
+        return bool(row['memetic_success'])
+    return row['reward'] == 1.0
+
+
 def group_outcomes(group_dirs):
     """task id -> [successes, scored] over the student samples of GRPO-format group directories (rewards.jsonl; JOLT+
     teacher attempts and unscored samples left out)."""
@@ -115,7 +132,7 @@ def group_outcomes(group_dirs):
             row = json.loads(line)
             if row.get('reward') is None or row.get('jolt_role', 'student') != 'student':
                 continue
-            rates[row['task_id']][0] += row['reward'] == 1.0
+            rates[row['task_id']][0] += episode_success(row)
             rates[row['task_id']][1] += 1
     return dict(rates)
 
@@ -300,6 +317,19 @@ def frontier_collector(base):
         def _pick(self):
             return self.by_id[self.order.popleft()]
 
+        def _memetic_open(self):
+            """A new memetic group may start: fewer than ``--memetic-max-groups`` run, and its episode wall clock
+            (the rows' ``world.case_seconds``) still fits before the deadline."""
+            if not super()._memetic_open():
+                return False
+            running = sum(1 for info in self.groups.values()
+                          if info.get('memetic') and info['done'] < info['size'] and not info.get('abandoned'))
+            if running >= getattr(self.args, 'memetic_max_groups', MEMETIC_MAX_GROUPS):
+                return False
+            tail = max([((r.get('semantics') or {}).get('world') or {}).get('case_seconds') or 7200
+                        for r in self.memetic_rows] or [7200])
+            return time.time() + tail < self.deadline
+
         def _take(self):
             self._priority()
             if self.paused.is_set():
@@ -439,17 +469,20 @@ def collect(args):
         actor_args += ['--sglang-weight-dtype', 'fp8']
     teacher_attempts = int(getattr(args, 'teacher_attempts', TEACHER_ATTEMPTS))
     teacher_max_succ = int(getattr(args, 'teacher_max_successes', 0))
+    memetic_share = float(getattr(args, 'memetic_share', MEMETIC_SHARE))
     g = grpo.build_parser().parse_args([
         'train', '--work', str(work), '--checkpoint', args.checkpoint, '--checkpoint-sha256', sha,
         '--group', str(args.k), '--slots', str(args.slots), '--task-ids', args.tasks, '--actor-port', str(args.actor_port),
         '--dynamic-sampling-max-spread', str(args.dynamic_sampling_max_spread), '--held-every-hours', '0',
-        '--no-actor-release', '--actor-overlap', 'on', '--memetic-share', '0', '--exclude-family-regex',
+        '--no-actor-release', '--actor-overlap', 'on', '--memetic-share', str(memetic_share), '--exclude-family-regex',
         args.exclude_family_regex, '--unit-prefix', args.unit_prefix, '--seed', str(args.seed),
         '--teacher-attempts', str(teacher_attempts), '--teacher-max-successes', str(teacher_max_succ),
         *(['--unpinned'] if args.unpinned else []), *[f'--actor-arg={a}' for a in actor_args]])
     g.top_p = check_top_p(g.top_p)
     g.pool = args.pool or grpo.default_pools()
     g.held_manifest = args.held_manifest or grpo.default_held()
+    g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
+    g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
     g.max_outstanding = args.slots // 2 + 8
     tasks, excluded = grpo.load_tasks(g, work)
     code = grpo.git_pin()
@@ -458,6 +491,7 @@ def collect(args):
     run = {'schema': 'natlang.ei-collect/1', 'started': time.time(), 'code': code, 'pin': pin, 'series': series(),
            'argv': sys.argv, 'checkpoint': args.checkpoint, 'checkpoint_sha256': sha, 'k': args.k, 'hours': args.hours,
            'tasks_file': args.tasks, 'tasks_sha256': sha256_file_hex_cached(Path(args.tasks)), 'eligible': len(tasks),
+           'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups},
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
@@ -549,7 +583,7 @@ def record_collection(work, closed=True):
 
 # ---- frontier --------------------------------------------------------------------------------------------------------
 def frontier(args):
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     import grpo
     dirs, policies = [], set()
     for work in map(Path, args.collect):
@@ -561,7 +595,7 @@ def frontier(args):
     if not policies or not policies.issubset(allowed_policies):
         raise SystemExit(f'collections served {sorted(policies)}, not allowed frontier policy set {sorted(allowed_policies)}')
     rates = group_outcomes(dirs)
-    held = set(exclusion_ids(args.held_manifest or grpo.default_held(), [{'id': t} for t in rates]))
+    held = set(training_exclusion_ids([{'id': t} for t in rates], args.held_manifest or grpo.default_held()))
     leaked = sorted(set(rates) & held)
     if leaked:
         raise SystemExit(f'{len(leaked)} held tasks in the collections (e.g. {leaked[0]})')
@@ -1139,6 +1173,7 @@ class Cycle:
                        '--checkpoint-sha256', sha, '--tasks', self.dir / 'tasks.json',
                        '--k', self.a.k, '--hours', self.a.collect_hours, *self.variant_args(),
                        '--collect-weight-dtype', collect_w_dtype, '--teacher-attempts', teacher_attempts,
+                       '--memetic-share', getattr(self.a, 'memetic_share', MEMETIC_SHARE),
                        '--slots', slots, '--unit-prefix', unit, *actor)
 
     def serve_colab(self, hosts, start, sha, profile):
@@ -2216,7 +2251,8 @@ class AsyncRoundDriver:
             pin=a.pin, sft_work=a.sft_work, seed_work=a.seed_work, live_work=a.live_work, k=a.k, collect_hours=a.collect_hours, slots=a.slots,
             kv_gb=a.kv_gb, fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
-            collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts, held_profile='dgx',
+            collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
+            memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE), held_profile='dgx',
             held_pin=a.held_pin, held_series_host='dgx', held_samples=a.held_samples, held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
             collect_profile='dgx', sft_profile='dgx', select_args=a.select_args, prefer_unseen=[],
@@ -2790,6 +2826,11 @@ def main():
         p.add_argument('--held-manifest', help='default: grpo.default_held() (held-v3)')
         p.add_argument('--exclude-family-regex', default='(?!)', help="families left out (default: none, as grpo-v5)")
         p.add_argument('--seed', type=int, default=20261120)
+
+    def memetic_flags(p):
+        p.add_argument('--memetic-share', type=float, default=MEMETIC_SHARE,
+                       help='share of new collection groups that are memetic "improve program P" episodes (default '
+                            'MEMETIC_SHARE; 0 opts out); their verified own successes enter the SFT mix')
     s = sub.add_parser('select')
     pool_flags(s)
     s.add_argument('--out', required=True)
@@ -2821,6 +2862,10 @@ def main():
     c.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS,
                    help='JOLT+ guided attempts for failing groups (default TEACHER_ATTEMPTS; 0: none)')
     c.add_argument('--teacher-max-successes', type=int, default=0)
+    memetic_flags(c)
+    c.add_argument('--memetic-tasks', help="memetic task rows (default: the registry role grpo-memetic-tasks)")
+    c.add_argument('--memetic-max-groups', type=int, default=MEMETIC_MAX_GROUPS,
+                   help='memetic groups running at once (each sample runs ~30 nested rollouts beside its slot)')
     c.add_argument('--unit-prefix', default='ei-collect')
     c.add_argument('--unpinned', action='store_true')
     c.add_argument('--held-priority-dir', default=str(HELD_PRIORITY_DIR),
@@ -2861,6 +2906,7 @@ def main():
                    help='SGLang linear weight dtype for collection actors (default COLLECT_WEIGHT_DTYPE; held stays bfloat16)')
     y.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS,
                    help='JOLT+ guided attempts for failing groups in collection (default TEACHER_ATTEMPTS; 0: none)')
+    memetic_flags(y)
     y.add_argument('--slots', type=int, default=128)
     y.add_argument('--kv-gb', type=int, default=12)
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
@@ -3027,6 +3073,7 @@ def main():
     ad.add_argument('--no-neuralese-variants', action='store_true')
     ad.add_argument('--collect-weight-dtype', choices=('fp8', 'bfloat16'), default=COLLECT_WEIGHT_DTYPE)
     ad.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS)
+    memetic_flags(ad)
     ad.add_argument('--fill', help='filled_reasoning.py OUT directory: fills on the standing collection actor')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')

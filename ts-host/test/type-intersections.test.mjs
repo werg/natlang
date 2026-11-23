@@ -61,3 +61,12 @@ test('the same types are valid TypeScript in declarations', () => {
   for (const text of ['A & { b: string }', '{ [k: string]: number }', "State['status']"])
     assert.equal(typeScriptText(text, new Set()), text);
 });
+
+test('Record keys: string-literal unions are exact records, string and aliased keys are dictionaries', () => {
+  assert.equal(formatType(parseType('Record<"blocking" | "praise", number>')), '{ blocking: number, praise: number }');
+  assert.equal(formatType(parseType("Record<'only', string>")), '{ only: string }');
+  assert.equal(formatType(parseType('Record<Kind, number>')), 'Record<string, number>');
+  assert.equal(formatType(parseType('Record<string, number>')), 'Record<string, number>');
+  assert.throws(() => parseType('Record<number, string>'), /Record keys are strings/);
+  assert.throws(() => parseType('Record<1 | 2, string>'), /Record keys are strings/);
+});

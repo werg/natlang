@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,8 +16,21 @@ const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, 
   types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
 
 test('requests are laid out system, instructions and types, callable declarations, arguments, transcript', async () => {
-  const outDir = mkdtempSync(join(tmpdir(), 'natlang-layout-'));
-  const built = buildProject({ project: fileURLToPath(new URL('../../examples/triage', import.meta.url)), outDir, runtimeModule, writeDeclarations: false });
+  // Two tool-loop functions called from host code (examples/triage scores its labels as decisions, which have no turns).
+  const project = mkdtempSync(join(tmpdir(), 'natlang-layout-src-')), outDir = mkdtempSync(join(tmpdir(), 'natlang-layout-'));
+  writeFileSync(join(project, 'package.json'), '{ "type": "module" }\n');
+  writeFileSync(join(project, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2023', module: 'NodeNext',
+    moduleResolution: 'NodeNext', strict: true, skipLibCheck: true, rootDir: '.', outDir: 'dist' }, include: ['*.ts'] }));
+  writeFileSync(join(project, 'types.ts'), 'export type Label = "billing" | "technical" | "spam";\n');
+  writeFileSync(join(project, 'classify.nl'), '---\ndescription: Label one ticket using the rubric.\nargs:\n  ticket: string\n  rubric: string\n' +
+    'returns: Label\n---\nPick the label from rubric that fits ticket.\n');
+  writeFileSync(join(project, 'is_urgent.nl'), '---\ndescription: Does this ticket need attention within the hour?\nargs:\n  ticket: string\n' +
+    'returns: boolean\n---\nA ticket is urgent when many customers are affected right now.\n');
+  writeFileSync(join(project, 'triage.ts'), "import classify from './classify.nl';\nimport isUrgent from './is_urgent.nl';\n" +
+    'export async function triage(tickets: string[], rubric: string) {\n' +
+    '  const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));\n' +
+    '  return { labels, urgent: await Promise.all(tickets.map(ticket => isUrgent(ticket))) };\n}\n');
+  const built = buildProject({ project, outDir, runtimeModule, writeDeclarations: false });
   assert.equal(built.ok, true, JSON.stringify(built.diagnostics));
   const { triage } = await import(pathToFileURL(join(outDir, 'triage.js')).href);
   const scripted = scriptedModel(opening => {

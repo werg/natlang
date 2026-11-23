@@ -111,6 +111,16 @@ held-v4 measures what the campaign wants, so it is built in Wave A, before the f
 
 Held-v3 continues unchanged as the continuity series.
 
+**As built (B1, 2026-11-23).** Every registry role named `held-eval*` is a held set training excludes:
+`held_eval.training_exclusion_ids` (and `sft_sources.held_closure` for the SFT/teacher/live paths) unite them, so a
+set is out of training the moment its role is registered. `held-eval` stays held-v3 (`grpo.default_held()`, the
+gate). `held-eval-semantic-fp-reservations` is `ops/held-v4/reservations.json`
+(`natlang.rl-held-reservations/1`: groups, path patterns and seeded share rules, `held_eval.reserved`), and
+`held-eval-semantic-fp` will name the pinned manifest. Fact correction: a reserved brief's 8 cases are 3 exact gates
+and 5 workflows whose oracle is an independent review rubric (`ts-host/scripts/design-briefs/lib.mjs` `makeRecord`).
+So the exact stratum is 60 gates. The 100 workflows join held-v4 with the verifier oracle (O1/B6), as do the 2 reserved
+Astra/Sol apps, whose fixtures are judged by verifier modules.
+
 ## 6. Activate fallow assets (F1)
 - `training/semantic_stack/sol_programs.json` (100 typed programs, 28 worlds, "eligible for plain teacher
   generation", never admitted): run it through the WS7 migrator and the O1 path. Admit what qualifies.

@@ -5,7 +5,7 @@
 import { Iteration, iterateOn as iterate, type IterationEvent, type IterationTrajectory, type ProgressVerdict } from './iterate.js';
 import type { Context } from './contexts.js';
 import { inline, uncompiled } from './lowered.js';
-import { resolveFrame } from './runtime.js';
+import { decideInFrame, resolveFrame, type Decision } from './runtime.js';
 import { traceFor } from '../native/graph.js';
 import { RefinementError, canonicalValue, failureError } from '../native/refinement.js';
 import { hexDigest } from '../native/hash.js';
@@ -92,6 +92,16 @@ Object.defineProperty(nl, '__inline', { value: inline });
  */
 export function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T> {
   return iterate(step as never, initial, ...args);
+}
+
+/**
+ * Call `fn` with `args` and return its answer with the probability of every allowed value: `{ value, probabilities,
+ * confidence, scored }`. A function with `readout: decision` on a finite result (a literal union or `boolean`) is scored
+ * in one pass; any other result has probability 1 and `scored: false`. The same `decide` eval code calls, here for
+ * host code: `const { value, confidence } = await decide(route, message)`.
+ */
+export async function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): Promise<Decision<T>> {
+  return decideInFrame(resolveFrame(), fn, args);
 }
 
 /**

@@ -31,7 +31,10 @@ install side by side.
 
 The authoring skill's [review example](natlang-authoring/assets/review/) is a named function with a callable folder
 holding a natural-language helper and an exact one; `ts-host/test/distributed-skills.test.mjs` runs it with a scripted
-model.
+model. Its [composition reference](natlang-authoring/references/composition.md) quotes `examples/refunds`,
+`examples/triage` and the curated applications; each quoted block carries a `<!-- from: PATH -->` marker, and
+`ts-host/test/authoring-examples.test.mjs` checks that the block is that file's code and runs the examples with a
+scripted model. Quote a program the same way when a skill shows code.
 
 ## What belongs here
 

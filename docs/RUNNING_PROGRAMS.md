@@ -11,7 +11,7 @@ natlang run examples/hello
 natlang dashboard --root examples --open
 ```
 
-The hello example runs one classifier using its bundled sample input. In the
+The hello example is what `natlang init` writes: it routes three bundled messages with one scored decision each. In the
 dashboard, choose a program and click **Run**. Output opens alongside **Execution**,
 with startup messages under **Log**. The run
 form explains the selected model and any required download before execution.
@@ -44,15 +44,21 @@ To create your own, in an empty directory outside the clone:
 ```sh
 natlang init my-program
 cd my-program
-natlang run                          # answer.nl on the sample input
-natlang call answer.nl "Your text"   # one call with your own input
+natlang check                                     # the program, without a model
+natlang run                                       # plan the bundled messages.json
+natlang call route.nl '{"from":"a@b","subject":"Invoice","body":"Can you resend it?"}'
 natlang dev
 ```
 
-A new program is `answer.nl`, `natlang.json` (its `main` target is `answer.nl` itself; the `message` argument's
-default is the sample), `examples.json`, `README.md`, `AGENTS.md` and `CLAUDE.md` for coding agents, `.gitignore` and
-`package.json`. `answer.nl` declares `readout: decision`: the model scores the declared labels instead of writing an
-answer, which keeps a first local call short. Edit `answer.nl` or the sample while `dev` runs; it stops the previous run
+A new program is an inbox planner: `types.ts` (the data, with `Untrusted<string>` on the message body and an
+`Is<string, "...">` reply), `route.nl` (a typed decision, `readout: decision`), `main.ts` (maps `route` over the
+messages with `decide(route, message)` and drafts replies with an inline `nl<Reply>`; `main` is the run target),
+`messages.json` (the sample input), `natlang.json` (its `main` target, whose `messages` argument takes your own
+messages as JSON), `examples.json` (the `route.nl` cases), `README.md`, `AGENTS.md` and `CLAUDE.md` for coding agents,
+`tsconfig.json`, `.gitignore` and `package.json`. The bundled messages need no reply, so the first run is three scored decisions; a message of your own that asks
+something (`natlang run . -- '[{...}]'`) also gets a drafted reply, a generative call that takes minutes on a CPU.
+`natlang init DIR --template classifier` writes the one-function program instead (`answer.nl` with its sample input
+as the target's default). Edit any file while `dev` runs; it stops the previous run
 before starting a replacement and ignores generated files. Ctrl+C stops both
 the watcher and its current run. Successive runs reuse the loaded local model
 (see "One loaded model for every run").
@@ -167,7 +173,7 @@ is the function's return type; the paragraphs that concern one call (its guidanc
 its signature in its first message. A new opening is therefore built on a shared base, the opening without its last
 tool line, saved once (`*.base.slot`) and restored for every opening: a function with a new return type prefills about
 300 tokens instead of 4,500 (3 s instead of 120 s on a loaded 16-core CPU). `natlang setup` prepares the base
-and the opening of a new program's `answer.nl` while it sets up the model, so the first `natlang run` after
+and one function's opening (the classifier template's `answer.nl`) while it sets up the model, so the first `natlang run` after
 `natlang init` starts warm. `NATLANG_WARM_PREFIXES=off` turns warming off; states are not used while tuned LoRA
 adapters or native states are loaded.
 

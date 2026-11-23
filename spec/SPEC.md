@@ -362,8 +362,9 @@ whole reply to the call's opening (signature and arguments, under a short
 system prompt) and returns the most probable one. The normalised distribution
 is the call's trace event `decision_readout` and its note, so a decision is a
 probability vector that proper scoring rules (Brier, ranked probability score,
-log loss) can grade (the [learning extension](ext/learning.md) also differentiates them). Host code reads it with
-`runtime.decide(fn, ...args)` and eval code with `decide(fn, ...args)`, which return
+log loss) can grade (the [learning extension](ext/learning.md) also differentiates them). Code reads it with
+`decide(fn, ...args)`: eval code, and host code inside a running task (`import { decide } from '@natlang/node'`);
+`runtime.decide(fn, ...args)` runs it in a task of its own. Both return
 `{ value, probabilities: [{ value, probability }], confidence, scored }`. A model config with
 `decisionReadout: 'finite-returns'` applies the readout to every finite-typed
 call. A backend that cannot score replies generates one offered JSON value on the same short decision messages,

@@ -279,6 +279,12 @@ def exclusion_ids(manifest, cases=None):
     held set (e.g. ``ops/held-v3/manifest.json``)."""
     if not isinstance(manifest, dict):
         manifest = json.loads(Path(manifest).read_text())
+    if manifest.get('schema') == RESERVATIONS_SCHEMA:
+        if cases is None:
+            raise ValueError('a held reservation names groups, not a pool: pass the rows to exclude from')
+        if isinstance(cases, (str, Path)):
+            cases = list(read_jsonl(cases))
+        return frozenset(row['id'] for row in cases if reserved(manifest, row))
     if cases is None:
         pool = manifest['pool']
         if _sha256(pool['path']) != pool['sha256']:
@@ -295,17 +301,104 @@ def exclusion_ids(manifest, cases=None):
     return frozenset(excluded)
 
 
+# ---- every held set, and reservations of held sources before their set exists ---------------------------------------
+# A registry role whose name starts with HELD_ROLE_PREFIX names a held set training never takes: `held-eval` (held-v3,
+# the gate series, `grpo.default_held()`), `held-eval-semantic-fp` (held-v4) and `held-eval-semantic-fp-reservations`
+# (held-v4's reserved sources). Training excludes their union (``training_exclusion_ids``).
+HELD_ROLE_PREFIX = 'held-eval'
+RESERVATIONS_SCHEMA = 'natlang.rl-held-reservations/1'
+
+
+def _row_groups(row):
+    return {_split_group(row), *_source_groups(row)}
+
+
+def reservation_share_held(rule, group):
+    """True when a split group falls in a share rule's held part: sha256(seed, group) below the share. Deterministic, so
+    a fixture pack labels its own held split with it before any of its rows exist (``reserved``)."""
+    return int(_hash(group, seed=rule['seed'])[:8], 16) / 0x100000000 < float(rule['share'])
+
+
+def reserved(reservations, row):
+    """Whether a pool row belongs to a reserved held source: a split or source group named in ``groups``, a split group,
+    source group or source id matched by a ``patterns`` regex, or a split group matched by a ``share_rules`` pattern
+    and falling in its held share."""
+    groups = _row_groups(row)
+    if groups & set(reservations.get('groups') or ()):
+        return True
+    texts = [*groups, *(row.get('source_ids') or ())]
+    for pattern in reservations.get('patterns') or ():
+        if any(re.search(pattern, str(text)) for text in texts):
+            return True
+    for rule in reservations.get('share_rules') or ():
+        for group in groups:
+            if re.search(rule['pattern'], str(group)) and reservation_share_held(rule, group):
+                return True
+    return False
+
+
+def held_manifests(*, repo=None):
+    """``[(role, path)]`` of every registry role named ``held-eval*``: the held sets and reservations training excludes."""
+    from ..common import data_registry
+    return data_registry.role_prefix_paths(HELD_ROLE_PREFIX, repo=repo)
+
+
+def training_exclusion_ids(cases, held_manifest=None, *, extra=(), repo=None):
+    """Ids among ``cases`` (pool rows or a path) that training must never take: ``exclusion_ids`` of ``held_manifest``
+    (a run's ``--held-manifest``), of every ``held-eval*`` registry manifest (held-v3, held-v4 and its reservations)
+    and of ``extra`` manifests, united. Every trainer, collector, builder and teacher path calls this, so a new held set
+    is out of training the moment its role is registered."""
+    if isinstance(cases, (str, Path)):
+        cases = list(read_jsonl(cases))
+    paths, seen = [], set()
+    for path in [held_manifest, *[p for _, p in held_manifests(repo=repo)], *extra]:
+        if path is None:
+            continue
+        key = os.path.realpath(path) if isinstance(path, (str, Path)) else id(path)
+        if key not in seen:
+            seen.add(key)
+            paths.append(path)
+    excluded, held_groups = set(), set()
+    for path in paths:
+        excluded |= exclusion_ids(path, cases)
+        held_groups |= held_source_groups(path)
+    # a pool row sharing a source group with a held row (a held set's own cases, its pool may be another file)
+    excluded |= {row['id'] for row in cases if _source_groups(row) & held_groups}
+    return frozenset(excluded)
+
+
+def held_source_groups(manifest):
+    """Source groups of a held manifest's own case rows, and of every earlier manifest it ``also_excludes``."""
+    path = Path(manifest)
+    data = json.loads(path.read_text())
+    if data.get('schema') == RESERVATIONS_SCHEMA or 'cases' not in data:
+        return set()
+    groups = set()
+    for row in read_jsonl(path.parent / data['cases']['path']):
+        groups |= _source_groups(row)
+    for earlier in data.get('also_excludes') or ():
+        groups |= held_source_groups(earlier['path'])
+    return groups
+
+
 # ---- series identity --------------------------------------------------------------------------------------------------
 def model_facing(config=None):
-    """The variants the collector resolves: a pinned option, the environment's, else the runtime's adopted default."""
+    """The variants the collector resolves: a pinned option, the environment's, else the runtime's adopted default.
+    NATLANG_PROMPT_REVISION (ts-host runtime/model-facing.ts ``promptRevision``) joins them as
+    ``prompt-revision-<revision>``: the series key then names the prompt revision, and every collector it starts, which
+    receives this list as NATLANG_MODEL_FACING, serves that revision."""
     pinned = (settings(config or {}) or {}).get('model_facing')
     raw = pinned if pinned is not None else os.environ.get('NATLANG_MODEL_FACING', '')
     raw = raw.strip()
-    if raw:
-        return raw
-    source = Path(__file__).resolve().parents[4] / 'ts-host/src/runtime/model-facing.ts'
-    match = re.search(r'const ADOPTED[^=]*=\s*\[([^\]]*)\]', source.read_text()) if source.exists() else None
-    return ','.join(re.findall(r"'([^']+)'", match.group(1))) if match else 'unknown'
+    if not raw:
+        source = Path(__file__).resolve().parents[4] / 'ts-host/src/runtime/model-facing.ts'
+        match = re.search(r'const ADOPTED[^=]*=\s*\[([^\]]*)\]', source.read_text()) if source.exists() else None
+        raw = ','.join(re.findall(r"'([^']+)'", match.group(1))) if match else 'unknown'
+    revision = os.environ.get('NATLANG_PROMPT_REVISION', '').strip()
+    if revision and revision != 'current' and f'prompt-revision-{revision}' not in raw.split(','):
+        raw = ','.join([*[name for name in raw.split(',') if not name.startswith('prompt-revision-')],
+                        f'prompt-revision-{revision}'])
+    return raw
 
 
 def series(config=None, *, engine_host=None):

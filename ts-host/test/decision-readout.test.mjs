@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
+import { createNatlangRuntime, decide, loadVirtualNatlang } from '../dist/index.js';
 import { finiteValues, softmax } from '../dist/native/decision.js';
 import { parseType, TypeEnv } from '../dist/native/types.js';
 import { promptLogprobDecider } from '../dist/model/chat-completion.js';
@@ -57,6 +57,21 @@ test('a readout: decision function answers by scoring its values once, without t
   const event = traces.flatMap(trace => trace.events).find(item => item.kind === 'decision_readout' || item.type === 'decision_readout' || item.event === 'decision_readout');
   assert.ok(event, 'the readout is traced');
   assert.deepEqual(event.probabilities.map(p => +p.toFixed(6)), [0.2, 0.8]);
+});
+
+test('host code calls decide(fn, ...args) inside a running task and gets the scored distribution', async () => {
+  const driver = Object.assign(async () => { throw new Error('the tool loop must not run'); }, {
+    decide: async () => ({ log_probs: [Math.log(0.3), Math.log(0.7)], tokens: [2, 2] }) });
+  const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' } });
+  const fn = loadVirtualNatlang({ 'verdict.nl': VERDICT }, 'verdict.nl');
+  const statements = ['I always lie.', 'I am a knave.'];
+  const decisions = await runtime.run(() => Promise.all(statements.map(statement => decide(fn, statement))));
+  for (const decision of decisions) {
+    assert.equal(decision.value, 'knave'); assert.equal(decision.scored, true);
+    assert.equal(+decision.confidence.toFixed(6), 0.7);
+    assert.deepEqual(decision.probabilities.map(p => [p.value, +p.probability.toFixed(6)]), [['knight', 0.3], ['knave', 0.7]]);
+  }
+  await assert.rejects(() => decide(fn, 'x'), 'outside a task there is no frame to call in');
 });
 
 test('a call store counts a scored readout as one model request with the prompt tokens it evaluated', async () => {

@@ -3,6 +3,17 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — `natlang init` writes the inbox planner; `Record<'a' | 'b', T>` is a record (B3)
+
+The front door is also the teacher prompt for idiomatic-program demonstrations (WS4 rule 4). Consumers and coding
+agents now start from `types.ts` + `route.nl` (`readout: decision`) + `main.ts` (`decide`, inline `nl<Reply>`), and the
+AGENTS.md of plans/semantic-fp/04 section 3, instead of the one-function classifier (`--template classifier` keeps it).
+`route.nl`'s instructions are model-facing: "reply when the sender asks the reader a question or asks them to do
+something; fyi when a person or team tells the reader something worth knowing and asks nothing; ignore when it is
+advertising, a newsletter or an automated message the reader does not need." On stock LFM3-1.7B its three cases pass.
+Types: `Record<"x" | "y", T>` now renders as `{ x: T, y: T }` and `Record<Alias, T>` as `Record<string, T>` in
+signatures and result checks. Both were rejected before, so no running program changes.
+
 ### 2026-11-23 — the system prompt says eval helpers carry forward, and a helper that calls another one now does
 
 Commit a5d27251b (semantic-FP Wave 0) changed one sentence of `APPROACH_PROMPT` (`native/prompt.ts`, "Getting at
@@ -2862,3 +2873,17 @@ for more than 60 s without pausing; use a bounded or faster approach (prune the
 search, check the input sizes, or compute in smaller parts)". The call continues
 and the model sees the error as the eval's observation. `NATLANG_EVAL_SYNC_SECONDS`
 sets the bound (0 turns it off). Browser evals are not bounded.
+
+### 2026-11-23 — memetic guidance reaches the guided program; unmeasured evaluations are not scored as 0
+
+Every guided evaluation of a memetic "improve program P" episode (the supervisor's own change sets, the mechanical
+default and the committed set on the query worlds) failed before its first call: the Python binding writer
+(`rl/memetic_workspace.guidance_binding`) put the bare state id in `program_guidance`, and the runtime
+(`ts-host/src/guidance/program.ts`) accepts only the native-state sentinel of the id, so every guided run exited with
+"invalid natlang.memetic-program-guidance/1 binding". The evaluator then reported a success rate of 0 for collections
+in which no run was scored, which the supervisor read as "this guidance hurts" and the anchor as a real arm. The
+binding now carries the sentinel. An evaluation with no scored run now reports no success: the supervisor's
+`evaluate` answers "no support run of this change set reached a verdict, so it is not counted against the budget",
+the anchor ignores that arm, a group whose support runs all failed is not admitted, and a committed set whose query
+runs all failed leaves the episode unmeasured. Guided programs now see their guidance as the runtime's
+`<natlang_program_guidance>` block, as designed. No opt-out: the old path failed every guided run.

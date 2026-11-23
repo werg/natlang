@@ -1,10 +1,38 @@
 [
   {
-    "name": "duplicate charge",
-    "function": "answer.nl",
+    "name": "a question needs a reply",
+    "function": "route.nl",
     "inputs": {
-      "message": "I was charged twice for my subscription."
+      "message": {
+        "from": "sam@example.com",
+        "subject": "Meeting time",
+        "body": "Does Tuesday at 10 still work for our review?"
+      }
     },
-    "expected": "billing"
+    "expected": "reply"
+  },
+  {
+    "name": "an announcement is fyi",
+    "function": "route.nl",
+    "inputs": {
+      "message": {
+        "from": "hr@example.com",
+        "subject": "New holiday calendar",
+        "body": "The 2027 holiday calendar is now on the intranet."
+      }
+    },
+    "expected": "fyi"
+  },
+  {
+    "name": "a newsletter is ignored",
+    "function": "route.nl",
+    "inputs": {
+      "message": {
+        "from": "news@vendor.example",
+        "subject": "Weekly digest",
+        "body": "Top stories this week from our blog. Unsubscribe at any time."
+      }
+    },
+    "expected": "ignore"
   }
 ]

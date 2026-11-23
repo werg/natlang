@@ -37,13 +37,13 @@ test('a newly scaffolded program checks, runs, and checks saved expected results
   const env = { ...process.env, NATLANG_SERVER: `http://127.0.0.1:${server.address().port}`, NATLANG_MODEL: 'fixture',
     NATLANG_CALL_STORE: 'off', NATLANG_HASH_CACHE: join(root, 'hashes.jsonl'), NATLANG_CONFIG_HOME: root, NATLANG_STATE_HOME: join(root, 'state') };
   try {
-    const init = await run(['init', program], root, env); assert.equal(init.code, 0, init.err);
+    const init = await run(['init', program, '--template', 'classifier'], root, env); assert.equal(init.code, 0, init.err);
     assert.deepEqual(readdirSync(program).sort(), ['.gitignore', 'AGENTS.md', 'CLAUDE.md', 'README.md', 'answer.nl', 'examples.json', 'natlang.json', 'package.json'],
       'a new program is its function, manifest, tests and guides; no entry module or input file');
     assert.match(readFileSync(join(program, 'answer.nl'), 'utf8'), /^returns: '"billing" \| "technical" \| "other"'\nreadout: decision$/m);
     assert.equal(readFileSync(join(program, 'CLAUDE.md'), 'utf8'), '@AGENTS.md\n');
     const original = readFileSync(join(program, 'answer.nl'), 'utf8');
-    assert.notEqual((await run(['init', program], root, env)).code, 0);
+    assert.notEqual((await run(['init', program, '--template', 'classifier'], root, env)).code, 0);
     assert.equal(readFileSync(join(program, 'answer.nl'), 'utf8'), original, 'init never overwrites a project');
     const checked = await run(['check'], program, env); assert.equal(checked.code, 0, checked.err);
     assert.equal(requests, 0, 'creation and checking never contact the model');
@@ -81,6 +81,52 @@ test('a newly scaffolded program checks, runs, and checks saved expected results
   } finally { await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); }
 });
 
+test('natlang init writes the inbox planner: it checks without a model, decides over the messages, and tests route.nl', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-inbox-')), program = join(root, 'inbox');
+  let requests = 0;
+  const server = createServer((request, response) => {
+    request.resume(); request.on('end', () => {
+      response.setHeader('content-type', 'application/json');
+      if (request.url.endsWith('/models')) return response.end(JSON.stringify({ data: [{ id: 'fixture' }] }));
+      requests++;
+      response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify('ignore'), tool_calls: [] }, finish_reason: 'stop' }], usage: { completion_tokens: 1 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const env = { ...process.env, NATLANG_SERVER: `http://127.0.0.1:${server.address().port}`, NATLANG_MODEL: 'fixture',
+    NATLANG_CALL_STORE: 'off', NATLANG_HASH_CACHE: join(root, 'hashes.jsonl'), NATLANG_CONFIG_HOME: root, NATLANG_STATE_HOME: join(root, 'state') };
+  try {
+    const init = await run(['init', program], root, env); assert.equal(init.code, 0, init.err);
+    assert.deepEqual(readdirSync(program).sort(), ['.gitignore', 'AGENTS.md', 'CLAUDE.md', 'README.md', 'examples.json', 'main.ts', 'messages.json',
+      'natlang.json', 'package.json', 'route.nl', 'tsconfig.json', 'types.ts']);
+    assert.match(readFileSync(join(program, 'route.nl'), 'utf8'), /^returns: Route\nreadout: decision$/m);
+    assert.match(readFileSync(join(program, 'types.ts'), 'utf8'), /body: Untrusted<string>/);
+    assert.match(readFileSync(join(program, 'main.ts'), 'utf8'), /decide\(route, message\)/);
+    const checked = await run(['check', '--json'], program, env); assert.equal(checked.code, 0, checked.err + checked.out);
+    const report = JSON.parse(checked.out);
+    assert.deepEqual(report.diagnostics, []);
+    assert.ok(report.functions.some(item => item.source === 'route.nl'), checked.out);
+    assert.ok(report.functions.some(item => item.source.startsWith('main.ts:')), 'the inline draft is a planned function');
+    assert.equal(requests, 0, 'creation and checking never contact the model');
+    const ran = await run(['run'], program, env); assert.equal(ran.code, 0, ran.err);
+    const plans = JSON.parse(ran.out);
+    assert.deepEqual(plans.map(item => [item.subject, item.route, typeof item.confidence, 'reply' in item]),
+      JSON.parse(readFileSync(join(program, 'messages.json'), 'utf8')).map(message => [message.subject, 'ignore', 'number', false]));
+    const own = await run(['run', '.', '--', JSON.stringify([{ from: 'a@b', subject: 'Hi', body: 'Are you free at 3?' }])], program, env);
+    assert.equal(own.code, 0, own.err); assert.equal(JSON.parse(own.out).length, 1);
+    const tested = await run(['test', '--json'], program, env);
+    const results = JSON.parse(tested.out);
+    assert.equal(results.results.length, 3); assert.equal(results.passed, 1, tested.out);
+    assert.equal((await run(['init', 'inner'], program, env)).code, 0);
+    const outer = await run(['check', '--json'], program, env);
+    assert.equal(outer.code, 0, outer.out);
+    assert.ok(!JSON.parse(outer.out).functions.some(item => item.source.startsWith('inner/')), 'a program created inside another is its own project');
+    assert.equal((await run(['init', join(root, 'other'), '--template', 'nope'], root, env)).code, 2);
+    assert.equal((await run(['init', join(root, 'classic'), '--template', 'classifier'], root, env)).code, 0);
+    assert.ok(existsSync(join(root, 'classic', 'answer.nl')));
+  } finally { await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); }
+});
+
 test('Playground instructions and typed return values survive scaffold serialization', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-scaffold-'));
   try {
@@ -106,9 +152,9 @@ test('examples/hello is exactly what natlang init creates', () => {
     for (const name of files(created)) assert.equal(readFileSync(join(example, name), 'utf8'), readFileSync(join(created, name), 'utf8'),
       `examples/hello/${name} differs from the scaffold; regenerate it with createProgram`);
     const manifest = JSON.parse(readFileSync(join(created, 'natlang.json'), 'utf8'));
-    assert.ok(!createPackageArchive(manifest, created).files.some(file => file.path.startsWith('answer/')), 'the helper folder may not exist yet');
-    mkdirSync(join(created, 'answer')); writeFileSync(join(created, 'answer', 'lookup.ts'), 'export default (key: string) => key;\n');
-    assert.ok(createPackageArchive(manifest, created).files.some(file => file.path === 'answer/lookup.ts'), 'helpers added to answer/ are packaged');
+    assert.ok(!createPackageArchive(manifest, created).files.some(file => file.path.startsWith('route/')), 'the callable folder may not exist yet');
+    mkdirSync(join(created, 'route')); writeFileSync(join(created, 'route', 'lookup.ts'), 'export default (key: string) => key;\n');
+    assert.ok(createPackageArchive(manifest, created).files.some(file => file.path === 'route/lookup.ts'), 'helpers added to route/ are packaged');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

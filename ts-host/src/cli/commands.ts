@@ -8,7 +8,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { isDeepStrictEqual } from 'node:util';
-import { answerSource, createProgram, sampleInput } from '../package/authoring.js';
+import { TEMPLATES, answerSource, createProgram, sampleInput, type Template } from '../package/authoring.js';
 import { readExamples } from '../calls/examples.js';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
@@ -982,14 +982,21 @@ export async function runCommand(command: string, words: string[], parsed: Parse
   await defaultProviderModel(parsed);
   const json = parsed.options.has('--json');
   if (command === 'init') {
-    acceptOptions(parsed, []); noTrailingArguments(parsed);
-    if (words.length > 1) throw usageError('usage: natlang init [DIRECTORY]');
+    acceptOptions(parsed, ['--template']); noTrailingArguments(parsed);
+    if (words.length > 1) throw usageError('usage: natlang init [DIRECTORY] [--template inbox|classifier]');
+    const template = (option(parsed, '--template') ?? 'inbox') as Template;
+    if (!TEMPLATES.includes(template)) throw usageError(`--template is ${TEMPLATES.join(' or ')}, not ${template}`);
     const target = resolve(words[0] ?? 'my-program');
     const enclosing = [process.cwd(), dirname(target)].find(directory => existsSync(join(directory, 'natlang.json')));
     if (enclosing) process.stderr.write(`natlang: note: ${relative(process.cwd(), enclosing) || '.'} is already a program (natlang.json); ` +
       'the new program is created inside it as a separate program\n');
-    const root = createProgram(words[0] ?? 'my-program');
-    output(`Created ${root}\n\nNext:\n  cd ${JSON.stringify(root)}\n  natlang run                      # answer.nl on the sample input\n  natlang call answer.nl "Your text"\n  natlang dev                      # rerun after each edit\n\nEdit answer.nl to change behavior and examples.json to save expectations; natlang test checks them.\nnatlang dashboard --open shows results, traces and model settings. AGENTS.md guides coding agents.`, false);
+    const root = createProgram(words[0] ?? 'my-program', { template });
+    output(`Created ${root}\n\nNext:\n  cd ${JSON.stringify(root)}\n` + (template === 'inbox' ?
+      '  natlang check                    # the program, without a model\n  natlang run                      # plan the bundled messages.json\n  natlang test                     # the saved route.nl cases\n  natlang dev                      # rerun after each edit\n\n' +
+      'Read main.ts first: TypeScript holds the data and exact steps, route.nl and the inline nl are the judgments.\n' :
+      '  natlang run                      # answer.nl on the sample input\n  natlang call answer.nl "Your text"\n  natlang dev                      # rerun after each edit\n\n' +
+      'Edit answer.nl to change behavior and examples.json to save expectations; natlang test checks them.\n') +
+      'natlang dashboard --open shows results, traces and model settings. AGENTS.md guides coding agents.', false);
     return 0;
   }
   if (command === 'dev') {

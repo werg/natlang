@@ -224,7 +224,11 @@ def graded_reward(outcome_class: str, reward: float | None, result: dict[str, An
     the credit: a right answer with 1 of 43 files earns 0.02, not half (returning the value and skipping the effects is
     the base model's commonest failure and must not be rewarded), and an episode that achieved none of the effects it
     had to make earns 0 whatever it returned. A task without a checked folder effect stays binary. Budget stops, other outcomes
-    and any other failed check are 0."""
+    and any other failed check are 0.
+
+    A task judged by a trusted executable verifier (``semantics.trusted_exact_verifier``) whose verdict carries a graded
+    ``score`` gets that score for its answer: the verifier's credit when the answer alone failed, and the factor on the
+    effect fraction (in place of the 0.5) when the files failed too."""
     if reward is None or reward == 1.0:
         return reward
     if outcome_class != "semantic_mismatch" or not result:
@@ -234,10 +238,26 @@ def graded_reward(outcome_class: str, reward: float | None, result: dict[str, An
     failed = {name for name, passed in checks.items() if not passed}
     if not checks or not failed or not failed <= GRADED_CHECKS:
         return 0.0
+    answer_credit = verifier_score(outcome, semantics or {})
+    if failed == {"answer"} and answer_credit is not None:
+        return round(answer_credit, 6)
     effects = effect_fraction(outcome, semantics or {})
     if not effects:
         return 0.0
-    return round(effects * (1.0 if checks.get("answer") else 0.5), 6)
+    factor = 1.0 if checks.get("answer") else (0.5 if answer_credit is None else answer_credit)
+    return round(effects * factor, 6)
+
+
+def verifier_score(outcome: dict[str, Any], semantics: dict[str, Any]) -> float | None:
+    """The graded answer credit in [0, 1] a trusted executable verifier returned (``trusted-exact-verifier.ts``), None
+    when the task has no such verifier or its verdict carries no score."""
+    if not isinstance(semantics.get("trusted_exact_verifier"), dict):
+        return None
+    oracle = outcome.get("oracle") if isinstance(outcome.get("oracle"), dict) else {}
+    score = oracle.get("score")
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 1:
+        return None
+    return float(score)
 
 
 def expand_captures(trajectory: list[Any]) -> list[Any]:
@@ -698,7 +718,22 @@ def memetic_reward_record(memetic: dict[str, Any]) -> dict[str, Any]:
             "without": arm("none"), "default": arm("default"),
             "query_success": float(memetic["query_success"]), "query_dir": memetic.get("query_dir"),
             "committed": memetic.get("committed"), "unscored_workspace": bool(memetic.get("unscored_workspace")),
-            "score_path": memetic.get("score_path")}
+            "leak_refused": bool(memetic.get("leak_refused")), "score_path": memetic.get("score_path")}
+
+
+def memetic_success(memetic: dict[str, Any] | None) -> bool:
+    """Whether a memetic improvement episode is a verified success (its own success for expert iteration): it
+    committed a change set, the workspace scored it on the private query worlds (never shown to the supervisor;
+    separate from the support worlds it was judged on while working), its texts reproduce no query answer, and its
+    quality (query success minus the evaluation cost) beats the best trivial improvement (``anchor``: no change or the
+    mechanical default on the same worlds and seeds), the condition under which GRPO gives it a positive advantage.
+    ``memetic``: a ``natlang.memetic-outcome/1`` record (``memetic_outcome``)."""
+    if not memetic or memetic.get("unscored_workspace") or memetic.get("leak_refused"):
+        return False
+    if not memetic.get("committed"):
+        return False
+    quality, anchor = memetic.get("quality"), memetic.get("anchor")
+    return type(quality) in (int, float) and type(anchor) in (int, float) and quality > anchor
 
 
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
@@ -877,6 +912,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "model_facing": os.environ.get("NATLANG_MODEL_FACING") or None,
                             "turns": turns, "execution_graph": execution_graph,
                             "outcome": outcome,
+                            **({"memetic_success": memetic_success(memetic)} if memetic is not None else {}),
                             "reward": None if training_reward is None else {"quality": training_reward,
                                 "graded": graded,
                                 **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
@@ -893,6 +929,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                          "neuralese_exchanges": exchanges,
                          "execution_efficiency": efficiency,
                          **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
+                         **({"memetic_success": memetic_success(memetic)} if memetic is not None else {}),
                          **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {})})
     groups = []
     for index, task in enumerate(packet):

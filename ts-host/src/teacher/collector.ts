@@ -1933,7 +1933,7 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
     const oracle = authoring ? { accepted: authoring.ok, level: 'exact' as const, verdict: authoringRun ? 'executable-authoring/1' : 'codebase-load/1' } : record.semantics.trusted_exact_verifier ?
       await checkTrustedExactVerifier(record.semantics.trusted_exact_verifier,
         { value: actual, oracle: record.semantics.trusted_exact_verifier.oracle,
-          inputs: record.semantics.inputs, fixture: folderFiles ?? {} }) :
+          inputs: record.semantics.inputs, fixture: folderFiles ?? {}, ...(actualFiles ? { files: actualFiles } : {}) }) :
       await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge,
         typeof record.semantics.inputs?.question === 'string' ? { question: record.semantics.inputs.question } : {});
     // A required repair (or a forbidden edit) of a program function is judged on the function the run left behind.

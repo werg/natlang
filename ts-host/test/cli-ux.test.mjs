@@ -57,7 +57,7 @@ test('usage errors exit 2, an unreachable model exits 3 with one line, and check
   const root = mkdtempSync(join(tmpdir(), 'natlang-cli-ux-')), program = join(root, 'p');
   const env = { ...isolated(root), NATLANG_SERVER: 'http://127.0.0.1:9', NATLANG_MODEL: 'fixture' };
   try {
-    assert.equal((await run(['init', program], root, env)).code, 0);
+    assert.equal((await run(['init', program, '--template', 'classifier'], root, env)).code, 0);
     const nested = await run(['init', 'inner'], program, env);
     assert.match(nested.err, /already a program/);
     for (const args of [['call', 'answer.nl'], ['call', 'nope.nl'], ['run', 'nope'], ['call', 'answer.nl', '--inputs', 'missing.json'], ['test', 'missing']]) {
@@ -107,7 +107,7 @@ test('call prints text results as text, reads piped text for a text parameter, a
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const env = { ...isolated(root), NATLANG_CALL_STORE: join(root, 'calls'), NATLANG_SERVER: `http://127.0.0.1:${server.address().port}`, NATLANG_MODEL: 'fixture' };
   try {
-    assert.equal((await run(['init', program], root, env)).code, 0);
+    assert.equal((await run(['init', program, '--template', 'classifier'], root, env)).code, 0);
     const json = await run(['call', 'answer.nl', 'hi', '--json'], program, env);
     assert.equal(json.out, '"billing"\n');
     assert.match(json.err, /^natlang: call (\S+) \(natlang traces show \1\)$/m);

@@ -32,15 +32,28 @@ The call_depth_3 warnings are heuristics: pass-through means identical argument 
 means under ``THIN_WORDS`` words of its own besides the call; they point the auditor at a task, they do not decide it.
 Smoke and reference scripts get the same argument-count check in structure_smoke.mjs (it parses the code).
 
-  authored_checks.py TASKS.jsonl     print {task id: {errors, warnings}} for every task with findings
+Verifier tasks (``oracle: verifier``, judged by executing their outcome) get direct controls of their verifier module
+(``verifier_controls.mjs`` through the runtime's trusted-verifier binding): the reference and every alias accepted,
+every wrong answer, degenerate values (null, {}, [], "", 0) and the keyword baseline rejected, the reference verdict
+deterministic. A verifier that accepts a wrong answer or the keyword baseline does not discriminate, and fails the task.
+Their instructions may not spell a judgment as a keyword rule ("contains the word ...", "by whole words"): the cue list
+is what the keyword baseline already does, and the task exists to need the meaning.
+
+  authored_checks.py TASKS.jsonl [--runtime TS_HOST]     print {task id: {errors, warnings}} for every task with findings
 """
 from __future__ import annotations
 
 import collections
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+CUE_RULE = re.compile(r'\bcontains?\s+(?:the|a|any|one|either)?\s*(?:of\s+the\s+)?(?:words?|phrases?|strings?|keywords?)\b'
+                      r'|\bby\s+whole\s+words?\b|\bkeywords?\b', re.I)
 
 THIN_WORDS = 20
 NEURALESE_CONSTRUCTS = frozenset({'typed_neuralese', 'neuralese_relay', 'neuralese_fan_in', 'iterate_neuralese'})
@@ -390,12 +403,49 @@ def helper_signature(task):
             if path.endswith('.nl') and path != task['root'] and '/' in path}
 
 
-def lint_batch(tasks):
+def node():
+    for candidate in sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin/node'), reverse=True):
+        return str(candidate)
+    return 'node'
+
+
+def verifier_controls(tasks, runtime=None):
+    """{task id: {'errors': [...], 'verdicts': {...}}} of ``verifier_controls.mjs`` for the batch's verifier tasks."""
+    chosen = [task for task in tasks if task.get('oracle') == 'verifier']
+    if not chosen:
+        return {}
+    runtime = runtime or os.environ.get('NATLANG_VERIFIER_RUNTIME') or str(REPO / 'ts-host')
+    text = ''.join(json.dumps(task) + '\n' for task in chosen)
+    done = subprocess.run([node(), str(Path(__file__).resolve().parent / 'verifier_controls.mjs'), runtime, '/dev/stdin'],
+                          input=text, capture_output=True, text=True,
+                          cwd=os.environ.get('NATLANG_REPO_ROOT') or str(REPO))
+    if done.returncode:
+        raise RuntimeError('verifier_controls.mjs failed: ' + done.stderr[-2000:])
+    return json.loads(done.stdout)
+
+
+def cue_rules(task):
+    """Instructions of a verifier task that spell a judgment as a keyword rule."""
+    found = []
+    for path, text in task['files'].items():
+        if path.endswith('.nl'):
+            match = CUE_RULE.search(split_file(text)[1])
+            if match:
+                found.append(f'{path} spells a judgment as a keyword rule ("{match.group(0)}"): a verifier task states '
+                             'what the judgment means and leaves surface cues to the keyword baseline it must beat')
+    return found
+
+
+def lint_batch(tasks, runtime=None):
     """{task id: {'errors': [...], 'warnings': [...]}} for every task, with the batch-level world checks."""
     report = {}
     for task in tasks:
         errors, warnings = lint_task(task)
+        if task.get('oracle') == 'verifier':
+            errors.extend(cue_rules(task))
         report[task['id']] = {'errors': errors, 'warnings': warnings}
+    for ident, found in verifier_controls(tasks, runtime).items():
+        report[ident]['errors'].extend(found['errors'])
     worlds = collections.defaultdict(list)
     for task in tasks:
         if 'multi_operation_codebase' in (task.get('constructs') or []):
@@ -420,10 +470,13 @@ def lint_batch(tasks):
 
 def main(argv=None):
     argv = argv or sys.argv[1:]
+    runtime = None
+    if len(argv) == 3 and argv[1] == '--runtime':
+        argv, runtime = argv[:1], argv[2]
     if len(argv) != 1:
         raise SystemExit(__doc__)
     tasks = [json.loads(line) for line in Path(argv[0]).read_text().splitlines() if line.strip()]
-    findings = {k: v for k, v in lint_batch(tasks).items() if v['errors'] or v['warnings']}
+    findings = {k: v for k, v in lint_batch(tasks, runtime).items() if v['errors'] or v['warnings']}
     print(json.dumps(findings, indent=1))
     return 1 if any(v['errors'] for v in findings.values()) else 0
 

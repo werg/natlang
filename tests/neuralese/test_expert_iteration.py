@@ -817,3 +817,34 @@ def test_a_preempted_held_unit_is_joined_until_it_resumes_and_finishes(tmp_path,
     monkeypatch.setattr(ei, 'ledger_queued', queued)
     cycle.dgx_held('candidate', tmp_path / 'c.pt')
     assert launches == [('sft-v10-held-candidate', 'medium')]       # joined, not launched twice; below training's high
+
+
+def test_select_never_takes_a_held_v4_task_or_sibling_and_the_gate_stays_held_v3(tmp_path, monkeypatch):
+    """B1: expert-iteration selection (pool_args -> grpo.load_tasks) excludes every held-eval* role, not only held-v3."""
+    import grpo
+    from natlang_neuralese.common import data_registry
+    from natlang_neuralese.rl import held_eval
+
+    def held_set(name, task_id, group):
+        directory = tmp_path / name
+        directory.mkdir()
+        case = {'id': task_id, 'curriculum': {'split_group': group}}
+        (directory / 'cases.jsonl').write_text(json.dumps(case) + '\n')
+        sha = held_eval._sha256(directory / 'cases.jsonl')
+        (directory / 'manifest.json').write_text(json.dumps({
+            'schema': held_eval.MANIFEST_SCHEMA, 'tasks': [{'id': task_id}], 'excluded_split_groups': [group],
+            'pool': {'path': str(directory / 'cases.jsonl'), 'sha256': sha}, 'cases': {'path': 'cases.jsonl', 'sha256': sha}}))
+        return str(directory / 'manifest.json')
+
+    v3, v4 = held_set('v3', 'a', 'ga'), held_set('v4', 'b', 'gb')
+    roles = [('held-eval', v3), ('held-eval-semantic-fp', v4)]
+    monkeypatch.setattr(data_registry, 'role_prefix_paths', lambda prefix, repo=None: roles)
+    monkeypatch.setattr(data_registry, 'role_path', lambda name, repo=None: dict(roles)[name])
+    rows = [{'id': i, 'split': 'train', 'family': 'f', 'curriculum': {'split_group': g}}
+            for i, g in (('a', 'ga'), ('b', 'gb'), ('b-sibling', 'gb'), ('c', 'gc'))]
+    pool = tmp_path / 'pool.jsonl'
+    pool.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    args = argparse.Namespace(pool=[str(pool)], held_manifest=None, exclude_family_regex='(?!)', seed=0)
+    assert grpo.default_held() == v3
+    eligible, excluded = grpo.load_tasks(ei.pool_args(args), None)
+    assert [r['id'] for r in eligible] == ['c'] and excluded == 3

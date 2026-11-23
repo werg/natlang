@@ -7400,3 +7400,162 @@ pairing.
   decoding) are still refused.
 - **Effect now:** aei1's first verdict pairs round 1 against sft-v7's existing Pop result. Without this, the reference
   needed 8-10 h of DGX held.
+
+## 2026-11-23 B5: the decision objective in expert-iteration SFT (WS5 O3)
+
+- **Change (default on, opt-out `exp0_sft --no-decision-objective`).** A call on a decision readout's surface (no
+  tools, last message the readout's request, reply one of the offered JSON values) is a scored choice, not a sampled
+  reply. `sft_sources build` (`render_candidate`/`admit` -> `render_decision`) now carries each such row's option set:
+  the closed continuation of every option rendered by the scorer's own `serve.native_learning.decision_items` (what the
+  Python engine and the SGLang actor score), the label (the verified trajectory's choice, own and teacher) and the
+  option texts. `exp0_sft.chains_of` makes each decision its own chain; `decision_backward` trains
+  `common.decision_objective.decision_loss` (logLoss, the native-graph trainer's objective) over the options' full-softmax
+  sequence log-probabilities, one target unit of loss mass per decision, in every step (Ambient TM steps included).
+  The plain row stays in the chain, so the opt-out (and an older learner reading a new mix) trains the token CE of the
+  chosen reply as before. A `--resume` keeps the setting its learner state trained with (it changes the step list).
+  `lower_sft_sources.py` no longer drops decision rows: they become decision chains (Neuralese-importing ones are
+  skipped and counted). Why: the runtime's answer and confidence are softmax(s); the token CE of the chosen reply can
+  neither lower a wrongly preferred option nor ignore the shared format tokens.
+- **Teacher distributions:** none of our teacher endpoints returns prompt log-probabilities (the replay declines
+  scoring, `ReplayEpisode.answer`), so teacher decisions train on their label. A `probabilities` target is supported
+  by the learner and by `lower_sft_sources` for when one does.
+- **Verified.** 431/431 own decision captures of sft-v9's collection (SGLang actor) equal the build rendering byte for
+  byte (prompt ids, every option continuation, label = `decision_sample.chosen`); 196/196 replayed decision rows equal a
+  capture; 8 captures with Neuralese prompts never reach the build (replay skips them). In sft-v9's mix the objective
+  covers 307 own and 3,982 teacher decision rows (~5.5M extra forward tokens per epoch against 292M, 1.9%). Tests:
+  `tests/neuralese/test_sft_decision_objective.py` (the loss equals the served scores' softmax CE on an engine
+  fixture; gradient equals the explicit option CE; build rendering carries options into chains and `build.json`
+  `mix.decisions`; lowered graph decisions).
+- **Reports.** `build.json`: `stats.<source>.decision_rows/decision_options/decision_surface_not_carried:*` and
+  `mix.decisions`; `train.log`: `decision_objective` at start, per step `decisions`, `decision_ce`,
+  `decision_accuracy`, `decision_loss_share`, and `val_decision_ce:*`/`val_decision_accuracy:*` for validation sets
+  holding decisions.
+
+## 2026-11-23 02:30 Memetic groups in expert-iteration collection; every guided memetic evaluation had failed (B15; e89558c2b)
+
+Brief B15 (`plans/semantic-fp/09_FIRST_BATCH.md`): expert-iteration collection forced `--memetic-share 0`. Owner
+2026-11-18: memetic stays on; the gap is telemetry, not a gate.
+
+- **Found: no guided memetic evaluation ever ran.** `memetic_workspace.guidance_binding` wrote `program_guidance` as
+  the bare state id; `ts-host/src/guidance/program.ts` (since 214f3ad2a, 2026-10-31) accepts only the native-state
+  sentinel `<id>`. Every guided nested run exited in 0.6 s with "invalid
+  natlang.memetic-program-guidance/1 binding" (grpo-v4 run2: 84 in one shared collector log; the 20 recorded bindings
+  all fail under today's runtime). The evaluator scored those collections (0 of 12 scored) as success 0, so
+  `baseline-query-default` was 0 in every group and each supervisor's guided support evaluation read 0. The grpo-v4
+  `memetic_groups` gap (15 groups, all <= 0) measured a broken channel, not memetic learning: any change set holding
+  guidance scored 0 on support and query (file changes such as instruction patches and skills did run), and the GRPO
+  memetic advantages trained on those scores. Fixed: the sentinel
+  (`NATIVE_SENTINEL_OPEN/CLOSE`); an evaluation with no scored run reports `success: None` (the anchor ignores it, the
+  supervisor's `evaluate` answers that it is not counted against the budget, a group whose support runs all failed is
+  not admitted, a committed set whose query runs all failed leaves the episode unmeasured); the shared collector
+  writes an invocation's error into the invocation's own log (`run_bonsai_queue.SharedChild`; it reached only the
+  server log, which hid this). MODEL_FACING_CHANGES entry.
+- **Memetic groups in collection by default.** `expert_iteration.MEMETIC_SHARE = 0.02` on `collect`, `cycle` and
+  `async-drive` (`--memetic-share 0` opts out; `collect_command` passes it), tasks from the role `grpo-memetic-tasks`.
+  At most `MEMETIC_MAX_GROUPS = 2` memetic groups run at once (each sample runs ~30 nested rollouts beside its slot:
+  bounded actor and host-memory load), and none starts when its wall clock (`world.case_seconds`, 7200 s) no longer
+  fits before the collection deadline (the collection would wait for it). No JOLT+ teacher attempts of a memetic group
+  (its reward is graded against its anchor; the `== 1.0` rule made every memetic group "failing").
+- **Success and the SFT mix.** `task_rollouts.memetic_success`: committed, not leak-refused, workspace scored, and
+  quality (query success minus evaluation cost) > anchor (best of no change / mechanical default on the same query
+  worlds and seeds): the condition under which GRPO gives a positive advantage. Rollout and rewards rows carry
+  `memetic_success`; `expert_iteration.group_outcomes` (frontier, select) and `sft_sources extract` read it, so a
+  memetic success enters as `rl-own`. Targets are the supervisor's own calls (its replies, including the guidance text
+  it writes through `workspace.propose`); prompts, workspace evidence and tool outputs are zero-weight context; the
+  nested runs of the guided program live under the group's `memetic/evals/` and are never extracted.
+- **Separate invocations and leaks.** Support worlds are the supervisor's evidence and evaluations; query worlds score
+  the commit and are never shown (`memetic_tasks.split`, one world per related component). `leaked_answers` refuses a
+  commit reproducing a query answer (>= 6 chars) verbatim. New: the collector leaves out memetic rows any of whose
+  support/query worlds is in the held closure of `--held-manifest`/`--exclude-manifest` (`grpo.memetic_rows_held_free`;
+  the 11-18 set was built against held-v3, a later held set must also apply), and the SFT build drops a memetic row
+  whose `curriculum.world_ids` meet the held ids. B1 (held-v4): route `memetic_rows_held_free` through
+  `training_exclusion_ids` when it lands.
+- **Replay.** `sft_sources replay` re-runs a memetic success from its recorded evaluations: the group's spec copied
+  with `recorded_only` (prepared evidence and every `evals/*/summary.json`, by name), so the replayed supervisor sees
+  the same evidence and scores, and any evaluation the recording lacks fails the replay instead of sampling a model;
+  a spec with `refine` is refused. Replayed success is re-derived (`memetic_success`) from the replayed score.
+- **aei1:** no argv change (the default carries it). It picks this up at its next start or restart on a pin at or after
+  this commit; `--memetic-share 0` on `async-drive` opts out.
+- **Not checked:** a live collection with memetic groups on a real actor (the DGX ledger was full: sft-v9-sft 100 GB),
+  so neither the guided runtime path after the sentinel fix (native-state import on the actor), nor actor/host-memory
+  load with memetic groups in an EI collection, nor a real replay of a memetic success through the node runtime has
+  run. The grpo-v4 run2 groups have no rollouts files left (only `memetic/`), so no recorded memetic success could be
+  replayed either. `teacher_gen` student rates still count a memetic episode by `reward >= 1` (memetic task ids are
+  outside its task universe).
+
+## 2026-11-23 02:30 natlang init writes the inbox planner (semantic-FP B3, WS4 F1)
+
+`natlang init DIR` now writes a semantic-FP program by default: `types.ts` (`Message` with an `Untrusted<string>` body,
+`Route = 'reply' | 'fyi' | 'ignore'`, `Reply = Is<string, "...">`, `Plan`), `route.nl` (`readout: decision`), `main.ts`
+(`decide(route, message)` mapped with `Promise.all`, an inline `nl<Reply>` drafted only for `reply`, and the `main(context)`
+target), `messages.json`, three `route.nl` cases in `examples.json`, `natlang.json`, `tsconfig.json`, README and the
+WS4 section 3 AGENTS.md (each command and API checked against the CLI). `--template classifier` writes the old
+`answer.nl` program; the dashboard's program page and Playground keep creating it (they edit one text-input function).
+`examples/hello` is byte-identical to the new default.
+
+Facts that differed from the plan, and what shipped instead:
+- **Host `decide`:** neither `route.decide(x)` nor a host `decide(fn, ...)` existed (only `runtime.decide`, which opens a
+  task of its own). `decide` is now exported from `@natlang/node`/`@natlang/browser` (`runtime/surface.ts`), the eval
+  builtin's form, implemented by the same `decideInFrame`.
+- **Callable folders:** `main/` is not main.ts's callable folder. Inline `nl` uses the nearest `natlang.d/`, and
+  `route.nl` uses `route/`. The AGENTS.md says so.
+- **examples.json** takes only `.nl` functions and compares exactly, so there is no `plan` case. The three route cases
+  are the tests.
+- **natlang.json** declares no `model.stock`, so the machine default applies, as it did before.
+- **Speed:** on Pop's CPU (12 cores, shared with a running held eval) with stock LFM3-1.7B Q8_0, a cold first `natlang run`
+  took 45.7 s, a warm one 4.7 s, and `natlang test` 5.2 s (3/3). A run whose sample drafts one reply took 672 s:
+  the draft reasoned for about 3k tokens at 5 tok/s. The bundled messages are therefore all fyi/ignore, following
+  section 2's rule. The README and AGENTS.md show `natlang run . -- '[...]'` for a message that gets a reply. The
+  DGX CPU was not measured: the ledger admitted nothing during sft-v9's 100 GB claim.
+- **Sample wording:** stock LFM3 routed "...No action is needed." and an office-closure notice to `ignore`. The
+  `route.nl` text and the sample messages were sharpened until all three route as intended.
+
+Fixed along the way:
+1. A program created inside another (`natlang init` prints that it does this) broke the outer program's build. The `.ts`
+   and `.nz` walks and the source fingerprint now skip nested packages, as `callableFolders` already did.
+2. `--template` was not a registered CLI option.
+3. `Record<K, V>` with a string-literal-union key is now the exact record. With an alias key it is a dictionary. It
+   used to be rejected as "Record keys must be string", and the error was attributed to the first `.nl` file in the
+   folder.
+
+A fresh agent given only the generated AGENTS.md built a PR-review triage program that passes `natlang check`. It has
+TypeScript exact steps, a `readout: decision` `.nl`, an inline `nl<Answer>`, and `Untrusted` on the comment text. The
+Record defect above was its one blocker. Its two unclear points went into the AGENTS.md: how an inline `nl` binds its
+call's arguments, and what `natlang.json` declares.
+Still open: an alias in `types.ts` that the natlang type grammar cannot parse breaks every `.nl` in that folder, with the
+error on the `.nl`. Five env builders parse every alias eagerly (`kernel.ts:297`, `lowered.ts:270`, `values.ts:281`,
+`refined-slots.ts:40`, `nz-file.ts:215`).
+
+## 2026-11-23 B4: the authoring skill and README teach the paradigm from quoted, tested programs
+
+Semantic-FP B4 (WS4 F2 + F4, and F3's paragraph). Shipped on main:
+- **SKILL.md**: WS4 §4's opening and the eight "Design the program" items replace the old opening and design list;
+  the three listed sentences are gone ("Port an algorithm as its steps" became item 3's narrower wording). The
+  working-loop table is B3's (the inbox template).
+- **New `references/composition.md`**: mapped judgments, inline captures and `nl.with`, `decide` floors with
+  `fn.on` escalation, `.in(context)`, `pluggable` shadow, `iterateOn(...).until(nl...)` and measures, folder
+  `propose`/check/`accept`, `Is`/`Untrusted`, Neuralese between stages (prose: fusion and generic results only; no
+  app uses them yet), and the ladder decision -> specialize -> escalation -> tune -> improve.
+- **`references/patterns.md`** rewritten around triage, refunds, review, notebook, helpdesk and nldb; the
+  Astra-derived paragraphs (semantic directory reducer item boundary, record-union arms, semantic pipelines over
+  source records; commits e133fabcc/115fc18c8/f15cda636) are dropped.
+- **Decision: code in a skill is quoted, never written for the page.** Each block carries `<!-- from: PATH -->`, and
+  `ts-host/test/authoring-examples.test.mjs` fails when a block is not that file's code. The same test builds and
+  runs the programs with a scripted model (decisions scored through `driver.decide`).
+- **New `examples/refunds`** (the program composition.md quotes): one `verdict.nl` bound per shop with
+  `Context.empty().with({ policy })`, `decide` with a 0.8 floor and `.on({ model: 'teacher' })`, a pluggable 30-day
+  window vs `eligible.nl`, a reply revised until an `nl` check holds, a ledger written through `folder.propose`.
+- **`examples/triage`** now shows what README's first screen promises: `readout: decision` on both functions,
+  `decide` with escalation of tickets below 0.8, and an `Is<string, ...>` summary. classify.nl lost its "report an
+  error" sentence (a decision readout has no error path). `native-triage.test.mjs` is folded into the new test;
+  `prompt-layout.test.mjs` keeps its tool-loop fixture inline. The website's classify.nl plate is synced.
+- **README** first screen is WS4 §5's text plus the triage snippet; "Using natlang" leads with the curated programs.
+  "Your first program" and SKILL.md's working-loop row are B3's text (the inbox template), left uncommitted by its
+  17b4520ef and committed here with B4 so the front door matches what `natlang init` writes.
+- **Integration skill**: "Choose the boundary" with the whole-workflow paragraph (helpdesk).
+Found while doing it (not fixed here): `Record<Verdict, number>` in `types.ts` fails the natlang type parser with a
+raw "Record keys must be string"; `Folder.propose`/`apply` infer `R = unknown` when the reducer's folder parameter is
+annotated `FolderHandle` (plain tsc against dist, so the dist declaration, not the natlang compiler), so ledger.ts
+writes `propose<[], Ledger>`; a target argument whose type contains `Untrusted` is refused ("Request types cannot be
+passed"); a decision readout on an endpoint without scoring (the Colab front) falls back to generation, and LFM3 then
+thinks and fails `decision-generation-invalid`.

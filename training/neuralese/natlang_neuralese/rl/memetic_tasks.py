@@ -272,9 +272,9 @@ def main(argv=None):
     from ..common.custody import CustodyError, ProtectedWorlds
     from ..common.jsonio import read_jsonl
     from ..common.paths import resolve_str
-    from .held_eval import exclusion_ids
+    from .held_eval import training_exclusion_ids
     cases = [row for pool in (args.pool or grpo.default_pools()) for row in read_jsonl(pool)]
-    excluded = set(exclusion_ids(args.held_manifest or grpo.default_held(), cases))
+    excluded = set(training_exclusion_ids(cases, args.held_manifest or grpo.default_held()))
     protected = ProtectedWorlds.load()
     for case in cases:
         try:

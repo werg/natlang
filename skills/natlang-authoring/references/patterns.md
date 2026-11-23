@@ -1,21 +1,96 @@
-# Algorithm patterns
+# Patterns from working programs
 
-## Orchestrate in code, judge in natural language
+Each pattern is how one of the curated programs in the natlang repository does it; read the program beside the
+pattern. The five to start from: [`examples/triage`](https://github.com/werg/natlang/tree/main/examples/triage) and
+[`examples/refunds`](https://github.com/werg/natlang/tree/main/examples/refunds) (typed judgments mapped over data,
+calibrated decisions, escalation, a pluggable rule, a folder transaction; walked through in
+[composition](composition.md)), [`examples/review`](https://github.com/werg/natlang/tree/main/examples/review) (a
+named function whose callable folder holds a decision leaf and an exact aggregate),
+[`applications/notebook`](https://github.com/werg/natlang/tree/main/applications/notebook) (a dependency graph run
+one ready cell per step, with a measure and checked citations),
+[`applications/helpdesk`](https://github.com/werg/natlang/tree/main/applications/helpdesk) (per-ticket event loops
+whose policies are natural-language functions behind settings) and
+[`applications/nldb`](https://github.com/werg/natlang/tree/main/applications/nldb) (a relational database whose
+engine is natural-language stages over a documented folder format). Each application's `DECOMPOSITION.md` records,
+part by part, what is a function, an instruction, a crisp helper, a service or host mechanism, and why.
 
-Most applications are ordinary TypeScript with a few natural-language decisions at the points where meaning matters. Write the control flow, validation, and bookkeeping in code, and call `nl` (or a named `.nl` function) for the judgment:
+## Types and exact steps in code, every judgment a typed function
 
+Control flow, validation, data and bookkeeping are TypeScript; each judgment is a typed function called where its
+answer is needed:
+
+<!-- from: examples/triage/triage.ts -->
 ```ts
-const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));   // parallel siblings
-const real = tickets.filter((_, i) => labels[i] !== 'spam');                          // exact work stays exact
+  const decisions = await Promise.all(tickets.map(ticket => decide(classify, ticket, rubric)));
+  // Only the tickets the local model is unsure of go to the stronger model.
+  const labels = await Promise.all(decisions.map(({ value, confidence }, i) =>
+    confidence >= 0.8 ? value : classify.on({ model: 'teacher' })(tickets[i]!, rubric)));
+  const real = tickets.filter((_, i) => labels[i] !== 'spam');
 ```
 
-Move orchestration into a natural-language function only when the *order of operations itself* needs judgment: a notebook that decides which ready cell to run next, a research controller that chooses what to investigate. Then keep the operations exact and let natlang sequence them, inspecting each result.
+When the order of operations itself needs judgment, the orchestration is a natural-language function and the
+operations stay exact: nldb's `database.nl` classifies a request and hands it to the query processor or to schema
+definition; the notebook's `choose_goal.nl` picks the cell that answers a request and code runs the cells.
 
-## Long algorithmic work for small interpreters
+## A named function and its folder
 
-Make the next meaningful action apparent from the instructions and typed state. A long run can be simple to execute if its steps, loop state, and helper contracts are clear. A tree walk recurses on each node's children, passing depth or path as separate arguments. For a graph traversal keep the frontier, visited IDs, results, and unresolved dependencies in typed state; let natlang choose priorities, and let an exact helper supply adjacency and readiness. Extract a helper when it gives a meaningful contract or reduces repeated context, not for every elementary operation.
+`examples/review` is `review.nl` with a callable folder: `assess.nl` judges one observation and calls its own
+`verdict.nl` (a decision, tested exactly in `examples.json`), and `summarize.ts` counts the verdicts. The parent gets
+its children's results, not their raw inputs, and the count is code. Items of one folder do not see each other, so a
+helper lives in the folder of the item that calls it.
 
-For a semantic directory reducer, make the item boundary a type: `{path, text}` for one current record, a separate context for the rule and related records, and a typed finding that carries the source path and evidence IDs. State the `iterateOn` step over the finite path frontier and its decreasing unprocessed count. The root combines returned findings after the frontier is empty. A generic `item: string` invites the executor to serialize the entire directory into one item, so the intended per-record natural-language calls never occur.
+## Decide on a snapshot, apply a pure commit
+
+`applications/helpdesk` runs one `KeyedEventLoop` per ticket. `reduce` is crisp: it applies events, sets timers as
+state (`due`, `wakeAt`) and schedules model work after the commit. Each model call reads a snapshot of the
+conversation and returns a value; the reducer applies it only while the snapshot is current (a triage of more
+messages replaces one of fewer, never the reverse). Exactly-once delivery by event ID, ordering and durability stay
+mechanism. Its policies are natural-language functions behind settings, each with a crisp counterpart:
+
+<!-- from: applications/helpdesk/index.ts -->
+```ts
+    this.allowance = pluggable<[Triage], number>({
+      crisp: triage => this.times[triage.urgency],
+      nl: async triage => (await deadlineFor(triage.urgency, triage.topic, deadlinePolicy)) * 60_000,
+    }, options.deadlineMode, { ...servesCrisp, name: 'helpdesk.deadline' });
+```
+
+`deadlineFor.nl` reads the desk's written service policy in numbered steps; the crisp side is the table. A
+natural-language side whose answer must have an exact shape is checked in code before it is served: the queue
+ranking must list every offered ticket exactly once. For interfaces, natlang chooses grouping, explanation and next
+steps (a view plan) and exact code builds the view; generated controls emit events that real handlers reduce.
+
+## Decisions with floors
+
+A finite judgment that gates an action (run a command, accept an answer, hand a step to a cheaper model) is a
+`readout: decision` function, and its caller acts on the probabilities: `const d = await decide(risk, command, task)`
+in host code or eval, or instructions that state the floors. nldb's server asks back when no class of a request has
+probability at least 0.5; the refund desk escalates a verdict below 0.8. Set a floor per action and escalate below
+it: refuse at p(destructive) >= 0.7, ask the user at p(review or worse) >= 0.5, run otherwise. A judgment about a
+stronger model's work is advice: add it to the tool result in brackets, say it comes from a quick check, and send a
+final answer back at most once. Without a scoring driver `decide` reports the sampled value with probability 1 and
+`scored: false`.
+
+## Iteration with a measure
+
+The notebook runs the goal's dependency closure one ready cell per step: the state is the run, the step runs one cell
+the previous steps made ready, and the measure is the number of required cells not yet run, which every continuing
+step lowers.
+
+<!-- from: applications/notebook/index.ts -->
+```ts
+export function remainingCells(run: NotebookRun): number {
+  if (run.status !== 'running') return 0;
+  const done = new Set(run.order);
+  return [...requiredIds(run)].filter(id => !done.has(id)).length;
+}
+```
+
+Use `iterateOn` for open-ended refinement (repair until checks pass, shorten until short enough, revise until a
+natural-language check holds) and for steps that depend on the previous state; map independent items with
+`Promise.all`. A TypeScript stopping check needs `withMeasure` or `withLimit`; when a limit is reached, handle
+`IterationLimitError` deliberately (triage keeps the shortest honest summary). A natural-language check needs
+neither: a progress judge reviews long runs.
 
 ## Instructions a small interpreter can follow
 
@@ -32,28 +107,6 @@ What a large model infers, a small interpreter needs said. These held across tho
   the step again over the callee's work (pi's compaction did, until its select and summarize returned `{ committed }`).
 - **Make the named helper the natural route.** Prefer a helper the model can already call over asking it to invent one, and when a specialist should do the work, give the specialist the access (a scoped service) rather than instructions to please delegate.
 
-## Monitored iteration
-
-Use `iterateOn` for open-ended refinement: repair until checks pass, shorten until short enough, advance until done. It records each step, reviews progress on fresh sites, and stops on a `divergent` verdict or a limit. Bound it with `withLimit` where the domain has a natural bound, and handle `IterationLimitError` deliberately (for example, keep the best honest state). Use plain finite loops for bounded work.
-
-## Reducers and applications
-
-A reducer `reduce(state, event) => state` is ordinary code that may call natlang. `EventLoop` applies events serially, suppresses duplicate IDs, commits before publishing, and retries a failed view without replaying the event. Keep persistence and transport exact in host code: event IDs, storage commits, effect receipts. A single event may require many operations; natlang can inspect each observation and continue.
-
-For interfaces, let natlang choose grouping, explanation, and next steps (a view *plan*), and let exact code build the safe view tree. Generated controls must emit events that real handlers reduce.
-
-## Semantic merging, notionally CRDT-like
-
-Merging can be the natlang algorithm. Present the common base, each intention in a canonical order, and provenance; preserve incompatible alternatives as explicit unresolved conflicts rather than losing them. Check exact invariants (every update accounted for once, IDs preserved) in code. Test reordered delivery, duplicates, contradictions, and replay. A shared model and seed are part of a reproducibility profile, not a convergence proof; report measured agreement.
-
-## Learned methods and generated source
-
-Natlang can author a candidate method, run it, inspect failures, revise, and retain it. Store the source revision, declared types, test inputs, and actual receipts; keep candidate and active revisions distinct when review or concurrent edits matter. Schema changes need executable migrations and preserved evidence.
-
-## Delegation by access
-
-When a caller should get answers from specialists rather than work the evidence itself, the evidence belongs to the specialists: scope each store to its specialist's function (`serviceScopes`). The caller reads the specialists' instructions and the stores' declarations, sees that only the specialists can use the stores, and asks; each specialist queries its own store inside its call. Everything stays readable: this limits what a call can do, not what it can see.
-
 ## Checked stages
 
 When a stage's output can be checked mechanically (a verifier, a compiler, a test run, a schema), build the pipeline around the check. Give the stage the checker as a service so it can check its own answer before returning; check again in the host; send a rejected answer back once with the checker's message through an optional argument (`problem?: string`: "why an earlier answer was rejected"); if it still fails, keep the previous version and record the rejection. Check behavior, not only validity: run the program on its inputs before and after the stage. A check sees only what the inputs exercise: once a function is no longer called, a wrong rewrite of it changes nothing observable. Run every stage through the same check-and-retry path, the first one included: a stage called outside it ends the whole pipeline when its call fails.
@@ -61,6 +114,11 @@ When a stage's output can be checked mechanically (a verifier, a compiler, a tes
 A stage can write code from contracts another stage declared: the compilers' front ends declare each runtime function they need with its contract in a comment, and one shared runtime stage writes whatever a header declares, for any language.
 
 When intermediate results cannot be run (code over virtual registers before register allocation), check the chain of stages once its output runs, and redo the whole chain with the problem. Record each step of the chain on its own, so that a failure still shows where the time went.
+
+The notebook checks its answer the same way: every `id@revision` the explanation cites must name a cell
+that ran, and a failing answer is asked again once with the problem. Services that can reject a call should say why in one sentence with the valid form (the expected positional
+arguments, the valid page range); the model recovers from that sentence, so the instructions need not list invalid
+forms.
 
 ## A system rewritten in natural language
 
@@ -74,23 +132,21 @@ To port a real system (a compiler, a database, an agent harness), keep its archi
 
 (`applications/compilers`, `applications/nldb`, `applications/pi`)
 
-## Judgments in synchronous code
+## Delegation by access
 
-Heterogeneous arrays can retain their declared record-union shape. For example, a list may contain one record arm with `invoiceId` and another without it when the type is an explicit union. The result is complete if every element satisfies at least one complete arm; there is no need to add invented placeholder fields to satisfy another arm.
+When a caller should get answers from specialists rather than work the evidence itself, the evidence belongs to the specialists: scope each store to its specialist's function (`serviceScopes`). The caller reads the specialists' instructions and the stores' declarations, sees that only the specialists can use the stores, and asks; each specialist queries its own store inside its call. Everything stays readable: this limits what a call can do, not what it can see.
+
+## Judgments in synchronous code
 
 A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
 
-## Decisions with floors
+## Semantic merging, notionally CRDT-like
 
-A finite judgment that gates an action (run a command, accept an answer, hand a step to a cheaper model) is a `readout: decision` function, and its caller acts on the probabilities: `const d = await runtime.decide(risk, command, task)` in the host, or `decide(risk, command, task)` in eval, where instructions state the floors. Set a floor per action and escalate below it: refuse at p(destructive) ≥ 0.7, ask the user at p(review or worse) ≥ 0.5, run otherwise; give a turn to the small model only at p(routine) ≥ 0.8. A judgment about a stronger model's work is advice: add it to the tool result in brackets, say it comes from a quick check, and send a final answer back at most once. Without a scoring driver `decide` reports the sampled value with probability 1 and `scored: false`. (the first pi app, before the pi-durable port; in git history)
+Merging can be the natlang algorithm. Present the common base, each intention in a canonical order, and provenance; preserve incompatible alternatives as explicit unresolved conflicts rather than losing them. Check exact invariants (every update accounted for once, IDs preserved) in code. Test reordered delivery, duplicates, contradictions, and replay. A shared model and seed are part of a reproducibility profile, not a convergence proof; report measured agreement.
 
-## A model that writes natlang
+## Learned methods and generated source
 
-A stronger model can author natlang at run time. Give it a tool that takes a script, and answer the tool by running the script in a natural-language function whose instructions say to run it: wrap the small model's driver so that the call whose opening carries those instructions gets `eval` of the script and then `return_result` with what it observed, and every other request, including the script's own `nl` calls, goes to the small model. The script reaches the world through services, gated like any other tool, and the stronger model reads only what the script reports. (`applications/pi`, codemode)
-
-## An agent harness as a program
-
-To port a durable agent harness (pi-durable), keep its host for what is mechanism — the commit line, storage, the scheduler's invocations and timers, the registry — and write its behaviour as functions: one entry per durable task kind (`generation.nl`, `tool.nl`, `compaction.nl`) whose phases are branches, each phase a stage of its own (prepare, request, classify, answer, the tool round, the tool-call policy, compaction's cut and summary), plus the scheduler's policy and admission. The agent is a provider model the functions call through a service (`ai.turn`); the functions are the harness around it, run by a small executor. Natural language never runs inside a commit: a function reads committed state, decides, and hands the host one list of write operations with guards on what it read (`durable.commit(ops, expect)`); a failed guard means the state changed, so it reads and decides again. Operations that judge a commit's own staged writes stay in the host. Shared rules several folders need (the boundary selection, the compaction cut, context derivation) are items listed in `uses:`; hot paths (context building, the system-entry plan and context estimate, the scheduler's policy, admission) have a crisp and a natural-language implementation behind one interface, chosen by a setting; a crisp side that needs host code reaches it through a service method, since callable-folder code imports only its siblings. Check the port with the original's own test suites, run against the natural-language task kinds with a real executor: they assert exact entries and documents. (`applications/pi`)
+Natlang can author a candidate method, run it, inspect failures, revise, and retain it. Store the source revision, declared types, test inputs, and actual receipts; keep candidate and active revisions distinct when review or concurrent edits matter. Schema changes need executable migrations and preserved evidence.
 
 ## Values a small interpreter must not retype
 
@@ -100,33 +156,13 @@ A function that returns what a service produced (a provider message, a derived v
 
 To run the same stages from a checked host driver and from a natural-language driver, put them in the natural-language driver's callable folder (`compiler.nl` beside `compiler/`) and call them from host code through the import's typed children (`compiler.opt.mem2reg(fn, context)`); items inside a callable folder cannot be imported on their own. Run the natural-language driver with `codeEdits: 'deny'` when its stages must not be rewritten during a run, limit model requests in flight by wrapping the `ModelDriver` (the driver schedules its own concurrent calls, which a host-level limiter never sees), and check its final result in the host. (`applications/compilers`)
 
-## Semantic pipelines over source records
+## A model that writes natlang
 
-For programs that read a set of documents or records and build findings from them:
+A stronger model can author natlang at run time. Give it a tool that takes a script, and answer the tool by running the script in a natural-language function whose instructions say to run it: wrap the small model's driver so that the call whose opening carries those instructions gets `eval` of the script and then `return_result` with what it observed, and every other request, including the script's own `nl` calls, goes to the small model. The script reaches the world through services, gated like any other tool, and the stronger model reads only what the script reports. (`applications/pi`, codemode)
 
-- **One item per step.** A named step function owns one original record: it returns the updated typed state and
-  finishes (`eval({ code: "return next;", finish: true })`); the parent's `iterateOn` picks the next record. Carry
-  the cursor or the shrinking frontier of original IDs in the state and use it as the measure
-  (`.withMeasure(s => s.pending.length).until(s => s.pending.length === 0)`), or `withLimit({ maxSteps: items.length })`.
-  An accumulator that stays the same across many items is not a stalled loop.
-- **Keep identities exact.** Bind source IDs and paths in the parent from the original record, and let the
-  natural-language child return meanings and exact quotes. Check in code that every quote is a substring of its
-  source and that every record got exactly one result; a finding without a passing quote stays unresolved.
-- **Hand typed results forward.** A later stage receives the earlier stage's typed findings with their witnesses,
-  not the raw documents again, and adds its own decision. Keep extracting a claim, judging a relation and assessing
-  support as separate typed steps when each can disagree.
-- **Make output conventions visible.** If the result uses derived IDs, case-folded names or another encoding, state
-  the rule in the root's instructions or types; an oracle must never require an encoding the program does not show.
-- **Keep failures distinct.** A malformed child result keeps its item pending and is repaired; a source-grounded
-  "cannot tell" is a completed unresolved result; neither erases earlier results.
-- **Complete every branch.** A public operation returns its full declared result on blocked, partial and successful
-  paths; a root that returns outgoing intentions declares an effects array and returns `[]` for no action.
-- **A small fixed judgment is a direct template.** Put the numbered steps in the `nl` literal itself rather than in a
-  captured instruction string, which adds a second interpretation boundary.
+## An agent harness as a program
 
-Services that can reject a call should say why in one sentence with the valid form (the expected positional
-arguments, the valid page range); the model recovers from that sentence, so the instructions need not list invalid
-forms.
+To port a durable agent harness (pi-durable), keep its host for what is mechanism — the commit line, storage, the scheduler's invocations and timers, the registry — and write its behaviour as functions: one entry per durable task kind (`generation.nl`, `tool.nl`, `compaction.nl`) whose phases are branches, each phase a stage of its own (prepare, request, classify, answer, the tool round, the tool-call policy, compaction's cut and summary), plus the scheduler's policy and admission. The agent is a provider model the functions call through a service (`ai.turn`); the functions are the harness around it, run by a small executor. Natural language never runs inside a commit: a function reads committed state, decides, and hands the host one list of write operations with guards on what it read (`durable.commit(ops, expect)`); a failed guard means the state changed, so it reads and decides again. Operations that judge a commit's own staged writes stay in the host. Shared rules several folders need (the boundary selection, the compaction cut, context derivation) are items listed in `uses:`; hot paths (context building, the system-entry plan and context estimate, the scheduler's policy, admission) have a crisp and a natural-language implementation behind one interface, chosen by a setting; a crisp side that needs host code reaches it through a service method, since callable-folder code imports only its siblings. Check the port with the original's own test suites, run against the natural-language task kinds with a real executor: they assert exact entries and documents. (`applications/pi`)
 
 ## Extension decisions
 

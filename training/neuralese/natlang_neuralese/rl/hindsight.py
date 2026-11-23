@@ -198,7 +198,7 @@ def main(argv=None):
     index.add_argument('--held-manifest', help='held manifest whose closure is excluded (default: the registry role held-eval)')
     index.add_argument('--out', required=True)
     args = parser.parse_args(argv)
-    from .held_eval import exclusion_ids
+    from .held_eval import training_exclusion_ids
     manifest = args.held_manifest
     if manifest is None:
         from ..common.data_registry import role_path
@@ -210,8 +210,10 @@ def main(argv=None):
         task = episode.get('task')
         if isinstance(task, dict):
             cases[episode['task_id']] = {'id': task.get('id'),
-                                         'curriculum': {'split_group': (task.get('curriculum') or {}).get('split_group')}}
-    excluded = exclusion_ids(manifest, list(cases.values()))
+                                         'curriculum': {'split_group': (task.get('curriculum') or {}).get('split_group')},
+                                         'source_groups': task.get('source_groups') or [],
+                                         'source_ids': task.get('source_ids') or []}
+    excluded = training_exclusion_ids(list(cases.values()), manifest)
     episodes = range(count)
     records = build_index(_episodes(args.episodes), excluded=excluded)
     out = Path(args.out)

@@ -93,6 +93,10 @@ def main(argv=None):
         for wrong in result['wrong']:
             if wrong['accepted'] is not False:
                 entry['problems'].append(f'wrong answer not rejected: {json.dumps(wrong["value"])[:200]}')
+        for baseline in result.get('keyword_baseline', []):
+            if baseline['accepted'] is not False:
+                entry['problems'].append('keyword baseline not rejected' + (
+                    f' (it did not run: {baseline.get("error", "")[:200]})' if baseline['accepted'] is None else ''))
         for alias in result['aliases']:
             if alias['accepted'] is not True:
                 entry['problems'].append(f'alias not accepted: {json.dumps(alias["value"])[:200]}')
@@ -132,7 +136,7 @@ def main(argv=None):
             status[ident]['problems'].append('held-set group closure conflict')
         report['steps']['custody'] = {'protected_worlds': 'checked', 'group_closure': union['status']}
     tasks = [json.loads(line) for line in Path(args.tasks).read_text().splitlines() if line.strip()]
-    lint = lint_batch(tasks)
+    lint = lint_batch(tasks, args.runtime)
     by_task = {entry['task']: entry for entry in status.values()}
     for ident, found in lint.items():
         entry = by_task.get(ident)

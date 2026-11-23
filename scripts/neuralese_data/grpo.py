@@ -122,6 +122,9 @@ BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/sna
 #   grpo-sd-teacher     sft_sources WORKs of verified teacher successes (TeacherDemos), in order
 #   held-eval           the held-out manifest: held-v3 (plans/neuralese/HELD_V3_20261113.md); its exclusion also covers
 #                       held-v2 (manifest `also_excludes`), so no v2 held task enters training either
+#   held-eval-*         more held sets: held-eval-semantic-fp (held-v4, plans/semantic-fp/05 §5) and
+#                       held-eval-semantic-fp-reservations (its reserved sources). Training excludes every held-eval*
+#                       role (held_eval.training_exclusion_ids); held-eval alone is the gate (default_held)
 def default_pools():
     return data_registry.role_paths('grpo-pool')
 
@@ -135,7 +138,15 @@ def default_sd_teacher_sources():
 
 
 def default_held():
+    """held-v3: the gate series (the registry role ``held-eval``, exactly one entry)."""
     return data_registry.role_path('held-eval')
+
+
+def held_role_paths():
+    """Every held set training excludes: the files of all ``held-eval*`` registry roles (held-v3, held-v4 and its
+    reservations; ``held_eval.training_exclusion_ids`` unites them)."""
+    from natlang_neuralese.rl.held_eval import held_manifests
+    return [path for _, path in held_manifests()]
 
 
 # Start-policy calls scored after every step (behaviour_probe.py): v1's 48 reasoning calls, and from 2026-11-19 (v2) 24
@@ -425,6 +436,27 @@ def unpack_scored_group(archive_path, store_dir=None):
 
 
 # ---- rollouts --------------------------------------------------------------------------------------------------------
+def memetic_rows_held_free(rows, args):
+    """The memetic rows none of whose support or query worlds (their episode specs) is a held task or shares a held
+    split group (``held_eval.training_exclusion_ids``: every held set training excludes): the set was built
+    against the held set of its day, and a later held set must keep its tasks out of the worlds the policy trains on."""
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
+    if not rows:
+        return rows
+    worlds = {}
+    for row in rows:
+        spec = json.loads(Path(row['semantics']['world']['task']).read_text())
+        worlds[row['id']] = spec['support'] + spec['query']
+    cases = [case for cases in worlds.values() for case in cases]
+    # every held set: --held-manifest, each held-eval* registry role (held-v3, held-v4, reservations), --exclude-manifest
+    held = set(training_exclusion_ids(cases, getattr(args, 'held_manifest', None),
+                                      extra=getattr(args, 'exclude_manifest', None) or ()))
+    kept = [row for row in rows if not any(case['id'] in held for case in worlds[row['id']])]
+    if len(kept) < len(rows):
+        print(json.dumps({'event': 'memetic rows with held worlds left out', 'rows': len(rows) - len(kept)}), flush=True)
+    return kept
+
+
 class Collector:
     """Work-stealing slots over an endless stream of task groups; finished groups are scored and queued for the learner."""
 
@@ -471,7 +503,7 @@ class Collector:
         self.memetic_rows, self.memetic_cursor = [], 0   # "improve program P" rows (--memetic-tasks)
         if getattr(args, 'memetic_tasks', None) and getattr(args, 'memetic_share', 0) > 0:
             from natlang_neuralese.common.jsonio import read_jsonl
-            self.memetic_rows = list(read_jsonl(args.memetic_tasks))
+            self.memetic_rows = memetic_rows_held_free(list(read_jsonl(args.memetic_tasks)), args)
             random.Random(args.seed).shuffle(self.memetic_rows)
         # the memetic world's Python (ts-host world-bridge.ts kind memetic): this interpreter, not the pin's missing venv
         self.env['NATLANG_MEMETIC_PYTHON'] = sys.executable
@@ -488,7 +520,7 @@ class Collector:
         from natlang_neuralese.rl import task_rollouts
         from natlang_neuralese.common.jsonio import read_jsonl
         a = self.args
-        memetic = bool(self.memetic_rows) and self.rng.random() < a.memetic_share
+        memetic = bool(self.memetic_rows) and self._memetic_open() and self.rng.random() < a.memetic_share
         if memetic:
             row = self.memetic_rows[self.memetic_cursor % len(self.memetic_rows)]
             self.memetic_cursor += 1
@@ -517,9 +549,14 @@ class Collector:
         (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
         wave = None if memetic else self._wave(row['id'], len(entries))
         self.groups[group] = {'dir': directory, 'size': len(entries), 'done': 0, 'versions': [], 'task_id': row['id'],
-                              'created': time.time(), 'wave': wave, 'held_back': entries[wave:] if wave else []}
+                              'created': time.time(), 'wave': wave, 'held_back': entries[wave:] if wave else [],
+                              **({'memetic': True} if memetic else {})}
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries[:wave])
+
+    def _memetic_open(self):
+        """Whether a new group may be a memetic one (always here; expert-iteration collection bounds them)."""
+        return True
 
     def _wave(self, task_id, size):
         """Dynamic sampling: the first-wave size of a new group of ``task_id`` (``wave_plan`` on its ``PassRatePrior``),
@@ -799,8 +836,8 @@ class Collector:
         from natlang_neuralese.common.jsonio import read_jsonl
         from natlang_neuralese.rl import jolt
         a, info = self.args, self.groups[group]
-        if getattr(a, 'teacher_attempts', 0) <= 0 or 'teachers' in info:
-            return 0
+        if getattr(a, 'teacher_attempts', 0) <= 0 or 'teachers' in info or info.get('memetic'):
+            return 0   # a memetic episode's reward is graded against its anchor: no privileged attempts of it
         info['teachers'] = 0
         directory = info['dir']
         students = [row for row in read_jsonl(directory / 'rollouts.jsonl') if row.get('jolt_role', 'student') == 'student']
@@ -1179,7 +1216,7 @@ def registry_run_records(args, work, rollouts_archive, collector, teacher_demos,
     stops the run here, ``NATLANG_ALLOW_UNREGISTERED_DATA=1`` opts out) and the growing datasets it writes (rollout
     archive, step chains), declared with their inputs and producer commit."""
     run = data_registry.run_name('grpo', work)
-    reads = [('GRPO task pool', list(args.pool), eligible), ('held exclusion', [args.held_manifest, *args.exclude_manifest], None),
+    reads = [('GRPO task pool', list(args.pool), eligible), ('held exclusion', list(dict.fromkeys([args.held_manifest, *held_role_paths(), *args.exclude_manifest])), None),
              ('errata (excluded ids)', errata_files(args), None), ('selection pass rates', [args.pass_rates], None)]
     if not args.replay and args.memetic_share > 0:
         reads.append(('memetic tasks', [args.memetic_tasks], None))
@@ -3763,16 +3800,15 @@ def load_tasks(args, work=None):
     import hashlib
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.common.jsonio import read_jsonl
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     rows, seen = [], set()
     for path in args.pool:
         for row in read_jsonl(path):
             if row['id'] not in seen:
                 seen.add(row['id'])
                 rows.append(row)
-    excluded = set(exclusion_ids(args.held_manifest, rows))
-    for extra in args.exclude_manifest:
-        excluded |= exclusion_ids(extra, rows)
+    # every held set (held-v3 and every other `held-eval*` registry role: held-v4 and its reservations) and --exclude-manifest
+    excluded = set(training_exclusion_ids(rows, args.held_manifest, extra=args.exclude_manifest))
     held_groups = {g for r in rows if r['id'] in excluded for g in r.get('source_groups') or ()}
     excluded |= {r['id'] for r in rows if held_groups.intersection(r.get('source_groups') or ())}
     if args.task_ids:
@@ -3792,6 +3828,8 @@ def load_tasks(args, work=None):
     if work is not None:
         record = {'pools': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in args.pool],
                   'held_manifest': args.held_manifest, 'held_manifest_sha256': sha256_file_hex_cached(Path(args.held_manifest)),
+                  'held_sets': [{'path': p, 'sha256': sha256_file_hex_cached(Path(p))}
+                                for p in dict.fromkeys([*held_role_paths(), *args.exclude_manifest])],
                   'union_rows': len(seen), 'excluded_ids': len(excluded), 'eligible': len(eligible),
                   'eligible_ids_sha256': hashlib.sha256('\n'.join(sorted(r['id'] for r in eligible)).encode()).hexdigest(),
                   'families': len({r.get('family') for r in eligible}),
@@ -3815,10 +3853,10 @@ def load_variants(args, tasks, work):
         return {}
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     from natlang_neuralese.common.jsonio import read_jsonl
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     eligible = {r['id'] for r in tasks}
     rows = list(read_jsonl(args.neuralese_variants))
-    excluded = set(exclusion_ids(args.held_manifest, rows))
+    excluded = set(training_exclusion_ids(rows, args.held_manifest, extra=args.exclude_manifest))
     variants = {}
     for row in rows:
         original = ((row.get('curriculum') or {}).get('external') or {}).get('variant_of')
@@ -4090,8 +4128,12 @@ def train(args):
     if args.replay_corpus and args.no_neuralese_passthrough:
         raise SystemExit('--replay-corpus consumers import their producer documents: drop --no-neuralese-passthrough')
     if args.replay_corpus:
-        from natlang_neuralese.rl.held_eval import exclusion_ids
+        from natlang_neuralese.common.jsonio import read_jsonl
+        from natlang_neuralese.rl.held_eval import exclusion_ids, training_exclusion_ids
+        # the held manifest's own closure, plus every held-eval* set's (and reservation's) rows among the pools
         held = set(exclusion_ids(args.held_manifest))
+        held |= training_exclusion_ids([row for path in args.pool for row in read_jsonl(path)], args.held_manifest,
+                                       extra=args.exclude_manifest)
         from transformers import AutoTokenizer
         corpus_tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=False)
         replay_corpora = [ReplayCorpus(spec, held, args.seed, log=lambda r: log_line(log, r), tokenizer=corpus_tokenizer)

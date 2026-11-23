@@ -20,7 +20,7 @@ sys.path[:0] = [str(Path(__file__).resolve().parents[2] / 'training/neuralese'),
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import grpo  # noqa: E402
 from natlang_neuralese.common.jsonio import read_jsonl  # noqa: E402
-from natlang_neuralese.rl.held_eval import exclusion_ids  # noqa: E402
+from natlang_neuralese.rl.held_eval import training_exclusion_ids  # noqa: E402
 
 
 def main():
@@ -38,9 +38,7 @@ def main():
             if row['id'] not in seen:
                 seen.add(row['id'])
                 rows.append(row)
-    excluded = set(exclusion_ids(grpo.default_held(), rows))
-    for manifest in args.exclude_manifest:
-        excluded |= exclusion_ids(manifest, rows)
+    excluded = set(training_exclusion_ids(rows, grpo.default_held(), extra=args.exclude_manifest))
     groups = {g for r in rows if r['id'] in excluded for g in r.get('source_groups') or ()}
     excluded |= {r['id'] for r in rows if groups.intersection(r.get('source_groups') or ())}
     for path in args.exclude_cases:

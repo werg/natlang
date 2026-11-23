@@ -47,6 +47,17 @@ from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 SUCCESS = 'task_success'
 OPS = ('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
+MEMETIC = 'memetic_scored'   # a memetic improvement episode's outcome (task_rollouts.score); success: memetic_success
+
+
+def episode_success(row):
+    """A scored natlang.rollout/1 row's verified success: a binary task success, or a memetic improvement episode
+    whose committed change set beat the trivial improvements on the private query worlds (``memetic_success``,
+    task_rollouts.memetic_success: the supervisor's own calls train as an own success; the guidance it wrote is its own
+    sampled action, and the nested runs of the guided program are never extracted)."""
+    if row.get('outcome') == MEMETIC:
+        return bool(row.get('memetic_success'))
+    return row.get('outcome') == SUCCESS and float((row.get('reward') or {}).get('quality') or 0) >= 1
 
 
 def zstd_lines(path):
@@ -319,7 +330,7 @@ def extract(args):
                     c['unscored'] += 1
                     continue
                 role = row.get('jolt_role', 'student')
-                success = row.get('outcome') == SUCCESS and float(row['reward'].get('quality') or 0) >= 1
+                success = episode_success(row)
                 if role != 'teacher':   # a guided attempt is no sample of the student's own pass rate
                     group_rates[row['task_id']][1] += 1
                     group_rates[row['task_id']][0] += success
@@ -331,6 +342,8 @@ def extract(args):
                     continue
                 c['successes'] += 1
                 if role == 'teacher':
+                if row.get('outcome') == MEMETIC:
+                    c['memetic_successes'] += 1
                     # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
                     # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
                     # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
@@ -1038,10 +1051,23 @@ def replay_episode(args, server, episode, env):
     if directory.exists():
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
-    (directory / 'cases.jsonl').write_text(json.dumps(episode['task']) + '\n')
+    task, memetic = episode['task'], is_memetic(episode['task'])
+    if memetic:
+        task, refusal = memetic_replay_task(task, directory)
+        if refusal:
+            record = {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
+                      'outcome': refusal, 'exact': False, 'recorded_turns': len(episode['turns'])}
+            shutil.rmtree(directory)
+            directory.mkdir(parents=True)
+            done.write_text(json.dumps(record) + '\n')
+            return record
+    (directory / 'cases.jsonl').write_text(json.dumps(task) + '\n')
     task_rollouts.prepare(SimpleNamespace(
         cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=2, temperature=1.0,
-        case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=128,
+        case_seconds=args.case_seconds,
+        # a memetic supervisor episode ran under grpo's --memetic-model-requests: its recorded calls all replay
+        max_model_requests=max(args.max_model_requests, len(episode['turns'])) if memetic else args.max_model_requests,
+        max_turns=128,
         seed_base=0, root_mode=episode.get('root_mode', 'student'), match_seeds_from=None, policy_checkpoint_sha256=None))
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
@@ -1065,13 +1091,17 @@ def replay_episode(args, server, episode, env):
     with (directory / 'journal.jsonl').open('w') as merged:
         merged.write(Path(directory / f"{entry['key']}.journal.jsonl").read_text()
                      if (directory / f"{entry['key']}.journal.jsonl").exists() else '')
-    outcome, turns = None, 0
+    outcome, turns, memetic_outcome = None, 0, None
     try:
         task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         rows = list(read_jsonl(directory / 'rollouts.jsonl'))
         if rows:
             outcome, turns = rows[0].get('outcome'), len(rows[0].get('turns') or [])
     except Exception as error:   # a scoring failure is this episode's verdict, never the whole replay's
+            if outcome == MEMETIC:   # verified again from the recorded evaluations: a success replays as one
+                memetic_outcome = {'memetic_success': bool(rows[0].get('memetic_success')),
+                                   'quality': (rows[0].get('reward') or {}).get('quality')}
+                outcome = SUCCESS if episode_success(rows[0]) else 'memetic_not_improved'
         outcome = 'score_error: ' + repr(error)[:300]
     kinds = collections.Counter(e['kind'] for e in replay.log)
     record = {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
@@ -1082,6 +1112,7 @@ def replay_episode(args, server, episode, env):
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
               'log': replay.log[:64]}
+              **({'memetic': memetic_outcome} if memetic else {}),
     # exact: every recorded call served to the same visible history, its opening message at most reworded by the runtime
     matched = {k: v for k, v in kinds.items() if k != 'scoring-declined'}
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
@@ -1096,6 +1127,45 @@ def replay_episode(args, server, episode, env):
 def replay(args):
     """Replay the extracted episodes that have no verdict in WORK/replay.jsonl yet: a periodic re-extraction of a growing
     teacher pool replays only its new episodes and appends each verdict once."""
+def is_memetic(task):
+    return ((task.get('semantics') or {}).get('world') or {}).get('kind') == 'memetic'
+
+
+def memetic_replay_task(task, directory):
+    """(task row, refusal) for replaying a memetic supervisor episode in ``directory``: the group's episode spec copied
+    with ``recorded_only`` (every evaluation is read from the collection's recorded results, prepared evidence included,
+    by the same names; one the recording lacks fails the replay instead of sampling a model) and its out under the
+    replay. The collection's group directory is read only. Refused: a spec that is gone, or one that refines guidance
+    states (a GPU fit the replay cannot repeat)."""
+    import copy
+    import hashlib
+    import shutil
+    world = task['semantics']['world']
+    spec_path = Path(world['task'])
+    if not spec_path.exists():
+        return task, 'memetic_spec_missing'
+    if hashlib.sha256(spec_path.read_bytes()).hexdigest() != world.get('spec_sha256', ''):
+        return task, 'memetic_spec_changed'
+    spec = json.loads(spec_path.read_text())
+    if spec.get('refine'):
+        return task, 'memetic_refined_not_replayable'
+    recorded = Path(spec['out'])
+    if not (recorded / 'prepared.json').exists():
+        return task, 'memetic_not_prepared'
+    out = directory / 'memetic'
+    out.mkdir(parents=True)
+    shutil.copyfile(recorded / 'prepared.json', out / 'prepared.json')
+    for summary in sorted((recorded / 'evals').glob('*/summary.json')):
+        (out / 'evals' / summary.parent.name).mkdir(parents=True)
+        shutil.copyfile(summary, out / 'evals' / summary.parent.name / 'summary.json')
+    spec.update(out=str(out), recorded_only=True)
+    path = directory / 'memetic-spec.json'
+    path.write_text(json.dumps(spec, ensure_ascii=False, sort_keys=True) + '\n')
+    task = copy.deepcopy(task)
+    task['semantics']['world'] = {**world, 'task': str(path), 'spec_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    return task, None
+
+
     path = Path(args.work) / 'replay.jsonl'
     done = {json.loads(line).get('key') for line in path.open() if line.strip()} if path.exists() else set()
     return replay_episodes(args, (e for e in all_episodes(Path(args.work)) if e['key'] not in done))
@@ -1112,7 +1182,8 @@ def replay_episodes(args, episodes):
     args.max_model_requests = args.max_model_requests or EPISODE_MODEL_CALLS
     env = {**os.environ, 'NATLANG_REPO': args.runtime_repo,
            'PYTHONPATH': f'{args.runtime_repo}/training/neuralese:{args.runtime_repo}',
-           'NATLANG_MODEL_FACING': series()['model_facing'], 'NATLANG_COLLECTOR_SHARED': '0'}
+           'NATLANG_MODEL_FACING': series()['model_facing'], 'NATLANG_COLLECTOR_SHARED': '0',
+           'NATLANG_MEMETIC_PYTHON': sys.executable}   # a memetic episode's workspace (world-bridge.ts kind memetic)
     server = ReplayServer()
     if args.limit:
         import itertools
@@ -1212,12 +1283,19 @@ def action_text(turns):
     return '\n'.join(parts)
 
 
-def held_closure(manifest_path):
-    """(ids, groups, source ids) of the held set and every earlier held set it excludes: task ids, split groups, the
-    held rows' source groups and source ids (the separation grpo.load_tasks applies, for rows outside the pool too)."""
+class HeldClosure(tuple):
+    """(ids, groups, source ids) of the held sets, with ``reservations``: held sources reserved by rule
+    (``held_eval.reserved``; held-v4's reserved briefs, apps and fixture-pack shares), which ``held_hit`` also applies."""
+    reservations = ()
+
+
+def _held_closure_one(manifest_path):
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    ids, groups, sources = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups']), set()
+    from natlang_neuralese.rl.held_eval import RESERVATIONS_SCHEMA
+    if manifest.get('schema') == RESERVATIONS_SCHEMA:
+        return set(), set(), set(), [manifest]
+    ids, groups, sources, reservations = {t['id'] for t in manifest['tasks']}, set(manifest['excluded_split_groups']), set(), []
     cases = manifest_path.parent / manifest['cases']['path']
     if sha256_file(cases) != manifest['cases']['sha256']:
         raise ValueError(f'held cases changed: {cases}')
@@ -1231,13 +1309,34 @@ def held_closure(manifest_path):
     for earlier in manifest.get('also_excludes') or ():
         if sha256_file(earlier['path']) != earlier['sha256']:
             raise ValueError('an excluded earlier held manifest changed: ' + earlier['path'])
-        more = held_closure(earlier['path'])
+        more = _held_closure_one(earlier['path'])
+        ids |= more[0]
+        groups |= more[1]
+        sources |= more[2]
+        reservations += more[3]
+    return ids, groups, sources, reservations
+
+
+def held_closure(manifest_path):
+    """(ids, groups, source ids) of the held set, every earlier held set it excludes and every other ``held-eval*``
+    registry role (held-v4 and its reservations: ``held_eval.held_manifests``): task ids, split groups, the held rows'
+    source groups and source ids (the separation grpo.load_tasks applies, for rows outside the pool too)."""
+    from natlang_neuralese.rl.held_eval import held_manifests
+    ids, groups, sources, reservations, seen = set(), set(), set(), [], set()
+    for path in [manifest_path, *[p for _, p in held_manifests()]]:
+        if path is None or os.path.realpath(path) in seen:
+            continue
+        seen.add(os.path.realpath(path))
+        more = _held_closure_one(path)
         ids |= more[0]
         groups |= more[1]
         sources |= more[2]
     groups.discard(None)
-    return ids, groups, sources
+    closure = HeldClosure((ids, groups, sources))
+    closure.reservations = tuple(reservations)
+    return closure
 
+        reservations += more[3]
 
 def live_holdout_registry(path, held):
     """Add the predeclared Vibestudio holdouts to the learner's source-group closure."""
@@ -1291,7 +1390,14 @@ DEFAULT_OCTOBER_GROUPS = ('luna-curricula=3', 'qwen-s72=2', 'fallow-v13r2=2', 'q
 
 def held_hit(task_id, source_ids, groups, held):
     held_ids, held_groups, held_sources = held
-    return task_id in held_ids or bool(set(groups) & held_groups) or bool(set(source_ids) & held_sources)
+    if task_id in held_ids or set(groups) & held_groups or set(source_ids) & held_sources:
+        return True
+    reservations = getattr(held, 'reservations', ())
+    if reservations:
+        from natlang_neuralese.rl.held_eval import reserved
+        row = {'id': task_id, 'source_groups': list(groups), 'source_ids': list(source_ids)}
+        return any(reserved(r, row) for r in reservations)
+    return False
 
 
 def water_fill(sizes, weights, budget):
@@ -1463,8 +1569,8 @@ def detour_call(turn, backend_workarounds):
 def held_excluded_ids(held_manifest, tasks, held):
     """Task ids among ``tasks`` ({id: task row}) in the held closure: ``held_eval.exclusion_ids`` (held tasks and their
     split groups) plus every row sharing a source group or source id with a held row (``held``: ``held_closure``)."""
-    from natlang_neuralese.rl.held_eval import exclusion_ids
-    excluded = set(exclusion_ids(held_manifest, list(tasks.values())))
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
+    excluded = set(training_exclusion_ids(list(tasks.values()), held_manifest))
     for task_id, task in tasks.items():
         groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
         if held_hit(task_id, task.get('source_ids') or (), groups, held):
@@ -1507,6 +1613,9 @@ def core_candidates(args, work, funnel, held):
     total, missing = teacher_coverage(args.teacher_pool, extracted)
     funnel['teacher']['manifest_successes_now'] = total
     funnel['teacher']['manifest_successes_not_extracted'] = len(missing)
+        # a memetic row's support and query worlds (memetic_tasks.episode_case): none may be a held task
+        if set((task.get('curriculum') or {}).get('world_ids') or ()) & held[0]:
+            excluded.add(task_id)
     if missing and not args.allow_stale_teacher:
         raise SystemExit(f'{len(missing)} of {total} teacher successes in the pool manifests are not extracted yet '
                          f'(e.g. {missing[0]}): run extract --teacher POOL --out-name episodes-teacher and replay first')
@@ -1699,13 +1808,44 @@ def call_row(renderer, source, key, index, turn, teacher_think='context', lead_i
                         turn, backend_workarounds)
 
 
-def render_call(renderer, source, turn, teacher_think='context', lead_in='context', own_empty_think='context'):
+def render_call(renderer, source, turn, teacher_think='context', lead_in='context', own_empty_think='context',
+                decisions=False):
     """The expensive half of ``call_row`` (chat template, tokenizer, think context): (prompt ids, target ids as int32
-    arrays, zero-weight lead). Raises on a render error."""
+    arrays, zero-weight lead), and with ``decisions`` a fourth item, the call's decision (``render_decision``). Raises
+    on a render error."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
     context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
-    return np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
+    rendered = np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
+    return (*rendered, render_decision(renderer, turn, rendered[0])) if decisions else rendered
+
+
+def render_decision(renderer, turn, prompt):
+    """The decision a call is, or None: a call on a decision readout's surface (no tools offered, the last message the
+    readout's request, ``decision_graph.decision_replies``) whose reply is one of the offered values is that readout's
+    choice, which the runtime scores rather than samples (``decide``). Rendered by the scorer's own rendering
+    (``serve.native_learning.decision_items``, which the Python engine and the SGLang actor score with): {'options':
+    per option its closed continuation ids (int32), 'label': the reply's option, 'values': the option texts,
+    'label_source': 'verified-trajectory'}, the learner's option-normalized objective (``exp0_sft.decision_backward``).
+    {'error': ...} when the scorer's prompt differs from the row's or the options do not render."""
+    import numpy as np
+    from natlang_neuralese.data.decision_graph import decision_label, decision_replies
+    target = turn.get('target') or {}
+    replies = decision_replies(turn.get('messages') or [])
+    if replies is None or turn.get('tools') or target.get('tool_calls'):
+        return None
+    label = decision_label(replies, (target.get('content') or '').strip())
+    if label is None:
+        return {'error': 'reply-not-an-option'}
+    from natlang_neuralese.serve.native_learning import decision_items
+    try:
+        before, continuations = decision_items(renderer, list(turn['messages']), turn.get('tools'), replies)
+    except Exception as error:
+        return {'error': repr(error)[:200]}
+    if any(kind != 'tok' for kind, _ in before) or [int(i) for _, i in before] != [int(i) for i in prompt]:
+        return {'error': 'prompt-differs-from-scorer'}
+    return {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': replies,
+            'label_source': 'verified-trajectory'}
 
 
 def rendered_row(rendered, source, key, index, turn, backend_workarounds='context'):
@@ -1713,7 +1853,7 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
     boundary are re-viewed with numpy's canonical dtype objects: pickle memoizes a dtype by identity, so rows carrying
     unpickled dtype copies would pickle into a different (if equivalent) chains.pkl."""
     import numpy as np
-    prompt, target, context = rendered
+    prompt, target, context, *decision = rendered
     row_id = turn.get('id') or hashlib.sha256(f"{key}#{index}".encode()).hexdigest()[:24]
     row = {'id': row_id, 'invocation': turn.get('invocation_id') or '', 'index': index,
            'prompt': prompt.view(np.int32), 'sample': target.view(np.int32)}
@@ -1721,6 +1861,12 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
     if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
+    decision = decision[0] if decision else None
+    if decision and 'options' in decision:
+        # the plain row stays (``exp0_sft --no-decision-objective`` trains it as token CE, as before)
+        row['decision'] = {**decision, 'options': [ids.view(np.int32) for ids in decision['options']]}
+    elif decision:
+        row['decision_error'] = decision['error']
     return row, context
 
 
@@ -1754,7 +1900,7 @@ def render_candidate(renderer, work, c, think, lead_in, own_empty_think):
     calls = []
     for turn in turns:
         try:
-            calls.append(render_call(renderer, c['source'], turn, think, lead_in, own_empty_think))
+            calls.append(render_call(renderer, c['source'], turn, think, lead_in, own_empty_think, decisions=True))
         except Exception as error:
             calls.append(repr(error))
     return turns, calls
@@ -2052,7 +2198,22 @@ def mix_report(chains, aux_report, open_goal_scope=None):
                                    'max_task_tokens': int(ranked[0]) if ranked else 0},
             'open_user_goals': {**open_goal_exposure(chains, open_goal_scope), 'scope': open_goal_scope or 'all'},
             'open_user_goal_depths': open_goal_depth_report(chains),
+            'decisions': decision_report(chains),
             'aux': aux_report}
+
+
+def decision_report(chains):
+    """The decision readout chains of a mix, per part: what ``exp0_sft`` trains with the option-normalized decision
+    objective by default (``--no-decision-objective``: as the token CE of the chosen reply)."""
+    parts = collections.defaultdict(collections.Counter)
+    for chain in chains:
+        if chain.get('decision') is not None:
+            p = parts[chain.get('part') or 'unknown']
+            p['chains'] += 1
+            p['options'] += len(chain['decision']['options'])
+            p['forward_tokens'] += sum(chain['segs'][0][0] + len(ids) for ids in chain['decision']['options'])
+    return {'objective': 'option-normalized log score (exp0_sft.decision_backward; --no-decision-objective opts out)',
+            'chains': sum(p['chains'] for p in parts.values()), 'parts': {k: dict(v) for k, v in sorted(parts.items())}}
 
 
 def publish_sft_rows(rows, mix, minimum_open_goal_share):
@@ -2199,7 +2360,7 @@ def build(args):
             for turn in turns:
                 try:
                     calls.append(render_call(renderer, source, turn, treatment.render(c), args.teacher_lead_in,
-                                             args.own_empty_think))
+                                             args.own_empty_think, decisions=True))
                 except Exception as error:
                     calls.append(repr(error))
         for index, (turn, call) in enumerate(zip(turns, calls)):
@@ -2233,6 +2394,10 @@ def build(args):
                             'tools': turn['tools'], 'target': turn['target'], 'prompt_tokens': len(prompt),
                             'target_tokens': len(target), 'loss_from': context,
                             'too_long': len(prompt) + len(target) > MAX_LEN,
+                            **({'decision': {'label': row['decision']['label'], 'values': row['decision']['values'],
+                                             'option_tokens': [len(o) for o in row['decision']['options']]}}
+                               if 'decision' in row else {}),
+                            **({'decision_error': row['decision_error']} if 'decision_error' in row else {}),
                             **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
                                 'world': c['world'], 'live_exchange': turn['live_exchange']}
                                if c.get('verification_mode') == 'observed-live' else {})})
@@ -2251,6 +2416,12 @@ def build(args):
                                                for r in rows))
         s['call_tokens'] += sum(len(r['prompt']) + len(r['sample']) for r in rows)
         s['too_long_calls'] += sum(len(r['prompt']) + len(r['sample']) > MAX_LEN for r in rows)
+        # decision readouts carried with their option sets (exp0_sft trains them with the option-normalized objective)
+        s['decision_rows'] += sum('decision' in r for r in rows)
+        s['decision_options'] += sum(len(r['decision']['options']) for r in rows if 'decision' in r)
+        for r in rows:
+            if 'decision_error' in r:
+                s[f"decision_surface_not_carried:{r.pop('decision_error')}"] += 1
         families[source][c['family']] += 1
         domains[source][c['domain']] += 1
         producer = f"{source}:{c.get('teacher') or c.get('run') or ''}"
@@ -2731,7 +2902,7 @@ def neuralese_text(args):
     import numpy as np
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     from exp0_sft import MAX_LEN, chains_of
     work, out = Path(args.work), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -2742,7 +2913,7 @@ def neuralese_text(args):
     surfaces = replay_surfaces(work, workers)    # the current runtime's surfaces: every call of every exact replay
     episodes = list(all_episodes(work, workers, keep=has_native_state))
     funnel['native_state_episodes'] = len(episodes)
-    excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
+    excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
     kept = []
     for e in episodes:
         task = e['task']
@@ -2863,7 +3034,7 @@ def neuralese_graph(args):
     import random
     import pickle
     from natlang_neuralese.common.code_provenance import code_provenance
-    from natlang_neuralese.rl.held_eval import exclusion_ids
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
     from exp0_sft import MAX_LEN, chains_of, source_tokens
     from lower_rollout_turns import episode_turns
     work, out = Path(args.work), Path(args.out)
@@ -2882,7 +3053,7 @@ def neuralese_graph(args):
     funnel['native_state_episodes'] = len(episodes)
     funnel['excluded_run'] = sum(1 for e in episodes if any(p.search(e.get('run') or '') for p in excluded_runs))
     episodes = [e for e in episodes if not any(p.search(e.get('run') or '') for p in excluded_runs)]
-    excluded = exclusion_ids(args.held_manifest, [e['task'] for e in episodes])
+    excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
     kept = []
     for e in episodes:
         task = e['task']

@@ -494,11 +494,14 @@ export function compileProject(options: BuildOptions): BuildResult {
     }
   }
   // Include dependency resolutions/configuration and conservatively all authored project files.
+  const rootIsPackage = fs.isFile(join(root, 'natlang.json'));
   const collectSources = (dir: string): void => {
     for (const name of fs.list(dir).sort()) {
       if (SKIPPED_DIRS.has(name) || name.startsWith('.') || name === 'adaptations' || name.endsWith('.d.nl.ts')) continue;
       const path = join(dir, name);
       if (fs.isDirectory(path)) {
+        // A package nested inside this one is its own program (walkSources).
+        if (rootIsPackage && fs.isFile(join(path, 'natlang.json'))) continue;
         const runManifest = join(path, 'manifest.json');
         if (fs.isFile(runManifest)) {
           try { if (JSON.parse(fs.read(runManifest))?.schema === 'natlang.adaptation-run/v1') continue; }
@@ -690,30 +693,31 @@ export function compileProject(options: BuildOptions): BuildResult {
 }
 
 function walkNz(fs: ProjectFiles, root: string): string[] {
-  const out: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of fs.list(dir)) {
-      if (SKIPPED_DIRS.has(entry) || entry.startsWith('.')) continue;
-      const path = join(dir, entry);
-      if (fs.isDirectory(path)) walk(path);
-      else if (entry.endsWith('.nz')) out.push(path);
-    }
-  };
-  walk(root);
-  return out;
+  return walkSources(fs, root, entry => entry.endsWith('.nz'));
 }
 
 function walkTs(fs: ProjectFiles, root: string): string[] {
+  return walkSources(fs, root, entry => /\.(ts|tsx|mts)$/.test(entry));
+}
+
+/**
+ * The files below `root` that `wanted` selects. A package nested inside another package (its own natlang.json below
+ * one, such as a program `natlang init` created inside this one) is its own project and is left out, as in
+ * `callableFolders`.
+ */
+function walkSources(fs: ProjectFiles, root: string, wanted: (entry: string) => boolean): string[] {
   const out: string[] = [];
-  const walk = (dir: string) => {
+  const walk = (dir: string, inPackage: boolean) => {
     for (const entry of fs.list(dir)) {
       if (SKIPPED_DIRS.has(entry) || entry.startsWith('.')) continue;
       const path = join(dir, entry);
-      if (fs.isDirectory(path)) walk(path);
-      else if (/\.(ts|tsx|mts)$/.test(entry)) out.push(path);
+      if (fs.isDirectory(path)) {
+        const isPackage = fs.isFile(join(path, 'natlang.json'));
+        if (!(isPackage && inPackage)) walk(path, inPackage || isPackage);
+      } else if (wanted(entry)) out.push(path);
     }
   };
-  walk(root);
+  walk(root, fs.isFile(join(root, 'natlang.json')));
   return out;
 }
 

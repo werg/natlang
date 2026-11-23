@@ -862,3 +862,51 @@ Round-8 targets: held-back programs rewritten with stated rules (urgency of the 
 keys, kiln withdraw order, cosmetic-vs-misuse warranty, assert invariant-vs-input, env pruning reserved variables, tide script-vs-library, rejected-file
 trailing newline); programs for the families still under 30 (service_world_operations 14 programs); a selector visit decay; real visit counts and
 outcome spread once interleaved RL rounds exist; typed producers of w39 and w45 (their replay copies tripped the protected-world check as copies).
+
+## 18. Verifier tasks: judged by executing the outcome (semantic FP, 2026-11-23)
+
+Rounds 10-23 asked for "one clearly right reading with a stated cue list and default" and qualified by exact match after a
+literal blind solve. That selected cue-word programs (`contains the word dog, cat, pet or pets`): a regex solves them, so
+training rewards keyword rules, not reading. Verifier tasks (`oracle: "verifier"`, plans/semantic-fp/05 O1) reverse both
+halves. **Where this section differs from sections 2-17, this section wins.**
+
+**What changes.**
+- *Judgments state meaning, never cues.* A helper says what the judgment is about ("what the sender finally wants done
+  with the booking; past events, questions they leave open and changes they take back are not requests"), not which
+  words to look for. `authored_checks.py` rejects a verifier task whose instructions say "contains the word/phrase",
+  "by whole words" or "keyword". Exact steps (lookups, arithmetic, sorting, the output shape) stay exact and numbered.
+- *Inputs defeat surface cues.* At least 40% of the items of every world are cue traps: negation ("no need to cancel"),
+  a cue word about the past or someone else, a question, a change taken back later in the same text, a paraphrase with
+  none of the cue words, a cue word in another sense, an instruction from a party with no authority. Every item still
+  has one reading a careful person would give it; when two are defensible, the oracle accepts both (or drop the item).
+- *The outcome is executed, not compared.* The oracle is a trusted verifier module under
+  `training/semantic_fp_tasks/verifiers/` (sha-bound at conversion; the model never sees it or its data). Use one of:
+
+| verifier | the root returns | oracle data | passes |
+|---|---|---|---|
+| `labels.mjs` | a labelling: `{label: [ids]}` (`shape: by_label`), `{id: label}` (`by_item`) or rows `[{<id_key>, <label_key>}]` (`rows`) | `items: {id: [acceptable labels]}`, `labels`, `shape` | every item labelled once with a label its meaning allows; order free |
+| `order.mjs` | an ordered list of ids (or records with `key`) | `items`, `before: [[a, b]]` (precedences the notes imply), optional `first`, `last`, `excluded` | any order that keeps every precedence and leaves out the excluded |
+| `assignment.mjs` | `{item: slot}` (`by_item`) or `{slot: [items]}` (`by_slot`) | `items`, `slots`, `allowed: {item: [slots or "none"]}` (what its own note permits), `together`, `apart`, `capacity` | any assignment meeting every constraint |
+| `ledger.mjs` | a list of operations `{op: "update", id, set}` / `{op: "remove", id}` / `{op: "add", id, record}` | `initial` records, `goal` (the complete final state, `null` = removed), `fields` that may change, `creatable` | any operation list whose execution on `initial` reaches `goal` |
+
+  Each returns `{ok, issues, score}`: `score` in [0, 1] is graded credit (`--reward graded`; a record or file already
+  right and left alone earns nothing), `ok` alone decides acceptance and held scoring. A new verifier module needs
+  review by the supervising agent before a batch uses it.
+- *Task fields* (in addition to section 2): `oracle: "verifier"`, `verifier: {"path": "training/semantic_fp_tasks/verifiers/<kind>.mjs", "oracle": {...}}`,
+  `keyword_baseline: {"code": "<root eval script>"}`. `expected` is one accepted outcome; `alias_answers` are *other*
+  accepted outcomes (a different valid order or assignment, a different operation list reaching the same state): give at
+  least one whenever the verifier admits more than one outcome. `wrong_answers` (2-6) are outcomes of real misreadings,
+  above all the cue reading of each trap. The keyword baseline is the honest surface-cue solver of the task: plain code
+  over the inputs (the root's arguments are its variables) with regexes, word lists and field positions and no helper,
+  `nl` or `decide` call, ending in `return <its answer>;`. It must fail; if it passes, the task does not need reading.
+- *Smoke is a full replay* (`smoke.replay: true`): the smoke script is the program's own algorithm calling its helpers,
+  the scripted children (`$match` on text only the call's arguments contain) answer with the meanings, and the verifier
+  judges what the script returns.
+- *Write `gen.py`* with one `solve()` per program that runs the program literally on the per-item meanings you assign,
+  and compute `expected`, the verifier's oracle data and the smoke children from the same meanings, never by hand twice.
+
+**Checks** (`authored_checks.py TASKS.jsonl`, which runs `verifier_controls.mjs`): reference and aliases accepted; every
+wrong answer, the keyword baseline and the degenerate values `null`, `{}`, `[]`, `""`, `0` rejected; the reference
+verdict deterministic; no cue rules in instructions. `qualify_authored.py` then replays the reference, the wrong answers
+and the keyword baseline through the collector (the verifier judges each run), runs the smoke and checks custody.
+`blind_solve.py compare` judges a blind solver's outcomes with the task's verifier: any outcome it accepts agrees.

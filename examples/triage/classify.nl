@@ -4,6 +4,6 @@ args:
   ticket: string
   rubric: string
 returns: Label
+readout: decision
 ---
-Pick the label from rubric that fits ticket. If no rule in the rubric covers
-the ticket, report an error saying what is missing.
+Pick the label from rubric that fits ticket.
