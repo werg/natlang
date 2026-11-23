@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import * as core from '../dist/index.js';
 import {workerdPlatform} from '../dist/core/workerd.js';
 const files={
- 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export async function restful(prefix:string,...values:number[]):Promise<string>{return prefix+values.join(",")+":"+await describe(values.length);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
+ 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export async function restful(prefix:string,...values:number[]):Promise<string>{return prefix+values.join(",")+":"+await describe(values.length);} export function inferredRest(...values){return values.length;} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
  'describe.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe the number.',
 };
 function setup(platform=core.nodePlatform(),recording){
@@ -60,6 +60,10 @@ for(const mode of ['node','workerd'])test(`actual ${mode} TS rest captures every
    const child=rows.find(row=>row.parent_call_id===root.call_id);assert.equal(child.definition.name,'describe');
    assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
   }
+  assert.equal(await env.rt.run(()=>env.module.inferredRest(1,2,3)),3);
+  const inferred=env.store.calls().map(row=>env.store.call(row.call_id)).find(row=>row.definition.name==='inferredRest');
+  assert.equal(inferred.definition.params[0].type,'unknown[]');assert.equal(inferred.definition.params[0].rest,true);
+  assert.deepEqual(env.store.value(inferred.inputs.values),[1,2,3]);
  }finally{env.close();}
 });
 test('NL eval sees the actual rest signature of a TS helper',async()=>{

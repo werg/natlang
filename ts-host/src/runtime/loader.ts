@@ -847,7 +847,7 @@ function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.So
     if (!compiled && (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped)))
       throw new NatlangSourceError(path, `${label}: parameters need names and explicit types`);
     const name = ts.isIdentifier(parameter.name) ? parameter.name.text : `arg${node.parameters.indexOf(parameter)}`;
-    args[name + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : 'unknown';
+    args[name + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : parameter.dotDotDotToken ? 'unknown[]' : 'unknown';
     if (parameter.dotDotDotToken) rest = name;
   }
   if (!node.type && !allowUntyped && !compiled) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
