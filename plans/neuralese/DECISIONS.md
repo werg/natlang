@@ -8737,3 +8737,33 @@ kills it.
 - **Live (policy e15b20a8 via the aei1 collection actor):** pr-shepherd examples 3/5, idiom-reviewer 5/6, inbox-pilot
   3/3, runbook-engine 4/4, semantic-etl 2/2, sem-sheet 1/2, task-author 1/2, examples/pr-review 2/2, examples/triage
   21/28.
+
+## 2026-11-23 16:00 Expert-iteration ledger priorities: round stages outrank collections (priority inversion fix)
+
+- **Observation.** The standing aei1 DGX collection (`ensure_collection`, ledger priority high, ~74 GB) held its own
+  round's build (`aei1-r0001-build`, 24 GB, medium) for 96 minutes. The ledger preempts only resumable units of
+  strictly lower priority, so a medium stage could never take memory from a high collection, and every medium job
+  queued behind the blocked build. The supervisor stopped the collection by hand.
+- **Decision.** Fix it in the ledger's own terms rather than with driver-side yielding: `STAGE_PRIORITY = 'high'` for
+  every critical-path stage (async `frontier`, `data`, `build`, DGX SFT, GRPO, `publish`; the cycle's `frontier`,
+  `data`, `build`; launch-sft.sh is already high) and `COLLECTION_PRIORITY = 'medium'` (resumable, the ledger default)
+  for every collection (the standing DGX one, remote collection clients, a cycle's collect and recollect; opt-out:
+  `NATLANG_EI_COLLECTION_PRIORITY=high` in the driver's environment). A waiting
+  stage now preempts the collection; the ledger requeues it with its launch spec (same policy, pin and work dir), the
+  collector resumes from its scored groups (`collect`: first group after the last, `already_scored`), and the fill
+  waits for the actor on the same port (`filled_reasoning` retries a refused actor for 4 h). This also covers the
+  cross-process case a driver-side yield cannot (another driver's collection blocking a cycle's build), and other
+  agents' medium smokes and evals still cannot preempt the collection (equal priority). Driver-side stopping was
+  rejected: the cycle path's collection belongs to another process whose collect stage exits on a stopped collection,
+  and restart bookkeeping races the DGX SFT's own stop.
+- **Requeue-awareness.** `Cycle.present(unit)` = active or `ledger_queued`; `Cycle.ledger` joins a requeued unit
+  instead of launching it twice, `Cycle.wait` and the cycle's collect loop wait through a requeue, and
+  `ensure_collection`, `ensure_remote_collection`, `stop_collections` (so a DGX SFT cancels a requeued collection
+  instead of the ledger relaunching it beside the learner), `prepare`'s snapshot wait and the halt/recollect paths use
+  it. Side effect: a collection no longer outranks a DGX held measurement (both medium); held keeps its slot share.
+- **Open.** A preempted cycle collection gets a fresh `--hours` window from its relaunch (`collect` sets the deadline
+  at start); harmless for the standing async collection (long horizon), it can lengthen a cycle's collect stage.
+- **Rollout.** aei1 untouched; the coordinator moves it onto the new pin at the next round boundary. Tests:
+  `test_round_stages_preempt_the_standing_collection_which_resumes_on_its_policy` (test_async_train.py, including
+  `memory_ledger.preemption_plan` with the real priorities) and
+  `test_cycle_stages_outrank_its_collection_and_a_requeued_unit_is_joined` (test_expert_iteration.py).
