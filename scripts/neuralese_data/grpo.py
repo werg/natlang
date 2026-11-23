@@ -129,6 +129,9 @@ def default_pools():
     return data_registry.role_paths('grpo-pool')
 
 
+MEMETIC_PREPARE = 'memetic_prepare'   # a staged memetic group's preparation item on a slot (Collector._prepare_memetic)
+
+
 def default_memetic_tasks():
     return data_registry.role_path('grpo-memetic-tasks')
 
@@ -548,11 +551,18 @@ class Collector:
             entry.update(prompt_rendering='full', context_tokens=a.context_tokens, rl_endpoint=a.actor)
         (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
         wave = None if memetic else self._wave(row['id'], len(entries))
+        # a staged memetic group (memetic_workspace.bind_layout) first runs its preparation stage on one slot; its
+        # supervisors start when it is admitted (``_prepare_memetic``)
+        staged = memetic and getattr(a, 'memetic_layout', 'staged') == 'staged'
         self.groups[group] = {'dir': directory, 'size': len(entries), 'done': 0, 'versions': [], 'task_id': row['id'],
-                              'created': time.time(), 'wave': wave, 'held_back': entries[wave:] if wave else [],
+                              'created': time.time(), 'wave': wave,
+                              'held_back': entries if staged else entries[wave:] if wave else [],
                               **({'memetic': True} if memetic else {})}
         self.outstanding += 1
-        self.pending.extend((group, entry) for entry in entries[:wave])
+        if staged:
+            self.pending.append((group, {'key': 'memetic-prepare', MEMETIC_PREPARE: True}))
+        else:
+            self.pending.extend((group, entry) for entry in entries[:wave])
 
     def _memetic_open(self):
         """Whether a new group may be a memetic one (always here; expert-iteration collection bounds them)."""
@@ -634,13 +644,19 @@ class Collector:
     def _bind_memetic(self, row, directory):
         """A memetic row bound to this group (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 3): its episode spec,
         copied into the group directory with the run's actor, runtime and sampling controls, so the group's samples share
-        one preparation (evidence and anchor baselines) measured under the policy version that samples them."""
+        one preparation (evidence and anchor baselines) measured under the policy version that samples them, and laid
+        out for the episode's wall clock (``memetic_workspace.bind_layout``, ``--memetic-layout``)."""
         import copy
         import hashlib
+        from natlang_neuralese.rl.memetic_workspace import bind_layout
         world = row['semantics']['world']
         spec = json.loads(Path(world['task']).read_text())
         spec.update(out=str(directory / 'memetic'), endpoint=self.args.actor, runtime=str(self.runtime),
                     sampling_config=str(self.work / 'sampling-config.json'))
+        if spec.get('budget') and spec.get('eval'):
+            # the supervisor's clock: the queue entry's (task_rollouts.build_queue: the larger of the run's and the row's)
+            seconds = max(int(getattr(self.args, 'case_seconds', 0) or 0), int(world.get('case_seconds') or 0))
+            spec = bind_layout(spec, episode_seconds=seconds, layout=getattr(self.args, 'memetic_layout', 'staged'))
         path = directory / 'memetic-spec.json'
         path.write_text(json.dumps(spec, ensure_ascii=False, sort_keys=True) + '\n')
         row = copy.deepcopy(row)
@@ -738,6 +754,9 @@ class Collector:
                 continue
             group, entry = item
             info = self.groups[group]
+            if entry.get(MEMETIC_PREPARE):
+                self._prepare_memetic(group, info)
+                continue
             workers = info['dir'] / 'workers'
             workers.mkdir(exist_ok=True)
             key = entry['key']
@@ -793,6 +812,73 @@ class Collector:
                         self.outstanding -= 1
                         # no longer outstanding: its creation time must not pin the block GC's cutoff for the whole run
                         self.groups.pop(group, None)
+
+    def _prepare_memetic(self, group, info):
+        """A staged memetic group's preparation stage (``memetic_workspace prepare``) on this slot: its supervisors
+        start, ahead of other groups, as soon as ``prepared.json`` admits the group; a group that is not admitted (every
+        support sample passed, or none reached a verdict) or whose preparation failed is dropped without starting them.
+        The stage keeps the slot while it measures the anchor's query baselines beside the supervisors."""
+        directory = info['dir']
+        prepared = directory / 'memetic' / 'prepared.json'
+        prepared.parent.mkdir(parents=True, exist_ok=True)
+        command = [sys.executable, '-m', 'natlang_neuralese.rl.memetic_workspace', 'prepare',
+                   str(directory / 'memetic-spec.json')]
+        released = False
+        with (directory / 'memetic' / 'prepare.log').open('a') as handle:
+            process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+            with self.lock:
+                self.running += 1
+            try:
+                while True:
+                    done = process.poll() is not None
+                    if not released and prepared.exists():
+                        released = self._memetic_prepared(group, info, prepared)
+                    if done:
+                        break
+                    if self.stop.wait(2):
+                        os.killpg(process.pid, signal.SIGTERM)
+                        process.wait()
+                        self._abandon(group, 'memetic-prepare', process.returncode)
+                        return
+            finally:
+                with self.lock:
+                    self.running -= 1
+        if not released and not info.get('abandoned') and group in self.groups:
+            self._drop_memetic(group, 'preparation failed', returncode=process.returncode)
+
+    def _memetic_prepared(self, group, info, path):
+        """Read a written preparation: start the supervisors of an admitted group, drop one that is not. True once
+        decided."""
+        try:
+            prepared = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return False   # still being written
+        if not prepared.get('admitted'):
+            self._drop_memetic(group, 'not admitted', support_success=prepared.get('support_success'),
+                               resolved_fraction=prepared.get('resolved_fraction'))
+            return True
+        with self.lock:
+            if info.get('abandoned') or group not in self.groups:
+                return True
+            self.pending.extendleft((group, entry) for entry in reversed(info['held_back']))
+            info['held_back'] = []
+        print(json.dumps({'event': 'memetic group prepared', 'group': group, 'task_id': info['task_id'],
+                          'support_success': prepared.get('support_success'),
+                          'resolved_fraction': prepared.get('resolved_fraction'),
+                          'seconds': round(time.time() - info['created'])}), flush=True)
+        return True
+
+    def _drop_memetic(self, group, reason, **detail):
+        """A memetic group that starts no supervisor: never scored, no longer outstanding."""
+        with self.lock:
+            info = self.groups.pop(group, None)
+            if info is None or info.get('abandoned'):
+                return
+            info['abandoned'] = True
+            self.outstanding -= 1
+        print(json.dumps({'event': 'memetic group dropped', 'group': group, 'task_id': info['task_id'],
+                          'reason': reason, **detail}), flush=True)
 
     def _abandon(self, group, key, returncode):
         """An episode killed by a signal (a unit stop signals every process of the cgroup, so the episodes die before this
@@ -5680,6 +5766,11 @@ def build_parser():
                         'train.jsonl is telemetry, never a stop')
     t.add_argument('--memetic-max-staleness', type=int, default=8,
                    help='staleness bound of a memetic group (its episodes run tens of minutes; --max-staleness for others)')
+    t.add_argument('--memetic-layout', choices=('staged', 'inline'), default='staged',
+                   help='staged (default): a memetic group runs its preparation as a collector stage before its '
+                        'supervisors, every run of an evaluation at once, a nested run\'s wall clock the episode\'s / '
+                        '(evaluations + 3) (rl/memetic_workspace.py bind_layout); inline: the layout before 2026-11-23 '
+                        '(preparation inside each supervisor\'s clock, the built 900 s and 4 runs at a time)')
     t.add_argument('--memetic-group', type=int, default=4)
     t.add_argument('--memetic-model-requests', type=int, default=64)
     t.add_argument('--reward', choices=('graded', 'binary'), default='graded',

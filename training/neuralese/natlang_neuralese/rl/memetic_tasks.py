@@ -31,6 +31,8 @@ FAMILY = 'memetic_improve'
 STAGE_SCHEMA = 'natlang.memetic-tasks/1'
 PACKAGE = Path(__file__).resolve().parents[4] / 'applications' / 'memetic-improver'
 # Lean sizes (one group of 4 samples is ~108 nested rollouts, about 13 ordinary groups; design doc section 3).
+# 'case_seconds' and 'workers' are the inline layout's; the default staged layout derives them from the episode's wall
+# clock when grpo binds a group (memetic_workspace.bind_layout).
 DEFAULTS = {'support': 4, 'query': 6, 'samples': 2, 'query_samples': 2, 'evaluations': 2, 'min_success': 0.1,
             'max_success': 0.85, 'min_rate_samples': 2, 'near_duplicate': 0.9, 'max_worlds_per_program': 40, 'cost_weight': 0.05,
             'episode_seconds': 7200, 'workers': 4, 'case_seconds': 900, 'max_model_requests': 40, 'max_turns': 40,

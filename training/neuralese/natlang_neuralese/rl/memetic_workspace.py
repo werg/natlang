@@ -26,6 +26,16 @@ is read as it is.
 
 Served as a JSON-lines world process (``ts-host/src/teacher/world-bridge.ts`` kind ``memetic``):
 ``python -m natlang_neuralese.rl.memetic_workspace serve``.
+
+Layout (``bind_layout``; 2026-11-23). An episode's nested collections are ordinary episodes of P, so their wall time
+is an ordinary episode's on the same actor (aei1: median 854 s, p75 1760 s). ``staged`` (the default): the collector
+runs the group's preparation as its own stage before any supervisor starts (``python -m ... prepare SPEC``: the support
+evidence and admission, then the anchor's query baselines while the supervisors work), every run of an evaluation
+starts at once, and a nested run's wall clock is the episode's divided by (evaluations + 3) (support, each evaluation,
+the commit's query score, and one share for the supervisor's own turns), so the group fits one episode wall clock plus
+one nested share. ``inline`` (the opt-out, the layout before): the supervisor's ``load`` prepares everything inside its
+own clock with the spec's built settings (900 s, 4 runs at a time), which took the whole 7200 s in aei1 (five groups,
+no scored episode).
 """
 from __future__ import annotations
 
@@ -454,7 +464,9 @@ def collection_evaluator(spec):
                             return
                         entry = pending.pop(0)
                     run_entry(entry, collection)
-            threads = [threading.Thread(target=worker) for _ in range(max(1, min(settings['workers'], len(entries))))]
+            # workers 0 (the staged layout): every run at once, so an evaluation takes one nested run's wall clock
+            width = settings.get('workers') or len(entries)
+            threads = [threading.Thread(target=worker) for _ in range(max(1, min(width, len(entries))))]
             for thread in threads:
                 thread.start()
             for thread in threads:
@@ -556,16 +568,15 @@ def all_passed(support):
 
 
 def prepare(spec, evaluate):
-    """Evidence and baselines of one episode group under the current policy, computed once by whichever sample loads
-    first (the others wait on the lock and read it): the unchanged program on the support worlds, then on the query
-    worlds with no change and with the mechanical default guidance (the anchor's two arms). Every group is admitted
-    except one whose unguided support samples all ran and all passed: then there is nothing to improve (owner
-    2026-11-18; an all-fail group is admitted, the improver works from its failures)."""
+    """Evidence of one episode group under the current policy, computed once by whichever process gets the lock first
+    (the collector's preparation stage, or the first sample's ``load``; the others read it): the unchanged program on
+    the support worlds. Every group is admitted except one whose unguided support samples all ran and all passed: then
+    there is nothing to improve (owner 2026-11-18; an all-fail group is admitted, the improver works from its
+    failures). The anchor's query baselines are ``baselines`` (needed only to score a commit)."""
     path = Path(spec['out']) / 'prepared.json'
     with locked(path):
         if path.exists():
             return json.loads(path.read_text())
-        settings = spec['settings']
         support = evaluate(spec['support'], None, name='baseline-support')
         attempts = [{'digest': attempt_digest(result, attempt_id=f'a{i + 1}', world=world), 'steps': attempt_steps(result)}
                     for i, (world, result) in enumerate(support['results'])]
@@ -573,19 +584,97 @@ def prepare(spec, evaluate):
         # a support collection in which no run reached a verdict measures nothing: no evidence, no episode
         admitted = support['success'] is not None and not all_passed(support)
         prepared = {'schema': 'natlang.memetic-prepared/1', 'support_success': support['success'],
-                    'resolved_fraction': round(resolved, 3), 'attempts': attempts, 'admitted': admitted,
-                    'baselines': {'none': None, 'default': None}}
-        if admitted:
-            none = evaluate(spec['query'], None, name='baseline-query-none', samples=settings['query_samples'])
-            default_text = mechanical_guidance([item['steps'] for item in attempts
-                                                if item['digest']['outcome'] == 'task_success'])
-            default = (evaluate(spec['query'], [{'function': None, 'text': default_text}], name='baseline-query-default',
-                                samples=settings['query_samples']) if default_text else None)
-            prepared['baselines'] = {'none': {'success': none['success'], 'dir': none['dir']},
-                                     'default': None if default is None else {
-                                         'success': default['success'], 'text': default_text, 'dir': default['dir']}}
+                    'resolved_fraction': round(resolved, 3), 'attempts': attempts, 'admitted': admitted}
         write_json_durable(path, prepared)
         return prepared
+
+
+def baselines(spec, evaluate, prepared):
+    """The anchor's two arms on the query worlds, computed once per group (``baselines.json``): the program with no
+    change and with the mechanical default guidance (the outline of a verified support success), run at the same
+    time. A preparation recorded before 2026-11-23 holds them in ``prepared['baselines']``."""
+    if (prepared.get('baselines') or {}).get('none') is not None:
+        return prepared['baselines']
+    path = Path(spec['out']) / 'baselines.json'
+    with locked(path):
+        if path.exists():
+            return json.loads(path.read_text())
+        samples = spec['settings']['query_samples']
+        default_text = mechanical_guidance([item['steps'] for item in prepared['attempts']
+                                            if item['digest']['outcome'] == 'task_success'])
+        runs = {'none': lambda: evaluate(spec['query'], None, name='baseline-query-none', samples=samples)}
+        if default_text:
+            runs['default'] = lambda: evaluate(spec['query'], [{'function': None, 'text': default_text}],
+                                               name='baseline-query-default', samples=samples)
+        reports = parallel(runs)
+        none, default = reports['none'], reports.get('default')
+        value = {'none': {'success': none['success'], 'dir': none['dir']},
+                 'default': None if default is None else {'success': default['success'], 'text': default_text,
+                                                          'dir': default['dir']}}
+        write_json_durable(path, value)
+        return value
+
+
+def parallel(calls):
+    """{name: call()} with every call running at once; the first error is raised after all have finished."""
+    results, errors = {}, []
+
+    def run(name, call):
+        try:
+            results[name] = call()
+        except BaseException as error:  # noqa: BLE001 - re-raised below
+            errors.append(error)
+    threads = [threading.Thread(target=run, args=item) for item in calls.items()]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        raise errors[0]
+    return results
+
+
+LAYOUTS = ('staged', 'inline')
+
+
+def nested_case_seconds(episode_seconds, evaluations):
+    """A nested run's wall clock under the staged layout: the episode's divided by (evaluations + 3): the support
+    preparation, each evaluation, the commit's query score, and one share for the supervisor's own turns."""
+    return max(60, int(episode_seconds) // (int(evaluations) + 3))
+
+
+def bind_layout(spec, *, episode_seconds, layout='staged'):
+    """The group's spec under ``layout`` (module docstring): staged derives the nested wall clock from the episode's
+    and starts every run of an evaluation at once; inline keeps the built settings."""
+    if layout not in LAYOUTS:
+        raise ValueError(f'memetic layout is one of {LAYOUTS}')
+    spec = {**spec, 'layout': layout}
+    if layout == 'staged':
+        spec['eval'] = {**spec['eval'], 'workers': 0,
+                        'case_seconds': nested_case_seconds(episode_seconds, spec['budget']['evaluations'])}
+    return spec
+
+
+def group_seconds(episode_seconds, evaluations, layout='staged'):
+    """A staged group's wall clock: its preparation stage (one nested run) and then its supervisors' episodes."""
+    return int(episode_seconds) + (nested_case_seconds(episode_seconds, evaluations) if layout == 'staged' else 0)
+
+
+def prepare_stage(spec_path, stdout=None):
+    """The collector's preparation stage of one group: ``prepared.json`` (the collector starts the supervisors, or
+    drops a group that is not admitted, as soon as it appears), then the query baselines while the supervisors work."""
+    stdout = stdout or sys.stdout
+    spec = json.loads(Path(spec_path).read_text())
+    evaluate = collection_evaluator(spec)
+    prepared = prepare(spec, evaluate)
+    print(json.dumps({'event': 'memetic prepared', 'admitted': prepared['admitted'],
+                      'support_success': prepared['support_success'],
+                      'resolved_fraction': prepared['resolved_fraction']}), file=stdout, flush=True)
+    if prepared['admitted']:
+        value = baselines(spec, evaluate, prepared)
+        print(json.dumps({'event': 'memetic baselines', **{k: (v or {}).get('success') for k, v in value.items()}}),
+              file=stdout, flush=True)
+    return prepared
 
 
 # ---- the workspace -----------------------------------------------------------------------------------------------------
@@ -627,6 +716,12 @@ class Workspace:
         if not hasattr(self, '_attempts'):
             self._attempts = {item['digest']['id']: item for item in self.prepared['attempts']}
         return self._attempts
+
+    @property
+    def baselines(self):
+        if getattr(self, '_baselines', None) is None:
+            self._baselines = baselines(self.spec, self.evaluate_cases, self.prepared)
+        return self._baselines
 
     def _save(self):
         write_json_durable(self.state_path, self.state)
@@ -794,17 +889,17 @@ class Workspace:
             if self.spec.get('refine') and candidate['guidance']:
                 query = self._refined_query(candidate, query)
         else:
-            query = {'success': prepared['baselines']['none']['success']}
+            query = {'success': self.baselines['none']['success']}
         if query['success'] is None:
             raise ValueError('no query run of the committed change set reached a verdict: the episode is unmeasured')
         quality, anchor, gain, cost = memetic_reward(
-            query['success'], prepared['baselines'], evaluations=len(self.state['evaluations']),
+            query['success'], self.baselines, evaluations=len(self.state['evaluations']),
             budget=self.spec['budget'], cost_weight=self.spec['settings'].get('cost_weight', 0.05),
             committed=committed is not None)
         result = {'score': 100, 'done': True, 'moves': len(self.state['evaluations']),
                   'memetic': {'schema': OUTCOME_SCHEMA, 'quality': quality, 'anchor': anchor, 'gain': gain, 'cost': cost,
                               'query_success': query['success'], 'committed': committed, 'candidate': candidate,
-                              'baselines': prepared['baselines'], 'defects': self.state['defects'],
+                              'baselines': self.baselines, 'defects': self.state['defects'],
                               'evaluations': self.state['evaluations'], 'leak_refused': bool(leak),
                               'query_dir': query.get('dir'), 'score_path': str(cached),
                               **({'refine': query['refine']} if 'refine' in query else {})}}
@@ -864,7 +959,9 @@ def serve(stdin=sys.stdin, stdout=None):
             if request['op'] == 'load':
                 spec = json.loads(Path(request['task']).read_text())
                 workspace = Workspace(spec, collection_evaluator(spec), run=request.get('run'))
-                workspace.prepared   # the policy's evidence and baselines, before the supervisor's first turn
+                workspace.prepared   # the policy's evidence, before the supervisor's first turn
+                if spec.get('layout', 'inline') == 'inline':
+                    workspace.baselines   # inline: the anchor too, inside this episode's clock (the layout before)
                 result = {'service': 'workspace', 'declaration': DECLARATION, 'methods': list(METHODS)}
             elif workspace is None:
                 raise ValueError('load the episode first')
@@ -877,6 +974,9 @@ def serve(stdin=sys.stdin, stdout=None):
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] != ['serve']:
-        raise SystemExit('usage: python -m natlang_neuralese.rl.memetic_workspace serve')
-    serve()
+    if sys.argv[1:] == ['serve']:
+        serve()
+    elif len(sys.argv) == 3 and sys.argv[1] == 'prepare':
+        prepare_stage(sys.argv[2])
+    else:
+        raise SystemExit('usage: python -m natlang_neuralese.rl.memetic_workspace serve | prepare SPEC')
