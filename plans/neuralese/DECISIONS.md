@@ -9587,8 +9587,13 @@ checker required it.
 - **Found and fixed on the way:** the collector never bound a root function's `ensures:` (the kernel binds them to the
   calls it runs; the collector prepares the root itself), so no root postcondition was checked in collection, held eval
   or qualification. `ensuresGate` is now shared. No pool root declares one today.
-- **Measurement** (30 tasks, one per family, 2 samples, sft-v9 on the Colab front, same seeds, prose vs typed, same
-  runtime): in flight; appended below when it finishes.
+- **Measurement** (30 tasks, one per family, 2 samples, sft-v9, same seeds, prose vs typed, same runtime): in
+  flight. The Colab front dropped three times (aei1 moved its round-1 SFT there), so only 9 prose and 6 typed episodes
+  scored there. A ledger unit (`typedwt-measure-supervisor`, `ops/typed-contracts-20261123/driver/supervise.sh`)
+  measures both arms on the first endpoint that attests sft-v9, the Colab front or aei1's DGX actor, and reruns
+  episodes an actor loss cut off. Result: `ops/typed-contracts-20261123/measure-<endpoint>/<arm>/run/result.json`,
+  compared with `held_eval compare`. It runs from the `/home/werg/natlang-wt/typed-contracts` worktree; remove that
+  worktree when it finishes.
 - **Not checked:**
   - a blind solve of the migrated rows;
   - `held_eval verify` against the new sources (same ids and groups as the verified old ones);
