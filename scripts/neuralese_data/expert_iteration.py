@@ -740,11 +740,16 @@ TEACHER_POOLS = [OPS / 'teacher-gen-20261115' / p for p in ('pool-v1', 'pool-v2-
 # the provider key files the campaign's launch script sources (~/.config/natlang/NAME.env)
 TEACHER_ENV_FILES = ('nvidia', 'gemini', 'anthropic', 'openrouter')
 NIM = 'https://integrate.api.nvidia.com/v1'
+# Gemini on Vertex AI, billed to the GCP project's credits (the AI Studio key is free tier: no Pro models); the ADC
+# user credentials mint an hour-long token per episode (teacher_gen api_key_command)
+VERTEX = 'https://aiplatform.googleapis.com/v1/projects/awareness-481308/locations/global/endpoints/openapi'
+VERTEX_TOKEN = [str(Path.home() / 'google-cloud-sdk/bin/gcloud'), 'auth', 'application-default', 'print-access-token']
 # the teacher campaign's teachers (DECISIONS 2026-11-21 teacher yield, 2026-11-24 teacher providers; ops/ei/teachers.json
 # overrides at each launch): Haiku retires itself while the Anthropic account has no credit; Luna at medium effort; GPT-6.1
 # Sol, the stronger model on the same Codex subscription, only on tasks another teacher failed (min_failed); the free
 # raw-reasoning models: Nemotron 3.5 Super and 3 Ultra on NIM (one account-wide rate limit: few slots), ERNIE 5.5 Flash
-# on OpenRouter's free tier (1,000 requests a day, ~26 episodes); family routing and --attempts in teacher_gen
+# on OpenRouter's free tier (1,000 requests a day, ~26 episodes); Gemini 3.1 Pro and Gemini 4 Argon (Vertex credits,
+# reasoning hidden) on tasks another teacher failed; family routing and --attempts in teacher_gen
 TEACHERS = [
     {'model_id': 'claude-haiku-5-5', 'provider': 'anthropic', 'reasoning_effort': 'medium', 'slots': 4},
     {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 6},
@@ -752,7 +757,9 @@ TEACHERS = [
     {'model_id': 'nvidia/nemotron-3.5-super-vl-120b-a12b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 2},
     {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 1},
     {'model_id': 'baidu/ernie-5.5-flash-preview:free', 'endpoint': 'https://openrouter.ai/api/v1',
-     'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1}]
+     'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1},
+    *[{'model_id': model, 'endpoint': VERTEX, 'api_key_env': 'VERTEX_ACCESS_TOKEN', 'api_key_command': VERTEX_TOKEN,
+       'slots': 3, 'min_failed': 1} for model in ('google/gemini-3.1-pro-preview', 'google/gemini-4-argon')]]
 
 
 def frontier_rare(frontier_path, rate=0.25):
