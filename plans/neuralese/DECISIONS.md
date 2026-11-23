@@ -8556,6 +8556,18 @@ symlink presented for source rehashing. No live capture or training state change
   a round (`health.json` is written once per round, so a collection whose groups score nothing shows only at the round
   boundary unless the drive stalls); SGLang actor liveness and throughput.
 
+
+## 2026-11-23 — Finish Vibe semantic-function migration and resume the full Luna queue
+
+The final seven-suite verifier cutover uses application values directly, with source-bound effect/return/incidental roles and an idempotent shared assessor. Python and independent native readers agree. All 2,327 original goals/splits/entries survive byte-identically; release9e81967d (155 runtime bindings) is byte-verified and collection driver07ed68a9f runs the full queue with eight Luna workers. The historical report convention incorrectly rejected one honest private draft; an additive native-verified recovery retains its24 decisions with no return exclusions, preserving the original failure. Recent registered cohorts now62/926 (50completed/861,12partial/65); this is not learner exposure.
+
+Native SQL disproved zero-inference interpretations of three timeouts:79 completed Luna replies and31 child calls remain. Cold preparation consumed323–366s of a600s system-test budget before inference. Teacher collection now defaults to a separately configurable3600s per-case budget; missing wrappers remain unknown. Normal tests and actual goal checks stay intact. Model/provider progress immediately before cancellation explains these episodes; their whole roots remain incomplete, and all evidence is retained.
+
+Production sources: Hostc160/Base64b/SST780e/Corevendorse6f; readerb30ee9240 (including cfc stale-extraction recovery) is built on DGX SSD. Ingestion/fill/export watchers use it; next-round loader minimum is original main d6061da76, and the existing student actor/learner were not restarted. Low/resumable CPU exports can yield to training and reclaimably backfill; paid controllers remain protected. Original148s doctor delay stays unattributed. The incorrect build-concurrency env hit the5.5GiB cap; the corrected same-cap release peaked4.25GiB. A disk guard stopped the first restart before inference; retiring completed derived checkouts restored headroom for fresh resumable wave0035. Details/proofs: VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md, VIBESTUDIO_TEACHER_BUDGET_20261123.md and campaign candidate/v10-catalog-binding-proof.json.
+
+
+Continuation: wave0035 finished its nine cases in402s, retaining every capture; three actual infrastructure failures triggered the standard boundary hold (source-read bootstrap twice, Workerd reset once). This qualification is not declared complete: library prompt/capability decomposition and fixture idempotent recovery are under investigation alongside the shared registry glob-lookup defect. The live ingester was found reading an unrelated acquired-agent archive solely to register one capture/** path. Shared metadata-derived ownership is being fixed rather than relaxing registration. Readers received BE2 I/O while keeping low reclaimable memory priority.
+
 ## 2026-11-23 13:45 Memory ledger: conservative backfill (no head-of-line starvation, no blocked small jobs)
 
 - **Observation:** on 2026-11-23 a 32 GB medium held measurement (`heldv4-measure-v2-sft-v6`) sat at the queue head
@@ -8647,3 +8659,45 @@ symlink presented for source rehashing. No live capture or training state change
   - `colab exec -s g4a -f` on the new session (the healer path);
   - FP8 weights on the L4 (sm_89; FP8 on Colab hardware is still unmeasured);
   - the L4 SFT speed itself (not measured, following the "don't measure what first principles settle" rule).
+
+## 2026-11-23 B14 flagship benchmark harness and the first triage reading (semantic-FP WS6 A0)
+
+**Built (ad9f1d248, f8f37a608).** `scripts/semantic_fp/bench.py` (split / setup / run / prepare-d / report / compare)
+runs WS6 §4's arms for real: A = `frontier_loop.mjs` (gpt-6-luna, reasoning effort low, over natlang's Pi transport in a
+standard tool loop: the app's services plus a submit tool, prose task prompt carrying the same rubric and urgency rule);
+B-D = `natlang run` of the program per unit on bench profiles (WORK/config; one call store per arm via
+NATLANG_CALL_STORE), C and D in reasoned and instant decision modes. Statistics reuse `held_eval._rate_change` and
+`binomial_two_sided`. Merged with 8e586c02e's harness (one implementation): kept its `split` labelling of any fixture
+pack and a result-file `compare`; dropped its own permutation code and runner-protocol stub. Pack:
+`examples/triage/bench/` (148 one-ticket units, 28 held by the held-v4 flagship share rule).
+
+**Fixed on the way (ad9f1d248, MODEL_FACING_CHANGES).** On a Pi provider every `readout: decision` drew 4 reasoning
+samples and discarded them (scorer declined), and every `Is<>` check failed the call with `decision-unsupported`
+(triage failed all urgent tickets on Luna). A declining scorer is now no scorer (generate at once; judge as the ordinary
+`holds` call); Pi turns report the whole prompt with cache reads as `cached_tokens`.
+
+**Triage, held split (program at 19844f4d; results `examples/triage/bench/results/2026-11-23.json`).**
+| arm | pass | vs A (CI, p) | p50 latency | $ / 100 units |
+|---|---|---|---|---|
+| A Luna loop (2 samples) | 55/56 = 0.982 | | 2.1 s | 0.006 |
+| B program on Luna (2 samples) | 56/56 = 1.000 | +1.8 [0, +5.4], p 1.0 | 3.2 s | 0.021 |
+| C program on base, reasoned | 26/28 = 0.929 | -5.4 [-17.9, +3.6], p 0.56 | 103 s | 3.28 (118 GPU-s/unit at $1/h) |
+| C program on base, instant | 4/28 = 0.143 | -83.9 [-96.4, -69.6], p 0.0001 | 743 s | 7.94 |
+| D policy + specialize/tune + escalate | not measured yet | | | |
+
+Reading: no arm beats A; the frontier arms sit at ceiling on single-ticket triage. Base LFM3 with reasoned decisions is
+statistically indistinguishable from A at n=28 but costs ~500x more and is ~50x slower on this setup (Python reference
+engine on a GB10 shared with the 128-slot aei1 collection actor, ~15 decode tokens/s; the summary's 4-5k-token tool
+loop dominates). Instant decisions on base collapse: the readout picks the first option (spam -> billing) and gives
+P(urgent) 0.89-0.91 on every ticket, so every unit runs the summary loop; root cause not established (not checked: the
+rendered readout bytes; whether the policy shows the same flat P).
+
+**Open.** Arm D: the policy server (and even 1 GB units) waits behind the ledger queue head aei1-r0001-build (24 GB,
+>80 min); `WORK/d-driver.sh` (WORK = /home/werg/data/semantic-fp-bench/triage-20261123) runs prepare-d (30-row seeded
+train sample: record, specialize on Luna, tune) and both D modes when admitted, then `bench.py report` regenerates the
+file. Arms A-C ran the pre-8e586c02e triage program (untrusted tickets, std escalate, semanticRepair now); rerun all arms
+on it. The B/C runs recorded held tickets into the machine call store (~/.local/share/natlang/calls) before per-arm
+stores existed. Native reference engine findings, not fixed: its batched decode admits every queued lane and OOMs at its
+CUDA cap (natlang test of 210 examples at once), and under load its health route stops answering so `natlang serve`
+kills it.
+

@@ -300,8 +300,8 @@ def test_find_takes_the_lexical_fast_path_and_agrees_with_the_full_index(roots, 
     assert reg.find(literal / 'cases.jsonl')['id'] == 'lit' and reg.find(literal)['id'] == 'lit'
     assert reg.find(work)['id'] == 'work' and reg.find(work / 'sub')['id'] == full[work / 'sub'] == 'inner'
     assert not calls
-    # a file a glob dataset claims is the full index's question
-    assert reg.find(inner)['id'] == full[inner] == 'inner' and calls == [inner]
+    # Glob-owned files now have the same answer without building the global filesystem index.
+    assert reg.find(inner)['id'] == full[inner] == 'inner' and not calls
 
 
 def test_find_of_a_temporary_path_indexes_only_temporary_datasets(roots, monkeypatch):
@@ -379,3 +379,103 @@ def test_snapshot_skips_a_file_removed_after_the_walk(roots, monkeypatch):
 
     monkeypatch.setattr(dr, '_walk', racing_walk)
     assert [f['path'] for f in dr.snapshot('live-x', d)['files']] == ['kept.json']
+
+
+@pytest.mark.parametrize('include,relative', [
+    (['capture/**'], 'capture/run-a/events.jsonl'),
+    (['run-*/**'], 'run-a/events.jsonl'),
+    (['run-?.jsonl'], 'run-a.jsonl'),
+    (['capture/*/events.jsonl'], 'capture/run-a/events.jsonl'),
+    (['capture/**', 'run-*/**'], 'run-a/events.jsonl'),
+])
+def test_glob_owner_does_not_enumerate_or_resolve_unrelated_datasets(roots, monkeypatch, include, relative):
+    data = roots / 'data_nvme' / 'vibe'
+    query = pool(data / relative, ['a'])
+    entries = [
+        {'id': 'vibe', 'path': 'data_nvme:vibe', 'include': include},
+        {'id': 'unrelated', 'path': 'data_hdd:acquired-agent', 'include': ['run-*/**']},
+    ]
+    expected = dr.Registry(entries, [])._find_full(query)['id']
+    reg = dr.Registry(entries, [])
+    listdir, realpath = dr.os.listdir, dr.os.path.realpath
+
+    def forbid_unrelated(fn):
+        def checked(path, *args, **kwargs):
+            assert 'acquired-agent' not in str(path), 'lookup touched the unrelated HDD dataset'
+            return fn(path, *args, **kwargs)
+        return checked
+
+    monkeypatch.setattr(dr.os, 'listdir', forbid_unrelated(listdir))
+    monkeypatch.setattr(dr.os.path, 'realpath', forbid_unrelated(realpath))
+    monkeypatch.setattr(dr, 'load', lambda: reg)
+    assert reg.find(query)['id'] == expected == 'vibe'
+    dr.require_registered([query])
+    assert dr.consume([query], run='test:vibe', how='admission', record=False)[0]['id'] == 'vibe'
+    assert reg._index is None
+    monkeypatch.setenv('NATLANG_REGISTRY_SCOPED_GLOBS', '0')
+    with pytest.raises(AssertionError, match='unrelated HDD'):
+        reg.find(query)
+
+
+def test_glob_lookup_preserves_deepest_protected_owner_and_inventory_rejection(roots, monkeypatch):
+    base = roots / 'data_nvme' / 'campaign'
+    query = pool(base / 'capture' / 'held' / 'result.jsonl', ['a'])
+    inventory = pool(base / 'archived' / 'run.jsonl', ['b'])
+    entries = [
+        {'id': 'inventory', 'path': 'data_nvme:campaign', 'admission': dr.INVENTORY},
+        {'id': 'vibe', 'path': 'data_nvme:campaign', 'include': ['capture/**']},
+        {'id': 'held', 'path': 'data_nvme:campaign/capture/held', 'include': ['*.jsonl'], 'protected': True},
+    ]
+    reg = dr.Registry(entries, [])
+    for path in [base, query.parent, query, base / 'capture' / 'missing' / 'future.jsonl', inventory]:
+        assert reg.find(path)['id'] == reg._find_full(path)['id']
+    assert reg.find(query)['protected'] is True
+    monkeypatch.setattr(dr, 'load', lambda: reg)
+    with pytest.raises(dr.UnregisteredData):
+        dr.require_registered([inventory])
+    with pytest.raises(dr.UnregisteredData):
+        dr.consume([inventory], run='test:inventory', how='admission', record=False)
+
+
+def test_manifest_prefix_and_glob_ties_keep_full_index_ownership(roots):
+    base = roots / 'data_nvme' / 'campaign'
+    query = pool(base / 'capture' / 'run-a' / 'events.jsonl', ['a'])
+    entries = [
+        {'id': 'manifest', 'path': 'data_nvme:campaign', 'include_manifest': 'manifest.json',
+         'include_prefixes': ['capture']},
+        {'id': 'literal', 'path': 'data_nvme:campaign/capture/run-a'},
+        {'id': 'inventory', 'path': 'data_nvme:campaign', 'include': ['capture/*'],
+         'admission': dr.INVENTORY},
+    ]
+    for ordering in [entries, entries[::-1]]:
+        reg = dr.Registry(ordering, [])
+        assert reg.find(query)['id'] == reg._find_full(query)['id']
+        assert reg.find(query.parent)['id'] == reg._find_full(query.parent)['id']
+
+
+def test_glob_lookup_preserves_symlink_alias_ownership(roots):
+    base = roots / 'data_nvme' / 'campaign'
+    query = pool(base / 'capture' / 'run-a' / 'events.jsonl', ['a'])
+    alias = roots / 'repo' / 'alias'
+    alias.symlink_to(base, target_is_directory=True)
+    for location in ['data_nvme:campaign', 'alias']:
+        reg = dr.Registry([{'id': 'vibe', 'path': location, 'include': ['capture/**']}], [])
+        for path in [query, alias / 'capture' / 'run-a' / 'events.jsonl']:
+            assert reg.find(path)['id'] == reg._find_full(path)['id'] == 'vibe'
+
+
+def test_inventory_dataset_id_cannot_bypass_path_admission(roots, monkeypatch):
+    reg = dr.Registry([
+        {'id': 'archive', 'path': 'data_nvme:archive', 'admission': dr.INVENTORY},
+        {'id': 'admitted', 'path': 'data_nvme:admitted'},
+    ], [])
+    monkeypatch.setattr(dr, 'load', lambda: reg)
+    with pytest.raises(dr.UnregisteredData):
+        dr.require_registered(['archive'])
+    with pytest.raises(dr.UnregisteredData):
+        dr.consume(['archive'], run='test:inventory', how='admission', record=False)
+    dr.require_registered(['admitted'])
+    assert dr.consume(['admitted'], run='test:admitted', how='admission', record=False)[0]['id'] == 'admitted'
+    ref = dr.consume(['archive'], run='test:inventory', how='explicit opt-out',
+                     allow_unregistered=True, record=False)[0]
+    assert ref == {'id': 'archive', 'unregistered': True, 'inventory_only': True}
