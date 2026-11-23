@@ -156,6 +156,10 @@ def verify_entry(interaction, root, *, partial=False):
         if (not isinstance(source, str) or not isinstance(program_root, str) or
                 str(Path(program_root) / source) != entry['program']):
             raise ValueError('application entry path differs from the recorded source')
+    if entry['program'].endswith('.ts') and (
+            (root.get('executor') or {}).get('kind') != 'crisp' or
+            root.get('definition', {}).get('id') != 'ts:' + str(root.get('definition', {}).get('source')) + '#default'):
+        raise ValueError('application entry does not bind its actual TS default export')
     inputs = root.get('inputs') or {}
     arguments = entry['arguments']
     if (root.get('definition', {}).get('name') != entry['callable'] or

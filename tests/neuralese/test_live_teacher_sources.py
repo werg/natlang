@@ -868,3 +868,18 @@ def test_void_application_return_requires_exact_completed_typed_contract():
             verify_application_return(binding, {'root': {**record, field: value}}, ['root'], entry)
     with pytest.raises(ValueError):
         verify_application_return({key: value for key, value in binding.items() if key != 'selectedResult'}, {'root': record}, ['root'], entry)
+
+
+def test_ts_application_entry_binds_actual_default_export():
+    text = '"reference"'
+    entry = {'program': 'skills/reference/review.ts', 'callable': 'review', 'arguments': {'goal': 'reference'}, 'argumentJson': {'goal': text}}
+    root = {'program_root': 'skills/reference', 'outcome': 'done', 'executor': {'kind': 'crisp'},
+            'definition': {'name': 'review', 'source': 'review.ts', 'id': 'ts:review.ts#default'},
+            'inputs': {'goal': {'complete': True, 'bytes': len(text), 'hash': hashlib.sha256(text.encode()).hexdigest()}}}
+    interaction = {'program': entry['program'], 'entry': entry}
+    live.verify_entry(interaction, root)
+    for definition in [{**root['definition'], 'id': 'ts:review.ts#other'}, {**root['definition'], 'id': None}]:
+        with pytest.raises(ValueError, match='default export'):
+            live.verify_entry(interaction, {**root, 'definition': definition})
+    with pytest.raises(ValueError, match='default export'):
+        live.verify_entry(interaction, {**root, 'executor': {'kind': 'agent'}})

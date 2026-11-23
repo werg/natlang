@@ -127,6 +127,8 @@ function verifyEntry(interaction, record, partial) {
         !entry.argumentJson || !isDeepStrictEqual(Object.keys(entry.argumentJson).sort(), Object.keys(entry.arguments).sort()))
       throw new Error('observed application entry needs its actual source and exact native argument JSON');
   }
+  if(entry.program.endsWith('.ts') && (record.executor?.kind!=='crisp' || record.definition?.id!==`ts:${record.definition?.source}#default`))
+    throw new Error('observed application entry does not bind its actual TS default export');
   for (const [name, value] of Object.entries(entry.arguments)) {
     const text = interaction.entry ? entry.argumentJson[name] : JSON.stringify(value);
     if (typeof text !== 'string' || !isDeepStrictEqual(JSON.parse(text), value))
