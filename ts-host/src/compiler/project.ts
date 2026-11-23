@@ -479,10 +479,16 @@ export function compileProject(options: BuildOptions): BuildResult {
       !ts.resolveTypeReferenceDirective(name, join(root, 'index.ts'), compilerOptions, resolutionHost).resolvedTypeReferenceDirective);
     if (missing) compilerOptions.typeRoots = [...(compilerOptions.typeRoots ?? []), ...options.runtimeTypeRoots];
   }
+  // A program outside a checkout or install (no node_modules above it) resolves the runtime and its standard library
+  // (`<specifier>/std`, the sibling std/index.d.ts) to the CLI's own declarations.
   if (options.runtimeTypes) for (const specifier of options.runtimeTypes.specifiers) {
-    const resolved = ts.resolveModuleName(specifier, join(root, 'index.ts'), compilerOptions, ts.sys ?? {
-      fileExists: path => fs.isFile(path), readFile: path => fs.isFile(path) ? fs.read(path) : undefined });
-    if (!resolved.resolvedModule) compilerOptions.paths = { ...(compilerOptions.paths ?? {}), [specifier]: [options.runtimeTypes.types] };
+    const stdTypes = sibling(options.runtimeTypes.types, /([\\/])index\.d\.ts$/, '$1std$1index.d.ts');
+    for (const [name, types] of [[specifier, options.runtimeTypes.types], [`${specifier}/std`, stdTypes && fs.isFile(stdTypes) ? stdTypes : undefined]] as const) {
+      if (!types) continue;
+      const resolved = ts.resolveModuleName(name, join(root, 'index.ts'), compilerOptions, ts.sys ?? {
+        fileExists: path => fs.isFile(path), readFile: path => fs.isFile(path) ? fs.read(path) : undefined });
+      if (!resolved.resolvedModule) compilerOptions.paths = { ...(compilerOptions.paths ?? {}), [name]: [types] };
+    }
   }
   if (options.surfaceSpecifiers?.length) compilerOptions.paths = { ...(compilerOptions.paths ?? {}),
     ...Object.fromEntries(withNeutral(options.surfaceSpecifiers).map(specifier => [specifier, [SURFACE_MODULE_FILE]])),
