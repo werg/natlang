@@ -9925,6 +9925,66 @@ Deployment: pull the commit in the DGX canonical checkout, restart only the ledg
 
 Validation: actual Tick ledger unit `vibe-ledger-dgx-reserve-tests-a`, 0.5 GiB budget/7.5 GiB reserve, passed all 98 ledger tests in 3.19 s (127.8 MiB peak). Tests cover implicit old specs and queued relaunches, explicit zero/small overrides, non-DGX proportional admission, machine-identity caching and known-DGX policy with unavailable GPU discovery.
 
+## 2026-11-24 00:30 Program tuning on the A100: tenants beside the actor between rounds; the 11-20 fit chain never ran (program-tuning strand, fallow T1-T3)
+
+Owner (11-24): "move forward with all of that comprehensively": real LFM3 program fits, a bank meta-learned from them,
+held programs adapted from the bank, serving parity on every engine, measured outcomes, on the Colab A100 between
+aei1's round SFTs without ever delaying one.
+
+**State found.**
+- **None of the 8 queued fits ran a step.** `progtune-fit-seq-4` (11-20) logged "3 runs without a step" for every
+  program. `program_tune.py plan` wrote `rows` with `.resolve()`. That followed the 11-18 archive symlink of the programs
+  root to the HDD archive, and the archive copy was gone after the directory moved back to the NVMe. Only
+  `ext_decisions_route` (fitted 11-18) has a release. Its dev base arm (Pop, 81.3%) is the only measurement.
+- `progdev-route-window-2` / `-yield-2` had been polling since 11-20 for a guard script (`pop_free.py`) whose
+  grpo-v5 inputs no longer exist (orphaned): stopped. Pop now runs held-v3 every round, so the Pop-window design is
+  retired. The dev arms move to the A100.
+- The A100 runs aei1's round SFT at about 7.5 s/step (r0001: 1,150 steps, from ~22:57). Its actor alone claims 70.5 of
+  78 GiB (mem fraction 0.88), so nothing fits beside it.
+
+**Fixes (defaults, tests).**
+- `program_tune.py plan`/`bank` record paths as written, with symlinks kept (`logical`). The 8 plans were regenerated.
+  verdict resumes from its step 8 (`tune.build` resumes from state.json alone).
+- **Tenants** (`scripts/colab/admission.py --preemptible`). A tenant is admitted only beside a live actor claim
+  (`--beside-label actor-`), so never in the gap after the actor yields to a round. It yields when any normal
+  admission request is waiting: SIGTERM to its process group, SIGKILL after 60 s. Waiting requests are read from the
+  process table, because a round's learner admitted by an older checkout (`run-sft` checks the session out at the
+  driver's pin) writes no waiting record and evicts nobody. With current code a normal claim that does not fit also
+  evicts tenants, newest first. Tenants run under MPS with `CUDA_MPS_ACTIVE_THREAD_PERCENTAGE` 50
+  (`NATLANG_COLAB_TENANT_MPS_PERCENT`), so the actor keeps at least half the SMs.
+- **The actor alone caps its KV at 24 GB on large GPUs** (`ACTOR_ALONE_KV_CAP_GB`; `NATLANG_COLAB_ACTOR_FULL=1` opts
+  out). 128 running used 20% of the L4's 11.2 GB pool (11-23 13:50), so 24 GB is ~10x what the sequences use. The
+  A100 actor then claims 34 GiB and leaves 43 GiB for tenants (`colab_layout(...)['tenants']`: a fit at 12 GiB and a
+  measurement actor at 8 GB KV / 18 GiB). The L4's pool is below the cap and unchanged. This enters the A100 when aei1
+  next starts on a commit that has it (an actor restore runs the driver's pin), or when the keeper serves a
+  replacement session.
+- `program_tune.py colab-fit` runs a fit as a tenant at a tenant commit. The code is ROOT/natlang-tenant, a detached
+  worktree: the session's own checkout belongs to the round. The checkpoint and rows are shipped through Drive, the
+  release is made on the VM and pulled back verified. The fit resumes after an eviction, and only a whole release
+  lands. `fit/colab-claim.json` makes the DGX chain skip the program.
+- `program_tune.py colab-measure` runs a held_eval dev arm on the DGX (ledger, pin) against a tenant measurement actor
+  (`pop_rl_actor.serve_colab_tenant_actor`: base, or base + release on one SGLang adapter slot, port 8571 -> DGX 18732;
+  the policy id comes from the attested binding). A lost actor stops the measure, and its unscored episodes are left
+  out. The driver is `program-tune-20261117/colab-seq.sh COMMIT PIN fits|arms PROGRAM ...`.
+- Commits 62003deb8, ba275577b, 58343e0e6; check-main --quick exit 0.
+
+**Experiment progtune-a100-1 (declared before it runs).**
+- Pin 58343e0e6. Start policy: the untouched base 5ff07638 (no exposure to any program's dev or confirmation tasks).
+- 9 programs: route, verdict, tally, tree, retail, pubmed, searchqa, multihop, neuralese_iterate.
+- Fits: free LoRA rank 16 on every LFM3 target family, 60 steps x 8 support rows, Adam 2e-3, BF16 base / FP32
+  adapter. The DGX chain (`progtune-fit-seq-6`, low priority, 13 GB, 15-step segments) takes them from the decisions
+  end, and A100 tenants from the large end.
+- Arms: held_eval on each program's dev split, 2 samples per task. Engine: SGLang, BF16 weights, FP8 KV, the tenant
+  actor (64 running). Base on every program, then base + the program's release. The pairs are `compare`d (mean
+  per-task change, permutation p, task-bootstrap CI).
+- **Success** per program: a positive change with p < 0.05. **Failure:** a regression with p < 0.05. That starts a
+  diagnosis (row masking, template parity between the fit's rendering and the actor's, served-adapter parity (T3))
+  before the method is judged.
+- Bank: `program_tune.py bank` over the meta-train fits, with 2 programs held out of the meta-train set entirely.
+  Their bank inner-fit releases are measured like a fit (bank vs base, bank vs the program's own LoRA). Success:
+  bank > base on the pooled held programs with p < 0.05.
+- T3 (adapter parity on the four engines) runs as its own strand on the route release (DGX only).
+
 ## 2026-11-24 00:45 Placement-aware round budgets; rounds stop repeating each other; teacher reasoning as context
 
 **Why.** The round size (12M weighted target tokens, `ROUND_TARGET_TOKENS`) was set for DGX rounds. On the Colab A100
