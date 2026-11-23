@@ -9,7 +9,8 @@ An item leaves the register when its fix lands on main. A finding reported by an
 | Item | Owner |
 |---|---|
 | B10 four-engine smoke, fork pin move to b12088 (reasoned decisions on llama-server and wllama), ENGINE_PARITY rows | B10 agent |
-| `readout: instant` collapse on triage (4/28, first label always, P(urgent) about 0.9) | instant-readout investigator |
+| Decision option scoring under the standard tokenization only. The model may generate another split (`"`,`spam`,`"` vs `"sp`,`am`). Sum both tokenizations per option on all four engines and the learner (8b34839ab) | B10 agent, after the fork release |
+| `lfm-latest` profile served the stale checkpoint 5ff07638; refresh to sft-v9, update `ops/current-policy.json`, rerun bench arm C | engine/bench agent |
 | Tuple `prefixItems` constrained decoding on all four engines | tuple-parity agent |
 | M2 migrator: one shared `stepKind`/`instructionsOf` in std, `migrate.nl` replaced by a TypeScript driver, P1/P2 measurements, pairs dataset | M2 agent |
 | Benchmark arm D (specialize, tune, escalate) | armed driver `semantic-fp-bench/triage-20261123/d-driver.sh` |
