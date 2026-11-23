@@ -9134,3 +9134,81 @@ driver can be restarted mid-round (it joins the learner and starts the remote co
 next publication). The r0001 SFT claim went to 72 GB (`adopt --hold-budget`; peak 64.7 GB at step 19) to admit it.
 The backlog fill was relaunched polite as `colab-g4a-fill-backlog-polite-20261123`. A same-policy rebind of the L4
 over the tunnel attested all routes in 30 s and rewrote the actor record (`rebound`).
+
+**2026-11-23 17:10, storage pipeline restored; teacher pools recalled to the NVMe; Drive tier waits on the owner.**
+- **The sweep wedge.** `natlang-storage-sweep` failed every 30 min with "already holds a claim". There was no stale
+  claim: the ledger counts only active units. A live run had sat 40+ min in disk sleep.
+  - Cause: `prune_stale_checkouts.pin_dirs` globbed `~/data/*/*/*/.natlang-pin.json`, and `Path.glob` followed
+    `~/data`'s 261 symlinks into the HDD (`pool-v1/claims`, 9.5k entries).
+  - Fix: the walk uses `scandir`, never follows symlinks and stays on the root filesystem. The run took 3 s instead
+    of more than 40 min, with the same decisions. The watch-directory lookup has the same fix.
+  - Wedge-proofing: the sweep unit skips a start while its run is still active (`ExecCondition`). Each run is bounded
+    (`timeout 1500`, and the pin pass by `SWEEP_PIN_TIMEOUT`, 900 s). The archive and retention units have start
+    timeouts (55 min and 6 h; both were `infinity`, so one hung run would have blocked its timer for good). The
+    sweep's summary now counts the pins it frees.
+  - First run: 4.8 GB of pins and orphaned worktrees removed (`semantic-fp/pin-382bcb1ab`, `exp1-rft/{code,actor-code}`).
+    Test: `tests/test_prune_stale_checkouts.py::test_pin_walk_never_follows_symlinks`.
+- **`natlang-continuous-storage` removed** (script, test, policy, units, decomposition doc). It guarded the Oct-24
+  `lfm-local-recovery` cycles and the Mellum cache, both gone. Its timer had been stopped since 10-31.
+- **Mechanism state:**
+  - The sweep (30 min) works again. It freed 10.9 GB of scratch in the last week, plus today's 4.8 GB of pins.
+  - The archiver (hourly) moved 17 GB last week, then refused 7 runs at the HDD floor. It now finds no NVMe file of
+    at least 1 GB that is cold: the NVMe's cold data is many-small-file trees (OPEN_ITEMS).
+  - Retention (weekly) is a dry-run report; its 11-22 run took 2 h.
+- **HDD contention behind r0001's "2 h of I/O wait":** the HDD was 97% busy at 150 random reads/s (0.7 MB/s) under
+  three whole-tree walks:
+  - another session's `find / -name llama-server`, running for 2 h 18 min (pid 1852501);
+  - a `find / -name *.gguf` (pid 4131900);
+  - the wedged prune.
+
+  I killed all three by PID (AGENTS: any agent may stop any process). The HDD went idle, and the build, whose mix had
+  been written at 16:42, finished its final registry step within minutes. Its registry step had been in the
+  data-registry full-index fallback (`Registry._find_full` lists every registered directory, including HDD
+  `dgxops/acquired-*` trees). Of r0001's inputs, only the three `teacher-gen-20261115` pools take that fallback,
+  because their registered paths were the HDD spelling (12 s when idle). Search an agent shell's `find /` with
+  `-xdev` or a bounded root: a whole-tree walk of the 3.6 TB HDD runs for hours and starves every reader.
+- **Teacher pools back on the NVMe (OPEN_ITEMS item closed).** The decision is NVMe placement, not a packed file:
+  - None of the pool manifests has admission records, so a build reads only 3 manifests and 27,432 per-group
+    `cases.jsonl` (0.33 GB): random small-file reads, which NVMe removes at no reader change.
+  - A packed file would be a second representation needing new reader code in `teacher_coverage`/`check_record`.
+  - It also gives the pools a lexical NVMe path, so the registry no longer takes the full-index fallback.
+
+  Mechanism: `scripts/recall_to_nvme.py` (new; the inverse of an archive move).
+  - It rebuilds `ops/teacher-gen-20261115` as a real NVMe tree.
+  - It copies 274,683 hot files (1.59 GB) and verifies each by SHA-256.
+  - It leaves `claims/`, `episodes/*/row-*`, `rollouts.jsonl`, `results.jsonl` and the two smoke dirs on the HDD as
+    symlinks (54,907 paths; only `extract` reads rollouts, and these pools are closed).
+  - It writes `.keep-on-nvme` and appends registry records with the NVMe path. The HDD copy stays complete.
+
+  - Done 17:06-17:18, before aei1 r0002's build: r0002-data had started 17:13, and its build follows that stage.
+    0 of 274,683 files mismatched. The registry lookup is now lexical (0.0 s against the 12 s fallback). The build's
+    read set (3 manifests and 27k `cases.jsonl`, 352 MB) now reads in 4.8 s.
+  - The tool now hashes the source while it copies, so the HDD is read once (the first run re-read it to verify).
+
+  Test: `tests/test_recall_to_nvme.py`.
+- **HDD: the retired bf95 trees deleted** (`ops/storage/delete-20261123-external.sh`, exact paths):
+  - `dgx-moved-20261104/bf95-lowlr-1105` (147 GB) and `dgx-ops-archive-20261118/bf95-lowlr-1105` (57 GB), which the
+    11-19 pass missed.
+  - Checked first: process, unit, watch-script and registry references, and the pickled strings of the sft-v7/v8/v9
+    checkpoints.
+  - 218 GB deleted (157.7 + 60.8): the external disk went from 48 to 251 GB free, so the hourly archiver is out of its
+    floor again.
+- **Drive cold tier: stopped at the credential, as briefed.**
+  - ADC holds `cloud-platform`, `colaboratory`, `userinfo.email` and `openid`, but no Drive scope (Drive API 403).
+  - Colab's `drivemount` uses dfs_ephemeral credential propagation, whose dry run asks for a browser consent: per
+    runtime, so it cannot serve unattended bootstraps.
+  - The owner adds `drive.file` to ADC once, keeping the four scopes Colab needs. In a DGX terminal (it prints a URL
+    and asks for the code):
+    `gcloud auth application-default login --no-launch-browser --scopes=openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/colaboratory,https://www.googleapis.com/auth/drive.file`
+    The DGX then uploads directly, and VMs get short-lived access tokens from the DGX, so no per-VM consent is needed.
+    If Google blocks the gcloud client for the Drive scope, the fallback is an OAuth client of project
+    awareness-481308 (`--client-id-file`).
+- **Drive plan, sized to the measured link:**
+  - Uplink 5.2-5.8 MB/s (2 x 200 MB to Cloudflare's upload sink); Google downlink 11.9 MB/s.
+  - Saturating the uplink would move about 475 GB/day but starve the Colab tunnel (2.4 MB/s up on the same uplink) and
+    teacher traffic. Uploads therefore cap at about 3 MB/s (about 260 GB/day) and pause during Colab transfers.
+  - HDD inflow was about 100 GB/day this week, so the tier keeps up. The backlog starts with HDD-cold natlang data.
+    Other projects' 591 GB (`bgkit-data`) is the owner's call.
+  - Colab: the first DGX -> Drive upload of a 3.4 GB checkpoint is still uplink-bound (about 630 s against the
+    tunnel's 968 s). Every later VM pulls it inside Google's network, and VM-written learner state never crosses the
+    tunnel. The before/after is measured once the scope exists.

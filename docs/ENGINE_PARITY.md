@@ -86,9 +86,35 @@ bandwidth; `--sglang-kv-cache-dtype auto` is the opt-in.
 | 623fd10c8 | the release builds werg/wllama 5b0dcd3 | page only |
 | cb03daee7 | a streamed reply's last chunk carries its produced native states (`native_state`, and `x_natlang_message` with each state as a part); before, a stream carried only the placeholder text and lost which state it named | page (it streams; found by the playground native-state smoke) and the managed server's streamed turns; the Python native engine streams parts already; SGLang does not produce in-reply states |
 | 401f8ad5e | the RL actor binding (GGUF and executable hashes) is computed on first use, not at load: a natlang GGUF failed to load in the page (`cannot hash actor executable`), and every load read the whole model file to hash it | managed server: `/v1/neuralese/info` and RL captures unchanged (`check_llama_native_state_protocol.py --expect-rl` passes); Python native and SGLang bind their actors separately |
+| 922903686 | `open_reply` in `/v1/natlang/score`: each continuation scored as the start of the reply (the final assistant message continued, `continue_final_message: "content"`, no end of message), echoed as `open_reply: true` in the result and the decision capture | every engine: section "Record decisions" |
+| 251abbc38 | the release builds werg/wllama 05e08ad: the page's chat-template defaults (`default_template_kwargs`, LFM3 `preserve_thinking`) become the engine's own defaults at load, as the managed server's `--chat-template-kwargs`, so `/v1/natlang/score` renders items with them; before, only chat requests carried them and in-page readouts dropped the history reasoning | page only; the managed server passes `--chat-template-kwargs` from the release (c17f8e7e6), the Python engines render with the checkpoint's template |
+| 550cb0313 | `/v1/natlang/score` cuts every continuation from the closed rendering: after its content (`open_reply`) or after its end-of-turn token. Before, a closed continuation also scored the template's newline after `<|im_end|>`, which the Python engines (`decision_items`) do not; and the continued rendering (922903686's first form) wrote the empty think block as `\n\n</think>\n\n` where the closed one writes `</think>` | every engine: the Python engines and SGLang score `</think>` + content (+ `<|im_end|>` when closed); checked on the fork with native_recording captures (closed 13 tokens ending `<|im_end|>`, open the same 12 without it). Closed scores of a decision move by the log-probability of a newline after the end of message (about 0 nats) |
+| e528eb5a3 | `split_tokenization` cuts the common prefix and suffix at word boundaries (a word byte is ASCII `[A-Za-z0-9_]` or >= 0x80): `"spam"` vs `"ham"` share `am"` inside the word, which stays with it | every engine: the same rule in the Python engines and the learner |
+| b4a202717 | `split_tokenization` in `/v1/natlang/score`: each option's probability sums its canonical tokenization and its split one (the options' common leading and trailing characters tokenized apart: `"spam"` also as `"`,`spam`,`"` where the canonical BPE writes `"sp`,`am"`); a split form equal to the canonical tokens counts once; results echo `tokenizations`, the capture records `continuation_alternatives` | every engine: Python native and SGLang (`decision_items` split_tokenization), learner (logsumexp over an option's sequences); client sends it by default (`NATLANG_DECISION_TOKENIZATIONS=canonical` opts out). prompt_logprobs servers (vLLM) score the canonical tokenization only: the chat route has no way to ask for another split |
+| 73cc6a7be | a dispatched release builds what natlang installs (each platform's CPU archive, Metal, the page's wllama) and the quick GPU archives; Windows CUDA and ROCm (1.5-2 h each) run on a tag push or with the `full` input | build only: `update_llama_runtime.mjs --fork` pins CPU/Metal archives and the wllama archive |
+| 7f89f2043 | the release workflow pins the prebuilt web UI assets (`HF_UI_VERSION`): a fork build number without its own bucket fell back to upstream's latest UI, which the tree's `ui-assets.cmake` rejects (natlang-b12082 failed) | build only; no engine serves the web UI (`--no-webui`) |
+| c9fc1aba8 | the release's Windows CPU build defines `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` (the runner's MSVC STL 14.52 refuses its bundled Clang older than 22) | build only |
 | af0f93100 | `/v1/natlang/score`: the tokens every reply of an item shares are prompt (they join `n_score_from` and the decision capture's prompt), each reply scores only its own, at least its last token; `NATLANG_DECISION_SHARED_PREFIX=option` keeps them | every engine: the Python engines and SGLang render through `decision_items` (`_shared_into_prompt`, 2026-11-23); checked on the natlang Q8_0 GGUF (CPU): closed and open items score the same own tokens per option as `decision_items`, captures equal |
 | 0bee37915 | `/v1/natlang/score` items take `reasoning`: each continuation is the content of an assistant message with that reasoning (`reasoning_content`), so the reasoning is prompt; results echo `reasoning: true`, the decision capture records it | Python native and SGLang the same day (`native_learning.decision_items`); the page from the same release; gap row above until the pin moves |
 | b704a8b2f | native-state files: `--native-state` and the page's `native_states` load natlang's store files (a release's `states/<id>.nzs`) through the PUT path (verified once, stored as read); PUT `{"path"}`; non-finite values refused; GGUF state-span format removed | every engine: section "Native state: one format, handed over as files" |
+
+## Record decisions: joint and field by field
+
+A `readout: decision` over a finite record or a union of records (native/decision.ts `decisionDomain`) is scored by
+the one client (`model/decision-scoring.ts`, `native/agent.ts` `decisionReadout`) on every engine. Up to 32 values,
+every record is one closed continuation of one score item, as a flat decision is. Above, each step is one score item
+whose continuations are open (`open_reply: true`): the reply's start through the next field, cut where the next key's
+name starts. An engine must echo `open_reply: true` in each result of such an item; the client refuses one that does
+not (`decision-open-unsupported`: the call generates its record instead), so an engine that ignores the field is never
+read as having scored open replies.
+
+| Engine | Open replies | How |
+|---|---|---|
+| Managed llama-server | from natlang-b12088 (fork 922903686, 550cb0313) | the closed rendering cut after the content |
+| In-page wllama | from natlang-b12088 (the release's page build) | the same server code |
+| Python native engine | yes | `serve/native_learning.decision_items(..., open_reply=True)`: the closed continuation without its end of message |
+| SGLang actor | yes | the same items (the front renders, SGLang scores the ids) |
+| prompt_logprobs servers (vLLM) | `continue_final_message: true` | not verifiable from the response; vLLM honours it |
 
 ## Native state: one format, handed over as files
 
