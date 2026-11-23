@@ -46,7 +46,6 @@ from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 SUCCESS = 'task_success'
-OPS = ('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
 MEMETIC = 'memetic_scored'   # a memetic improvement episode's outcome (task_rollouts.score); success: memetic_success
 
 
@@ -58,6 +57,7 @@ def episode_success(row):
     if row.get('outcome') == MEMETIC:
         return bool(row.get('memetic_success'))
     return row.get('outcome') == SUCCESS and float((row.get('reward') or {}).get('quality') or 0) >= 1
+OPS = ('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
 
 
 def zstd_lines(path):
