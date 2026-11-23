@@ -5,10 +5,42 @@ import { dirname, resolve, posix } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { graphCustodyMatches } from '../dist/calls/graph-custody.js';
 
+export async function validateReassessmentCheckRoles(proof, originalChecks, root) {
+  const checks = proof.checks;
+  if (!checks || Array.isArray(checks) || !Object.keys(checks).length || Object.values(checks).some(value=>value!==true) ||
+      !originalChecks || !Object.keys(originalChecks).length)
+    throw new Error('completed reassessment needs positive independent required checks');
+  if (isDeepStrictEqual(Object.keys(checks).sort(),Object.keys(originalChecks).sort())) return;
+  const contract=proof.outcomeContract, dimensions=proof.outcomeDimensions;
+  if (!contract || !dimensions) throw new Error('omitted reassessment checks need source-bound outcome roles');
+  const bindings=(proof.checker_sources??[]).filter(item=>item.role==='outcome-contract');
+  if(bindings.length!==1 || !isDeepStrictEqual(JSON.parse(await readBound(bindings[0],root)),contract))
+    throw new Error('reassessment outcome roles differ from the bound checker contract');
+  const names=[],required=[];
+  for(const role of ['effects','returnedValue','incidentalValues']) {
+    const declaration=contract[role],observed=dimensions[role];
+    if(role==='incidentalValues' && declaration===undefined && observed===undefined)continue;
+    if(!declaration || !observed)throw new Error('reassessment check roles must account for every original observation');
+    const roleNames=declaration.checks,needed=role==='effects'||role==='returnedValue'&&declaration.required===true;
+    if(!Array.isArray(roleNames)||roleNames.some(name=>typeof name!=='string'||!name)||
+       typeof declaration.rationale!=='string'||!declaration.rationale.trim()||role==='effects'&&!roleNames.length||
+       role==='returnedValue'&&(typeof declaration.required!=='boolean'||observed.required!==declaration.required))
+      throw new Error('reassessment check roles need explicit requirements and rationales');
+    const expected=Object.fromEntries(roleNames.map(name=>[name,needed?checks[name]:originalChecks[name]]));
+    if(Object.values(expected).some(value=>typeof value!=='boolean')||!isDeepStrictEqual(observed.checks,expected)||
+       observed.passed!==Object.values(expected).every(Boolean))
+      throw new Error('reassessment must preserve optional observations and prove required roles');
+    names.push(...roleNames);if(needed)required.push(...roleNames);
+  }
+  if(new Set(names).size!==names.length||!isDeepStrictEqual([...names].sort(),Object.keys(originalChecks).sort())||
+     !isDeepStrictEqual([...required].sort(),Object.keys(checks).sort()))
+    throw new Error('reassessment roles must partition the exact original check set');
+}
+
 function declaredReturnSelectors(proof) {
   const incidental=proof.outcomeDimensions?.incidentalValues;
   if(incidental?.passed!==false)return [];
-  if(!Array.isArray(incidental.incorrectReturns)||!incidental.incorrectReturns.length)throw new Error('incorrect incidental returns need exact original value bindings');
+  if(!Array.isArray(incidental.incorrectReturns))throw new Error('incorrect incidental returns need exact original value bindings');
   const contains=(value,wanted)=>isDeepStrictEqual(value,wanted)||value!==null&&typeof value==='object'&&Object.values(value).some(item=>contains(item,wanted));
   for(const item of incidental.incorrectReturns){
     if(!item.definition?.name||!item.definition?.source||typeof item.valueJson!=='string'||createHash('sha256').update(item.valueJson).digest('hex')!==item.sha256)throw new Error('incorrect return value identity/hash differs');
@@ -151,10 +183,10 @@ async function completedReassessment(receipt, manifest, row, root) {
       proof.original_sha256!==assessment.original_sha256 || proof.goal!==prior.goal ||
       !isDeepStrictEqual(proof.entry??null,native.entry??null) || !isDeepStrictEqual(proof.actualResult??null,native.report??null) ||
       !proof.checks || !Object.keys(proof.checks).length ||
-      !isDeepStrictEqual(Object.keys(proof.checks).sort(),Object.keys(prior.checks??{}).sort()) ||
       Object.values(proof.checks).some(value=>value!==true) || !proof.rationale ||
       !Array.isArray(proof.evidence) || !proof.evidence.length || !Array.isArray(proof.checker_sources) || !proof.checker_sources.length)
     throw new Error('completed reassessment differs from actual original execution or independent outcome');
+  await validateReassessmentCheckRoles(proof,prior.checks,root);
   for(const artifact of [...proof.evidence,...proof.checker_sources])await readBound(artifact,root);
 }
 

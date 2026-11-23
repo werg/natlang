@@ -36,6 +36,47 @@ def same_json_value(left, right):
     return left == right
 
 
+def validate_reassessment_check_roles(proof, original_checks, root):
+    """A projection may omit only exhaustively declared, source-bound optional roles."""
+    checks = proof.get('checks')
+    if (not isinstance(checks, dict) or not checks or any(value is not True for value in checks.values()) or
+            not isinstance(original_checks, dict) or not original_checks):
+        raise ValueError('completed reassessment needs positive independent required checks')
+    if set(checks) == set(original_checks):
+        return  # Historical corrected whole-oracle verdict, with every original check retained.
+    contract, dimensions = proof.get('outcomeContract'), proof.get('outcomeDimensions')
+    if not isinstance(contract, dict) or not isinstance(dimensions, dict):
+        raise ValueError('omitted reassessment checks need source-bound outcome roles')
+    bindings = [item for item in proof.get('checker_sources') or [] if item.get('role') == 'outcome-contract']
+    if len(bindings) != 1 or not same_json_value(json.loads(bound_file(bindings[0], root).read_text()), contract):
+        raise ValueError('reassessment outcome roles differ from the bound checker contract')
+    names, required = [], []
+    for role in ('effects', 'returnedValue', 'incidentalValues'):
+        declaration, observed = contract.get(role), dimensions.get(role)
+        if role == 'incidentalValues' and declaration is None and observed is None:
+            continue
+        if not isinstance(declaration, dict) or not isinstance(observed, dict):
+            raise ValueError('reassessment check roles must account for every original observation')
+        role_names = declaration.get('checks')
+        needed = role == 'effects' or (role == 'returnedValue' and declaration.get('required') is True)
+        if (not isinstance(role_names, list) or any(not isinstance(name, str) or not name for name in role_names) or
+                not isinstance(declaration.get('rationale'), str) or not declaration['rationale'].strip() or
+                (role == 'effects' and not role_names) or
+                (role == 'returnedValue' and type(declaration.get('required')) is not bool) or
+                (role == 'returnedValue' and observed.get('required') is not declaration['required'])):
+            raise ValueError('reassessment check roles need explicit requirements and rationales')
+        expected = {name: checks.get(name) if needed else original_checks.get(name) for name in role_names}
+        if (any(type(value) is not bool for value in expected.values()) or
+                not same_json_value(observed.get('checks'), expected) or
+                observed.get('passed') is not all(expected.values())):
+            raise ValueError('reassessment must preserve optional observations and prove required roles')
+        names.extend(role_names)
+        if needed:
+            required.extend(role_names)
+    if len(set(names)) != len(names) or set(names) != set(original_checks) or set(required) != set(checks):
+        raise ValueError('reassessment roles must partition the exact original check set')
+
+
 def declared_return_exclusions(proofs, records):
     """Bind optional wrong returns to original function identity and value bytes."""
     selectors = []
@@ -46,7 +87,7 @@ def declared_return_exclusions(proofs, records):
         if incidental.get('passed') is not False:
             continue
         values = incidental.get('incorrectReturns')
-        if not isinstance(values, list) or not values:
+        if not isinstance(values, list):
             raise ValueError('incorrect incidental returns need exact original value bindings')
         for item in values:
             definition, text = item.get('definition'), item.get('valueJson')
@@ -214,10 +255,11 @@ def verify_completed_reassessment(verification, spec, root):
             proof.get('task_id') != spec['id'] or proof.get('original_sha256') != assessment['original_sha256'] or
             proof.get('goal') != original_proof.get('goal') or not same_json_value(proof.get('entry'), native.get('entry')) or
             not same_json_value(proof.get('actualResult'), native.get('report')) or
-            not isinstance(proof.get('checks'), dict) or set(proof['checks']) != set(original_proof.get('checks') or {}) or
+            not isinstance(proof.get('checks'), dict) or
             not proof['checks'] or any(value is not True for value in proof['checks'].values()) or
             not proof.get('rationale') or not proof.get('evidence') or not proof.get('checker_sources')):
         raise ValueError('completed reassessment differs from the original execution or independent whole outcome')
+    validate_reassessment_check_roles(proof, original_proof.get('checks'), root)
     for binding in proof['evidence'] + proof['checker_sources']:
         bound_file(binding, root)
 
