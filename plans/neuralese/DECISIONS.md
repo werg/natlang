@@ -7974,6 +7974,64 @@ types.
 - **Measurement.** Base (5ff07638) and current policy (sft-v6, dc95f29d) on the DGX series: `ops/held-v4/runs/`
   (`measure.sh`: held pin afa009657912, since d3ad57fb21db was removed before the run started; 4 samples, 16 slots, medium and resumable). It starts only when no other held
   measurement holds the held-priority claim. Results are appended below when complete.
+- **Superseded before it ran (2026-11-23 08:10).** The base run failed at preparation (06:39): `--all-rows` keeps the
+  set's dev/confirmation splits and the student-root transform refused non-train rows; the sft-v6 waiter never
+  started. Both are replaced by measurements of the second manifest (next entry).
+
+## 2026-11-23 08:10 held-v4 second manifest: 252 tasks (c09720e1) with .in(context), refinements, ensures:, recursion, std and function types; four runtime gaps closed
+
+- **Runtime gaps from B1** (all on main, b3c7acc80/fd81de7e8):
+  - *Helper refinements* (`refinement-undecided`, kept hv4-untr-008/012 out). Cause: B1 qualified on a runtime
+    (e8dbf721e) that predates the collector judge fix 4cfc91199 (`agentDriver`, the 05:00 entry); on main both tasks
+    smoke-pass, and with `NATLANG_COLLECTOR_REFINEMENT_JUDGE=0` both fail again. New tests judge a helper's refined
+    result in every shape (record field, array elements, inline nl, TS helper over a refined `.nl`; scorer and `holds`
+    child; true and false): 16/16 fail with the opt-out (fa4d066b1).
+  - *`Context` in eval*: eval now has `NatlangContext` (the package's `Context`; the name keeps program types named
+    Context free): `fn.in(NatlangContext.empty().with({ policy }))`. `read_code("NatlangContext")` documents it; the
+    built-ins line of every opening names it (one word; `NATLANG_PROMPT_REVISION=2026-11-22` keeps the old line;
+    MODEL_FACING_CHANGES). Found on the way and fixed: eval's `refine` wrapper dropped `{ context }`, and a context kept
+    records built in another realm by reference instead of snapshotting them (fd52c73d1).
+  - *`ensures:` and `.nl` helpers with `=> Promise<R>` function types* (parameter and result): both already work through
+    the collector on main; tests added (b986a73bc).
+  - *Found by the refinement author:* `refine<Is<T, "p">>(value)` failed with `refinement-predicate-invalid` in eval and
+    in callable-folder TypeScript (only project builds lowered the type argument). One text lowering
+    (`lower.ts lowerTypedRefinementText`) now serves both (5d8057737). Not changed, deliberately: a TS helper's
+    declared `Promise<Is<...>>` result is not judged at runtime (crisp code gets an `Is` only through `refine`/`assume`;
+    a runtime re-judgment without the call's context broke relational refinements, so the change was reverted).
+  - *Held measurement*: `held_eval measure` takes held rows of any split (`task_roots.student_root_row(held=True)`;
+    rollouts that may train keep the train-only guard) (498fdd7c3). Lint: `refinement_contract` counts `refine(` in
+    scripts, std checks accept a type argument, new tags `ensures_contract`/`structural_recursion`.
+  - Also fixed: `std-converge` test counted scorer calls, which the reasoned readout (fc842c0f9) multiplies (b3c7acc80).
+- **New families** (six Opus authors, `ops/held-v4/authoring/BRIEF-2.md`, 16 tasks each from 11-14 programs, empty
+  groups, qualified on `qual-runtime-2`): `sfp_context_lens` (7 bind in eval with `NatlangContext`, 9 in TS helpers),
+  `sfp_refinement_contract`, `sfp_ensures_contract`, `sfp_structural_recursion`, `sfp_std_combinators`
+  (semanticRepair, fixedPoint, semanticMerge, proposeAndVerify; 3 merge tasks use the merge.mjs verifier, 4 are folder
+  tasks), `sfp_function_types`. All six PASS qualification. Independent Sonnet blind solves (packets only) agreed on
+  96/96; 10 tasks the solver flagged with two defensible readings were dropped anyway (`source/dropped.json`,
+  round 2). hv4-untr-008/012 requalified (groups emptied) and rejoin.
+- **Requalification of the whole authored stratum** on `qual-runtime-3` (b3c7acc80): 192/192 references admitted,
+  889 wrong answers all rejected, 192/192 smoke replays.
+- **Set** (`ops/held-v4/manifest.json` sha c09720e1, registry `held-v4-set-2`, role `held-eval-semantic-fp`,
+  supersedes `held-v4-set`, whose files moved to `ops/held-v4/v1/`): 252 tasks = 192 authored + 60 brief gates.
+  Strata: context_lens 15, refinement_contract 15, structural_recursion 15, ensures_contract 13, std_combinators 14,
+  function_types 14, untrusted_contract 13, semantic_convergence 14, folder_transaction 14, library_discovery 14,
+  decision_calibrated 13, inline_lambda 13, neuralese_pipeline 13, higher_order_policy 12, design-brief gates 60.
+  Construct tags: refinement_contract 30, higher_order 26, inline_nl 25, nl_with_context 19, context_lens 15,
+  structural_recursion 15, ensures_contract 13, std combinators 14 (semantic_repair 4, propose_and_verify 4,
+  fixed_point 3, semantic_merge 3). Levels 0: 6, 1: 97, 2: 80, 3: 69.
+- **Separation.** Exposure recollected (`exposure-v2`): `held_eval verify` 0 id / 0 group overlap against the exposure
+  collection (43,844 ids, 60,729 groups) and against every row of the 21 pool files (37,798 ids, 62,221 groups).
+  Against all grpo pools plus the admitted authored pool (42,559 rows, sfp1/sfp2 included): 0 shared instructions,
+  programs or functional programs. `training_exclusion_ids` names all 252 held rows; over the current pools it
+  excludes 1,554 rows (held-v3 included).
+- **Measurement** (replaces B1's queue, same settings: DGX series, 4 samples, 16 slots, 32 GB, medium, resumable):
+  base (5ff07638) then sft-v6 (dc95f29d), driver `heldv4x-measure-driver` (`ops/held-v4/runs/measure-both.sh`, pin
+  `ops/held-v4/pin-fd81de7e8f4e`, removed by the driver when both finish). Queued behind aei1's collection at
+  08:10. Results are appended below when complete.
+- **Not done / not checked.** No model has run the new tasks (pass rates unknown). The 100 rubric workflows and the 2
+  reserved apps are still outside held-v4. `branch_and_select` has no task. The inline `nl.with<T>` built inside a
+  callable-folder TS factory shows its parameter as `unknown` (an author's report; not investigated). B1's 104 rows
+  keep their `invented:` groups. The kit (sections 2/6, the first-round example line) still shows `invented:` groups.
 
 ## 2026-11-23 B16: `natlang:learning` conformance runs end to end on the Python native engine (semantic-FP WS8 N1)
 
@@ -8281,3 +8339,62 @@ A resumable ledger preemption after `git worktree add` left an exact checkout wi
 Pin retry follow-up: the real DGX partial checkout included correct dangling shared links. `Path.exists()` misclassified them as absent and attempted a duplicate symlink. LINKED leaves/roots and SHARED now use one lexical intended-target check; correct dangling links are preserved and conflicting paths rejected. Failed-build/retry coverage now includes dangling run/data leaves, venv root and model store.17 targeted tests plus quick gate passed; source fix published for the unchanged clean partial pin to resume.
 
 Pin retry nested-ignore follow-up: the old preparation could create an exact symlink-container venv view and then reject that same scaffold because Git listed both root and children. Shared roots now prepare first; exact canonical link views are verified/completed without deleting unique data, and covered descendants are skipped. SHARED model paths are excluded before rsync at every ancestor and never copied through their links; ordinary ignored source symlinks are not dereferenced.19 targeted tests passed (188MiB), quick gate passed (859MiB), including a failed-build/retry with realistic nested .gitignore and unchanged canonical model inode/bytes/mtime/ctime.
+## 2026-11-23 08:20 Verifier tasks over the @natlang/std combinators (sfp3): std now runs in collection, 9 batches, 73 train rows in grpo-pool
+
+The coordinator asked for this batch because live LFM3 scored additive edits as less compatible than real clashes in
+`compatible.nl` (B13). The tasks are programs that use `semanticMerge`, `semanticRepair`, `fixedPoint`,
+`proposeAndVerify` and `branchAndSelect` with the shipped judgments (no overrides), and their verifiers judge the outcome.
+- **Collection could not run std at all; fixed in c93124ec1.**
+  - *First bug.* The collector loads the runtime without the package entry, so `@natlang/node/std` in callable-folder
+    TypeScript fell through to the package loader. That ran a second copy of the runtime, which has no active task
+    ("No natlang task is active here"). Now `platform-defaults.ts` registers the standard library on every platform.
+  - *Second bug.* `semanticMerge` treated records built in the module realm as opaque values, because they have
+    another `Object.prototype`, so the whole record became one conflict. A single realm-tolerant `isPlainObject`
+    (`runtime/plain-object.ts`) now serves std and seven other places that tested `=== Object.prototype`: native
+    values and runtime, canonical data, call normalization, folder iteration, folder Python, the learning module and the
+    teacher materializer.
+  - The async module path also exports `Context`. Test: `ts-host/test/std-platform-entry.test.mjs` imports only the Node
+    platform.
+- **Merge verifier.** New verifier `merge.mjs` (fe8efaa41). It checks that a judged field equals an accepted value or
+  contains each compatible edit's piece. It also checks that `unresolved` lists exactly the incompatible paths. Where a
+  reading is genuinely two-way, `{any: [...]}` and `unresolved_optional` accept both.
+- **Construct tags.** New tags `semantic_merge`, `semantic_repair`, `fixed_point`, `propose_and_verify` and
+  `branch_and_select`, each checked statically (the program imports the combinator and calls it). The repetition
+  structure key carries the std combinators a program calls. Kit section 20 covers std tasks.
+- **Batches.** 9 Opus authors (w430-w438) wrote 108 tasks; 106 were admitted.
+  - Each merge world has >= 8 judged conflicts, about half of them compatible. The all-compatible and all-incompatible
+    readings are both wrong answers, so the outcome depends on every real compatibility judgment.
+  - Qualification on pin c93124ec1b: references, wrong controls (0 accepted), keyword baselines (all ran, all
+    rejected), aliases, full smoke replays, novelty, held-v3/held-v4 separation.
+  - Blind solves (Sonnet):
+    - w435-w438: 48/48.
+    - Merge batches: 47 of 62 at first.
+    - w432 at first: 0/12. It read capacity edits as deltas (40->46 and 40->48 made 54). The author rewrote every
+      count as named groups, then 10/12.
+  - Disputed conflicts were widened to accept both readings, or the task was dropped (w434 p2a/p3a, w432 p2a/p6b).
+  - Nearly every dispute had one pattern: one edit keeps base text that the other edit changes ("1 year" kept while
+    the other side writes "2 years"). Readers split on whether the kept text is a purpose. These now accept both
+    readings, so expert iteration trains compatibility on the unambiguous cases: each side adds its own part, two
+    different new values for one thing, or a removal of what the other side edits.
+  - Admitted per batch:
+    - w430 listing_merges 12
+    - w431 clause_merges 14
+    - w432 settings_merges 10
+    - w433 itinerary_merges 12
+    - w434 ticket_merges 10
+    - w435 repair_loops 12
+    - w436 settling_revisions 12
+    - w437 verified_folder_edits 12
+    - w438 selected_drafts 12
+- **Supply `natlang-rl-task-supply-20261123sfp3`** (promoted to grpo-pool):
+  - 73 train rows in 9 new families; 38 of them are merge programs.
+  - 52 programs, 24 structures (16.6 effective). Nothing is shared with the 37,546-row pool (instructions, programs,
+    structures, functional programs).
+  - 33 held rows are in `natlang-rl-authored-{dev,confirmation}-20261123sfp3`.
+  - Custody 0; held-v3 verify 0/0 with and without exposure.
+- **Not checked:**
+  - No model has run these tasks.
+  - Collection of std tasks needs a policy pin at or after c93124ec1; the aei1 driver's current pin predates it.
+  - Floors never bite in replay (confidence 1).
+  - The structure count is low (24): every program shares a TS-helper-plus-std shape. Diversity lives in the
+    programs (52) and the worlds.

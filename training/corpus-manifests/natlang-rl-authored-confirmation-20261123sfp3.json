@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-authored-confirmation-20261123sfp3",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-authored-confirmation-20261123sfp3",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 333316,
+      "sha256": "5e5ba6d9b575cbc61a6b1ea5f6b8aeba4eeb20e508856e97e0b4ddcf84458d4a",
+      "lines": 15
+    }
+  ],
+  "bytes": 333316
+}
