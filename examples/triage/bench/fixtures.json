@@ -1,0 +1,2084 @@
+{
+ "schema": "natlang.bench-fixtures/1",
+ "app": "triage",
+ "note": "One support ticket per unit. Gold follows the default rubric in natlang.json and the urgency rule in is_urgent.nl; a spam ticket is never urgent (the program checks urgency only for non-spam). Split groups follow WS6 \u00a71.4 (flagship:<app>:<group>); split is held_eval.reservation_share_held with held-v4 share rule (seed held-v4-flagship, share 0.2), so held-v4 reserves the held rows.",
+ "split_rule": {
+  "pattern": "^flagship:",
+  "share": 0.2,
+  "seed": "held-v4-flagship"
+ },
+ "rows": [
+  {
+   "id": "triage-730d969989e8",
+   "split_group": "flagship:triage:730d969989e8",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Could you email me the receipt for my March payment? I can't find it in my inbox."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-5d4dca06339f",
+   "split_group": "flagship:triage:5d4dca06339f",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "We want to switch from monthly to annual billing at the next renewal. What do we need to do?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-d3766933a198",
+   "split_group": "flagship:triage:d3766933a198",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our VAT number is missing from the invoices. Can you add DE811907980 to future invoices?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-455dde567479",
+   "split_group": "flagship:triage:455dde567479",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "I cancelled my Pro plan last week but I still see the upcoming renewal date on my billing page. Will I be charged?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-02bf7fc5e7ab",
+   "split_group": "flagship:triage:02bf7fc5e7ab",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Please change the card on file to the new company Visa ending in 4410."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-9fd4e5b5610b",
+   "split_group": "flagship:triage:9fd4e5b5610b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The invoice lists 12 seats but we only have 10 users. Can you correct it for next month?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-5066e0760369",
+   "split_group": "flagship:triage:5066e0760369",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Do you offer a nonprofit discount? We are a registered charity."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-1f1c0446d4a2",
+   "split_group": "flagship:triage:1f1c0446d4a2",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "I was charged $49 instead of $39 this month even though I am on the Basic plan. Please refund the difference."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-1f6ff9128250",
+   "split_group": "flagship:triage:1f6ff9128250",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Can invoices be sent to accounts@ourcompany.com instead of my personal address?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-edbbea5809b4",
+   "split_group": "flagship:triage:edbbea5809b4",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our finance team needs invoices in PDF with a purchase order number. Where do I enter the PO number?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-4ed51d9a9e79",
+   "split_group": "flagship:triage:4ed51d9a9e79",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "My coupon code SPRING20 was not applied to my last payment. Can you credit it?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-7d49d569963c",
+   "split_group": "flagship:triage:7d49d569963c",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "How do I download all of last year's invoices at once for our tax filing?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-8b2f03fec263",
+   "split_group": "flagship:triage:8b2f03fec263",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "We were billed in USD but our contract says EUR. Please reissue invoice INV-5523 in euros."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-4b08fbca2799",
+   "split_group": "flagship:triage:4b08fbca2799",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "I upgraded mid-month; why does my invoice show two separate charges?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-64dde7785253",
+   "split_group": "flagship:triage:64dde7785253",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Please remove the extra storage add-on from our subscription starting next billing cycle."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-e309f8867eb7",
+   "split_group": "flagship:triage:e309f8867eb7",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The refund you promised two weeks ago for order 88123 has not shown up on my statement yet."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-9afedf891d5a",
+   "split_group": "flagship:triage:9afedf891d5a",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Is the annual price locked in if we renew early, or will the new pricing apply?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-1b4d4f746e56",
+   "split_group": "flagship:triage:1b4d4f746e56",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "My trial converted to a paid plan and I forgot to cancel. Can I get a refund for this one charge?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-51b1bf92b4c9",
+   "split_group": "flagship:triage:51b1bf92b4c9",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Please send a W-9 or tax form so we can add you as a vendor and pay your invoice."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-c8a16b03ca58",
+   "split_group": "flagship:triage:c8a16b03ca58",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our bank transfer for invoice INV-6610 was sent on Monday; can you confirm you received it?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-461f7e54b0d3",
+   "split_group": "flagship:triage:461f7e54b0d3",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Can I pay by bank transfer instead of credit card from now on?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-12b56275f567",
+   "split_group": "flagship:triage:12b56275f567",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The billing page says my payment method expired, but I updated it yesterday. Which card will you charge?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-f72204ee63ee",
+   "split_group": "flagship:triage:f72204ee63ee",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Your system has charged our company card 40 times in the last hour, $299 each, and the charges keep coming. Stop it now."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-a97d64dd3188",
+   "split_group": "flagship:triage:a97d64dd3188",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Every one of our 3,000 customers was just charged twice for their renewal this morning and refund requests are flooding in."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-4678dc77df8e",
+   "split_group": "flagship:triage:4678dc77df8e",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "We are being billed for 50,000 API calls a minute that we are not making; the meter has added $12,000 since noon and is still climbing."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-bb4750fa4665",
+   "split_group": "flagship:triage:bb4750fa4665",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "All our subscribers were charged the annual price instead of the monthly price an hour ago, and chargebacks are already arriving."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-9fd18908fa3e",
+   "split_group": "flagship:triage:9fd18908fa3e",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Someone used our account to buy $8,000 of credits in the last 30 minutes and more purchases keep going through on our card."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-b4d19c46f7fa",
+   "split_group": "flagship:triage:b4d19c46f7fa",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Payouts to all our sellers were sent to the wrong bank account this morning and money is leaving our balance as we speak."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-1debfc3100b5",
+   "split_group": "flagship:triage:1debfc3100b5",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "The whole site returns 502 Bad Gateway for everyone since 10:40. Our customers cannot reach us at all."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-0eb9796a1ab6",
+   "split_group": "flagship:triage:0eb9796a1ab6",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Login is broken for all users after your update: every attempt shows 'session expired' and nobody in our company can work."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-46da0a72dd07",
+   "split_group": "flagship:triage:46da0a72dd07",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our customers' home addresses and phone numbers are showing up in other customers' order confirmations."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-aa779c657226",
+   "split_group": "flagship:triage:aa779c657226",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "We found an admin API key of ours posted in a public forum and someone is using it to delete records right now."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-5d48d492873a",
+   "split_group": "flagship:triage:5d48d492873a",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The database seems to be gone: every page shows 'relation does not exist' and all 400 of our stores are offline."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-b7b288b74882",
+   "split_group": "flagship:triage:b7b288b74882",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Emails with password reset links are being sent to the wrong users, so anyone can take over another account."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-73001fa7ace9",
+   "split_group": "flagship:triage:73001fa7ace9",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Since the 9:15 release the mobile app crashes on launch for every Android user; our support line is overwhelmed."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-115595732ce9",
+   "split_group": "flagship:triage:115595732ce9",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Uploaded files from all our customers are publicly downloadable without logging in. Please lock this down immediately."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-730e388fb012",
+   "split_group": "flagship:triage:730e388fb012",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The checkout page spins forever for all shoppers since lunch, so no orders have come in for two hours."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-ca3fa2730f4b",
+   "split_group": "flagship:triage:ca3fa2730f4b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our webhook endpoint is receiving thousands of requests per second from your servers and our production system is falling over."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-16f6c8a0e997",
+   "split_group": "flagship:triage:16f6c8a0e997",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "All scheduled shipments vanished from the dispatch dashboard this morning and none of our 60 drivers know where to go."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-25c8f5c0e87b",
+   "split_group": "flagship:triage:25c8f5c0e87b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "There is a SQL injection in the search box: typing a quote dumps other tenants' data. Attackers are already probing it."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-efb663db3699",
+   "split_group": "flagship:triage:efb663db3699",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The point-of-sale terminals in every one of our restaurants stopped syncing an hour ago and cannot take card payments."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-96e2c1df0fd1",
+   "split_group": "flagship:triage:96e2c1df0fd1",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Two-factor codes are not being checked at all; any six digits log you in to any account."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-2f4cfbf41039",
+   "split_group": "flagship:triage:2f4cfbf41039",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "All video calls drop after 30 seconds for every participant since this morning; our entire sales team is unable to hold meetings."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-a149af20f3fd",
+   "split_group": "flagship:triage:a149af20f3fd",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Your service is sending our full customer list to an unknown external address according to our firewall logs, right now."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-f89cb54c8dfd",
+   "split_group": "flagship:triage:f89cb54c8dfd",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Every API request has returned 503 for the last 45 minutes; our app is down for all 20,000 of our users."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-147e1325a42b",
+   "split_group": "flagship:triage:147e1325a42b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Patients cannot book or cancel appointments: the booking widget is blank on every clinic site since 8am."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-272b27e6d531",
+   "split_group": "flagship:triage:272b27e6d531",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our ransomware alert fired on the file sync folder and encrypted files are syncing to every employee's laptop."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-fdd4e08a7dee",
+   "split_group": "flagship:triage:fdd4e08a7dee",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Orders placed in the last three hours were all marked as delivered without shipping, and customers are not getting anything."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-76d5c988c644",
+   "split_group": "flagship:triage:76d5c988c644",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The date picker shows weeks starting on Sunday even though I set Monday in my preferences."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-123e1e3365cc",
+   "split_group": "flagship:triage:123e1e3365cc",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "When I export a report to Excel, the column headers come out in lowercase. Minor, but a bit annoying."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-0d345c446f9c",
+   "split_group": "flagship:triage:0d345c446f9c",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The profile photo upload rejects PNG files larger than 2 MB with a vague error message."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-54e4b90c2232",
+   "split_group": "flagship:triage:54e4b90c2232",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The dark theme makes the tooltip text hard to read; the contrast is very low."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-6b9ea889eff8",
+   "split_group": "flagship:triage:6b9ea889eff8",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "My notification sound plays twice for each new message on the desktop app."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-7e19f7a05efe",
+   "split_group": "flagship:triage:7e19f7a05efe",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The 'Forgot password' link on the login page is slightly misaligned on small screens."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-960409fa31c8",
+   "split_group": "flagship:triage:960409fa31c8",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Sorting the contacts table by last name puts names with accents at the end of the list."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-8ef2feab0ac8",
+   "split_group": "flagship:triage:8ef2feab0ac8",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Search results take about five seconds to load for me since yesterday; it was faster before."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-9fbf30dd0656",
+   "split_group": "flagship:triage:9fbf30dd0656",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "The progress bar on file uploads jumps back to zero sometimes, although the upload completes fine."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-f2606a05bdff",
+   "split_group": "flagship:triage:f2606a05bdff",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "In the Android app the keyboard covers the comment box when I reply to a post."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-9fa12534f819",
+   "split_group": "flagship:triage:9fa12534f819",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Time zones in the activity log are shown in UTC even though my account is set to Berlin time."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-228043d50789",
+   "split_group": "flagship:triage:228043d50789",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The CSV import silently skips rows that contain an emoji in the name column."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-68af3742c2ce",
+   "split_group": "flagship:triage:68af3742c2ce",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Printing an invoice from the browser cuts off the last line of the page."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-ce63c02a2e0b",
+   "split_group": "flagship:triage:ce63c02a2e0b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The calendar sync with Outlook duplicates recurring events once a week. I delete them by hand for now."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-04b489bd08e0",
+   "split_group": "flagship:triage:04b489bd08e0",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "A broken image icon appears in the footer of the help center pages."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-96f1c882c6e5",
+   "split_group": "flagship:triage:96f1c882c6e5",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "My saved filters disappear after I log out and back in."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-3f545096cf1f",
+   "split_group": "flagship:triage:3f545096cf1f",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The 'Copy link' button does nothing in Firefox, but I can copy the URL from the address bar."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-036377ea11bd",
+   "split_group": "flagship:triage:036377ea11bd",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Charts on the dashboard don't resize when I rotate my tablet until I refresh the page."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-081b121f35ee",
+   "split_group": "flagship:triage:081b121f35ee",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The spell checker in the editor flags 'colour' as wrong even though my language is set to British English."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-f861fab279d8",
+   "split_group": "flagship:triage:f861fab279d8",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "After the update, the app asks me to log in again every few days instead of remembering me."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-c52be83352df",
+   "split_group": "flagship:triage:c52be83352df",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Drag and drop of attachments into the message window doesn't work on Safari; the attach button still works."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-cc33e166997b",
+   "split_group": "flagship:triage:cc33e166997b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The weekly summary email shows last week's numbers twice in the table."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-57275d74c62c",
+   "split_group": "flagship:triage:57275d74c62c",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "The help article about API rate limits links to a page that returns 404."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-a4aeab76f130",
+   "split_group": "flagship:triage:a4aeab76f130",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "When I paste formatted text into a note, the bullet points turn into asterisks."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-71ece5c5ecdd",
+   "split_group": "flagship:triage:71ece5c5ecdd",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The keyboard shortcut Ctrl+K opens the search box on Windows but not on Linux."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-0ac2510aa4eb",
+   "split_group": "flagship:triage:0ac2510aa4eb",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "My avatar shows as a grey circle in the team list although it shows correctly on my profile."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-3f2df1f71d0e",
+   "split_group": "flagship:triage:3f2df1f71d0e",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The Markdown preview doesn't render tables with more than ten columns."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-249b378da1dc",
+   "split_group": "flagship:triage:249b378da1dc",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The mobile app's widget doesn't refresh until I open the app."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-7c18c0f85cfa",
+   "split_group": "flagship:triage:7c18c0f85cfa",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Long project names overflow the sidebar instead of being truncated."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-7b773c307849",
+   "split_group": "flagship:triage:7b773c307849",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "The 'Remember this device' checkbox seems to have no effect on my work laptop."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-066fc8737490",
+   "split_group": "flagship:triage:066fc8737490",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Limited time offer!!! Get 10,000 website visitors for just $9.99. Reply YES to start today."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-ddc66815d609",
+   "split_group": "flagship:triage:ddc66815d609",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Dear Sir/Madam, we are a leading SEO agency and can put your website on page one of Google within 7 days."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-efb95c799a72",
+   "split_group": "flagship:triage:efb95c799a72",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "You have been selected for an exclusive investment opportunity with guaranteed 300% returns. Act now!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-db92c2c6359f",
+   "split_group": "flagship:triage:db92c2c6359f",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Cheap designer handbags, 80% off retail, free worldwide shipping. Shop at our online store."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-51b54b5db919",
+   "split_group": "flagship:triage:51b54b5db919",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Hi! I am a freelance web designer offering logo and website packages from $49. Let me know if interested."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-32fed69d55f0",
+   "split_group": "flagship:triage:32fed69d55f0",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Lose 20 pounds in 2 weeks with our miracle supplement. Doctors hate this one trick!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-5023edd14d18",
+   "split_group": "flagship:triage:5023edd14d18",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Boost your email open rates with our premium list of 2 million verified business contacts."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-38ec74d882c1",
+   "split_group": "flagship:triage:38ec74d882c1",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Get a free iPhone 17 today! Just complete this short survey and pay shipping."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-14279ca66615",
+   "split_group": "flagship:triage:14279ca66615",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Crypto signals group: join 50,000 traders making daily profits. First week free."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-275685bbedc9",
+   "split_group": "flagship:triage:275685bbedc9",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "We buy used laptops and phones for cash. Best prices guaranteed, call us today."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-94f45c5fa09a",
+   "split_group": "flagship:triage:94f45c5fa09a",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Grow your YouTube channel with 5,000 real subscribers delivered in 48 hours."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-2802a7620659",
+   "split_group": "flagship:triage:2802a7620659",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Exclusive casino bonus: deposit $10 and play with $200. Sign up through this link."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-809c6e36fe8e",
+   "split_group": "flagship:triage:809c6e36fe8e",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our outsourcing team can build your mobile app for a fraction of the cost. Book a free call."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-a840fae27920",
+   "split_group": "flagship:triage:a840fae27920",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Refinance your mortgage at the lowest rates of the year. Pre-approval in 5 minutes."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-c3097e73c015",
+   "split_group": "flagship:triage:c3097e73c015",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Want more 5-star reviews? We post genuine-looking reviews for your business on every platform."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-cf12edbbf1c8",
+   "split_group": "flagship:triage:cf12edbbf1c8",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Learn to earn passive income with dropshipping. Enroll in our masterclass at 70% off today only."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-43b7840340bf",
+   "split_group": "flagship:triage:43b7840340bf",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Premium replica watches, indistinguishable from the real thing. Order now and save big."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-a3b459121582",
+   "split_group": "flagship:triage:a3b459121582",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Need office chairs? Wholesale ergonomic chairs at factory prices, minimum order 20 units."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-97ea66d0a9b8",
+   "split_group": "flagship:triage:97ea66d0a9b8",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Increase your sales 10x with our AI chatbot. Free trial, no credit card required!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-f3650cec612c",
+   "split_group": "flagship:triage:f3650cec612c",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Meet beautiful women in your city tonight. Free registration, discreet and safe."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-b8e2dfb26e79",
+   "split_group": "flagship:triage:b8e2dfb26e79",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Our printing company offers business cards, flyers and banners at unbeatable prices. Visit our shop."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-ad3904d6dcb7",
+   "split_group": "flagship:triage:ad3904d6dcb7",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Fast loans with no credit check, money in your account within one hour. Apply now."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-89cea34a3ef5",
+   "split_group": "flagship:triage:89cea34a3ef5",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Join our affiliate program and earn 50% commission on every sale you refer!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-f4a521603165",
+   "split_group": "flagship:triage:f4a521603165",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Top-rated essay writing service: plagiarism-free papers delivered in 24 hours."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-f8191741a58b",
+   "split_group": "flagship:triage:f8191741a58b",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Can you split our invoice between two cost centers, marketing and sales?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-a96bd5d14494",
+   "split_group": "flagship:triage:a96bd5d14494",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "I need a credit note for the seat we removed in February."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-ae6f2ff38a89",
+   "split_group": "flagship:triage:ae6f2ff38a89",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Why is there a $2.50 processing fee on my last invoice? I never saw it before."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-9da78e3e71d7",
+   "split_group": "flagship:triage:9da78e3e71d7",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Please cancel the auto-renewal on our team plan; we will renew manually if needed."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-4d015ab8e18e",
+   "split_group": "flagship:triage:4d015ab8e18e",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Our accountant asks whether your prices include sales tax for customers in Texas."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-243f45d91c7c",
+   "split_group": "flagship:triage:243f45d91c7c",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Can you resend the payment link for invoice INV-7012? The old one expired."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-623e18124e68",
+   "split_group": "flagship:triage:623e18124e68",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "I paid for the annual plan but my account still shows the monthly plan on the billing page."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-6bd9d05cb524",
+   "split_group": "flagship:triage:6bd9d05cb524",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Is it possible to get a quote for 200 seats with volume pricing?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-d01dae8b2201",
+   "split_group": "flagship:triage:d01dae8b2201",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The amount on my bank statement is slightly different from the invoice total. Is that the exchange rate?"
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-9719895bd5f7",
+   "split_group": "flagship:triage:9719895bd5f7",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Please add our company's legal name, Northwind Traders GmbH, to all invoices."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-e5320fecbb12",
+   "split_group": "flagship:triage:e5320fecbb12",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Your billing run just charged every customer on our platform $1,000 instead of $10 and they are calling their banks right now."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-9c6a1916485d",
+   "split_group": "flagship:triage:9c6a1916485d",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Refunds are being issued automatically to every order placed today, our balance has dropped by $40,000 in the last hour and it continues."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-d25b825cb1e4",
+   "split_group": "flagship:triage:d25b825cb1e4",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Our card was charged for 900 seats instead of 9 a few minutes ago and new charges are appearing every few minutes."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-60e8b1c093e7",
+   "split_group": "flagship:triage:60e8b1c093e7",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Gift card balances for all our shoppers were reset to $500 an hour ago and people are spending them as we speak."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-95cf81c4f737",
+   "split_group": "flagship:triage:95cf81c4f737",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Discount code WELCOME5 is applying 100% off to every order since this morning and we have given away $25,000 of products."
+    ]
+   },
+   "expected": {
+    "label": "billing",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-abbac88eee2c",
+   "split_group": "flagship:triage:abbac88eee2c",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Every customer who logs in right now sees someone else's account dashboard, including their payment details."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-ebd9a3be6c3a",
+   "split_group": "flagship:triage:ebd9a3be6c3a",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The ticketing system has been down for all agents for an hour, our whole support team of 80 is idle."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-2a16f9a185a3",
+   "split_group": "flagship:triage:2a16f9a185a3",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "All outgoing emails from our account are bouncing since 7am, so none of our 10,000 customers get order confirmations."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-f2d2ba175b74",
+   "split_group": "flagship:triage:f2d2ba175b74",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "A former employee still has admin access and is deleting our projects as we type this."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-a69247ee23f0",
+   "split_group": "flagship:triage:a69247ee23f0",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Inventory counts for every warehouse were set to zero after last night's sync, so our store shows everything as sold out."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-85bba9aba753",
+   "split_group": "flagship:triage:85bba9aba753",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The voice assistant in all our hotels stopped answering guests since the morning update; front desks are overwhelmed."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-00419e6ec04f",
+   "split_group": "flagship:triage:00419e6ec04f",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Our phishing scanner shows your login page was replaced with a fake one collecting our users' passwords."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-3933f1bc168a",
+   "split_group": "flagship:triage:3933f1bc168a",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Search, cart and checkout all time out for every visitor during our biggest sale of the year, right now."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-aac385afd492",
+   "split_group": "flagship:triage:aac385afd492",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "All our IoT door locks are reporting 'unlocked' and won't lock from the app in any of our 30 buildings."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-fdbb5ba1fb23",
+   "split_group": "flagship:triage:fdbb5ba1fb23",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The payroll export crashed for the whole company today, so 1,200 employees will not be paid tomorrow unless it works."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-8d20031fcffa",
+   "split_group": "flagship:triage:8d20031fcffa",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Since your certificate expired an hour ago, every browser blocks our site with a security warning for all customers."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-2812ff40ee09",
+   "split_group": "flagship:triage:2812ff40ee09",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Private messages between all users became visible on public profile pages after this afternoon's release."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-3b93114dc67b",
+   "split_group": "flagship:triage:3b93114dc67b",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Our trading desk's live price feed from your API froze 20 minutes ago and every trader is quoting stale prices."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": true
+   }
+  },
+  {
+   "id": "triage-7a5aba739b64",
+   "split_group": "flagship:triage:7a5aba739b64",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The 'last seen' timestamp on my profile is off by one hour since daylight saving time changed."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-0f512dc3a55d",
+   "split_group": "flagship:triage:0f512dc3a55d",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "In the Windows app, the window doesn't remember its size when I reopen it."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-44cc24698259",
+   "split_group": "flagship:triage:44cc24698259",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The emoji picker in chat doesn't show recently used emojis."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-d655bb738958",
+   "split_group": "flagship:triage:d655bb738958",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Exported PDFs use a different font from the one shown on screen."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-a0b4595c4f81",
+   "split_group": "flagship:triage:a0b4595c4f81",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The 'Show more' button in comments loads the same comments twice."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-d2370f88687a",
+   "split_group": "flagship:triage:d2370f88687a",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "When I zoom the browser to 150%, the settings menu overlaps the main content."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-5d19904c5d42",
+   "split_group": "flagship:triage:5d19904c5d42",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The import wizard doesn't accept semicolon-separated CSV files, only commas."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-fb9ab56cdf2e",
+   "split_group": "flagship:triage:fb9ab56cdf2e",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Archived projects still show up in the project picker when creating a task."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-c9392f3c045f",
+   "split_group": "flagship:triage:c9392f3c045f",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "The mobile app shows prices without the currency symbol on the order history screen."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-1024a9a306d4",
+   "split_group": "flagship:triage:1024a9a306d4",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Pressing Escape in a modal closes it but leaves the page scrolled to the top."
+    ]
+   },
+   "expected": {
+    "label": "technical",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-a6d8114c17de",
+   "split_group": "flagship:triage:a6d8114c17de",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Unlock your hidden potential with our life coaching program. First session free, book today!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-1acdcf9c4210",
+   "split_group": "flagship:triage:1acdcf9c4210",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Dear business owner, claim your free listing in our premium global business directory now."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-23353ade83c9",
+   "split_group": "flagship:triage:23353ade83c9",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Win big with our sports betting tips, 95% accuracy guaranteed. Subscribe today."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-1412d27c93f0",
+   "split_group": "flagship:triage:1412d27c93f0",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "We sell high-quality Instagram accounts with 10k followers. Message us for prices."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-2089e03f559c",
+   "split_group": "flagship:triage:2089e03f559c",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Upgrade your home with solar panels at zero upfront cost. Free consultation this week only!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-040ddb1e8d34",
+   "split_group": "flagship:triage:040ddb1e8d34",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Translators available 24/7 for any language at 2 cents per word. Visit our website for a quote."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-e06f55bafc73",
+   "split_group": "flagship:triage:e06f55bafc73",
+   "split": "train",
+   "arguments": {
+    "tickets": [
+     "Increase your website ranking with 1,000 high-authority backlinks for $29."
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  },
+  {
+   "id": "triage-fa80160ac415",
+   "split_group": "flagship:triage:fa80160ac415",
+   "split": "held",
+   "arguments": {
+    "tickets": [
+     "Anti-aging cream that erases wrinkles overnight. Buy two, get one free!"
+    ]
+   },
+   "expected": {
+    "label": "spam",
+    "urgent": false
+   }
+  }
+ ]
+}

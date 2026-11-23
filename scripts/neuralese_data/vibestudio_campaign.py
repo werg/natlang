@@ -23,6 +23,7 @@ from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registr
 
 
 LUNA = 'openai-codex:gpt-6-luna'
+DEFAULT_TEACHER_TIMEOUT_MS = 3_600_000
 
 
 def read(path):
@@ -106,10 +107,10 @@ def outcomes(capture, names, held, training, cases):
             reason = transport or entry.get('error') or test.get('reason')
             results[name] = {'status': 'export-rejected' if test.get('passed') else 'test-failed',
                              'raw': str(raw.relative_to(capture)), 'reason': reason,
-                             'teacher_started': bool(teacher.get('rootCallIds') or teacher.get('calls'))
-                             if not capture_integrity_errors(teacher.get('captureErrors')) else None}
+                             'teacher_started': True if (teacher.get('rootCallIds') or teacher.get('calls'))
+                             and not capture_integrity_errors(teacher.get('captureErrors')) else None}
         else:
-            results[name] = {'status': 'no-capture'}
+            results[name] = {'status': 'no-capture', 'teacher_started': None}
         if capture_errors:
             results[name]['capture_errors'] = capture_errors
     return results
@@ -215,7 +216,7 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
     unit_prefix = f'{root.name}-{destination.name}-export'.replace('_', '-').lower()
     unit = f'{unit_prefix}-{time.time_ns()}'
     ledger = ['python3', str(repo / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '1.5',
-              '--reserve-gb', '15', '--wait', '1200', '--detach', '--no-resumable', '--priority', 'low',
+              '--reserve-gb', '15', '--wait', '1200', '--detach', '--resumable', '--priority', 'low',
               '--workdir', str(repo), '--']
     check = ['test', '-f', str(destination / 'exported.json')]
     ssh = ['ssh', '-o', 'BatchMode=yes', args.archive_host]
@@ -519,11 +520,11 @@ def drive(args):
                 continue
             first = cases[names[0]]
             publish_immutable(execution, {'cases': names, 'attempt_epoch': plan.get('attempt_epoch'),
-                                          'provenance': plan.get('provenance')})
+                                          'provenance': plan.get('provenance'), 'teacher_timeout_ms': args.teacher_timeout_ms})
             if shutil.disk_usage(root).free < args.reserve_disk_gib * 1024**3:
                 raise RuntimeError('insufficient local disk headroom for another managed collection wave')
             collect = ['pnpm', '--silent', 'natlang:teacher', '--model', LUNA, '--approve-codex-session',
-                       '--cases-per-instance', str(args.wave_size), '--test-timeout-ms', '600000', '--out', str(capture)]
+                       '--cases-per-instance', str(args.wave_size), '--test-timeout-ms', str(args.teacher_timeout_ms), '--out', str(capture)]
             if args.concurrency > 1:
                 collect += ['--concurrency', str(args.concurrency)]
             if first.get('requiresReview'):
@@ -574,6 +575,8 @@ def main():
     run.add_argument('--wave-size', type=int, default=6)
     run.add_argument('--max-waves', type=int, help='stop after archiving this many waves and syncing status')
     run.add_argument('--concurrency', type=int, default=1)
+    run.add_argument('--teacher-timeout-ms', type=int, default=DEFAULT_TEACHER_TIMEOUT_MS,
+                     help='per-teacher episode wall time, including native preparation; default 3600000ms; explicit override leaves normal test budgets unchanged')
     run.add_argument('--reserve-disk-gib', type=float, default=8)
     export = sub.add_parser('export-wave')
     export.add_argument('--archive', type=Path, required=True)
@@ -584,7 +587,7 @@ def main():
         export_trajectories(args.archive, read(args.receipt), held, training)
         return
     reviewer = (args.review_model or '').split(':')[-1].lower().split('-')
-    if (args.attempts < 1 or args.infrastructure_hold_threshold < 0 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
+    if (args.teacher_timeout_ms < 1 or args.attempts < 1 or args.infrastructure_hold_threshold < 0 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
             or (args.max_waves is not None and args.max_waves < 1)
             or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer):
         parser.error('provide positive limits, concurrency within the wave size, and an independent non-Sol reviewer when configured')
