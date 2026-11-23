@@ -42,8 +42,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 COLAB = os.environ.get('NATLANG_COLAB_CLI', str(Path.home() / '.local/bin/colab'))
 COLAB_STORE = Path.home() / '.config/colab-cli/sessions.json'
-OPS = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/ei/colab')
-SGLANG_CHECKOUT = Path('/home/werg/sglang-natlang')
+sys.path.insert(0, str(REPO / 'training/neuralese'))
+from natlang_neuralese.common.paths import resolve  # noqa: E402  (stdlib-only)
+
+WORKSPACE = Path(os.environ.get('NATLANG_LFM3_WORKSPACE', str(resolve('data_nvme', 'lfm3-rl-dgx-20261029'))))
+OPS = WORKSPACE / 'ops/ei/colab'
+SGLANG_CHECKOUT = Path(os.environ.get('NATLANG_SGLANG_CHECKOUT', str(Path.home() / 'sglang-natlang')))
 VM_ROOT = '/content/natlang-work'
 # preference order: (label as `colab sessions` shows it, --gpu value, --high-mem)
 DEFAULT_ORDER = (('A100', 'A100', True), ('G4', 'G4', False), ('L4', 'L4', False))
@@ -405,7 +409,7 @@ def main(argv=None) -> int:
     p.add_argument('--tunnel-fail-minutes', type=float, default=15)
     p.add_argument('--bootstrap-minutes', type=float, default=45)
     p.add_argument('--state', default=str(OPS / 'session-keeper.json'))
-    p.add_argument('--actor-root', default='/home/werg/data/lfm3-rl-dgx-20261029/ops/pop-behavior-eval',
+    p.add_argument('--actor-root', default=str(WORKSPACE / 'ops/pop-behavior-eval'),
                    help="pop_rl_actor's ROOT (its colab-actor-<alias>.json records the actor to serve again)")
     p.add_argument('--serve-default', default=None, help='serve_args JSON when no actor record exists')
     p.add_argument('--scratch', default=str(OPS / 'keeper-scratch'))
