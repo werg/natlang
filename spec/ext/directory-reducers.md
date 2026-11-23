@@ -26,3 +26,36 @@ tree, once compiled, is a file context from which new executable nodes may be
 bound (see Contexts). Self-improvement is a function from a context and evidence
 to a new context revision; promotion binds a program to that revision, or
 `folder.apply` commits it to a real directory.
+
+## Declared files
+
+`writes:` in a directory reducer's frontmatter declares the files its calls write, as one type: a record whose field
+names are paths from the folder, or globs (`*` is any name within one folder level, `**` any number of levels), and
+whose field types type each file's text (`string`, a string literal, or a union of them). Usually it names an alias of
+`types.ts`, whose doc comments say what each file holds (line templates, separators, number formats, the empty case,
+order) and, on the alias, what holds for all of them:
+
+```ts
+/** Every line of a written file ends with a newline. */
+export type DeskFiles = {
+  /** One line per applied request, `<request id> | <change>`, in request file name order; `none` when none applied. */
+  "log/applied.md": string;
+  /** The applied requests, moved here under their own names. */
+  "done/*.md": string;
+};
+```
+
+```yaml
+kind: directory-reducer
+returns: number
+writes: DeskFiles
+```
+
+A call's opening shows the declaration under its signature (`The files it writes: DeskFiles`) with the aliases it
+names, doc comments included, as it shows the aliases of the signature. A doc comment on an alias in `types.ts` is
+shown above it. When the call returns success, every file it created or changed must match a field and its text must
+fit that field's type; otherwise the return is refused with `writes-unsatisfied` and one sentence naming the file
+(`notes.md is not among the files tally writes (tally.md, done/*.md); undo that change ...`), and the call repairs it.
+Files it removed (the source of a move) and files it left alone are not checked. A function that is not a directory
+reducer, a type that is not a record, a field type that is not text, and a field name that leaves the folder are load
+errors. An edit cannot change the `writes:` line (`protected`).

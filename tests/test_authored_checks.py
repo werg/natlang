@@ -26,7 +26,6 @@ returns: "{ ready: string[]; waiting: string[] }"
 Sort the parcels by whether they can go out today.
 1. For each note, call `const state = await decide(read_state, note.text);`.
 2. Put the note's id under state.value.
-Output contract: return { ready, waiting } with ids in note order.
 '''
 HELPER = '''---
 readout: decision

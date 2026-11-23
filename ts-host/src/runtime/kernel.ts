@@ -68,6 +68,8 @@ export type CallableDefinition = {
   measure?: string;
   /** `ensures:` postconditions over the result and the arguments (runtime/ensures.ts), judged before a result is accepted. */
   ensures?: readonly import('./ensures.js').EnsuresClause[];
+  /** `writes:` of a directory reducer: the type of the files its calls write (runtime/writes.ts). */
+  writes?: string;
   /** The record of a recursive definition: bound under its own name in its calls' eval scope. */
   self?: import('./loader.js').NatlangRecord;
   revision?: string;
@@ -361,6 +363,7 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   node.hostClasses = options.classes;
   if (definition.readout) node.readout = definition.readout;
   if (definition.withhold?.length) node.withheldTools = [...definition.withhold];
+  if (definition.writes) node.writes = definition.writes;
   if ((definition.protect?.length || definition.ensures?.length) && definition.source)
     node.protectedSources = [...protectedSources(definition.source, definition.protect),
       ...protectedSources(definition.source, checkItems(definition.ensures, definition.params.map(parameter => parameter.name), definition.codebase))];
@@ -525,7 +528,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
       returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase,
       withhold: record.withhold, protect: record.protect, budget: record.budget, recursive: record.recursive, measure: record.measure,
-      ensures: record.ensures, self: record.recursive || record.measure ? record : undefined };
+      ensures: record.ensures, writes: record.writes, self: record.recursive || record.measure ? record : undefined };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.

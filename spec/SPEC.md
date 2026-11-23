@@ -116,7 +116,8 @@ Assess every observation with assess, then summarize the assessments.
 
 Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
 (`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold`, `protect`, `budget`,
-`recursive` and `measure` (see Iteration and termination) and `ensures` (see Postconditions). `generic` declares a
+`recursive` and `measure` (see Iteration and termination), `ensures` (see Postconditions) and `writes` (a directory
+reducer's files, [Declared files](ext/directory-reducers.md#declared-files)). `generic` declares a
 representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
@@ -350,7 +351,7 @@ ensures:
   eval, with the clause's message, and repairs within the refinement repair budget; past it the call fails with
   `RefinementCallError`. A result that reaches the caller satisfies every postcondition.
 - The companion-folder items a `check` names judge the call: its `edit_code` refuses them (`protected`), as it refuses
-  an edit that changes the function's `ensures`, `measure` or `recursive` lines.
+  an edit that changes the function's `ensures`, `writes`, `measure` or `recursive` lines.
 - A load error names an expression that does not parse, a name a `check` or `measure` uses that is not `result`, an
   argument, a companion item or a standard global, and an `against` entry that is not an argument.
 

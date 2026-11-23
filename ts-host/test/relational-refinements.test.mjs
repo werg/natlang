@@ -145,7 +145,7 @@ Count items.
     ['eval', { code: 'return items.length' }], ['return_result', { status: 'success' }]]);
   const editRuntime = createNatlangRuntime({ model: editing.driver, programRoot: walk });
   assert.equal(await editRuntime.run(() => walker(['a'])), 1);
-  assert.match(lastToolText(editing.requests[1]), /The ensures:, measure: and recursive: lines of walk\.nl judge its calls, so an edit cannot change them/);
+  assert.match(lastToolText(editing.requests[1]), /The ensures:, writes:, measure: and recursive: lines of walk\.nl judge its calls, so an edit cannot change them/);
 });
 
 function quotesRecord(root) {
