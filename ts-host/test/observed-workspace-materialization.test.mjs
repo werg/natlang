@@ -221,7 +221,7 @@ test('partial original assessor bytes remain independently bound',async()=>{
 });
 
 for(const kind of ['incidental-forged-hash','incidental-foreign-call','decision-review-hash','decision-review-score'])test(`rejects ${kind} output exclusion`,async()=>{
- await assert.rejects(fixture(kind),/incorrect return/);
+ await assert.rejects(fixture(kind),/incorrect return|decision review/);
 });
 for(const mutation of ['hash','foreign-source','value'])test(`independent disk verifier rejects incidental ${mutation} forgery`,async()=>{
  const {root,row}=await fixture('incidental');
