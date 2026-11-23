@@ -187,7 +187,7 @@ def verify_entry(interaction, root, *, partial=False):
             raise ValueError('open goal application input differs from the actual root invocation')
 
 
-def verify_application_return(binding, records, roots):
+def verify_application_return(binding, records, roots, entry=None):
     """Validate a selected domain value against the actual authored return bytes."""
     if not isinstance(binding, dict) or binding.get('root_call_id') not in roots or len(roots) != 1:
         raise ValueError('application return does not identify its actual authored root')
@@ -202,6 +202,17 @@ def verify_application_return(binding, records, roots):
     encoded = text.encode('utf-8')
     if output.get('complete') is not True or output.get('bytes') != len(encoded) or output.get('hash') != hashlib.sha256(encoded).hexdigest():
         raise ValueError('application return differs from original root output')
+    if binding.get('kind') == 'void':
+        record = records[binding['root_call_id']]
+        definition = record.get('definition') or {}
+        if (not isinstance(entry, dict) or entry.get('resultType') != 'void' or
+                not str(entry.get('program', '')).endswith('.ts') or definition.get('returns') != 'void' or
+                (record.get('executor') or {}).get('kind') != 'crisp' or record.get('outcome') != 'done' or
+                text != 'null' or 'selectedResult' not in binding or binding['selectedResult'] is not None):
+            raise ValueError('void application return does not bind an actual completed TS void contract')
+        return
+    if binding.get('kind') not in (None, 'value'):
+        raise ValueError('unknown application return kind')
     selected = binding.get('selectedResult')
     results = value.get('results') if isinstance(value, dict) else None
     if ('selectedResult' not in binding or not (same_json_value(value, selected) or
@@ -524,9 +535,13 @@ def load_episode(path):
     if (not isinstance(attested_roots, list) or not attested_roots or
             len(attested_roots) != len(set(attested_roots)) or roots != set(attested_roots)):
         raise ValueError('live call roots differ from independently verified roots')
-    for binding in application_returns:
-        verify_application_return(binding, records, roots)
     interaction = spec.get('interaction')
+    entry = (interaction or {}).get('entry')
+    if isinstance(entry, dict) and entry.get('resultType') == 'void' and (
+            len(application_returns) != 1 or application_returns[0].get('kind') != 'void'):
+        raise ValueError('void application entry needs its explicit actual return witness')
+    for binding in application_returns:
+        verify_application_return(binding, records, roots, entry)
     if interaction != verification.get('interaction'):
         raise ValueError('live task interaction differs from independent verification')
     if interaction is not None:

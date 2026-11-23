@@ -5,12 +5,21 @@ import { dirname, resolve, posix } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { graphCustodyMatches } from '../dist/calls/graph-custody.js';
 
-export function verifyApplicationReturn(binding, records, roots) {
+export function verifyApplicationReturn(binding, records, roots, entry) {
   if (!binding || !Array.isArray(roots) || roots.length !== 1 || binding.root_call_id !== roots[0] || typeof binding.valueJson !== 'string')
     throw new Error('application return does not identify its actual authored root');
   const value = JSON.parse(binding.valueJson), output = records.get(binding.root_call_id)?.output;
   if (output?.complete !== true || output.bytes !== Buffer.byteLength(binding.valueJson) || output.hash !== digest(binding.valueJson))
     throw new Error('application return differs from original root output');
+  if(binding.kind==='void'){
+    const record=records.get(binding.root_call_id);
+    if(entry?.resultType!=='void' || !entry.program?.endsWith('.ts') || record?.definition?.returns!=='void' ||
+       record.executor?.kind!=='crisp' || record.outcome!=='done' || binding.valueJson!=='null' ||
+       !Object.hasOwn(binding,'selectedResult') || binding.selectedResult!==null)
+      throw new Error('void application return does not bind an actual completed TS void contract');
+    return;
+  }
+  if(binding.kind!==undefined && binding.kind!=='value')throw new Error('unknown application return kind');
   if (!Object.hasOwn(binding,'selectedResult') || !(isDeepStrictEqual(value,binding.selectedResult) ||
       value?.results?.length === 1 && Object.hasOwn(value.results[0],'report') && isDeepStrictEqual(value.results[0].report,binding.selectedResult)))
     throw new Error('selected domain return differs from actual application result');
@@ -411,7 +420,10 @@ export async function verifyObservedWorkspaceEvidence(row) {
   if ((selected && [...selected.keys()].some(id => !capturedRecords.has(id))) ||
       row.outcome.excluded_return_decisions !== undefined && !equal(row.outcome.excluded_return_decisions, returnExclusions))
     throw new Error('observed decision admission differs from independent training scope or return evidence');
-  for(const binding of applicationReturns)verifyApplicationReturn(binding,capturedRecords,receipt.root_call_ids);
+  const applicationEntry=row.task.interaction?.entry;
+  if(applicationEntry?.resultType==='void' && (applicationReturns.length!==1 || applicationReturns[0].kind!=='void'))
+    throw new Error('void application entry needs its explicit actual return witness');
+  for(const binding of applicationReturns)verifyApplicationReturn(binding,capturedRecords,receipt.root_call_ids,applicationEntry);
   verifyObservedCallTree(records, receipt.root_call_ids[0]);
   for (const decision of row.trajectory) {
     const chain = [];

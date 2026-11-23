@@ -844,3 +844,27 @@ def test_exact_generation_quality_review_is_conservative_and_source_bound(tmp_pa
     else:
         with pytest.raises(ValueError,match='decision review'):
             live.declared_decision_exclusions([proof],[(spec['calls'][0],detail)])
+
+
+def test_void_application_return_requires_exact_completed_typed_contract():
+    import copy
+    import hashlib
+    from live_teacher_sources import verify_application_return
+    binding = {'kind': 'void', 'root_call_id': 'root', 'valueJson': 'null', 'selectedResult': None}
+    entry = {'program': 'skills/reference/review.ts', 'resultType': 'void'}
+    record = {'outcome': 'done', 'executor': {'kind': 'crisp'}, 'definition': {'returns': 'void'},
+              'output': {'complete': True, 'bytes': 4, 'hash': hashlib.sha256(b'null').hexdigest()}}
+    verify_application_return(binding, {'root': record}, ['root'], entry)
+    for section, key, value in [('entry', 'resultType', 'string'), ('entry', 'program', 'review.nl'),
+                                ('record', 'outcome', 'error'), ('binding', 'valueJson', ' null'),
+                                ('binding', 'selectedResult', 'invented'), ('binding', 'kind', 'unknown')]:
+        changed_binding, changed_entry, changed_record = map(copy.deepcopy, [binding, entry, record])
+        {'binding': changed_binding, 'entry': changed_entry, 'record': changed_record}[section][key] = value
+        with pytest.raises(ValueError):
+            verify_application_return(changed_binding, {'root': changed_record}, ['root'], changed_entry)
+    for field, value in [('definition', {'returns': 'string'}), ('executor', {'kind': 'agent'}),
+                         ('output', {**record['output'], 'hash': '0'*64})]:
+        with pytest.raises(ValueError):
+            verify_application_return(binding, {'root': {**record, field: value}}, ['root'], entry)
+    with pytest.raises(ValueError):
+        verify_application_return({key: value for key, value in binding.items() if key != 'selectedResult'}, {'root': record}, ['root'], entry)
