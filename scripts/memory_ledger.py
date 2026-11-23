@@ -46,6 +46,7 @@ import argparse
 import contextlib
 import shutil
 import fcntl
+import functools
 import mmap
 import json
 import re
@@ -585,6 +586,11 @@ def waiting_order(state, now=None):
     now = now or time.time()
     entries = [(u, w) for u, w in state.get('waiting', {}).items()
                if w.get('requeued') or now - w.get('seen', 0) < WAITER_TTL]
+    for _, entry in entries:
+        if entry.get('spec'):
+            entry['reserve'] = spec_reserve(entry['spec'], entry['budget'])
+        elif 'reserve_explicit' in entry and not entry['reserve_explicit']:
+            entry['reserve'] = default_reserve(entry['budget'])
     return sorted(entries, key=lambda item: (-PRIORITIES[item[1]['priority']], item[1]['since'], item[0]))
 
 
@@ -704,11 +710,28 @@ def plan_launch(state, head, wanted, backfill, free, cuda_free=None):
                 and not any(container_running(n) for n in entry.get('containers', ())))
 
 
+def known_dgx_host():
+    """The local hostname mapping also used by scripts/coord.py; independent of CUDA/driver health."""
+    return os.uname().nodename.split('.')[0] == 'mltick'
+
+
+@functools.lru_cache(maxsize=1)
+def dgx_reserve_required():
+    """Identify the actual unified-memory DGX once per ledger process, using the existing GPU probe.
+
+    Execution-profile/environment labels can describe a remote job; they are not local machine identity.
+    has_gb10 requires the actual NVIDIA GB10 device, never architecture alone.
+    """
+    return known_dgx_host() or has_gb10()
+
+
 def default_reserve(budget):
-    """Free memory a job must leave after its admission unless ``run --reserve-gb`` says otherwise: a quarter of its
-    budget, at least 1 GiB and at most 8 GiB. A flat 8 GiB kept every 2-12 GB job (plan-only proofs, full checks,
-    smokes) out beside Mellum v4 with ~8 GB headroom (2026-10-12); a small job can only push memory down by little,
-    and the guard's floor stops lower-priority units if it does."""
+    """Leave 15 GiB on the DGX for diagnostics; other machines leave a quarter of the budget (1–8 GiB).
+
+    An explicit run --reserve-gb overrides either policy. Cache only machine identity, never the job budget.
+    """
+    if dgx_reserve_required():
+        return 15 * GIB
     return int(min(8 * GIB, max(GIB, 0.25 * budget)))
 
 
@@ -910,7 +933,7 @@ def run(args):
             waiting = state.setdefault('waiting', {})
             now = time.time()
             waiting[unit] = {'priority': priority, 'since': waiting.get(unit, {}).get('since', since), 'seen': now,
-                             'budget': budget, 'reserve': reserve, 'cuda_budget': cuda_budget}
+                             'budget': budget, 'reserve': reserve, 'reserve_explicit': explicit_reserve, 'cuda_budget': cuda_budget}
             order = waiting_order(state, now)
             head = order[0][0]
             # The head of the priority queue starts when it fits (the guard preempts lower units for it when real
@@ -1507,7 +1530,7 @@ def main():
                    help='the command resumes from its own checkpoints, so the ledger may stop it for a higher priority job '
                         'or under pressure and relaunch it from the queue (default: yes except services)')
     r.add_argument('--reserve-gb', type=float, default=None,
-                   help='free memory that must remain after admission (default: a quarter of the budget, 1-8 GiB)')
+                   help='free memory that must remain after admission (default: DGX GB10 15 GiB; other machines quarter budget, 1-8 GiB)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
     r.add_argument('--detach', action='store_true',
                    help='wait for admission in its own user unit (<unit>-waiter) instead of this process, so the queue '

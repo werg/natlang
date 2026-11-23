@@ -61,6 +61,14 @@ BINDING = 'program'
 ERROR_RESULT = re.compile(r'^\s*(?:[A-Z][A-Za-z]*Error\b|Error\b|\d+:\d+ [a-z][a-z-]*:|rejected\b|[A-Za-z_][\w.]*: failed:)')
 
 
+def logical(path):
+    """The absolute path as written, symlinks kept: a plan or operation record must not bind to where a symlink
+    pointed when it was written (2026-11-20: plans resolved through the archive symlink to the HDD archive, the
+    directory moved back to the NVMe, and every fit of the chain failed on a missing rows.jsonl)."""
+    import os
+    return os.path.abspath(path)
+
+
 def read_jsonl(path):
     with open(path, encoding='utf-8') as handle:
         return [json.loads(line) for line in handle if line.strip()]
@@ -350,17 +358,17 @@ def plan(args):
               'optimizer': {'name': 'adam', 'learning_rate': args.lr}, 'batch_rows': args.batch_rows,
               'prompt_weight': 0., 'seed': args.seed, **({'target_classes': args.targets} if args.targets else {}),
               **({'epochs': args.epochs} if args.epochs else {'steps': args.steps})}
-    student = {'checkpoint': str(Path(args.checkpoint).resolve())}
+    student = {'checkpoint': logical(args.checkpoint)}
     exports = []
     if args.gguf_base_sha256:
         if not args.hf_config:
             raise SystemExit('--gguf-base-sha256 needs --hf-config (the base model config for the GGUF converter)')
-        student.update(baseGgufSha256=args.gguf_base_sha256, hfConfigDir=str(Path(args.hf_config).resolve()))
+        student.update(baseGgufSha256=args.gguf_base_sha256, hfConfigDir=logical(args.hf_config))
         exports = ['gguf']
     body = {'manifest': manifest(record['family'], {'checkpoint_sha256': sha}),
             'engine': {'checkpoint': student['checkpoint'], 'base': args.base, 'device': args.device, 'dtype': args.dtype,
                        **({'store_scratch': args.store_scratch} if args.store_scratch else {})},
-            'student': student, 'rows': str((directory / 'rows.jsonl').resolve()), 'recipe': recipe,
+            'student': student, 'rows': logical(directory / 'rows.jsonl'), 'recipe': recipe,
             'exports': exports, 'label': f'program:{record["family"]}'}
     (fit / 'plan.json').write_text(json.dumps(body, indent=1) + '\n')
     print(json.dumps({'plan': str(fit / 'plan.json'), 'recipe': recipe, 'exports': exports}))
@@ -462,8 +470,8 @@ def bank(args):
     recipe = MB.MetaRecipe.from_json({'target_pattern': args.target_pattern, 'seed': args.seed,
                                       **json.loads(args.recipe or '{}')})
     operation = {'checkpoint_sha256': sha, 'recipe': recipe.as_json(),
-                 'programs': [str(Path(p).resolve()) for p in args.programs],
-                 'held': [str(Path(p).resolve()) for p in args.held]}
+                 'programs': [logical(p) for p in args.programs],
+                 'held': [logical(p) for p in args.held]}
     if (out / 'operation.json').exists() and json.loads((out / 'operation.json').read_text()) != operation:
         raise SystemExit(f'{out} is bound to another checkpoint, recipe or program set')
     _write(out / 'operation.json', operation)
@@ -520,11 +528,137 @@ def bank(args):
                                                                       'support': [r['graph']['id'] for r in made]})
             write_release(engine, record.id, out / 'adapt' / family,
                           {'bank': manifest['snapshot'], 'family': family, 'support_rows': len(made),
-                           'support_loss': fitted['history'][-1], 'program': str(directory.resolve())})
+                           'support_loss': fitted['history'][-1], 'program': logical(directory)})
             print(json.dumps({'event': 'adapted', 'family': family, 'release': str(out / 'adapt' / family),
                               'support_loss': [round(fitted['history'][0], 4), round(fitted['history'][-1], 4)]}),
                   flush=True)
         _write(out / 'bank-manifest.json', manifest)
+
+
+# ---- Colab tenants (DECISIONS 2026-11-24 "program tuning on the A100") -----------------------------------------------
+def remote_plan(plan, *, checkpoint, base, rows, scratch):
+    """The plan with its paths on the VM (the recipe, manifest and labels unchanged)."""
+    return {**plan, 'engine': {**plan['engine'], 'checkpoint': checkpoint, 'base': base, 'store_scratch': scratch},
+            'student': {**plan['student'], 'checkpoint': checkpoint}, 'rows': rows}
+
+
+def colab_fit(args):
+    """DIR's fit as a tenant of the Colab session (beside its actor; yields to a round's learner and restarts from its
+    own state.json): the start checkpoint and rows shipped (Drive), tune.build at the tenant commit, the release made on
+    the VM and pulled back verified into DIR/fit/release (and DIR/fit/build/{result,state}.json). Exit 0 when the release
+    is home; another status when the tenant was evicted or failed (rerun: it resumes)."""
+    import shlex
+    import time
+    import pop_rl_actor as A
+    directory = Path(args.dir)
+    fit = directory / 'fit'
+    if (fit / 'release' / 'result.json').exists():
+        print(json.dumps({'event': 'release present', 'dir': str(directory)}))
+        return 0
+    state = fit / 'build' / 'state.json'
+    if state.exists() and not args.take_over:
+        raise SystemExit(f'{state}: a local fit is in progress (--take-over to fit it on Colab from scratch)')
+    plan = json.loads((fit / 'plan.json').read_text())
+    family = json.loads((directory / 'split.json').read_text())['family']
+    cfg = A.host_config('colab', host=args.host)
+    host = cfg['host']
+    # the DGX fit chain (fit-seq.sh) skips a program with this marker: one program is never fitted twice at once
+    (fit / 'colab-claim.json').write_text(json.dumps({'host': host, 'commit': args.commit, 'at': time.time()}) + '\n')
+    tcfg = A.colab_tenant_checkout(host, cfg, args.commit)
+    remote = f'{cfg["work_root"]}/tenant-fit-{family}'
+    sha = plan['manifest']['base']['checkpoint_sha256']
+    started = time.time()
+    A.ensure_remote_checkpoint(host, cfg, plan['engine']['checkpoint'], sha)
+    rows_sha, remote_rows = sha256_file(plan['rows']), f'{remote}/rows.jsonl'
+    have = A.ssh_host(host, f'sha256sum {shlex.quote(remote_rows)} 2>/dev/null || true', check=False).split()
+    if not have or have[0] != rows_sha:
+        A.ship_file(plan['rows'], remote_rows, host, cfg, rows_sha)
+    body = remote_plan(plan, checkpoint=f'{cfg["checkpoints"]}/{sha}.pt', base=cfg['base'], rows=remote_rows,
+                       scratch=f'{remote}/fit-scratch')
+    A.ssh_host(host, f'mkdir -p {shlex.quote(remote)}/fit && cat > {shlex.quote(remote)}/fit/plan.json',
+               input=json.dumps(body, indent=1) + '\n', timeout=60)
+    claim = A.colab_layout(A.colab_hardware(host))['tenants']['fit']
+    command = A.colab_tenant_command(cfg, tcfg, claim, f'fit-{family[:40]}',
+                                     [cfg['python'], '-m', 'natlang_neuralese.tune.build', '--plan',
+                                      f'{remote}/fit/plan.json', '--out', f'{remote}/fit/build'],
+                                     mps_percent=args.mps_percent)
+    shipped = time.time()
+    rc = A.run_detached(host, cfg, remote, command)
+    trained = time.time()
+    A.log(event='Colab tenant fit ended', host=host, family=family, returncode=rc, ship_seconds=round(shipped - started, 1),
+          fit_seconds=round(trained - shipped, 1))
+    if rc != 0:
+        return rc if rc else 1
+    A.ssh_host(host, shlex.join(['/usr/bin/env', f'PYTHONPATH={tcfg["repo"]}/training/neuralese:{tcfg["repo"]}',
+                                 cfg['python'], f'{tcfg["repo"]}/scripts/neuralese_data/program_tune.py', 'release',
+                                 '--dir', remote]), timeout=600)
+    names = A.ssh_host(host, f'ls {shlex.quote(remote)}/fit/release/artifacts', timeout=60).split()
+    staged = fit / 'release.pull'
+    shutil.rmtree(staged, ignore_errors=True)
+    (staged / 'artifacts').mkdir(parents=True)
+    for name in names:
+        A.pull_verified(f'{remote}/fit/release/artifacts/{name}', staged / 'artifacts' / name, host)
+    A.pull_verified(f'{remote}/fit/release/result.json', staged / 'result.json', host)
+    (fit / 'build').mkdir(parents=True, exist_ok=True)
+    A.pull_verified(f'{remote}/fit/build/state.json', fit / 'build' / 'state.json', host)
+    shutil.copyfile(staged / 'result.json', fit / 'build' / 'result.json')
+    shutil.rmtree(fit / 'release', ignore_errors=True)
+    staged.rename(fit / 'release')
+    record = {'schema': 'natlang.program-fit-colab/1', 'host': host, 'tenant_commit': tcfg['commit'], 'remote': remote,
+              'gpu': A.colab_hardware(host).get('gpu_name'), 'ship_seconds': round(shipped - started, 1),
+              'fit_seconds': round(trained - shipped, 1), 'pull_seconds': round(time.time() - trained, 1),
+              'mps_percent': args.mps_percent if args.mps_percent is not None else A.COLAB_TENANT_MPS_PERCENT}
+    (fit / 'colab.json').write_text(json.dumps(record, indent=1) + '\n')
+    print(json.dumps({'event': 'release home', 'dir': str(directory), **record}))
+    return 0
+
+
+def colab_measure(args):
+    """One held_eval arm on dev manifests against a Colab tenant actor: the start checkpoint (``--arm base``, every
+    --dir on one actor) or it with DIR's fit release on an SGLang adapter slot (``--arm adapter``, one --dir). The
+    episodes run on the DGX (a ledger unit at the experiment pin); the policy id comes from the actor's attested
+    binding (``CHECKPOINT+stack digest`` for the adapter). Resumable; a lost (evicted) actor stops the measure, whose
+    unscored episodes are left out, and the next call resumes."""
+    import subprocess
+    import time
+    import urllib.request
+    import pop_rl_actor as A
+    dirs = [Path(d) for d in args.dir]
+    if args.arm == 'adapter' and len(dirs) != 1:
+        raise SystemExit('--arm adapter measures one program')
+    plan = json.loads((dirs[0] / 'fit' / 'plan.json').read_text())
+    sha = plan['manifest']['base']['checkpoint_sha256']
+    release = dirs[0] / 'fit' / 'release' if args.arm == 'adapter' else None
+    record = A.serve_colab_tenant_actor(host=args.host, checkpoint=plan['engine']['checkpoint'], sha=sha,
+                                        commit=args.commit, release=str(release) if release else None)
+    pin = Path(args.pin).resolve()
+    sys.path.insert(0, str(pin / 'training/neuralese'))
+    from natlang_neuralese.rl.held_eval import policy_id_of
+    info = json.load(urllib.request.urlopen(f'{record["endpoint"]}/v1/neuralese/info', timeout=30))
+    policy = policy_id_of(info.get('rl_policy_binding') or {})
+    results = {}
+    for directory in dirs:
+        out = directory / 'eval' / f'{args.arm}-dev-{args.series}'
+        out.mkdir(parents=True, exist_ok=True)
+        unit = f'progdev-{directory.name[:40]}-{args.arm}-{int(time.time())}'
+        env = (f'NATLANG_REPO={pin} PYTHONPATH={pin}/training/neuralese:{pin} HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 '
+               f'MKL_NUM_THREADS=1')
+        measure = (f'exec /usr/bin/env {env} {sys.executable} -m natlang_neuralese.rl.held_eval measure '
+                   f'--manifest {directory}/dev/manifest.json --endpoint {record["endpoint"]}={args.slots} '
+                   f'--policy-id {policy} --top-p 0.95 --samples {args.samples} --out {out} '
+                   f'--label {directory.name}-{args.arm}-{args.series} --allow-other-engine --max-model-requests 40 '
+                   f'>> {out}/measure.log 2>&1')
+        subprocess.run(['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb',
+                        str(args.budget_gb), '--priority', args.priority, '--wait', '3600', '--workdir', str(pin), '--',
+                        '/bin/sh', '-c', measure], check=True)
+        while subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
+            time.sleep(30)
+        result = json.loads((out / 'result.json').read_text()) if (out / 'result.json').exists() else {}
+        results[directory.name] = {k: result.get(k) for k in ('policy_id', 'complete', 'scored', 'successes',
+                                                              'success_rate', 'samples_per_task')}
+        print(json.dumps({'event': 'arm measured', 'program': directory.name, 'arm': args.arm, **results[directory.name]}),
+              flush=True)
+    return 0 if all(r.get('complete') for r in results.values()) else 3
 
 
 # ---- teacher tasks ---------------------------------------------------------------------------------------------------
@@ -621,10 +755,28 @@ def main(argv=None):
                    help='bank target matrices (default: the program fits\' attention and conv projections)')
     b.add_argument('--recipe', help='JSON overrides of meta_bank.MetaRecipe')
     b.add_argument('--seed', type=int, default=0)
+    cf = sub.add_parser('colab-fit', help='a fit as a tenant of the Colab session (yields to rounds; resumable)')
+    cf.add_argument('--dir', required=True)
+    cf.add_argument('--host', default=None)
+    cf.add_argument('--commit', required=True, help='the tenant checkout commit (pushed to origin)')
+    cf.add_argument('--mps-percent', type=int, help='MPS SM share of the fit (default NATLANG_COLAB_TENANT_MPS_PERCENT, 50)')
+    cf.add_argument('--take-over', action='store_true', help='fit on Colab although a local fit state exists')
+    cm = sub.add_parser('colab-measure', help='one dev arm against a Colab tenant actor (held_eval on the DGX)')
+    cm.add_argument('--dir', action='append', required=True)
+    cm.add_argument('--arm', choices=('base', 'adapter'), required=True)
+    cm.add_argument('--host', default=None)
+    cm.add_argument('--commit', required=True)
+    cm.add_argument('--pin', required=True, help='experiment pin (scripts/pin_checkout.py) the episodes run from')
+    cm.add_argument('--series', default='a100', help='result directory suffix: DIR/eval/<arm>-dev-<series>')
+    cm.add_argument('--samples', type=int, default=2)
+    cm.add_argument('--slots', type=int, default=32)
+    cm.add_argument('--budget-gb', type=float, default=12.)
+    cm.add_argument('--priority', default='low')
     args = parser.parse_args(argv)
-    {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
-     'bank': bank}[args.command](args)
+    status = {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
+              'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure}[args.command](args)
+    return status if isinstance(status, int) else 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main() or 0)

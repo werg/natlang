@@ -301,8 +301,12 @@ def test_candidate_admission_gate_receives_exact_proposed_registry_and_manifest(
     real_run=subprocess.run;observed=[]
     def intercepted(command,*args,**kwargs):
         if command[:3]==['npm','run','--silent']:
+            assert kwargs['cwd']==rc.CODE_REPO/'ts-host'
             return SimpleNamespace(returncode=0,stdout='',stderr='')
         if isinstance(command,(list,tuple)) and any('render_native_turn_corpus.py' in str(item) for item in command):
+            assert command[1]==str(rc.CODE_REPO/'scripts/neuralese_data/render_native_turn_corpus.py')
+            assert kwargs['cwd']==rc.CODE_REPO
+            assert command[command.index('--source')+1]==str(repo/'data/corpora/new/turns.jsonl')
             registry=Path(command[command.index('--admission-registry-file')+1])
             manifest=Path(command[command.index('--admission-manifest-file')+1])
             corpora=json.loads(registry.read_text())['corpora']
@@ -407,7 +411,8 @@ def test_red_quick_check_preserves_complete_failure_without_publishing(tmp_path,
     from types import SimpleNamespace
     origin,repo=setup(tmp_path,monkeypatch);real_run=subprocess.run
     def run(command,*args,**kwargs):
-        if command==['scripts/check-main.sh','--quick']:
+        if command==[str(rc.CODE_REPO/'scripts/check-main.sh'),'--quick']:
+            assert kwargs['cwd']==rc.CODE_REPO
             return SimpleNamespace(returncode=1,stdout='full stdout',stderr='full stderr')
         return real_run(command,*args,**kwargs)
     monkeypatch.setattr(rc.subprocess,'run',run)
@@ -530,3 +535,34 @@ def test_promotion_snapshot_cannot_overwrite_newer_published_curation(tmp_path, 
         rc.register([{**NEW, 'roles': {'grpo-pool': {'order': 1}}}], 'stale promotion',
                     replace=True, check=False, expected_registry_ref=selected_ref)
     assert main_entry(origin, 'new') == text(curated)
+
+
+def test_pinned_publisher_uses_its_own_helpers_with_a_stale_poisoned_write_owner(tmp_path, monkeypatch):
+    import importlib.util
+    origin, owner = setup(tmp_path, monkeypatch)
+    helper = owner / 'scripts/neuralese_data/register_corpora.py'
+    helper.parent.mkdir()
+    shutil.copy(REAL / 'scripts/neuralese_data/register_corpora.py', helper)
+    sh('git', 'add', str(helper.relative_to(owner)), cwd=owner)
+    sh('git', 'commit', '-qm', 'pin producer code', cwd=owner)
+    sh('git', 'push', '-q', 'origin', 'main', cwd=owner)
+    pin = tmp_path / 'producer-pin'
+    sh('git', 'worktree', 'add', '--detach', str(pin), 'HEAD', cwd=owner)
+    before = sh('git', 'rev-parse', 'HEAD', cwd=pin).strip()
+    (pin / '.natlang-pin.json').write_text(json.dumps({'source': str(owner), 'commit': before}))
+    for relative in ['scripts/git_publish.py', 'scripts/sync_training_corpora.py',
+                     'scripts/neuralese_data/register_corpora.py']:
+        (owner / relative).write_text("raise RuntimeError('stale owner helper was executed')\n")
+    monkeypatch.setenv('NATLANG_REGISTRY_REPO', str(owner))
+    spec = importlib.util.spec_from_file_location('exact_pinned_corpus_publisher', pin / 'scripts/neuralese_data/register_corpora.py')
+    producer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(producer)
+    producer.LOCK = tmp_path / 'pin-producer.lock'
+    assert producer.CODE_REPO == pin and producer.REPO == owner
+    assert producer.register([NEW], 'publish using pinned helpers', check=False) == ['new']
+    assert main_entry(origin, 'new') == text(NEW)
+    assert sh('git', 'rev-parse', 'HEAD', cwd=pin).strip() == before
+    assert not (pin / producer.entry_file('new')).exists()
+    for relative in ['scripts/git_publish.py', 'scripts/sync_training_corpora.py',
+                     'scripts/neuralese_data/register_corpora.py']:
+        assert 'stale owner helper' in (owner / relative).read_text()
