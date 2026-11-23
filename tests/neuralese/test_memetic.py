@@ -508,8 +508,9 @@ def test_collection_leaves_out_memetic_rows_with_a_held_world(tmp_path):
         path = tmp_path / f'{name}.json'
         path.write_text(json.dumps({'support': [{'id': ids[0]}], 'query': [{'id': ids[1]}]}))
         rows.append({'id': f'memetic:{name}', 'semantics': {'world': {'kind': 'memetic', 'task': str(path)}}})
-    manifest = {'tasks': [{'id': 'w4'}], 'excluded_split_groups': []}
-    args = type('A', (), {'held_manifest': manifest, 'exclude_manifest': []})()
+    manifest = tmp_path / 'held.json'
+    manifest.write_text(json.dumps({'tasks': [{'id': 'w4'}], 'excluded_split_groups': []}))
+    args = type('A', (), {'held_manifest': str(manifest), 'exclude_manifest': []})()
     assert [r['id'] for r in grpo.memetic_rows_held_free(rows, args)] == ['memetic:a']
 
 
