@@ -48,6 +48,26 @@ else:
  if kind=='caught-child':
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
+if kind=='completed':
+ import recheck_live_trajectories as recovery
+ proof={'goal':interaction['goal'],'checks':{'native_state':True,'old_oracle':False}}
+ packet={'test':{'name':'draft'},'result':{'passed':False},'execution':{'diagnostics':{
+  'openGoalVerification':proof,'natlangTeacher':{'programPath':interaction['program'],'calls':[detail],
+  'rootCallIds':['call-one'],'report':{'value':'actual'}}}}}
+ raw=artifact(root,'original.json',packet)
+ artifact(root,'pins.json',{'repositories':{'natlang':{'git_commit':'a'*40,'dirty':False}},'instance':'owned-instance','run_id':'run'})
+ artifact(root,'catalog.jsonl',{'scenario':'draft','taskId':'live-draft','family':'draft','split':'train','sourceGroups':['drafts']})
+ outcome={'schema':'natlang.live-outcome-reassessment/1','task_id':'live-draft','original_sha256':raw['sha256'],
+  'goal':interaction['goal'],'entry':None,'actualResult':{'value':'actual'},'passed':True,
+  'checks':{'native_state':True,'old_oracle':True},'rationale':'Independently recomputed native outcome.',
+  'checker_sources':[artifact(root,'checker-source.json',{'code':'original checker'})],
+  'evidence':[artifact(root,'native-state.json',{'state':'native'})]}
+ completed=artifact(root,'completed.json',outcome)
+ artifact(root,'assessment.json',{'schema':'natlang.live-reassessment/1','task_id':'live-draft',
+  'original_sha256':raw['sha256'],'rationale':outcome['rationale'],'completed_outcome':completed})
+ recovery.held_closure=lambda _:{};recovery.held_hit=lambda *_:False
+ result=recovery.recover(root/'original.json',root/'pins.json',root/'assessment.json',root/'catalog.jsonl',root/'held.json',root/'derivative')
+ path=Path(result['manifest'])
 row=live.load_episode(path)['trajectory_ir']
 if kind=='masked-historical':row['outcome'].pop('excluded_return_decisions',None)
 (root/'input.jsonl').write_text(json.dumps(row)+'\n')
@@ -59,7 +79,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2]]) {
+for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -129,6 +149,26 @@ test('actual recovered archived Luna capture materializes from its original boun
       const run=spawnSync(process.execPath,[join(repo,'ts-host/scripts/materialize-native-teacher.mjs'),input,join(root,'real-output.jsonl')],{encoding:'utf8'});
       assert.equal(run.status,0,run.stderr);
       assert.equal(JSON.parse(run.stdout).training_decisions,expected);
-      assert.equal(row.outcome.task_completed,false);
+      assert.equal(row.outcome.task_completed,process.env.NATLANG_RECOVERED_COMPLETED==='1');
     } finally {await rm(root,{recursive:true,force:true});}
   });
+
+for(const mutation of ['actual-result','native-evidence','completion-status'])test(`completed reassessment rejects ${mutation} forgery`,async()=>{
+ const {root,row}=await fixture('completed');
+ try {
+  const manifest=JSON.parse(await readFile(row.provenance.source_manifest.path,'utf8'));
+  const base=join(root,'derivative');
+  if(mutation==='completion-status')row.outcome.reassessment=null;
+  else {
+   const receipt=JSON.parse(await readFile(join(base,manifest.verification.path),'utf8'));
+   const workspace=receipt.evidence.find(item=>item.kind==='workspace');
+   const proof=JSON.parse(await readFile(join(base,workspace.path),'utf8')).proof;
+   if(mutation==='native-evidence')await writeFile(join(base,proof.evidence[0].path),'forged witness');
+   else {
+    proof.actualResult={value:'invented'};const bytes=JSON.stringify({proof});await writeFile(join(base,workspace.path),bytes);
+    // Updating a local nested binding cannot rewrite the attested verification artifact.
+   }
+  }
+  await assert.rejects(verifyObservedWorkspaceEvidence(row));
+ }finally{await rm(root,{recursive:true,force:true});}
+});

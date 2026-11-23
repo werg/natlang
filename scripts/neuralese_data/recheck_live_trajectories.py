@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import shutil
 
-from live_teacher_sources import load_episode, open_goal_fingerprint
+from live_teacher_sources import bound_file, load_episode, open_goal_fingerprint, same_json_value
 from sft_sources import ZstdWriter, held_closure, held_hit
 
 
@@ -43,12 +43,32 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
             packet['result'].get('passed') is not False):
         raise ValueError('reassessment must bind the original failed training capture')
     checks = original.get('checks') or {}
+    completed = assessment.get('completed_outcome')
+    completed_proof = None
+    if completed is not None:
+        proof_path = bound_file(completed, Path(assessment_path).parent)
+        completed_proof = read(proof_path)
+        proof_checks = completed_proof.get('checks')
+        if (completed_proof.get('schema') != 'natlang.live-outcome-reassessment/1' or
+                completed_proof.get('original_sha256') != digest or completed_proof.get('task_id') != task['taskId'] or
+                completed_proof.get('goal') != original.get('goal') or
+                not same_json_value(completed_proof.get('entry'), exercise.get('entry')) or
+                not same_json_value(completed_proof.get('actualResult'), exercise.get('report')) or
+                completed_proof.get('passed') is not True or not isinstance(proof_checks, dict) or
+                set(proof_checks) != set(checks) or any(value is not True for value in proof_checks.values()) or
+                not completed_proof.get('rationale') or not completed_proof.get('evidence') or
+                not completed_proof.get('checker_sources')):
+            raise ValueError('completed reassessment must independently attest the exact original whole outcome')
+        for binding in completed_proof['evidence'] + completed_proof['checker_sources']:
+            bound_file(binding, proof_path.parent)
     selected = assessment.get('invocations') or []
+    if completed is not None and selected:
+        raise ValueError('completed reassessment must not silently restrict its training scope')
     for row in selected:
         names = row.get('checks') or []
         if not isinstance(names, list) or not names or any(checks.get(name) is not True for name in names):
             raise ValueError('reassessment cites an absent or failed independent workspace check')
-    if not selected:
+    if not selected and completed is None:
         raise ValueError('reassessment needs explicitly checked invocations')
     calls = exercise['calls']
     roots = exercise['rootCallIds']
@@ -69,7 +89,22 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         shutil.copyfile(packet_path, raw)
         original_binding = bind(out, 'original-outcome.json', packet['result'])
         assessment_binding = bind(out, 'reassessment.json', assessment)
-        proof_binding = {**bind(out, 'workspace.json', original), 'kind': 'workspace'}
+        completed_original_binding = None
+        if completed_proof is not None:
+            original_proof_bytes = proof_path.read_bytes()
+            (out / 'completed-outcome-original.json').write_bytes(original_proof_bytes)
+            completed_original_binding = {'path': 'completed-outcome-original.json', 'sha256': hashlib.sha256(original_proof_bytes).hexdigest()}
+            # Copy every independently bound witness/source into the derivative capture.
+            for field in ('evidence', 'checker_sources'):
+                copied = []
+                for index, binding in enumerate(completed_proof[field]):
+                    source = bound_file(binding, proof_path.parent)
+                    target = out / f'reassessment-{field}-{index}{source.suffix}'
+                    shutil.copyfile(source, target)
+                    copied.append({**binding, 'path': target.name})
+                completed_proof[field] = copied
+            bind(out, 'completed-reassessment.json', completed_proof)
+        proof_binding = {**bind(out, 'workspace.json', {'proof': completed_proof} if completed_proof is not None else original), 'kind': 'workspace'}
         invocation_scope = [{'call_id': row['call_id'], 'checks': {name: True for name in row['checks']},
                              'evidence': [proof_binding], **({'ordinals': row['ordinals']} if 'ordinals' in row else {})}
                             for row in selected]
@@ -79,15 +114,17 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         world = {'instance': pins['instance'], 'run_id': pins['run_id']}
         validator = bind(out, 'reassessment-validator.json', {
             'original_packet': {'path': raw.name, 'sha256': digest}, 'assessment': assessment_binding,
-            'implementation_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})
+            'implementation_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            **({'completed_outcome': completed_original_binding} if completed_original_binding else {})})
         bound_calls = [bind(out, f'call-{index}.json', call) for index, call in enumerate(calls)]
         verification = {'schema': 'natlang.live-task-verification/1', 'task_id': task['taskId'],
-                        'run_id': pins['run_id'], 'world': world, 'split': 'train', 'status': 'partial',
+                        'run_id': pins['run_id'], 'world': world, 'split': 'train', 'status': 'passed' if completed_proof is not None else 'partial',
                         'checks': {'originalCapturePreserved': True, 'independentInvocationEvidence': True},
                         'validator': validator, 'evidence': [proof_binding], 'interaction': interaction,
                         'root_call_ids': roots, 'calls': [call['summary'] for call in calls],
-                        'training_scope': {'schema': 'natlang.training-scope/1', 'original_outcome': original_binding,
-                                           'invocations': invocation_scope}}
+                        **({'reassessment': {'original_outcome': original_binding, 'assessment': assessment_binding}} if completed_proof is not None else
+                           {'training_scope': {'schema': 'natlang.training-scope/1', 'original_outcome': original_binding,
+                                              'invocations': invocation_scope}})}
         spec = {'schema': 'natlang.live-teacher-task/1', 'id': task['taskId'], 'family': task['family'],
                 'split': 'train', 'source_namespace': task['taskId'].rsplit(':', 1)[0],
                 'source_ids': [task['taskId']], 'source_groups': task['sourceGroups'],
