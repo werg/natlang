@@ -10088,3 +10088,89 @@ Its `/v1/neuralese/info` equals the DGX collection actor's in capabilities (`dec
 
 Tests: `test_async_train.py` (target parsing and slots, Pop unit naming, Colab-only rebind, yield and re-serve,
 GRPO-phase stop, held process detection and serve lock, collection law passed to the driver).
+## 2026-11-24 01:00 Teacher providers for aei1's campaign: Gemini on Vertex (credits), Nemotron 3.5 Super, ERNIE free; Nemotron 0/48 explained; three harness fixes (teacher-providers strand)
+
+**Nemotron 3 Ultra's 0/48 in `aei1/teacher-r0001`.** 45 of its 48 episodes were third attempts (`-a2`) on tasks Luna and
+Sol had both failed (Sol got 1/3 on that tier); with 1 slot behind 3-attempt routing it only ever saw that tail. Its
+records are well formed (tool calls on 549/549 targets, raw `reasoning_content` on all, 10 tool errors in 181 tool
+results). Its 0-turn `budget_exhaustion` records (12) are 40-call budget stops whose turns were not exported, not
+stalls. Inside the tail two oracle defects that every teacher hit: bAbI task 15 golds the singular species ("wolf" for
+"Sheep are afraid of wolves": Luna, Sol and Nemotron all answered "wolves"), task 19 golds direction letters ("s,e")
+the instruction never asks for (19 + 31 such tasks in the campaign's queue). Fixed in the scorer (below). Not a
+Nemotron harness bug; no harness bug found in its records.
+
+**Providers probed (2026-11-24 00:05-00:45, keys from `~/.config/natlang/*.env`; licenses and terms as facts):**
+- **Google Vertex AI**, project `awareness-481308` via the ADC user credentials (`gcloud auth application-default`):
+  Gemini 3.1 Pro Preview and Gemini 4 Argon serve (`trafficType ON_DEMAND`, billed to the project: the owner's
+  generation credits). Credit balance not readable here (Cloud Billing API disabled on the project; ADC is an
+  `authorized_user`, no `gcloud auth login` account). Reasoning **hidden** (no thoughts without `include_thoughts`;
+  with it Vertex's OpenAI endpoint puts a *thought summary* inside `content` as `<think>...</think>`, which the
+  runtime would treat as the answer text, so it stays off). Thought signatures round-trip (`extra_content`).
+  Gemini API terms (paid tier: prompts not used for product improvement).
+- **Google AI Studio key** (`GEMINI_API_KEY`): **free tier only** — every Pro and Gemini 4 model is `limit: 0`
+  (`generate_content_free_tier_*`, `RESOURCE_EXHAUSTED`); Flash models answer. The credits are on Vertex, not this key.
+- **NVIDIA NIM** (free API credits): Nemotron 3.5 Super VL 120B-A12B, Nemotron 3 Ultra, Mistral Large 4, MiniMax M3.1
+  Flash, Kimi K3.1 Pro, Step 5 Preview, GLM 5.3 Flash answer tool calls with raw `reasoning_content`. One
+  account-wide rate limit (429 "Too Many Requests" with ~12 qualification slots plus production): few slots in total.
+  Kimi K3.1 Pro, Step 5 and GLM 5.3 Flash took 74-180 s for a one-line tool call. Terms: NVIDIA API Catalog trial
+  credits; each model's weight license is on its card (not re-read here; all licenses are acceptable).
+- **OpenRouter**: credit $15.15 bought, $15.15 used ($0 left); free models 1,000 requests/day (the key bought >= $10)
+  and 20 requests/min. An episode uses ~38 requests: ~26 free episodes a day across all free models. ERNIE 5.5 Flash
+  Preview, Ling 3.2 Flash, dots 3 note, Nemotron 3 Ultra `:free` answer with raw reasoning.
+- **Groq** (free tier): gpt-oss-120b (raw reasoning) and Qwen 3.8 27B answer, but 8,000 tokens/min per model: below
+  one of our prompts (80-140k tokens per episode). Not usable. (A Python client needs a User-Agent: Cloudflare 1010.)
+- **Z.ai**: `1113 Insufficient balance or no resource package` on every GLM (5.4, 5.3, 5.3 Flash; general and coding
+  endpoints). **OpenCode Zen**: paid models 402 "Insufficient balance"; its free models are restricted to the official
+  OpenCode client (plans/OPENCODE_GENERATION.md), not a direct API. **Mistral** and **OpenAI platform** keys: invalid.
+- **Codex (Luna, Sol)**: no 429 or usage-limit error in the campaign's 300 Codex episodes at 4 + 2 slots; the
+  subscription's window usage was not readable.
+
+**Qualification** (`ops/ei/teacher-qual-20261124/`, pin 1c177e3fc609 for the first runs, 19459324d after the fixes):
+20 pool tasks of `aei1/teacher-r0001` (10 Luna first-attempt successes, 10 failures, one per family, bAbI 15/19 left
+out; none in the held-v2/v3/v4 closure by `held_eval.training_exclusion_ids`), one episode each, 40-call budget.
+
+| Teacher | Luna-solved half | Luna-failed half | Total | s/episode | Reasoning |
+|---|---|---|---|---|---|
+| Gemini 3.1 Pro Preview (Vertex) | 10/10 | 3/9 | 13/19 | 118 | hidden |
+| Gemini 4 Argon (Vertex) | 10/10 | 3/6 | 13/16 | 151 | hidden |
+| Nemotron 3.5 Super VL 120B-A12B (NIM) | 5/10 | 4/10 | 9/20 | 109 | raw (253/253 targets) |
+| ERNIE 5.5 Flash Preview (OpenRouter free) | 4/10 | 3/10 | 7/20 | 128 | raw (273/384) |
+| Nemotron 3 Ultra (NIM) | 0/2 | | 0/2 (stopped: 1,400 s/episode under NIM throttling) | | raw |
+| Mistral Large 4, MiniMax M3.1, Kimi K3.1 (NIM, after fix 2) | | | 0 finished after 25 min (NIM throttled) | | raw |
+
+Gemini episodes use ~16 calls, ~100k prompt tokens (estimate from rendered messages) and ~2k visible output tokens
+plus hidden thinking: roughly $0.2-0.4 per episode at list price before Vertex's implicit prefix caching (not read
+from billing). Open: Gemini answers some `decide()` calls with 400 "Expected a valid JSON object in the request"
+(259 failed nested calls over 35 episodes, mostly Argon); Vertex returns exactly this for a history function call whose
+`arguments` is not a JSON object (reproduced). The recorded histories hold no such call, so the request that decide()
+builds for a hosted endpoint is the suspect; not yet traced.
+
+**Specs (`expert_iteration.TEACHERS`, also `ops/ei/teachers.json`):** Haiku 4 (retired while the account is empty),
+Luna 6 and Sol 4 (`min_failed` 1) (were 4 and 2; no Codex limit errors), Nemotron 3.5 Super 2 + Nemotron 3 Ultra 1 (NIM:
+one account limit), ERNIE 5.5 Flash 1 (OpenRouter free quota), Gemini 3.1 Pro 3 + Gemini 4 Argon 3 (`min_failed` 1:
+paid tokens go to tasks another teacher failed). The campaign reads `ops/ei/teachers.json` at each launch from the
+first driver restart on a pin with these commits; until then the running `aei1-teacher` keeps its launch's specs.
+
+**Harness fixes (default on, tests):**
+1. `teacher_gen.completions_url`: an endpoint with a path is the API base. Vertex (`.../endpoints/openapi`), Z.ai
+   (`/api/paas/v4`) and AI Studio (`/v1beta/openai`) got `/v1/chat/completions` appended: 404 on every request.
+2. ts-host `x_natlang_history_reasoning` (`both` default, `reasoning_content`, `reasoning`, `none`): NIM's Mistral
+   Large 4, MiniMax M3.1 and Kimi K3.1 reject the `reasoning` + `reasoning_content` pair the runtime sends on history
+   turns ("duplicate field reasoning_content"): every second turn failed, the task deferred. teacher_gen's NIM default
+   sends `reasoning_content` only. Inventory: the only sender of reasoning history to an OpenAI-compatible server is
+   `ts-host/src/model/chat-completion.ts` (the HTTP transport); the Pi provider path (`pi-translation.ts`) speaks the
+   providers' own formats; engines (managed llama-server, wllama, native, SGLang) are receivers, unchanged.
+3. `task_packet`: bAbI task 15 plural species and task 19 spelled-out directions in gold order are accepted (classifier
+   `babi-alias/4`, `NATLANG_BABI_ALIAS_REPAIR=0` restores `babi-article/3`). **New scoring series** for held tasks of
+   those two families. Not changed: the generator's alias lists (`scripts/rl_tasks/sources/reading.py`).
+4. teacher spec `api_key_command` (a fresh Vertex token per episode; ADC tokens last an hour), `reasoning` recorded per
+   teacher in the manifest (`raw | summary | hidden`; Codex and Claude: summary, NIM/OpenRouter/Groq/Z.ai: raw, Gemini:
+   hidden), Vertex/Groq/OpenCode hosts named, "Insufficient balance" retires a teacher.
+5. `expert_iteration`: the campaign reads `ops/ei/teachers.json` at each launch (else `TEACHERS`), and its launch
+   script sources `openrouter.env`.
+
+**Reasoning path checked end to end** (owner 2026-11-24: teacher reasoning may stay as zero-weight context): a real
+Nemotron episode turn rendered by `sft_sources.call_row` with the round's tokenizer gives 144 zero-weight tokens
+(its raw reasoning through `</think>`) and 25 target tokens (the tool call); round r0001's mix holds 22,312 teacher
+chains (`--teacher-think context`, think treatment default `context`; a filled-reasoning unit replaces an episode only
+where it exists).
