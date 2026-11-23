@@ -11,6 +11,9 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
    * whole message. Only drivers marked `continuesReplies` receive it.
    */
   continue?: { text: string; reasoning?: string };
+  /** Host metadata, never sent: this turn samples reasoning `index` of a reasoned decision readout's `samples` (its reply
+   * after the reasoning is not the call's answer; the options are scored after the reasoning instead). */
+  decision_reasoning?: { index: number; samples: number };
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
   tool_choice?: 'auto' | 'required';
   /** Weight adapters bound in the calling function's context (Neuralese servers only; others refuse the call). */
@@ -148,6 +151,15 @@ export type DecisionRequest = { messages: unknown[]; options: string[]; adapters
    * scored without the end of message. A scorer that cannot score open replies fails with `decision-open-unsupported`
    * (never by scoring them closed). */
   open_reply?: boolean;
+  /** The reply's reasoning, sampled before the options are scored (a reasoned readout, the default of `readout:
+   * decision`): every option is scored as the content after it, the template's rendering of an assistant message with
+   * this reasoning (LFM3 `<think>R</think>option`). A scorer that cannot condition on it fails with
+   * `decision-reasoning-unsupported` (never by scoring without it). */
+  reasoning?: string;
+  /** Host metadata, never sent: this request is sample `index` of a reasoned readout's `samples`, and `action` marks
+   * the one whose choice the call returns when the scorer samples (RL collection); the others only estimate the
+   * readout's probabilities. */
+  reasoning_sample?: { index: number; samples: number; action: boolean };
   /** Set by the transport for a JOLT+ teacher attempt: the server renders this invocation's privileged block. */
   x_natlang_privileged_context?: Record<string, unknown> };
 export type DecisionScores = { log_probs: number[]; tokens?: number[];

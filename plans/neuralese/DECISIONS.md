@@ -8212,3 +8212,64 @@ Actual prepared v8 Workerd execution produced three completed trajectories/55 de
 The broader audit removes readonly one-shot/order limits and preserves independently issued same-revision evidence across Base, System Testing, Personal, Spectrolite, News, Examples, System and Google. User-requested ordering/counts, pagination cycle safety, approval, ownership and native revision/CAS remain. Successor checkouts remain separate from frozen v8; new sources enter through a new prepared release at a graceful wave boundary. Actual wave0033 completed model work with38 completed captures among64, all other attempts retained, while its whole-state checksum archival proceeds.
 
 Published recovered/new cohorts currently hold18 trajectories/199 eligible decisions (6 completed goals/134 decisions plus12 partials/65 decisions). Independent native materialization rejected zero rows. The standing DGX ingester actually extracted the earlier14/105 and wave0032's3/55 with no drops; student reasoning fill is active on its compatible pin. Registry admission, extraction, student fill and learner exposure stay separate. Existing training is untouched. See VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md and VIBESTUDIO_RECOVERED_DATA_HANDOFF_20261123.md for exact pins, receipts and phase status.
+
+## 2026-11-23 reasoned decisions: `readout: decision` reasons first, then scores; `readout: instant` is the fast mode
+
+**Decision (coordinator, from the 2026-11-23 decision-score hunt; this entry records it).** A decision readout samples
+the model's own reasoning on the readout request, then scores its options conditioned on that reasoning. That is the
+default of `readout: decision`, `decisionReadout: 'finite-returns'` and the std judgments. The no-reasoning readout
+stays as `readout: instant` (a new value of the existing `readout:` key: no new frontmatter key, one new word). Trace
+specialization and the compile ladder recover cost on hot paths. Why: the instant readout described a weaker
+no-reasoning policy (argmax = the model's reasoned answer on 7 of 10 prompts, mean TV 0.31; answerInvite `accept`
+p 0.40 vs `decline` 16/16), and floors and escalation read its confidence.
+
+- **Semantics.** `decisionSamples` reasoning samples per readout (default 4, `NATLANG_DECISION_SAMPLES`, model config;
+  1 at temperature 0; 0 = instant everywhere), drawn in parallel at the call's temperature on the unchanged readout
+  messages. Each option is scored as the content after the sample's reasoning (`<think>R</think>option`). A value's
+  probability is the mean over samples of its softmax after that reasoning: a Monte Carlo estimate of the reasoned
+  policy's answer distribution (the model's chance of answering with it when it reasons first). Scores are the model's
+  own log-probabilities, never tempered; temperature only shapes the reasoning drawn. Answer = mixture argmax; under an
+  RL sampling scorer, one seeded sample is the action and its sampled choice is the answer (a draw from the mixture).
+  Several samples rather than one: after its reasoning the model is almost always certain (the scored option equals
+  the answer it then wrote in 155/155 samples), so one sample's conditional is ~0/1 and a floor would read noise.
+- **Engines (one wire field, score item `reasoning`).** Python native and SGLang: `native_learning.decision_items(...,
+  reasoning=)` (shared-prefix rule puts R and `</think>` in the prompt; results echo `reasoning: true`, captures record
+  it). llama.cpp fork 0bee37915 on `neuralese` (token ids equal to Python on 3 items incl. `open_reply`); release run
+  45120615947 queued behind run 45117905605; the runtime pin moves with the next `update_llama_runtime --fork`. Until
+  then the managed server and the page do not echo: the client refuses (`decision-reasoning-unsupported`), traces it and
+  reads out instantly for that driver (ENGINE_PARITY gap row). Client: `decision-scoring.ts` (batch item + echo check;
+  prompt_logprobs route puts the reasoning on the assistant message), `neuralese-server.ts`, browser `local-model.ts`.
+- **Captures and training.** Reasoning turns: phase `decision_reasoning` in trajectories, `decision_reasoning` on
+  recorded turns, no execution-graph node; decision entries carry `assistant.reasoning` and `decision_reasoning:
+  {index, samples, action}`; the collector samples only the action. SFT (B5 objective): in a verified success each sample
+  whose answer equals the action's trains the option CE conditioned on its own reasoning plus the reasoning tokens as
+  own targets (`decision_graph.reasoned_decision_plan`, `exp0_sft` reasoning NLL; opt-out `--no-decision-reasoning`);
+  other samples and groups without an action are not trained. `sft_sources.ReplayEpisode` answers a reasoned group from
+  its action entry as one call. GRPO: the choice is conditioned on R (capture prompt ids); R's tokens are not trained
+  there (open). Tune rollouts push the action sample only.
+- **Calibration (same 10 prompts, sft-v8, native engine, the hunt's 16 recorded reasoned samples each;
+  `ops/semantic-fp/decision-parity/reasoned-20261123/reasoned.json`).** Readout vs the reasoned answers of the 12
+  held-out samples: instant TV 0.30, mode 8/10 -> reasoned (k=4) TV 0.12, mode 9/10. Vs all 16: 0.31 / 7 -> 0.09 / 10.
+  answerInvite: instant `accept` 0.38 -> reasoned `decline` 1.00; routeEmail 0.50 -> 1.00; moderatePost and rateBug move
+  to the sampled mode. Mean of all 16 conditionals vs the 16 answers: TV 0.000.
+- **B13 `compatible.nl` cases (sft-v6, the current policy, native server; `compatible-v2.json`).** Four reconstructed cases (the B13 diag
+  program is gone; texts from `examples/release` and B13's entry): P(compatible) instant -> reasoned (k=16), and the
+  answers the 16 reasoning turns wrote: additive highlights, clean intents (gold true) 0.057 -> 0.189 (2 true / 12
+  false / 2 cut off at 4096 tokens); same with the model's intents (true) 0.128 -> 0.120 (1/14/1); version clash
+  (false) 0.023 -> 0.000 (0/16); release titles (false) 0.057 -> 0.000 (0/16). **Reasoning does not fix it:** the
+  readout now ranks the compatible cases above the clashes (it did not before) and its numbers match what the model
+  answers when it reasons, but the reasoned policy itself judges additive edits incompatible (14 of 16 answers), so
+  every merge is still judged incompatible at any sensible floor. It stays a training target (WS5
+  `semantic-convergence`, as B13 recorded); the reasoned readout makes the floor read the policy's actual belief. The
+  compatible cases also reason long (two samples hit 4096 tokens): `compatible` is a candidate for `readout: instant`
+  or a specialized path once trained.
+- **Also fixed:** `nl` called on literal instructions (``nl(`...`(x))``, ``nl(`...`, x)``, ``nl(`...`)(x)``) compiles as
+  the tag form on every compile path (compiler host, eval, host cells) with identical plans and identity; `nl-not-tag`
+  stays for run-time-built text (now one sentence naming that cause) and `nl` as a value (B13's live loop;
+  MODEL_FACING_CHANGES); a reasoning reply
+  cut off before `</think>` is still used as the reasoning; `model-call-kinds.json` declares `decision-reasoning` and the
+  `/v1/neuralese/sentinel` route; a guessed (`discover`) score endpoint answering non-score JSON counts as absent.
+- **Open.** The Python engines strip the reasoning text (`chat.build_message` `.strip()`), so the scored prompt can differ
+  from the sampled ids at the edges (`build.json` `decision_reasoning_ids_exact` counts it; the rendered ids train).
+  Stock-model frames (`decision-frame.ts`) score a framed request after reasoning sampled on the unframed one. Not run:
+  SGLang end to end with reasoning, the page, a full collection with reasoned readouts, held eval.

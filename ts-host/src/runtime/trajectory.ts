@@ -15,7 +15,11 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
   const planned = Object.hasOwn(response, 'execution_plan');
   const retainedReasoning = planned ? response.execution_plan :
     response.reasoning ?? message.reasoning_content ?? message.reasoning ?? message.thinking ?? null;
-  return { phase: 'action', ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}), context: structuredClone(request.messages),
+  // The reasoning sampled for a reasoned decision readout is not an action: its reply after the reasoning was not the
+  // call's answer (the readout's scored decision entries are, with this reasoning as their `assistant.reasoning`).
+  return { phase: request.decision_reasoning ? 'decision_reasoning' : 'action',
+    ...(request.decision_reasoning ? { decision_reasoning: { ...request.decision_reasoning } } : {}),
+    ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}), context: structuredClone(request.messages),
     request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id")))),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),

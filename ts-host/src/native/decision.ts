@@ -7,6 +7,14 @@
  * call's opening, and returns the most probable one. The full distribution is kept in the trace, so a decision is a
  * scored probability vector: it can be scored with proper scoring rules (Brier, ranked
  * probability score) and, on a Neuralese server, differentiated. A call declares `readout: decision`.
+ *
+ * `readout: decision` reasons first (DECISIONS 2026-11-23 "reasoned decisions"): the model replies to the readout's
+ * request `decisionSamples` times (its own reasoning, sampled at the call's temperature), and the options are scored
+ * after each reasoning. A value's probability is the mean over the samples of its softmax after that reasoning: the
+ * model's probability of answering with it when it reasons first, as it does when it generates (temperature shapes
+ * the reasoning drawn; the scores are the model's own log-probabilities, not tempered). `readout: instant` scores the
+ * options right after the request, without reasoning: one forward pass, for latency-critical calls; its
+ * probabilities describe the model answering without reasoning.
  * Without scoring, the same prompt generates one actual JSON choice, with no inferred probabilities.
  * A call opts in through frontmatter, or every finite-typed call does when the model config sets `decisionReadout: 'finite-returns'`.
  */
@@ -14,7 +22,7 @@ import type { DecisionRequest, DecisionScorer, DecisionScores } from '../contrac
 import type { Type, TypeEnv } from './types.js';
 
 export type DecisionValue = string | number | boolean | null;
-export const DECISION_READOUT_MODES = ['decision'] as const;
+export const DECISION_READOUT_MODES = ['decision', 'instant'] as const;
 export type DecisionReadout = typeof DECISION_READOUT_MODES[number];
 
 /** Every value of a finite type, in declaration order; null when the type is not finite. */
@@ -192,6 +200,20 @@ export const DECISION_SYSTEM_PROMPT = 'You are running one call of a natural-lan
 export { decisionPrompt } from '../decision-frame.js';
 
 /** The driver's decision scorer (contracts.ts `DecisionRequest`), if it carries the optional capability. */
+/** Reasoning samples a `readout: decision` call draws by default: enough to estimate the reasoned answer
+ * distribution (a floor or an escalation reads it), drawn in parallel so a batching server decodes them together. */
+export const DECISION_SAMPLES = 4;
+
+/** The reasoning samples of a `readout: decision` call: the configured number (`decisionSamples`), else
+ * `NATLANG_DECISION_SAMPLES`, else DECISION_SAMPLES; one at temperature 0 (every draw is the same). 0 reads every
+ * decision out without reasoning, as `readout: instant` does. */
+export function decisionSamples(configured?: number, temperature?: number): number {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_DECISION_SAMPLES;
+  const value = configured ?? (env !== undefined && env !== '' ? Number(env) : DECISION_SAMPLES);
+  if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`decisionSamples must be a whole number of reasoning samples (0 or more), not ${value}`);
+  return temperature === 0 ? Math.min(value, 1) : value;
+}
+
 export function decisionScorer(driver: { decide?: DecisionScorer } | null | undefined): DecisionScorer | undefined {
   return typeof driver?.decide === 'function' ? driver.decide : undefined;
 }

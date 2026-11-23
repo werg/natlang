@@ -51,8 +51,9 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
    * call site instantiates from the type its result is used as (native/representation.ts).
    */
   generic?: GenericResult;
-  /** `readout: decision` in the frontmatter: answer by scoring the finite result values (native/decision.ts). */
-  readout?: 'decision' | 'template';
+  /** `readout: decision` in the frontmatter: answer by scoring the finite result values after the model's own reasoning;
+   * `readout: instant`: score them without reasoning, in one pass (native/decision.ts). */
+  readout?: 'decision' | 'instant' | 'template';
   /** `model: NAME` in the frontmatter: the call runs on the runtime's model of that name (`models`), else the default. */
   model?: string;
   /**
@@ -288,13 +289,15 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   if (generic && (Object.hasOwn(types, generic.name) || Object.values(args).some(type => new RegExp(`(?<![\\w$])${generic!.name}(?![\\w$])`).test(type))))
     throw new NatlangSourceError(path, `${generic.name} is the generic result; name the parameter something no argument or type alias uses`,
       frontmatterLine(text, 'generic'));
-  if (generic && meta.readout === 'decision')
-    throw new NatlangSourceError(path, `readout: decision scores a finite crisp result; declare returns: ${generic.crisp} for it`, frontmatterLine(text, 'readout'));
+  if (generic && (meta.readout === 'decision' || meta.readout === 'instant'))
+    throw new NatlangSourceError(path, `readout: ${meta.readout} scores a finite crisp result; declare returns: ${generic.crisp} for it`, frontmatterLine(text, 'readout'));
   const returns = generic?.crisp ?? meta.returns;
   checkSignature(path, args, returns, types, text);
   if (generic) checkSignature(path, {}, generic.neuralese, types);
   if (meta.readout !== undefined) {
-    if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template', frontmatterLine(text, 'readout'));
+    if (meta.readout !== 'decision' && meta.readout !== 'instant' && meta.readout !== 'template')
+      throw new NatlangSourceError(path, 'readout must be decision (reason, then score the values), instant (score them without reasoning) or template',
+        frontmatterLine(text, 'readout'));
   }
   // A model name is a word (small) or, where the runtime names models by provider, a "provider:id" ref.
   if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w.:/-]*$/.test(meta.model)))
@@ -311,10 +314,10 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
       !/^(?:\.\/)?[\w$.-]+(?:\/[\w$.-]+)*\/?$/.test(item) || item.split('/').some(part => part === '..'))))
     throw new NatlangSourceError(path, 'protect lists items of this function\'s folder by path from that folder, such as [checks/citations.ts]',
       frontmatterLine(text, 'protect'));
-  if (meta.readout === 'decision') {
+  if (meta.readout === 'decision' || meta.readout === 'instant') {
     const env = new TypeEnv(parseAliases(types));
     if ((decisionDomain(parseTypeCached(returns), env)?.size ?? 0) < 2)
-      throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no" or a record whose fields are all finite',
+      throw new NatlangSourceError(path, `readout: ${meta.readout} needs a finite returns type with at least two values, such as "yes" | "no" or a record whose fields are all finite`,
         frontmatterLine(text, 'returns'));
   }
   const params = Object.keys(args).map(raw => raw.replace(/\?$/, ''));
@@ -337,7 +340,7 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
     description: String(meta.description ?? ''), args, returns,
     instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {}, ...(generic ? { generic } : {}),
-    ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}),
+    ...(meta.readout === 'decision' || meta.readout === 'instant' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'instant' | 'template' } : {}),
     ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
     ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}),
     ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}),

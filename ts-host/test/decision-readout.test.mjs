@@ -40,7 +40,7 @@ test('the prompt-logprob decider scores where the options differ, through the en
     /^Error: decision-unsupported/);
 });
 
-const VERDICT = '---\nargs: { statement: string }\nreturns: "knight" | "knave"\nreadout: decision\n---\nWho said it?\n';
+const VERDICT = '---\nargs: { statement: string }\nreturns: "knight" | "knave"\nreadout: instant\n---\nWho said it?\n';
 
 test('a readout: decision function answers by scoring its values once, without the tool loop', async () => {
   const traces = [], requests = [];
@@ -103,8 +103,8 @@ test('without a scorer the call generates a JSON decision; finite-returns applie
   const driver = Object.assign(plain, { decide: async () => ({ log_probs: [-0.1, -3] }) });
   assert.equal(await createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, seed: { mode: 'backend' } })
     .run(() => open('q')), true);
-  assert.throws(() => loadVirtualNatlang({ 'bad.nl': '---\nargs: {}\nreturns: string\nreadout: decision\n---\nx\n' }, 'bad.nl'),
-    /readout: decision needs a finite returns type/);
+  assert.throws(() => loadVirtualNatlang({ 'bad.nl': '---\nargs: {}\nreturns: string\nreadout: instant\n---\nx\n' }, 'bad.nl'),
+    /readout: instant needs a finite returns type/);
 });
 
 test('a readout: template function forces its first reply to return_result, writing a Neuralese result', async () => {
@@ -209,7 +209,7 @@ test('the readout offers no tools: its system turn is the decision prompt, not t
   const requests = [];
   const driver = Object.assign(async () => { throw new Error('the tool loop must not run'); }, {
     decide: async request => { requests.push(request); return { log_probs: [Math.log(0.3), Math.log(0.7)] }; } });
-  const agent = new NativeToolAgent(driver, { decisionReadout: 'finite-returns',
+  const agent = new NativeToolAgent(driver, { decisionReadout: 'finite-returns', decisionSamples: 0,
     authoredTextGuidance: authoredTextGuidance('Use the approved procedure.', 'fixture-program') });
   const runtime = interpreter({ agent: session => agent.run(session) });
   await runtime.run(lambda({ type: '() => "yes" | "no"', instructions: 'Decide.' }));

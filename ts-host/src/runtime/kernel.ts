@@ -53,7 +53,7 @@ export type CallableDefinition = {
   subtype: 'function' | 'directory-reducer';
   /** `decision`: the call scores its finite result values instead of running the tool loop (native/decision.ts).
    * `template`: the call's first reply is forced to `return_result`, its value written or decoded (template readout). */
-  readout?: 'decision' | 'template';
+  readout?: 'decision' | 'instant' | 'template';
   /** The runtime's model this definition runs on (`models`); the default model when absent or not configured. */
   model?: string;
   /** Tools this definition's own calls are not offered (`withhold:` frontmatter; loader WITHHOLDABLE_TOOLS). */
@@ -806,7 +806,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxTurns: definition.budget?.maxTurns ?? model.maxTurns, maxTokens: definition.budget?.maxTokens ?? model.maxTokens,
     turnTokens: definition.budget?.turnTokens ?? model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: definition.budget?.contextTokens ?? model.contextTokens,
-    maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout, decisionGeneration: model.decisionGeneration,
+    maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout, decisionGeneration: model.decisionGeneration, decisionSamples: model.decisionSamples,
     guidance: model.guidance, promptRendering: model.promptRendering,
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
@@ -894,7 +894,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     outcome = result.outcome.kind; detail = result.outcome.detail;
     const scored = frame.readout && runtime.trace.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
     if (scored) frame.readout!({ options: scored.options as string[], probabilities: scored.probabilities as number[],
-      ...(scored.fields ? { fields: scored.fields as NonNullable<DecisionReadout['fields']> } : {}) });
+      ...(scored.fields ? { fields: scored.fields as NonNullable<DecisionReadout['fields']> } : {}),
+      ...(Array.isArray(scored.reasoning) ? { reasoned: scored.reasoning.length } : {}) });
     if (outcome !== 'done') {
       const code = refinementCodeOf(detail);
       if (code) throw new RefinementCallError(code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);

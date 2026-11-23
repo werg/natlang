@@ -48,7 +48,7 @@ export async function triage(tickets: string[], rubric: string): Promise<Report>
   const draft: Summary = await nl`Write one paragraph saying what is going wrong across tickets, most severe first.`(tickets);
 ```
 
-`classify.nl` is a natural-language function with `readout: decision`: the model scores the three labels in one pass,
+`classify.nl` is a natural-language function with `readout: decision`: the model reasons, then scores the three labels,
 and `decide` returns their probabilities. The tickets it is sure of are settled locally; `classify.on({ model:
 'teacher' })` asks a stronger model about the rest (`teacher` is the profile that your model profile names as
 `escalate`; without one the call runs on the default model). Counting is code. The summary's type is a property the
@@ -106,8 +106,8 @@ natlang dev                            # reruns after source or input edits; Ctr
 
 `natlang init` writes an inbox planner, the paradigm in one screen. `types.ts` holds the data: a `Message` whose body
 is `Untrusted<string>` (fenced as data, never followed) and a `Reply` typed `Is<string, "...">` (a property the runtime
-checks on every draft). `route.nl` is a typed function with `readout: decision`: the model scores `reply`, `fyi` and
-`ignore` in one pass. `main.ts` maps it over the messages with `decide(route, message)`, keeps each confidence, and
+checks on every draft). `route.nl` is a typed function with `readout: decision`: the model reasons, then scores `reply`, `fyi`
+and `ignore`. `main.ts` maps it over the messages with `decide(route, message)`, keeps each confidence, and
 drafts a reply with an inline `nl<Reply>` only where one is needed. `examples.json` holds the `route.nl` cases,
 `messages.json` the sample input, `natlang.json` the run target, and `AGENTS.md` (with `CLAUDE.md`) guides coding
 agents. `natlang init DIR --template classifier` writes the one-function program instead: `answer.nl`, a three-label

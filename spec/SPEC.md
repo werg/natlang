@@ -410,9 +410,15 @@ judgment is given directly.
 **Decision readout.** A function whose result type is finite (a union of
 literals, `boolean`, `null`; a record whose fields are all finite and none optional; a union of such records,
 tagged or not) may declare `readout: decision`. Its call then
-offers no tools: the runtime asks the model to score every allowed value as the
-whole reply to the call's opening (signature and arguments, under a short
-system prompt) and returns the most probable one. The normalised distribution
+offers no tools. The model first replies to the readout's request (the call's opening, signature and arguments,
+under a short system prompt) with its own reasoning, `decisionSamples` times (default 4, drawn at the call's
+temperature; one at temperature 0); the runtime then scores every allowed value as the whole reply after each
+reasoning and returns the value with the highest mean probability. A value's probability is that mean: the model's
+chance of answering with the value when it reasons first, as it does when it generates. The scores are the model's own
+log-probabilities (not tempered); temperature only shapes the reasoning drawn. `readout: instant` scores the values
+right after the request, without reasoning: one pass for latency-critical calls, whose probabilities describe the
+model answering without reasoning (`decisionSamples: 0` makes every readout instant). `decide(...)` reports
+`reasoned`, the number of reasoning samples, when the call reasoned. The normalised distribution
 is the call's trace event `decision_readout` and its note, so a decision is a
 probability vector that proper scoring rules (Brier, ranked probability score,
 log loss) can grade (the [learning extension](ext/learning.md) also differentiates them). Code reads it with
@@ -430,7 +436,7 @@ call. A backend that cannot score replies generates one offered JSON value on th
 without tools. This is a sampled choice with `scored: false`, not a score distribution. A missing, truncated, malformed
 or unoffered choice fails with `decision-generation-invalid`; return one complete offered JSON value. The model setting
 `decisionGeneration: 'tool-loop'` explicitly restores the prior unscored tool loop for controlled diagnosis.
-The loader rejects `readout: decision` on a type that is not finite.
+The loader rejects `readout: decision` and `readout: instant` on a type that is not finite.
 
 ## Eval
 

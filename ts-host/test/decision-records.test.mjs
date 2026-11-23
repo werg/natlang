@@ -58,12 +58,12 @@ test('field-by-field candidates end where the next key name starts, so they are 
 });
 
 const ROUTE = [
-  '---', 'args: { message: string }', 'returns: "{ label: \\"spam\\" | \\"ham\\"; urgent: boolean }"', 'readout: decision', '---',
+  '---', 'args: { message: string }', 'returns: "{ label: \\"spam\\" | \\"ham\\"; urgent: boolean }"', 'readout: instant', '---',
   'Classify the message and say whether it is urgent.', ''].join('\n');
 const BIG = [
   '---', 'args: { message: string }',
   'types:', '  Ticket: "{ label: \\"spam\\" | \\"ham\\" | \\"other\\"; urgency: \\"low\\" | \\"mid\\" | \\"high\\"; route: \\"billing\\" | \\"tech\\" | \\"sales\\" | \\"abuse\\" }"',
-  'returns: Ticket', 'readout: decision', '---', 'Triage the message.', ''].join('\n');
+  'returns: Ticket', 'readout: instant', '---', 'Triage the message.', ''].join('\n');
 
 test('a record decision within the joint limit scores every record once and reports per-field marginals', async () => {
   const requests = [];
@@ -128,8 +128,8 @@ test('every engine route carries open_reply and an engine that ignores it is ref
   assert.equal('open_reply' in batchScoreItem({ messages: [], options: ['"x"'] }), false);
   assert.equal(promptLogprobRequest([], '{"a":', {}, true).continue_final_message, true);
   assert.equal(promptLogprobRequest([], '"a"').continue_final_message, false);
-  assert.throws(() => scoresFromBatchResult({ log_probs: [-1, -2] }, 2, true), /^Error: decision-open-unsupported/);
-  assert.deepEqual(scoresFromBatchResult({ log_probs: [-1, -2], open_reply: true }, 2, true).log_probs, [-1, -2]);
+  assert.throws(() => scoresFromBatchResult({ log_probs: [-1, -2] }, { options: ['a', 'b'], open_reply: true }), /^Error: decision-open-unsupported/);
+  assert.deepEqual(scoresFromBatchResult({ log_probs: [-1, -2], open_reply: true }, { options: ['a', 'b'], open_reply: true }).log_probs, [-1, -2]);
   // the stock-model frame wraps open replies without closing them
   const framed = framedDecision({ messages: [{ role: 'user', content: decisionFieldsPrompt(['{"a":<1 | 2>,"b":<true | false>}']) }],
     options: ['{"a":1,"', '{"a":2,"'], open_reply: true }, 'result-object');

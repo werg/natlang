@@ -53,7 +53,7 @@ test('privileged self-teaching supplies only invocation-visible facts to scored 
 test('verified scored decisions become training turns without privileged prompts', async () => {
   const root = project();
   try {
-    writeFileSync(join(root, 'outer.nl'), '---\nargs: { value: string }\nreturns: "yes" | "no"\nreadout: decision\n---\nChoose yes.\n');
+    writeFileSync(join(root, 'outer.nl'), '---\nargs: { value: string }\nreturns: "yes" | "no"\nreadout: instant\n---\nChoose yes.\n');
     writeFileSync(join(root, 'examples.json'), JSON.stringify(values.map(value => ({function:'outer.nl',
       inputs:{value},expected:'yes',group:`w:${value}`}))));
     const examples = split(root);

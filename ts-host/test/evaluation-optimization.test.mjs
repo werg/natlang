@@ -154,7 +154,7 @@ test('evaluation imports application state afresh, scores real runtime execution
 
 test('a driver that scores decision readouts answers them for the evaluation worker, metered as model calls', async () => {
   const fixture = fixtureSuite();
-  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: instant\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
   const suite = await loadEvaluationSuite(fixture.path);
   const scored = [];
   const driver = Object.assign(() => { throw new Error('a scored decision must not run the tool loop'); }, {
@@ -198,7 +198,7 @@ test('teacher capture preserves exact executor exchanges and actual identity wit
 
 test('teacher capture refuses scored decisions instead of silently omitting training targets', async () => {
   const fixture = fixtureSuite();
-  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: instant\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
   const prepared = await loadEvaluationSuite(fixture.path);
   const driver = Object.assign(() => { throw new Error('unexpected generated turn'); }, {
     decide: async request => ({ log_probs: request.options.map(() => -1) }),
@@ -236,7 +236,7 @@ test('teacher capture binds nested invocations and excludes the independent judg
 test('the CLI evaluation driver of a model session scores decision readouts in the evaluation', async () => {
   const { sessionDriver } = await import('../dist/model/driver.js');
   const fixture = fixtureSuite();
-  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: instant\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
   const suite = await loadEvaluationSuite(fixture.path);
   const scored = [];
   const session = { turn: async () => { throw new Error('a scored decision must not run the tool loop'); },
@@ -248,7 +248,7 @@ test('the CLI evaluation driver of a model session scores decision readouts in t
 
 test('a driver that declines to score generates a JSON decision, charged for the actual request only', async () => {
   const fixture = fixtureSuite();
-  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: decision\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
+  writeFileSync(join(fixture.root, 'classify.nl'), '---\nreadout: instant\nargs: { value: string }\nreturns: \'"ordinary" | "urgent"\'\n---\nAnswer urgent when value asks for help, otherwise ordinary.\n');
   const suite = await loadEvaluationSuite(fixture.path);
   const model = scriptedModel(() => 'return "ordinary"');
   let turns = 0;

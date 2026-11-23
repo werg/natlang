@@ -99,9 +99,10 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    reused or tested on its own. When the instructions are several steps of judgment, number them and name the data
    each step uses. Children get distinct sub-questions and the inputs they need, and a parent gets its children's
    results, not their raw inputs.
-4. **Finite answers are decisions.** `readout: decision` on a literal-union or boolean result: one scored pass, and
-   `decide(fn, ...args)` returns the probabilities. Gate actions on confidence, and escalate the unsure cases with
-   `fn.on({ model })`.
+4. **Finite answers are decisions.** `readout: decision` on a literal-union, boolean or finite-record result: the
+   model reasons, then every value is scored, and `decide(fn, ...args)` returns the probabilities. Gate actions on
+   confidence, and escalate the unsure cases with `fn.on({ model })`. `readout: instant` scores without reasoning, in
+   one pass, for calls where latency matters more than accuracy.
 5. **Compose.** Map a judgment over a collection with `Promise.all`. Pass semantic functions as arguments. Rebind a
    function's context with `fn.in(context)`. Use `pluggable({ crisp, nl })` where a rule and a judgment compete
    ([composition](references/composition.md)).
@@ -152,7 +153,10 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `invalid-binding` | A name reused for a result (`const plan = await plan(x)`): keep the result under another name (`planResult`). |
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
 | `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, an item an `ensures:` check names, `types.ts`, the `protect:`, `ensures:`, `measure:` and `recursive:` lines): leave it as it is and fix the code that produces the value it rejects. |
-| `idiom-decision-readout` (warning) | Add `readout: decision` to the function's front matter so its finite result is scored in one pass; a function that must call helpers before it answers gets a companion folder for them. |
+| `idiom-decision-readout` (warning) | Add `readout: decision` to the function's front matter so the model reasons and its finite result is scored without a tool loop; a function that must call helpers before it answers gets a companion folder for them. |
+| `nl-not-tag` | Write the instructions in place as a template right after `nl` (``nl<T>`...`(x)``, or ``nl<T>(`...`, x)``); put changing values in `${...}` or pass them as arguments, never build the instruction text at run time, and never use `nl` itself as a value. |
+| `readout must be decision (reason, then score the values), instant (score them without reasoning) or template` | Write `readout: decision`, or `readout: instant` for a hot-path call that should skip the reasoning. |
+| `readout: decision needs a finite returns type` (or `readout: instant ...`) | Declare a finite `returns` (a literal union, `boolean`, or a record whose fields are all finite), or drop `readout:` and let the call run its tool loop. |
 | `idiom-code-in-prose` (warning) | Move the step the instructions describe as code into a TypeScript helper in the function's companion folder, and let the instructions call it by name. |
 | `idiom-fixed-cursor-iterate` (warning) | Map the step over the list (`await Promise.all(items.map(item => judge(item)))`) and keep `iterateOn` for steps that read the previous state. |
 | `capture-conflict` | Another task changed a captured `let` mid-call; if it recurs, make the state a parameter or a returned value. |
