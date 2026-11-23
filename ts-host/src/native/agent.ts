@@ -48,7 +48,9 @@ import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
-import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
+import { DECISION_SYSTEM_PROMPT, armForm, decisionDomain, decisionPrompt, decisionScorer, domainMatch, domainValues,
+  pathValue, scoredJointly, softmax, stepCandidates, type DecisionDomain, type DecisionPath } from './decision.js';
+import { decisionFieldsPrompt } from '../decision-frame.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 import {activeRecorder, activeNativeAdapters, activeNativeStates} from './model-recording.js';
 import { hexDigest } from './hash.js';
@@ -1603,26 +1605,30 @@ export class NativeToolAgent {
 
   /**
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
+   * Up to DECISION_JOINT_OPTIONS values are scored together, each the whole reply; a larger record type is scored field
+   * by field, each step's candidates as the start of the reply after the fields chosen before (`stepCandidates`).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
   private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
     const lam = session.lam;
     const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
-    const values = finiteValues(lam.type.returns, session.env);
+    const domain = decisionDomain(lam.type.returns, session.env);
     const callId = session.runtime.currentCallId ?? null;
     const bounded = this.options.modelBudget?.maxRequests !== undefined || this.options.modelBudget?.maxTokens !== undefined;
     const decide = bounded ? undefined : decisionScorer(this.driver);
-    if (!values || values.length < 2 || (!decide && this.options.decisionGeneration === 'tool-loop')) {
+    if (!domain || domain.size < 2 || (!decide && this.options.decisionGeneration === 'tool-loop')) {
       if (lam.readout === 'decision') session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable',
         reason: decide ? 'result type is not finite' : 'model driver cannot score replies' });
       return false;
     }
-    const replies = values.map(value => JSON.stringify(value));
+    const joint = scoredJointly(domain) ? [...domainValues(domain)] : undefined;
+    const replies = joint?.map(item => item.text);
     // The readout offers no tools, so its system turn is the short decision prompt; the tool manual of the opening's
     // system turn stays out (it is most of the opening's tokens). The program's guidance is in the opening message.
     const system = this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT;
-    const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
+    const question = replies ? decisionPrompt(replies) : decisionFieldsPrompt(domain.arms.map(armForm));
+    const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: question }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
     const training = this.options.trainingGuidance;
     const guidancePolicy = training?.policyOf(session.lam, callId);
@@ -1631,45 +1637,86 @@ export class NativeToolAgent {
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
     const started = performance.now();
-    const generate = () => this.generatedDecision(session, encoded.messages, values, capturedGuidance, guidancePolicy);
+    const generate = () => this.generatedDecision(session, encoded.messages, domain, capturedGuidance, guidancePolicy);
     if (!decide) return generate();
-    let scores;
-    try {
-      const adapters = adapterCells(lam);
-      if (adapters.length && !supportsNeuralese(this.driver))
-        throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
-      // Every call of this function shares its messages before the first tool result (the argument values), or all but
-      // the final question when it has none: a server that caches by prefix continues the next call from there.
-      const firstValues = encoded.messages.findIndex(message => (message as { role?: unknown }).role === 'tool');
-      const cacheMessages = firstValues >= 0 ? firstValues : encoded.messages.length - 1;
+    const adapters = adapterCells(lam);
+    if (adapters.length && !supportsNeuralese(this.driver))
+      throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+    // Every call of this function shares its messages before the first tool result (the argument values), or all but
+    // the final question when it has none: a server that caches by prefix continues the next call from there.
+    const firstValues = encoded.messages.findIndex(message => (message as { role?: unknown }).role === 'tool');
+    const cacheMessages = firstValues >= 0 ? firstValues : encoded.messages.length - 1;
+    const score = async (options: string[], open: boolean, turn: number) => {
       // model-call-kind: decision-readout -- training/model-call-kinds.json
-      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies, cache_messages: cacheMessages,
+      const scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options, cache_messages: cacheMessages,
+        ...(open ? { open_reply: true } : {}),
         ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
         ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
-    } catch (error) {
+      if (scores.log_probs.length !== options.length || scores.log_probs.some(value => !Number.isFinite(value)))
+        throw new Error('decision readout returned no finite score for every option');
+      // A decision readout is a model turn of its call's execution graph, like a generated turn (one per scored step).
+      const turnNode = await this.modelTurnNode(session, encoded.messages,
+        scores.native_decision_capture ? { raw_response: { x_natlang_rl_capture: scores.native_decision_capture } } : {}, turn, 'decision');
+      if (turnNode && scores.x_natlang_native_recorded_turn) activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn, turnNode);
+      const probabilities = softmax(scores.log_probs);
+      if (scores.chosen !== undefined && !(Number.isSafeInteger(scores.chosen) && scores.chosen >= 0 && scores.chosen < options.length))
+        throw new Error('decision readout sampled an option outside its option set');
+      return { scores, probabilities, chosen: scores.chosen ?? probabilities.indexOf(Math.max(...probabilities)) };
+    };
+    const unavailable = (error: unknown): false | Promise<string | void> => {
       const message = error instanceof Error ? error.message : String(error);
-      if (!message.startsWith('decision-unsupported')) throw error;
+      if (!message.startsWith('decision-unsupported') && !message.startsWith('decision-open-unsupported')) throw error;
       session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable', reason: message });
       return this.options.decisionGeneration === 'tool-loop' ? false : generate();
+    };
+    if (joint) {
+      let result;
+      try { result = await score(replies!, false, 1); } catch (error) { return unavailable(error); }
+      const { scores, probabilities, chosen } = result;
+      const fields = recordMarginals(joint.map(item => item.value), probabilities);
+      session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
+        log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
+        ...(fields ? { fields } : {}),
+        ...(scores.prompt_tokens !== undefined ? { prompt_tokens: scores.prompt_tokens } : {}),
+        duration_ms: Math.round(performance.now() - started),
+        ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
+      lam.return = joint[chosen]!.value as Value;
+      lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies!.map((reply, index) => [reply, probabilities[index]])) });
+      if (!session.finish()) return 'decision readout chose a value the declared type rejects';
+      return;
     }
-    if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
-      throw new Error('decision readout returned no finite score for every option');
-    // A decision readout is a model turn of its call's execution graph, like a generated turn.
-    const turnNode=await this.modelTurnNode(session,encoded.messages,
-      scores.native_decision_capture ? {raw_response:{x_natlang_rl_capture:scores.native_decision_capture}} : {},1,'decision');
-    if(turnNode&&scores.x_natlang_native_recorded_turn)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
-    const probabilities = softmax(scores.log_probs);
-    if (scores.chosen !== undefined && !(Number.isSafeInteger(scores.chosen) && scores.chosen >= 0 && scores.chosen < replies.length))
-      throw new Error('decision readout sampled an option outside its option set');
-    const chosen = scores.chosen ?? probabilities.indexOf(Math.max(...probabilities));
-    session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
-      log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
-      ...(scores.prompt_tokens !== undefined ? { prompt_tokens: scores.prompt_tokens } : {}),
-      duration_ms: Math.round(performance.now() - started),
-      ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
-    lam.return = values[chosen] as Value;
-    lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies.map((reply, index) => [reply, probabilities[index]])) });
+    // Field by field: each step scores the candidates that continue the reply chosen so far, as open replies.
+    let paths: DecisionPath[] = domain.arms.map((_, arm) => ({ arm, chosen: [] }));
+    const steps: Record<string, unknown>[] = [];
+    const fields: Record<string, { value: string; probability: number }[]> = {};
+    let confidence = 1, promptTokens: number | undefined = 0, finished: DecisionPath | undefined;
+    for (let turn = 1; !finished; turn++) {
+      const candidates = stepCandidates(domain, paths);
+      let chosen = 0, probabilities = [1];
+      if (candidates.length > 1) {
+        let result;
+        try { result = await score(candidates.map(candidate => candidate.text), true, turn); } catch (error) { return unavailable(error); }
+        ({ chosen, probabilities } = result);
+        promptTokens = promptTokens !== undefined && result.scores.prompt_tokens !== undefined ? promptTokens + result.scores.prompt_tokens : undefined;
+        steps.push({ options: candidates.map(candidate => candidate.text), log_probs: result.scores.log_probs, probabilities, chosen,
+          tokens: result.scores.tokens ?? null });
+      }
+      confidence *= probabilities[chosen]!;
+      candidates.forEach((candidate, index) => {
+        if (candidate.key === undefined) return;
+        (fields[candidate.key] ??= []).push({ value: JSON.stringify(candidate.value), probability: probabilities[index]! });
+      });
+      const pick = candidates[chosen]!;
+      if (pick.complete) finished = pick.paths[0]!;
+      else paths = pick.paths;
+    }
+    const value = pathValue(domain, finished), text = domainMatch(domain, value)!.text;
+    session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', mode: 'fields', options: [text],
+      probabilities: [confidence], chosen: 0, steps, fields,
+      ...(promptTokens !== undefined ? { prompt_tokens: promptTokens } : {}), duration_ms: Math.round(performance.now() - started) });
+    lam.return = value as Value;
+    lam.note = JSON.stringify({ readout: 'decision', mode: 'fields', probability: confidence, fields });
     if (!session.finish()) return 'decision readout chose a value the declared type rejects';
   }
 
@@ -1690,7 +1737,7 @@ export class NativeToolAgent {
   }
 
   /** Generate on the very same short JSON decision surface used by the scored student. No probabilities are inferred. */
-  private async generatedDecision(session: NativeSession, messages: unknown[], values: unknown[],
+  private async generatedDecision(session: NativeSession, messages: unknown[], domain: DecisionDomain,
     privilegedContext?: ModelTurnRequest['privileged_context'], guidancePolicy?: ModelTurnRequest['guidance_policy']): Promise<string | void> {
     const callId = session.runtime.currentCallId ?? null;
     const fail = (detail: string): string => {
@@ -1746,11 +1793,13 @@ export class NativeToolAgent {
       return fail('the generated choice must be complete JSON text');
     let value: unknown;
     try { value = JSON.parse(response.text); } catch { return fail('the generated choice is not valid JSON'); }
-    const chosen = values.findIndex(option => fingerprint(option) === fingerprint(value));
-    if (chosen < 0) return fail('the generated choice is outside the offered values');
-    session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'generated', options: values.map(value => JSON.stringify(value)), chosen,
+    const match = domainMatch(domain, value);
+    if (!match) return fail('the generated choice is outside the offered values');
+    const offered = scoredJointly(domain) ? [...domainValues(domain)].map(item => item.text) : undefined;
+    session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'generated',
+      ...(offered ? { options: offered, chosen: offered.indexOf(match.text) } : { options: [match.text], chosen: 0, mode: 'fields' }),
       duration_ms: Math.round(performance.now() - started), scored: false });
-    session.lam.return = values[chosen] as Value;
+    session.lam.return = match.value as Value;
     session.lam.note = JSON.stringify({ readout: 'decision', source: 'generated', scored: false });
     if (!session.finish()) return fail('the generated choice does not satisfy the declared return type');
   }
@@ -2608,4 +2657,22 @@ export class NativeToolAgent {
       if (results.at(-1)?.kind === 'completed') return;
     }
   }
+}
+
+/**
+ * Per-field marginals of a jointly scored decision over records: for each field, each of its values and the total
+ * probability of the options that carry it (an option of an arm without the field adds nothing). Undefined when no
+ * option is a record.
+ */
+function recordMarginals(values: readonly unknown[], probabilities: readonly number[]): Record<string, { value: string; probability: number }[]> | undefined {
+  const out = new Map<string, Map<string, number>>();
+  values.forEach((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    for (const [key, item] of Object.entries(value)) {
+      const field = out.get(key) ?? new Map<string, number>(); out.set(key, field);
+      const text = JSON.stringify(item);
+      field.set(text, (field.get(text) ?? 0) + probabilities[index]!);
+    }
+  });
+  return out.size ? Object.fromEntries([...out].map(([key, field]) => [key, [...field].map(([value, probability]) => ({ value, probability }))])) : undefined;
 }

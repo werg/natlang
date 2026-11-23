@@ -407,7 +407,8 @@ Instructions do not all need code: an answer that takes only reading and
 judgment is given directly.
 
 **Decision readout.** A function whose result type is finite (a union of
-literals, `boolean`, `null`) may declare `readout: decision`. Its call then
+literals, `boolean`, `null`; a record whose fields are all finite and none optional; a union of such records,
+tagged or not) may declare `readout: decision`. Its call then
 offers no tools: the runtime asks the model to score every allowed value as the
 whole reply to the call's opening (signature and arguments, under a short
 system prompt) and returns the most probable one. The normalised distribution
@@ -416,7 +417,13 @@ probability vector that proper scoring rules (Brier, ranked probability score,
 log loss) can grade (the [learning extension](ext/learning.md) also differentiates them). Code reads it with
 `decide(fn, ...args)`: eval code, and host code inside a running task (`import { decide } from '@natlang/node'`);
 `runtime.decide(fn, ...args)` runs it in a task of its own. Both return
-`{ value, probabilities: [{ value, probability }], confidence, scored }`. A model config with
+`{ value, probabilities: [{ value, probability }], confidence, scored }`, and for a record result also
+`fields: { [field]: [{ value, probability }] }`. A record type of at most 32 values is scored jointly, each record (compact
+JSON, fields in declaration order) one reply, and `fields` holds each field's marginal. A larger one is scored field by
+field: the prompt shows the type's forms with each field's values written `<A | B>`, and each step scores the replies
+that continue the fields chosen so far through the next field, as the start of the reply; `fields` holds each step's
+distribution given the earlier choices, `probabilities` the chosen record alone, and `confidence` its probability (the
+product of the steps). A backend that cannot score open replies generates the record instead. A model config with
 `decisionReadout: 'finite-returns'` applies the readout to every finite-typed
 call. A backend that cannot score replies generates one offered JSON value on the same short decision messages,
 without tools. This is a sampled choice with `scored: false`, not a score distribution. A missing, truncated, malformed

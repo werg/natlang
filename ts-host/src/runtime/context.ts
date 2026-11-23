@@ -13,8 +13,10 @@ import type { FileHandle, Folder, FolderHandle } from '../native/scoped-fs.js';
 export const MAX_AD_HOC_NL_DEPTH = 5;
 export const canGenerateNl = (frame?: Frame): boolean => (frame?.adHocDepth ?? 0) < MAX_AD_HOC_NL_DEPTH;
 
-/** The distribution a decision readout scored: each allowed reply (JSON text) and its probability. */
-export type DecisionReadout = { options: string[]; probabilities: number[] };
+/** The distribution a decision readout scored: each allowed reply (JSON text) and its probability. A record decision
+ * also has `fields`: per field each value (JSON text) and its probability, the marginal of a joint readout or the
+ * step's distribution of a field-by-field one (whose `options` is then the one value chosen, with its probability). */
+export type DecisionReadout = { options: string[]; probabilities: number[]; fields?: Record<string, { value: string; probability: number }[]> };
 
 export type Frame = Readonly<{
   task: NatlangTask;

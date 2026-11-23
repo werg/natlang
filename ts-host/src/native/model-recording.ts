@@ -27,7 +27,7 @@ export type RecordedTurn = {
   /** Write records of the blocks this turn wrote. */
   readonly blocks: readonly Record<string, unknown>[];
   /** A decision readout instead of a generated reply: the options it scored (native/decision.ts). */
-  readonly decision?: { readonly options: readonly string[] };
+  readonly decision?: { readonly options: readonly string[]; readonly open_reply?: true };
   /** Exact named native coefficient actors and scales active for this recorded turn. */
   readonly adapters?: readonly NativeAdapterBinding[];
   /** Explicit transport contract retained for exact native replay. */

@@ -71,7 +71,10 @@ export type ExplicitBatchOptions = { url: string; headers?: Record<string, strin
   /** Requests with fewer items go to the fallback (default 2: single items score as well by the fallback). */
   minItems?: number;
   /** Per-item request fields (the llama.cpp fork's `lora` scales of the item's own call). */
-  itemExtra?: (item: DecisionRequest) => Record<string, unknown> | undefined };
+  itemExtra?: (item: DecisionRequest) => Record<string, unknown> | undefined;
+  /** The endpoint is a guess (an external server that may not be natlang's): any client error (4xx but 408 and 429) or
+   * 501 means it has none, as 404/405/501 do otherwise. */
+  discovered?: boolean };
 export class ScoreEndpointMissing extends Error {}
 
 export async function postExplicitBatch(options: ExplicitBatchOptions, items: DecisionRequest[], signal?: AbortSignal): Promise<Settled[]> {
@@ -80,13 +83,15 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
     const response = await fetchModel(options.url, { method: 'POST', signal,
       headers: { 'content-type': 'application/json', ...options.headers },
       body: JSON.stringify({ ...options.extra, items: items.map(item => batchScoreItem(item, options.itemExtra?.(item))) }) });
-    if ([404, 405, 501].includes(response.status)) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
+    const absent = [404, 405, 501].includes(response.status) ||
+      (options.discovered === true && response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429);
+    if (absent) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!response.ok) throw new Error(`batched scoring HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
     const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
     if (!Array.isArray(body.results) || body.results.length !== items.length)
       throw new Error('batched scoring returned a different number of results than items');
     return body.results.map((result, index): Settled => {
-      try { return { status: 'fulfilled', value: scoresFromBatchResult(result, items[index]!.options.length) }; }
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(result, items[index]!.options.length, items[index]!.open_reply === true) }; }
       catch (reason) { return { status: 'rejected', reason }; }
     });
   } finally { release(); }

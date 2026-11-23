@@ -155,10 +155,14 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true,
       ...(runtimeOptions.rlTopK !== undefined ? { x_natlang_rl_top_k: runtimeOptions.rlTopK } : {}) } : external!.request });
   // The managed llama.cpp fork scores decisions at /v1/natlang/score (single readouts and per-call LoRA scales too);
-  // an upstream server answers 404 there and decisions fall back to prompt_logprobs, which it does not serve.
+  // an upstream server answers 404 there and decisions fall back to prompt_logprobs, which it does not serve. An
+  // external endpoint is asked there first too (single readouts included): natlang's Python servers (native engine,
+  // the SGLang actor's front, e.g. a Colab actor) serve it and not prompt_logprobs; any other server's client error
+  // there falls back to prompt_logprobs (vLLM) for the session.
+  const external_score = choice.kind === 'external' && choice.batching?.scoreEndpoint === undefined;
   const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
-    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint ?? (choice.kind === 'managed-local' || undefined),
-    ...(choice.kind === 'managed-local' ? { scoreAll: true, continuesReplies: true } : {}),
+    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint ?? (choice.kind === 'managed-local' || (external_score ? 'discover' : undefined)),
+    ...(choice.kind === 'managed-local' ? { scoreAll: true, continuesReplies: true } : external_score ? { scoreAll: true } : {}),
     ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => llama!.nativeStatesLoaded } : {}) });
   // One driver per server: its scheduler, request limit and decision coalescer are what turns and readouts that
   // arrive together share, so they are not rebuilt per request.

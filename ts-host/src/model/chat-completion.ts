@@ -509,7 +509,7 @@ export function promptLogprobDecider(transport: ChatTransport, options: { reques
     if (!replies.length) throw new Error('a decision needs at least one option');
     const itemExtra = options.extraFor?.(item);
     const responses = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }) }, signal);
+      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true) }, signal);
       return (isStream(raw) ? await assembleChatCompletion(raw) : raw) as PromptLogprobResponse;
     }));
     return scoresFromPromptLogprobs(responses);

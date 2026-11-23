@@ -144,6 +144,10 @@ export type DecisionRequest = { messages: unknown[]; options: string[]; adapters
    * opening before the argument values), so a server may checkpoint its memory where they end and continue later
    * prompts that share them from there (the llama.cpp fork's score endpoint does). */
   cache_messages?: number;
+  /** The options are the start of the reply, not the whole of it (a field-by-field step of a record decision): each is
+   * scored without the end of message. A scorer that cannot score open replies fails with `decision-open-unsupported`
+   * (never by scoring them closed). */
+  open_reply?: boolean;
   /** Set by the transport for a JOLT+ teacher attempt: the server renders this invocation's privileged block. */
   x_natlang_privileged_context?: Record<string, unknown> };
 export type DecisionScores = { log_probs: number[]; tokens?: number[];

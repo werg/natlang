@@ -16,6 +16,25 @@ serves goal better than second ... not its length or wording"). They run as ordi
 as own successes like any program's calls. Opt-out: pass a replacement (`intentOf`, `compatible`, `combine`, `judge`,
 `beats` options) or an exact `settled`. Tests: `ts-host/test/std-converge.test.mjs`, `std-folder.test.mjs`.
 
+### 2026-11-23 — a decision readout scores finite records and unions of records (B10, R3)
+
+- **What a record decision shows the model.** A `readout: decision` function (or, under `decisionReadout:
+  'finite-returns'`, any call) whose result is a record with every field finite, or a union of such records and
+  literals, now takes the readout instead of being refused at load (`.nl`) or running the tool loop (finite-returns).
+  Up to 32 values: the existing request, listing every record as compact JSON in declaration order ("Reply with exactly
+  one of these JSON values and nothing else: {"label":"spam","urgent":true}, ..."), each scored as the whole reply.
+  More: "Answer this call now, without tools. Reply with exactly one JSON value of this form and nothing else:
+  {"label":<"spam" | "ham" | "other">,"urgency":<"low" | "mid" | "high">,"route":<"billing" | "tech" | "sales" | "abuse">}."
+  ("of one of these forms" for several arms; a constant field is written as its value), and the reply is scored field
+  by field, each step's candidates the start of the reply through the next field. The same text is the generated
+  choice's prompt where scoring is unavailable. Flat decisions are byte-identical to before.
+- **Where a step's reply is cut.** LFM3 merges punctuation runs (`{"`, `":"`, `","`, `"}`), so a candidate ends after
+  the run that follows its value, where the next key's name starts (`{"label":"spam","`), or after `}`: there its
+  tokens are a prefix of the whole reply's tokens. The end of message is not scored in field mode.
+- **Training.** Each step is its own decision turn (capture with `open_reply`); the B5 objective trains joint record
+  decisions unchanged (they are JSON values in the existing request).
+- **Opt-out:** `NATLANG_DECISION_RECORDS=0` (records are not finite again).
+
 ### 2026-11-23 — function types are checked signatures; a call whose result is a function is told how to return one (B9, L4)
 
 - **Call note** (`native/prompt.ts` `functionResultNote`, appended to the call notes by `callNotes` for the runtime and

@@ -14,7 +14,7 @@ import { CRISP, representationType, type GenericResult, type Representation } fr
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, canonicalValue, checkServiceResults, failureError, refinementCodeOf, type RefinementCode, type RefinementFailure } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
-import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, runInFrame, type ActiveCall, type Descent, type Frame } from './context.js';
+import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, runInFrame, type ActiveCall, type DecisionReadout, type Descent, type Frame } from './context.js';
 import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { protectedSources } from './loader.js';
@@ -893,7 +893,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     const result = await runInFrame(childFrame, () => runtime!.run(node));
     outcome = result.outcome.kind; detail = result.outcome.detail;
     const scored = frame.readout && runtime.trace.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
-    if (scored) frame.readout!({ options: scored.options as string[], probabilities: scored.probabilities as number[] });
+    if (scored) frame.readout!({ options: scored.options as string[], probabilities: scored.probabilities as number[],
+      ...(scored.fields ? { fields: scored.fields as NonNullable<DecisionReadout['fields']> } : {}) });
     if (outcome !== 'done') {
       const code = refinementCodeOf(detail);
       if (code) throw new RefinementCallError(code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);

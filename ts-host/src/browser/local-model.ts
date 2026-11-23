@@ -12,11 +12,12 @@ import { decodeNativeState, encodeNativeStateWire, type NativeArtifactSource, ty
   type NeuraleseStore } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 import { opfsWarmStateStore, pageWarmOpenings, warmTag, type PageWarmOpening, type WarmSlotEngine, type WarmStateStore } from './warm-openings.js';
+import { BROWSER_MODEL_RELEASE } from '../model-default.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
 type LoadParams = { n_ctx: number; n_parallel: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
-  reasoning: boolean; chat_template?: string; swa_full?: boolean;
+  reasoning: boolean; chat_template?: string; swa_full?: boolean; default_template_kwargs?: Record<string, unknown>;
   lora_adapters?: { blob: Blob; scale: number }[]; lora_init_without_apply?: boolean;
   native_states?: { blob: Blob }[];
   progressCallback?: (progress: { loaded: number; total: number }) => void;
@@ -75,6 +76,10 @@ export type BrowserModelLoadOptions = {
   /** The model file's SHA-256 (a catalog entry's `sha256`). Warm openings are kept across reloads only for a model
    * known by its content. */
   modelSha256?: string;
+  /** Chat-template switches every request renders with, chat and decision scoring alike (the engine's defaults, as
+   * the managed server's `--chat-template-kwargs`). Default: the page release's (`BROWSER_MODEL_RELEASE.request`, LFM3
+   * `preserve_thinking`) when `modelSha256` is that release's model, else none. */
+  chatTemplateKwargs?: Record<string, unknown>;
   /** Where warm openings are kept across reloads (browser/warm-openings.ts): the page's OPFS by default; `false` turns
    * it off. Needs `modelSha256` and an engine with `capabilities.slotState`; off with tuned adapters or states. */
   warmOpenings?: WarmStateStore | false;
@@ -98,12 +103,20 @@ export type BrowserModelDiagnostics = {
   actualGpuLayers: null;
 };
 
+/** The chat-template switches a load gives the engine (`chatTemplateKwargs`, else the page release's for its model). */
+function templateDefaults(options: BrowserModelLoadOptions): Record<string, unknown> | undefined {
+  if (options.chatTemplateKwargs) return Object.keys(options.chatTemplateKwargs).length ? { ...options.chatTemplateKwargs } : undefined;
+  const release = BROWSER_MODEL_RELEASE as { sha256: string; request?: { chat_template_kwargs?: Record<string, unknown> } };
+  return options.modelSha256 === release.sha256 && release.request?.chat_template_kwargs ? { ...release.request.chat_template_kwargs } : undefined;
+}
+
 function loadParams(options: BrowserModelLoadOptions) {
   if (options.gpuLayers !== undefined && (!Number.isInteger(options.gpuLayers) || options.gpuLayers < 0))
     throw new RangeError('gpuLayers must be a nonnegative integer');
   return { n_ctx: options.contextTokens ?? 4096, n_parallel: PAGE_SLOTS, n_gpu_layers: options.gpuLayers ?? 99999,
     n_threads: options.threads, jinja: true, reasoning: false, chat_template: options.chatTemplate,
     swa_full: options.fullSlidingWindowCache ?? true,
+    ...(templateDefaults(options) ? { default_template_kwargs: templateDefaults(options) } : {}),
     ...(options.loraAdapters?.length ? { lora_adapters: options.loraAdapters.map(adapter => ({ blob: adapter.blob, scale: 0 })),
       lora_init_without_apply: true } : {}),
     ...(options.nativeStates?.length ? { native_states: options.nativeStates.map(state => ({ blob: state.blob })) } : {}),
@@ -347,7 +360,7 @@ export class BrowserLocalModel {
       return this.engine.createNatlangScore!(body);
     });
     return items.map((item, index): PromiseSettledResult<DecisionScores> => {
-      try { return { status: 'fulfilled', value: scoresFromBatchResult(response.results[index] as BatchScoreResult, item.options.length) }; }
+      try { return { status: 'fulfilled', value: scoresFromBatchResult(response.results[index] as BatchScoreResult, item.options.length, item.open_reply === true) }; }
       catch (reason) { return { status: 'rejected', reason }; }
     });
   };

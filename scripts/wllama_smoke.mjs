@@ -5,6 +5,12 @@
  * new release (docs/ENGINE_PARITY.md).
  *
  *   node scripts/wllama_smoke.mjs --model MODEL.gguf --server LLAMA_SERVER [--chrome PATH] [--tolerance NATS] [--wllama DIR]
+ *     [--template FILE.jinja] [--template-kwargs JSON] [--items ITEMS.json --out RESULT.json] [--ctx N]
+ *
+ * `--template` / `--template-kwargs` load both engines with a release's chat template and its switches (the managed
+ * server's `--chat-template-file` / `--chat-template-kwargs`; the page's `chat_template` / `default_template_kwargs`).
+ * `--items` scores those score items (a JSON array, e.g. scripts/semantic_fp/decision_parity.py `llama-items`) on both
+ * engines in place of the built-in ones, and `--out` writes both engines' results (`decision_parity.py llama`).
  *
  * Needs playwright (npx playwright, or a wllama checkout's node_modules via NODE_PATH) and Chrome. Exits 1 when the
  * page renders or tokenizes an item differently from the native server (its prompt and reply token counts), ranks its
@@ -25,7 +31,7 @@
  * the server's tokens and text, and the server accepts it (PUT) and consumes it exactly.
  */
 import { spawn } from 'node:child_process';
-import { createReadStream, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { createReadStream, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -38,6 +44,8 @@ const failures = [];
 const args = process.argv.slice(2), value = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const model = value('--model'), server = value('--server'), chrome = value('--chrome') ?? '/usr/bin/google-chrome';
 const tolerance = Number(value('--tolerance') ?? 2.5);
+const template = value('--template'), templateKwargs = value('--template-kwargs') ? JSON.parse(value('--template-kwargs')) : undefined;
+const itemsFile = value('--items'), outFile = value('--out'), contextTokens = Number(value('--ctx') ?? 4096);
 if (!model || !server) throw new Error('usage: node scripts/wllama_smoke.mjs --model MODEL.gguf --server LLAMA_SERVER [--chrome PATH]');
 // `--wllama DIR`: a candidate build (a release's llama-natlang-wllama.tar.gz unpacked) before it is vendored
 const vendor = resolve(value('--wllama') ?? resolve(dirname(fileURLToPath(import.meta.url)), '../ts-host/vendor/wllama'));
@@ -63,9 +71,21 @@ const items = [
   { messages: [system, { role: 'user', content: 'The app crashes when I open settings.' }], continuations: options, cache_messages: 1 },
   { messages: [system, { role: 'user', content: 'Can I change the email on my account?' }], continuations: options, cache_messages: 1 },
 ];
+// Record decisions (native/decision.ts): jointly, every record a closed reply; field by field, a step's open replies
+// (`open_reply`, the reply's start through one field, cut where the next key name begins).
+const triage = { role: 'system', content: 'Triage the support ticket. Answer with one JSON object.' };
+const ticket = { role: 'user', content: 'I was charged twice and the app crashes when I open the invoice. Please hurry.' };
+items.push({ messages: [triage, ticket], continuations: ['{"label":"billing","urgent":true}', '{"label":"billing","urgent":false}',
+  '{"label":"technical","urgent":true}', '{"label":"technical","urgent":false}'] });
+items.push({ messages: [triage, ticket], open_reply: true,
+  continuations: ['{"label":"billing","', '{"label":"technical","', '{"label":"other","'] });
+if (itemsFile) items.splice(0, items.length, ...JSON.parse(readFileSync(itemsFile, 'utf8')));
+const templateText = template ? readFileSync(template, 'utf8') : undefined;
 
 const port = 18000 + Math.floor(Math.random() * 1000), base = `http://127.0.0.1:${port}`;
-const native = spawn(server, ['-m', model, '--port', String(port), '-c', '4096', '-np', '2', '--swa-full'], { stdio: 'ignore' });
+const native = spawn(server, ['-m', model, '--port', String(port), '-c', String(contextTokens * 2), '-np', '2', '--swa-full', '--jinja',
+  ...(template ? ['--chat-template-file', template] : []), ...(templateKwargs ? ['--chat-template-kwargs', JSON.stringify(templateKwargs)] : [])],
+  { stdio: 'ignore' });
 const post = async (path, body, init = {}) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body), ...init });
 const score = async scored => (await (await post('/v1/natlang/score', { items: scored })).json()).results.map(result => result.log_probs ?? result);
@@ -104,13 +124,15 @@ async function runPage() {
   try {
     const tab = await browser.newPage();
     await tab.goto(`http://127.0.0.1:${http.address().port}/`);
-    page = await tab.evaluate(async ({ items, states }) => {
+    page = await tab.evaluate(async ({ items, states, templateText, templateKwargs, contextTokens }) => {
       const { Wllama } = await import('/esm/index.js');
       const engine = new Wllama({ default: '/esm/wasm/wllama.wasm' });
-      await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: 4096, n_gpu_layers: 0 });
+      await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: contextTokens, n_gpu_layers: 0,
+        ...(templateText ? { jinja: true, chat_template: templateText } : {}),
+        ...(templateKwargs ? { default_template_kwargs: templateKwargs } : {}) });
       const all = await engine.createNatlangScore({ items });
       const again = await engine.createNatlangScore({ items: [items[1]] });
-      const result = { shapes: all.results.map(result => ({ tokens: result.tokens, prompt_tokens: result.prompt_tokens })),
+      const result = { shapes: all.results.map(result => ({ tokens: result.tokens, prompt_tokens: result.prompt_tokens, open_reply: result.open_reply })),
         all: all.results.map(result => result.log_probs ?? result), again: again.results[0].log_probs ?? again.results[0],
         capabilities: engine.capabilities };
       if (!states || !engine.capabilities.nativeStateStore) return result;
@@ -125,7 +147,7 @@ async function runPage() {
       let binary = ''; for (const byte of got?.state ?? []) binary += String.fromCharCode(byte);
       return { ...result, states: { put, consumed: consumed.log_probs ?? consumed, id: id ?? null, meta: got?.meta ?? null,
         wire: got ? btoa(binary) : null, reply: id ? null : reply } };
-    }, { items, states });
+    }, { items, states, templateText, templateKwargs, contextTokens });
   } finally { await browser.close(); http.close(); rmSync(profile, { recursive: true, force: true }); }
 }
 
@@ -163,6 +185,8 @@ expected.forEach((scores, index) => {
   const shape = result => JSON.stringify([result.tokens, result.prompt_tokens]);
   if (shape(page.shapes[index]) !== shape(nativeResults[index]))
     failures.push(`item ${index}: page renders or tokenizes differently: ${shape(page.shapes[index])}, native ${shape(nativeResults[index])}`);
+  if (items[index].open_reply && (page.shapes[index].open_reply !== true || nativeResults[index].open_reply !== true))
+    failures.push(`item ${index}: an open_reply item was not scored open (page ${page.shapes[index].open_reply}, native ${nativeResults[index].open_reply})`);
   if (rank(mine) !== rank(scores)) failures.push(`item ${index}: page ranks ${rank(mine)}, native ${rank(scores)}`);
   const gap = Math.max(...mine.map((score, option) => Math.abs(score - scores[option])));
   if (gap > tolerance) failures.push(`item ${index}: page differs by ${gap.toFixed(3)} nats`);
@@ -171,6 +195,9 @@ if (rank(page.again) !== rank(page.all[1])) failures.push('a repeated item ranks
 const drift = Math.max(...page.again.map((score, option) => Math.abs(score - page.all[1][option])));
 if (drift > tolerance) failures.push(`a repeated item moved by ${drift.toFixed(3)} nats`);
 if (states && !page.states) failures.push('the natlang GGUF\'s native states were not checked: the page build has no nativeStateStore');
+if (outFile) writeFileSync(outFile, JSON.stringify({ schema: 'natlang.wllama-smoke-scores/1', model, server, template: template ?? null,
+  template_kwargs: templateKwargs ?? null, items, native: nativeResults, page: page.all.map((log_probs, index) =>
+    Array.isArray(log_probs) ? { log_probs, ...page.shapes[index] } : { error: log_probs }) }, null, 1) + '\n');
 console.log(JSON.stringify({ native: expected, page: page.all, repeated: page.again, capabilities: page.capabilities,
   ...(states ? { native_states: { server: { id: states.id, consumed: states.expected }, page: { ...states.page, consumed: page.states?.consumed } } } : {}),
   failures }));

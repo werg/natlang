@@ -6,7 +6,9 @@
  *   - per reply: the prompt plus the reply as the closed final assistant message, `prompt_logprobs: 0`, one token to
  *     generate (`promptLogprobRequest`); `scoresFromPromptLogprobs` sums each reply's token log-probabilities after the
  *     prefix all replies share;
- *   - the explicit-batch endpoint (`scoring.ts`): `batchScoreItem` writes an item, `scoresFromBatchResult` reads its result.
+ *   - the explicit-batch endpoint (`scoring.ts`): `batchScoreItem` writes an item, `scoresFromBatchResult` reads its result;
+ *   - `open_reply` (a field-by-field step of a record decision) scores each reply as the start of the message: continued
+ *     rather than closed on the chat-completions route, the item's `open_reply` on the batch endpoint, echoed back.
  */
 import type { DecisionRequest, DecisionScores } from '../contracts.js';
 
@@ -20,10 +22,11 @@ export function softmax(logProbs: readonly number[]): number[] {
   return weights.map(value => value / total);
 }
 
-/** The chat-completions body that evaluates `reply` as the closed final assistant message after `messages`. */
-export function promptLogprobRequest(messages: readonly unknown[], reply: string, extra: Json = {}): Json {
+/** The chat-completions body that evaluates `reply` as the closed final assistant message after `messages`, or with
+ * `open` as the start of that message (continued, so its end is not part of the prompt). */
+export function promptLogprobRequest(messages: readonly unknown[], reply: string, extra: Json = {}, open = false): Json {
   return { ...extra, messages: [...messages, { role: 'assistant', content: reply }],
-    add_generation_prompt: false, continue_final_message: false, prompt_logprobs: 0, max_tokens: 1 };
+    add_generation_prompt: false, continue_final_message: open, prompt_logprobs: 0, max_tokens: 1 };
 }
 
 /** What one reply's response is read for: the server's `prompt_logprobs` rows and the prompt tokens it evaluated. */
@@ -60,22 +63,27 @@ export function scoresFromPromptLogprobs(responses: readonly PromptLogprobRespon
 }
 
 /** One item of the explicit-batch endpoint's request: the prompt and its replies as continuations. */
-export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages'>>,
+export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages' | 'open_reply'>>,
   extra?: Json): Json {
   return { ...extra, messages: item.messages, continuations: item.options,
     ...(item.cache_messages ? { cache_messages: item.cache_messages } : {}),
+    ...(item.open_reply ? { open_reply: true } : {}),
     ...(item.adapters?.length ? { adapters: item.adapters } : {}),
     ...(item.native_state_modes ? { native_state_modes: item.native_state_modes } : {}),
     ...(item.native_recording ? { native_recording: true } : {}) };
 }
 
 /** One result of the explicit-batch endpoint's response, for an item of `replyCount` replies. */
-export type BatchScoreResult = { log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; native_decision_capture?: Record<string, unknown> } | null | undefined;
+export type BatchScoreResult = { log_probs?: number[]; tokens?: number[]; prompt_tokens?: number; error?: string; open_reply?: boolean;
+  native_decision_capture?: Record<string, unknown> } | null | undefined;
 
-/** The scores of a batch result, or the failure it reports. */
-export function scoresFromBatchResult(result: BatchScoreResult, replyCount: number): DecisionScores {
+/** The scores of a batch result, or the failure it reports. An item scored as open replies (`open`) must say so: a
+ * server that ignored `open_reply` scored them closed, which is refused as `decision-open-unsupported`. */
+export function scoresFromBatchResult(result: BatchScoreResult, replyCount: number, open = false): DecisionScores {
   if (!result || typeof result.error === 'string' || !Array.isArray(result.log_probs) || result.log_probs.length !== replyCount)
     throw new Error(result?.error ?? 'batched scoring returned no scores for an item');
+  if (open && result.open_reply !== true)
+    throw new Error('decision-open-unsupported: the server scored the replies of a field-by-field decision as closed (open_reply not served)');
   return { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}),
     ...(Number.isSafeInteger(result.prompt_tokens) ? { prompt_tokens: result.prompt_tokens } : {}),
     ...(result.native_decision_capture ? { native_decision_capture: result.native_decision_capture } : {}) };

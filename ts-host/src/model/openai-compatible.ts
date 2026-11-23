@@ -17,8 +17,10 @@ export type OpenAICompatibleOptions = HttpChatOptions & {
    * a model scheduler (model/scheduler.ts), which also orders the queue and records each request's batch.
    */
   concurrency?: number | RequestLimit | Scheduler;
-  /** Optional explicit-batch scoring endpoint (see model/scoring.ts): a URL, or true for `{endpoint}/v1/natlang/score`. */
-  scoreEndpoint?: string | boolean;
+  /** Optional explicit-batch scoring endpoint (see model/scoring.ts): a URL, or true for `{endpoint}/v1/natlang/score`;
+   * `'discover'` asks `{endpoint}/v1/natlang/score` first and treats any client error there as no endpoint (an
+   * external server that may or may not be natlang's), falling back to prompt_logprobs. */
+  scoreEndpoint?: string | boolean | 'discover';
   /** Decision readouts arriving within this many ms are scored together (default 0: the same tick). */
   scoreCoalesceMs?: number;
   /**
@@ -77,10 +79,10 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
   type Tuned = { [TUNED]?: Record<string, unknown> };
   const single = promptLogprobDecider(transport({ ...http, stream: false }), { request,
     ...(tunedRequest ? { extraFor: (item: object) => (item as Tuned)[TUNED] } : {}) });
-  const url = scoreEndpoint === true ? openAIEndpointRoot(http.endpoint) + '/v1/natlang/score' : scoreEndpoint || undefined;
+  const url = scoreEndpoint === true || scoreEndpoint === 'discover' ? openAIEndpointRoot(http.endpoint) + '/v1/natlang/score' : scoreEndpoint || undefined;
   const concurrent = concurrentScoreMany(single);
   const explicit = url ? explicitBatchScoreMany({ url, headers: { ...(http.apiKey ? { authorization: `Bearer ${http.apiKey}` } : {}), ...http.headers },
-    extra: { model: http.model, ...(request ? { request } : {}) }, scheduler,
+    extra: { model: http.model, ...(request ? { request } : {}) }, scheduler, ...(scoreEndpoint === 'discover' ? { discovered: true } : {}),
     ...(scoreAll ? { minItems: 1, itemExtra: (item: object) => (item as Tuned)[TUNED] } : {}) }, concurrent) : concurrent;
   // Without per-item fields on the explicit-batch endpoint, tuned items are scored as individual requests.
   const many: typeof explicit = items => !scoreAll && items.some(item => (item as Tuned)[TUNED]) ? concurrent(items) : explicit(items);

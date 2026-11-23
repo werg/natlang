@@ -13,8 +13,13 @@ text) and field mode (the FORM request, one ``open_reply`` step per field). Both
                                     SGLang input log-probabilities of exactly the native items' prompt + continuation
                                     ids; field steps use this, so an actor whose code predates ``open_reply`` scores
                                     them too); sequential requests; OUT/sglang.json
+    llama-items OUT                 the native run's score items (messages, continuations, open_reply) as
+                                    OUT/llama-items.json for scripts/wllama_smoke.mjs --items (the managed llama-server
+                                    and the in-page engine score them in one run, same GGUF, release template)
+    llama OUT --smoke RESULT        the smoke's --out file as OUT/llama.json and OUT/page.json
     compare OUT                     per decision (field: per step, on the native prefix) argmax agreement and the
-                                    largest |log-prob difference| per option; OUT/result.json
+                                    largest |log-prob difference| per option against the native engine, for SGLang and,
+                                    when present, the llama-server and the page; OUT/result.json
 
 Rendering is ``decision_items`` on the LFM3 tokenizer (``tokenizer_renderer``), the rendering both engines serve with
 (the options' shared tokens, ``</think>`` and the record's opening, are prompt). sglang.json keeps each option's
@@ -250,6 +255,33 @@ def sglang(out, endpoint):
     print(json.dumps({'items': len(items), 'seconds': round(time.time() - started, 1)}))
 
 
+def llama_items(out):
+    native_items = json.loads((out / 'native.json').read_text())['items']
+    decisions = {d['id']: d for d in json.loads((out / 'decisions.json').read_text())}
+    items = [{'messages': decisions[item['decision']]['messages'], 'continuations': item['options'],
+              **({'open_reply': True} if item['open_reply'] else {})} for item in native_items]
+    (out / 'llama-items.json').write_text(json.dumps(items) + '\n')
+    print(json.dumps({'items': len(items), 'path': str(out / 'llama-items.json')}))
+
+
+def llama(out, smoke):
+    run = json.loads(Path(smoke).read_text())
+    native_items = json.loads((out / 'native.json').read_text())['items']
+    assert len(run['items']) == len(native_items), 'the smoke scored other items'
+    for engine, results in (('llama-server', run['native']), ('wllama-page', run['page'])):
+        items = []
+        for item, result in zip(native_items, results):
+            if item['open_reply'] and result.get('open_reply') is not True:
+                raise SystemExit(f'{engine}: an open item was not scored open: {result}')
+            items.append({**{k: item[k] for k in ('decision', 'mode', 'step', 'options', 'open_reply')},
+                          **({'log_probs': result['log_probs'], 'tokens': result.get('tokens')} if 'log_probs' in result
+                             else {'error': result.get('error')})})
+        (out / ('llama.json' if engine == 'llama-server' else 'page.json')).write_text(json.dumps({
+            'engine': engine, 'model': run['model'], 'server': run['server'], 'template': run['template'],
+            'template_kwargs': run['template_kwargs'], 'items': items}, indent=1) + '\n')
+    print(json.dumps({'items': len(native_items)}))
+
+
 def compare(out):
     native_run = json.loads((out / 'native.json').read_text())
     sglang_run = json.loads((out / 'sglang.json').read_text())
@@ -284,6 +316,27 @@ def compare(out):
         'native': {k: native_run.get(k) for k in ('checkpoint', 'checkpoint_sha256', 'code', 'dtype')},
         'sglang': {k: sglang_run.get(k) for k in ('endpoint', 'checkpoint_sha256', 'actor_code', 'actor_export',
                                                   'kv_cache_dtype')}}
+    # the GGUF engines (Q8_0: int8 activation rounding, docs/ENGINE_PARITY.md numerics) against the native engine
+    for name in ('llama', 'page'):
+        path = out / f'{name}.json'
+        if not path.exists():
+            continue
+        run = json.loads(path.read_text())
+        agree = gaps = 0
+        worst, per_decision = 0.0, {}
+        for a, b, row in zip(native_run['items'], run['items'], rows):
+            assert (a['decision'], a['step'], a['options']) == (b['decision'], b['step'], b['options'])
+            if 'log_probs' not in b:
+                row[f'{name}_error'] = b.get('error'); per_decision.setdefault(a['decision'], []).append(False); continue
+            same = a['options'][argmax(b['log_probs'])] == row['native_argmax']
+            row[f'{name}_argmax'] = a['options'][argmax(b['log_probs'])]
+            row[f'{name}_max_abs_diff'] = max(abs(x - y) for x, y in zip(a['log_probs'], b['log_probs']))
+            row[f'{name}_tokens_equal'] = b.get('tokens') == a.get('tokens')
+            agree += same; gaps += not row[f'{name}_tokens_equal']; worst = max(worst, row[f'{name}_max_abs_diff'])
+            per_decision.setdefault(a['decision'], []).append(same)
+        summary[name] = {'engine': run['engine'], 'model': run['model'], 'template_kwargs': run['template_kwargs'],
+                         'items_agree_with_native': agree, 'decisions_all_steps_agree': sum(all(v) for v in per_decision.values()),
+                         'items_with_other_token_counts': gaps, 'max_abs_diff_vs_native': worst}
     (out / 'result.json').write_text(json.dumps({'summary': summary, 'items': rows}, indent=1) + '\n')
     print(json.dumps(summary, indent=1))
 
@@ -291,7 +344,7 @@ def compare(out):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
-    for name in ('build', 'native', 'sglang', 'compare'):
+    for name in ('build', 'native', 'sglang', 'llama-items', 'llama', 'compare'):
         p = sub.add_parser(name)
         p.add_argument('out', type=Path)
         if name == 'native':
@@ -299,6 +352,8 @@ def main():
             p.add_argument('--base', type=Path, default=LFM3)
         if name == 'sglang':
             p.add_argument('--endpoint', required=True)
+        if name == 'llama':
+            p.add_argument('--smoke', type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'build':
         build(args.out)
@@ -306,6 +361,10 @@ def main():
         native(args.out, args.checkpoint, args.base)
     elif args.command == 'sglang':
         sglang(args.out, args.endpoint.rstrip('/'))
+    elif args.command == 'llama-items':
+        llama_items(args.out)
+    elif args.command == 'llama':
+        llama(args.out, args.smoke)
     else:
         compare(args.out)
 

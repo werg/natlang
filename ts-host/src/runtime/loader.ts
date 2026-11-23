@@ -11,7 +11,7 @@ import YAML from 'yaml';
 import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
 import { parseAliases, parseTypeCached, TypeEnv } from '../native/types.js';
-import { finiteValues } from '../native/decision.js';
+import { decisionDomain } from '../native/decision.js';
 import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
 import { closestName } from '../compiler/suggest.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
@@ -313,8 +313,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
       frontmatterLine(text, 'protect'));
   if (meta.readout === 'decision') {
     const env = new TypeEnv(parseAliases(types));
-    if ((finiteValues(parseTypeCached(returns), env)?.length ?? 0) < 2)
-      throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"',
+    if ((decisionDomain(parseTypeCached(returns), env)?.size ?? 0) < 2)
+      throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no" or a record whose fields are all finite',
         frontmatterLine(text, 'returns'));
   }
   const params = Object.keys(args).map(raw => raw.replace(/\?$/, ''));

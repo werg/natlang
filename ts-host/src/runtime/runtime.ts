@@ -81,7 +81,10 @@ export type LiveEvent = (LiveCall & { type: 'model_delta'; turn: number; delta: 
 /** Receives live events synchronously as they occur; it must be quick, and what it throws is ignored. */
 export type LiveSink = (event: LiveEvent) => void;
 /** A decision with its distribution (`runtime.decide`): every allowed value's probability, highest is `value`. */
-export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean };
+export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean;
+  /** A record decision: per field, each of its values and its probability (the marginal when the records were scored
+   * together; the step's distribution, given the fields chosen before it, when they were scored field by field). */
+  fields?: Record<string, { value: unknown; probability: number }[]> };
 
 export type NatlangLimits = { maxEpisodes?: number; maxDepth?: number; maxActions?: number; maxToolCalls?: number;
   /** Total model requests and completion tokens across this task's complete invocation graph. */
@@ -599,7 +602,10 @@ export async function decideInFrame<A extends unknown[], T>(frame: Frame, fn: (.
   const probabilities = scored
     ? scored.options.map((option, index) => ({ value: JSON.parse(option) as T, probability: scored.probabilities[index]! }))
     : [{ value, probability: 1 }];
-  return { value, probabilities, confidence: Math.max(...probabilities.map(item => item.probability)), scored: scored !== undefined };
+  const fields = scored?.fields && Object.fromEntries(Object.entries(scored.fields).map(([key, items]) =>
+    [key, items.map(item => ({ value: JSON.parse(item.value) as unknown, probability: item.probability }))]));
+  return { value, probabilities, confidence: Math.max(...probabilities.map(item => item.probability)), scored: scored !== undefined,
+    ...(fields ? { fields } : {}) };
 }
 
 /** Resolve the frame for a natlang call: the propagated frame, the creation frame, or the only active task. */

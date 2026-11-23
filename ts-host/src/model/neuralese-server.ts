@@ -689,16 +689,18 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates(),
     softStates: [...activeSoftStates()] });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
+  // `hints`: the request's cache hint and open-reply flag, carried to the server as they are (SCORE_ITEM_FIELDS).
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
-      scope: Scope = here(), record = false):Promise<Item> => {
+      scope: Scope = here(), record = false, hints?: Pick<Item,'cache_messages'|'open_reply'>):Promise<Item> => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
     const info = await serverInfo(scope.nativeStates.length > 0);
     const native=info?.native_state as {enabled?:boolean}|undefined;
     const preparedMessages=materializeNativeStateSentinels(await bindNativeStateContext(messages,scope.nativeStates,info)) as unknown[];
     const modes=await nativeStateModesFor(preparedMessages,{adapters:scope.adapters,softStates:scope.softStates});
     if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
-      decision:{options:[...replies]},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
+      decision:{options:[...replies],...(hints?.open_reply?{open_reply:true}:{})},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
+      ...(hints?.cache_messages?{cache_messages:hints.cache_messages}:{}),...(hints?.open_reply?{open_reply:true}:{}),
       ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&(record||scope.recorder||scope.nativeStates.length)?{native_recording:true}:{})};
   };
   // JOLT+ teacher attempt: a decision readout gets its invocation's privileged block like a generated turn.
@@ -727,7 +729,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const native={schema:'natlang.native-recorded-turn/1' as const,kind:'decision' as const,
       id:`native-turn:${globalThis.crypto.randomUUID()}`,decision:structuredClone(capture),retry:0};
     scope.recorder.record({messages:structuredClone(item.messages),reply:{role:'assistant',content:null},blocks:[],
-      decision:{options:[...item.options]},...(item.adapters?.length?{adapters:[...item.adapters]}:{}),
+      decision:{options:[...item.options],...(item.open_reply?{open_reply:true}:{})},...(item.adapters?.length?{adapters:[...item.adapters]}:{}),
       ...(item.native_state_modes?{native_state_modes:{...item.native_state_modes}}:{}),native});
     return {...scores,x_natlang_native_recorded_turn:native.id};
   };
@@ -739,7 +741,10 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       headers:{'content-type':'application/json',...http.headers},body:JSON.stringify(item)});
     if(response.status===404||response.status===501)throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
     if(!response.ok)throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0,2000)}`);
-    return await response.json() as DecisionScores;
+    const scores=await response.json() as DecisionScores & {open_reply?:boolean};
+    if(item.open_reply&&scores.open_reply!==true)
+      throw new Error('decision-open-unsupported: the server scored the replies of a field-by-field decision as closed (open_reply not served)');
+    return scores;
   });
   // A decision readout's training guidance, like a generated turn's, goes only to a server that renders it.
   const guidanceServed=async(item:Item):Promise<Item>=>{
@@ -749,7 +754,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     return item;
   };
   const decide:DecisionScorer=async(request,signal)=>{
-    const scope=scopeOf(request),item=await guidanceServed(privileged(await prepare(request.messages,request.options,request.adapters,scope,request.native_recording===true),request));
+    const scope=scopeOf(request),item=await guidanceServed(privileged(await prepare(request.messages,request.options,request.adapters,scope,request.native_recording===true,request),request));
     return finish(item,scope,await issue(item,signal));
   };
   const perItem=(items:Item[],signal?:AbortSignal)=>Promise.allSettled(items.map(item=>issue(item,signal)));
@@ -758,7 +763,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const prepared:({index:number;item:Item;scope:Scope;key:string}|undefined)[]=[],results:Settled[]=new Array(items.length);
     await Promise.all(items.map(async(original,index)=>{
       try{
-        const scope=scopeOf(original),item=await guidanceServed(privileged(await prepare(original.messages,original.options,original.adapters,scope,original.native_recording===true),original));
+        const scope=scopeOf(original),item=await guidanceServed(privileged(await prepare(original.messages,original.options,original.adapters,scope,original.native_recording===true,original),original));
         await restore(item,async()=>({log_probs:[]}));
         prepared[index]={index,item,scope,key:JSON.stringify([item.messages,item.adapters])};
       }catch(error){results[index]={status:'rejected',reason:error};}
