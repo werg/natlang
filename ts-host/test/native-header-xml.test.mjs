@@ -55,3 +55,26 @@ test('JSON schema references, boolean schemas and structural equality follow nat
  assert.throws(()=>parseNativeXmlCalls(call('u',{value:'[{"a":1,"b":2},{"b":2,"a":1}]'}),[u]));
  assert.deepEqual(parseNativeXmlCalls(call('u',{value:'[{"a":1},{"a":2}]'}),[u]),[['u',{value:[{a:1},{a:2}]}]]);
 });
+test('tuple results: prefixItems types elements by position, items the rest; each arity of an optional tail parses',async()=>{
+ const { schemaOf } = await import('../dist/native/agent.js');
+ const { TypeEnv, parseType } = await import('../dist/native/types.js');
+ const result=type=>tool('return_result',{status:{type:'string'},value:schemaOf(parseType(type),new TypeEnv())},['status']);
+ const exact=[result('[string, number]')], tail=[result('[string, number?]')];
+ assert.deepEqual(parseNativeXmlCalls(call('return_result',{status:'success',value:'["a", 1]'}),exact),[['return_result',{status:'success',value:['a',1]}]]);
+ for(const bad of ['[1, "a"]','["a"]','["a", 1, 2]','{"0": "a"}']) assert.throws(()=>parseNativeXmlCalls(call('return_result',{status:'success',value:bad}),exact),/schema|type/);
+ for(const good of ['["a"]','["a", 1]']) assert.deepEqual(parseNativeXmlCalls(call('return_result',{status:'success',value:good}),tail)[0][1].value,JSON.parse(good));
+ for(const bad of ['[]','["a", "b"]','["a", 1, 2]']) assert.throws(()=>parseNativeXmlCalls(call('return_result',{status:'success',value:bad}),tail));
+ const rest=tool('rest',{value:{type:'array',prefixItems:[{type:'string'}],items:{type:'number'}}},['value']);
+ assert.deepEqual(parseNativeXmlCalls(call('rest',{value:'["a", 1, 2]'}),[rest])[0][1].value,['a',1,2]);
+ assert.throws(()=>parseNativeXmlCalls(call('rest',{value:'["a", "b"]'}),[rest]));
+ const closed=tool('closed',{value:{type:'array',prefixItems:[{type:'string'}],items:false}},['value']);
+ assert.deepEqual(parseNativeXmlCalls(call('closed',{value:'["a"]'}),[closed])[0][1].value,['a']);
+ assert.throws(()=>parseNativeXmlCalls(call('closed',{value:'["a", "b"]'}),[closed]));
+});
+test('captures parsed under the parser policy before tuple support still authenticate',async()=>{
+ const turn=chatCompletionModelTurn(async()=>({choices:[{finish_reason:'stop',message:{content:compact}}]}));
+ const req={messages:[{role:'user',content:'go'}],tools:[],response_tools:tools,seed:3,max_tokens:100,invocation_id:'invocation'};
+ const captured=trajectoryTurn(req,await turn(req));
+ captured.model_response.tool_parse.policy_sha256='1b2713adb032003d3522794fe65b75f03d9b31a1453bc86027f544f460bc315e';
+ assert.equal(authenticateNativeXmlTurn(captured).length,1);
+});

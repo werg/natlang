@@ -68,7 +68,7 @@ function valid(schema: Schema | boolean, value: unknown, root: Schema, depth=0):
   if (depth>64) return false;
   if (typeof schema==='boolean') return schema;
   if (!schema || typeof schema!=='object' || Array.isArray(schema)) return false;
-  const supported = new Set(['type','properties','required','additionalProperties','items','enum','const','anyOf','oneOf','allOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','minLength','maxLength','pattern','minItems','maxItems','uniqueItems','$ref','$defs','definitions', ...annotation]);
+  const supported = new Set(['type','properties','required','additionalProperties','prefixItems','items','enum','const','anyOf','oneOf','allOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','minLength','maxLength','pattern','minItems','maxItems','uniqueItems','$ref','$defs','definitions', ...annotation]);
   if (Object.keys(schema).some(k => !supported.has(k) && !k.startsWith('x-'))) return false;
   if (schema.$ref !== undefined && !valid(resolveRef(schema.$ref,root),value,root,depth+1)) return false;
   const kind = schema.type;
@@ -89,7 +89,10 @@ function valid(schema: Schema | boolean, value: unknown, root: Schema, depth=0):
   if (Array.isArray(value)) {
     if (typeof schema.minItems === 'number' && value.length < schema.minItems || typeof schema.maxItems === 'number' && value.length > schema.maxItems) return false;
     if (schema.uniqueItems === true && value.some((x,i)=>value.slice(0,i).some(y=>equal(x,y)))) return false;
-    if (schema.items !== undefined && !value.every(x => valid(schema.items as Schema | boolean,x,root,depth+1))) return false;
+    // JSON Schema 2020-12: prefixItems types the leading elements by position, and items the elements after them.
+    const prefix = Array.isArray(schema.prefixItems) ? schema.prefixItems as (Schema | boolean)[] : [];
+    if (value.some((x,i) => i < prefix.length && !valid(prefix[i]!,x,root,depth+1))) return false;
+    if (schema.items !== undefined && !value.every((x,i) => i < prefix.length || valid(schema.items as Schema | boolean,x,root,depth+1))) return false;
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const obj = value as Record<string, unknown>, props = (schema.properties ?? {}) as Record<string, Schema>;

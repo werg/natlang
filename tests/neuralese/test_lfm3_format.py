@@ -148,6 +148,16 @@ def test_typed_values_reasoning_and_several_calls(tokenizer):
     assert xml_value('{ a: 1 }', {'type': 'object'}) == '{ a: 1 }' and xml_value('NaN', {'type': 'number'}) == 'NaN'
 
 
+
+def test_tuple_result_schemas_read_as_arrays():
+    """ts-host schemaOf: an exact tuple is one prefixItems schema, an optional tail one exact tuple per length (anyOf).
+    The Python engines and SGLang do not constrain the value; they read it as an array and the runtime checks the type."""
+    exact = {'type': 'array', 'prefixItems': [{'type': 'string'}, {'type': 'number'}], 'minItems': 2, 'maxItems': 2}
+    tail = {'anyOf': [{'type': 'array', 'prefixItems': [{'type': 'string'}], 'minItems': 1, 'maxItems': 1}, exact]}
+    for schema in (exact, tail):
+        assert xml_value('["a", 1]', schema) == ['a', 1] and xml_value('["a"]', schema) == ['a']
+        assert xml_value('a, 1', schema) == 'a, 1'  # not JSON: the model's text, reported by the runtime
+
 @needs_lfm3
 def test_unrepresentable_values_fail_loudly(tokenizer):
     bad = 'line\n</parameter>\nmore'

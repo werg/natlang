@@ -3,6 +3,20 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — an optional tuple tail is decodable; a tuple result parsed from text is not refused
+
+- **Optional tail.** `[A, B?]` as a `return_result` value schema is `anyOf` one exact tuple per length
+  (`{type: "array", prefixItems: [A], minItems: 1, maxItems: 1}`, then `[A, B]`); exact tuples keep their one
+  `prefixItems` schema byte for byte. Before, the single `prefixItems: [A, B], minItems: 1` schema made the managed
+  llama-server's and the page's tool grammar write B every time (llama.cpp's grammar ignores `minItems` on
+  `prefixItems`), so a model could not return `[a]`. The prompt shows the new schema in the tool list for such
+  functions only. Opt-out: `NATLANG_TUPLE_SCHEMA=prefix-items`.
+- **Calls parsed from text.** The client's parser for XML calls in reply text (`model/native-xml-calls.ts`, program
+  headers, where the server is offered no tools) refused every argument whose schema held `prefixItems`, so a
+  tuple-returning function's `return_result` there was answered "gave an argument that is not of its declared type"
+  whatever it held. It now validates `prefixItems` by position and `items` after them (JSON Schema 2020-12); captures
+  parsed under the previous parser policy (`1b2713ad…`) still authenticate (`NATIVE_XML_POLICY_READS`).
+- Engine status and the smoke: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
 ### 2026-11-23 — a readout without reasoning is read in the reply form the model answers in (`decisionReply: 'auto'`); reasoning samples at T=1 (B14 instant collapse)
 
 - **What changed.** Every profile except a managed stock model now defaults to `decisionReply: 'auto'` (it was `value`
