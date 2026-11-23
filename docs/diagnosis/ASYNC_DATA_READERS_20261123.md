@@ -38,6 +38,11 @@ reader follows its selected data reader unless explicitly overridden. Every
 source consumer's command and NATLANG_REPO/PYTHONPATH agree. The controller records
 actual controller/runtime/data/fill Git identities separately in reader-sources.json
 and in its dry-run plan, never claiming that new data tooling changed actor code.
+--minimum-data-reader-commit binds both immutable data/fill readers at controller
+startup and every SFT boundary; it deliberately does not demand a new actor or
+learner pin. This is the active owner's loader gate, replacing reliance on an
+already-completed one-time handoff. Without that explicit source requirement,
+legacy-pin paths remain an opt-out for data that does not need newer readers.
 
 An owner-only resume stops/cancels only the old controller unit, then starts the
 new controller with the original root, runtime arguments and policy recipe plus

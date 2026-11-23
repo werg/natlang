@@ -1465,6 +1465,19 @@ class Cycle:
     def fill_repo(self):
         return Path(getattr(self.a, 'fill_repo', None) or self.data_repo())
 
+    def require_data_readers(self):
+        minimum = getattr(self.a, 'minimum_data_reader_commit', None)
+        if not minimum:
+            return
+        for repo in {self.data_repo(), self.fill_repo()}:
+            marker = repo / '.natlang-pin.json'
+            recorded = json.loads(marker.read_text())
+            actual = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+            if recorded.get('commit') != actual:
+                raise ValueError(f'data reader pin identity differs: {repo}')
+            subprocess.run(['git', '-C', str(repo), 'merge-base', '--is-ancestor', minimum, actual], check=True)
+            subprocess.run(['git', '-C', str(repo), 'diff', '--quiet', 'HEAD', '--'], check=True)
+
     def data_py(self, script, *args):
         return [PY, str(self.data_repo() / 'scripts/neuralese_data' / script), *map(str, args)]
 
@@ -2423,6 +2436,7 @@ class AsyncRoundDriver:
             # keep --commit/--pin. Explicit old-pin paths opt out at a normal resume.
             fill_repo=getattr(a, 'fill_repo', None) or getattr(a, 'data_repo', None) or str(REPO),
             data_repo=getattr(a, 'data_repo', None) or str(REPO),
+            minimum_data_reader_commit=getattr(a, 'minimum_data_reader_commit', None),
             success_pts=a.success_pts, fail_pts=a.fail_pts)
 
     def note(self, **record):
@@ -2671,6 +2685,7 @@ class AsyncRoundDriver:
         """launch-sft.sh's environment for a round: the one recipe for the G4 and the DGX learner (launch-sft.sh
         writes ``--epochs 1 --warmup 10 --batch-loss-tokens 30000 --min-lr-fraction 0.1 --clip 1.0``; a resumed state
         indexes the same step list wherever it trains) plus the round's flags."""
+        self.c.require_data_readers()
         run = round_dir / 'sft'
         extra = ['--round-id', round_dir.name, '--export-factors-dir', str(run / 'factors'), '--factors-only', '--resume']
         vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (round_dir / 'mix' / v).exists()]
@@ -3039,6 +3054,7 @@ class AsyncRoundDriver:
 
     def run(self):
         """Drive up to ``--max-rounds`` (0: continuous) rounds."""
+        self.c.require_data_readers()
         self.record_reader_sources()
         self.c.pin_stage()
         threading.Thread(target=self.held_loop, daemon=True).start()
@@ -3131,7 +3147,8 @@ class AsyncRoundDriver:
     def record_reader_sources(self):
         from natlang_neuralese.common.jsonio import write_json_durable
         record = {'schema': 'natlang.async-reader-sources/1', 'sources': self.reader_sources(),
-                  'runtime_commit': self.a.commit, 'time': time.time()}
+                  'runtime_commit': self.a.commit,
+                  'minimum_data_reader_commit': getattr(self.a, 'minimum_data_reader_commit', None), 'time': time.time()}
         write_json_durable(self.root / 'reader-sources.json', record)
         self.note(reader_sources=record['sources'])
 
@@ -3478,6 +3495,7 @@ def main():
     ad.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS)
     memetic_flags(ad)
     ad.add_argument('--fill', help='filled_reasoning.py OUT directory: fills on the standing collection actor')
+    ad.add_argument('--minimum-data-reader-commit', help='required ancestor of both immutable data/fill reader pins; checked at controller start and each SFT boundary')
     ad.add_argument('--data-repo', help='immutable data-reader checkout (default: controller source); actor/learner --pin is unchanged')
     ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)

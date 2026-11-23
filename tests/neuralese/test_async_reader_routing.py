@@ -145,3 +145,23 @@ d.run()
     finally:
         if owner.poll() is None:owner.kill();owner.wait()
         child.terminate();child.wait(timeout=10)
+
+
+def test_minimum_loader_gate_checks_data_and_fill_not_learner_runtime(tmp_path):
+    from types import SimpleNamespace
+    repo=tmp_path/'reader';repo.mkdir()
+    def git(*args):
+        return subprocess.check_output(['git','-C',str(repo),*args],text=True).strip()
+    git('init','-q');git('config','user.email','test@example.invalid');git('config','user.name','Reader Test')
+    (repo/'source.py').write_text('old')
+    git('add','source.py');git('commit','-qm','old reader');old=git('rev-parse','HEAD')
+    (repo/'source.py').write_text('new');git('add','source.py');git('commit','-qm','new reader');new=git('rev-parse','HEAD')
+    (repo/'.natlang-pin.json').write_text(json.dumps({'commit':new}))
+    c=object.__new__(ei.Cycle);c.pin=tmp_path/'unchanged-runtime'
+    c.a=SimpleNamespace(data_repo=str(repo),fill_repo=str(repo),minimum_data_reader_commit=new)
+    c.require_data_readers()  # Runtime needs no new pin and is not queried.
+    git('checkout','-q',old);(repo/'.natlang-pin.json').write_text(json.dumps({'commit':old}))
+    with pytest.raises(subprocess.CalledProcessError):c.require_data_readers()
+    git('checkout','-q',new);(repo/'.natlang-pin.json').write_text(json.dumps({'commit':new}))
+    (repo/'source.py').write_text('unbound modification')
+    with pytest.raises(subprocess.CalledProcessError):c.require_data_readers()
