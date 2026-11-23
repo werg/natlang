@@ -14,7 +14,7 @@ function fixture(kind='projection'){
  const selector={definition:structuredClone(records.get('producer').definition),valueJson,sha256:hash(valueJson),required:false,
  contribution:{schema:'natlang.application-return-contribution/1',kind,root_call_id:'root',producer_call_id:'producer',root_value_json:rootJson,root_sha256:hash(rootJson),root_path:kind==='forwarded'?[]:['answer'],producer_path:kind==='forwarded'?[]:['answer'],checks:['answerCorrect'],lineage:['root','producer']}};
  if(kind==='projection')Object.assign(selector.contribution,{producer_source_suffix:'judge.nl',candidates:[{call_id:'producer',value_json:valueJson,sha256:hash(valueJson)}]});
- const proof={actualResult:actual,outcomeDimensions:{returnedValue:{checks:{answerCorrect:false}},incidentalValues:{passed:false,checks:{},incorrectReturns:[selector]}}};
+ const proof={actualResult:actual,outcomeDimensions:{returnedValue:{passed:false,checks:{answerCorrect:false}},incidentalValues:{passed:false,checks:{},incorrectReturns:[selector]}}};
  return {selector,proof,records};
 }
 const check=({selector,proof,records})=>{assert.deepEqual(declaredReturnSelectors(proof),[selector]);validateReturnContribution(selector,records,['root']);};
