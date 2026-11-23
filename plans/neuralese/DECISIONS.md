@@ -7975,6 +7975,53 @@ types.
   (`measure.sh`: held pin d3ad57fb21db, 4 samples, 16 slots, medium and resumable). It starts only when no other held
   measurement holds the held-priority claim. Results are appended below when complete.
 
+## 2026-11-23 B16: `natlang:learning` conformance runs end to end on the Python native engine (semantic-FP WS8 N1)
+
+- **Cases.** All 10 pending cases of `conformance/neuralese/cases/termination-learning-graph.yaml` are `implemented`
+  and green: `grad-context-item`, `grad-stop-gradient`, `grad-nested-first-order`, `grad-log-likelihood`,
+  `graph-replay-fixed-choices`, the four `iterate-*` cases and `learning-requires-service`. Runnable forms:
+  `ts-host/test/conformance/learning.mjs`.
+- **Runner.** `ts-host/scripts/native-conformance.mjs` (check-main's `ts-conformance` step, full check only) now also
+  reads the behavioural cases. It checks that every `implemented_by` exists and runs the conformance-module forms
+  itself. Cases with `engines: [python-native]` run against `tests/neuralese/learning_conformance_server.py`, a real
+  Python native engine on the tiny LFM backbone of the native harness tests. Every forward, native write and import,
+  recorded turn, replay and gradient there is the engine's own. Only token selection is a fixture policy (`default`
+  and `alt`, switchable over stdin), and so is the driver's typed readout. The engine runs on CUDA when present.
+  All ten cases take about 50 s.
+- **How the replay checks hold.** The case records under the `default` policy and replays under `alt`, where every
+  choice differs. It then requires an equal loss and gradient, zero generation requests during the replay and one
+  effect call per recording. "Model weights unchanged" is a SHA-256 of the live parameters, taken before and after.
+- **Bugs found and fixed (each was a real failure of a case):**
+  1. A soft value written by an earlier task, such as a context item, carries its writer's `source_occurrence`.
+     `NativeToolAgent.modelTurnNode` refused to read it ("names no matching in-episode writer"), while `blockInput`
+     (graph.ts) binds such a read as `external`, as NEURALESE_GRAPH "Record" says. The agent now agrees with it. A
+     recorded request (one under a learning recorder) also drops occurrences its trajectory does not hold
+     (`localNativeOccurrences`, applied in the Neuralese server transport), so the request, the server's capture and
+     the graph events agree on the external read.
+  2. An arrow-function model driver gave the actor id `''` (`kernel.ts` used `??` on `driver.name`), and every recorded
+     native turn then failed with `invalid actor`. It is now `model`, as in the agent.
+  3. First-order nesting was wrong: an inner `grad` plus an optimizer step inside an order-1 `grad` gave the root no
+     gradient, because the updated state was unrelated to it. The derivative program now takes `order: 1`, where the
+     inner gradient nodes are detached (constants). An order-1 gradient whose loss updates its argument runs through it,
+     so the outer gradient passes the update with its Jacobian at constant g. With plain SGD that equals ∇L at s', and
+     the case checks this.
+  4. The derivative program never reached its roots through an update, at either order. The recorded turns after a host
+     optimizer step import the host's own updated artifact. The program recomputes that update under a different ID
+     (its provenance differs), so the outer replay read the recorded artifact as a constant. The `order: 2` gradient
+     through native-state updates was exactly zero. Optimizer nodes now carry `recorded` (the host's artifact ID), and
+     `_rewrite_request` maps it to the recomputed value. Contract changes are on both sides
+     (`native_derivative_contract.py`, `native-derivative-contract.ts`). The existing order-2 adapter fixture
+     (`native-adapter-recorded-learning.mjs`) checked only provenance, which is why this went unseen. Adapters take the
+     same path; their nonzero order-2 gradient is not asserted anywhere yet.
+- **Engines.** `docs/ENGINE_PARITY.md` has a gradients row with each engine's blocker: llama.cpp and wllama have no
+  backward pass, and the SGLang actor has no gradient replay endpoint. Training runs on the Python native engine and
+  hands states and adapters to the others as files.
+- **Not checked.** The non-layer state tensors (`embeddings`, `token_ids`, `positions`) get no gradient; the case
+  asserts that this is the server's root inventory and does not check whether `embeddings` should be a root. Nothing
+  was measured on LFM3 weights; the tiny backbone checks mechanism, not learning quality. An order-2 gradient inside
+  an order-1 gradient whose loss updates its argument is refused (`learning-grad-order`). `ERRORS.md` gained
+  `learning-unavailable`, which existed in code but had no row.
+
 ## 2026-11-23 07:00 `@natlang/std` skeleton: convergence and workspace combinators with shipped `.nl` judgments (semantic-FP B13, WS3 S2)
 
 **Shipped.** `@natlang/node/std` / `@natlang/browser/std` (also `std` from `@natlang/node`): `semanticRepair`,
@@ -8032,3 +8079,55 @@ most of it long thinking turns). Every combinator ran on the real model and the 
 - `branchAndSelect`: both styles passed `verify`, and `beats` chose the bulleted announcement for the goal "learns
   first what will break". That choice is arguable, since the breaking change is the second bullet.
 A second live run with the fixed check is queued; its result is appended below when it completes.
+
+## 2026-11-22 23:30 GRPO decision-only steps: the step's data factor counts units and scales the gradient; KL telemetry per value (decision hunt)
+
+Observations (LoRA bench, 7c9038cf5, grpo-v4/run2 replay, 6 groups/step): steps 1 and 6 trained only sampled decisions
+(16 and 24, 3-option `</think>"pass|fail|needs-review"<|im_end|>` readouts) with pre-clip grad_norm 65 and 23 against
+0.2-0.3 on chain steps; step 1 KL 0, step 6 kl_mean 860.
+
+- **Cause.** Under `--loss-norm token` a step's loss is the mean over its own units, and a decision in an episode with no
+  token call is 1 unit, so each decision weighed 1/16-1/24 (1/~10,000 in a mixed step). The 16 decisions were 2
+  distinct choices (sibling episodes repeat a decision), so their gradients add coherently: that is the norm ratio.
+  `lr_data_scale` counted the 2 decision groups like chain groups (2/12), so one AdamW step (a sign step at step 1:
+  LoRA B = 0) at LR 8.3e-6 went to two choices. It moved an unseen prompt of the same family by up to 3.2 nats
+  (`needs-review` up, the direction the advantages select: summed by option over steps 1-5, needs-review +8.4,
+  fail -7.8) and the behaviour probe's end-of-turn logp by +1.35. AdamW's moments (beta2 0.99) then carried that
+  clipped gradient (norm 1 against 0.2-0.3) into steps 2-5 at their LR while decisions were 1e-4 of those steps'
+  gradient; by step 6 option-softmax d reached 7.5 nats. kl_mean 860 = k3 (e^d) of that d, summed over the 24
+  softmax values plus ~146 chosen-token values and divided by 24 units.
+- **Fixes (1601076d9, defaults with opt-outs, tests in test_grpo_learner.py):**
+  - `spread_data`: each group with spread counts min(1, its loss units / `--lr-reference-group-units` 4096) in
+    `lr_data_scale` (0: one per group). A decision group of 8 is ~0.002 of a group; production groups (~100k units)
+    and the bench's chain groups count ~1.
+  - `scale_and_clip`: the same factor scales the gradient before the clip, so the moments carry a small step at its
+    size (`--no-data-scaled-gradient` opts out). `grad_norm` stays the mean-loss norm; `grad_norm_applied` is logged.
+  - KL telemetry divides by its values (`kl_n`), not the loss units; `decision_kl_k2_mean` (option softmax) and
+    `decision_token_kl_k2_mean` (chosen-option tokens) are logged apart.
+  - Identical sampled decisions share one forward (`decision_forward_key`); each keeps its term.
+- **Re-run** (`ops/grpo-v6/bench-lora-20261122/dechunt/`, main fb20452d1 vs the same code with
+  `--lr-reference-group-units 0 --no-data-scaled-gradient`; schedule = the bench's step-1 then step-6 batches):
+  old: step 1 lr 8.3e-6, applied grad 64.4, end_logp_change +1.35, step-6 batch option scores vs the reference up
+  to +3.19, kl_mean 0.90 (decision k2 1.62). New: step 1 lr 1.6e-8, applied grad 0.021, end_logp_change +0.015,
+  option scores within 0.54 (centered within ~0.2; the rest is a common shift on the shared tail tokens), kl_mean 0.009.
+  Decision forward+backward 5-10 s (32.8 s at step 1 of the original bench, before dedup). CUDA peak 12.2 GiB.
+- **Ruled out / checked:** clip (rescales only; step 1 is a sign step either way); reference view (step-1 KL exactly 0,
+  reference scores of a prompt identical at steps 2 and 6); warmup (0.5x at step 1, as designed); decision tensors
+  (positions/targets/owner; learner = reference at step 1); rows untied (`load_base_model` refuses an untied head);
+  the step-1 learner/actor gap (|log rho| 0.6 at "stale 0"): the replayed groups were sampled by run2's versions 2-12
+  (`served_policy`), the replay labels them fresh; the record's `policy` field is the start checkpoint id.
+  Independent static review (second investigator) agreed on normalization, data scale and AdamW; it raised the gap
+  above, which the served versions explain.
+- **Open findings (not fixed here):**
+  - SGLang decision scores are nondeterministic: identical (served version, prompt, options) rows differ by median
+    0.74, max 1.81 nats in an option score (27 sets, 189 rows of the bench groups). `sglang_score` scores each option
+    as its own request (`sglang_actor.py` 1352-1377), so the tokens all options share (`</think>` at ~-21 nats, `"`)
+    are computed per option in different batches and do not cancel; the native engine scores every option from one
+    prefill (`native_learning._score_rendered`). A serving change across all engines (llama.cpp fork decide path not
+    read); next serving work stream.
+  - The decision-token KL adds 5-7 per-token terms for a decision's single unit (small).
+  - With the new factor a residual 0.1-0.5 nat common shift on shared tail tokens after a 1.6e-8 step is near the
+    known BF16 pack-shape rounding on such tokens (2026-11-19); not measured further.
+  - Not checked: a 6-step re-run with the chain steps (the pair above isolates the decision steps); per-token
+    breakdown of option scores; trainable-row share of the gradient beyond its telemetry (0.78 of the clipped norm at
+    step 1: `</think>`'s input row opens every option).
