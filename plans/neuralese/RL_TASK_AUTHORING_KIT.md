@@ -998,3 +998,23 @@ aliases with it as the files the run left. Wrong placements are `wrong_code` (th
 
 **Groups are checked**: `authored_checks.py` rejects any group that is not one real source item (`<dataset>:<item
 id>`), and every `invented...` group.
+
+## 20. Tasks over the `@natlang/std` combinators (sfp3, 2026-11-23)
+
+Programs call `semanticMerge`, `semanticRepair`, `fixedPoint`, `proposeAndVerify` or `branchAndSelect` from a
+callable-folder TypeScript helper (`import { semanticMerge } from "@natlang/node/std"`) and use the shipped judgments
+(`intentOf`, `compatible`, `combine`, `settled`, `beats`) without overrides, so expert iteration trains exactly the
+calls the library makes. Construct tags: `semantic_merge`, `semantic_repair`, `fixed_point`, `propose_and_verify`,
+`branch_and_select` (checked: a program file imports the combinator and calls it). Brief and probe:
+`/mnt/external/natlang-rl-authoring/sfp3/`.
+- **Merges are judged by `merge.mjs`**: per record, each judged field equals an acceptable value or contains a piece of
+  each compatible edit (`includes` groups, `excludes`), and `unresolved` lists exactly the incompatible paths. A world
+  has >= 8 judged conflicts, about half compatible, and both "all incompatible" and "all compatible" are wrong answers:
+  the compatibility judgment decides the outcome (live LFM3 scored additive edits less compatible than clashes).
+- **Replay**: reference children match the shipped judgments' instruction text (`after is before with one edit`, `can
+  carry out both purposes at once`, `carry out the purpose of ours`, `says the same as previous`, `serves goal better
+  than second`), never their description line; each `intentOf` answer is followed by a refinement judge (`Decide
+  whether value satisfies predicate`, smoke `holds`). Smoke children answer by judgment name.
+- Until c93124ec1 the collector (which loads the runtime without the package entry) could not run std at all: the
+  import fell through to the package loader and ran a second runtime copy with no task, and records from the module
+  realm merged as one opaque value. Collection of these tasks needs a pin at or after c93124ec1.

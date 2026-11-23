@@ -178,7 +178,8 @@ class FunctionalPrograms:
 
 def semantic_fp_shape(semantics):
     """Program-visible semantic-FP shape (plans/semantic-fp/05): TypeScript helpers, function-typed signatures, outside
-    text and refinement types, a directory-reducer root, and the kind of trusted verifier that judges the outcome.
+    text and refinement types, a directory-reducer root, the kind of trusted verifier that judges the outcome and the
+    @natlang/std combinators it calls.
     Only keys that are present are returned, so a program without any keeps the structure key it had before."""
     every = semantics.get('files') or {}
     text = '\n'.join(every.values())
@@ -189,6 +190,9 @@ def semantic_fp_shape(semantics):
         'untrusted': 'Untrusted<' in text, 'refined': bool(re.search(r'\bIs<', text)),
         'directory_reducer': bool(re.search(r'^kind:\s*directory-reducer', text, re.M)),
         'verifier': ((semantics.get('trusted_exact_verifier') or {}).get('path') or '').rsplit('/', 1)[-1].removesuffix('.mjs'),
+        # @natlang/std combinators the program calls, in a fixed order
+        'std': ','.join(name for name in ('semanticMerge', 'semanticRepair', 'fixedPoint', 'proposeAndVerify', 'branchAndSelect')
+                        if '@natlang/' in text and re.search(rf'\b{name}\(', text)),
     }
     return {key: value for key, value in shape.items() if value}
 

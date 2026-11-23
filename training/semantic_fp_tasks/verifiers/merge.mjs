@@ -8,6 +8,8 @@
 //   Rule: { equals: [<acceptable value>, ...] }
 //       | { includes: [[<alternative text>, ...], ...], excludes?: [<text>, ...] }   a string field containing at least
 //         one alternative of every group (case and spacing ignored) and none of excludes
+//       | { any: [Rule, ...] }   one of several readings (e.g. the conflict combined, or kept unresolved at base; list
+//         the path in unresolved_optional too)
 // A path in unresolved is a dotted string or a list of keys. The listed paths must be exactly the required ones plus
 // any of the optional ones. Strings compare after trimming, collapsing spaces and lowercasing; a numeric string equals
 // its number. score = right checks / (fields + 1 for the unresolved list, per item + stray items).
@@ -29,6 +31,7 @@ const at = (record, path) => path.split('.').reduce((node, key) => node && typeo
 const pathOf = path => Array.isArray(path) ? path.map(String).join('.') : typeof path === 'string' ? path.trim() : null;
 
 function ruleHolds(have, rule) {
+  if (rule.any) return rule.any.some(option => ruleHolds(have, option));
   if (rule.equals) return rule.equals.some(option => same(have, option));
   if (typeof have !== 'string') return false;
   const text = flat(have);

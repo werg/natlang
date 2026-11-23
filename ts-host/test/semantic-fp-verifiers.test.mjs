@@ -175,6 +175,11 @@ test('merge: compatible fields keep both edits, conflicts listed exactly, base k
   assert.equal(missing.ok, false);
   assert.ok(Math.abs(missing.score - 3 / 5) < 1e-9);
   assert.equal(verifyCandidate({ value: { ...good, m3: good.m2 }, oracle }).ok, false);
+  const either = { shape: 'single', items: { only: { fields: { hours: { any: [{ equals: ['9-5'] }, { includes: [['sat'], ['sun']] }] } },
+    unresolved: [], unresolved_optional: ['hours'] } } };
+  assert.equal(verifyCandidate({ value: { value: { hours: '9-5' }, unresolved: ['hours'] }, oracle: either }).ok, true);
+  assert.equal(verifyCandidate({ value: { value: { hours: '9-5, Sat, Sun' }, unresolved: [] }, oracle: either }).ok, true);
+  assert.equal(verifyCandidate({ value: { value: { hours: '9-5, Sat' }, unresolved: [] }, oracle: either }).ok, false);
   const single = { shape: 'single', items: { only: oracle.items.m2 } };
   assert.equal(verifyCandidate({ value: good.m2, oracle: single }).ok, true);
 });
