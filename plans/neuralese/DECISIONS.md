@@ -9698,7 +9698,7 @@ checker required it.
   or qualification. `ensuresGate` is now shared. No pool root declares one today.
 - **Measurement** (30 tasks, one per family, 2 samples, sft-v9, same seeds, prose vs typed, same runtime): in
   flight. The Colab front dropped three times (aei1 moved its round-1 SFT there), so only 9 prose and 6 typed episodes
-  scored there. A ledger unit (`typedwt-measure-supervisor`, `ops/typed-contracts-20261123/driver/supervise.sh`)
+  scored there. A ledger unit (`typedwt-measure-supervisor3`, `ops/typed-contracts-20261123/driver/supervise2.sh`)
   measures both arms on the first endpoint that attests sft-v9, the Colab front or aei1's DGX actor, and reruns
   episodes an actor loss cut off. Result: `ops/typed-contracts-20261123/measure-<endpoint>/<arm>/run/result.json`,
   compared with `held_eval compare`. It runs from the `/home/werg/natlang-wt/typed-contracts` worktree; remove that

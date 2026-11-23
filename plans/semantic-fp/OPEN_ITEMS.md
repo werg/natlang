@@ -16,6 +16,7 @@ An item leaves the register when its fix lands on main. A finding reported by an
 | Memetic layout fix (c64d250b2) on a real actor | queued unit `memverify-dgx3`, then the round 1 health report |
 | held-v4 sft-v6 reference measurement | Pop unit `popheld-hv4-sft-v6`; the coordinator appends the result to DECISIONS |
 | Remove the legacy `expert_iteration.py cycle` mode once aei1's round 1 has a held verdict (AGENTS.md: async-drive replaces cycle) | coordinator, after the r0001 verdict |
+| Typed-contracts before/after measurement (30 tasks x 2 samples, sft-v9, prose vs typed): ledger unit `typedwt-measure-supervisor3` (`ops/typed-contracts-20261123/driver/supervise2.sh`) measures on the first endpoint attesting sft-v9 (now aei1's DGX actor, 12 slots per arm) and reruns cut-off episodes; result in `ops/typed-contracts-20261123/measure-dgx/{orig,typed}/run/result.json`, compare with `held_eval compare`, append to DECISIONS "typed output contracts", then `git worktree remove /home/werg/natlang-wt/typed-contracts` (the run uses it) | typed-contracts agent; coordinator if it outlives the session |
 | aei1 round 1 build, SFT and held verdict | aei1 driver; the coordinator reads its health report |
 
 ## Reasoned decisions in training
