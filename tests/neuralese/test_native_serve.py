@@ -281,7 +281,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert {'template', 'guidance'} <= set(info['capabilities'])
         assert not {'embed', 'encode', 'init-body', 'write'} & set(info['capabilities'])
         assert info['native_state']['consumption_modes'] == [
-            'exact-native-state', 'same-base-adapter-state', 'best-effort-text-retokenization']
+            'exact-native-state', 'same-base-adapter-state', 'best-effort-text-retokenization', 'in-context-text']
         assert 'adapters' not in info, 'legacy projected-adapter inventory is retired'
         assert 'native.adapters' in info['capabilities'], 'native modelLoRA remains available'
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])

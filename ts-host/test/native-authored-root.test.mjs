@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import * as core from '../dist/index.js';
 import {workerdPlatform} from '../dist/core/workerd.js';
 const files={
- 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
+ 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export async function restful(prefix:string,...values:number[]):Promise<string>{return prefix+values.join(",")+":"+await describe(values.length);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
  'describe.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe the number.',
 };
 function setup(platform=core.nodePlatform(),recording){
@@ -44,6 +44,38 @@ for(const mode of ['node','workerd'])test(`actual ${mode} TS optional input stay
   assert.equal(child.parent_call_id,root.call_id);
   assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
  }finally{env.close();}
+});
+for(const mode of ['node','workerd'])test(`actual ${mode} TS rest captures every trailing value and keeps child lineage`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const env=setup(platform);try{
+  assert.equal(await env.rt.run(()=>env.module.restful('p:',1,2,3)),'p:1,2,3:seven');
+  const folder=core.loadVirtualCallables(files,'','/reference',platform);
+  assert.equal(await env.rt.run(()=>folder.entry.restful('empty:')),'empty::seven');
+  const rows=env.store.calls().map(row=>env.store.call(row.call_id));
+  const roots=rows.filter(row=>row.parent_call_id===null);assert.equal(roots.length,2);
+  for(const root of roots){
+   assert.equal(root.definition.params[1].name,'values');assert.equal(root.definition.params[1].rest,true);
+   const prefix=env.store.value(root.inputs.prefix);
+   assert.deepEqual(env.store.value(root.inputs.values),prefix==='p:'?[1,2,3]:[]);
+   const child=rows.find(row=>row.parent_call_id===root.call_id);assert.equal(child.definition.name,'describe');
+   assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
+  }
+  const loose=core.compileVirtualProject({files:{'inferred.ts':'// @ts-nocheck\nexport function inferredRest(...values){return values.length;}'},root:'/loose-reference'},core,{platform});
+  assert.equal(loose.ok,true,JSON.stringify(loose.diagnostics));
+  assert.equal(await env.rt.run(()=>loose.require('inferred.ts').inferredRest(1,2,3)),3);
+  const inferred=env.store.calls().map(row=>env.store.call(row.call_id)).find(row=>row.definition.name==='inferredRest');
+  assert.equal(inferred.definition.params[0].type,'unknown[]');assert.equal(inferred.definition.params[0].rest,true);
+  assert.deepEqual(env.store.value(inferred.inputs.values),[1,2,3]);
+ }finally{env.close();}
+});
+test('NL eval sees the actual rest signature of a TS helper',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'native-rest-scope-')),store=core.CallStore.open(dir);
+ store.writeSettings({minFreeBytes:0,specialization:'off'});
+ const platform=core.nodePlatform(),rt=core.createNatlangRuntime({platform,calls:store,model:async()=>({calls:[['eval',{code:'return helper.join("p:",1,2,3);',finish:true}]]})});
+ const program={'entry.ts':'import main from "./main.nl"; export default async function entry():Promise<string>{return await main();}', 'main.nl':'---\nargs: {}\nreturns: string\n---\nJoin the supplied values using helper.',
+ 'main/helper.ts':'export function join(prefix:string,...values:number[]):string{return prefix+values.join(",");}'};
+ try{const compiled=core.compileVirtualProject({files:program,root:'/reference'},core,{platform});assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));const module=compiled.require('entry.ts');assert.equal(await rt.run(()=>module.default()),'p:1,2,3');}
+ finally{rt.close();store.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('native entry preserves synchronous return and failure semantics',async()=>{
  const env=setup();try{
@@ -108,4 +140,43 @@ for(const mode of ['node','workerd'])test(`overlapping ${mode} native roots pres
    assert.deepEqual(root.graph_custody.child_call_ids,[children[0].call_id]);
   }
  }finally{for(const release of gates)release();rt.close();env.close();}
+});
+
+for(const mode of ['node','workerd'])test(`actual ${mode} TS service ancestry honors explicit descendant scope without global grants`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ for(const nativeRoots of [true,false])for(const scope of ['owner.ts/**','owner.ts']){
+  const env=setup(platform),rt=core.createNatlangRuntime({platform,calls:env.store,recording:{nativeRoots},services:{notes:{read(){return 'actual';}}},serviceScopes:{notes:[scope]},agent:async session=>{session.lam.return=Object.hasOwn(session.availableServices(),'notes')?'allowed':'denied';}});
+  const project={'owner.ts':'import judge from "./judge.nl"; export default async function owner():Promise<string>{return await judge();}',
+   'other.ts':'import judge from "./judge.nl"; export default async function other():Promise<string>{return await judge();}',
+   'judge.nl':'---\nargs: {}\nreturns: string\n---\nRead only the actually available scoped service.'};
+  try{
+   const compiled=core.compileVirtualProject({files:project,root:'/scoped-reference'},core,{platform});assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));
+   assert.equal(await rt.run(()=>compiled.require('owner.ts').default()),scope.endsWith('/**')?'allowed':'denied');
+   assert.equal(await rt.run(()=>compiled.require('other.ts').default()),'denied');
+  }finally{rt.close();env.close();}
+ }
+});
+
+for(const mode of ['node','workerd'])test(`actual ${mode} explicit nested-package NL imports retain own types and ambient service declarations`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const dir=mkdtempSync(join(tmpdir(),'explicit-package-reference-')),store=core.CallStore.open(dir);store.writeSettings({minFreeBytes:0,specialization:'off'});
+ const project={
+  'natlang.json':JSON.stringify({name:'outer'}),
+  'types.ts':'export type Result = { wrong: boolean };',
+  'entry.ts':'import answer from "./library/answer.nl"; export default async function entry():Promise<string>{return (await answer()).answer;}',
+  'library/natlang.json':JSON.stringify({name:'inner',exports:{lookup:'./lookup.nl'}}),
+  'library/types.ts':'export type Result = { answer:string };',
+  'library/services.d.ts':'declare module "natlang:services" {export const journal:{read():Promise<import("./types.js").Result>};}',
+  'library/answer.nl':'---\nargs: {}\nreturns: Result\nuses: [lookup]\n---\nUse lookup.',
+  'library/lookup.nl':'---\nargs: {}\nreturns: Result\n---\nRead the actual service through readNative.',
+  'library/lookup/readNative.ts':'import {journal} from "natlang:services"; import type {Result} from "../types.js"; export default async function readNative():Promise<Result>{return await journal.read();}',
+  'unimported/natlang.json':JSON.stringify({name:'unrelated'}),'unimported/broken.ts':'this is invalid TypeScript and must remain excluded',
+ };
+ let turns=0;const rt=core.createNatlangRuntime({platform,calls:store,services:{journal:{async read(){return {answer:'actual'};}}},model:async()=>({calls:[['eval',{code:++turns===1?'return await lookup();':'return await readNative();',finish:true}]]})});
+ try{
+  const compiled=core.compileVirtualProject({files:project,root:'/package-reference'},core,{platform});assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));
+  assert(Object.keys(compiled.declarations).some(path=>path.endsWith('/library/answer.d.nl.ts')));
+  assert.equal(await rt.run(()=>compiled.require('entry.ts').default()),'actual');
+  assert.equal(turns,2);
+ }finally{rt.close();store.close();rmSync(dir,{recursive:true,force:true});}
 });

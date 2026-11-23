@@ -23,3 +23,10 @@ test('a foreign class, custom prototype and nonportable leaves remain excluded',
     assert.equal(text, undefined, code);
   }
 });
+
+test('sparse and decorated arrays are not silently certified as exact JSON', () => {
+  for (const value of [new Array(2), [1,,3], Object.assign([1,2],{note:'must not vanish'}), runInNewContext('[1,,3]')]) {
+    const taken=snapshot(value,1024);assert.equal(taken.ref.complete,false);assert.equal(taken.ref.reason,'nonportable');assert.equal(taken.text,undefined);
+  }
+  assert.equal(snapshot([1,null,3],1024).ref.complete,true);
+});

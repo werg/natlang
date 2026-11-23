@@ -339,6 +339,64 @@ def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
                 assert torch.equal(saved[f'layers.{index}.{name}'], value.cpu())
 
 
+def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_path, monkeypatch):
+    """A state written from text (write-text) is consumed as its exact tokens in the reader's own context on both
+    engines (`in-context-text`): the out-of-context write was unreadable (2026-11-23, 1 of 87 held read-backs). The
+    reader's logits equal those of the same tokens inline; NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices the stored
+    state as before, and states not written from text still splice exactly."""
+    import torch
+    from natlang_neuralese.model.shared_state import native_step
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    front.sglang_url = 'http://fork.invalid'   # the write goes through the fork's capture request (mocked natively)
+    front.native_endpoint_metrics = {}
+    text = 't6 t7 t9'
+    written = front.native_write_text(text, value_type='Neuralese<string>')
+    assert native.native_write_text(text, value_type='Neuralese<string>')['id'] == written['id']
+    block_id = written['id']
+    tokens = list(native.store.get_native_state(block_id).block.token_ids.tolist())
+    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
+                                             {'type': 'text', 'text': ' t5'}]}]
+    later = lambda: GenerationRequest(messages=messages, temperature=1.0, max_tokens=8, rl_capture=True, rl_top_k=2,
+                                      native_recording=True, request_id='r2', seed=2)
+    reply = word('t8') + [sorted(front.stop_ids)[0]]
+    seen = []
+    script = iter(reply)
+    native._native_token = lambda seq: (seen.append(seq.logits.detach().clone()), (next(script), -0.5))[1]
+    expected = native.generate(later())
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in reply]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': reply, 'meta_info': {'natlang_top_k': records}})[1]
+    actual = front.generate(later())
+    receipt = {'id': block_id, 'mode': 'in-context-text', 'observed_native_state_id': block_id}
+    assert expected['native_state']['imports'] == actual['native_state']['imports'] == [receipt]
+    mine, theirs = actual['x_natlang_rl_capture'], expected['x_natlang_rl_capture']
+    assert mine['prompt'] == theirs['prompt'] and _protocol_view(mine) == _protocol_view(theirs)
+    assert not [segment for segment in mine['prompt'] if segment['kind'] == 'native_state']
+    span = [roles.consume_open, *tokens, roles.consume_close]
+    ids = sent[0]['input_ids']
+    at = ids.index(roles.consume_open)
+    assert ids[at:at + len(span)] == span and 'natlang_import' not in sent[0]['sampling_params'].get('custom_params', {})
+    # The reader's first-token logits are those of the prompt with the text's tokens inline.
+    prompt_ids = [token for segment in theirs['prompt'] for token in segment['token_ids']]
+    with torch.no_grad():
+        inline = native.shared_model.logits(native_step(native.shared_model, torch.tensor([prompt_ids]))['h_final'][:, -1])
+    assert torch.allclose(seen[0].float(), inline.float(), atol=1e-4)
+    # Opt-out: the stored state is spliced (the old path); a state not written from text is spliced too.
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    script = iter(reply)
+    assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    monkeypatch.delenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT')
+    # The front's store records its text writes: a restarted front (empty memory) still reads them in context.
+    front._text_written_states.clear()
+    assert front.text_write_in_context(block_id)
+    native._text_written_states.clear()
+    if native._text_write_marks() is not None:
+        import shutil
+        shutil.rmtree(native._text_write_marks())
+    script = iter(reply)
+    assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+
+
 def test_same_base_adapter_state_mode_imports_with_the_native_receipt(tmp_path):
     """A declared same-base adapter-state import: the same receipt (source/target identities, target position) in
     the prompt capture and the imports on both engines, the state spliced through the same placeholders."""

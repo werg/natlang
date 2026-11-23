@@ -38,7 +38,7 @@ export type SourceFiles = {
 };
 
 export type ExportRecord =
-  | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean; doc?: string }
+  | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean; doc?: string; rest?: string }
   | { kind: 'value'; type?: string };
 
 export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
@@ -509,7 +509,7 @@ function findPackageRoot(dir: string, files: SourceFiles): string | undefined {
 }
 
 /** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */
-function packageRoot(dir: string, files: SourceFiles): string {
+export function packageRoot(dir: string, files: SourceFiles): string {
   return findPackageRoot(dir, files) ?? (() => {
     let current = dir;
     while (files.dirname(current) !== current) current = files.dirname(current);
@@ -746,6 +746,17 @@ function siblingHasSpecifier(specifier: string, siblings: Record<string, ItemRec
   return true;
 }
 
+/** Shared source resolution for runtime module loading and explicit compiler import closure. */
+export function resolveImportedSource(specifier: string, from: string, files: SourceFiles): string | undefined {
+  if (RUNTIME_OR_BUILTIN_IMPORT.test(specifier)) return undefined;
+  if (specifier.startsWith('./') || specifier.startsWith('../')) {
+    const base = normalizePath(files.join(files.dirname(from), ...specifier.split('/')));
+    return resolveTargetFile(base, files, ['ts', 'js', 'nl']);
+  }
+  if (!specifier.startsWith('/')) return resolvePackageExport(specifier, packageRoot(files.dirname(from), files), files, ['ts', 'js', 'nl']).target;
+  return undefined;
+}
+
 /**
  * Resolve package-relative `.ts`/`.js`/`.nl` imports and `natlang.json` package exports for a callable-folder module.
  * Enforces the project-root boundary and the same finite-iteration policy (`parseModule`) on every imported module.
@@ -768,7 +779,7 @@ function attachModuleImports(record: ModuleRecord, path: string, siblings: Recor
       const base = normalizePath(files.join(files.dirname(path), ...specifier.split('/')));
       if (escapesBoundary(path, base, files))
         throw new NatlangSourceError(path, `cannot import ${JSON.stringify(specifier)}: import escapes the project root`);
-      const target = resolveTargetFile(base, files, ['ts', 'js', 'nl']);
+      const target = resolveImportedSource(specifier, path, files);
       if (!target) continue;
       const normTarget = normalizePath(target);
       if (target.endsWith('.nl')) {
@@ -842,11 +853,13 @@ function attachTypeSources(record: ModuleRecord, path: string, files: SourceFile
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string,
     allowUntyped = false, compiled = false): ExportRecord {
   const args: Record<string, string> = {};
+  let rest: string | undefined;
   for (const parameter of node.parameters) {
-    if (!compiled && (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped) || parameter.dotDotDotToken))
+    if (!compiled && (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped)))
       throw new NatlangSourceError(path, `${label}: parameters need names and explicit types`);
     const name = ts.isIdentifier(parameter.name) ? parameter.name.text : `arg${node.parameters.indexOf(parameter)}`;
-    args[name + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : 'unknown';
+    args[name + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : parameter.dotDotDotToken ? 'unknown[]' : 'unknown';
+    if (parameter.dotDotDotToken) rest = name;
   }
   if (!node.type && !allowUntyped && !compiled) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
   let returns = node.type ? node.type.getText(file) : 'unknown';
@@ -855,7 +868,7 @@ function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.So
   if (promised) returns = node.type!.typeArguments![0]!.getText(file);
   const isAsync = promised || !!ts.getModifiers(node as ts.FunctionDeclaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
   const doc = docComment(node);
-  return { kind: 'function', args, returns, async: isAsync, ...(doc ? { doc } : {}) };
+  return { kind: 'function', args, returns, async: isAsync, ...(doc ? { doc } : {}), ...(rest ? { rest } : {}) };
 }
 
 /** The text of a function's JSDoc comment, on one line; for a function expression, its variable statement's. */

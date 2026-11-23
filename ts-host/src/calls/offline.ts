@@ -38,8 +38,8 @@ export function definitionFor(store: CallStore, record: CallRecord): { definitio
     ...(identity.source ? { source: identity.source } : {}) } };
 }
 
-export const signatureOf = (definition: { name: string; params: { name: string; type: string; optional?: boolean }[]; returns: string }): string =>
-  `${definition.name}(${definition.params.map(param => `${param.name}${param.optional ? '?' : ''}: ${param.type}`).join(', ')}): ${definition.returns}`;
+export const signatureOf = (definition: { name: string; params: { name: string; type: string; optional?: boolean; rest?: boolean }[]; returns: string }): string =>
+  `${definition.name}(${definition.params.map(param => `${param.rest ? '...' : ''}${param.name}${param.optional ? '?' : ''}: ${param.type}`).join(', ')}): ${definition.returns}`;
 
 /** Find a case by hash in the current compilation of a definition revision, loaded in `definition`'s context. */
 export function caseFor(platform: Platform, store: CallStore, definitionKeyValue: string, hash: string, definition: CallableDefinition): LoadedCase | undefined {

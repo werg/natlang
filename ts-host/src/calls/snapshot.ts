@@ -36,7 +36,14 @@ function portable(value: unknown, seen: Set<object>, depth: number): boolean {
   if (typeof value !== 'object' || seen.has(value)) return false;
   seen.add(value);
   try {
-    if (Array.isArray(value)) return value.every(item => portable(item, seen, depth + 1));
+    if (Array.isArray(value)) {
+      // JSON turns holes into null and drops extra array fields. Neither is an
+      // exact snapshot of the actual call input, so never certify it complete.
+      if (Object.keys(value).length !== value.length) return false;
+      for (let index = 0; index < value.length; index++)
+        if (!Object.hasOwn(value, index) || !portable(value[index], seen, depth + 1)) return false;
+      return true;
+    }
     if (!plainPrototype(Object.getPrototypeOf(value))) return false;
     return Object.entries(value).every(([, item]) => item !== undefined && portable(item, seen, depth + 1));
   } finally { seen.delete(value); }

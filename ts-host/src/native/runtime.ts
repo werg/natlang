@@ -2184,10 +2184,13 @@ export class NativeSession {
   }
 
   availableServices(): Record<string, object> {
-    const chain = currentFrame()?.chain ?? [];
+    const frame = currentFrame();
+    const chain = frame?.serviceChain ?? frame?.chain ?? [];
     return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
       const scope = this.runtime.serviceScopes[name];
-      return !scope || scope.some(path => path.endsWith('/**') ? chain.includes(`nl:${path.slice(0,-3)}`) : chain.at(-1)===`nl:${path}`);
+      return !scope || scope.some(path => path.endsWith('/**')
+        ? chain.includes(`nl:${path.slice(0,-3)}`) || chain.includes(`ts:${path.slice(0,-3)}`)
+        : chain.at(-1)===`nl:${path}` || chain.at(-1)===`ts:${path}`);
     }).map(([name, service]) => [name, name === 'neuralese' && service && typeof service === 'object' ?
       Object.create(Object.getPrototypeOf(service), {
         // Descriptors, not a spread: a getter stays lazy (it is never read for a declaration) and prototype methods stay.
