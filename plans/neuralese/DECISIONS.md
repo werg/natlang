@@ -9006,3 +9006,53 @@ executed, so the episode's reward says nothing about them, and giving them its a
   `ops/gdr-bench/pin-91b26036f` and the agent's `scratchpad/gdr/scripts/bench.sh`. The coordinator reruns it, or reads
   the first real GRPO step's `lowering.decision_reasoning_*` counters. The offline lowering of the same groups with the
   real tokenizer gives 16 rows and 22,988 reasoning tokens, all closed by `</think>` (`decision_reasoning_turns`).
+### 2026-11-23 — constrained decoding with an exact learner law (tool grammar on the Python engine and SGLang)
+
+**Decision.** The two training-collection engines decode tool calls under their schemas by default, with the same law
+the managed llama-server and the page already applied, and the learner scores every such token under the mask it was
+drawn with. This closes the ENGINE_PARITY gap row "Tool arguments decoded under their schema" (commit b7d0647e3), which
+was blocked on the learner scoring the unmasked policy (biased rho, KL and SFT targets on constrained tokens).
+
+**What was built.**
+- `common/tool_grammar.py`: one xgrammar structural tag per tool list (free text unconstrained; `<tool_call>` must name
+  a declared tool; its parameters follow the tool's JSON schema in the backbone's call format, `qwen_xml` for LFM3,
+  `json` for Qwen3; LFM2's pythonic form has none), its declaration in the capture (`sampling_law.tool_grammar`: the
+  tag, sha256, xgrammar version, tokenizer identity), and the exact replay of a reply's masks from its own tokens.
+- Python engine (`serve/engine.py`): masks the logits before guidance bans, temperature and the nucleus; the matcher
+  follows every fed token and guidance rewinds (`native_guidance.check`); a templated `decode` opening is fed first.
+- SGLang fork 17e3458c2e (`NATLANG_GRAMMAR_PREFIX`): the grammar backend loads the served tokenizer under
+  `--skip-tokenizer-init` (upstream had no backend there), and `custom_params.natlang_grammar_prefix` makes a
+  continuation request's grammar take the reply it already holds. The mask precedes the fork's natlang records, so the
+  recorded logp is the masked law. The front sends the same tag and checks every SGLang token with its own matcher.
+- Learner: `lower_rollout_turns.sampled_call` keeps the law (and guidance bans, which were recorded but never applied:
+  the same defect for bans), `exp0_sft.law_mask` builds a `lfm3_fast.HeadMask`, and the fused head NLL, its nucleus and
+  their gradients use the renormalized law at those rows: `grpo.py` policy, reference (so rho and the KL), `exp0_sft.py`
+  SFT, Ambient TM, validation and its parity tool. A law over another tokenizer or xgrammar version is refused.
+- Opt-outs: `NATLANG_TOOL_GRAMMAR=0` on a server, `x_natlang_tool_grammar: false` per request; a host without xgrammar
+  serves unconstrained (says so once); a fork without the marker serves unconstrained. Each records what it did.
+
+**Evidence (2026-11-23, sft-v9 e15b20a8 BF16, DGX, ledgered units).**
+- Forced decode (`scripts/neuralese_data/check_tool_grammar.py decode`, wllama_smoke's tuple cases, greedy): Python
+  engine and SGLang both return `["red", 2]` for `[string, number]` and `[string, number?]` asked for
+  `["red", "green", "blue"]`, and `["red"]` for the optional tail asked for `["red"]`; the unconstrained control returns
+  the three strings; llama-server and the page give the same values (b7d0647e3). Both engines declare the same grammar
+  sha256 per tool list (437d5524…, 2f7c80a4…).
+- Learner law (`check_tool_grammar.py learner`, the captured T=1/top-p 0.95 samples, learner at the capture's weights):
+  Python engine, calls 9, 4,406 sampled tokens, 270 constrained (the grammar allows fewer than the 125,037 real tokens free text allows). With the mask, log rho = learner - recorded has mean -0.0003 on the constrained tokens (|max| 0.20, BF16 engine vs learner noise) and -0.0002 on free text; unmasked, its mean on the constrained tokens is -0.979 (min -26.2 nats: tokens the grammar forced that the unmasked policy found unlikely), the bias a learner without the mask would have put on every constrained token; free-text tokens are unchanged by the mask (the padding rows it removes carry no measurable mass).
+  SGLang: its captures declared the same grammar (the 6 captures recorded before the ledger preempted the unit); the learner leg on them and the
+  throughput arms did not run (the ledger preempted the low-priority actor three times and then had no room beside aei1
+  r0001 SFT; the unit was cancelled).
+- Collection throughput: not measured (above). Expected cost: xgrammar fills the batch's masks on CPU threads while
+  the GPU decodes (SGLang overlaps them; free text reuses one cached mask); read `natlang_sglang_generated_tokens_total`
+  per hour at the first actor on 17e3458c2e against the previous round, and opt out per actor with NATLANG_TOOL_GRAMMAR=0
+  if it drops.
+
+**Not checked.** The grpo learner bench (`grpo.py train --replay`) on constrained rollouts (the DGX ledger had no room
+for a learner unit; the check above runs the learner's own scoring functions on the captures instead); a full
+collection episode on a natlang task (the check uses the tuple prompt); guidance-rewind continuations on live SGLang
+(`natlang_grammar_prefix` is covered by fork unit tests; RL collection runs without guidance); the Python engine
+throughput cost; Qwen3's json call format on a live model; Pop's serving image (no xgrammar there: unconstrained).
+The managed llama-server and the page still drop the tool grammar under `x_natlang_rl_capture` (ENGINE_PARITY gap
+row: exact replay needs xgrammar in the fork). Collection actors adopt the grammar when the DGX and Colab SGLang
+checkouts move to 17e3458c2e at their next boundary; held results with and without the grammar are separate engine
+settings (`serving_engine.tool_grammar`, not a pairing field).

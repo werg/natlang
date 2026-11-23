@@ -177,31 +177,36 @@ resident_tokens = lfm3_fast_train.resident_tokens
 set_checkpointing = lfm3_fast_train.set_checkpointing
 
 
-def _nll(weight, h, target):
+def _nll(weight, h, target, allowed=None):
     logits = F.linear(h, weight).float()
+    if allowed is not None:
+        logits = logits.masked_fill(~allowed, float('-inf'))
     return F.cross_entropy(logits, target, reduction='none')
 
 
-def token_nll(model, h, positions, targets, chunk=2048, *, trainable_rows=None):
-    """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (fused chunked linear NLL)."""
+def token_nll(model, h, positions, targets, chunk=2048, *, trainable_rows=None, mask=None):
+    """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (fused chunked linear NLL; ``mask``: the
+    sampling-law masks of those rows, ``law_mask``)."""
     rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else (
         None if trainable_rows is False else trainable_rows
     )
     if getattr(model, '_lfm3_fast', None) is not None:
-        return lfm3_fast_train.linear_nll(h[positions], model.lm_head.weight, targets, trainable_rows=rows)
+        return lfm3_fast_train.linear_nll(h[positions], model.lm_head.weight, targets, trainable_rows=rows, mask=mask)
     out = []
     weight = model.lm_head.weight
     for start in range(0, len(positions), chunk):
         h_rows = h[positions[start:start + chunk]]
         target = targets[start:start + chunk]
+        allowed = (mask.allowed_rows(start, start + len(target), weight.shape[0], h.device)
+                   if mask is not None and len(mask) else None)
         if torch.is_grad_enabled():
-            out.append(torch_checkpoint(_nll, weight, h_rows, target, use_reentrant=False))
+            out.append(torch_checkpoint(_nll, weight, h_rows, target, allowed, use_reentrant=False))
         else:
-            out.append(_nll(weight, h_rows, target))
+            out.append(_nll(weight, h_rows, target, allowed))
     return torch.cat(out)
 
 
-def token_nll_nucleus(model, h, positions, targets, top_p, *, trainable_rows=None):
+def token_nll_nucleus(model, h, positions, targets, top_p, *, trainable_rows=None, mask=None):
     """(nll, nll under each row's own top-p nucleus, target outside the nucleus) of ``targets`` at hidden rows
     ``positions`` (`lfm3_fast.linear_nll_nucleus`; prepared models only)."""
     if getattr(model, '_lfm3_fast', None) is None:
@@ -209,7 +214,46 @@ def token_nll_nucleus(model, h, positions, targets, top_p, *, trainable_rows=Non
     rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else (
         None if trainable_rows is False else trainable_rows
     )
-    return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p, trainable_rows=rows)
+    return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p, trainable_rows=rows,
+                                              mask=mask)
+
+
+# The tokenizer a row's tool grammar is replayed over (`common.tool_grammar.info_from_base`): the learner's --base
+# (its tokenizer with the Neuralese role markers is the served export's). Set by the trainers (exp0_sft, grpo).
+LAW_BASE = {'path': None}
+
+
+def law_mask(chains, vocab_size):
+    """``lfm3_fast_train.HeadMask`` of the targets of ``chains`` packed back to back (``row_tensors``' order): the
+    sampling-law masks their calls were drawn under (`lower_rollout_turns.sampled_call`: a tool grammar, guidance bans;
+    `common.tool_grammar.row_masks`), or None when no call was. The learner then scores each such target under the law
+    the engine drew it from, for the policy, the reference and the behaviour ratio alike."""
+    from natlang_neuralese.common import tool_grammar
+    rows, which, tables, seen, offset = [], [], [], {}, 0
+    grammar = None
+    for chain in chains:
+        for _, length, row in chain['segs']:
+            if row.get('tool_grammar') is not None or row.get('bans'):
+                if grammar is None and row.get('tool_grammar') is not None:
+                    if LAW_BASE['path'] is None:
+                        raise ValueError('a call drawn under a tool grammar needs exp0_sft.LAW_BASE (the --base tokenizer)')
+                    grammar = tool_grammar.info_from_base(LAW_BASE['path'])
+                info, sha = grammar or (None, None)
+                table, index = tool_grammar.row_masks(row, info, sha, vocab_size)
+                slots = []
+                for mask in table:
+                    key = mask.tobytes()
+                    if key not in seen:
+                        seen[key] = len(tables)
+                        tables.append(mask)
+                    slots.append(seen[key])
+                hit = np.nonzero(index >= 0)[0]
+                rows.extend((offset + hit).tolist())
+                which.extend(slots[int(index[i])] for i in hit)
+            offset += length
+    if not rows:
+        return None
+    return lfm3_fast_train.HeadMask(np.asarray(rows, np.int64), np.stack(tables), np.asarray(which, np.int64))
 
 
 # Ambient SFT (Daras et al., arXiv 2611.23229, Algorithm 1; DECISIONS 2026-11-20): with probability ``--ambient-p-clean``
@@ -230,35 +274,42 @@ def ambient_clean(seed, step, p_clean):
 
 
 def _tm_ce(weight, h, teacher_h, teacher_weight, temperature, sparse_ids=None, sparse_rows=None,
-           teacher_sparse_ids=None, teacher_sparse_rows=None):
+           teacher_sparse_ids=None, teacher_sparse_rows=None, allowed=None):
     s_logits = F.linear(h, weight)
     if sparse_ids is not None and sparse_rows is not None and sparse_ids.numel():
         s_logits = s_logits.clone()
         s_logits[:, sparse_ids] = F.linear(h, sparse_rows.to(h.dtype))
     s = s_logits.float() / temperature
+    if allowed is not None:      # rows drawn under a sampling-law mask: both laws over the allowed tokens (law_mask)
+        s = s.masked_fill(~allowed, float('-inf'))
     with torch.no_grad():
         t_logits = F.linear(teacher_h, teacher_weight)
         if teacher_sparse_ids is not None and teacher_sparse_rows is not None and teacher_sparse_ids.numel():
             t_logits = t_logits.clone()
             t_logits[:, teacher_sparse_ids] = F.linear(teacher_h, teacher_sparse_rows.to(teacher_h.dtype))
         t = t_logits.float() / temperature
+        if allowed is not None:
+            t = t.masked_fill(~allowed, float('-inf'))
         q = torch.softmax(t, -1)
-        entropy = -(q * torch.log_softmax(t, -1)).sum(-1)
-    return -(q * torch.log_softmax(s, -1)).sum(-1), entropy
+        entropy = -torch.where(q > 0, q * torch.log_softmax(t, -1), 0.).sum(-1)
+    return -torch.where(q > 0, q * torch.log_softmax(s, -1), 0.).sum(-1), entropy
 
 
 def tm_ce(weight, h_rows, teacher_rows, teacher_weight, temperature, chunk=512, *,
-          trainable_rows=None, teacher_trainable_rows=None):
+          trainable_rows=None, teacher_trainable_rows=None, mask=None):
     """(per-row cross-entropy from softmax(teacher logits / T) to log_softmax(student logits / T), per-row teacher
-    entropy (no grad)) over the full vocabulary, with optional tied trainable sparse rows."""
+    entropy (no grad)) over the full vocabulary (over the allowed tokens at the rows of ``mask``, a
+    ``lfm3_fast_train.HeadMask``), with optional tied trainable sparse rows."""
     ces, entropies = [], []
     s_ids = trainable_rows.token_ids.to(h_rows.device) if trainable_rows is not None else None
     s_rows = trainable_rows.rows if trainable_rows is not None else None
     t_ids = teacher_trainable_rows.token_ids.to(teacher_rows.device) if teacher_trainable_rows is not None else None
     t_rows = teacher_trainable_rows.rows if teacher_trainable_rows is not None else None
     for start in range(0, len(h_rows), chunk):
+        allowed = (mask.allowed_rows(start, min(len(h_rows), start + chunk), weight.shape[0], h_rows.device)
+                   if mask is not None else None)
         args = (weight, h_rows[start:start + chunk], teacher_rows[start:start + chunk], teacher_weight, temperature,
-                s_ids, s_rows, t_ids, t_rows)
+                s_ids, s_rows, t_ids, t_rows, allowed)
         ce, entropy = (torch_checkpoint(_tm_ce, *args, use_reentrant=False) if torch.is_grad_enabled()
                        else _tm_ce(*args))
         ces.append(ce)
@@ -278,16 +329,17 @@ def student_sampled(chain):
     return bool(chain.get('sampled', chain_source(chain) in STUDENT_SOURCES))
 
 
-def targets_nll(model, h, positions, targets, sampled, top_p):
+def targets_nll(model, h, positions, targets, sampled, top_p, mask=None):
     """Per-target NLL: under each row's top-p nucleus (``token_nll_nucleus``) where ``sampled`` (bool per target), the
     full softmax elsewhere. The student sampled its own replies at top-p ``top_p``, so their likelihood is the
     nucleus-renormalized one; the full-softmax NLL of such samples is not zero in expectation on the student's own
     distribution: it drains the tail into the nucleus and so raises every token that sits inside it, ``</think>`` at
     the points where reasoning may end among them (sft-v4-run1's behaviour probe: hazard 0.546 -> 1.03; one fresh-Adam
     step on the base's own samples raised it 5x under the full NLL and lowered it under the nucleus NLL)."""
+    law = {} if mask is None else {'mask': mask}
     if top_p >= 1. or sampled is None or not bool(sampled.any()):
-        return token_nll(model, h, positions, targets)
-    nll, nucleus, _ = token_nll_nucleus(model, h, positions, targets, top_p)
+        return token_nll(model, h, positions, targets, **law)
+    nll, nucleus, _ = token_nll_nucleus(model, h, positions, targets, top_p, **law)
     return torch.where(sampled, nucleus, nll)
 
 
@@ -846,12 +898,13 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
     device = model.lm_head.weight.device
 
     def loss_of(h, positions, targets, weights, indices, sampled):
+        mask = law_mask([chains[index] for index in indices], model.lm_head.weight.shape[0])
         if ambient is None:
-            return targets_nll(model, h, positions, targets, sampled, student_top_p) * weights
+            return targets_nll(model, h, positions, targets, sampled, student_top_p, mask) * weights
         teacher = torch.cat([ambient['rows'][index] for index in indices])
         ce, entropy = tm_ce(model.lm_head.weight, h[positions], teacher, ambient['head'], ambient['temperature'],
                             trainable_rows=getattr(model, '_lfm3_trainable_rows', None),
-                            teacher_trainable_rows=ambient.get('teacher_trainable_rows'))
+                            teacher_trainable_rows=ambient.get('teacher_trainable_rows'), mask=mask)
         ambient['kl'] = ambient.get('kl', 0.) + ((ce.detach() - entropy) * weights).sum().item()
         return ce * weights
     if not fast:                     # the stock HF path: one chain per forward, no imports
@@ -1001,7 +1054,8 @@ def validation_loss(model, forward, chains, pack_tokens=0, student_top_p=1.):
         for row in packed_rows(chains, pack_tokens):
             ids, positions, targets, weights, lengths, imports = row_inputs(row, 'cuda')
             h = forward(model, ids, lengths, imports) if imports is not None or len(lengths) > 1 else forward(model, ids)
-            nll = targets_nll(model, h, positions, targets, sampled_mask(row, 'cuda'), student_top_p)
+            nll = targets_nll(model, h, positions, targets, sampled_mask(row, 'cuda'), student_top_p,
+                              law_mask(row, model.lm_head.weight.shape[0]))
             total += (nll * weights).sum().item()
             mass += weights.sum().item()
     return total / max(mass, 1e-9)
@@ -1050,7 +1104,7 @@ def parity(args):
         ids, positions, targets = chain_tensors(chain, 'cuda')
         with torch.no_grad(), torch.autocast('cuda', dtype=torch.bfloat16, enabled=not args.bf16_params):
             h = hidden(model, ids)
-            value = -token_nll(model, h, positions, targets)
+            value = -token_nll(model, h, positions, targets, mask=law_mask([chain], model.lm_head.weight.shape[0]))
         recorded = torch.from_numpy(np.concatenate([row['logp'] for _, _, row in chain['segs']])).cuda()
         diffs.append((value.float() - recorded))
         nll.append(-value.float().mean().item())
@@ -1613,6 +1667,7 @@ def main():
     p.add_argument('--replan-step', type=int, default=20)
     p.add_argument('--reserve-minutes', type=float, default=25.)
     args = parser.parse_args()
+    LAW_BASE['path'] = getattr(args, 'base', None)
     from natlang_neuralese.common.cuda_context import ensure_context
     ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried
     {'parity': parity, 'train': train, 'bench': bench}[args.command](args)

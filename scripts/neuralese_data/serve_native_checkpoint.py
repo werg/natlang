@@ -403,7 +403,9 @@ def attest_sglang_source(python, fork, pythonpath=''):
               # LFM3 serves n-gram speculative chains with exact rollback and the natlang records of the verify pass
               'speculative_ngram': params.is_file() and 'NATLANG_SPECULATIVE_NGRAM = True' in params.read_text(),
               # online FP8 weights run in LFM3's natlang projection paths and reload in place (collection profile)
-              'fp8_weights': lfm3.is_file() and 'NATLANG_FP8_WEIGHTS = True' in lfm3.read_text()}
+              'fp8_weights': lfm3.is_file() and 'NATLANG_FP8_WEIGHTS = True' in lfm3.read_text(),
+              # grammars (structural_tag) under --skip-tokenizer-init, continued across requests (natlang_grammar_prefix)
+              'grammar_prefix': params.is_file() and 'NATLANG_GRAMMAR_PREFIX = True' in params.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
@@ -613,7 +615,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout, head_logits=args.sglang_head_logits,
                        weight_dtype=weight_dtype,
                        max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')),
-                       speculative=speculative)
+                       speculative=speculative, tool_grammar=bool(source.get('grammar_prefix')), export_dir=export_dir)
     return process
 
 
