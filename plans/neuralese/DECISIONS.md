@@ -7715,3 +7715,113 @@ edit becomes a proposal the program can adopt instead of dying with the run. The
 - **Result.** `ts-host/test/collector-refinement-judge.test.mjs` (5 tests: scorer true/false, scripted `holds`
   true/false, opt-out reproduces undecided). `qualify_authored.py` on `w900-refine` with the fixed runtime: PASS
   (reference admitted, smoke returns expected); with the opt-out: FAIL with the original `refinement-undecided`.
+
+## 2026-11-23 05:00 Verifier-task supply for the semantic-FP constructs: sfp2, 22 batches, 187 train rows into grpo-pool
+
+Follow-up to B6 (04:30): scale the verifier-oracle supply across the constructs that sfp1 left at 0%.
+- **Mechanism (5fc080b32, c89f52e19, dd66dde49, 64c7fc43d; 4cfc91199 by a sub-agent).**
+  - Five new trusted verifiers under `training/semantic_fp_tasks/verifiers/`: `records`, `selection`, `clusters`,
+    `numeric` and `placement` (folder tasks: each file at a place its meaning allows, written files by exact pieces,
+    nothing stray). Tests are in `ts-host/test/semantic-fp-verifiers.test.mjs`.
+  - `authored_checks.py` now rejects any group that is not one real source item (`<dataset>:<item id>`) and every
+    `invented...` group. sfp1's family-wide groups, which tied 28 rows to held worlds, are now a check.
+  - A top-level `types.ts` gives the root its aliases (Untrusted fields). Inline `nl` smoke children answer as "nl".
+    `context_lens` and `higher_order` no longer force `inline: required`.
+  - `Context` reaches callable-folder TypeScript through `@natlang/node`, so a helper can return
+    `fn.in(Context.empty().with({...}))`, as composition.md teaches. Before this the import was undefined. Test in
+    `ts-host/test/callable-folder-context.test.mjs`; skill updated.
+  - Found while probing: `Is<T, P>` returns were undecidable in every collector run (`refinement-undecided`): no
+    model meant no judge. A sub-agent fixed the collector (4cfc91199, its own DECISIONS entry); the replay now judges
+    through a `holds` child.
+  - `measure_repetition`'s structure key now also carries the program-visible semantic-FP shape: TS helpers, function
+    types, Untrusted/Is, directory reducer, and the verifier kind. On this key sfp1 has 9 structures.
+  - `scripts/rl_tasks/sfp_batch.py`:
+    - `qualify` runs qualify_authored, novelty, held separation, repetition and the blind packet;
+    - held separation covers `training_exclusion_ids` over every `held-eval*` role, and no instruction, program or
+      functional program shared with held-v4's authored tasks;
+    - `blind` compares a blind solve;
+    - `supply` runs build_supply, held packets, custody, held-v3 verify with and without exposure, repetition and
+      selection simulation.
+  - Kit section 19 carries the construct recipes and the authors' lessons. Brief:
+    `/mnt/external/natlang-rl-authoring/sfp2/AUTHOR_TASK.md`.
+- **Batches.** 22 Opus authors (w407-w428), one family each, 6-7 programs x 2 worlds per batch: 271 tasks, 147
+  programs.
+  - Every batch passed `sfp_batch qualify` on pins 85bc66298d58 / 4cfc91199138:
+    - all references accepted;
+    - 1,290 wrong controls, 0 accepted;
+    - 271 keyword baselines, every one ran and was rejected;
+    - 176 alias probes, 0 rejected;
+    - 271/271 full smoke replays;
+    - novelty PASS;
+    - 0 rows excluded by any held-eval role;
+    - 0 overlap with held-v4's authored tasks.
+  - An independent Sonnet blind solve, judged by each task's verifier, agreed on 266/271. Of the 5 disagreements:
+    - 4 items had two defensible readings, and the oracle now accepts both: w409-p1b b07, w414-p3a K7/K5, w424-p2b
+      d4, w426-p1b d7. Each was requalified.
+    - w421-p2b was dropped: who found the child reads two ways, and the records verifier cannot accept a record or
+      no record.
+  - Admitted: 270.
+- **Constructs by batch** (each needed by the reference in at least 5 programs):
+  - `nl_convergence` / `iterate`: w407, w420
+  - `folder_transaction`: w408, w419 (snapshot/select, declined proposals)
+  - decide with floors and escalation: w409
+  - `inline_nl` / `nl_with_context`: w410
+  - `context_lens`: w411, w424, w426
+  - `untrusted_contract`: w412, w425
+  - Neuralese relay and fan-in: w413, w421
+  - `iterate_neuralese`: w428
+  - `higher_order`: w414
+  - `clusters`: w415
+  - `numeric`: w416
+  - `library_discovery`: w417
+  - multilingual: w418
+  - `call_depth_3` with floors: w422
+  - assignment with `nl_convergence`: w423
+  - `refinement_contract` with scripted repair: w427
+- **Supply `natlang-rl-task-supply-20261123sfp2`** (promoted to grpo-pool, 29f7333ad):
+  - 187 train rows in 22 new families;
+  - 122 programs (115.5 effective), 97 structures (88.2 effective);
+  - nothing shared with the 37,359-row pool: 0 instruction texts, 0 program texts, 0 functional programs; 8 rows
+    share a structure.
+  - The 84 held rows (42 dev, 42 confirmation) are `natlang-rl-authored-{dev,confirmation}-20261123sfp2`, seeds
+    for held-v4.
+  - Custody 0 related; held-v3 verify 0/0 with and without exposure; training exclusion 0.
+- **Not done or not checked:**
+  - No model has run these tasks: pass rates and frontier tiers are unmeasured.
+  - Floor and escalation branches never run in qualification, because replay drivers score at confidence 1.
+  - The aei1 driver collects on a pin that predates d00814b62: these rows reach collection only from a pin at or
+    after 4cfc91199.
+  - Held-v4 separation covers only the authored tasks pinned so far.
+  - `simulate_selection` simulates GRPO's selector, not expert iteration's tiers.
+
+## 2026-11-23 B11: the idiom floor in `natlang check` (semantic-FP WS3 I1)
+
+- **Shipped:** `ts-host/src/compiler/idiom.ts`, run by `compileProject` (so `natlang check`, `build`, virtual and
+  browser projects) and by the playground's `.nl`-root check. Three new warnings, each one sentence naming the fix
+  (texts from WS4 §8): `idiom-decision-readout`, `idiom-code-in-prose`, `idiom-fixed-cursor-iterate`. The fourth rule
+  of WS3 §3.1 is the existing `untrusted-instruction` error; it is not duplicated. No suppression syntax. Rows in
+  `spec/ERRORS.md` and the authoring skill's error table. Playground diagnostics now carry `code`.
+- **Exact conditions chosen:** decision-readout fires only on leaves (no companion folder, no `uses:`, no `Folder`
+  argument, not a reducer, not generic). Code-in-prose reports one warning per file, at the first token outside a
+  fenced block. Fixed-cursor fires when the step advances one field by `+ 1` (reading a fixed list only at that index)
+  or `.slice(1)`, every other field is carried or appended to with a value independent of the state, the step writes
+  no outer variable, and `until` reads only the cursor. That is exactly the case where `Promise.all` over the list
+  gives the same result.
+- **Repo census** (`ts-host/scripts/idiom-floor-census.mjs --sites`; every natlang.json package plus `.nl` programs
+  without one, and the 15 gallery projects; 0 packages failed to check):
+
+  | Directory | units | decision-readout | code-in-prose | fixed-cursor | untrusted-instruction |
+  |---|---|---|---|---|---|
+  | applications | 40 | 7 | 29 | 0 | 0 |
+  | codebases (design_briefs: 100 units) | 116 | 47 (39) | 9 (8) | 0 | 0 |
+  | examples | 11 | 2 (`examples/adaptation`) | 0 | 0 | 0 |
+  | ts-host/playground gallery | 15 | 2 | 0 | 0 | 0 |
+  | **total** | 182 | 58 | 38 | 0 | 0 |
+
+  Largest code-in-prose: `applications/field-gloss-workbench` 10, `applications/pi` 5. Fixed-cursor is 0 because
+  the repo's programs hold only three TypeScript `iterateOn` calls, none a cursor walk; the cursor walks live in
+  `.nl` prose (e.g. `cave-mission/.../readFrames.nl`, caught as code-in-prose) and in `ts-host/scripts/inline-curriculum`
+  generators, which are training-data builders, not programs `natlang check` sees.
+- **Plan conflict:** B11 asks for zero warnings on `applications/helpdesk`. `helpdesk/triage/urgency.nl` is a leaf
+  with a finite `Urgency` result and no readout, so the exact rule fires there. The check is right by its definition.
+  The program was not changed (brief: WS7 fixes programs); the test pins that one site.
