@@ -4,9 +4,11 @@ export type Type =
   | { kind: 'lit'; value: string | number }
   | { kind: 'record'; fields: { name: string; type: Type; optional: boolean }[] }
   | { kind: 'list'; element: Type }
-  /** A dictionary from string keys. `key` names the alias of `Record<Kind, T>`: when `Kind` resolves to string literals,
+  /** A fixed-length (optionally trailing-optional) tuple `[A, B]` or `[A, B?]`. `minLength`, when set, is the count of required leading elements. */
+  | { kind: 'tuple'; elements: Type[]; minLength?: number }
+  /** A dictionary from string keys. `key` / `keyType` names the key of `Record<Kind, T>`: when it resolves to string literals,
    * the type is the record with exactly those fields (TypeEnv.resolve), as in TypeScript. */
-  | { kind: 'dict'; element: Type; key?: string }
+  | { kind: 'dict'; element: Type; key?: string; keyType?: Type }
   | { kind: 'union'; members: Type[] }
   /** An alias. `unparsed` marks a definition the type grammar cannot read (parseAliases): using it reports why. */
   | { kind: 'name'; name: string; unparsed?: string }
@@ -23,6 +25,9 @@ export type Type =
   | { kind: 'intersection'; members: Type[] }
   /** `T['field']`: a record field, a dictionary element, or the union of the selected members. */
   | { kind: 'index'; base: Type; key: string }
+  /** `Partial<R>`, `Required<R>`, `Pick<R, K>`, `Omit<R, K>`: record transformations resolved in `TypeEnv.resolve`. */
+  | { kind: 'utility'; op: 'Partial' | 'Required'; target: Type }
+  | { kind: 'utility'; op: 'Pick' | 'Omit'; target: Type; keys: Type }
   /** `Untrusted<T>`: a `T` that came from outside the program. Structurally `base`; the model-facing renderer always
    * shows it as a quoted data block (native/untrusted.ts) and it never enters instruction text (plans/REFINEMENT_TYPES.md). */
   | { kind: 'untrusted'; base: Type };
@@ -186,6 +191,34 @@ class Parser {
     this.eat('}');
     return { kind: 'dict', element };
   }
+  /** `[A, B]`, `[]`, `[A, B?]`, `[first: A, second?: B]` (trailing comma allowed). */
+  private tuple(): Type {
+    this.eat('[');
+    const elements: Type[] = [];
+    let minLength: number | undefined;
+    while (this.peek()?.value !== ']') {
+      let labeledOptional = false;
+      if (this.peek()?.kind === 'id') {
+        const next = this.tokens[this.index + 1]?.value;
+        const after = this.tokens[this.index + 2]?.value;
+        if (next === ':') { this.eat(); this.eat(':'); }
+        else if (next === '?' && after === ':') { this.eat(); this.eat('?'); this.eat(':'); labeledOptional = true; }
+      }
+      const element = this.union();
+      const optional = labeledOptional || this.peek()?.value === '?';
+      if (!labeledOptional && this.peek()?.value === '?') this.eat('?');
+      if (optional) {
+        if (minLength === undefined) minLength = elements.length;
+      } else if (minLength !== undefined) {
+        throw new TypeSyntaxError('a required tuple element cannot follow an optional element');
+      }
+      elements.push(element);
+      if (this.peek()?.value === ',') this.eat(',');
+      else break;
+    }
+    this.eat(']');
+    return minLength === undefined ? { kind: 'tuple', elements } : { kind: 'tuple', elements, minLength };
+  }
   private atom(): Type {
     const token = this.peek();
     if (!token) throw new TypeSyntaxError('unexpected end of type');
@@ -217,6 +250,8 @@ class Parser {
       this.index = start; this.eat('('); const inner = this.union(); this.eat(')'); return inner;
     }
     if (token.value === '{') return this.record();
+    if (token.value === '[]') { this.eat('[]'); return { kind: 'tuple', elements: [] }; }
+    if (token.value === '[') return this.tuple();
     this.eat();
     if (token.kind === 'str') return { kind: 'lit', value: token.value };
     if (token.kind === 'num') return { kind: 'lit', value: Number(token.value) };
@@ -227,11 +262,25 @@ class Parser {
       // Record<'a' | 'b', T> is the record with exactly those fields, as in TypeScript. Record<string, T>, and a key
       // named by an alias (Record<Kind, T>, resolved only later), is a dictionary from string keys.
       const keys = key?.kind === 'lit' ? [key] : key?.kind === 'union' ? key.members : undefined;
-      if (keys?.length && keys.every(item => item.kind === 'lit' && typeof item.value === 'string'))
-        return { kind: 'record', fields: keys.map(item => ({ name: String((item as { value: string }).value), type: value!, optional: false })) };
+      if (keys?.length && keys.every(item => item.kind === 'lit' && typeof item.value === 'string')) {
+        const names = [...new Set(keys.map(item => String((item as { value: string }).value)))];
+        return { kind: 'record', fields: names.map(name => ({ name, type: value!, optional: false })) };
+      }
       if (key?.kind === 'name') return { kind: 'dict', element: value!, key: key.name };
       if (key?.kind === 'prim' && key.name === 'string') return { kind: 'dict', element: value! };
+      if (key?.kind === 'index' || (key?.kind === 'union' && key.members.every(item =>
+          item.kind === 'name' || item.kind === 'index' || (item.kind === 'lit' && typeof item.value === 'string') ||
+          (item.kind === 'prim' && item.name === 'string'))))
+        return { kind: 'dict', element: value!, keyType: key };
       throw new TypeSyntaxError('Record keys are strings: write Record<string, T>, a union of string literals, or a type name for one');
+    }
+    if ((token.value === 'Partial' || token.value === 'Required') && this.peek()?.value === '<') {
+      const [target] = this.args(1);
+      return { kind: 'utility', op: token.value, target: target! };
+    }
+    if ((token.value === 'Pick' || token.value === 'Omit') && this.peek()?.value === '<') {
+      const [target, keys] = this.args(2);
+      return { kind: 'utility', op: token.value, target: target!, keys: keys! };
     }
     if (token.value === 'NativeAdapter') return NATIVE_ADAPTER_TYPE;
     if (token.value === 'NativeTensor') return NATIVE_TENSOR_TYPE;
@@ -370,13 +419,23 @@ export function formatType(type: Type): string {
     case 'lit': return typeof type.value === 'string' ? JSON.stringify(type.value) : String(type.value);
     case 'record': return type.fields.length ? `{ ${type.fields.map(f => `${/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(f.name) ? f.name : JSON.stringify(f.name)}${f.optional ? '?' : ''}: ${formatType(f.type)}`).join(', ')} }` : '{}';
     case 'list': return (type.element.kind === 'union' ? `(${formatType(type.element)})` : formatType(type.element)) + '[]';
-    case 'dict': return `Record<${type.key ?? 'string'}, ${formatType(type.element)}>`;
+    case 'tuple': {
+      const required = type.minLength ?? type.elements.length;
+      return `[${type.elements.map((element, index) => {
+        const text = formatType(element);
+        return index >= required ?
+          `${element.kind === 'union' || element.kind === 'intersection' || element.kind === 'lambda' ? `(${text})` : text}?` : text;
+      }).join(', ')}]`;
+    }
+    case 'dict': return `Record<${type.keyType ? formatType(type.keyType) : type.key ?? 'string'}, ${formatType(type.element)}>`;
     case 'union': return type.members.map(formatType).join(' | ');
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
     case 'host': return type.name;
     case 'intersection': return type.members.map(m => m.kind === 'union' ? `(${formatType(m)})` : formatType(m)).join(' & ');
     case 'index': return `${type.base.kind === 'union' || type.base.kind === 'intersection' ? `(${formatType(type.base)})` : formatType(type.base)}[${JSON.stringify(type.key)}]`;
+    case 'utility': return type.op === 'Pick' || type.op === 'Omit' ?
+      `${type.op}<${formatType(type.target)}, ${formatType(type.keys)}>` : `${type.op}<${formatType(type.target)}>`;
     case 'refined': return `Is<${formatType(type.base)}, ${JSON.stringify(type.predicate)}>`;
     case 'untrusted': return `Untrusted<${formatType(type.base)}>`;
     case 'neuralese': return `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
@@ -388,10 +447,13 @@ export function formatType(type: Type): string {
 function children(type: Type): Type[] {
   switch (type.kind) {
     case 'record': return type.fields.map(field => field.type);
-    case 'list': case 'dict': case 'neuralese': return [type.element];
+    case 'list': case 'neuralese': return [type.element];
+    case 'tuple': return type.elements;
+    case 'dict': return type.keyType ? [type.keyType, type.element] : [type.element];
     case 'refined': case 'untrusted': return [type.base];
     case 'union': case 'intersection': return type.members;
     case 'index': return [type.base];
+    case 'utility': return type.op === 'Pick' || type.op === 'Omit' ? [type.target, type.keys] : [type.target];
     case 'lambda': return [type.params, type.returns];
     default: return [];
   }
@@ -492,19 +554,22 @@ export class TypeEnv {
         // A program's own type shadows a platform global of the same name in its scope, as in TypeScript:
         // `type Request = { id: string }` makes `Request` that record, not fetch's Request.
         type = { kind: 'name', name: type.name };
-      } else if (type.kind === 'dict' && type.key) type = this.recordOfKeys(type.key, type.element);
+      } else if (type.kind === 'dict' && (type.key || type.keyType))
+        type = this.recordOfKeys(type.keyType ?? { kind: 'name', name: type.key! }, type.element);
       else if (type.kind === 'intersection') type = mergeIntersection(type.members, member => this.resolve(member));
       else if (type.kind === 'index') type = indexedType(type.base, type.key, member => this.resolve(member));
+      else if (type.kind === 'utility') type = applyUtility(type, member => this.resolve(member));
       else return type;
     }
   }
   /** `Record<Kind, T>`: the record with a field for each string literal `Kind` names, or a dictionary for `string`. */
-  private recordOfKeys(key: string, element: Type): Type {
-    const resolved = this.resolve({ kind: 'name', name: key });
-    const members = resolved.kind === 'union' ? resolved.members.map(member => this.resolve(member)) : [resolved];
-    if (members.length === 1 && members[0]!.kind === 'prim' && members[0]!.name === 'string') return { kind: 'dict', element };
-    if (!members.every(member => member.kind === 'lit' && typeof member.value === 'string'))
-      throw new TypeSyntaxError(`Record keys are strings: ${key} is ${formatType(resolved)}; write Record<string, T> or a union of string literals for its keys`);
+  private recordOfKeys(keyType: Type, element: Type): Type {
+    const members = flattenUnion(keyType, member => this.resolve(member));
+    if (members.some(member => member.kind === 'prim' && member.name === 'string') &&
+        members.every(member => (member.kind === 'prim' && member.name === 'string') || (member.kind === 'lit' && typeof member.value === 'string')))
+      return { kind: 'dict', element };
+    if (!members.length || !members.every(member => member.kind === 'lit' && typeof member.value === 'string'))
+      throw new TypeSyntaxError(`Record keys are strings: ${formatType(keyType)} is ${formatType(this.resolve(keyType))}; write Record<string, T> or a union of string literals for its keys`);
     return { kind: 'record', fields: [...new Set(members.map(member => String((member as { value: string }).value)))]
       .map(name => ({ name, type: element, optional: false })) };
   }
@@ -515,12 +580,18 @@ export class TypeEnv {
       if (found.kind === 'name' && found.unparsed !== undefined) throw unreadableAlias(found);
       return;
     }
-    if (type.kind === 'dict' && type.key && !this.lookup(type.key)) throw new TypeSyntaxError(`unknown type name ${type.key}`);
+    if (type.kind === 'dict' && type.key) this.checkNames({ kind: 'name', name: type.key });
+    if (type.kind === 'dict' && type.keyType) this.checkNames(type.keyType);
     if (type.kind === 'record') for (const field of type.fields) this.checkNames(field.type);
     if (type.kind === 'list' || type.kind === 'dict') this.checkNames(type.element);
+    if (type.kind === 'tuple') for (const element of type.elements) this.checkNames(element);
     if (type.kind === 'refined' || type.kind === 'untrusted') this.checkNames(type.base);
     if (type.kind === 'union' || type.kind === 'intersection') for (const member of type.members) this.checkNames(member);
     if (type.kind === 'index') this.checkNames(type.base);
+    if (type.kind === 'utility') {
+      this.checkNames(type.target);
+      if (type.op === 'Pick' || type.op === 'Omit') this.checkNames(type.keys);
+    }
     if (type.kind === 'lambda') { this.checkNames(type.params); this.checkNames(type.returns); }
     if (type.kind === 'neuralese') {
       this.checkNames(type.element);
@@ -556,10 +627,18 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   if (b.kind === 'union') return b.members.some(member => fitsType(a, member, env, seen));
   if (a.kind === 'lit' && b.kind === 'prim') return b.name === (typeof a.value === 'string' ? 'string' : 'number');
   if ((a.kind === 'list' || a.kind === 'dict') && a.kind === b.kind) return fitsType(a.element, b.element, env, seen);
+  if (a.kind === 'tuple' && b.kind === 'tuple') {
+    const aMin = a.minLength ?? a.elements.length, bMin = b.minLength ?? b.elements.length;
+    if (aMin < bMin || a.elements.length > b.elements.length) return false;
+    return a.elements.every((element, index) => fitsType(element, b.elements[index]!, env, seen));
+  }
+  if (a.kind === 'tuple' && b.kind === 'list')
+    return a.elements.every(element => fitsType(element, b.element, env, seen));
   if (a.kind === 'record' && b.kind === 'record') {
     for (const field of b.fields) {
       const got = a.fields.find(f => f.name === field.name);
       if (!got) { if (!field.optional) return false; continue; }
+      if (got.optional && !field.optional) return false;
       if (!fitsType(got.type, field.type, env, seen)) return false;
     }
     return a.fields.every(field => b.fields.some(other => other.name === field.name));
@@ -619,9 +698,13 @@ export function formatTypeScript(type: Type): string {
 function mapChildTypes(type: Type, child: (inner: Type) => Type): Type {
   switch (type.kind) {
     case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: child(field.type) })) };
-    case 'list': case 'dict': case 'neuralese': return { ...type, element: child(type.element) };
+    case 'list': case 'neuralese': return { ...type, element: child(type.element) };
+    case 'tuple': return { ...type, elements: type.elements.map(child) };
+    case 'dict': return { ...type, element: child(type.element), ...(type.keyType ? { keyType: child(type.keyType) } : {}) };
     case 'union': case 'intersection': return { ...type, members: type.members.map(child) };
     case 'index': case 'refined': case 'untrusted': return { ...type, base: child(type.base) };
+    case 'utility': return type.op === 'Pick' || type.op === 'Omit' ?
+      { ...type, target: child(type.target), keys: child(type.keys) } : { ...type, target: child(type.target) };
     case 'lambda': return { ...type, params: child(type.params) as typeof type.params, returns: child(type.returns) };
     default: return type;
   }
@@ -666,6 +749,9 @@ export function containsRefinement(type: Type, env: TypeEnv, seen = new Set<stri
     const found = env.lookup(type.name);
     return !!found && containsRefinement(found, env, seen);
   }
+  if (type.kind === 'utility') {
+    try { return containsRefinement(env.resolve(type), env, seen); } catch { /* fall through to children */ }
+  }
   if (type.kind === 'neuralese' || type.kind === 'host') return false;
   return children(type).some(child => containsRefinement(child, env, seen));
 }
@@ -686,6 +772,10 @@ export function fitObligations(source: Type, target: Type, env = new TypeEnv(), 
   const out: { path: string; predicate: string }[] = [];
   const sub = (x: Type, y: Type, at: string) => { out.push(...fitObligations(x, y, env, at) ?? []); };
   if ((a.kind === 'list' && b.kind === 'list') || (a.kind === 'dict' && b.kind === 'dict')) sub(a.element, b.element, `${path}/*`);
+  else if (a.kind === 'tuple' && b.kind === 'tuple')
+    for (let i = 0; i < Math.min(a.elements.length, b.elements.length); i++) sub(a.elements[i]!, b.elements[i]!, `${path}/${i}`);
+  else if (a.kind === 'tuple' && b.kind === 'list')
+    for (let i = 0; i < a.elements.length; i++) sub(a.elements[i]!, b.element, `${path}/${i}`);
   else if (a.kind === 'record' && b.kind === 'record')
     for (const field of b.fields) { const got = a.fields.find(f => f.name === field.name); if (got) sub(got.type, field.type, `${path}/${field.name}`); }
   return out;
@@ -697,6 +787,58 @@ export function fitObligations(source: Type, target: Type, env = new TypeEnv(), 
  * a runtime's `refinements.crisp` setting is consulted before this table.
  */
 export const refinements: Record<string, (value: unknown) => boolean | undefined> = Object.create(null);
+
+/** Flatten nested unions while resolving aliases, guarding against recursive unions. */
+function flattenUnion(type: Type, resolve: (type: Type) => Type, activeUnions = new Set<Type>()): Type[] {
+  const resolved = resolve(type);
+  if (resolved.kind !== 'union') return [resolved];
+  if (activeUnions.has(resolved)) throw new TypeSyntaxError('cannot flatten a recursive union');
+  activeUnions.add(resolved);
+  try {
+    return resolved.members.flatMap(member => flattenUnion(member, resolve, activeUnions));
+  } finally {
+    activeUnions.delete(resolved);
+  }
+}
+
+/** Resolve `Partial<R>`, `Required<R>`, `Pick<R, K>`, `Omit<R, K>` over records and unions of records. */
+function applyUtility(type: Extract<Type, { kind: 'utility' }>, resolve: (type: Type) => Type, activeUnions = new Set<Type>()): Type {
+  const resolved = resolve(type.target);
+  if (resolved.kind === 'union') {
+    if (activeUnions.has(resolved))
+      throw new TypeSyntaxError(`cannot apply ${type.op} through a recursive union`);
+    activeUnions.add(resolved);
+    try {
+      const members = resolved.members.flatMap(member => {
+        const applied = applyUtility({ ...type, target: member }, resolve, activeUnions);
+        return applied.kind === 'union' ? applied.members : [applied];
+      });
+      return members.length === 1 ? members[0]! : { kind: 'union', members };
+    } finally {
+      activeUnions.delete(resolved);
+    }
+  }
+  if (resolved.kind !== 'record')
+    throw new TypeSyntaxError(`${formatType(type)} requires a record type or a union of record types, got ${formatType(resolved)}`);
+  if (type.op === 'Partial')
+    return { kind: 'record', fields: resolved.fields.map(field => ({ ...field, optional: true })) };
+  if (type.op === 'Required')
+    return { kind: 'record', fields: resolved.fields.map(field => ({ ...field, optional: false })) };
+  if (!('keys' in type)) return resolved;
+  const keyMembers = flattenUnion(type.keys, resolve);
+  if (!keyMembers.length || !keyMembers.every(member => member.kind === 'lit' && typeof member.value === 'string'))
+    throw new TypeSyntaxError(`${formatType(type)} requires string literal keys, got ${formatType(type.keys)}`);
+  const keyNames = [...new Set(keyMembers.map(member => String((member as { value: string }).value)))];
+  const keySet = new Set(keyNames);
+  if (type.op === 'Pick') {
+    for (const key of keyNames) {
+      if (!resolved.fields.some(field => field.name === key))
+        throw new TypeSyntaxError(`${formatType(type)}: ${formatType(resolved)} has no field ${JSON.stringify(key)}`);
+    }
+    return { kind: 'record', fields: resolved.fields.filter(field => keySet.has(field.name)) };
+  }
+  return { kind: 'record', fields: resolved.fields.filter(field => !keySet.has(field.name)) };
+}
 
 /** Select a field from every possible base. Optional fields also admit null. */
 function indexedType(base: Type, key: string, resolve: (type: Type) => Type, activeUnions = new Set<Type>()): Type {

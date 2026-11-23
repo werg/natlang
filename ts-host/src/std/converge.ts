@@ -10,6 +10,7 @@ import { decideInFrame } from '../runtime/runtime.js';
 import type { NatlangFunction } from '../runtime/surface.js';
 import { combine as shippedCombine, compatible as shippedCompatible, intentOf as shippedIntentOf, settled as shippedSettled,
   type Edit, type Intent } from './judgments.js';
+import { carryOf, defaultSoftRead, defaultSoftView, type CarryMode } from './collections.js';
 import { StdSpan, stdError } from './trace.js';
 import { isPlainObject } from '../runtime/plain-object.js';
 
@@ -103,6 +104,14 @@ export type FixedPointOptions<T> = {
   settled?: (previous: T, current: T) => Maybe<boolean>;
   /** The most steps. Reaching it returns the latest value with `settled: false`. */
   maxSteps?: number;
+  /** How state is carried between revisions: `'text'` (default) or `'neuralese'` (`view` each revision, `read` once at end). */
+  carry?: CarryMode;
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  view?: (value: unknown, instructions?: string) => Maybe<unknown>;
+  /** Optional readout hook used once at the end when `carry: 'neuralese'` (default: Neuralese `read`). */
+  read?: (value: unknown) => Maybe<unknown>;
+  /** Optional instructions forwarded to `view` when `carry: 'neuralese'`. */
+  viewInstructions?: string;
 };
 export type FixedPoint<T> = { value: T; steps: number; settled: boolean };
 
@@ -112,27 +121,37 @@ export async function fixedPoint<T>(step: (value: T) => Maybe<T>, initial: T, op
   if (options.settled && options.maxSteps === undefined)
     throw stdError('iteration-unbounded', 'fixedPoint with an exact settled test needs maxSteps: the most steps before it returns the latest value; leave settled out to judge settledness in natural language.');
   const maxSteps = options.maxSteps === undefined ? undefined : boundOf(options.maxSteps, 'maxSteps', 'fixedPoint');
+  const carry = carryOf(options.carry, 'fixedPoint');
+  const view = options.view ?? defaultSoftView;
+  const read = options.read ?? defaultSoftRead;
   const span = new StdSpan('fixedPoint');
   return span.around(async () => {
     if (maxSteps === 0) return { value: initial, steps: 0, settled: false };
+    const start = (carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial) as T;
     let steps = 0;
+    const finish = async (value: T, isSettled: boolean): Promise<FixedPoint<T>> => ({
+      value: (carry === 'neuralese' ? await span.run(() => read(value)) : value) as T,
+      steps,
+      settled: isSettled,
+    });
     const revise = async (revision: Revision<T>): Promise<Revision<T>> => {
-      const current = await span.run(() => step(revision.current));
+      const raw = await span.run(() => step(revision.current));
+      const current = (carry === 'neuralese' ? await span.run(() => view(raw, options.viewInstructions)) : raw) as T;
       steps++;
-      span.stage('step', { step: steps });
+      span.stage('step', { step: steps, ...(carry === 'neuralese' ? { carry } : {}) });
       return { previous: revision.current, current };
     };
-    const first = await revise({ previous: initial, current: initial });
-    if (stableHash(first.current) === stableHash(initial)) return { value: first.current, steps, settled: true };
+    const first = await revise({ previous: start, current: start });
+    if (stableHash(first.current) === stableHash(start)) return finish(first.current, true);
     let iteration = iterateOn(revise, first);
     if (maxSteps !== undefined) iteration = iteration.withLimit({ maxSteps: maxSteps - 1 });
     const settled = options.settled;
     try {
       const last = await span.run(() => iteration.until(settled ? revision => settled(revision.previous, revision.current) :
         (options.judge ?? shippedSettled) as unknown as (revision: Revision<T>) => Promise<boolean>));
-      return { value: last.current, steps, settled: true };
+      return finish(last.current, true);
     } catch (error) {
-      if (error instanceof IterationLimitError) return { value: (error.lastState as Revision<T>).current, steps, settled: false };
+      if (error instanceof IterationLimitError) return finish((error.lastState as Revision<T>).current, false);
       throw error;
     }
   }, result => `${result.settled ? 'settled' : 'unsettled'} after ${result.steps} steps`);

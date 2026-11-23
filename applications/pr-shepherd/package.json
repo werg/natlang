@@ -1,0 +1,5 @@
+{
+  "name": "@natlang/app-pr-shepherd",
+  "private": true,
+  "type": "module"
+}

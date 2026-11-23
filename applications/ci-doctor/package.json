@@ -1,0 +1,5 @@
+{
+  "name": "@natlang/app-ci-doctor",
+  "private": true,
+  "type": "module"
+}

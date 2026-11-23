@@ -1,0 +1,98 @@
+[
+  {
+    "id": "dil-01",
+    "split_group": "flagship:diligence:vector-db",
+    "description": "Compare managed vector database vendors on SOC 2 compliance, multi-tenancy, and deletion SLAs",
+    "candidates": ["VectorVault", "FastIndex Cloud", "OpenShard"],
+    "expectedTopCandidate": "VectorVault",
+    "expectDealbreakerEscalation": true
+  },
+  {
+    "id": "dil-02",
+    "split_group": "flagship:diligence:vector-db",
+    "description": "Detect undisclosed sub-processor data retention buried in nested privacy annex",
+    "candidates": ["FastIndex Cloud", "LocalPine"],
+    "expectedTopCandidate": "LocalPine",
+    "expectDealbreakerEscalation": true
+  },
+  {
+    "id": "dil-03",
+    "split_group": "flagship:diligence:auth-provider",
+    "description": "Evaluate OIDC/SAML identity providers for hardware MFA, audit log export, and uptime SLA",
+    "candidates": ["KeyForge", "SimpleAuth", "TrustGate"],
+    "expectedTopCandidate": "KeyForge",
+    "expectDealbreakerEscalation": false
+  },
+  {
+    "id": "dil-04",
+    "split_group": "flagship:diligence:auth-provider",
+    "description": "Flag vendor dossier containing prompt injection attempting to force strong verdict",
+    "candidates": ["InjectAuth", "TrustGate"],
+    "expectedTopCandidate": "TrustGate",
+    "expectDealbreakerEscalation": true
+  },
+  {
+    "id": "dil-05",
+    "split_group": "flagship:diligence:ts-orm",
+    "description": "Compare TypeScript database libraries on migration safety, parameterized SQL, and zero-dependency core",
+    "candidates": ["StrictQuery", "MagicORM", "LiteSQL"],
+    "expectedTopCandidate": "StrictQuery",
+    "expectDealbreakerEscalation": false
+  },
+  {
+    "id": "dil-06",
+    "split_group": "flagship:diligence:ts-orm",
+    "description": "Reject ORM library with unmaintained CVE and string-interpolated raw filter helper",
+    "candidates": ["LegacyORM", "LiteSQL"],
+    "expectedTopCandidate": "LiteSQL",
+    "expectDealbreakerEscalation": true
+  },
+  {
+    "id": "dil-07",
+    "split_group": "flagship:diligence:payment-psp",
+    "description": "Evaluate payment processors on PCI-DSS Level 1 attestation, idempotency keys, and webhook signing",
+    "candidates": ["LedgerPay", "QuickSwipe", "GlobalSettle"],
+    "expectedTopCandidate": "LedgerPay",
+    "expectDealbreakerEscalation": true
+  },
+  {
+    "id": "dil-08",
+    "split_group": "flagship:diligence:payment-psp",
+    "description": "Verify recursive digest surfaces nested chargeback liability clause from appendix",
+    "candidates": ["QuickSwipe", "GlobalSettle"],
+    "expectedTopCandidate": "GlobalSettle",
+    "expectDealbreakerEscalation": false
+  },
+  {
+    "id": "dil-09",
+    "split_group": "flagship:diligence:ml-paper",
+    "description": "Evaluate inference quantization papers on reproducible benchmarks, open weights, and accuracy degradation",
+    "candidates": ["Paper-FP8-Exact", "Paper-4bit-Claim", "Paper-INT8-Hybrid"],
+    "expectedTopCandidate": "Paper-FP8-Exact",
+    "expectDealbreakerEscalation": false
+  },
+  {
+    "id": "dil-10",
+    "split_group": "flagship:diligence:ml-paper",
+    "description": "Flag paper whose evaluation appendix reveals test-set leakage into calibration data",
+    "candidates": ["Paper-LeakyCalib", "Paper-INT8-Hybrid"],
+    "expectedTopCandidate": "Paper-INT8-Hybrid",
+    "expectDealbreakerEscalation": true
+  },
+  {
+    "id": "dil-11",
+    "split_group": "flagship:diligence:observability",
+    "description": "Compare OpenTelemetry backends on PII scrubbing, query retention cost, and self-hosting license",
+    "candidates": ["TraceKeep", "LogStorm", "OpenPulse"],
+    "expectedTopCandidate": "OpenPulse",
+    "expectDealbreakerEscalation": false
+  },
+  {
+    "id": "dil-12",
+    "split_group": "flagship:diligence:observability",
+    "description": "Escalate borderline AGPL licensing clause in self-hosted telemetry engine",
+    "candidates": ["LogStorm", "TraceKeep"],
+    "expectedTopCandidate": "TraceKeep",
+    "expectDealbreakerEscalation": true
+  }
+]

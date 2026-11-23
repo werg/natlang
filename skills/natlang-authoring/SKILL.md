@@ -195,6 +195,8 @@ Read the one that matches the task:
 - [refinements.md](references/refinements.md): `Is<T, "predicate">` and `Untrusted<T>`.
 - [verification.md](references/verification.md): what each kind of evidence establishes, scenario design, diagnosis.
 - [fusion.md](references/fusion.md): writing stage chains the runtime can keep as Neuralese between stages.
+- [neuralese.md](references/neuralese.md): `Neuralese<T>` soft state in `@natlang/node/std` (`carry: 'neuralese'`,
+  `compactValue`, `compactParams`), `natlang profile`, and `natlang improve DIR`.
 - [tuning.md](references/tuning.md): `natlang tune`: adapters so a program's calls run well on a small student.
 - [adaptation.md](references/adaptation.md): evaluation suites and instruction optimization (`natlang eval`,
   `natlang optimize`).

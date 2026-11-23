@@ -252,6 +252,81 @@ const parsedFile = (node: ts.Node): ts.SourceFile | undefined => {
   return at;
 };
 
+/** Whether `expression` is a natural-language stopping predicate (an `nl` tagged template, modifier chain on one, or typed natlang callable). */
+function isNlStoppingPredicate(expression: ts.Expression, checker?: ts.TypeChecker): boolean {
+  let current: ts.Expression = expression;
+  for (;;) {
+    while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) ||
+        ts.isTypeAssertionExpression(current) || ts.isNonNullExpression(current) || ts.isSatisfiesExpression(current))
+      current = current.expression;
+    if (ts.isCallExpression(current) && ts.isPropertyAccessExpression(current.expression) &&
+        ['with', 'in', 'on', 'partial'].includes(current.expression.name.text)) {
+      current = current.expression.expression;
+      continue;
+    }
+    break;
+  }
+  if (ts.isTaggedTemplateExpression(current)) {
+    const tag = current.tag;
+    if (ts.isIdentifier(tag) && tag.text === 'nl') return true;
+    if (ts.isCallExpression(tag) && ts.isPropertyAccessExpression(tag.expression) &&
+        ts.isIdentifier(tag.expression.expression) && tag.expression.expression.text === 'nl' && tag.expression.name.text === 'with')
+      return true;
+  }
+  if (checker) {
+    const type = checker.getTypeAtLocation(expression);
+    if (type.getProperty('iterateOn') && type.getProperty('in') && type.getProperty('on')) return true;
+  } else if (ts.isIdentifier(current)) {
+    // Syntactic fallback (without a type checker): recognize `const done = nl\`...\`` declared in an enclosing block.
+    const name = current.text;
+    let scope: ts.Node | undefined = current.parent;
+    while (scope) {
+      if (ts.isBlock(scope) || ts.isSourceFile(scope)) {
+        for (const statement of scope.statements) {
+          if (!ts.isVariableStatement(statement)) continue;
+          for (const decl of statement.declarationList.declarations) {
+            if (ts.isIdentifier(decl.name) && decl.name.text === name && decl.initializer && decl.getEnd() <= current.getStart())
+              return isNlStoppingPredicate(decl.initializer);
+          }
+        }
+      }
+      scope = scope.parent;
+    }
+  }
+  return false;
+}
+
+/** Whether `node` is an `iterateOn(...).until(tsPredicate)` chain with neither `.withMeasure(...)` nor `.withLimit(...)`. */
+function isUnboundedUntil(node: ts.CallExpression, checker?: ts.TypeChecker): boolean {
+  if (!ts.isPropertyAccessExpression(node.expression) || node.expression.name.text !== 'until') return false;
+  const predicate = node.arguments[0];
+  if (!predicate || isNlStoppingPredicate(predicate, checker)) return false;
+  let current: ts.Expression = node.expression.expression;
+  let hasBound = false;
+  let foundIterateOn = false;
+  for (;;) {
+    while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) ||
+        ts.isTypeAssertionExpression(current) || ts.isNonNullExpression(current))
+      current = current.expression;
+    if (!ts.isCallExpression(current)) break;
+    if (ts.isIdentifier(current.expression) && current.expression.text === 'iterateOn') {
+      foundIterateOn = true;
+      break;
+    }
+    if (ts.isPropertyAccessExpression(current.expression)) {
+      const method = current.expression.name.text;
+      if (method === 'iterateOn') { foundIterateOn = true; break; }
+      if (method === 'withMeasure' || method === 'withLimit') hasBound = true;
+      if (['onStep', 'checkProgress', 'withMeasure', 'withLimit', 'withSiteId'].includes(method)) {
+        current = current.expression.expression;
+        continue;
+      }
+    }
+    break;
+  }
+  return foundIterateOn && !hasBound;
+}
+
 /** Diagnose forbidden loops and dynamic code in a constrained source file. */
 export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptions = {}): NatlangDiagnostic[] {
   const diagnostics: NatlangDiagnostic[] = [];
@@ -287,6 +362,9 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
       report(node, 'forbidden-loop', ITERATOR_REFUSAL);
     else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && !options.allowDynamicImport)
       report(node, 'forbidden-dynamic-code', 'Dynamic `import()` is not allowed here; use a static import.');
+    else if (ts.isCallExpression(node) && isUnboundedUntil(node, options.checker))
+      report(node, 'iteration-unbounded' as NatlangDiagnostic['code'],
+        'An iteration with a TypeScript stopping predicate needs a bound: chain `.withMeasure(state => remaining)` or `.withLimit({ maxSteps })` before `.until(...)`, or use a natural-language predicate `until(nl`...`)`.');
     else if (ts.isForOfStatement(node) && options.checker) {
       const type = options.checker.getTypeAtLocation(node.expression);
       const collectionIteratorCall = (expression: ts.Expression): boolean => {

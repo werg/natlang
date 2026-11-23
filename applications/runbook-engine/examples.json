@@ -1,0 +1,59 @@
+[
+  {
+    "name": "read-only pod inspection is safe",
+    "function": "assessStepRisk.nl",
+    "inputs": {
+      "step": {
+        "id": "inspect-pods",
+        "title": "Check API pod status",
+        "command": "kubectl get pods -n prod -l app=api",
+        "description": "List running API pods and restart counts.",
+        "dependsOn": []
+      }
+    },
+    "expected": "safe"
+  },
+  {
+    "name": "stateless worker rollout restart is confirm",
+    "function": "assessStepRisk.nl",
+    "inputs": {
+      "step": {
+        "id": "restart-api",
+        "title": "Rolling restart API deployment",
+        "command": "kubectl rollout restart deployment/api -n prod",
+        "description": "Cycle stateless API replicas to clear stale connection pools.",
+        "dependsOn": ["inspect-pods"]
+      }
+    },
+    "expected": "confirm"
+  },
+  {
+    "name": "dropping production database table is destructive",
+    "function": "assessStepRisk.nl",
+    "inputs": {
+      "step": {
+        "id": "drop-sessions",
+        "title": "Drop legacy sessions table",
+        "command": "psql $PROD_DB -c 'DROP TABLE sessions CASCADE;'",
+        "description": "Permanently remove the sessions table and dependent records.",
+        "dependsOn": []
+      }
+    },
+    "expected": "destructive"
+  },
+  {
+    "name": "healthy zero-error telemetry confirms recovery",
+    "function": "checkHealth.nl",
+    "inputs": {
+      "reading": {
+        "stepId": "restart-api",
+        "attempt": 2,
+        "status": "healthy",
+        "metrics": { "errorRate": 0.0, "p99Ms": 110 },
+        "message": "All 6 replicas ready; HTTP 200 on /healthz"
+      },
+      "targetCondition": "errorRate below 0.01 and all replicas ready"
+    },
+    "expected": true
+  }
+]

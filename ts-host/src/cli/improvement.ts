@@ -1,7 +1,7 @@
-import {readFileSync,mkdirSync,writeFileSync,readdirSync,existsSync} from 'node:fs';
+import {readFileSync,mkdirSync,writeFileSync,readdirSync,existsSync,statSync} from 'node:fs';
 import {resolve,join,dirname} from 'node:path';
 import {Folder} from '../native/scoped-fs.js';
-import {improveProgram} from '../improvement/program.js';
+import {buildDirectoryCasePack,improveDirectory,improveProgram,type DirectoryProposal} from '../improvement/program.js';
 import {SourceEvaluator} from '../improvement/host.js';
 import {adoptSource,rollbackSource,recoverAdoption,type SourceManifest,type AdoptionRecord} from '../improvement/adoption.js';
 import {adoptCall,type AdoptionVerdict} from '../improvement/adopt-call.js';
@@ -47,6 +47,10 @@ export async function improvementCommand(args:string[]):Promise<number>{
   const record=await adoptSource(checkout,manifest,source=>evaluator.check(source),join(directory,'adoption.json'));console.log(JSON.stringify({changed:record.changed,source:record.afterDigest}));return 0;
  }
  const resume=command==='resume'||command==='step';
+ if(!resume){
+  const target=resolve(command);
+  if(existsSync(target)&&statSync(target).isDirectory())return improveDirectoryCommand(target,option,flags);
+ }
  const output=resume?resolve(rest[0]??''):resolve(option('--out')??'');
  if(!resume&&!option('--out')&&!flags.includes('--dry-run'))throw Error('--out is required');
  const recorded=resume?read(join(output,'run.json')):null;
@@ -124,4 +128,58 @@ async function adoptCallCommand(rest:string[],option:(name:string,fallback?:stri
    `not adopted: ${result.reasons.join('; ')}`);
   return result.status==='rejected'?1:0;
  }finally{store.close();}
+}
+
+/**
+ * `natlang improve DIR [--proposal FILE] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]` (WS8 N4):
+ * builds the deterministic support/dev/confirmation case pack from `<DIR>/examples.json` + recorded calls in CallStore,
+ * verifies a proposed change set through a temp-copy check + split evaluation transaction, and installs via adoptSource.
+ */
+async function improveDirectoryCommand(directory:string,option:(name:string,fallback?:string)=>string|undefined,flags:string[]):Promise<number>{
+ const json=flags.includes('--json'),dryRun=flags.includes('--dry-run');
+ const seedRaw=option('--seed','0')!,seed=Number(seedRaw);
+ if(!Number.isSafeInteger(seed))throw Error(`--seed must be a safe integer, got ${seedRaw}`);
+ const storeOpt=option('--store');
+ const defaultStore=machineStoreRoot();
+ const storeRoot=storeOpt?resolve(storeOpt):(defaultStore&&existsSync(join(defaultStore,'calls.sqlite'))?defaultStore:null);
+ const store=storeRoot?openMachineStore(storeRoot):undefined;
+ const proposalPath=option('--proposal'),recordPath=option('--record');
+ const provider=option('--provider'),model=option('--model'),server=option('--server','http://127.0.0.1:8081');
+ const backend=provider&&model?createPiModelBackend(provider,model):undefined;
+ try{
+  if(!proposalPath&&dryRun){
+   const casePack=buildDirectoryCasePack(directory,{store,seed});
+   const checked=buildProject({project:directory,write:false,emit:false,writeDeclarations:false});
+   const report={directory,seed,ok:checked.ok,diagnostics:checked.diagnostics.filter(row=>row.severity==='error').map(row=>row.message),
+    cases:casePack.cases.length,splits:{support:casePack.splits.support.length,dev:casePack.splits.dev.length,confirmation:casePack.splits.confirmation.length},sources:casePack.sources};
+   if(json)console.log(JSON.stringify(report,null,2));
+   else console.log(`${directory}: ${report.cases} cases (support=${report.splits.support}, dev=${report.splits.dev}, confirmation=${report.splits.confirmation}); check=${report.ok?'ok':'failed'}`);
+   return report.ok?0:1;
+  }
+  let proposal:DirectoryProposal|undefined;
+  if(proposalPath){
+   const raw=read(resolve(proposalPath)) as Record<string,unknown>;
+   proposal=raw&&typeof raw==='object'&&'files'in raw&&raw.files&&typeof raw.files==='object'?
+    {files:raw.files as Record<string,string|null>,...(typeof raw.summary==='string'?{summary:raw.summary}:{})}:
+    {files:raw as Record<string,string|null>};
+  }
+  if(!proposal&&!model)throw Error('natlang improve DIR needs --proposal FILE, --dry-run, or --model MODEL');
+  await backend?.prepare();
+  const driver=model?(backend?(request:ModelTurnRequest,signal?:AbortSignal,options?:ModelTurnOptions)=>backend.turn(request,signal,options):openAICompatibleModelTurn({endpoint:server!,model})):undefined;
+  const result=await improveDirectory({directory,store,seed,proposal,model:driver,recordPath,dryRun});
+  if(json){
+   console.log(JSON.stringify({status:result.status,directory:result.directory,changed:result.changed,reasons:result.reasons,summary:result.summary??null,
+    splits:{support:result.casePack.splits.support.length,dev:result.casePack.splits.dev.length,confirmation:result.casePack.splits.confirmation.length},
+    sources:result.casePack.sources,check:result.check??null,baseline:result.baseline??null,proposed:result.proposed??null,record:result.recordPath??null},null,2));
+  }else if(result.status==='accepted'){
+   console.log(`adopted ${result.changed.join(', ')} into ${result.directory}\nnatlang improve rollback ${JSON.stringify(result.recordPath)} restores the previous source`);
+  }else if(result.status==='checked'){
+   console.log(`verified ${result.changed.join(', ')} (${result.casePack.cases.length} cases); run without --dry-run to install`);
+  }else if(result.status==='unchanged'){
+   console.log(`unchanged: ${result.reasons.join('; ')}`);
+  }else{
+   console.log(`rejected: ${result.reasons.join('; ')}`);
+  }
+  return result.status==='rejected'?1:0;
+ }finally{store?.close();backend?.close();}
 }

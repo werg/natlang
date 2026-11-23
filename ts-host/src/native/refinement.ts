@@ -190,6 +190,9 @@ export function collectObligations(value: unknown, type: Type, env: TypeEnv, pat
       case 'list':
         if (Array.isArray(item)) item.forEach((child, index) => walk(child, resolved.element, `${at}/${index}`, depth + 1));
         return;
+      case 'tuple':
+        if (Array.isArray(item)) resolved.elements.forEach((el, index) => walk(item[index], el, `${at}/${index}`, depth + 1));
+        return;
       case 'dict':
         if (plain(item)) for (const [key, child] of Object.entries(item)) walk(child, resolved.element, `${at}/${key}`, depth + 1);
         return;

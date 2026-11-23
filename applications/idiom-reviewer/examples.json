@@ -1,0 +1,42 @@
+{
+  "classifyGroup": [
+    {
+      "inputs": {
+        "group": {
+          "file": "triage/classify.nl",
+          "index": 0,
+          "text": "Classify the customer message into billing, technical, or spam based on the underlying issue."
+        }
+      },
+      "expected": "judgment"
+    },
+    {
+      "inputs": {
+        "group": {
+          "file": "legacy/report.nl",
+          "index": 1,
+          "text": "Step 1: Sort the rows alphabetically by id. Step 2: Count each status in a map. Step 3: Format the totals as Markdown bullets."
+        }
+      },
+      "expected": "prose-interpreter"
+    }
+  ],
+  "detectUntypedExternal": [
+    {
+      "inputs": {
+        "paramName": "ticket",
+        "paramType": "string",
+        "body": "Classify the incoming customer support email ticket."
+      },
+      "expected": true
+    },
+    {
+      "inputs": {
+        "paramName": "rubric",
+        "paramType": "string",
+        "body": "Apply the internal grading rubric to each submission."
+      },
+      "expected": false
+    }
+  ]
+}

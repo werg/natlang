@@ -262,6 +262,18 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     // Array.from builds the array in this realm even when eval produced it in its sandbox realm.
     return Array.from(raw as unknown[], (item, i) => coerce(item, wanted.element, env, `${path}/${i}`, options));
   }
+  if (wanted.kind === 'tuple') {
+    if (!Array.isArray(raw)) return reject(path, 'type-mismatch', formatType(type), preview(raw));
+    const min = wanted.minLength ?? wanted.elements.length;
+    const max = wanted.elements.length;
+    let effectiveLength = raw.length;
+    while (effectiveLength > min && raw[effectiveLength - 1] === undefined) effectiveLength--;
+    if (effectiveLength < min || raw.length > max) {
+      const expectedLength = min === max ? `${max} element${max === 1 ? '' : 's'}` : `${min}..${max} elements`;
+      return reject(path, 'type-mismatch', `${formatType(type)} (${expectedLength})`, `array of length ${raw.length}`);
+    }
+    return Array.from({ length: effectiveLength }, (_, i) => coerce(raw[i], wanted.elements[i]!, env, `${path}/${i}`, options));
+  }
   if (wanted.kind === 'dict' || wanted.kind === 'record') {
     if (!plain(raw)) return reject(path, 'type-mismatch', formatType(type), preview(raw));
     const out: Record<string, Value> = Object.create(null);
@@ -409,6 +421,13 @@ export function problems(value: Value, type: Type, env: TypeEnv, path: string): 
         else walk((item as Record<string, Value>)[field.name] as Value, field.type, `${at}/${field.name}`);
       }
     } else if (resolved.kind === 'list' && Array.isArray(item)) item.forEach((child, i) => walk(child, resolved.element, `${at}/${i}`));
+    else if (resolved.kind === 'tuple' && Array.isArray(item)) {
+      const min = resolved.minLength ?? resolved.elements.length;
+      for (let i = 0; i < Math.max(min, Math.min(item.length, resolved.elements.length)); i++) {
+        if (i >= item.length) holes.push({ path: `${at}/${i}`, code: 'hole', expected: formatType(resolved.elements[i]!) });
+        else walk(item[i]!, resolved.elements[i]!, `${at}/${i}`);
+      }
+    }
     else if (resolved.kind === 'dict' && plain(item)) for (const [key, child] of Object.entries(item)) walk(child as Value, resolved.element, `${at}/${key}`);
   }
   walk(value, type, path);

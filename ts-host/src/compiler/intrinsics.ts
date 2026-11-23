@@ -313,11 +313,14 @@ function read<T>(value: Neuralese<T>): Promise<T>;
 function read(value: string): Promise<string>;
 `;
 
+/** Search the call's callable codebase by name, signature, type alias, or doc comment. */
+const SEARCH_CODE_FUNCTION = `declare function search_code(query: string): Array<{ name: string; kind: string; signature?: string; description?: string; path?: string }>;\n`;
+
 /** Ambient global declarations used by eval programs and virtual projects. */
 const STRING_NEURALESE_CONCAT = `interface String {
   concat<T, D extends string>(...strings: (string | Neuralese<T, D>)[]): string;
 }\n`;
-export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${READ_FUNCTION.replace(/\nfunction /g, '\ndeclare function ')}\n${STRING_NEURALESE_CONCAT}`;
+export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${READ_FUNCTION.replace(/\nfunction /g, '\ndeclare function ')}\n${SEARCH_CODE_FUNCTION}${STRING_NEURALESE_CONCAT}`;
 
 /** Host and application helper `pluggable` (runtime/pluggable.ts): for imports of the package, not for what an eval is shown. */
 const PLUGGABLE_MODULE_DTS = `
@@ -342,14 +345,18 @@ type Maybe<T> = T | Promise<T>;
 export type Problems = readonly string[];
 export type Intent = string;
 export type Edit<T = unknown> = { after?: T; removed?: boolean; intent: Intent };
-export type MapOptions = { concurrency?: number };
+export type CarryMode = 'text' | 'neuralese';
+export type EscalationHistory = { totalCalls?: number; escalationRate?: number; disagreementRate?: number };
+export type TierCost = { local?: number; fallback?: number; ratio?: number };
+export type MapOptions = { concurrency?: number; carry?: CarryMode; view?: (value: unknown, instructions?: string) => Maybe<unknown>; viewInstructions?: string };
 export declare function semanticMap<T, R>(items: readonly T[], fn: (item: T, index: number) => Maybe<R>, options?: MapOptions): Promise<R[]>;
 export type FilterOptions<T> = { floor?: number; concurrency?: number; meets?: (criterion: string, item: T) => Promise<boolean> };
 export declare function semanticFilter<T>(items: readonly T[], predicate: string | ((item: T, index: number) => Maybe<boolean>), options?: FilterOptions<T>): Promise<T[]>;
 export type PartitionOptions = { floor?: number; concurrency?: number };
 export type Partition<T, K extends string = string> = { groups: Record<K, T[]>; uncertain: { item: T; label: K; confidence: number }[] };
 export declare function semanticPartition<T, K extends string = string>(items: readonly T[], classifier: (item: T) => Maybe<K>, options?: PartitionOptions): Promise<Partition<T, K>>;
-export type ReduceOptions<S> = { mode?: 'linear' | 'tree'; combine?: (left: S, right: S) => Maybe<S>; concurrency?: number };
+export type ReduceOptions<S> = { mode?: 'linear' | 'tree'; combine?: (left: S, right: S) => Maybe<S>; concurrency?: number;
+  carry?: CarryMode; view?: (value: unknown, instructions?: string) => Maybe<unknown>; read?: (value: unknown) => Maybe<unknown>; viewInstructions?: string };
 export declare function semanticReduce<T, S>(items: readonly T[], initial: S, step: (state: S, item: T, index: number) => Maybe<S>, options?: ReduceOptions<S>): Promise<S>;
 export type MatchOptions<L, R> = { relation?: string; match?: (left: L, right: R) => Maybe<boolean>; block?: (left: L, right: R) => boolean;
   floor?: number; concurrency?: number; relates?: (relation: string, left: L, right: R) => Promise<boolean> };
@@ -366,7 +373,8 @@ export type RepairOptions<T> = { check: (value: T) => Maybe<Problems>; fix: (val
 export declare function semanticRepair<T>(value: T, options: RepairOptions<T>): Promise<Repair<T>>;
 export type Revision<T> = { previous: T; current: T };
 export type FixedPoint<T> = { value: T; steps: number; settled: boolean };
-export type FixedPointOptions<T> = { judge?: NatlangFunction<[revision: Revision<T>], boolean>; settled?: (previous: T, current: T) => Maybe<boolean>; maxSteps?: number };
+export type FixedPointOptions<T> = { judge?: NatlangFunction<[revision: Revision<T>], boolean>; settled?: (previous: T, current: T) => Maybe<boolean>; maxSteps?: number;
+  carry?: CarryMode; view?: (value: unknown, instructions?: string) => Maybe<unknown>; read?: (value: unknown) => Maybe<unknown>; viewInstructions?: string };
 export declare function fixedPoint<T>(step: (value: T) => Maybe<T>, initial: T, options?: FixedPointOptions<T>): Promise<FixedPoint<T>>;
 export type MergeConflict = { path: string[]; base: unknown; ours: unknown; theirs: unknown };
 export type Merged = MergeConflict & { value: unknown; intents: { ours: Intent; theirs: Intent }; compatibility: number };
@@ -376,7 +384,11 @@ export type MergeOptions = { floor?: number; check?: (value: unknown, path: stri
   intentOf?: (before?: unknown, after?: unknown) => Promise<Intent>; compatible?: (base: unknown, ours: Edit, theirs: Edit) => Promise<boolean>;
   combine?: (base: unknown, ours: Edit, theirs: Edit) => Promise<unknown> };
 export declare function semanticMerge<T>(base: T, ours: T, theirs: T, options?: MergeOptions): Promise<Merge<T>>;
-export type EscalateOptions<R> = { to: string; floor?: number; risk?: Record<string, number>; shouldEscalate?: (decision: any) => Maybe<boolean> };
+export type EscalateOptions<R> = { to?: string; fallback?: string; floor?: number; risk?: Record<string, number>;
+  policy?: 'crisp' | 'nl' | 'shadow' | 'natlang' | 'natural-language';
+  shouldEscalate?: (decision: any) => Maybe<boolean>;
+  nlPolicy?: (decision: any, floor?: number, risk?: Record<string, number>, history?: EscalationHistory, cost?: TierCost) => Maybe<boolean>;
+  history?: EscalationHistory; cost?: TierCost };
 export type Escalated<R> = { value: R; probabilities: { value: R; probability: number }[]; confidence: number; scored: boolean;
   reasoned?: number; fields?: Record<string, { value: unknown; probability: number }[]>; escalated: boolean; reason?: string; initialValue?: R };
 export declare function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, options: EscalateOptions<R>): (...args: A) => Promise<Escalated<R>>;
@@ -404,6 +416,10 @@ export declare const beats: NatlangFunction<[goal: string, first: unknown, secon
 export declare const meets: NatlangFunction<[criterion: string, item: unknown], boolean>;
 export declare const relates: NatlangFunction<[relation: string, left: unknown, right: unknown], boolean>;
 export declare const compileRuleFn: NatlangFunction<[rule: string, problems?: string[]], (item: unknown) => Promise<unknown>>;
+export declare const shouldEscalate: NatlangFunction<[decision: any, floor?: number, risk?: Record<string, number>, history?: EscalationHistory, cost?: TierCost], boolean>;
+export declare const compactValue: NatlangFunction<[value: string, instructions?: string], Neuralese<string>>;
+export declare const compactParams: NatlangFunction<[value: string, name?: string, type?: string, purpose?: string], Neuralese<string>>;
+export declare const neuralese: { readonly compactValue: typeof compactValue; readonly compactParams: typeof compactParams };
 `;
 /** Module form of the standard library, resolved for `@natlang/<runtime>/std` imports in virtual programs. */
 export const STD_MODULE_FILE = '/__natlang__/std.d.ts';

@@ -1,0 +1,5 @@
+{
+  "name": "@natlang/app-semantic-etl",
+  "private": true,
+  "type": "module"
+}

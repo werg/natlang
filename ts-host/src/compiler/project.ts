@@ -11,7 +11,7 @@ import { checkSequentialNlLoops } from './sequential-loops.js';
 import { checkFixedCursorIterations, checkNlIdiomsIn } from './idiom.js';
 import { refinedSlotsOf, type RefinedSlot } from './refined-slots.js';
 import ts from 'typescript';
-import { RewriteGate, rewriteCombinators, type RewriteRecord } from './rewrites.js';
+import { REWRITE_RULES, RewriteGate, rewriteCombinators, type RewriteRecord, type RewriteRule, type RuleMeasurement } from './rewrites.js';
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
 import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
 import { declarationNamespace } from '../native/external.js';
@@ -206,6 +206,56 @@ export function natlangDeclaration(record: NatlangRecord, runtimeSpecifier: stri
 const SERVICES_FALLBACK = '/__natlang__/services.d.ts';
 /** No measurements: every rewrite rule is off. */
 const DEFAULT_REWRITE_GATE = new RewriteGate({ model: 'unmeasured', dialect: 'unmeasured' });
+
+const isRewriteRule = (value: unknown): value is RewriteRule =>
+  typeof value === 'string' && (REWRITE_RULES as readonly string[]).includes(value);
+
+const isRuleMeasurement = (value: unknown): value is RuleMeasurement => {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return isRewriteRule(item.rule) && typeof item.model === 'string' && typeof item.dialect === 'string' &&
+    typeof item.comparison === 'string' && (item.verdict === 'no-harm' || item.verdict === 'harm' || item.verdict === 'inconclusive');
+};
+
+/**
+ * Build a `RewriteGate` from `natlang.json`'s optional `"rewrites": { "measurements": PATH }` entry (WS2 R5).
+ * Rules remain off by default whenever the key or measurements file is absent, malformed, or lacks a certified
+ * `no-harm` measurement for the active model and dialect.
+ */
+export function loadRewriteGate(files: ProjectFiles, root: string): RewriteGate {
+  const manifestPath = join(root, 'natlang.json');
+  if (!files.isFile(manifestPath)) return DEFAULT_REWRITE_GATE;
+  let manifest: Record<string, unknown>;
+  try { manifest = JSON.parse(files.read(manifestPath)) as Record<string, unknown>; } catch { return DEFAULT_REWRITE_GATE; }
+  const rewritesConfig = manifest?.rewrites;
+  if (!rewritesConfig || typeof rewritesConfig !== 'object' || Array.isArray(rewritesConfig)) return DEFAULT_REWRITE_GATE;
+  const config = rewritesConfig as Record<string, unknown>;
+  if (typeof config.measurements !== 'string' || !config.measurements.trim()) return DEFAULT_REWRITE_GATE;
+  const measurementsPath = resolve(root, config.measurements);
+  if (!files.isFile(measurementsPath)) return DEFAULT_REWRITE_GATE;
+  let parsed: unknown;
+  try { parsed = JSON.parse(files.read(measurementsPath)); } catch { return DEFAULT_REWRITE_GATE; }
+  const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+  const rawList = Array.isArray(parsed) ? parsed : Array.isArray(record?.measurements) ? record.measurements : [];
+  const measurements = rawList.filter(isRuleMeasurement);
+  if (!measurements.length) return DEFAULT_REWRITE_GATE;
+  const manifestModel = typeof manifest.model === 'string' ? manifest.model :
+    manifest.model && typeof manifest.model === 'object' && !Array.isArray(manifest.model) ?
+      ((manifest.model as Record<string, unknown>).model ?? (manifest.model as Record<string, unknown>).stock ?? (manifest.model as Record<string, unknown>).profile) :
+      undefined;
+  const parsedVersion = record?.version && typeof record.version === 'object' && !Array.isArray(record.version) ?
+    record.version as Record<string, unknown> : undefined;
+  const model = typeof config.model === 'string' ? config.model :
+    typeof parsedVersion?.model === 'string' ? parsedVersion.model :
+    typeof record?.model === 'string' ? record.model :
+    typeof manifestModel === 'string' ? manifestModel : 'unmeasured';
+  const dialect = typeof config.dialect === 'string' ? config.dialect :
+    typeof parsedVersion?.dialect === 'string' ? parsedVersion.dialect :
+    typeof record?.dialect === 'string' ? record.dialect : 'unmeasured';
+  const disabledRaw = Array.isArray(config.disabled) ? config.disabled : Array.isArray(record?.disabled) ? record.disabled : [];
+  const disabled = disabledRaw.filter(isRewriteRule);
+  return new RewriteGate({ model, dialect }, measurements, disabled.length ? { disabled } : {});
+}
 const NEURALESE_MODULES = '/__natlang__/neuralese-modules.d.ts';
 /** `natlang:neuralese` and `natlang:learning` in terms of the intrinsic `Neuralese` type (spec/neuralese.d.ts). */
 const NEURALESE_MODULES_SOURCE = `
@@ -651,6 +701,7 @@ export function compileProject(options: BuildOptions): BuildResult {
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
         module: { natlangImports: importsBySource.get(source) ?? noNatlangImports, rewrite: rewriteFor } })(context)(file);
     };
+    const rewriteGate = options.rewriteGate ?? loadRewriteGate(fs, root);
     const emit = (fileName: string, text: string) => {
       if ((options.constrained || /\b__natlang\.(?:fuseSite|instantiate)\(/.test(text)) && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
         const commonjs = compilerOptions.module === ts.ModuleKind.CommonJS || /Object\.defineProperty\(exports/.test(text);
@@ -658,7 +709,7 @@ export function compileProject(options: BuildOptions): BuildResult {
           `import { __natlang } from ${JSON.stringify(specifierFor(false))};\n`) + text;
       }
       if (/\.[cm]?js$/.test(fileName) && /['"]natlang:neuralese['"]/.test(text)) {
-        const rewritten = rewriteCombinators(text, { gate: options.rewriteGate ?? DEFAULT_REWRITE_GATE, fileName });
+        const rewritten = rewriteCombinators(text, { gate: rewriteGate, fileName });
         text = rewritten.code;
         if (rewritten.applied.length) rewrites[fileName] = rewritten.applied;
       }

@@ -1,0 +1,41 @@
+[
+  {
+    "name": "network reset is a flake",
+    "function": "classifyFailure.nl",
+    "inputs": {
+      "trace": {
+        "id": "tr-1",
+        "job": "integration-api",
+        "log": "Error: read ECONNRESET while fetching registry metadata during retry 2",
+        "commits": ["a1b2c3"]
+      }
+    },
+    "expected": "flake"
+  },
+  {
+    "name": "missing runner binary is env",
+    "function": "classifyFailure.nl",
+    "inputs": {
+      "trace": {
+        "id": "tr-2",
+        "job": "build-linux",
+        "log": "sh: 1: cmake: not found\nExited with code 127 on runner image ubuntu-24.04-v2",
+        "commits": ["a1b2c3"]
+      }
+    },
+    "expected": "env"
+  },
+  {
+    "name": "assertion mismatch after refactor is regression",
+    "function": "classifyFailure.nl",
+    "inputs": {
+      "trace": {
+        "id": "tr-3",
+        "job": "unit-tests",
+        "log": "AssertionError [ERR_ASSERTION]: Expected discount(100, 0.2) to equal 80, received 120",
+        "commits": ["c001", "c002", "c003"]
+      }
+    },
+    "expected": "regression"
+  }
+]

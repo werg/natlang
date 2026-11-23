@@ -9,9 +9,11 @@ import { Context } from '../runtime/contexts.js';
 import { decideInFrame, type Decision } from '../runtime/runtime.js';
 import { isNatlangCallable } from '../runtime/callable.js';
 import type { NatlangFunction } from '../runtime/surface.js';
+import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { stableHash } from '../runtime/iterate.js';
 import { semanticRepair, type Problems } from './converge.js';
-import { compileRuleFn as shippedCompileRule } from './judgments.js';
+import { compileRuleFn as shippedCompileRule, shouldEscalate as shippedShouldEscalate,
+  type EscalationHistory, type TierCost } from './judgments.js';
 import { StdSpan, stdError } from './trace.js';
 
 type Maybe<T> = T | Promise<T>;
@@ -19,17 +21,31 @@ type Maybe<T> = T | Promise<T>;
 // --- escalate -------------------------------------------------------------------------------------------------------
 
 export type EscalateOptions<R> = {
-  /** Target model name in the runtime's `models` map (for example `'teacher'`). */
-  to: string;
-  /** Confidence threshold below which the call escalates to `to`. Default `0.8`. */
+  /** Target model name in the runtime's `models` map (for example `'teacher'`). Alias: `fallback`. */
+  to?: string;
+  /** Target model name in the runtime's `models` map (alias for `to`). */
+  fallback?: string;
+  /** Confidence threshold below which the call escalates to `to`/`fallback`. Default `0.8`. */
   floor?: number;
   /**
    * Asymmetric risk floors keyed by JSON or string label (for example `{ block: 0.2 }` or `{ true: 0.25 }`):
    * escalate whenever any named value has probability at least its risk threshold, even if another value won argmax.
    */
   risk?: Record<string, number>;
-  /** Optional custom escalation predicate over the local decision. */
+  /**
+   * Escalation policy mode (`pluggable`): `'crisp'` (default: asymmetric risk floors then confidence floor),
+   * `'nl'` (the shipped `shouldEscalate.nl` decision policy), or `'shadow'` (runs both, serves crisp, records `pluggable_shadow`).
+   */
+  policy?: PluggableSetting;
+  /** Optional custom escalation predicate over the local decision (overrides `policy` when supplied). */
   shouldEscalate?: (decision: Decision<R>) => Maybe<boolean>;
+  /** Replacement for the shipped `shouldEscalate.nl` judgment when `policy` is `'nl'` or `'shadow'`. */
+  nlPolicy?: (decision: Decision<R>, floor?: number, risk?: Record<string, number>,
+    history?: EscalationHistory, cost?: TierCost) => Maybe<boolean>;
+  /** Optional prior escalation statistics supplied to the `nl` policy. */
+  history?: EscalationHistory;
+  /** Optional local vs fallback tier cost metadata supplied to the `nl` policy. */
+  cost?: TierCost;
 };
 
 export type Escalated<R> = Decision<R> & {
@@ -43,18 +59,43 @@ export type Escalated<R> = Decision<R> & {
 
 /**
  * Wrap a `readout: decision` natlang function with confidence- and risk-gated escalation.
- * Most calls settle locally; only uncertain or high-risk calls invoke `fn.on({ model: to })` (keeping `fn`'s context).
+ * Most calls settle locally; only uncertain or high-risk calls invoke `fn.on({ model })` (keeping `fn`'s context).
  */
 export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, options: EscalateOptions<R>): (...args: A) => Promise<Escalated<R>> {
   if (typeof fn !== 'function' || typeof fn.on !== 'function')
-    throw stdError('std-arguments', 'escalate(fn, { to, floor?, risk? }) needs a natlang function with .on({ model }).');
-  const to = typeof options?.to === 'string' ? options.to.trim() : '';
-  if (!to) throw stdError('std-arguments', 'escalate(fn, { to }) needs a nonempty target model name.');
+    throw stdError('std-arguments', 'escalate(fn, { to | fallback, floor?, risk?, policy? }) needs a natlang function with .on({ model }).');
+  const rawTo = typeof options?.to === 'string' ? options.to.trim() : '';
+  const rawFallback = typeof options?.fallback === 'string' ? options.fallback.trim() : '';
+  if (rawTo && rawFallback && rawTo !== rawFallback)
+    throw stdError('std-arguments', `escalate received conflicting to (${JSON.stringify(rawTo)}) and fallback (${JSON.stringify(rawFallback)}); pass one target model name.`);
+  const to = rawTo || rawFallback;
+  if (!to) throw stdError('std-arguments', 'escalate(fn, { to | fallback }) needs a nonempty target model name.');
   const floor = options.floor ?? 0.8;
   if (!(floor >= 0 && floor <= 1)) throw stdError('std-arguments', 'escalate floor is a probability between 0 and 1.');
   for (const [label, threshold] of Object.entries(options.risk ?? {}))
     if (!(threshold >= 0 && threshold <= 1))
       throw stdError('std-arguments', `escalate risk floor for ${JSON.stringify(label)} must be a probability between 0 and 1.`);
+
+  const crispReason = (decision: Decision<R>): string | undefined => {
+    // Check asymmetric risk floors before the general confidence floor so high-risk escalations keep their specific reason.
+    if (options.risk) {
+      for (const [label, threshold] of Object.entries(options.risk)) {
+        const match = decision.probabilities.find(entry => String(entry.value) === label || JSON.stringify(entry.value) === label);
+        if (match && match.probability >= threshold) return `risk:${label}`;
+      }
+    }
+    if (decision.confidence < floor) return 'confidence';
+    return undefined;
+  };
+  const nlJudge = options.nlPolicy ?? (shippedShouldEscalate as unknown as NonNullable<EscalateOptions<R>['nlPolicy']>);
+  const decidePolicy = pluggable<[Decision<R>], string | undefined>(
+    {
+      crisp: decision => crispReason(decision),
+      nl: async decision => (await nlJudge(decision, floor, options.risk, options.history, options.cost)) ? 'policy' : undefined,
+    },
+    options.policy,
+    { default: 'crisp', serve: 'crisp', name: 'std.escalate', same: (a, b) => Boolean(a) === Boolean(b) },
+  );
 
   const fallback = fn.on({ model: to });
   return async (...args: A): Promise<Escalated<R>> => {
@@ -62,19 +103,9 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
     return span.around(async () => {
       const decision = await decideInFrame(span.frame, fn, args);
       span.stage('local', { confidence: decision.confidence, scored: decision.scored });
-      let reason: string | undefined;
-      if (options.shouldEscalate) {
-        if (await span.run(() => options.shouldEscalate!(decision))) reason = 'policy';
-      } else {
-        // Check asymmetric risk floors before the general confidence floor so high-risk escalations keep their specific reason.
-        if (options.risk) {
-          for (const [label, threshold] of Object.entries(options.risk)) {
-            const match = decision.probabilities.find(entry => String(entry.value) === label || JSON.stringify(entry.value) === label);
-            if (match && match.probability >= threshold) { reason = `risk:${label}`; break; }
-          }
-        }
-        if (!reason && decision.confidence < floor) reason = 'confidence';
-      }
+      const reason = options.shouldEscalate
+        ? ((await span.run(() => options.shouldEscalate!(decision))) ? 'policy' : undefined)
+        : await span.run(() => decidePolicy(decision));
       if (!reason) return { ...decision, escalated: false };
       span.emit('decision_escalate', { to, reason, confidence: decision.confidence, initial_value: decision.value });
       const value = await span.run(() => fallback(...args));

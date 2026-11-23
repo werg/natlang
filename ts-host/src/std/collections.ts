@@ -4,11 +4,42 @@
  * Each combinator is TypeScript mechanism (bounded concurrency, exact grouping, blocking, Copeland ranking) around
  * typed natural-language judgments. Values pass through by reference so `Neuralese<T>` states flow untouched.
  */
+import { currentFrame } from '../runtime/context.js';
 import { decideInFrame } from '../runtime/runtime.js';
-import { beats as shippedBeats, meets as shippedMeets, relates as shippedRelates } from './judgments.js';
+import { isNeuraleseRef, NeuraleseUnsupportedError } from '../native/neuralese.js';
+import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
+import { beats as shippedBeats, compactValue as shippedCompactValue, meets as shippedMeets, relates as shippedRelates } from './judgments.js';
 import { StdSpan, stdError } from './trace.js';
 
 type Maybe<T> = T | Promise<T>;
+
+/** How intermediate state or mapped items are carried between calls: plain `'text'` (default) or `'neuralese'` soft state. */
+export type CarryMode = 'text' | 'neuralese';
+
+export function carryOf(value: unknown, combinator: string): CarryMode {
+  if (value === undefined || value === 'text') return 'text';
+  if (value === 'neuralese') return 'neuralese';
+  throw stdError('std-arguments', `${combinator} carry must be "text" or "neuralese".`);
+}
+
+const asViewText = (value: unknown): string => typeof value === 'string' ? value : JSON.stringify(value) ?? String(value);
+
+/** Default soft view for `carry: 'neuralese'`: uses the runtime's Neuralese viewer or `compactValue.nl`. */
+export async function defaultSoftView(value: unknown, instructions?: string): Promise<unknown> {
+  if (isNeuraleseRef(value)) return value;
+  const neuralese = currentFrame()?.task.runtime.options.neuralese;
+  if (neuralese?.view) {
+    const viewed = await neuralese.view({ value: asViewText(value), ...(instructions ? { instructions } : {}) });
+    if (viewed !== undefined) return viewed;
+  }
+  if (neuralese) return shippedCompactValue(asViewText(value), instructions);
+  throw new NeuraleseUnsupportedError('carry: "neuralese" needs a Neuralese-capable runtime or a custom view option');
+}
+
+/** Default final readout for `carry: 'neuralese'`: reads a Neuralese reference back to an ordinary value. */
+export async function defaultSoftRead(value: unknown): Promise<unknown> {
+  return isNeuraleseRef(value) ? readNeuraleseForCurrentTask(value) : value;
+}
 
 function concurrencyOf(value: unknown, combinator: string): number | undefined {
   if (value === undefined) return undefined;
@@ -45,6 +76,12 @@ async function mapBounded<T, R>(items: readonly T[], concurrency: number | undef
 export type MapOptions = {
   /** Maximum concurrent calls. Omit to run every item concurrently. */
   concurrency?: number;
+  /** How items reach `fn`: `'text'` (default) passes items untouched; `'neuralese'` runs `view` once per item first. */
+  carry?: CarryMode;
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  view?: (value: unknown, instructions?: string) => Maybe<unknown>;
+  /** Optional instructions forwarded to `view` when `carry: 'neuralese'`. */
+  viewInstructions?: string;
 };
 
 /** Apply a semantic function to every item in `items` concurrently (or with bounded concurrency), preserving order. */
@@ -52,10 +89,15 @@ export async function semanticMap<T, R>(items: readonly T[], fn: (item: T, index
   if (!Array.isArray(items)) throw stdError('std-arguments', 'semanticMap(items, fn) needs an array of items.');
   if (typeof fn !== 'function') throw stdError('std-arguments', 'semanticMap(items, fn) needs a function.');
   const concurrency = concurrencyOf(options.concurrency, 'semanticMap');
+  const carry = carryOf(options.carry, 'semanticMap');
+  const view = options.view ?? defaultSoftView;
   const span = new StdSpan('semanticMap');
   return span.around(async () => {
-    const results = await mapBounded(items, concurrency, (item, index) => Promise.resolve(span.run(() => fn(item, index))));
-    span.stage('map', { items: items.length });
+    const results = await mapBounded(items, concurrency, async (item, index) => {
+      const input = carry === 'neuralese' ? await span.run(() => view(item, options.viewInstructions)) as T : item;
+      return await span.run(() => fn(input, index));
+    });
+    span.stage('map', { items: items.length, ...(carry === 'neuralese' ? { carry } : {}) });
     return results;
   }, results => `mapped ${results.length} items`);
 }
@@ -161,11 +203,20 @@ export type ReduceOptions<S> = {
   combine?: (left: S, right: S) => Maybe<S>;
   /** Maximum concurrent calls in `mode: 'tree'`. */
   concurrency?: number;
+  /** How state is carried between steps: `'text'` (default) or `'neuralese'` (`view` between steps, `read` once at the end). */
+  carry?: CarryMode;
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  view?: (value: unknown, instructions?: string) => Maybe<unknown>;
+  /** Optional readout hook used once at the end when `carry: 'neuralese'` (default: Neuralese `read`). */
+  read?: (value: unknown) => Maybe<unknown>;
+  /** Optional instructions forwarded to `view` when `carry: 'neuralese'`. */
+  viewInstructions?: string;
 };
 
 /**
  * Fold `items` from `initial` using `step(state, item, index)`. State passes by reference, so `Neuralese<S>` values
- * carry directly from step to step (or across tree levels in `mode: 'tree'`).
+ * carry directly from step to step (or across tree levels in `mode: 'tree'`). With `carry: 'neuralese'`, intermediate
+ * states pass through `view` and are read once at the end.
  */
 export async function semanticReduce<T, S>(items: readonly T[], initial: S, step: (state: S, item: T, index: number) => Maybe<S>,
     options: ReduceOptions<S> = {}): Promise<S> {
@@ -176,30 +227,43 @@ export async function semanticReduce<T, S>(items: readonly T[], initial: S, step
   if (mode === 'tree' && typeof options.combine !== 'function')
     throw stdError('std-arguments', 'semanticReduce with mode "tree" needs a combine(left, right) function.');
   const concurrency = concurrencyOf(options.concurrency, 'semanticReduce');
+  const carry = carryOf(options.carry, 'semanticReduce');
+  const view = options.view ?? defaultSoftView;
+  const read = options.read ?? defaultSoftRead;
   const span = new StdSpan('semanticReduce');
   return span.around(async () => {
     if (!items.length) return initial;
     if (mode === 'linear') {
-      let state = initial;
+      let state: unknown = carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial;
       for (let index = 0; index < items.length; index++) {
-        state = await span.run(() => step(state, items[index]!, index));
-        span.stage('step', { index });
+        state = await span.run(() => step(state as S, items[index]!, index));
+        if (carry === 'neuralese' && index + 1 < items.length)
+          state = await span.run(() => view(state, options.viewInstructions));
+        span.stage('step', { index, ...(carry === 'neuralese' ? { carry } : {}) });
       }
-      return state;
+      return (carry === 'neuralese' ? await span.run(() => read(state)) : state) as S;
     }
-    let level = await mapBounded(items, concurrency, (item, index) => Promise.resolve(span.run(() => step(initial, item, index))));
-    span.stage('leaves', { count: level.length });
+    const initState = (carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial) as S;
+    let level = await mapBounded(items, concurrency, async (item, index) => {
+      const out = await span.run(() => step(initState, item, index));
+      return (carry === 'neuralese' && items.length > 1 ? await span.run(() => view(out, options.viewInstructions)) : out) as S;
+    });
+    span.stage('leaves', { count: level.length, ...(carry === 'neuralese' ? { carry } : {}) });
     let round = 0;
     while (level.length > 1) {
       const pairs: [S, S][] = [];
-      const carry = level.length % 2 === 1 ? level[level.length - 1] : undefined;
+      const odd = level.length % 2 === 1 ? level[level.length - 1] : undefined;
       for (let i = 0; i + 1 < level.length; i += 2) pairs.push([level[i]!, level[i + 1]!]);
-      const combined = await mapBounded(pairs, concurrency, ([left, right]) => Promise.resolve(span.run(() => options.combine!(left, right))));
-      if (carry !== undefined) combined.push(carry);
+      const nextCount = pairs.length + (odd !== undefined ? 1 : 0);
+      const combined = await mapBounded(pairs, concurrency, async ([left, right]) => {
+        const out = await span.run(() => options.combine!(left, right));
+        return (carry === 'neuralese' && nextCount > 1 ? await span.run(() => view(out, options.viewInstructions)) : out) as S;
+      });
+      if (odd !== undefined) combined.push(odd);
       level = combined;
-      span.stage('combine', { round: ++round, count: level.length });
+      span.stage('combine', { round: ++round, count: level.length, ...(carry === 'neuralese' ? { carry } : {}) });
     }
-    return level[0]!;
+    return (carry === 'neuralese' ? await span.run(() => read(level[0]!)) : level[0]!) as S;
   }, () => `reduced ${items.length} items (${mode})`);
 }
 

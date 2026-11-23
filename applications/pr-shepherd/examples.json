@@ -1,0 +1,57 @@
+[
+  {
+    "name": "auth timing leak is high-risk code",
+    "function": "classifyHunk.nl",
+    "inputs": {
+      "hunk": {
+        "file": "src/auth/session.ts",
+        "patch": "@@ -41,4 +41,4 @@\n- return timingSafeEqual(a, b);\n+ return sig === expected;"
+      }
+    },
+    "expected": { "kind": "code", "risk": "high" }
+  },
+  {
+    "name": "README update is low-risk docs",
+    "function": "classifyHunk.nl",
+    "inputs": {
+      "hunk": {
+        "file": "README.md",
+        "patch": "@@ -1,2 +1,3 @@\n # App\n+Updated setup instructions."
+      }
+    },
+    "expected": { "kind": "docs", "risk": "low" }
+  },
+  {
+    "name": "lockfile churn is trivial",
+    "function": "isTrivialHunk.nl",
+    "inputs": {
+      "hunk": {
+        "file": "package-lock.json",
+        "patch": "@@ -100,2 +100,2 @@\n- \"version\": \"1.0.0\"\n+ \"version\": \"1.0.1\""
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "security blocker blocks merge",
+    "function": "mergeVerdict.nl",
+    "inputs": {
+      "findings": [
+        {
+          "file": "src/db/invoices.ts",
+          "quote": "SELECT * FROM invoices WHERE id = '${id}'",
+          "rule": "tenant-and-sql-safety",
+          "severity": "blocker",
+          "fix": "Parameterize query and filter tenant_id."
+        }
+      ]
+    },
+    "expected": "block"
+  },
+  {
+    "name": "empty findings approve merge",
+    "function": "mergeVerdict.nl",
+    "inputs": { "findings": [] },
+    "expected": "approve"
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "same vendor despite legal suffix difference",
+    "function": "sameEntity.nl",
+    "inputs": {
+      "left": { "id": "v1", "name": "Acme Cloud Inc.", "country": "US", "domain": "acmecloud.io" },
+      "right": { "id": "e1", "name": "ACME Cloud LLC", "country": "US", "domain": "acmecloud.io" }
+    },
+    "expected": true
+  },
+  {
+    "name": "distinct vendors with different tax IDs",
+    "function": "sameEntity.nl",
+    "inputs": {
+      "left": { "id": "v2", "name": "Northstar Logistics GmbH", "country": "DE", "taxId": "DE111222333" },
+      "right": { "id": "e2", "name": "Northstar Analytics GmbH", "country": "DE", "taxId": "DE999888777" }
+    },
+    "expected": false
+  }
+]

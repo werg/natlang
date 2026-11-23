@@ -14,7 +14,8 @@ import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { STD_MODULE_FILE, STD_SPECIFIERS } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { typeScriptText } from '../compiler/eval-check.js';
-import { NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
+import { moduleResolvedImports, NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
+import { joinSourcePath } from './source-path.js';
 import * as lowered from './lowered.js';
 import * as surface from './surface.js';
 import { inlineDescriptor } from '../adaptation/inventory.js';
@@ -124,10 +125,15 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let stringReplaces = new Map<string, { conditional?: true }>();
   let instantiations = new Map<string, { representation: import('../native/representation.js').Representation; site: string }>();
   let checker: ts.TypeChecker | undefined;
-  const path = `${FOLDER}/${record.name}.ts`;
+  const extraImports = moduleResolvedImports(record);
+  const relSource = record.source.replace(/\\/g, '/').replace(/^\/+/, '');
+  const usePkgRoot = !!extraImports && Object.keys(extraImports).length > 0 && !!relSource && !relSource.startsWith('..');
+  const path = usePkgRoot ? `/__natlang__/pkg/${relSource.endsWith('.js') ? `${relSource.slice(0, -3)}.ts` : relSource}` : `${FOLDER}/${record.name}.ts`;
+  const virtualDir = path.slice(0, path.lastIndexOf('/'));
   const softTypes = JSON.stringify(record.types);
-  // A sibling with a representation-generic result: its call sites need the checker to pick their instance.
-  const generic = Object.values(level).some(item => item.kind === 'natlang' && !!item.generic);
+  // A sibling or imported .nl with a representation-generic result: its call sites need the checker to pick their instance.
+  const generic = Object.values(level).some(item => item.kind === 'natlang' && !!item.generic) ||
+    Object.values(extraImports ?? {}).some(item => item.kind === 'natlang' && !!item.generic);
   // Desugar nl("...") / nl(`...`, x) before parsing and transpiling so both analysis and lowering see tagged templates.
   let text = /\b(?:function|const|let|var|class)\s+nl\b/.test(record.text) ? record.text : desugarNlCalls(record.text);
   const parsed = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true);
@@ -139,30 +145,47 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     const files: Record<string, string> = { [path]: text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
-      if (item.kind === 'module') files[`${FOLDER}/${name}.ts`] = item.text;
-      if (item.kind === 'natlang') files[`${FOLDER}/${name}.d.nl.ts`] = natlangDeclaration(item);
+      if (item.kind === 'module') files[`${virtualDir}/${name}.ts`] = item.text;
+      if (item.kind === 'natlang') files[`${virtualDir}/${name}.d.nl.ts`] = natlangDeclaration(item);
+    }
+    const extraPaths: Record<string, string[]> = {};
+    let extraIndex = 0;
+    for (const [specifier, item] of Object.entries(extraImports ?? {})) {
+      if (specifier.startsWith('.')) {
+        const resolved = joinSourcePath(virtualDir, specifier);
+        if (item.kind === 'module') {
+          const tsPath = resolved.endsWith('.js') ? `${resolved.slice(0, -3)}.ts` : resolved.endsWith('.ts') ? resolved : `${resolved}.ts`;
+          files[tsPath] ??= item.text;
+        } else if (item.kind === 'natlang') {
+          files[`${resolved.replace(/\.(?:nl|ts|js)$/, '')}.d.nl.ts`] ??= natlangDeclaration(item);
+        }
+      } else {
+        const mapped = `/__natlang__/pkg-export/${++extraIndex}/${item.name}${item.kind === 'natlang' ? '.d.nl.ts' : '.ts'}`;
+        if (item.kind === 'module') { files[mapped] = item.text; extraPaths[specifier] = [mapped]; }
+        else if (item.kind === 'natlang') { files[mapped] = natlangDeclaration(item); extraPaths[specifier] = [mapped]; }
+      }
     }
     const known = new Set(Object.keys(record.types));
-    files[`${FOLDER}/__types.d.ts`] = Object.entries(record.types)
+    files[`${virtualDir}/__types.d.ts`] = Object.entries(record.types)
       .map(([name, text]) => `type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\n';
     // The same aliases are importable as the folder's types module (`import type { Ticket } from "./types"`),
     // which is what TypeScript authors write; without it the import resolves to nothing and types become any.
-    files[`${FOLDER}/types.ts`] ??= Object.entries(record.types)
+    files[`${virtualDir}/types.ts`] ??= Object.entries(record.types)
       .map(([name, text]) => `export type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\nexport {};\n';
     const external = new Map<string, Set<string>>();
     for (const statement of parsed.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&
-        !statement.moduleSpecifier.text.startsWith('.')) {
+        !statement.moduleSpecifier.text.startsWith('.') && !(extraPaths && Object.hasOwn(extraPaths, statement.moduleSpecifier.text))) {
       const names = external.get(statement.moduleSpecifier.text) ?? new Set<string>();
       const bindings = statement.importClause?.namedBindings;
       if (bindings && ts.isNamedImports(bindings)) for (const element of bindings.elements) names.add((element.propertyName ?? element.name).text);
       external.set(statement.moduleSpecifier.text, names);
     }
-    files[`${FOLDER}/__external.d.ts`] = [...external].filter(([specifier]) => !/^@natlang\//.test(specifier) && specifier !== NEUTRAL_RUNTIME_SPECIFIER)
+    files[`${virtualDir}/__external.d.ts`] = [...external].filter(([specifier]) => !/^@natlang\//.test(specifier) && specifier !== NEUTRAL_RUNTIME_SPECIFIER)
       .map(([specifier, names]) => `declare module ${JSON.stringify(specifier)} {\n${[...names].map(name =>
         `  export const ${name}: any;`).join('\n')}\n  const value: any;\n  export default value;\n}`).join('\n');
     const compilerOptions = { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'],
       ...Object.fromEntries(STD_SPECIFIERS.map(specifier => [specifier, [STD_MODULE_FILE]])),
-      [NEUTRAL_RUNTIME_SPECIFIER]: ['/__natlang__/surface.d.ts'] } };
+      [NEUTRAL_RUNTIME_SPECIFIER]: ['/__natlang__/surface.d.ts'], ...extraPaths } };
     let program = createVirtualProgram(files, compilerOptions);
     // Typed refine/assume calls become their predicate form in the text itself: the transform below runs on a separate
     // parse of the text, where the type argument cannot be resolved.
@@ -216,8 +239,11 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
 // Compilation is immutable and shareable; mutable exports remain in the task's instance cache.
 const compiled = new Map<string, string>();
 function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>, target: ModuleTarget): string {
+  const extraImports = moduleResolvedImports(record);
   const key = fingerprint({ target, source: record.source, id: record.id, revision: record.revision,
     programId: record.programId ?? null, text: record.text, types: record.types,
+    ...(extraImports ? { extraImports: Object.entries(extraImports).map(([specifier, item]) => ({ specifier, kind: item.kind,
+      source: item.source, revision: item.kind === 'namespace' ? null : item.revision })) } : {}),
     siblings: Object.entries(level).map(([name, item]) => ({ name, kind: item.kind,
       text: item.kind === 'namespace' ? null : item.text,
       ...(item.kind === 'natlang' ? { args: item.args, returns: item.returns, types: item.types, subtype: item.subtype,
@@ -252,7 +278,8 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
   const host = moduleHost(platform);
   const cache = task && (task.programView.binding || task.runtime.options.isolateModules || task.programView.revisionId) ?
     task.moduleInstances : host.instances;
-  record = task?.programView.original(record) ?? record;
+  const original = task?.programView.original(record) ?? record;
+  record = original;
   const patched = task?.programView.patched(record.source);
   if (patched) record = task!.programView.record(record);
   const existing = cache.get(record);
@@ -274,6 +301,7 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
   const state = { exports, ready: false };
   cache.set(record, state);
   const environment = host.moduleRealm();
+  const extraImports = moduleResolvedImports(record) ?? moduleResolvedImports(original);
   const require = (specifier: string): unknown => {
     if (specifier === 'natlang:services') return servicesModule;
     if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
@@ -281,6 +309,12 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
     // `Context` is the host package's context value (`fn.in(Context.empty().with({ policy }))`), installed by contexts.ts.
     if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier))
       return { __esModule: true, ...surface, Context: (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] };
+    if (extraImports && Object.hasOwn(extraImports, specifier)) {
+      const item = extraImports[specifier]!;
+      if (item.kind === 'natlang') return { __esModule: true, default: namedCallable(item.name, item as never) };
+      if (item.kind === 'module') return moduleInstance(platform, item, {});
+      return { __esModule: true, ...callableTree(item.codebase as never) };
+    }
     if (specifier.startsWith('./')) {
       const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');
       let scope: Record<string, ItemRecord> = level, parent = level, item: ItemRecord | undefined;
@@ -468,7 +502,17 @@ export async function moduleInstanceAsync(platform: Platform, record: ModuleReco
     try {
       const nested = new Set(visiting); nested.add(current);
       const dependencies = new Map<string, unknown>();
+      const originalCurrent = task?.programView.original(current) ?? current;
+      const extra = moduleResolvedImports(current) ?? moduleResolvedImports(originalCurrent);
       for (const specifier of current.imports) {
+        if (extra && Object.hasOwn(extra, specifier)) {
+          const item = extra[specifier]!;
+          if (item.kind === 'module') dependencies.set(specifier, await initialize(item, {}, nested));
+          else if (item.kind === 'natlang') dependencies.set(specifier,
+            {__esModule:true, default:namedCallable(item.name, item as never)});
+          else dependencies.set(specifier, {__esModule:true, ...callableTree(item.codebase as never)});
+          continue;
+        }
         if (!specifier.startsWith('./')) continue;
         const {item, parent} = relativeModuleItem(specifier, siblings, current.source);
         if (item.kind === 'module') dependencies.set(specifier, await initialize(item, parent, nested));

@@ -1,0 +1,51 @@
+[
+  {
+    "name": "leaf section preserves id, title, and verbatim citation",
+    "function": "digestSection.nl",
+    "inputs": {
+      "section": {
+        "id": "sec-security",
+        "title": "Security Controls",
+        "text": "All customer data is encrypted at rest using AES-256-GCM with customer-managed KMS keys and audited annually under SOC 2 Type II.",
+        "sections": []
+      }
+    },
+    "expected": {
+      "sectionId": "sec-security",
+      "title": "Security Controls",
+      "summary": "Customer data uses AES-256-GCM encryption at rest with customer-managed KMS keys and annual SOC 2 Type II audits.",
+      "keyClaims": [
+        "AES-256-GCM encryption at rest with customer-managed KMS keys",
+        "Annual SOC 2 Type II audit"
+      ],
+      "citations": [
+        {
+          "sectionId": "sec-security",
+          "quote": "encrypted at rest using AES-256-GCM with customer-managed KMS keys"
+        }
+      ],
+      "children": []
+    }
+  },
+  {
+    "name": "agpl license in proprietary product is a dealbreaker",
+    "function": "scoreCriterion.nl",
+    "inputs": {
+      "dossierName": "OmniQueue",
+      "digest": {
+        "sectionId": "root",
+        "title": "OmniQueue Technical Brief",
+        "summary": "Distributed queue licensed solely under AGPL-3.0 with no commercial license option.",
+        "keyClaims": ["Licensed strictly under AGPL-3.0 without commercial buyout"],
+        "citations": [{ "sectionId": "root", "quote": "licensed solely under AGPL-3.0" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "license",
+        "name": "Permissive Licensing",
+        "guidance": "Must be MIT, Apache-2.0, or BSD-3-Clause; copyleft licenses without commercial exemption are dealbreakers."
+      }
+    },
+    "expected": "dealbreaker"
+  }
+]

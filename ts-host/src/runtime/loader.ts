@@ -57,10 +57,12 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   /** `model: NAME` in the frontmatter: the call runs on the runtime's model of that name (`models`), else the default. */
   model?: string;
   /**
-   * `uses: [dir/item]` in the frontmatter: package items this function may call besides its companion folder, by path
-   * from the package root. Each is in `codebase` under its base name.
+   * `uses:` in the frontmatter: package, relative (`./`, `../`), or `natlang.json` package-export items this function
+   * may call besides its companion folder. List form binds under basename; map form binds under explicit alias keys.
    */
   uses?: string[];
+  /** Canonical alias -> specifier map for `uses:` (populated for both list and map forms). */
+  usesMap?: Record<string, string>;
   /** `withhold: [delegate]` in the frontmatter: tools this function's own calls are not offered (WITHHOLDABLE_TOOLS). */
   withhold?: string[];
   /**
@@ -127,20 +129,29 @@ function frontmatterLine(text: string, key: string, member?: string): number | u
  * text at run time (`defineNatlang`) are not registered, so a context refuses them as new executable nodes.
  */
 const FILE_NODES = new Set<string>();
+/** Resolved package-relative and package-export imports for callable-folder modules, kept off records so records stay JSON-serializable. */
+const MODULE_IMPORTS = new WeakMap<ModuleRecord, Record<string, ItemRecord>>();
+export function moduleResolvedImports(record: ModuleRecord): Record<string, ItemRecord> | undefined { return MODULE_IMPORTS.get(record); }
 export const nodeKey = (record: NatlangRecord | ModuleRecord): string => `${record.kind}:${record.id}@${record.revision}`;
 export function registerFileRecords(codebase: Record<string, ItemRecord> | ItemRecord): void {
+  const seen = new Set<ItemRecord>();
   const visit = (item: ItemRecord) => {
+    if (seen.has(item)) return;
+    seen.add(item);
     if (item.kind !== 'namespace') FILE_NODES.add(nodeKey(item));
     for (const child of Object.values(item.codebase)) visit(child);
+    if (item.kind === 'module') for (const dep of Object.values(MODULE_IMPORTS.get(item) ?? {})) visit(dep);
   };
   const single = typeof (codebase as ItemRecord).kind === 'string' && 'codebase' in codebase && typeof (codebase as ItemRecord).codebase === 'object';
   if (single) visit(codebase as ItemRecord);
   else for (const item of Object.values(codebase as Record<string, ItemRecord>)) visit(item);
 }
 /** Whether an executable node and all its children come from files. */
-export function isFileRecord(record: ItemRecord): boolean {
+export function isFileRecord(record: ItemRecord, seen = new Set<ItemRecord>()): boolean {
+  if (seen.has(record)) return true;
+  seen.add(record);
   if (record.kind !== 'namespace' && !FILE_NODES.has(nodeKey(record))) return false;
-  return Object.values(record.codebase).every(isFileRecord);
+  return Object.values(record.codebase).every(child => isFileRecord(child, seen));
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -302,10 +313,49 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   // A model name is a word (small) or, where the runtime names models by provider, a "provider:id" ref.
   if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w.:/-]*$/.test(meta.model)))
     throw new NatlangSourceError(path, 'model must name one of the runtime\'s models, such as small', frontmatterLine(text, 'model'));
+const USES_SEGMENT = '(?!\\.\\.?$)[A-Za-z0-9_$.-]+';
+const USES_SPECIFIER = new RegExp(`^(?:(?:\\.\\.?\\/)+)?(?:@[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+|${USES_SEGMENT})(?:\\/${USES_SEGMENT})*$`);
+
+function usesAliasFromSpecifier(specifier: string): string {
+  const leaf = specifier.slice(specifier.lastIndexOf('/') + 1);
+  return leaf.replace(/\.(?:nl|ts|js)$/, '');
+}
+
+function parseUsesFrontmatter(path: string, value: unknown, text: string): { uses?: string[]; usesMap?: Record<string, string> } {
+  if (value === undefined) return {};
+  const line = frontmatterLine(text, 'uses');
+  if (Array.isArray(value)) {
+    const uses: string[] = [];
+    const usesMap: Record<string, string> = {};
+    for (const item of value) {
+      if (typeof item !== 'string' || !USES_SPECIFIER.test(item))
+        throw new NatlangSourceError(path, 'uses must list package, relative (./ or ../), or package-export specifiers, such as [harness/cut] or { rubric: "./shared/rubric" }', line);
+      const alias = usesAliasFromSpecifier(item);
+      checkName(path, alias);
+      if (Object.hasOwn(usesMap, alias))
+        throw new NatlangSourceError(path, `uses lists two items with the same base name ${JSON.stringify(alias)}; use map form to give them distinct aliases, such as uses: { ${alias}A: ${JSON.stringify(usesMap[alias])}, ${alias}B: ${JSON.stringify(item)} }`, line);
+      uses.push(item);
+      usesMap[alias] = item;
+    }
+    return uses.length ? { uses, usesMap } : {};
+  }
+  if (value && typeof value === 'object') {
+    const usesMap: Record<string, string> = {};
+    for (const [alias, spec] of Object.entries(value as Record<string, unknown>)) {
+      checkName(path, alias);
+      if (typeof spec !== 'string' || !USES_SPECIFIER.test(spec))
+        throw new NatlangSourceError(path, `uses.${alias} must be a package, relative (./ or ../), or package-export specifier`,
+          frontmatterLine(text, 'uses', alias));
+      usesMap[alias] = spec;
+    }
+    const aliases = Object.keys(usesMap);
+    return aliases.length ? { uses: aliases, usesMap } : {};
+  }
+  throw new NatlangSourceError(path, 'uses must be a list of paths ([harness/cut]) or a map of aliases to specifiers ({ rubric: "./shared/rubric" })', line);
+}
+
   const budget = callBudget(path, meta.budget, frontmatterLine(text, 'budget'));
-  if (meta.uses !== undefined && (!Array.isArray(meta.uses) || meta.uses.some(item => typeof item !== 'string' ||
-      !/^[A-Za-z_$][\w$]*(\/[A-Za-z_$][\w$]*)*$/.test(item))))
-    throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]', frontmatterLine(text, 'uses'));
+  const parsedUses = parseUsesFrontmatter(path, meta.uses, text);
   if (meta.withhold !== undefined && (!Array.isArray(meta.withhold) ||
       meta.withhold.some(item => typeof item !== 'string' || !WITHHOLDABLE_TOOLS.includes(item))))
     throw new NatlangSourceError(path, `withhold lists tools this function's calls are not offered, from: ${WITHHOLDABLE_TOOLS.join(', ')}`,
@@ -342,7 +392,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {}, ...(generic ? { generic } : {}),
     ...(meta.readout === 'decision' || meta.readout === 'instant' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'instant' | 'template' } : {}),
     ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
-    ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}),
+    ...(parsedUses.uses ? { uses: parsedUses.uses } : {}),
+    ...(parsedUses.usesMap ? { usesMap: parsedUses.usesMap } : {}),
     ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}),
     ...(Array.isArray(meta.protect) && meta.protect.length ? { protect: [...new Set(meta.protect as string[])] } : {}),
     ...(budget ? { budget } : {}), ...(meta.recursive === 'structural' ? { recursive: 'structural' as const } : {}),
@@ -375,7 +426,10 @@ export function recordProtectedSources(record: Pick<NatlangRecord, 'source' | 'p
 /** Every source a record tree protects: its natural-language functions' `protect:` lists and `ensures:` checks, resolved. */
 export function treeProtectedSources(codebase: Record<string, ItemRecord>): string[] {
   const found: string[] = [];
+  const seen = new Set<ItemRecord>();
   const visit = (item: ItemRecord) => {
+    if (seen.has(item)) return;
+    seen.add(item);
     if (item.kind === 'natlang') found.push(...recordProtectedSources(item));
     for (const child of Object.values(item.codebase)) visit(child);
   };
@@ -399,7 +453,13 @@ function checkProtect(record: NatlangRecord, path: string): void {
   }
   if (!record.protect?.length) return;
   const sources: string[] = [];
-  const visit = (item: ItemRecord) => { sources.push(item.source); for (const child of Object.values(item.codebase)) visit(child); };
+  const seen = new Set<ItemRecord>();
+  const visit = (item: ItemRecord) => {
+    if (seen.has(item)) return;
+    seen.add(item);
+    sources.push(item.source);
+    for (const child of Object.values(item.codebase)) visit(child);
+  };
   for (const item of Object.values(record.codebase)) visit(item);
   record.protect.forEach(entry => {
     if (!sources.some(source => isProtectedSource(source, [protectedSources(record.source, [entry])[0]!])))
@@ -408,79 +468,361 @@ function checkProtect(record: NatlangRecord, path: string): void {
   });
 }
 
-/** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */
-function packageRoot(dir: string, files: SourceFiles): string {
+function normalizePath(path: string): string {
+  const unix = path.replace(/\\/g, '/');
+  const absolute = unix.startsWith('/');
+  const parts: string[] = [];
+  for (const part of unix.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (parts.length && parts[parts.length - 1] !== '..') parts.pop();
+      else if (!absolute) parts.push('..');
+    } else parts.push(part);
+  }
+  return (absolute ? '/' : '') + parts.join('/') || (absolute ? '/' : '.');
+}
+
+function isWithinRoot(root: string, target: string): boolean {
+  const r = normalizePath(root).replace(/\/+$/, '') || '/';
+  const t = normalizePath(target);
+  return r === '/' ? t.startsWith('/') : t === r || t.startsWith(`${r}/`);
+}
+
+/** The nearest directory with `natlang.json` or `package.json`, or undefined when none exists. */
+function findPackageRoot(dir: string, files: SourceFiles): string | undefined {
   for (let current = dir; ; current = files.dirname(current)) {
     if (files.isFile(files.join(current, 'natlang.json')) || files.isFile(files.join(current, 'package.json'))) return current;
-    if (files.dirname(current) === current) return current;
+    if (files.dirname(current) === current) return undefined;
   }
 }
 
-/** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users. */
+/** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */
+function packageRoot(dir: string, files: SourceFiles): string {
+  return findPackageRoot(dir, files) ?? (() => {
+    let current = dir;
+    while (files.dirname(current) !== current) current = files.dirname(current);
+    return current;
+  })();
+}
+
+/** Whether `targetPath` escapes the package or loaded project boundary of `fromPath`. */
+function escapesBoundary(fromPath: string, targetPath: string, files: SourceFiles): boolean {
+  const pkgRoot = findPackageRoot(files.dirname(fromPath), files);
+  if (pkgRoot && !isWithinRoot(pkgRoot, targetPath)) return true;
+  if (files.relative) {
+    const fromRel = files.relative(fromPath).replace(/\\/g, '/');
+    const targetRel = files.relative(targetPath).replace(/\\/g, '/');
+    if (targetRel === '..' || targetRel.startsWith('../')) return true;
+    if (!fromRel.startsWith('/') && targetRel.startsWith('/')) return true;
+  }
+  return false;
+}
+
+function readManifestExports(dir: string, files: SourceFiles, fileName: 'natlang.json' | 'package.json'):
+    { name?: string; exports?: Record<string, unknown> } | undefined {
+  const manifestPath = files.join(dir, fileName);
+  if (!files.isFile(manifestPath)) return undefined;
+  try {
+    const parsed = JSON.parse(files.read(manifestPath)) as { name?: unknown; exports?: unknown };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const exports = parsed.exports && typeof parsed.exports === 'object' && !Array.isArray(parsed.exports)
+      ? parsed.exports as Record<string, unknown> : undefined;
+    return { ...(typeof parsed.name === 'string' ? { name: parsed.name } : {}), ...(exports ? { exports } : {}) };
+  } catch { return undefined; }
+}
+
+function exportTargetString(entry: unknown): string | undefined {
+  if (typeof entry === 'string') return entry;
+  if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+    const record = entry as Record<string, unknown>;
+    for (const key of ['natlang', 'import', 'default'])
+      if (typeof record[key] === 'string') return record[key] as string;
+  }
+  return undefined;
+}
+
+function matchExportTarget(exportsMap: Record<string, unknown>, key: string): string | undefined {
+  if (Object.hasOwn(exportsMap, key)) return exportTargetString(exportsMap[key]);
+  for (const [pattern, rawTarget] of Object.entries(exportsMap)) {
+    const star = pattern.indexOf('*');
+    if (star < 0 || pattern.indexOf('*', star + 1) >= 0) continue;
+    const prefix = pattern.slice(0, star), suffix = pattern.slice(star + 1);
+    if (!key.startsWith(prefix) || !key.endsWith(suffix) || key.length < prefix.length + suffix.length) continue;
+    const target = exportTargetString(rawTarget);
+    if (target) return target.replace('*', key.slice(prefix.length, key.length - suffix.length));
+  }
+  return undefined;
+}
+
+function resolveTargetFile(base: string, files: SourceFiles, extensions: readonly ('nl' | 'ts' | 'js')[]): string | undefined {
+  const allowed = new Set(extensions);
+  if (base.endsWith('.nl')) return allowed.has('nl') && files.isFile(base) ? base : undefined;
+  if (base.endsWith('.ts')) return allowed.has('ts') && files.isFile(base) ? base : undefined;
+  if (base.endsWith('.js')) {
+    const asTs = `${base.slice(0, -3)}.ts`;
+    if (allowed.has('ts') && files.isFile(asTs)) return asTs;
+    return allowed.has('js') && files.isFile(base) ? base : undefined;
+  }
+  for (const ext of extensions) if (files.isFile(`${base}.${ext}`)) return `${base}.${ext}`;
+  return undefined;
+}
+
+function resolvePackageExport(specifier: string, root: string, files: SourceFiles,
+    extensions: readonly ('nl' | 'ts' | 'js')[]): { target?: string; error?: string } {
+  const parts = specifier.split('/');
+  const scoped = specifier.startsWith('@');
+  if (scoped && parts.length < 2) return {};
+  const pkgName = scoped ? `${parts[0]}/${parts[1]}` : parts[0]!;
+  const subpath = (scoped ? parts.length > 2 : parts.length > 1)
+    ? `./${parts.slice(scoped ? 2 : 1).join('/')}` : '.';
+
+  const resolveMapped = (pkgDir: string, mapped: string): { target?: string; error?: string } => {
+    const joined = normalizePath(files.join(pkgDir, ...mapped.split('/')));
+    if (!isWithinRoot(pkgDir, joined)) return { error: `export target ${JSON.stringify(mapped)} escapes its package root` };
+    const target = resolveTargetFile(joined, files, extensions);
+    return target ? { target } : { error: `export target ${JSON.stringify(mapped)} does not exist` };
+  };
+
+  // 1. Current package's natlang.json exports (direct key, self-package name, or ./subpath).
+  const rootManifest = readManifestExports(root, files, 'natlang.json');
+  if (rootManifest?.exports) {
+    const mapped = matchExportTarget(rootManifest.exports, specifier)
+      ?? (rootManifest.name === pkgName ? matchExportTarget(rootManifest.exports, subpath) : undefined)
+      ?? (!scoped ? matchExportTarget(rootManifest.exports, `./${specifier}`) : undefined);
+    if (mapped) return resolveMapped(root, mapped);
+    if (rootManifest.name === pkgName) return { error: `package ${pkgName} does not export ${JSON.stringify(subpath)}` };
+  }
+
+  // 2. Installed packages under node_modules/<pkgName>/natlang.json (or package.json).
+  for (let current = root; ; current = files.dirname(current)) {
+    const pkgDir = files.join(current, 'node_modules', ...pkgName.split('/'));
+    if (files.isDirectory(pkgDir)) {
+      const nlManifest = readManifestExports(pkgDir, files, 'natlang.json');
+      const pkgManifest = nlManifest?.exports ? nlManifest : readManifestExports(pkgDir, files, 'package.json');
+      const exportsMap = nlManifest?.exports ?? pkgManifest?.exports;
+      if (exportsMap) {
+        const mapped = matchExportTarget(exportsMap, subpath);
+        if (mapped) return resolveMapped(pkgDir, mapped);
+        if (nlManifest) return { error: `package ${pkgName} does not export ${JSON.stringify(subpath)}` };
+      } else if (nlManifest) {
+        const rel = subpath === '.' ? 'index' : subpath.slice(2);
+        return resolveMapped(pkgDir, rel);
+      }
+      break;
+    }
+    if (files.dirname(current) === current) break;
+  }
+  return {};
+}
+
+function resolveUsesTarget(specifier: string, fromPath: string, root: string, files: SourceFiles): string {
+  if (specifier.startsWith('./') || specifier.startsWith('../')) {
+    const base = normalizePath(files.join(files.dirname(fromPath), ...specifier.split('/')));
+    if (escapesBoundary(fromPath, base, files))
+      throw new NatlangSourceError(fromPath, `uses ${JSON.stringify(specifier)}, which escapes the package root`);
+    const target = resolveTargetFile(base, files, ['nl', 'ts', 'js']);
+    if (!target) throw new NatlangSourceError(fromPath, `uses ${specifier}, but no matching .nl, .ts or .js file exists at ${specifier}`);
+    return target;
+  }
+  const exported = resolvePackageExport(specifier, root, files, ['nl', 'ts', 'js']);
+  if (exported.error) throw new NatlangSourceError(fromPath, `uses ${specifier}: ${exported.error}`);
+  if (exported.target) return exported.target;
+  const base = normalizePath(files.join(root, ...specifier.split('/')));
+  const target = resolveTargetFile(base, files, ['nl', 'ts', 'js']);
+  if (!target) throw new NatlangSourceError(fromPath, `uses ${specifier}, but the package has no ${specifier}.nl or ${specifier}.ts`);
+  return target;
+}
+
+/** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users unless recursive. */
 const ATTACHING: string[] = [];
-/** Functions of callable folders whose load is still running, by file path: a `uses` naming one shares that record. */
+/** Records currently on the `ATTACHING` stack, by normalized path. */
+const ATTACHING_RECORDS = new Map<string, NatlangRecord>();
+/** Functions of callable folders whose load is still running, by normalized file path: a `uses` naming one shares that record. */
 const LOADING = new Map<string, NatlangRecord>();
-/** The `uses` edges between records of folders being loaded, by file path, to find a cycle among siblings. */
+/** The `uses` edges between records of folders being loaded, by normalized file path, to find a cycle among siblings. */
 const LOADING_EDGES = new Map<string, Set<string>>();
-const reaches = (from: string, to: string, seen = new Set<string>()): boolean => {
-  if (from === to) return true;
-  if (seen.has(from)) return false;
+const findEdgePath = (from: string, to: string, seen = new Set<string>()): string[] | undefined => {
+  if (from === to) return [from];
+  if (seen.has(from)) return undefined;
   seen.add(from);
-  return [...LOADING_EDGES.get(from) ?? []].some(next => reaches(next, to, seen));
+  for (const next of LOADING_EDGES.get(from) ?? []) {
+    const rest = findEdgePath(next, to, seen);
+    if (rest) return [from, ...rest];
+  }
+  return undefined;
 };
+const isRecursiveRecord = (record: NatlangRecord | undefined): boolean =>
+  Boolean(record && (record.recursive === 'structural' || record.measure));
+const acyclicCycleTarget = (target: NatlangRecord): NatlangRecord => ({ ...target, codebase: {} });
 const cycleMessage = (item: string, path: string[]) =>
-  `uses ${item}, which leads back to this function (${path.join(' -> ')}); remove one of these uses so that a function cannot reach itself`;
+  `uses ${item}, which leads back to this function (${path.join(' -> ')}); remove one of these uses so that a function cannot reach itself, or declare recursive: structural or measure:`;
 
 /**
- * Add the items `record.uses` names to its codebase under their base names: `harness/cut` is `<root>/harness/cut.nl`,
- * or `cut.ts`, loaded with its own companion folder. A used item counts as part of the user's callable context.
+ * Add the items `record.uses` / `record.usesMap` names to its codebase under their aliases (or base names in list form).
+ * Supports package-root paths (`harness/cut`), relative specifiers (`./`, `../`), and `natlang.json` package exports.
+ * Rejects cyclic `uses:` chains with the cycle path unless the `.nl` declares `recursive: structural` or `measure:`.
  */
 function attachUses(record: NatlangRecord, path: string, files: SourceFiles): void {
-  if (!record.uses?.length || files === PATH_ONLY) return;
+  const usesMap = record.usesMap ?? (record.uses?.length
+    ? Object.fromEntries(record.uses.map(item => [item.slice(item.lastIndexOf('/') + 1).replace(/\.(?:nl|ts|js)$/, ''), item]))
+    : undefined);
+  if (!usesMap || !Object.keys(usesMap).length || files === PATH_ONLY) return;
   const root = packageRoot(files.dirname(path), files);
-  for (const item of record.uses) {
-    const base = files.join(root, ...item.split('/'));
-    const name = item.slice(item.lastIndexOf('/') + 1);
-    if (Object.hasOwn(record.codebase, name))
-      throw new NatlangSourceError(path, `uses ${item}, but its folder already has an item named ${name}; rename one of them`);
-    const target = files.isFile(`${base}.nl`) ? `${base}.nl` : files.isFile(`${base}.ts`) ? `${base}.ts` : undefined;
-    if (!target) throw new NatlangSourceError(path, `uses ${item}, but the package has no ${item}.nl or ${item}.ts`);
-    const base0 = (file: string) => files.relative?.(file) ?? file;
-    if (ATTACHING.includes(target) || target === path)
-      throw new NatlangSourceError(path, cycleMessage(item, [...ATTACHING.slice(Math.max(0, ATTACHING.indexOf(target))), target].map(base0)));
-    // A sibling or relative in a folder this load is still reading is that very record, not a second copy of its owner.
-    const live = LOADING.get(target);
-    if (live) {
-      if (reaches(target, path)) throw new NatlangSourceError(path, cycleMessage(item, [path, target, path].map(base0)));
-      LOADING_EDGES.set(path, (LOADING_EDGES.get(path) ?? new Set()).add(target));
-      record.codebase[name] = live;
-      continue;
-    }
-    ATTACHING.push(target);
-    try {
-      if (target.endsWith('.nl')) record.codebase[name] = loadNamedFunction(target, files);
-      else {
-        const dir = files.dirname(target);
-        const module = parseModule(target, files.read(target), packageTypes(dir, files), files);
-        module.codebase = loadCallableFolder(files.join(dir, name), files, module.types);
-        record.codebase[name] = module;
+  const normPath = normalizePath(path);
+  const base0 = (file: string) => files.relative?.(file) ?? file;
+  const pushedSelf = !ATTACHING.includes(normPath);
+  if (pushedSelf) ATTACHING.push(normPath);
+  const prevRecord = ATTACHING_RECORDS.get(normPath);
+  ATTACHING_RECORDS.set(normPath, record);
+  try {
+    for (const [name, item] of Object.entries(usesMap)) {
+      if (Object.hasOwn(record.codebase, name))
+        throw new NatlangSourceError(path, `uses ${item}, but its folder already has an item named ${name}; rename one of them`);
+      const target = resolveUsesTarget(item, path, root, files);
+      const normTarget = normalizePath(target);
+      if (normTarget === normPath || ATTACHING.includes(normTarget)) {
+        const targetRecord = normTarget === normPath ? record : ATTACHING_RECORDS.get(normTarget);
+        if (isRecursiveRecord(record) || isRecursiveRecord(targetRecord)) {
+          record.codebase[name] = acyclicCycleTarget(targetRecord ?? record);
+          continue;
+        }
+        const at = ATTACHING.indexOf(normTarget);
+        const chain = at >= 0 ? [...ATTACHING.slice(at), normTarget] : [normPath, normTarget];
+        throw new NatlangSourceError(path, cycleMessage(item, chain.map(base0)));
       }
-    } finally { ATTACHING.pop(); }
+      // A sibling or relative in a folder this load is still reading is that very record, not a second copy of its owner.
+      const live = LOADING.get(normTarget);
+      if (live) {
+        const backPath = findEdgePath(normTarget, normPath);
+        if (backPath) {
+          if (isRecursiveRecord(record) || isRecursiveRecord(live)) {
+            record.codebase[name] = acyclicCycleTarget(live);
+            continue;
+          }
+          throw new NatlangSourceError(path, cycleMessage(item, [normPath, ...backPath].map(base0)));
+        }
+        LOADING_EDGES.set(normPath, (LOADING_EDGES.get(normPath) ?? new Set()).add(normTarget));
+        record.codebase[name] = live;
+        continue;
+      }
+      ATTACHING.push(normTarget);
+      try {
+        if (target.endsWith('.nl')) record.codebase[name] = loadNamedFunction(target, files);
+        else {
+          const dir = files.dirname(target);
+          const stem = files.basename(target, files.extname(target));
+          const module = parseModule(target, files.read(target), packageTypes(dir, files), files,
+            { allowUntypedExports: target.endsWith('.js') });
+          if (target.endsWith('.ts')) module.codebase = loadCallableFolder(files.join(dir, stem), files, module.types);
+          attachModuleImports(module, target, {}, files);
+          record.codebase[name] = module;
+        }
+      } finally { ATTACHING.pop(); }
+    }
+  } finally {
+    if (pushedSelf) ATTACHING.pop();
+    if (prevRecord) ATTACHING_RECORDS.set(normPath, prevRecord);
+    else ATTACHING_RECORDS.delete(normPath);
   }
 }
 
-function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string): ExportRecord {
+const RUNTIME_OR_BUILTIN_IMPORT = /^(?:natlang:|@natlang\/(?:node|browser|core)(?:\/|$)|__natlang__)/;
+const SUPPORTED_RELATIVE_EXT = /\.(?:ts|js|nl)$/;
+const HAS_EXTENSION = /\/[^/]+\.[A-Za-z0-9]+$/;
+
+function siblingHasSpecifier(specifier: string, siblings: Record<string, ItemRecord>): boolean {
+  if (!specifier.startsWith('./')) return false;
+  const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');
+  let scope: Record<string, ItemRecord> = siblings;
+  for (const part of parts) {
+    const item = scope[part];
+    if (!item) return false;
+    scope = item.codebase;
+  }
+  return true;
+}
+
+/**
+ * Resolve package-relative `.ts`/`.js`/`.nl` imports and `natlang.json` package exports for a callable-folder module.
+ * Enforces the project-root boundary and the same finite-iteration policy (`parseModule`) on every imported module.
+ */
+function attachModuleImports(record: ModuleRecord, path: string, siblings: Record<string, ItemRecord>,
+    files: SourceFiles, seen = new Map<string, ModuleRecord>()): void {
+  if (files === PATH_ONLY || !record.imports.length) return;
+  const normSelf = normalizePath(path);
+  seen.set(normSelf, record);
+  const root = packageRoot(files.dirname(path), files);
+  const resolved: Record<string, ItemRecord> = {};
+  for (const specifier of record.imports) {
+    if (RUNTIME_OR_BUILTIN_IMPORT.test(specifier)) continue;
+    if (specifier.startsWith('./') || specifier.startsWith('../')) {
+      if (specifier.startsWith('./') && siblingHasSpecifier(specifier, siblings)) continue;
+      // Only handle extensionless or .ts/.js/.nl imports; other extensions (such as .mjs) stay rejected by modules.ts.
+      if (HAS_EXTENSION.test(specifier) && !SUPPORTED_RELATIVE_EXT.test(specifier)) continue;
+      const base = normalizePath(files.join(files.dirname(path), ...specifier.split('/')));
+      if (escapesBoundary(path, base, files))
+        throw new NatlangSourceError(path, `cannot import ${JSON.stringify(specifier)}: import escapes the project root`);
+      const target = resolveTargetFile(base, files, ['ts', 'js', 'nl']);
+      if (!target) continue;
+      const normTarget = normalizePath(target);
+      if (target.endsWith('.nl')) {
+        resolved[specifier] = loadNamedFunction(target, files);
+      } else {
+        const existing = seen.get(normTarget);
+        if (existing) { resolved[specifier] = existing; continue; }
+        const dir = files.dirname(target);
+        const mod = parseModule(target, files.read(target), packageTypes(dir, files), files,
+          { allowUntypedExports: target.endsWith('.js') });
+        if (target.endsWith('.ts')) {
+          const stem = files.basename(target, '.ts');
+          mod.codebase = loadCallableFolder(files.join(dir, stem), files, mod.types);
+        }
+        attachModuleImports(mod, target, {}, files, seen);
+        registerFileRecords(mod);
+        resolved[specifier] = mod;
+      }
+      continue;
+    }
+    if (!specifier.startsWith('/')) {
+      const exported = resolvePackageExport(specifier, root, files, ['ts', 'js', 'nl']);
+      if (exported.target) {
+        const target = exported.target;
+        const normTarget = normalizePath(target);
+        if (target.endsWith('.nl')) {
+          resolved[specifier] = loadNamedFunction(target, files);
+        } else {
+          const existing = seen.get(normTarget);
+          if (existing) { resolved[specifier] = existing; continue; }
+          const dir = files.dirname(target);
+          const mod = parseModule(target, files.read(target), packageTypes(dir, files), files,
+            { allowUntypedExports: target.endsWith('.js') });
+          if (target.endsWith('.ts')) {
+            const stem = files.basename(target, '.ts');
+            mod.codebase = loadCallableFolder(files.join(dir, stem), files, mod.types);
+          }
+          attachModuleImports(mod, target, {}, files, seen);
+          registerFileRecords(mod);
+          resolved[specifier] = mod;
+        }
+      }
+    }
+  }
+  if (Object.keys(resolved).length) MODULE_IMPORTS.set(record, resolved);
+}
+
+function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string,
+    allowUntyped = false): ExportRecord {
   const args: Record<string, string> = {};
   for (const parameter of node.parameters) {
-    if (!ts.isIdentifier(parameter.name) || !parameter.type || parameter.dotDotDotToken)
+    if (!ts.isIdentifier(parameter.name) || (!parameter.type && !allowUntyped) || parameter.dotDotDotToken)
       throw new NatlangSourceError(path, `${label}: parameters need names and explicit types`);
-    args[parameter.name.text + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type.getText(file);
+    args[parameter.name.text + (parameter.questionToken || parameter.initializer ? '?' : '')] = parameter.type ? parameter.type.getText(file) : 'unknown';
   }
-  if (!node.type) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
-  let returns = node.type.getText(file);
-  const promised = ts.isTypeReferenceNode(node.type) && ts.isIdentifier(node.type.typeName) &&
+  if (!node.type && !allowUntyped) throw new NatlangSourceError(path, `${label}: an exported function needs an explicit return type`);
+  let returns = node.type ? node.type.getText(file) : 'unknown';
+  const promised = !!node.type && ts.isTypeReferenceNode(node.type) && ts.isIdentifier(node.type.typeName) &&
     node.type.typeName.text === 'Promise' && node.type.typeArguments?.length === 1;
-  if (promised) returns = node.type.typeArguments![0]!.getText(file);
+  if (promised) returns = node.type!.typeArguments![0]!.getText(file);
   const isAsync = promised || !!ts.getModifiers(node as ts.FunctionDeclaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
   const doc = docComment(node);
   return { kind: 'function', args, returns, async: isAsync, ...(doc ? { doc } : {}) };
@@ -538,9 +880,11 @@ function declaredTypes(file: ts.SourceFile): { types: Record<string, string>; de
   return { types, declarations };
 }
 
-/** Parse a TypeScript module in a callable folder: its exports, imports, and type aliases. */
-export function parseModule(path: string, text: string, inherited: Record<string, string>, files: SourceFiles): ModuleRecord {
-  const file = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+/** Parse a TypeScript (or constrained JavaScript) module in a callable folder: its exports, imports, and type aliases. */
+export function parseModule(path: string, text: string, inherited: Record<string, string>, files: SourceFiles,
+    options: { allowUntypedExports?: boolean } = {}): ModuleRecord {
+  const allowUntyped = options.allowUntypedExports === true;
+  const file = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, path.endsWith('.js') ? ts.ScriptKind.JS : ts.ScriptKind.TS);
   const errors = (file as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
   if (errors.length) throw new NatlangSourceError(path, errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; '));
   const policy = checkConstrainedSource(file);
@@ -578,11 +922,11 @@ export function parseModule(path: string, text: string, inherited: Record<string
     return;
   };
   const describe = (name: string, node: ts.Node): ExportRecord => {
-    if (ts.isFunctionDeclaration(node)) return functionRecord(path, node, file, name);
+    if (ts.isFunctionDeclaration(node)) return functionRecord(path, node, file, name, allowUntyped);
     if (ts.isVariableDeclaration(node)) {
       const initializer = node.initializer;
       if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)))
-        return functionRecord(path, initializer, file, name);
+        return functionRecord(path, initializer, file, name, allowUntyped);
       const type = node.type ? node.type.getText(file) : initializer ? literalType(initializer) : undefined;
       return { kind: 'value', ...(type ? { type } : {}) };
     }
@@ -614,7 +958,7 @@ export function parseModule(path: string, text: string, inherited: Record<string
       throw new NatlangSourceError(path, 're-exports from other modules are not supported; import and export explicitly');
   }
   for (const name of Object.keys(exports)) if (name !== 'default') checkName(path, name);
-  const name = files.basename(path, '.ts');
+  const name = files.basename(path, files.extname(path));
   checkName(path, name);
   const declared = declaredTypes(file);
   const types = { ...inherited, ...declared.types, ...readTypeAliases(text) };
@@ -641,7 +985,7 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
   const add = (name: string, record: ItemRecord, path: string) => {
     if (Object.hasOwn(items, name)) throw new NatlangSourceError(path, `two items in ${dir} are named ${JSON.stringify(name)}`);
     items[name] = record;
-    if (record.kind === 'natlang' && files !== PATH_ONLY) { LOADING.set(path, record); mine.push(path); }
+    if (record.kind === 'natlang' && files !== PATH_ONLY) { const norm = normalizePath(path); LOADING.set(norm, record); mine.push(norm); }
   };
   try {
   for (const entry of entries) {
@@ -667,8 +1011,10 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
     } else if (Object.keys(children).length)
       add(entry, { kind: 'namespace', name: entry, source: files.relative?.(path) ?? path, codebase: children }, path);
   }
-  for (const [name, item] of Object.entries(items))
-    if (item.kind === 'natlang' && item.uses) attachUses(item, files.join(dir, `${name}.nl`), files);
+  for (const [name, item] of Object.entries(items)) {
+    if (item.kind === 'natlang' && (item.uses || item.usesMap)) attachUses(item, files.join(dir, `${name}.nl`), files);
+    else if (item.kind === 'module') attachModuleImports(item, files.join(dir, `${name}.ts`), items, files);
+  }
   for (const item of Object.values(items)) if (item.kind === 'natlang') checkProtect(item, item.source);
   if (files !== PATH_ONLY) registerFileRecords(items);
   return items;

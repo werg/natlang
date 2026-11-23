@@ -44,6 +44,7 @@ export class UntrustedRegistry {
         case 'refined': walk(item, resolved.base, depth + 1); return;
         case 'union': for (const member of resolved.members) walk(item, member, depth + 1); return;
         case 'list': if (Array.isArray(item)) for (const child of item) walk(child, resolved.element, depth + 1); return;
+        case 'tuple': if (Array.isArray(item)) resolved.elements.forEach((el, i) => walk(item[i], el, depth + 1)); return;
         case 'dict': if (typeof item === 'object') for (const child of Object.values(item)) walk(child, resolved.element, depth + 1); return;
         case 'record':
           if (typeof item === 'object' && !Array.isArray(item))
@@ -89,6 +90,7 @@ export function containsUntrusted(type: Type, env: TypeEnv, seen = new Set<strin
   switch (type.kind) {
     case 'record': return type.fields.some(field => containsUntrusted(field.type, env, seen));
     case 'list': case 'dict': return containsUntrusted(type.element, env, seen);
+    case 'tuple': return type.elements.some(element => containsUntrusted(element, env, seen));
     case 'refined': return containsUntrusted(type.base, env, seen);
     case 'union': return type.members.some(member => containsUntrusted(member, env, seen));
     default: return false;
