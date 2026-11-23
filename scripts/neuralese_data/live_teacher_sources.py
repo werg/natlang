@@ -77,17 +77,186 @@ def validate_reassessment_check_roles(proof, original_checks, root):
         raise ValueError('reassessment roles must partition the exact original check set')
 
 
+def validate_return_contribution(item, proof, records):
+    """Recheck an authored producer projection and its complete native candidate inventory."""
+    c = item.get('contribution')
+    if c is None:
+        return None
+    roles = proof.get('outcomeDimensions') or {}
+    failed = {**((roles.get('returnedValue') or {}).get('checks') or {}),
+              **((roles.get('incidentalValues') or {}).get('checks') or {})}
+    valid_path = lambda path: isinstance(path, list) and all(
+        isinstance(key, str) or type(key) is int and 0 <= key <= 9007199254740991 for key in path)
+    if (not isinstance(c, dict) or c.get('schema') != 'natlang.application-return-contribution/1' or
+            c.get('kind') not in ('root', 'forwarded', 'projection', 'uncertain-projection', 'incidental-child') or
+            not all(isinstance(c.get(key), str) for key in ('root_call_id', 'producer_call_id', 'root_value_json')) or
+            hashlib.sha256(c['root_value_json'].encode()).hexdigest() != c.get('root_sha256') or
+            not all(valid_path(c.get(key)) for key in ('root_path', 'producer_path')) or
+            not isinstance(c.get('checks'), list) or not c['checks'] or
+            any(not isinstance(check, str) or failed.get(check) is not False for check in c['checks']) or
+            len(c['checks']) != len(set(c['checks'])) or
+            not isinstance(c.get('lineage'), list) or not c['lineage'] or
+            any(not isinstance(key, str) for key in c['lineage']) or len(c['lineage']) != len(set(c['lineage']))):
+        raise ValueError('invalid authored application return contribution')
+    try:
+        root_value, producer_value = json.loads(c['root_value_json']), json.loads(item['valueJson'])
+    except (TypeError, ValueError) as error:
+        raise ValueError('invalid application return contribution JSON') from error
+    if not same_json_value(root_value, proof.get('actualResult')):
+        raise ValueError('application return contribution differs from actual application result')
+    root, producer = records.get(c['root_call_id']), records.get(c['producer_call_id'])
+    roots = [key for key, row in records.items() if row.get('parent_call_id') is None]
+    def matches(record, text, digest):
+        output = (record or {}).get('output') or {}
+        return ((record or {}).get('outcome') == 'done' and output.get('complete') is True and
+                output.get('hash') == digest and output.get('bytes') == len(text.encode()))
+    if (roots != [c['root_call_id']] or not root or not producer or
+            not matches(root, c['root_value_json'], c['root_sha256']) or
+            not matches(producer, item['valueJson'], item['sha256']) or
+            any((producer.get('definition') or {}).get(key) != item['definition'].get(key) for key in ('name', 'source')) or
+            c['lineage'][0] != root.get('call_id') or c['lineage'][-1] != producer.get('call_id')):
+        raise ValueError('application return contribution differs from actual captured outputs')
+    def at(value, path):
+        for key in path:
+            if isinstance(value, dict) and isinstance(key, str) and key in value:
+                value = value[key]
+            elif isinstance(value, list) and type(key) is int and 0 <= key < len(value):
+                value = value[key]
+            else:
+                return False, None
+        return True, value
+    def same_projection(value):
+        left, right = at(root_value, c['root_path']), at(value, c['producer_path'])
+        return left[0] and right[0] and same_json_value(left[1], right[1])
+    if c['kind'] == 'root':
+        if producer is not root or len(c['lineage']) != 1 or c['root_path'] or c['producer_path']:
+            raise ValueError('root contribution must identify its whole actual root return')
+        if not same_projection(producer_value):
+            raise ValueError('application return projection differs from actual producer value')
+        return c['producer_call_id']
+    # An empty JSON reply object is present in JavaScript too; do not coerce it to no reply.
+    reply_present = lambda turn: isinstance(turn.get('reply'), (dict, list)) or bool(turn.get('reply'))
+    def sampled(record):
+        execution, cost = record.get('executor') or {}, record.get('cost') or {}
+        return (record.get('outcome') == 'done' and execution.get('kind') in ('agent', 'crisp-agent') and
+                bool(execution.get('model_id')) and isinstance(cost.get('model_requests'), (int, float)) and
+                cost['model_requests'] > 0 and str((record.get('definition') or {}).get('source') or '').endswith('.nl') and
+                any(turn.get('kind') == 'generation' and reply_present(turn) and not turn.get('error')
+                    for turn in record.get('model_turns') or []))
+    def chain(record, crisp=True):
+        path, seen = [], set()
+        while record:
+            key = record.get('call_id')
+            if key in seen:
+                return None
+            seen.add(key)
+            path.insert(0, key)
+            if key == root['call_id']:
+                return path
+            record = records.get(record.get('parent_call_id'))
+            if not record or crisp and ((record.get('executor') or {}).get('kind') != 'crisp' or record.get('outcome') != 'done'):
+                return None
+        return None
+    if c['kind'] == 'incidental-child':
+        incidental = (roles.get('incidentalValues') or {}).get('checks') or {}
+        if (producer is root or not sampled(producer) or chain(producer, crisp=False) != c['lineage'] or
+                c['root_path'] or c['producer_path'] or any(incidental.get(name) is not False for name in c['checks'])):
+            raise ValueError('incidental child hold needs an actual sampled child and independently failed incidental checks')
+        return c['producer_call_id']
+    if producer is root or not sampled(producer) or chain(producer) != c['lineage']:
+        raise ValueError('application return contribution needs a sampled NL producer with actual crisp ancestry')
+    if c['kind'] == 'forwarded':
+        if c['root_path'] or c['producer_path'] or not same_projection(producer_value):
+            raise ValueError('forwarding contribution cannot project values')
+        for parent_id in c['lineage'][:-1]:
+            parent = records[parent_id]
+            if (sum(row.get('parent_call_id') == parent_id for row in records.values()) != 1 or
+                    not matches(parent, item['valueJson'], item['sha256'])):
+                raise ValueError('forwarding contribution must preserve the sole child whole return')
+        return c['producer_call_id']
+    suffix, candidates = c.get('producer_source_suffix'), c.get('candidates')
+    if not isinstance(suffix, str) or not suffix or not isinstance(candidates, list):
+        raise ValueError('projected return contribution needs its authored source and full candidate inventory')
+    eligible = {key for key, record in records.items() if sampled(record) and key != root['call_id'] and
+                str((record.get('definition') or {}).get('source') or '').endswith(suffix) and chain(record)}
+    supplied = [candidate.get('call_id') for candidate in candidates if isinstance(candidate, dict)]
+    if len(supplied) != len(candidates) or len(set(supplied)) != len(supplied) or set(supplied) != eligible:
+        raise ValueError('application return candidate inventory differs from actual sampled source calls')
+    matching = set()
+    for candidate in candidates:
+        text, digest = candidate.get('value_json'), candidate.get('sha256')
+        if (not isinstance(text, str) or hashlib.sha256(text.encode()).hexdigest() != digest or
+                not matches(records[candidate['call_id']], text, digest)):
+            raise ValueError('application return candidate differs from actual captured output')
+        try:
+            value = json.loads(text)
+        except (TypeError, ValueError) as error:
+            raise ValueError('invalid application return candidate JSON') from error
+        if same_projection(value):
+            matching.add(candidate['call_id'])
+    if c['kind'] == 'projection':
+        if matching != {c['producer_call_id']} or c.get('uncertainty') is not None:
+            raise ValueError('projected return contribution does not identify a unique actual producer')
+    elif c.get('uncertainty') == 'ambiguous-actual-producer':
+        if len(matching) < 2 or c['producer_call_id'] not in matching:
+            raise ValueError('uncertain return contribution does not cover ambiguous actual producers')
+    elif c.get('uncertainty') == 'no-verified-actual-producer':
+        if matching or c['producer_call_id'] not in eligible:
+            raise ValueError('uncertain return contribution contradicts actual projection candidates')
+    else:
+        raise ValueError('uncertain return contribution needs its actual ambiguity reason')
+    return c['producer_call_id']
+
+
+def validate_uncertain_return_groups(selectors, records):
+    """An uncertainty hold cannot omit a possible sampled final-return generation."""
+    groups = {}
+    for selector in selectors:
+        c = selector.get('contribution') or {}
+        if c.get('kind') != 'uncertain-projection':
+            continue
+        key = json.dumps({name: c[name] for name in ('root_call_id', 'producer_source_suffix', 'root_path',
+                         'producer_path', 'checks', 'candidates', 'uncertainty')}, sort_keys=True)
+        group = groups.setdefault(key, {'selected': set(), 'expected': set()})
+        group['selected'].add(c['producer_call_id'])
+        root = json.loads(c['root_value_json'])
+        def at(value, path):
+            for part in path:
+                if isinstance(value, dict) and isinstance(part, str) and part in value:
+                    value = value[part]
+                elif isinstance(value, list) and type(part) is int and 0 <= part < len(value):
+                    value = value[part]
+                else:
+                    return False, None
+            return True, value
+        root_part = at(root, c['root_path'])
+        for candidate in c['candidates']:
+            part = at(json.loads(candidate['value_json']), c['producer_path'])
+            if c['uncertainty'] == 'no-verified-actual-producer' or (root_part[0] and part[0] and same_json_value(root_part[1], part[1])):
+                group['expected'].add(candidate['call_id'])
+    if any(group['selected'] != group['expected'] for group in groups.values()):
+        raise ValueError('uncertain return hold must cover every possible actual producer')
+
+
 def declared_return_exclusions(proofs, records):
     """Bind optional wrong returns to original function identity and value bytes."""
     selectors = []
     def contains(value, wanted):
         return same_json_value(value, wanted) or (isinstance(value, dict) and any(contains(item, wanted) for item in value.values())) or (isinstance(value, list) and any(contains(item, wanted) for item in value))
     for proof in proofs:
-        incidental = (proof.get('outcomeDimensions') or {}).get('incidentalValues') or {}
-        if incidental.get('passed') is not False:
+        dimensions = proof.get('outcomeDimensions') or {}
+        incidental, returned = dimensions.get('incidentalValues') or {}, dimensions.get('returnedValue') or {}
+        if incidental.get('passed') is not False and returned.get('passed') is not False:
             continue
-        values = incidental.get('incorrectReturns')
-        if not isinstance(values, list):
+        values = []
+        for role in (incidental, returned):
+            selected = role.get('incorrectReturns', [])
+            if not isinstance(selected, list):
+                raise ValueError('incorrect incidental returns need exact original value bindings')
+            for item in selected:
+                if item not in values:
+                    values.append(item)
+        if incidental.get('passed') is False and 'incorrectReturns' not in incidental and not values:
             raise ValueError('incorrect incidental returns need exact original value bindings')
         for item in values:
             definition, text = item.get('definition'), item.get('valueJson')
@@ -96,12 +265,17 @@ def declared_return_exclusions(proofs, records):
                 raise ValueError('incorrect return value identity/hash differs')
             try: value = json.loads(text)
             except (TypeError, ValueError) as error: raise ValueError('invalid incorrect return JSON') from error
-            if not contains(proof.get('actualResult'), value):
+            if item.get('contribution') is not None:
+                validate_return_contribution(item, proof, records)
+            elif not contains(proof.get('actualResult'), value):
                 raise ValueError('incorrect return value is outside the actual application result')
             selectors.append(item)
+        validate_uncertain_return_groups(values, records)
     excluded, matched = {}, set()
     for call_id, record in records.items():
         for index, selector in enumerate(selectors):
+            if selector.get('contribution') and call_id != selector['contribution']['producer_call_id']:
+                continue
             definition, output = record.get('definition') or {}, record.get('output') or {}
             if (definition.get('name') == selector['definition']['name'] and definition.get('source') == selector['definition']['source'] and
                     output.get('complete') is True and output.get('hash') == selector['sha256'] and output.get('bytes') == len(selector['valueJson'].encode('utf-8'))):
@@ -156,6 +330,10 @@ def verify_entry(interaction, root, *, partial=False):
         if (not isinstance(source, str) or not isinstance(program_root, str) or
                 str(Path(program_root) / source) != entry['program']):
             raise ValueError('application entry path differs from the recorded source')
+    if entry['program'].endswith('.ts') and (
+            (root.get('executor') or {}).get('kind') != 'crisp' or
+            root.get('definition', {}).get('id') != 'ts:' + str(root.get('definition', {}).get('source')) + '#default'):
+        raise ValueError('application entry does not bind its actual TS default export')
     inputs = root.get('inputs') or {}
     arguments = entry['arguments']
     if (root.get('definition', {}).get('name') != entry['callable'] or
@@ -187,7 +365,7 @@ def verify_entry(interaction, root, *, partial=False):
             raise ValueError('open goal application input differs from the actual root invocation')
 
 
-def verify_application_return(binding, records, roots):
+def verify_application_return(binding, records, roots, entry=None):
     """Validate a selected domain value against the actual authored return bytes."""
     if not isinstance(binding, dict) or binding.get('root_call_id') not in roots or len(roots) != 1:
         raise ValueError('application return does not identify its actual authored root')
@@ -202,6 +380,17 @@ def verify_application_return(binding, records, roots):
     encoded = text.encode('utf-8')
     if output.get('complete') is not True or output.get('bytes') != len(encoded) or output.get('hash') != hashlib.sha256(encoded).hexdigest():
         raise ValueError('application return differs from original root output')
+    if binding.get('kind') == 'void':
+        record = records[binding['root_call_id']]
+        definition = record.get('definition') or {}
+        if (not isinstance(entry, dict) or entry.get('resultType') != 'void' or
+                not str(entry.get('program', '')).endswith('.ts') or definition.get('returns') != 'void' or
+                (record.get('executor') or {}).get('kind') != 'crisp' or record.get('outcome') != 'done' or
+                text != 'null' or 'selectedResult' not in binding or binding['selectedResult'] is not None):
+            raise ValueError('void application return does not bind an actual completed TS void contract')
+        return
+    if binding.get('kind') not in (None, 'value'):
+        raise ValueError('unknown application return kind')
     selected = binding.get('selectedResult')
     results = value.get('results') if isinstance(value, dict) else None
     if ('selectedResult' not in binding or not (same_json_value(value, selected) or
@@ -524,9 +713,13 @@ def load_episode(path):
     if (not isinstance(attested_roots, list) or not attested_roots or
             len(attested_roots) != len(set(attested_roots)) or roots != set(attested_roots)):
         raise ValueError('live call roots differ from independently verified roots')
-    for binding in application_returns:
-        verify_application_return(binding, records, roots)
     interaction = spec.get('interaction')
+    entry = (interaction or {}).get('entry')
+    if isinstance(entry, dict) and entry.get('resultType') == 'void' and (
+            len(application_returns) != 1 or application_returns[0].get('kind') != 'void'):
+        raise ValueError('void application entry needs its explicit actual return witness')
+    for binding in application_returns:
+        verify_application_return(binding, records, roots, entry)
     if interaction != verification.get('interaction'):
         raise ValueError('live task interaction differs from independent verification')
     if interaction is not None:

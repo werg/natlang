@@ -1,0 +1,155 @@
+{
+  "id": "natlang-rl-task-supply-20261123hfb",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-task-supply-20261123hfb",
+  "include": [
+    "cases.jsonl",
+    "selection.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 task JSONL (cases.jsonl) + selection.json",
+  "rows": 242,
+  "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
+  "protected": false,
+  "note": "authored workers 440-459: 242 train rows",
+  "inputs": [
+    {
+      "id": "natlang-rl-authoring-admitted",
+      "path": "data_hdd:natlang-rl-authoring/admitted/cases.jsonl",
+      "sha256": "d1e40748dbebf902ad9a861ff5b9f331bb24fc67e878307b294a20681c8d9ce3"
+    },
+    {
+      "id": "natlang-rl-authoring-admitted",
+      "path": "data_hdd:natlang-rl-authoring/admitted/admissions.jsonl",
+      "sha256": "ce395640b8943cd024b4b19e1f2e445e4959e2cc4d6a8e4a0f54e4b8ab91ba45"
+    },
+    {
+      "id": "memetic-program-source-20261105-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/memetic-program-source-20261105-typed/cases.jsonl",
+      "sha256": "dd7a5c8261ad516869db25ca80901eb3c36a93f2ef0030ce302dbd3bd4a5a619"
+    },
+    {
+      "id": "natlang-rl-bgkit-kr-20261103",
+      "path": "data_hdd:natlang-rl-bgkit-kr-20261103/natlang-rl-bgkit-kr-20261103/cases.jsonl",
+      "sha256": "7e047e956a0f305f34704c854dc409a91b868a4cd552e0a43e6fb50809e3e8b3"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261117-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261117-typed/cases.jsonl",
+      "sha256": "a9c56a5a62dc11ffaa7805b53c5bff4e42001fac67476995eba933f97cf9c2e7"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118-typed/cases.jsonl",
+      "sha256": "1a8f3d6dcc3893ddd5d2ec3429ff249f80ae6cb4494e31751e148fd8f53df38f"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118b-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118b-typed/cases.jsonl",
+      "sha256": "47dea38e9ebb59960112d15cb42fead7f3fcc1afd45b80f55550803688cc2301"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118c-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118c-typed/cases.jsonl",
+      "sha256": "b7c6b589dcfb3d1e2e1774fb391c65a51d9ef283dc3b90e317a00a0d2e43af76"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118d-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118d-typed/cases.jsonl",
+      "sha256": "72535dc99abbbaf9aa8e05766d61fed35087bedb943c82670489127820177d8a"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118e-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118e-typed/cases.jsonl",
+      "sha256": "d5393ec5df4f532580137afbf1791083020b364d0525c5847aa90a0d00d6209c"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118f-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118f-typed/cases.jsonl",
+      "sha256": "2d0848a936e225b05d1275d78836701bd11870c91f4e12ab96e458b287c8a15a"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261118g-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261118g-typed/cases.jsonl",
+      "sha256": "e7c790331fd6999c2eaf4f363e1ac09a08c7bf4be16e15f1412fedca71f4ec38"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261119-typed/cases.jsonl",
+      "sha256": "7d62a02083441f9789c64ad4bb5dd57a7bb22cd627a1657b81c735f07c1378a8"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119b-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261119b-typed/cases.jsonl",
+      "sha256": "d427838c75bfd714b8222d8eeae94f1eceefb130a9a8a8bc8d3776068b0253ef"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119c-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261119c-typed/cases.jsonl",
+      "sha256": "4b129c9d70eedaf4b579d50fa71ace57fc7b5d1a9fc63c52bfdf8144844a6132"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261119d-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261119d-typed/cases.jsonl",
+      "sha256": "c7dbca4b6158d67c670d34935e0c138a3d519f695b54e4c44788a5b801a603c6"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261120-typed/cases.jsonl",
+      "sha256": "00d90786e11a5348edbaf5d34d7781e75e4cedfd624ddfc8c033dd146ecf3d81"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120b-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261120b-typed/cases.jsonl",
+      "sha256": "c84ec4eb92149a340bd5378e3353b94a1d2834e0f8ce5521c69b5150612900ab"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261120c-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261120c-typed/cases.jsonl",
+      "sha256": "43be289f1227860dc33266953fc2ae885f076edcf7501dbdb21df2b7124bb08d"
+    },
+    {
+      "id": "natlang-rl-git-history-20261120",
+      "path": "data_hdd:natlang-rl-git-history-20261120/cases.jsonl",
+      "sha256": "5a51b45a2075a05b42517c4ae5d0c5cb8e0e4cbef87029aaa57d38f54663dbb3"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261123sfp1-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261123sfp1-typed/cases.jsonl",
+      "sha256": "03661d7f061f415c7d32b5cce02b083439525e18086562da1d566e1d5eb58946"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261123sfp2-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261123sfp2-typed/cases.jsonl",
+      "sha256": "5fbddf41dc73ffaba241d782b55a6743e31a3e79c12c1cfbf15d24910b49490e"
+    },
+    {
+      "id": "natlang-rl-task-supply-20261123sfp3-typed",
+      "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261123sfp3-typed/cases.jsonl",
+      "sha256": "9c21f16bab5a3c40f28ec24724bd728120dca339ecac04308e669ea7c92ec5d6"
+    }
+  ],
+  "producer": {
+    "script": "build_supply.py",
+    "argv": [
+      "/home/werg/natlang/runs/natlang-rl-task-supply-20261123hfb",
+      "--min-worker",
+      "440",
+      "--max-worker",
+      "459",
+      "--drop-related",
+      "/home/werg/natlang/runs/hfb/drop-related.json"
+    ],
+    "git_commit": "18c0db072eea9f3172f44b8ab347e01d28352bc3",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "59a1f655b7b46cfd30e356dc088c0eac139a2968dd86596da7e06453e646eb91",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 21,
+      "file": "cases.jsonl"
+    }
+  }
+}

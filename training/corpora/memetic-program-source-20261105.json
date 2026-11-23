@@ -8,12 +8,6 @@
   "kind": "rl-tasks",
   "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
   "training_admission": "grpo-task-pool",
-  "roles": {
-    "grpo-pool": {
-      "order": 0,
-      "file": "cases.jsonl"
-    }
-  },
   "license": "derived: composed selection of project-authored, child-note, decision/codebase and bgkit KR tasks; each source keeps its own license provenance",
   "derived_from": [
     "natlang-rl-composed-20261103/pool-spec.json (child-notes, decisions-and-codebase-ops, natlang-rl-authoring/admitted, natlang-rl-bgkit-kr-20261104)"
@@ -22,5 +16,5 @@
     "script": "scripts/rl_tasks/assemble_selection_pool.py (inferred: no receipt was written)",
     "git_commit": null
   },
-  "note": "The largest GRPO task pool (28,733 rows). Registered 2026-11-20 by the data-registry backfill; it had no provenance record at all (TRAINING_DATA_DISCOVERABILITY_20261120.md item 2)."
+  "note": "The largest GRPO task pool (28,733 rows). Registered 2026-11-20 by the data-registry backfill; it had no provenance record at all (TRAINING_DATA_DISCOVERABILITY_20261120.md item 2). Superseded in the grpo-pool role by memetic-program-source-20261105-typed (2026-11-23, typed output contracts)."
 }

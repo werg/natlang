@@ -116,16 +116,18 @@ Assess every observation with assess, then summarize the assessments.
 
 Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
 (`function` or `directory-reducer`), `readout` (see Decision readout), `model`, `uses`, `withhold`, `protect`, `budget`,
-`recursive` and `measure` (see Iteration and termination) and `ensures` (see Postconditions). `generic` declares a
+`recursive` and `measure` (see Iteration and termination), `ensures` (see Postconditions) and `writes` (a directory
+reducer's files, [Declared files](ext/directory-reducers.md#declared-files)). `generic` declares a
 representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
 with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
 when the runtime has none. `uses` lists package
-items the function may call besides its companion folder: by path from the package root (`uses: [harness/cut]`), by
+items the function may call besides its companion folder: by path from the package root (the nearest folder with `natlang.json` or `package.json`, else the loaded project folder; `uses: [harness/cut]`), by
 path relative to the function's file (`./shared/rubric`, `../lib/cut`, inside the package root), or by a specifier a
 `natlang.json` `exports` map resolves (`@scope/pkg/item`, the package's own or an installed one's). The list form
 binds each under its base name; the map form binds each under its key (`uses: { rubric: ./shared/rubric }`). Each
-joins the function's context with its own companion folder. A `uses` chain that leads back to the function is a load
+joins the function's context with its own companion folder; an item of the tree being loaded (a sibling, a cousin under
+the same owner) is that very item, not a second copy. A `uses` chain that leads back to the function is a load
 error naming the cycle; a recursive function calls itself by its own name. `withhold` lists optional tools the
 function's own calls are not offered (`withhold: [delegate]`): `edit_code`, `diff_code` and the folder tools; eval,
 return_result, read_page, compact_history and read_code are always offered. A withheld tool is absent from the call's
@@ -350,7 +352,7 @@ ensures:
   eval, with the clause's message, and repairs within the refinement repair budget; past it the call fails with
   `RefinementCallError`. A result that reaches the caller satisfies every postcondition.
 - The companion-folder items a `check` names judge the call: its `edit_code` refuses them (`protected`), as it refuses
-  an edit that changes the function's `ensures`, `measure` or `recursive` lines.
+  an edit that changes the function's `ensures`, `writes`, `measure` or `recursive` lines.
 - A load error names an expression that does not parse, a name a `check` or `measure` uses that is not `result`, an
   argument, a companion item or a standard global, and an `against` entry that is not an argument.
 

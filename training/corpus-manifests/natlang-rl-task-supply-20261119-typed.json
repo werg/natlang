@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-task-supply-20261119-typed",
+  "owner": "dgx",
+  "path": "data_nvme:rl-typed-contracts-20261123/natlang-rl-task-supply-20261119-typed",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 1440162,
+      "sha256": "7d62a02083441f9789c64ad4bb5dd57a7bb22cd627a1657b81c735f07c1378a8",
+      "lines": 103
+    },
+    {
+      "path": "typed-contracts.json",
+      "bytes": 177,
+      "sha256": "415723e4302c80a1ceced4cf429dcb95b051901e34ef2ab8ef585f42c5e63461"
+    }
+  ],
+  "bytes": 1440339
+}

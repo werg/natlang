@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -537,6 +538,7 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
         (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
         (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
     monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
     monkeypatch.setattr(d.c, 'wait', finished)
     stops = []
     monkeypatch.setattr(d, 'stop_collections', lambda **kw: stops.append((kw, len(launched))))
@@ -572,6 +574,7 @@ def test_a_round_skips_an_answering_session_slower_than_the_dgx_and_trains_on_th
         (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
         (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
     monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
     monkeypatch.setattr(d.c, 'wait', finished)
     monkeypatch.setattr(d, 'stop_collections', lambda **kw: None)
     assert d.train_sft(rd, d.controller.current) == rd / 'sft' / 'factors'
@@ -579,6 +582,305 @@ def test_a_round_skips_an_answering_session_slower_than_the_dgx_and_trains_on_th
     assert launched and launched[-1][:2] == ['/bin/sh', str(ei.OPS / 'grpo-v4' / 'launch-sft.sh')]
     changes = json.loads((rd / 'round.json').read_text())['profile_changes']
     assert changes[-1]['to_profile'] == 'dgx' and 'slower than the DGX' in changes[-1]['reason']
+
+
+def test_sft_handback_decision_moves_only_with_a_clear_margin(tmp_path):
+    """r0001 on 2026-11-23: step ~306 of 1150 on the DGX at ~85 s/step (~20 h left); an A100 (4.09x measured, 2.5x by
+    TFLOPS) finishes from the last save in a fraction of that, the move included. A small or marginal gain, or an
+    unknown GPU, keeps the round where it is."""
+    import expert_iteration as ei
+    from natlang_neuralese.common.execution_profile import sft_speedup
+    a100 = {'gpu_name': 'NVIDIA A100-SXM4-80GB'}
+    assert sft_speedup(a100) == (4.09, 'measured (execution_profile)')
+    assert sft_speedup(a100, {'NVIDIA A100-SXM4-80GB': 3.2}) == (3.2, 'measured by this loop')
+    assert sft_speedup({'gpu_name': 'NVIDIA H100 80GB HBM3'}) == (6.05, 'BF16 TFLOPS ratio')
+    assert sft_speedup({'gpu_name': 'mystery'}) == (None, 'unknown GPU')
+    rule = dict(margin=0.25, min_gain_seconds=3600)
+    r0001 = ei.sft_handback_decision(steps_total=1150, dgx_step=309, resume_step=304, dgx_s_per_step=85.0,
+                                     speedup=2.5, move_seconds=2400, **rule)
+    assert r0001['move'] and r0001['dgx_left_s'] == 841 * 85 and r0001['colab_left_s'] == round(2400 + 846 * 85 / 2.5)
+    # near the end: the move costs more than it saves
+    assert not ei.sft_handback_decision(steps_total=1150, dgx_step=1120, resume_step=1110, dgx_s_per_step=85.0,
+                                        speedup=4.09, move_seconds=2400, **rule)['move']
+    # faster, but not by the margin (a 1.3x session)
+    assert not ei.sft_handback_decision(steps_total=1150, dgx_step=300, resume_step=300, dgx_s_per_step=85.0,
+                                        speedup=1.3, move_seconds=600, **rule)['move']
+    assert not ei.sft_handback_decision(steps_total=1150, dgx_step=300, resume_step=300, dgx_s_per_step=85.0,
+                                        speedup=None, move_seconds=600, **rule)['move']
+    log = tmp_path / 'train.jsonl'
+    log.write_text('{"resumed_from": "x"}\n' + ''.join(
+        json.dumps({'step': i, 'of': 1150, 'step_seconds': 80.0 + (i % 3) * 5}) + '\n' for i in range(270, 310)))
+    assert ei.dgx_sft_progress(log) == {'step': 309, 'of': 1150, 's_per_step': 85.0, 'window': 20}
+    log.write_text(json.dumps({'step': 1, 'of': 9, 'step_seconds': 3}) + '\n')
+    assert ei.dgx_sft_progress(log) is None
+
+
+def _dgx_round(tmp_path, monkeypatch, *, saved_age=60.0, argv=()):
+    """A driver whose round r0001 trains on the DGX (a takeover): unit present, train.jsonl at step 309 of 1150 at
+    85 s/step, its learner state saved ``saved_age`` s ago at step 304, a fit A100 session answering."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--sft-profile', 'colab', '--colab-hosts', 'colab-g4', *argv])
+    rd = d.root / 'r0001'
+    run = rd / 'sft'
+    (run / 'learner-state').mkdir(parents=True)
+    (rd / 'mix').mkdir()
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    (rd / 'round.json').write_text(json.dumps({'profile': 'dgx', 'profile_changes': [
+        {'from_profile': 'colab', 'to_profile': 'dgx', 'reason': 'Colab session slower than the DGX for SFT'}]}))
+    (run / 'launch.json').write_text(json.dumps({'exp0_sft_args': 'train --chains /c.pkl --checkpoint /s.pt',
+                                                 'chains_sha256': 'f' * 64, 'start_checkpoint_sha256': 'a' * 64}))
+    (run / 'train.jsonl').write_text(''.join(json.dumps({'step': i, 'of': 1150, 'step_seconds': 85.0}) + '\n'
+                                             for i in range(280, 310)))
+    (run / 'train.log').write_text('dgx log\n')
+    (run / 'learner-state' / 'learner_manifest.json').write_text(json.dumps(
+        {'learner_step': 304, 'batch_cursor': {'next_step': 304, 'total_steps': 1150},
+         'saved_at': ei.time.time() - saved_age}))
+    (run / 'learner-state' / 'optimizer_state.pt').write_bytes(b'o' * 1000)
+    import pop_rl_actor
+    events = []
+    state = {'present': True}
+    monkeypatch.setattr(pop_rl_actor, 'reachable_hosts', lambda profile, hosts: ['colab-g4'])
+    monkeypatch.setattr(pop_rl_actor, 'colab_sft_fit', lambda host: (True, 'A100: 2.5x'))
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: {'gpu_name': 'NVIDIA A100-SXM4-80GB',
+                                                                      'vram_total_gib': 80.0})
+    monkeypatch.setattr(pop_rl_actor, 'sft_move_seconds', lambda host, cfg, **kw: (
+        2400.0, {'state': 300.0, 'setup': 900.0, 'chains': 400.0, 'checkpoint': 800.0}))
+    monkeypatch.setattr(pop_rl_actor, 'colab_checkout', lambda host, cfg, commit: events.append(('checkout', commit)))
+
+    def push(host, cfg, remote_run, local_state, *, run_name, via):
+        events.append(('push', remote_run, Path(local_state).name, run_name, via, state['present']))
+        return {'step': 304, 'via': 'drive', 'seconds': 310.0, 'bytes': 1000, 'files': 2}
+    monkeypatch.setattr(pop_rl_actor, 'push_learner_state', push)
+    monkeypatch.setattr(d.c, 'present', lambda unit: state['present'])
+    monkeypatch.setattr(d.c, 'active', lambda unit: state['present'])
+    monkeypatch.setattr(d.c, 'stop_unit', lambda unit: events.append(('stop', unit)) or state.update(present=False))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: events.append(('run', argv[:3])) or
+                        SimpleNamespace(returncode=0))
+
+    def wait(unit, poll=60, between=None):
+        events.append(('wait', unit))
+        for _ in range(3):              # three polls while the DGX learner runs
+            if not state['present']:
+                break
+            between()
+    monkeypatch.setattr(d.c, 'wait', wait)
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: events.append(('stop_collections', kw)))
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda policy: None)
+    monkeypatch.setattr(d, 'ensure_collection', lambda policy: events.append(('ensure_collection', policy['sha256'])))
+
+    def colab(round_dir, policy):
+        events.append(('colab_sft', state['present']))
+        (run / 'factors').mkdir()
+        (run / 'factors' / 'policy_manifest.json').write_text('{}')
+    monkeypatch.setattr(d, 'colab_sft', colab)
+    return ei, d, rd, events
+
+
+def test_a_round_on_the_dgx_moves_to_a_fit_session_from_its_verified_state(tmp_path, monkeypatch):
+    """2026-11-23: r0001 went to the DGX because the session was an L4; the keeper then got an A100, but the round
+    stayed on the DGX for ~20 h. A restarted driver joins the running DGX learner (never a second learner on the
+    session), the hand-back pushes its latest save to the VM, and only after that push verified does the DGX unit
+    stop; the round then continues on the session (run-sft resumes that state), the DGX collection resumes, and the
+    move is recorded in round.json, handback.json and the driver log, with the DGX logs kept."""
+    ei, d, rd, events = _dgx_round(tmp_path, monkeypatch)
+    cur = d.controller.current
+    assert d.train_sft(rd, cur) == rd / 'sft' / 'factors'
+    kinds = [e[0] for e in events]
+    assert kinds.index('wait') < kinds.index('push') < kinds.index('stop') < kinds.index('colab_sft')
+    assert not any(e[0] == 'run' and 'launch-sft.sh' in str(e[1]) for e in events)   # the running learner joined
+    (push,) = [e for e in events if e[0] == 'push']
+    assert push[1:] == ('/content/natlang-work/runs/sft-aei-r0001', 'learner-state', 'aei-r0001', 'auto', True)
+    assert ('checkout', 'c' * 40) in events and ('stop', 'aei-r0001-sft') in events
+    assert ('colab_sft', False) in events and ('ensure_collection', cur['sha256']) in events
+    manifest = json.loads((rd / 'round.json').read_text())
+    change = manifest['profile_changes'][-1]
+    assert manifest['profile'] == 'colab' and (change['from_profile'], change['to_profile']) == ('dgx', 'colab')
+    assert 'hand-back to colab-g4' in change['reason'] and 'step 304 verified' in change['reason']
+    (move,) = json.loads((rd / 'sft' / 'handback.json').read_text())
+    assert move['pushed_step'] == 304 and move['dgx_step'] == 309 and move['speedup'] == 4.09
+    assert move['decision']['move'] and move['dgx_s_per_step'] == 85.0
+    assert (rd / 'sft' / 'train.dgx-1.jsonl').exists() and (rd / 'sft' / 'train.dgx-1.log').read_text() == 'dgx log\n'
+    log = [json.loads(line) for line in (d.root / 'drive.log').read_text().splitlines()]
+    assert any(r.get('handback') == 'colab' for r in log) and any('handback_check' in r for r in log)
+    # the session's measured speed on the steps it trained becomes the next move's estimate
+    (rd / 'sft' / 'train.jsonl').write_text(''.join(json.dumps({'step': i, 'of': 1150, 'step_seconds': 25.0}) + '\n'
+                                                    for i in range(304, 340)))
+    d.record_sft_speed(rd)
+    assert d.measured_sft_speed() == {'NVIDIA A100-SXM4-80GB': 3.4}
+
+
+def test_no_handback_when_opted_out_unfavourable_unsaved_or_unverified(tmp_path, monkeypatch):
+    """The DGX learner keeps training when: --no-sft-handback; the push to the VM fails (nothing stopped, retried
+    after 30 min); the last save is too old to push before the next one lands (it waits for that save); the session is
+    an L4; or the round's Colab learner failed (blocked)."""
+    def run(argv=(), saved_age=60.0, setup=None):
+        ei, d, rd, events = _dgx_round(tmp_path / str(len(list(tmp_path.iterdir()))), monkeypatch,
+                                       saved_age=saved_age, argv=argv)
+        if setup:
+            setup(ei, d)
+        with pytest.raises(SystemExit, match='no factors'):
+            d.train_sft(rd, d.controller.current)
+        return d, rd, [e[0] for e in events]
+    import pop_rl_actor
+    d, rd, kinds = run(argv=['--no-sft-handback'])
+    assert 'push' not in kinds and 'stop' not in kinds and not (d.root / 'drive.log').exists()
+
+    def failing(ei, d):
+        monkeypatch.setattr(pop_rl_actor, 'push_learner_state', lambda *a, **k: (_ for _ in ()).throw(
+            RuntimeError('the learner state on colab-g4 does not match the DGX snapshot')))
+    d, rd, kinds = run(setup=failing)
+    assert 'stop' not in kinds and 'colab_sft' not in kinds
+    assert json.loads((rd / 'round.json').read_text())['profile'] == 'dgx' and not (rd / 'sft' / 'handback.json').exists()
+    assert d.handback_next['r0001'] > time.time() + 1700
+    d, rd, kinds = run(saved_age=800.0)                     # 800 s + 300 s push > the 15 min save interval
+    assert 'push' not in kinds and 'waits_for_save' in (d.root / 'drive.log').read_text()
+
+    def l4(ei, d):
+        monkeypatch.setattr(pop_rl_actor, 'colab_sft_fit', lambda host: (False, 'NVIDIA L4: 0.97x'))
+    d, rd, kinds = run(setup=l4)
+    assert 'push' not in kinds
+
+    def blocked(ei, d):
+        d.handback_blocked.add('r0001')
+    d, rd, kinds = run(setup=blocked)
+    assert 'push' not in kinds and 'stop' not in kinds
+
+
+def _fake_vm(tmp_path, monkeypatch):
+    """A Colab VM in a directory: ssh commands run in bash with /content/natlang-work mapped there; the tunnel copies."""
+    import shutil
+    import subprocess
+    import pop_rl_actor
+    vm = tmp_path / 'vm'
+    vm.mkdir()
+    mapped = lambda text: str(text).replace('/content/natlang-work', str(vm))
+    sent = []
+
+    def ssh_host(host, command, *, input=None, timeout=600, check=True):
+        sent.append(command)
+        out = subprocess.run(['bash', '-c', mapped(command)], input=input, text=True, capture_output=True)
+        if check and out.returncode:
+            raise RuntimeError(out.stderr)
+        return out.stdout.replace(str(vm), '/content/natlang-work')
+
+    def sync_to(local, remote, host, **kw):
+        sent.append(('tunnel', remote))
+        shutil.copytree(str(local).rstrip('/'), mapped(remote).rstrip('/'), dirs_exist_ok=True)
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', sync_to)
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    return vm, sent
+
+
+def _state(path, step, fill=b's'):
+    path.mkdir(parents=True, exist_ok=True)
+    (path / 'learner_manifest.json').write_text(json.dumps({'learner_step': step, 'batch_cursor': {'next_step': step}}))
+    (path / 'optimizer_state.pt').write_bytes(fill * 4096)
+    (path / 'adapter_factors_fp32.safetensors').write_bytes(fill * 2048)
+
+
+def test_the_dgx_learner_state_replaces_the_vms_only_whole_and_verified(tmp_path, monkeypatch):
+    """The hand-back's push: a consistent snapshot of the DGX state reaches the VM through Drive (the tunnel when Drive
+    fails), every file's sha256 is checked against the snapshot, and only then does it replace the VM's state; a copy
+    that arrives altered is discarded with the VM's state untouched; a learner running there is never overwritten."""
+    import pop_rl_actor
+    from scripts import drive_tier
+    vm, sent = _fake_vm(tmp_path, monkeypatch)
+    cfg = pop_rl_actor.host_config('colab', host='colab-g4')
+    run = pop_rl_actor.remote_sft_run(cfg, 'aei-r0001')
+    local = tmp_path / 'sft' / 'learner-state'
+    _state(local, 304)
+    _state(vm / 'runs' / 'sft-aei-r0001' / 'learner-state', 120, fill=b'v')
+    monkeypatch.setattr(pop_rl_actor, 'remote_learner_state', lambda host, remote_run: 'rc 1')
+    drive = {}
+    monkeypatch.setattr(drive_tier, 'put_dir', lambda ns: drive.update(prefix=ns.prefix, files=sorted(
+        p.name for p in Path(ns.dir).iterdir())) or 0)
+
+    def get_dir(host, cfg, command, prefix, dest, **kw):
+        import shutil
+        shutil.copytree(local, str(dest).replace('/content/natlang-work', str(vm)))
+        return {'event': 'get-dir', 'prefix': prefix}
+    monkeypatch.setattr(pop_rl_actor, 'drive_vm', get_dir)
+    assert pop_rl_actor.remote_state_step('colab-g4', run) == 120
+    pushed = pop_rl_actor.push_learner_state('colab-g4', cfg, run, local, run_name='aei-r0001')
+    assert pushed['step'] == 304 and pushed['via'] == 'drive' and pushed['files'] == 3
+    assert drive == {'prefix': 'colab/aei-r0001/handback-state',
+                     'files': ['adapter_factors_fp32.safetensors', 'learner_manifest.json', 'optimizer_state.pt']}
+    assert pop_rl_actor.remote_state_step('colab-g4', run) == 304
+    assert (vm / 'runs/sft-aei-r0001/learner-state/optimizer_state.pt').read_bytes() == b's' * 4096
+    assert sorted(p.name for p in (vm / 'runs/sft-aei-r0001').iterdir()) == ['learner-state']
+    assert not list(local.parent.glob('learner-state.*'))            # the snapshot is gone
+    # Drive fails: the tunnel; an altered copy: discarded, the VM's state as it was
+    _state(local, 330, fill=b't')
+    monkeypatch.setattr(pop_rl_actor, 'drive_vm', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('403')))
+    real_sync = pop_rl_actor.sync_to_remote
+
+    def corrupt(local_dir, remote, host, **kw):
+        real_sync(local_dir, remote, host)
+        (vm / 'runs/sft-aei-r0001/learner-state.incoming/optimizer_state.pt').write_bytes(b'x')
+    monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', corrupt)
+    with pytest.raises(RuntimeError, match='does not match'):
+        pop_rl_actor.push_learner_state('colab-g4', cfg, run, local, run_name='aei-r0001')
+    assert pop_rl_actor.remote_state_step('colab-g4', run) == 304
+    assert not (vm / 'runs/sft-aei-r0001/learner-state.incoming').exists()
+    monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', real_sync)
+    assert pop_rl_actor.push_learner_state('colab-g4', cfg, run, local, run_name='aei-r0001')['via'] == 'tunnel'
+    assert pop_rl_actor.remote_state_step('colab-g4', run) == 330
+    monkeypatch.setenv('NATLANG_COLAB_DRIVE', '0')                    # the opt-out never touches Drive
+    drive.clear()
+    _state(local, 331)
+    assert pop_rl_actor.push_learner_state('colab-g4', cfg, run, local, run_name='aei-r0001')['via'] == 'tunnel'
+    assert drive == {}
+    monkeypatch.setattr(pop_rl_actor, 'remote_learner_state', lambda host, remote_run: 'running')
+    with pytest.raises(RuntimeError, match='is running'):
+        pop_rl_actor.push_learner_state('colab-g4', cfg, run, local, run_name='aei-r0001')
+
+
+def test_run_sft_pushes_a_dgx_state_ahead_of_the_vms_and_keeps_a_newer_vm_state(tmp_path, monkeypatch):
+    """run-sft's resume rule: the DGX state goes to the VM when the VM holds none or an older one (a hand-back whose
+    DGX saved once more before it stopped; a VM whose earlier learner failed, 'rc 1', kept a stale state the old rule
+    resumed), never when the VM's own state is newer or its learner runs."""
+    import pop_rl_actor
+    vm, sent = _fake_vm(tmp_path, monkeypatch)
+    cfg = pop_rl_actor.host_config('colab', host='colab-g4')
+    run = pop_rl_actor.remote_sft_run(cfg, 'aei-r0001')
+    local = tmp_path / 'sft' / 'learner-state'
+    _state(local, 320)
+    states = {'learner': 'rc 1'}
+    monkeypatch.setattr(pop_rl_actor, 'remote_learner_state', lambda host, remote_run: states['learner'])
+    pushes = []
+    monkeypatch.setattr(pop_rl_actor, 'push_learner_state', lambda *a, **k: pushes.append(k['via']) or
+                        {'step': 320, 'via': k['via'], 'seconds': 1.0, 'bytes': 1, 'files': 1})
+    assert pop_rl_actor.sft_state_push_needed('colab-g4', run, local)             # the VM has none
+    _state(vm / 'runs/sft-aei-r0001/learner-state', 304)
+    assert pop_rl_actor.sft_state_push_needed('colab-g4', run, local)             # stale (rc 1)
+    _state(vm / 'runs/sft-aei-r0001/learner-state', 340)
+    assert not pop_rl_actor.sft_state_push_needed('colab-g4', run, local)         # the VM's own is newer
+    _state(vm / 'runs/sft-aei-r0001/learner-state', 304)
+    states['learner'] = 'running'
+    assert not pop_rl_actor.sft_state_push_needed('colab-g4', run, local)
+    assert not pop_rl_actor.sft_state_push_needed('colab-g4', run, tmp_path / 'none')
+
+
+def test_the_move_estimate_counts_only_what_the_vm_lacks(tmp_path, monkeypatch):
+    import pop_rl_actor
+    vm, sent = _fake_vm(tmp_path, monkeypatch)
+    monkeypatch.setenv('NATLANG_COLAB_DRIVE', '0')
+    cfg = pop_rl_actor.host_config('colab', host='colab-g4')
+    chains, ckpt = tmp_path / 'chains.pkl', tmp_path / 'start.pt'
+    chains.write_bytes(b'c' * 2_400_000)
+    ckpt.write_bytes(b'k' * 4_800_000)
+    launch = {'exp0_sft_args': f'train --chains {chains} --checkpoint {ckpt}', 'start_checkpoint_sha256': 'a' * 64}
+    seconds, parts = pop_rl_actor.sft_move_seconds('colab-g4', cfg, run_name='aei-r0001', launch=launch,
+                                                   state_bytes=1_200_000)
+    assert parts == {'state': 0.5, 'setup': pop_rl_actor.SFT_REMOTE_SETUP_SECONDS, 'chains': 1.0, 'checkpoint': 2.0}
+    (vm / 'checkpoints').mkdir()
+    (vm / 'checkpoints' / f'{"a" * 64}.pt').write_bytes(b'k')
+    (vm / 'runs/sft-aei-r0001').mkdir(parents=True)
+    (vm / 'runs/sft-aei-r0001/chains.pkl').write_bytes(b'c')
+    seconds, parts = pop_rl_actor.sft_move_seconds('colab-g4', cfg, run_name='aei-r0001', launch=launch,
+                                                   state_bytes=1_200_000)
+    assert (parts['chains'], parts['checkpoint']) == (0.0, 0.0) and seconds == 0.5 + pop_rl_actor.SFT_REMOTE_SETUP_SECONDS
 
 
 def test_round_stages_preempt_the_standing_collection_which_resumes_on_its_policy(tmp_path, monkeypatch):
@@ -948,6 +1250,7 @@ def test_a_dgx_sft_stops_only_the_dgx_collection_and_keeps_the_remote_one_collec
     stops = []
     monkeypatch.setattr(d, 'stop_collections', lambda **kw: stops.append(kw))
     monkeypatch.setattr(d.c, 'active', lambda u: u.endswith('-sft'))
+    monkeypatch.setattr(d.c, 'present', lambda u: u.endswith('-sft'))
     monkeypatch.setattr(d, 'launch_sft', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('relaunched')))
     d.train_sft(rd, cur)
     assert stops == [{'remote': False}]

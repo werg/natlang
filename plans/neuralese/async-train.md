@@ -119,6 +119,19 @@ A round turns a pool snapshot into a published policy.
   last 15-minute state.
 - **G4 away more than 30 minutes.** The DGX learner takes over the current round from its last state. The round
   records the profile change.
+- **A fit session appears while the DGX trains a round (hand-back, 2026-11-23).** A takeover (an L4 session, a lost
+  one) left the round on the DGX; when a session that passes the SFT placement rule (`colab_sft_fit`) answers, the
+  driver checks every 10 min whether moving pays: the DGX's steps left at its measured median s/step against the
+  move (what the VM lacks of chains, start checkpoint and state at the measured link rates, plus ~15 min of learner
+  setup) plus the steps from the last DGX save at the session's speed (measured by this loop on an earlier move,
+  else the built-in A100 measurement, else the BF16 TFLOPS ratio). It moves only when the session finishes within
+  75% of the DGX's time and at least 60 min sooner (`--sft-handback-margin`, `--sft-handback-min-gain-minutes`).
+  The DGX state's latest save (right after one, so no newer save lands during the push) goes to the VM through
+  Drive (the tunnel on failure), every file's sha256 is checked there, and only then does the DGX unit stop; the
+  DGX collection resumes, `run-sft` resumes that state with the same recipe and step list (and pushes a newer DGX
+  save first if one landed). Recorded in `round.json` (`dgx -> colab`), `sft/handback.json` and the driver log; the
+  DGX logs are kept as `train.dgx-N.*`. At most two moves a round, none after its Colab learner failed 3 times; a
+  session lost afterwards falls back to the DGX as above. `--no-sft-handback` opts out.
 - **DGX unreachable from the G4.** The learner finishes its round and holds the factors locally until the link
   returns. Nothing is lost, because commits are blob-first.
 - **Mid-episode policy changes** happen only at call boundaries, and the per-call sha makes every episode attributable.

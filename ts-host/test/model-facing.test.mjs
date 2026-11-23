@@ -42,5 +42,5 @@ test('a read_file result is the file text and nothing else', async () => {
 });
 
 test('the system prompt keeps the shipped inline nl example', () => {
-  assert.match(TOOLS_PROMPT, /Decide whether item meets policy\./);
+  assert.match(TOOLS_PROMPT, /Decide whether item meets <criterion>\./);
 });

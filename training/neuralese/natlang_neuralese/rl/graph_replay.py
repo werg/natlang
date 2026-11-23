@@ -320,7 +320,8 @@ def producer_turns(rollout):
                 continue
             if node.get('kind') == 'block_write':
                 writes[node['block']] = node['node']
-            elif node.get('kind') == 'block_read':
+            elif node.get('kind') == 'block_read' and node.get('format') != 'in-context-text':
+                # an in-context-text read is the state's tokens in the prompt: no state to bind a gradient to
                 sources = [edge['node'] for edge in node.get('inputs', []) if edge.get('block') == node['block']]
                 if sources and sources[0] != 'external':
                     reads[node['block']] = sources[0]

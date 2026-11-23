@@ -46,7 +46,9 @@ import json
 import os
 import random
 import shutil
+import shlex
 import signal
+import statistics
 import re
 import subprocess
 import sys
@@ -2156,6 +2158,47 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
     return manifest
 
 
+SFT_HANDBACK_MAX = 2          # moves of one round from the DGX back to a session (no ping-pong between two hosts)
+
+
+def dgx_sft_progress(train_jsonl, window=20):
+    """{step, of, s_per_step} of a running SFT from its ``train.jsonl``: the last step and the median wall seconds of
+    the last ``window`` steps; None before 5 steps are logged."""
+    path = Path(train_jsonl)
+    if not path.exists():
+        return None
+    records = []
+    for line in path.read_text(errors='replace').splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and record.get('step_seconds') and record.get('of'):
+            records.append(record)
+    if len(records) < 5:
+        return None
+    last = records[-window:]
+    return {'step': int(records[-1]['step']), 'of': int(records[-1]['of']),
+            's_per_step': round(statistics.median(float(r['step_seconds']) for r in last), 2), 'window': len(last)}
+
+
+def sft_handback_decision(*, steps_total, dgx_step, resume_step, dgx_s_per_step, speedup, move_seconds, margin,
+                          min_gain_seconds):
+    """Whether a round training on the DGX moves to a session: the DGX's remaining time (its steps left at its measured
+    s/step) against the move (``move_seconds``: transfers and the learner's setup) plus the session's steps from the
+    pushed state (``resume_step``: the DGX's steps since its last save are redone there) at ``dgx_s_per_step /
+    speedup``. It moves only with a clear margin: the session must finish within ``1 - margin`` of the DGX's time and
+    at least ``min_gain_seconds`` sooner."""
+    dgx_left = max(0, steps_total - dgx_step) * dgx_s_per_step
+    colab_left = (move_seconds + max(0, steps_total - resume_step) * dgx_s_per_step / speedup) if speedup else None
+    move = bool(colab_left is not None and colab_left <= (1.0 - margin) * dgx_left
+                and dgx_left - colab_left >= min_gain_seconds)
+    return {'move': move, 'dgx_left_s': round(dgx_left), 'colab_left_s': None if colab_left is None else round(colab_left),
+            'gain_s': None if colab_left is None else round(dgx_left - colab_left), 'steps_total': steps_total,
+            'dgx_step': dgx_step, 'resume_step': resume_step, 'dgx_s_per_step': dgx_s_per_step, 'speedup': speedup,
+            'move_s': round(move_seconds), 'margin': margin, 'min_gain_s': min_gain_seconds}
+
+
 def record_profile_change(round_dir, *, from_profile, to_profile, reason, at=None):
     """Record a mid-round host profile transition (e.g. Colab G4 -> DGX takeover after 30 min unreachable;
     async-train §4) into ``round.json`` atomically."""
@@ -2416,6 +2459,9 @@ class AsyncRoundDriver:
         self.held_done = set()          # held-v3 candidates the held thread finished
         self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
         self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
+        self.handback_next = {}         # round -> when its DGX SFT is next checked for a move to a session
+        self.handback_blocked = set()   # rounds whose Colab learner failed: they stay on the DGX
+        self.handed_back = None         # the round a hand-back just moved (ends the DGX wait)
 
     def cycle_args(self):
         """The Cycle helper's arguments (ledger, pin, DGX held series, collection and fill builders) from ours."""
@@ -2720,69 +2766,223 @@ class AsyncRoundDriver:
         return [PY, str(self.c.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py'), 'run-sft', '--host', host,
                 '--run-name', f'{self.a.name}-{round_dir.name}', '--work', str(run), '--launch-json',
                 str(run / 'launch.json'), '--commit', self.a.commit, '--state-sync-minutes',
-                str(profile.state_sync_minutes)]
+                str(profile.state_sync_minutes), '--state-transfer', getattr(self.a, 'sft_state_transfer', 'auto')]
 
     def train_sft(self, round_dir, policy):
         """Stage 2 of an SFT round: on Colab while a session answers, else (or after ``--fallback-wait-minutes``
-        away) on the DGX from the synced learner state. Done when ``sft/factors/policy_manifest.json`` exists."""
+        away) on the DGX from the synced learner state; a round on the DGX moves back to a session fit for SFT when
+        the estimated remaining time favours it (``sft_handback``). Done when ``sft/factors/policy_manifest.json``
+        exists."""
         factors = round_dir / 'sft' / 'factors'
-        if (factors / 'policy_manifest.json').exists():
-            return factors
-        if self.a.sft_profile == 'colab':
-            from natlang_neuralese.common.execution_profile import resolve_profile
-            import pop_rl_actor
-            profile = resolve_profile('colab', hosts=self.colab_hosts)
-            away_since, failures = None, 0
-            while not (factors / 'policy_manifest.json').exists():
-                up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
-                fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
-                if up and not any(ok for ok, _ in fit.values()):
-                    # an answering session slower than the DGX (an L4) keeps its actor; the round trains here now
-                    record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
-                                          reason='Colab session slower than the DGX for SFT: '
-                                                 + '; '.join(reason for _, reason in fit.values()))
-                    self.note(round=round_dir.name, takeover='dgx', unfit_sessions=up)
-                    break
-                up = [h for h in up if fit[h][0]]
-                if up and failures >= 3:       # the session answers but the learner keeps failing there
-                    record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
-                                          reason='the Colab learner failed 3 times')
-                    break
-                if up:
-                    away_since = None
-                    failures += 1
-                    self.launch_sft(round_dir, policy, activation_gb=profile.activation_gib, preflight_only=True)
-                    self.c.session(up[0], profile, True)
-                    try:
-                        with (round_dir / 'sft-colab.log').open('a') as handle:
-                            subprocess.run(self.colab_command(round_dir, up[0], profile), env=self.c.env, stdout=handle,
-                                           stderr=subprocess.STDOUT)
-                    finally:
-                        self.c.session(up[0], profile, False)
-                    continue
-                away_since = away_since or time.time()
-                if time.time() - away_since >= 60 * self.a.fallback_wait_minutes:
-                    record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
-                                          reason=f'no Colab session for {self.a.fallback_wait_minutes} min')
-                    self.note(round=round_dir.name, takeover='dgx')
-                    break
-                time.sleep(60)
-            if (factors / 'policy_manifest.json').exists():
-                return factors
         unit = f'{self.a.name}-{round_dir.name}-sft'
-        # the standing DGX collection (74 GB beside a ~64-80 GB learner on 121 GB) yields for the whole SFT: the
-        # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room appears;
-        # stopped (and cancelled if requeued) here, the next round's collection restarts it. Also when a restarted
-        # driver joins a running learner: the round's start just queued the DGX collection again
-        self.stop_collections(remote=False)
-        if not self.c.active(unit):
-            self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
-        # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the keeper
-        # replaced (and served again) gets its collector back, one that was down at the round's start gets one
-        self.c.wait(unit, poll=120, between=lambda: self.ensure_remote_collection(policy))
+        while not (factors / 'policy_manifest.json').exists():
+            # a DGX learner of this round that runs (a driver restarted mid-SFT) is joined, never raced by a second
+            # learner on the session: the hand-back moves it, verified, when that pays
+            if self.a.sft_profile == 'colab' and not self.c.present(unit):
+                self.colab_sft(round_dir, policy)
+                if (factors / 'policy_manifest.json').exists():
+                    break
+            # the standing DGX collection (74 GB beside a ~64-80 GB learner on 121 GB) yields for the whole SFT: the
+            # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room
+            # appears; stopped (and cancelled if requeued) here, the next round's collection restarts it. Also when a
+            # restarted driver joins a running learner: the round's start just queued the DGX collection again
+            self.stop_collections(remote=False)
+            if not self.c.present(unit):
+                self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
+            # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the
+            # keeper replaced (and served again) gets its collector back, one that was down at the round's start gets
+            # one. A session fit for SFT may take the round over (the hand-back stops the unit, ending the wait)
+            self.handed_back = None
+            self.c.wait(unit, poll=120, between=lambda: self.dgx_sft_between(round_dir, policy, unit))
+            if self.handed_back != round_dir.name:
+                break
+            self.ensure_collection(policy)          # the DGX is free again: its standing collection resumes
         if not (factors / 'policy_manifest.json').exists():
             raise SystemExit(f'round {round_dir.name}: no factors after the SFT ({round_dir}/sft/train.log)')
+        self.record_sft_speed(round_dir)
         return factors
+
+    def colab_sft(self, round_dir, policy):
+        """The round on a Colab session (``run-sft``) until its factors exist, or until it falls back to the DGX: every
+        answering session slower than the DGX, the learner failing 3 times there, or no session for
+        ``--fallback-wait-minutes`` (recorded in ``round.json``; the DGX resumes the synced learner state)."""
+        from natlang_neuralese.common.execution_profile import resolve_profile
+        import pop_rl_actor
+        factors = round_dir / 'sft' / 'factors'
+        profile = resolve_profile('colab', hosts=self.colab_hosts)
+        away_since, failures = None, 0
+        while not (factors / 'policy_manifest.json').exists():
+            up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
+            fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
+            if up and not any(ok for ok, _ in fit.values()):
+                # an answering session slower than the DGX (an L4) keeps its actor; the round trains here now
+                record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
+                                      reason='Colab session slower than the DGX for SFT: '
+                                             + '; '.join(reason for _, reason in fit.values()))
+                self.note(round=round_dir.name, takeover='dgx', unfit_sessions=up)
+                return
+            up = [h for h in up if fit[h][0]]
+            if up and failures >= 3:       # the session answers but the learner keeps failing there
+                record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
+                                      reason='the Colab learner failed 3 times')
+                self.handback_blocked.add(round_dir.name)       # no hand-back to where it keeps failing
+                self.note(round=round_dir.name, takeover='dgx', colab_failures=failures)
+                return
+            if up:
+                away_since = None
+                failures += 1
+                self.launch_sft(round_dir, policy, activation_gb=profile.activation_gib, preflight_only=True)
+                self.c.session(up[0], profile, True)
+                try:
+                    with (round_dir / 'sft-colab.log').open('a') as handle:
+                        subprocess.run(self.colab_command(round_dir, up[0], profile), env=self.c.env, stdout=handle,
+                                       stderr=subprocess.STDOUT)
+                finally:
+                    self.c.session(up[0], profile, False)
+                continue
+            away_since = away_since or time.time()
+            if time.time() - away_since >= 60 * self.a.fallback_wait_minutes:
+                record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
+                                      reason=f'no Colab session for {self.a.fallback_wait_minutes} min')
+                self.note(round=round_dir.name, takeover='dgx')
+                return
+            time.sleep(60)
+
+    def dgx_sft_between(self, round_dir, policy, unit):
+        """Every poll of a DGX SFT: the remote collectors, then the hand-back check (each failure logged apart)."""
+        try:
+            self.ensure_remote_collection(policy)
+        except Exception as error:
+            self.note(stage='wait', unit=unit, between_failed=repr(error)[:300])
+        self.sft_handback(round_dir, policy, unit)
+
+    def measured_sft_speed(self):
+        """{GPU name: round SFT speed against the DGX} this loop measured on rounds that moved (``sft-speed.json``)."""
+        path = self.root / 'sft-speed.json'
+        return {k: v['speedup'] for k, v in json.loads(path.read_text()).items()} if path.exists() else {}
+
+    def record_sft_speed(self, round_dir):
+        """After a round that moved from the DGX to a session finished there: the session's median s/step on the
+        steps it trained against the DGX's at the move -> ``sft-speed.json`` (the next move's estimate)."""
+        path = round_dir / 'sft' / 'handback.json'
+        if not path.exists():
+            return
+        try:
+            move = json.loads(path.read_text())[-1]
+            if round_dir.name in self.handback_blocked or json.loads(
+                    (round_dir / 'round.json').read_text()).get('profile') != 'colab':
+                return
+            steps = [json.loads(line) for line in (round_dir / 'sft' / 'train.jsonl').read_text().splitlines()
+                     if line.startswith('{')]
+            colab = [float(r['step_seconds']) for r in steps
+                     if r.get('step_seconds') and int(r.get('step', -1)) >= int(move['pushed_step'])]
+            if len(colab) < 20 or not move.get('gpu'):
+                return
+            speed = self.root / 'sft-speed.json'
+            table = json.loads(speed.read_text()) if speed.exists() else {}
+            table[move['gpu']] = {'speedup': round(move['dgx_s_per_step'] / statistics.median(colab), 2),
+                                  'round': round_dir.name, 'colab_s_per_step': round(statistics.median(colab), 2),
+                                  'dgx_s_per_step': move['dgx_s_per_step'], 'steps': len(colab)}
+            from natlang_neuralese.common.jsonio import write_json_durable
+            write_json_durable(speed, table)
+            self.note(round=round_dir.name, sft_speed=table[move['gpu']], gpu=move['gpu'])
+        except (OSError, ValueError, KeyError) as error:
+            self.note(round=round_dir.name, sft_speed_failed=repr(error)[:300])
+
+    def sft_handback(self, round_dir, policy, unit):
+        """Move a round training on the DGX to a Colab session fit for SFT (``colab_sft_fit``: an A100, not an L4)
+        when the estimate favours it with a clear margin (``sft_handback_decision``): the DGX learner's latest save
+        (FP32 factors, optimizer, RNG, batch cursor) goes to the VM and is verified there file by file
+        (``push_learner_state``: Drive, the tunnel on failure), then the DGX unit stops; ``run-sft`` resumes that state
+        with the same recipe and step list (``exp0_sft --resume`` refuses other chains or another schedule), and pushes
+        a newer DGX save first if one landed meanwhile. Checked every ``--sft-handback-check-minutes``; at most
+        SFT_HANDBACK_MAX moves a round; never for a round whose Colab learner failed. ``--no-sft-handback`` opts out.
+        Sets ``handed_back`` (the unit's end then ends the wait)."""
+        name = round_dir.name
+        if (self.a.sft_profile != 'colab' or not self.colab_hosts or getattr(self.a, 'no_sft_handback', False)
+                or name in self.handback_blocked or time.time() < self.handback_next.get(name, 0.0)):
+            return
+        now = time.time()
+        self.handback_next[name] = now + 60 * self.a.sft_handback_check_minutes
+        run = round_dir / 'sft'
+        moves = json.loads((run / 'handback.json').read_text()) if (run / 'handback.json').exists() else []
+        state = run / 'learner-state'
+        progress = dgx_sft_progress(run / 'train.jsonl')
+        if (len(moves) >= SFT_HANDBACK_MAX or progress is None or not (state / 'learner_manifest.json').exists()
+                or not (run / 'launch.json').exists()):
+            return
+        import pop_rl_actor
+        from natlang_neuralese.common.execution_profile import sft_speedup
+        host = next((h for h in pop_rl_actor.reachable_hosts('colab', self.colab_hosts)
+                     if pop_rl_actor.colab_sft_fit(h)[0]), None)
+        if host is None:
+            return
+        hardware = pop_rl_actor.colab_hardware(host)
+        speedup, source = sft_speedup(hardware, self.measured_sft_speed())
+        manifest = json.loads((state / 'learner_manifest.json').read_text())
+        resume = pop_rl_actor.state_step(manifest)
+        cfg = pop_rl_actor.host_config('colab', host=host)
+        run_name = f'{self.a.name}-{name}'
+        launch = json.loads((run / 'launch.json').read_text())
+        state_bytes = sum(p.stat().st_size for p in state.rglob('*') if p.is_file())
+        via = getattr(self.a, 'sft_state_transfer', 'auto')
+        move_s, parts = pop_rl_actor.sft_move_seconds(host, cfg, run_name=run_name, launch=launch,
+                                                      state_bytes=state_bytes, via=via)
+        decision = sft_handback_decision(steps_total=progress['of'], dgx_step=progress['step'], resume_step=resume,
+                                         dgx_s_per_step=progress['s_per_step'], speedup=speedup, move_seconds=move_s,
+                                         margin=self.a.sft_handback_margin,
+                                         min_gain_seconds=60 * self.a.sft_handback_min_gain_minutes)
+        self.note(round=name, handback_check=decision, host=host, gpu=hardware.get('gpu_name'),
+                  speedup_source=source, move_parts=parts)
+        if not decision['move']:
+            return
+        # push right after a DGX save: one landing during the push would be newer than the VM's copy (run-sft pushes
+        # it again) and the steps since the pushed save are redone on the session
+        recipe = shlex.split(launch.get('exp0_sft_args', ''))
+        save_s = 60 * float(recipe[recipe.index('--state-save-minutes') + 1]) if '--state-save-minutes' in recipe \
+            else 900.0
+        age = now - float(manifest.get('saved_at') or 0)
+        if age + parts['state'] + 120 > save_s:
+            self.handback_next[name] = float(manifest.get('saved_at') or now) + save_s + 60
+            self.note(round=name, handback_waits_for_save=round(self.handback_next[name] - now))
+            return
+        remote_run = pop_rl_actor.remote_sft_run(cfg, run_name)
+        try:
+            pop_rl_actor.colab_checkout(host, cfg, self.a.commit)     # run-sft's code, and the VM's drive_tier.py
+            pushed = pop_rl_actor.push_learner_state(host, cfg, remote_run, state, run_name=run_name, via=via)
+        except Exception as error:      # the DGX learner keeps training; the next check tries again
+            self.handback_next[name] = now + 1800
+            self.note(round=name, handback_failed=repr(error)[:300], host=host)
+            return
+        # verified on the VM: only now does the DGX learner stop
+        self.c.stop_unit(unit)
+        deadline = time.time() + 600
+        while self.c.present(unit) and time.time() < deadline:
+            time.sleep(5)
+        if self.c.present(unit):
+            self.note(round=name, handback_failed=f'{unit} did not stop', host=host)
+            return
+        subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}.service'], stderr=subprocess.DEVNULL)
+        after = pop_rl_actor.state_step(json.loads((state / 'learner_manifest.json').read_text()))
+        k = len(moves) + 1
+        for log_name in ('train.jsonl', 'train.log'):   # run-sft's pulls replace them with the session's logs
+            if (run / log_name).exists():
+                shutil.copy2(run / log_name, run / f'{Path(log_name).stem}.dgx-{k}{Path(log_name).suffix}')
+        entry = {'at': round(now, 1), 'host': host, 'gpu': hardware.get('gpu_name'), 'speedup': speedup,
+                 'speedup_source': source, 'dgx_step': progress['step'], 'dgx_s_per_step': progress['s_per_step'],
+                 'pushed_step': pushed['step'], 'dgx_state_step_at_stop': after, 'push': pushed,
+                 'move_parts': parts, 'decision': decision, 'commit': self.a.commit}
+        from natlang_neuralese.common.jsonio import write_json_durable
+        write_json_durable(run / 'handback.json', [*moves, entry])
+        record_profile_change(round_dir, from_profile='dgx', to_profile='colab',
+                              reason=(f'hand-back to {host} ({hardware.get("gpu_name")}, {speedup}x the DGX, '
+                                      f'{source}): DGX {decision["dgx_left_s"] / 3600:.1f} h left at '
+                                      f'{progress["s_per_step"]} s/step vs {decision["colab_left_s"] / 3600:.1f} h there '
+                                      f'(move {decision["move_s"]} s); learner state step {pushed["step"]} verified on '
+                                      f'the VM via {pushed["via"]}'))
+        self.note(round=name, handback='colab', host=host, pushed_step=pushed['step'], dgx_step=progress['step'],
+                  dgx_state_step_at_stop=after, via=pushed['via'], gain_s=decision['gain_s'])
+        self.handed_back = name
 
     def grpo_command(self, round_dir, policy):
         return [PY, str(self.c.pin / 'scripts/neuralese_data/grpo.py'), 'train', '--work', str(round_dir / 'grpo'),
@@ -3475,6 +3675,16 @@ def main():
                     help='a round mix\'s weighted target tokens (sft_sources build --max-target-tokens: every part '
                          'scaled alike, unseen episodes first); 0: the uncapped build (r0001: 37.4M, 1247 steps)')
     ad.add_argument('--fallback-wait-minutes', type=float, default=30.0)
+    ad.add_argument('--no-sft-handback', action='store_true',
+                    help='a round training on the DGX (a takeover) stays there; by default it moves to a Colab session '
+                         'fit for SFT (colab_sft_fit) from its latest verified learner state when the estimate favours it')
+    ad.add_argument('--sft-handback-margin', type=float, default=0.25,
+                    help='a hand-back needs the session to finish within (1 - margin) of the DGX\'s remaining time')
+    ad.add_argument('--sft-handback-min-gain-minutes', type=float, default=60.0,
+                    help='... and at least this much sooner')
+    ad.add_argument('--sft-handback-check-minutes', type=float, default=10.0)
+    ad.add_argument('--sft-state-transfer', choices=('auto', 'drive', 'tunnel'), default='auto',
+                    help='how learner state goes to a session (auto: Google Drive, the tunnel on failure)')
     ad.add_argument('--lr', default='5e-5', help='LoRA SFT learning rate (lfm3opti.md §5: 5e-5 at r=128)')
     ad.add_argument('--sft-budget', type=int, default=80,
                     help='DGX SFT ledger GB (a fixed claim): r0001 measured a 63.9 GB cgroup peak at activation 56 '

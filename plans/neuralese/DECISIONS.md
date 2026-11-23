@@ -9646,3 +9646,198 @@ HeadMask cost now that every sample records bans; the in-page wllama smoke again
 of the fork. Pre-existing failures seen and left open, because they fail on the base too:
 `test_native_typed_harness[recorded]` (StopIteration from the scripted sampler) and
 `test_serving_close_boundary[5-*]`.
+
+### 2026-11-23: whole-corpus semantic functional integration (in progress)
+
+The second audit found that domain-named roots still mixed deterministic I/O with copied audit envelopes. The whole116-binding/114-function surface now has100 typed TS compositions and14 genuine semantic NL coordinators, preserving all2327 goals/groups/splits. Native application effects and requested returned values are separate; real saved/delivered content is checked independently. Exact actual producer/generation masks preserve useful earlier actions and every raw capture, including Sol history; new paid teachers remain Luna. Full immutable release/collection activation is pending combined toolchain integration, not declared complete from source counts.
+
+Actual validation:254 dependent-template native tests +3 program tests;85 operational tests;19 shared outcome tests;28 configured-checkout unit/API tests; combined reader126 Python +52 Node (1 optional archived fixture unavailable) +quick. Two actual offline value/void TS-root captures passed export/both readers/native CLI and are excluded from training. Exact units, source proofs, limitations and the still-pending28 recoveries/496 decisions are recorded in VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md.
+
+The full compile exposed canonical type-only workspace aliases absent from virtual mounts and a per-entry programId in the shared frontend cache key. Fix the shared resolver/cache mechanism rather than duplicate DTOs, insert casts or repeatedly compile the same codebase. Earlier SDK97 graph/declaration reuse fixes passed their targets but did not make the full compile fit a1.1GiB heap; the bounded2GiB run reached remaining type errors at about1.85GiB. The final successor's all116 compile and155-release proof remain required; no measured memory-saving claim or campaign restart is made here.
+
+## 2026-11-23 21:45 Typed output contracts: a directory reducer declares the files it writes; authored tasks carry their output format in types, not prose
+
+The owner saw training-task instructions ending in prose like "Output contract: stock.md rows are seed | packets ...", and
+asked for the target format to come from natlang's own type machinery so the model learns to attend to declared types.
+3,180 of aei1's 37,619 pool tasks (8.5%, all `auth_*` exact desks, round 6 on) carried such a paragraph; the authoring
+checker required it.
+
+- **Mechanism.** The return value was already declared (its type in the signature); the files a directory reducer writes
+  had no declaration at all. Smallest native addition: `writes:` in a directory reducer's frontmatter names one record
+  type whose fields are the paths or globs it may write, each typed by the file's text (`string`, a string literal, or
+  a union). It reuses what exists: types and aliases, field doc comments ("describe a data format there", the skill's
+  rule), the opening's alias rendering, the return gate. The opening shows `The files it writes: T` under the signature
+  with the aliases it names. A return that created or changed an undeclared file, or a file whose text misses its
+  literal type, is refused with one sentence (`writes-unsatisfied`), and the call repairs it. An alias's own doc
+  comment in `types.ts` is now shown above it (it was dropped; only field doc comments reached the model). Spec:
+  `spec/ext/directory-reducers.md` "Declared files"; skills: authoring `language.md`, integration `refinements.md`.
+  Not chosen: template-literal line types and `Is<string, P>` file types (OPEN_ITEMS "Typed output contracts").
+- **Authoring rule.** `authored_checks.py` rule 6: a prose `Output contract:` paragraph is an error for every task; a
+  root that writes files declares `writes:` (error for round-6+ workers), and every file the reference writes must match
+  a field. Kit section 2; `/mnt/external/natlang-rl-authoring/AUTHOR_BRIEF_ROUND23.md` for the next round.
+- **Migration** (`scripts/rl_tasks/migrate_output_contracts.py`, mechanical): the paragraph leaves the instructions. Its
+  sentences about one file become that file's field doc comment in `<Root>Files`; those about the folder become the
+  alias's doc comment; those about the return value become the doc comment of `<Root>Result`, an alias of the declared
+  return type. The declared paths are not only the files the reference writes, which would leak which conditional
+  files stay unwritten. They are also every non-input path and template folder (`replies/<id>.md`) the instructions
+  name, and the input files a numbered step writes. 2,454 rows declare `writes:`; 2,589 got a documented result alias.
+- **Requalification** (`verify.mjs`, reference replay + negative controls, on the new runtime): 3,145 of 3,180 kept, 0
+  wrong answers accepted. 35 left out. 32 fail identically in their original form (17 reference replays in
+  `selected-drafts` w438 and `settings-merges` w432; 15 whose negative controls error on the replay's missing Neuralese
+  writer). 3 fail because of the migration: the declaration misses `ledger.csv`/package files that an installing run
+  writes, so the keyword baseline's return is refused instead of rejected (`verified-folder-edits` w437-p4a, w437-p6b,
+  `transactional-filing-rooms` w408-p3b). Each source's `typed-contracts.json` lists them.
+- **Data.** Each of the 19 grpo-pool sources with contract rows gets a `<id>-typed` version
+  (`data_nvme:rl-typed-contracts-20261123/`): the contract rows replaced by their requalified migrations, the 35 left
+  out, every other row copied byte for byte. Same ids and source groups, so held-v3/v4 exclusions are unchanged. The
+  `-typed` entries take the old entries' `grpo-pool` order, supersede them, and the old entries lose the role. aei1's pin
+  (108cd848) keeps its own registry and runtime. The typed rows enter at the next pin, together with the runtime that
+  reads `writes:`; an older runtime refuses `writes:` as an unknown frontmatter key.
+- **Found and fixed on the way:** the collector never bound a root function's `ensures:` (the kernel binds them to the
+  calls it runs; the collector prepares the root itself), so no root postcondition was checked in collection, held eval
+  or qualification. `ensuresGate` is now shared. No pool root declares one today.
+- **Measurement** (30 tasks, one per family, 2 samples, sft-v9 on the Colab front, same seeds, prose vs typed, same
+  runtime): in flight; appended below when it finishes.
+- **Not checked:**
+  - a blind solve of the migrated rows;
+  - `held_eval verify` against the new sources (same ids and groups as the verified old ones);
+  - a human read of the sentence attribution beyond about 10 samples;
+  - the full `check-main` (only `--quick` and the targeted ts-host and Python tests).
+
+## 2026-11-23 22:30 In-context-text reads broke the episode graph under RL capture; fixed (rollout agent)
+
+Follow-up to "Neuralese read-back" (21:30). The Colab L4 actor for aei1's collection now runs 78fb05054 (same policy
+e15b20a8, same serving settings; `pop_rl_actor serve-checkpoint --commit`, then an in-place rebind for the measured
+four-route attestation). Read-back probe on the live front, greedy: before 0/6 state, 5/6 inline, 0/6 shuffled; after
+10/12 state, 10/12 inline, 0/12 shuffled (each shuffled read returns the other state's text).
+
+**Defect found in collection.** An `in-context-text` read is captured as a `tokens` segment, but ts-host's model-turn
+graph (`native/agent.ts`) reconciles every native read against the captured prompt's `native_state` segments, so a
+traced read threw `neuralese-native-grad-invalid: request graph contains native reads absent from the captured model
+prompt`. The model saw that error in its tool result (2 of ~140 collection episodes in the first 40 minutes after the
+swap; 0 before). Learners (`rl/native_occurrences.py`, ts-host `nativeCaptureGraphBinding`) had the same inventory rule.
+
+**Fix, no switch of its own** (the read-back opt-out `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` removes the case): a read
+the response's import receipts name as `in-context-text` stays in the graph with its writer edge, as format
+`in-context-text`, outside the native-state inventory, like teacher text (agent.ts, model-recording.ts,
+native_occurrences.py, graph_replay.py read bindings). Tests: ts-host `native-state-values.test.mjs` (the read is kept
+and excluded; without the receipt the old refusal stands), `test_teacher_text_occurrences.py`. Also fixed:
+`test_native_stop_wire.py` tested the splice path without the opt-out since d16437be8.
+
+The live collector (pin 108cd84) runs the old ts-host and keeps hitting this until the driver moves to a pin with the
+fix; do not re-enable Neuralese variants on a pin without it.
+
+## 2026-11-23 23:30 Async SFT hand-back: a round on the DGX moves back to a fit Colab session from its verified state
+
+**Why.** aei1 r0001's SFT went to the DGX because the session was an L4 (unfit by `colab_sft_fit`). The keeper later
+got an A100, but nothing moved the round back: at step ~309 of 1150 and ~85 s/step (median of the last 40 steps;
+the brief's 45 s was optimistic) it had ~20 h left on the DGX, while the A100 sat on collection.
+
+**Decision (built, default on; `--no-sft-handback` opts out).** `AsyncRoundDriver.sft_handback`, checked every
+10 min while the round's DGX unit runs (`--sft-handback-check-minutes`):
+- Rule (`sft_handback_decision`): DGX left = (total - current step) x median s/step of the last 20 steps; session
+  left = move + (total - last saved step) x DGX s/step / speedup. Move = what the VM lacks (chains, start checkpoint,
+  state) at the measured link rates (Drive 5.0, tunnel 2.4 MB/s) + 900 s learner setup (`pop_rl_actor.sft_move_seconds`).
+  Speedup = this loop's measurement from an earlier move (`ROOT/sft-speed.json`, written when a moved round finishes),
+  else the built-in A100 measurement (36.8/9 = 4.09x), else the BF16 TFLOPS ratio (A100 2.5x). It moves only when
+  the session finishes within 75% of the DGX's time and at least 60 min sooner (`--sft-handback-margin 0.25`,
+  `--sft-handback-min-gain-minutes 60`). For r0001 at step 309 that is ~20 h vs ~5.5 h (4.09x) or ~8.7 h (2.5x), with a ~40 min move.
+- Exact resume: right after a DGX save (it waits for one if the push could not finish before the next), a hardlink
+  snapshot of `sft/learner-state` (FP32 factors, optimizer, RNG and batch cursor, `trainer_state`) goes to
+  `learner-state.incoming` on the VM through Drive (`put-dir` / `get-dir`, the tunnel on any failure,
+  `--sft-state-transfer`); every file's sha256 is checked against the snapshot, only then does it replace the VM's
+  state, and only then does the DGX unit stop. `run-sft` resumes it with the same recipe (`launch.json`) and step
+  list (`exp0_sft --resume` refuses other chains or a different step count). The VM runs the driver's commit, not
+  the DGX unit's pin.
+- After the move: DGX collection resumes (`ensure_collection`), the session's actor yields to the learner as before,
+  `round.json` records `dgx -> colab`, `sft/handback.json` keeps the decision and push, and the DGX logs are kept as
+  `sft/train.dgx-N.{jsonl,log}` (run-sft's pulls replace `train.jsonl`/`train.log`). At most 2 moves a round, none
+  after its Colab learner failed 3 times. A session lost afterwards falls back to the DGX from the synced state.
+
+**Fixed along the way.**
+- A driver restarted while the round's DGX learner ran entered the Colab loop when a fit session answered and started
+  `run-sft` beside it: two learners on one round, the 15-min pulls overwriting the DGX's `learner-state`. Now
+  `train_sft` joins a present DGX unit and only the verified hand-back moves it.
+- run-sft pushed the DGX state only when the VM's learner state probe said `none`. A VM whose earlier learner failed
+  (`rc 1`) kept its stale state and resumed from it. Now the DGX state is pushed (verified) whenever it is ahead of the
+  VM's state and no learner runs there (`sft_state_push_needed`).
+- The DGX learner launch uses `present` (running or ledger-held) instead of `active`, so a requeued unit is not
+  launched twice.
+
+**Not covered.** The `cycle` SFT stage (`Cycle.sft_stage`, the path async-drive replaces, no cycle running) gets
+the shared run-sft push fix but no hand-back. GRPO rounds train only on the DGX. Not checked: a live push to the
+A100 (no live unit was touched); Drive `put-dir`/`get-dir` of a 1.5 GB state (only `put`/`get` of blobs were
+measured); whether exp0_sft's restored `trainer_state` OOM plan (DGX pack 19573 tokens, 56 GiB) is the right plan
+on the A100 (it changes memory, not the step list, as in the existing Colab -> DGX takeover). Hand-back Drive
+objects (`natlang/colab/<run>/handback-state`) are replaced per move, not deleted.
+
+Tests: `tests/neuralese/test_async_train.py` (decision, move after verified push, no move when opted out,
+unfavourable, unsaved, unverified or blocked, VM state replaced only whole and verified, run-sft push rule, move
+estimate).
+
+## 2026-11-23 23:45 Held-failure task batch (hfb): briefs A–E, 343 tasks qualified, 242 train rows in grpo-pool
+
+The held failure taxonomy (`HELD_FAILURES_20261123.md`) asked for training tasks in five classes (OPEN_ITEMS briefs A–E).
+20 Opus authors (w440–w459) wrote one batch each. Brief E kept only the capabilities that need no Neuralese read. Common
+brief: `/mnt/external/natlang-rl-authoring/hfb/AUTHOR_TASK.md`; per-worker assignments are `hfb/brief-wNNN.md`.
+- **Format.** Every task is verifier-judged (kit sections 18–19): meaning-based judgments with at least 40% cue traps
+  per world, a keyword baseline that must fail, and smoke replays.
+  - Output formats are stated in types: a top-level `types.ts` with field doc comments, literal unions, `ensures:`
+    checks, and the trusted verifier. No `Output contract:` paragraph appears anywhere, and no task uses Neuralese.
+  - File formats sit in the numbered steps. `writes:` was not in the collection runtime when the authors started, and
+    the landed rule 6 (089ab8d15) exempts verifier tasks from it. Declaring their files in `writes:` is an OPEN_ITEMS
+    follow-up.
+- **Qualification.** Each author cleared `authored_checks.py` and the collector replay (`hfb/replay.sh`, on aei1's
+  collection runtime 1c177e3fc). Then `sfp_batch.py qualify` ran on a pin of 78fb05054:
+  - reference, wrong answers, aliases, keyword baselines and smoke replays all passed (0 wrong answers accepted, 0
+    keyword baselines accepted);
+  - custody, novelty (every family new), held-v3/held-v4 separation and repetition all passed;
+  - all 20 batches PASS.
+- **Blind solves.** Sonnet solvers worked from the packet alone; each answer was judged by the task's own verifier.
+  - 340 of 343 agreed on the first solve. w449's solver wrote paths with the root task's folder name in front; once
+    that prefix was stripped it agreed 21/21.
+  - The 3 disagreements were all w454: p5b term 5, p5c term 3, p6b section 5. Each was reworded to one reading,
+    requalified (qualified-2) and re-solved blind, and now agrees.
+- **Admission.** All 343 tasks were admitted (`admitted/admissions.jsonl`).
+  - Supply `natlang-rl-task-supply-20261123hfb` (e1219c0a6, `grpo-pool` order 21): 242 train rows.
+  - 100 held rows are registered evaluation-only: `natlang-rl-authored-{dev,confirmation}-20261123hfb`, 51 and 49 rows.
+  - One train row was dropped (`--drop-related`, now an `sfp_batch supply` option): w449-p1a-result-producers. Its whole
+    input `{type_name: "Quote"}` equals a held w447 row's input, and custody's input binding fails closed on it.
+  - Checks: custody 0, held-v3 verify 0/0 with and without exposure, held-v4 verify 0/0 (with exposure and
+    exposure-v2 too), training exclusion 0.
+
+  | Brief | Workers | Authored and admitted | Train rows |
+  |---|---|---|---|
+  | A: directory reducers with exact effects | w440–w443 | 67 | 42 |
+  | B: child-call discipline | w444–w446 | 49 | 39 |
+  | C: exhaustive codebase exploration | w447–w449 | 60 | 50 |
+  | D: decision calibration on hard negatives | w450–w453 | 66 | 44 |
+  | E: zero-rate capabilities, no Neuralese | w454–w459 | 101 | 67 |
+- **Repetition** (`measure_repetition.py` against the 37,584-row pool):
+  - 162 distinct programs (148.5 effective) and 42 structures (21.5 effective);
+  - 0 instruction, program or functional-program texts already in the pool;
+  - 7 of 42 structures are shared with the pool (60 rows);
+  - 199 of 242 rows are in families absent from the pool;
+  - the novelty gate passed for every batch's family (each family is new to the pool).
+- **Selection.** `simulate_selection --grpo` with the supply added: PASS (2,000 groups).
+- **Found and fixed.** A relative `uses:` into a cousin folder was rejected as a false cycle, because the loader reloaded
+  the owner chain mid-load. Two C authors hit it independently. The fix is e494bc5ca (loader binds the record of the tree
+  being loaded; package-root `uses:` without `natlang.json`; tests).
+- **Found, not fixed:**
+  - `register_authored_held.py` and `build_supply.py` write relative to the script's checkout. Run from a worktree, the
+    held packets landed in the worktree's own `runs/`. They were moved to `/home/werg/natlang/runs` and linked back.
+  - The static verifier controls run keyword baselines without `read_code`, while the collector replay has it.
+    Exploration baselines therefore inline the sources.
+  - A `types.ts` doc-comment example whose id is also a real item id makes every child opening match that item's
+    scripted answer (w445).
+- **Current policy on the new tasks.** Not measured. The measurement ran sft-v9 (e15b20a8) on the Colab front at 2
+  samples over the first 49 train rows. It lost the actor after 13 episodes, when the keeper replaced the L4 session with
+  an A100 at 22:15 and the new session's actor serve failed. 3 episodes were scored, 0 passed, mean graded reward 0.16.
+  One read: a brief-A run wrote the right summary and left every ticket unmoved, which is the targeted failure.
+  Re-measure on the next actor (`runs/hfb/make_measure_manifest.py` over the supply).
+- **Not checked:**
+  - the policy's pass rate (above);
+  - a model run of the depth-3 middles (replay scripts them);
+  - B worlds sized at about 28 requests per correct pass, which may be tight if children take several turns;
+  - a second blind solver;
+  - whether collection on a `writes:` runtime treats these tasks the same (they declare no `writes:`).

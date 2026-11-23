@@ -11,7 +11,7 @@
   "rows": 36,
   "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
   "protected": false,
-  "note": "authored workers 402-406: 36 train rows",
+  "note": "authored workers 402-406: 36 train rows Superseded in the grpo-pool role by natlang-rl-task-supply-20261123sfp1-typed (2026-11-23, typed output contracts).",
   "inputs": [
     {
       "id": "natlang-rl-authoring-admitted",
@@ -128,11 +128,5 @@
     "host": "mltick"
   },
   "manifest_sha256": "3cc7d7392a6e2139752cd3f722d6786cc9db8c36ba6c4295284979f72e458476",
-  "training_admission": "registry-recorded",
-  "roles": {
-    "grpo-pool": {
-      "order": 18,
-      "file": "cases.jsonl"
-    }
-  }
+  "training_admission": "registry-recorded"
 }

@@ -68,6 +68,8 @@ export type CallableDefinition = {
   measure?: string;
   /** `ensures:` postconditions over the result and the arguments (runtime/ensures.ts), judged before a result is accepted. */
   ensures?: readonly import('./ensures.js').EnsuresClause[];
+  /** `writes:` of a directory reducer: the type of the files its calls write (runtime/writes.ts). */
+  writes?: string;
   /** The record of a recursive definition: bound under its own name in its calls' eval scope. */
   self?: import('./loader.js').NatlangRecord;
   revision?: string;
@@ -361,6 +363,7 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   node.hostClasses = options.classes;
   if (definition.readout) node.readout = definition.readout;
   if (definition.withhold?.length) node.withheldTools = [...definition.withhold];
+  if (definition.writes) node.writes = definition.writes;
   if ((definition.protect?.length || definition.ensures?.length) && definition.source)
     node.protectedSources = [...protectedSources(definition.source, definition.protect),
       ...protectedSources(definition.source, checkItems(definition.ensures, definition.params.map(parameter => parameter.name), definition.codebase))];
@@ -373,6 +376,25 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   });
   if (options.captures && Object.keys(options.captures).length) node.captures = options.captures;
   return node;
+}
+
+/**
+ * The `ensures:` check of one call of `definition` on `inputs` (runtime/contracts.ts), one verdict per distinct result:
+ * crisp checks run in `frame` (the call's own), judged predicates on the judges of `judgeFrame` (its caller's). The
+ * kernel binds it to every call it runs; a host that prepares a root node itself (the collector) binds it to the root.
+ */
+export function ensuresGate(definition: CallableDefinition, inputs: unknown[], frame: Frame, judgeFrame: Frame,
+  model: Parameters<Frame["task"]["refinementJudges"]>[0], callId: string, trace: { emit(kind: string, data: Record<string, unknown>): unknown }): NonNullable<LambdaNode['ensures']> {
+  const task = frame.task, verdicts = new Map<string, Promise<RefinementFailure[]>>();
+  const input = { frame, owner: definition, inputs, checker: task.refinementChecker(), judges: task.refinementJudges(model, judgeFrame),
+    callId, signal: frame.signal ?? task.signal, trace: trace as never, untrusted: scopedUntrusted(task),
+    emit: (kind: string, data: Record<string, unknown>) => { trace.emit(kind, data); } };
+  return value => {
+    const result = toHost(value), key = canonicalValue(result);
+    let verdict = verdicts.get(key);
+    if (!verdict) verdicts.set(key, verdict = checkEnsures(input, result));
+    return verdict;
+  };
 }
 
 /**
@@ -525,7 +547,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
       returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase,
       withhold: record.withhold, protect: record.protect, budget: record.budget, recursive: record.recursive, measure: record.measure,
-      ensures: record.ensures, self: record.recursive || record.measure ? record : undefined };
+      ensures: record.ensures, writes: record.writes, self: record.recursive || record.measure ? record : undefined };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.
@@ -876,20 +898,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         text: kept, reason: 'the text differs from the one its soft state was primed from; it stays text' });
     }
     if (handoff) node.handoff = handoff;
-    if (definition.ensures?.length) {
-      // Postconditions over the result and the arguments (`ensures:`): the executor's return gate asks them like refined
-      // slots, and so does the check below whatever path produced the value. One verdict per distinct result.
-      const verdicts = new Map<string, Promise<RefinementFailure[]>>();
-      const input = { frame: childFrame, owner: definition, inputs, checker: task.refinementChecker(), judges: task.refinementJudges(model, frame),
-        callId, signal: frame.signal ?? task.signal, trace: runtime.trace, untrusted: scopedUntrusted(task),
-        emit: (kind: string, data: Record<string, unknown>) => { runtime!.trace.emit(kind, data); } };
-      node.ensures = value => {
-        const result = toHost(value), key = canonicalValue(result);
-        let verdict = verdicts.get(key);
-        if (!verdict) verdicts.set(key, verdict = checkEnsures(input, result));
-        return verdict;
-      };
-    }
+    // Postconditions over the result and the arguments (`ensures:`): the executor's return gate asks them like refined
+    // slots, and so does the check below whatever path produced the value.
+    if (definition.ensures?.length) node.ensures = ensuresGate(definition, inputs, childFrame, frame, model, callId, runtime.trace);
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
     if (extraTransactions.length) node.extraTransactions = extraTransactions;
     const result = await runInFrame(childFrame, () => runtime!.run(node));

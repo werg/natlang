@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "memetic-program-source-20261105-typed",
+  "owner": "dgx",
+  "path": "data_nvme:rl-typed-contracts-20261123/memetic-program-source-20261105-typed",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 341586729,
+      "sha256": "dd7a5c8261ad516869db25ca80901eb3c36a93f2ef0030ce302dbd3bd4a5a619",
+      "lines": 28730
+    },
+    {
+      "path": "typed-contracts.json",
+      "bytes": 1127,
+      "sha256": "1e80c51c362e4ecf0af5517546c173e6869b5b8f769edfac502dd6ec1eb64911"
+    }
+  ],
+  "bytes": 341587856
+}

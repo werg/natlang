@@ -1,0 +1,27 @@
+{
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-recovered-review-outcomes-20261123",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/recovered-review-outcomes-20261123",
+  "include": [
+    "capture/**",
+    "receipt.json",
+    "trajectory.native.jsonl.zst",
+    "graph-metrics.json"
+  ],
+  "kind": "teacher-demos",
+  "format": "native Vibestudio Luna trajectories and capture evidence",
+  "rows": 2,
+  "protected": false,
+  "producer": {
+    "script": "publish-semantic-review-recoveries.py",
+    "argv": [
+      "/home/werg/natlang-pins/vibestudio-reader-a600149b3c7f",
+      "b931c9a0cc349c77642f2acb5336e39c44a401cc"
+    ],
+    "git_commit": "a600149b3c7fe8317e645e580ac587ab13720434",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "5f219199fe4cdca577f7e4f5e533abc31fa2b5c94024125a7a154cf53280c3d2",
+  "training_admission": "registry-recorded"
+}

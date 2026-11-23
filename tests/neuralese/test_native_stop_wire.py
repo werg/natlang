@@ -82,6 +82,8 @@ def test_same_numeric_adapter_live_and_constant_uses_never_share_derivative_cach
 @pytest.mark.parametrize('family',['lfm'])
 def test_actual_engine_generation_and_contextual_capture_retain_constant_import(tmp_path,monkeypatch,family):
     from natlang_neuralese.serve.engine import GenerationRequest
+    # the spliced import path: a text-written state is otherwise read as its tokens in context (in-context-text)
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT','0')
     engine=engine_fixture(tmp_path,family)
     block=engine.native_write_text('t4 t5')
     messages=[{'role':'user','content':[{'type':'text','text':'t6 '},

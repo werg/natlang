@@ -66,6 +66,29 @@ is not required (owner, 2026-11-12: that rule did not come from the owner and wa
   an exact learner law".
 - Engine status and the check: `docs/ENGINE_PARITY.md` "Result schemas: tuples".
 
+### 2026-11-23 — a directory reducer declares the files it writes; authored tasks' output contracts move from prose into types
+
+- **What the model sees.** A directory reducer with `writes:` has one more line under its signature, `The files it
+  writes: <Alias>`, followed (with the signature's own aliases) by that alias: a record whose fields are the paths or
+  globs it may write, each typed by the file's text, with doc comments saying what each file holds. A doc comment on a
+  type alias in `types.ts` is now shown above the alias (`/** ... */` then `type X = ...;`); before, only doc comments
+  on fields reached the model and an alias's own was dropped. This applies to every program, not only tasks.
+- **New refusal.** A `return_result` (or finishing eval) of such a call whose created or changed files are not declared,
+  or do not fit their declared literal type, is refused with one sentence: `writes-unsatisfied: notes.md is not among
+  the files tally writes (tally.md, done/*.md); undo that change (remove the file, or restore its text), and put what
+  the result needs in the files it declares.` The call repairs it and returns again.
+- **Training tasks.** 3,180 pool tasks (8.5% of aei1's 37,619) carried an `Output contract:` paragraph in their root
+  instructions. Migrated (`scripts/rl_tasks/migrate_output_contracts.py`): the paragraph leaves the instructions; its
+  sentences about one file become that file's field doc comment in `<Root>Files` (`writes:`), those about the folder
+  the alias's doc comment, those about the return value the doc comment of `<Root>Result` (the root's `returns:` now
+  names it). Measured before/after on 30 tasks x 2 samples on sft-v9: see DECISIONS 2026-11-23 "typed output contracts".
+- **Root postconditions.** A root function's `ensures:` is now checked in collection, held eval and qualification
+  replay (the collector prepares the root node itself and never bound them; only called functions had theirs checked).
+  None of the 37,619 pool roots declares one today, so no current task changes.
+- **Opt-outs.** A program without `writes:` sees no change but the alias doc comments. There is no switch for the
+  doc-comment rendering (it fixes a dropped declaration); the migrated pool's previous rows stay registered under their
+  old dataset ids (`*-typed` supersede them in the `grpo-pool` role).
+
 ### 2026-11-23 — an optional tuple tail is decodable; a tuple result parsed from text is not refused
 
 - **Optional tail.** `[A, B?]` as a `return_result` value schema is `anyOf` one exact tuple per length
