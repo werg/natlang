@@ -1,0 +1,58 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "held-v4-set",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v4",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 2645830,
+      "sha256": "bfd04bdbfee98aac4003b1dcb721c4567b94e13b344d18c8200e385b1de952f4",
+      "lines": 164
+    },
+    {
+      "path": "engine.json",
+      "bytes": 1162,
+      "sha256": "951540fd91151c45cc6d990d5e0970cdd8292a97a725e92f7c33b173aba6be40"
+    },
+    {
+      "path": "exclusion-ids.json",
+      "bytes": 10531,
+      "sha256": "8b08359ac639178532c79371a656cfb26a194a9da17f71a38fe63a29c2ae6712"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 57666,
+      "sha256": "2cddfa0af1637e5204727e99ec7e1adf3a955ccce25c3985ff957eda5931eac2"
+    },
+    {
+      "path": "pin.sh",
+      "bytes": 680,
+      "sha256": "be7b934ab8a6ceb368a62ad73a3137dca5c60009e77cd91657080690e8a0e403"
+    },
+    {
+      "path": "source/authored.jsonl",
+      "bytes": 1097885,
+      "sha256": "a0c71ca83104116387c5dfa3c57cfbc350cb613c3cf153cfab0dc4c0875399ae",
+      "lines": 104
+    },
+    {
+      "path": "source/cases.jsonl",
+      "bytes": 2645548,
+      "sha256": "b87c25b518119aa056c4d4910ea9b60ac6246ba41ba830e18026d60b8a5d6eb7",
+      "lines": 164
+    },
+    {
+      "path": "source/design-brief-gates.jsonl",
+      "bytes": 1547663,
+      "sha256": "ab331ed782a25e6072bc07b0ba2a0cc7aa54a98a64378a5ef9fbb68dce822202",
+      "lines": 60
+    },
+    {
+      "path": "source/dropped.json",
+      "bytes": 1039,
+      "sha256": "e570a8ed1f867ca25eb40e66f1c599904508abe947e66c17e132d33da89ca07c"
+    }
+  ],
+  "bytes": 8008004
+}

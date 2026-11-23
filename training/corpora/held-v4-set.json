@@ -1,0 +1,29 @@
+{
+  "id": "held-v4-set",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v4",
+  "include": [
+    "manifest.json",
+    "cases.jsonl",
+    "engine.json",
+    "exclusion-ids.json",
+    "pin.sh",
+    "source/cases.jsonl",
+    "source/design-brief-gates.jsonl",
+    "source/authored.jsonl",
+    "source/dropped.json"
+  ],
+  "kind": "held",
+  "protected": true,
+  "admission": "evaluation-only-never-training",
+  "training_admission": "evaluation-only",
+  "roles": {
+    "held-eval-semantic-fp": {
+      "order": 0,
+      "file": "manifest.json"
+    }
+  },
+  "format": "held_eval pinned set: manifest.json (sha 2cddfa0a), cases.jsonl (164 tasks: 104 authored semantic-FP construct tasks over 8 families, 60 exact design-brief gates of the 20 reserved briefs) and its reservations (natlang.rl-held-reservations/1)",
+  "license": "project task sources (design briefs, Astra/Sol applications, flagship fixtures)",
+  "note": "held-v4, the semantic-FP held set (plans/semantic-fp/05 §5, 09 B1): 164 tasks pinned with held_eval pin --all-rows; also_excludes held-v3 and the held-v4 reservations (entry held-v4). Training excludes every held-eval* role (held_eval.training_exclusion_ids). held-v3 (role held-eval) stays the gate until held-v4 has two measured rounds."
+}
