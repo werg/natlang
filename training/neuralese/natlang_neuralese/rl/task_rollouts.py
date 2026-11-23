@@ -718,7 +718,22 @@ def memetic_reward_record(memetic: dict[str, Any]) -> dict[str, Any]:
             "without": arm("none"), "default": arm("default"),
             "query_success": float(memetic["query_success"]), "query_dir": memetic.get("query_dir"),
             "committed": memetic.get("committed"), "unscored_workspace": bool(memetic.get("unscored_workspace")),
-            "score_path": memetic.get("score_path")}
+            "leak_refused": bool(memetic.get("leak_refused")), "score_path": memetic.get("score_path")}
+
+
+def memetic_success(memetic: dict[str, Any] | None) -> bool:
+    """Whether a memetic improvement episode is a verified success (its own success for expert iteration): it
+    committed a change set, the workspace scored it on the private query worlds (never shown to the supervisor;
+    separate from the support worlds it was judged on while working), its texts reproduce no query answer, and its
+    quality (query success minus the evaluation cost) beats the best trivial improvement (``anchor``: no change or the
+    mechanical default on the same worlds and seeds), the condition under which GRPO gives it a positive advantage.
+    ``memetic``: a ``natlang.memetic-outcome/1`` record (``memetic_outcome``)."""
+    if not memetic or memetic.get("unscored_workspace") or memetic.get("leak_refused"):
+        return False
+    if not memetic.get("committed"):
+        return False
+    quality, anchor = memetic.get("quality"), memetic.get("anchor")
+    return type(quality) in (int, float) and type(anchor) in (int, float) and quality > anchor
 
 
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
@@ -897,6 +912,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                             "model_facing": os.environ.get("NATLANG_MODEL_FACING") or None,
                             "turns": turns, "execution_graph": execution_graph,
                             "outcome": outcome,
+                            **({"memetic_success": memetic_success(memetic)} if memetic is not None else {}),
                             "reward": None if training_reward is None else {"quality": training_reward,
                                 "graded": graded,
                                 **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
@@ -913,6 +929,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
                          "neuralese_exchanges": exchanges,
                          "execution_efficiency": efficiency,
                          **({"neuralese_bonus": episode_bonus} if episode_bonus else {}),
+                         **({"memetic_success": memetic_success(memetic)} if memetic is not None else {}),
                          **({"jolt_role": entry["jolt_role"]} if "jolt_role" in entry else {})})
     groups = []
     for index, task in enumerate(packet):

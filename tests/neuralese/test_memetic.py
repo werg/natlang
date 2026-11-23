@@ -309,3 +309,219 @@ def test_guidance_rows_are_the_verified_calls_that_imported_the_state_with_its_t
     assert row['messages'][1]['content'] == ('Instructions: x\n\n<natlang_program_guidance>\nCheck the weekday twice.\n'
                                              '</natlang_program_guidance>\n')
     assert row['teacher'] == 'rl' and row['evidence']['rootOracle'] is True and row['reply'] == {'text': 'Sunday'}
+
+
+# ---- memetic episodes in expert-iteration collection and the SFT mix (B15) ------------------------------------------
+def _outcome(**over):
+    return {'schema': mw.OUTCOME_SCHEMA, 'quality': 0.8, 'anchor': 0.5, 'gain': 0.35, 'cost': 0.05,
+            'query_success': 0.85, 'committed': {'ids': ['c1'], 'reason': 'r'}, 'leak_refused': False, **over}
+
+
+def test_a_memetic_success_beats_the_trivial_improvements_on_query_worlds_with_a_leak_free_commit():
+    assert task_rollouts.memetic_success(_outcome())
+    assert not task_rollouts.memetic_success(_outcome(quality=0.5))           # ties the anchor: no gain
+    assert not task_rollouts.memetic_success(_outcome(leak_refused=True))
+    assert not task_rollouts.memetic_success(_outcome(committed=None))
+    assert not task_rollouts.memetic_success(_outcome(unscored_workspace=True))
+    assert not task_rollouts.memetic_success(None)
+
+
+class GuidedEvaluator(Evaluator):
+    """The mechanical default does nothing (0.25); written guidance that names the exact answer form helps (1.0)."""
+
+    def __call__(self, cases, guidance, *, name, samples=None):
+        report = super().__call__(cases, guidance, name=name, samples=samples)
+        text = ' '.join(g['text'] for g in guidance or ())
+        report['success'] = 1.0 if 'exact name' in text else 0.25
+        return report
+
+
+def test_a_workspace_commit_that_beats_the_anchor_is_a_success_and_the_mechanical_default_is_not(tmp_path):
+    w = mw.Workspace(spec(tmp_path), GuidedEvaluator(), check=lambda case: [], run='r0')
+    change = w.propose({'kind': 'guidance', 'scope': {'kind': 'program'},
+                        'text': 'Answer with the exact name the question asks for.'})['id']
+    assert w.evaluate([change])['success'] == 1.0
+    w.commit([change], 'exact answer form')
+    assert task_rollouts.memetic_success(w.score()['memetic'])
+    lazy = mw.Workspace(spec(tmp_path), GuidedEvaluator(), check=lambda case: [], run='r1')
+    lazy.commit([], 'nothing to change')
+    assert not task_rollouts.memetic_success(lazy.score()['memetic'])
+
+
+def test_a_recorded_only_evaluator_reads_recorded_evaluations_and_never_samples(tmp_path):
+    out = tmp_path / 'memetic'
+    (out / 'evals' / 'support-x').mkdir(parents=True)
+    (out / 'evals' / 'support-x' / 'summary.json').write_text(json.dumps({'success': 0.5}))
+    value = {'out': str(out), 'endpoint': 'http://127.0.0.1:9', 'recorded_only': True,
+             'eval': {'samples': 2, 'workers': 1, 'case_seconds': 1, 'max_model_requests': 1, 'max_turns': 1,
+                      'seed_base': 0}}
+    evaluate = mw.collection_evaluator(value)
+    assert evaluate([], None, name='support-x') == {'success': 0.5}
+    with pytest.raises(ValueError, match='not recorded'):
+        evaluate([world(0)], None, name='support-y')
+    assert not (out / 'evals' / 'support-y' / 'collection').exists()
+
+
+def test_grpo_runs_no_privileged_attempts_of_a_memetic_group(tmp_path):
+    c = grpo.Collector.__new__(grpo.Collector)
+    c.args = type('A', (), {'teacher_attempts': 2})()
+    c.groups = {1: {'dir': tmp_path, 'memetic': True}}
+    assert c._teachers(1) == 0
+
+
+def _ei():
+    import expert_iteration
+    return expert_iteration
+
+
+class _MemeticBase:
+    def __init__(self, rows):
+        self.memetic_rows, self.groups, self.args = rows, {}, type('A', (), {'memetic_max_groups': 2})()
+
+    def _memetic_open(self):
+        return True
+
+
+def test_expert_iteration_bounds_memetic_groups_in_flight_and_near_the_deadline():
+    import time
+    ei = _ei()
+    rows = [{'semantics': {'world': {'kind': 'memetic', 'case_seconds': 3600}}}]
+    collector = ei.frontier_collector(_MemeticBase)(rows)
+    collector.deadline = time.time() + 7200
+    assert collector._memetic_open()
+    collector.groups = {1: {'memetic': True, 'done': 0, 'size': 4}, 2: {'memetic': True, 'done': 4, 'size': 4},
+                        3: {'done': 0, 'size': 4}}
+    assert collector._memetic_open()                       # one running, one finished, one ordinary
+    collector.groups[4] = {'memetic': True, 'done': 1, 'size': 4}
+    assert not collector._memetic_open()                   # two running: the bound
+    collector.groups = {}
+    collector.deadline = time.time() + 1800
+    assert not collector._memetic_open()                   # its wall clock no longer fits before the deadline
+
+
+def test_expert_iteration_collection_draws_memetic_groups_by_default_and_opts_out(tmp_path):
+    from types import SimpleNamespace
+    ei = _ei()
+    assert ei.MEMETIC_SHARE == 0.02
+    c = ei.Cycle.__new__(ei.Cycle)
+    c.a = SimpleNamespace(kv_gb=12, slots=8, fill=None, k=4, collect_hours=1., no_neuralese_variants=True,
+                          neuralese_variants=None)
+    c.pin, c.collect_dir, c.dir = tmp_path, tmp_path / 'collect', tmp_path
+    argv = c.collect_command('u', 'ckpt', 'sha', 8)
+    assert argv[argv.index('--memetic-share') + 1] == '0.02'
+    c.a.memetic_share = 0.
+    argv = c.collect_command('u', 'ckpt', 'sha', 8)
+    assert argv[argv.index('--memetic-share') + 1] == '0.0'
+
+
+def test_frontier_rates_count_a_memetic_episode_by_its_verified_success(tmp_path):
+    ei = _ei()
+    directory = tmp_path / 'groups' / 'g000000'
+    directory.mkdir(parents=True)
+    rows = [{'task_id': 'memetic:p', 'reward': 0.7, 'outcome': 'memetic_scored', 'memetic_success': True},
+            {'task_id': 'memetic:p', 'reward': 0.3, 'outcome': 'memetic_scored', 'memetic_success': False},
+            {'task_id': 't', 'reward': 1.0}]
+    (directory / 'rewards.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    assert ei.group_outcomes([directory]) == {'memetic:p': [1, 2], 't': [1, 1]}
+
+
+def test_sft_sources_take_a_memetic_success_as_an_own_success_and_replay_it_from_its_recorded_evaluations(tmp_path):
+    import hashlib
+    import sft_sources
+    ok = {'outcome': 'memetic_scored', 'memetic_success': True, 'reward': {'quality': 0.7}}
+    assert sft_sources.episode_success(ok)
+    assert not sft_sources.episode_success({**ok, 'memetic_success': False})
+    assert sft_sources.episode_success({'outcome': 'task_success', 'reward': {'quality': 1.0}})
+    group = tmp_path / 'collect' / 'groups' / 'g000001'
+    recorded = group / 'memetic'
+    for name in ('baseline-support', 'support-abc'):
+        (recorded / 'evals' / name / 'collection').mkdir(parents=True)
+        (recorded / 'evals' / name / 'summary.json').write_text(json.dumps({'success': 0.5, 'name': name}))
+    (recorded / 'prepared.json').write_text(json.dumps({'admitted': True}))
+    spec_path = group / 'memetic-spec.json'
+    spec_path.write_text(json.dumps({'schema': mw.SPEC_SCHEMA, 'out': str(recorded), 'endpoint': 'http://actor'}))
+    task = {'id': 'memetic:p', 'semantics': {'world': {
+        'kind': 'memetic', 'task': str(spec_path), 'spec_sha256': hashlib.sha256(spec_path.read_bytes()).hexdigest()}}}
+    replay = tmp_path / 'replay' / 'e'
+    replay.mkdir(parents=True)
+    bound, refusal = sft_sources.memetic_replay_task(task, replay)
+    assert refusal is None and sft_sources.is_memetic(bound)
+    bound_spec = json.loads(Path(bound['semantics']['world']['task']).read_text())
+    assert bound_spec['recorded_only'] and bound_spec['out'] == str(replay / 'memetic')
+    assert sorted(p.parent.name for p in (replay / 'memetic' / 'evals').glob('*/summary.json')) == \
+        ['baseline-support', 'support-abc']
+    assert not (replay / 'memetic' / 'evals' / 'support-abc' / 'collection').exists()   # summaries only
+    assert task['semantics']['world']['task'] == str(spec_path)                         # the recording is read only
+    spec_path.write_text(json.dumps({'schema': mw.SPEC_SCHEMA, 'out': str(recorded), 'refine': True}))
+    assert sft_sources.memetic_replay_task(task, tmp_path / 'r2')[1] == 'memetic_spec_changed'
+
+
+def test_sft_build_drops_a_memetic_row_whose_worlds_include_a_held_task(tmp_path, monkeypatch):
+    import sft_sources
+    from natlang_neuralese.rl import held_eval
+    for name in ('exclusion_ids', 'training_exclusion_ids'):     # the held tasks themselves: none in this fixture
+        monkeypatch.setattr(held_eval, name, lambda *args, **kwargs: [], raising=False)
+    tasks = {'memetic:a': {'id': 'memetic:a', 'curriculum': {'world_ids': ['w1', 'held-1']}},
+             'memetic:b': {'id': 'memetic:b', 'curriculum': {'world_ids': ['w1', 'w2']}}}
+    held = ({'held-1'}, set(), set())
+    assert sft_sources.held_excluded_ids('manifest', tasks, held) == {'memetic:a'}
+
+
+def test_a_guidance_binding_carries_the_runtime_sentinel_around_its_state_id(tmp_path, monkeypatch):
+    """guidance/program.ts accepts a binding only when program_guidance is the native-state sentinel of its id; every
+    guided evaluation of grpo-v4 run2 failed on that before 2026-11-23 ('invalid natlang.memetic-program-guidance/1')."""
+    state = 'nzs1_' + 'a' * 52
+    identity = {'architecture': 'lfm3', 'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
+                'embedding_weight_sha256': 'c' * 64}
+    monkeypatch.setattr(mw, 'request_json', lambda server, path, value=None, timeout=900:
+                        {'id': state} if 'write-text' in path else {})
+    monkeypatch.setattr(mw, 'native_identity', lambda info: identity)
+    (tmp_path / 'states').mkdir()
+    (tmp_path / 'states' / f'{state}.safetensors').write_bytes(b'x')
+    binding = mw.guidance_binding('http://actor', tmp_path, 'memetic:p', 'Read twice.')
+    assert binding['program_guidance'] == '' + state + '' and binding['native_state_id'] == state
+
+
+def test_an_evaluation_no_run_finished_measures_nothing(tmp_path):
+    class Failing(Evaluator):
+        def __call__(self, cases, guidance, *, name, samples=None):
+            report = super().__call__(cases, guidance, name=name, samples=samples)
+            return {**report, 'success': None if guidance else report['success'], 'scored': 0 if guidance else len(cases)}
+    w = mw.Workspace(spec(tmp_path), Failing(), check=lambda case: [], run='r0')
+    assert w.prepared['baselines']['default']['success'] is None          # the anchor ignores it
+    change = w.propose({'kind': 'guidance', 'scope': {'kind': 'program'}, 'text': 'Read the question twice.'})['id']
+    with pytest.raises(ValueError, match='not counted against the budget'):
+        w.evaluate([change])
+    assert w.budget()['evaluations'] == 2
+    w.commit([change], 'reads twice')
+    with pytest.raises(ValueError, match='unmeasured'):
+        w.score()
+    nothing = mw.Workspace(spec(tmp_path / 'b'), lambda cases, guidance, *, name, samples=None: {
+        'success': None, 'scored': 0, 'rollouts': len(cases), 'results': [], 'dir': name}, check=lambda case: [], run='r')
+    with pytest.raises(ValueError, match='no evidence'):
+        nothing.baseline()
+
+
+def test_collection_leaves_out_memetic_rows_with_a_held_world(tmp_path):
+    rows = []
+    for name, ids in (('a', ['w1', 'w2']), ('b', ['w3', 'w4'])):
+        path = tmp_path / f'{name}.json'
+        path.write_text(json.dumps({'support': [{'id': ids[0]}], 'query': [{'id': ids[1]}]}))
+        rows.append({'id': f'memetic:{name}', 'semantics': {'world': {'kind': 'memetic', 'task': str(path)}}})
+    manifest = {'tasks': [{'id': 'w4'}], 'excluded_split_groups': []}
+    args = type('A', (), {'held_manifest': manifest, 'exclude_manifest': []})()
+    assert [r['id'] for r in grpo.memetic_rows_held_free(rows, args)] == ['memetic:a']
+
+
+def test_async_drive_passes_its_memetic_share_to_the_collection(tmp_path, monkeypatch):
+    ei = _ei()
+    seen = []
+    monkeypatch.setattr(ei, 'async_drive', lambda args: seen.append(args) or 0)
+    base = ['expert_iteration.py', 'async-drive', '--root', str(tmp_path), '--start', '/p.pt', '--commit', 'c' * 40]
+    for extra, share in (([], ei.MEMETIC_SHARE), (['--memetic-share', '0'], 0.)):
+        monkeypatch.setattr(sys, 'argv', base + extra)
+        ei.main()
+        assert seen[-1].memetic_share == share
+    driver = ei.AsyncRoundDriver.__new__(ei.AsyncRoundDriver)
+    driver.a, driver.root = seen[-1], tmp_path
+    assert driver.cycle_args().memetic_share == 0.

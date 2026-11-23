@@ -47,6 +47,17 @@ from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 SUCCESS = 'task_success'
 OPS = ('data_nvme', 'lfm3-rl-dgx-20261029', 'ops')
+MEMETIC = 'memetic_scored'   # a memetic improvement episode's outcome (task_rollouts.score); success: memetic_success
+
+
+def episode_success(row):
+    """A scored natlang.rollout/1 row's verified success: a binary task success, or a memetic improvement episode
+    whose committed change set beat the trivial improvements on the private query worlds (``memetic_success``,
+    task_rollouts.memetic_success: the supervisor's own calls train as an own success; the guidance it wrote is its own
+    sampled action, and the nested runs of the guided program are never extracted)."""
+    if row.get('outcome') == MEMETIC:
+        return bool(row.get('memetic_success'))
+    return row.get('outcome') == SUCCESS and float((row.get('reward') or {}).get('quality') or 0) >= 1
 
 
 def zstd_lines(path):
@@ -319,7 +330,7 @@ def extract(args):
                     c['unscored'] += 1
                     continue
                 role = row.get('jolt_role', 'student')
-                success = row.get('outcome') == SUCCESS and float(row['reward'].get('quality') or 0) >= 1
+                success = episode_success(row)
                 if role != 'teacher':   # a guided attempt is no sample of the student's own pass rate
                     group_rates[row['task_id']][1] += 1
                     group_rates[row['task_id']][0] += success
@@ -331,6 +342,8 @@ def extract(args):
                     continue
                 c['successes'] += 1
                 if role == 'teacher':
+                if row.get('outcome') == MEMETIC:
+                    c['memetic_successes'] += 1
                     # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
                     # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
                     # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
@@ -1038,10 +1051,23 @@ def replay_episode(args, server, episode, env):
     if directory.exists():
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
-    (directory / 'cases.jsonl').write_text(json.dumps(episode['task']) + '\n')
+    task, memetic = episode['task'], is_memetic(episode['task'])
+    if memetic:
+        task, refusal = memetic_replay_task(task, directory)
+        if refusal:
+            record = {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
+                      'outcome': refusal, 'exact': False, 'recorded_turns': len(episode['turns'])}
+            shutil.rmtree(directory)
+            directory.mkdir(parents=True)
+            done.write_text(json.dumps(record) + '\n')
+            return record
+    (directory / 'cases.jsonl').write_text(json.dumps(task) + '\n')
     task_rollouts.prepare(SimpleNamespace(
         cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=2, temperature=1.0,
-        case_seconds=args.case_seconds, max_model_requests=args.max_model_requests, max_turns=128,
+        case_seconds=args.case_seconds,
+        # a memetic supervisor episode ran under grpo's --memetic-model-requests: its recorded calls all replay
+        max_model_requests=max(args.max_model_requests, len(episode['turns'])) if memetic else args.max_model_requests,
+        max_turns=128,
         seed_base=0, root_mode=episode.get('root_mode', 'student'), match_seeds_from=None, policy_checkpoint_sha256=None))
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
@@ -1065,13 +1091,17 @@ def replay_episode(args, server, episode, env):
     with (directory / 'journal.jsonl').open('w') as merged:
         merged.write(Path(directory / f"{entry['key']}.journal.jsonl").read_text()
                      if (directory / f"{entry['key']}.journal.jsonl").exists() else '')
-    outcome, turns = None, 0
+    outcome, turns, memetic_outcome = None, 0, None
     try:
         task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         rows = list(read_jsonl(directory / 'rollouts.jsonl'))
         if rows:
             outcome, turns = rows[0].get('outcome'), len(rows[0].get('turns') or [])
     except Exception as error:   # a scoring failure is this episode's verdict, never the whole replay's
+            if outcome == MEMETIC:   # verified again from the recorded evaluations: a success replays as one
+                memetic_outcome = {'memetic_success': bool(rows[0].get('memetic_success')),
+                                   'quality': (rows[0].get('reward') or {}).get('quality')}
+                outcome = SUCCESS if episode_success(rows[0]) else 'memetic_not_improved'
         outcome = 'score_error: ' + repr(error)[:300]
     kinds = collections.Counter(e['kind'] for e in replay.log)
     record = {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
@@ -1082,6 +1112,7 @@ def replay_episode(args, server, episode, env):
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
               'log': replay.log[:64]}
+              **({'memetic': memetic_outcome} if memetic else {}),
     # exact: every recorded call served to the same visible history, its opening message at most reworded by the runtime
     matched = {k: v for k, v in kinds.items() if k != 'scoring-declined'}
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
@@ -1096,6 +1127,45 @@ def replay_episode(args, server, episode, env):
 def replay(args):
     """Replay the extracted episodes that have no verdict in WORK/replay.jsonl yet: a periodic re-extraction of a growing
     teacher pool replays only its new episodes and appends each verdict once."""
+def is_memetic(task):
+    return ((task.get('semantics') or {}).get('world') or {}).get('kind') == 'memetic'
+
+
+def memetic_replay_task(task, directory):
+    """(task row, refusal) for replaying a memetic supervisor episode in ``directory``: the group's episode spec copied
+    with ``recorded_only`` (every evaluation is read from the collection's recorded results, prepared evidence included,
+    by the same names; one the recording lacks fails the replay instead of sampling a model) and its out under the
+    replay. The collection's group directory is read only. Refused: a spec that is gone, or one that refines guidance
+    states (a GPU fit the replay cannot repeat)."""
+    import copy
+    import hashlib
+    import shutil
+    world = task['semantics']['world']
+    spec_path = Path(world['task'])
+    if not spec_path.exists():
+        return task, 'memetic_spec_missing'
+    if hashlib.sha256(spec_path.read_bytes()).hexdigest() != world.get('spec_sha256', ''):
+        return task, 'memetic_spec_changed'
+    spec = json.loads(spec_path.read_text())
+    if spec.get('refine'):
+        return task, 'memetic_refined_not_replayable'
+    recorded = Path(spec['out'])
+    if not (recorded / 'prepared.json').exists():
+        return task, 'memetic_not_prepared'
+    out = directory / 'memetic'
+    out.mkdir(parents=True)
+    shutil.copyfile(recorded / 'prepared.json', out / 'prepared.json')
+    for summary in sorted((recorded / 'evals').glob('*/summary.json')):
+        (out / 'evals' / summary.parent.name).mkdir(parents=True)
+        shutil.copyfile(summary, out / 'evals' / summary.parent.name / 'summary.json')
+    spec.update(out=str(out), recorded_only=True)
+    path = directory / 'memetic-spec.json'
+    path.write_text(json.dumps(spec, ensure_ascii=False, sort_keys=True) + '\n')
+    task = copy.deepcopy(task)
+    task['semantics']['world'] = {**world, 'task': str(path), 'spec_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    return task, None
+
+
     path = Path(args.work) / 'replay.jsonl'
     done = {json.loads(line).get('key') for line in path.open() if line.strip()} if path.exists() else set()
     return replay_episodes(args, (e for e in all_episodes(Path(args.work)) if e['key'] not in done))
@@ -1112,7 +1182,8 @@ def replay_episodes(args, episodes):
     args.max_model_requests = args.max_model_requests or EPISODE_MODEL_CALLS
     env = {**os.environ, 'NATLANG_REPO': args.runtime_repo,
            'PYTHONPATH': f'{args.runtime_repo}/training/neuralese:{args.runtime_repo}',
-           'NATLANG_MODEL_FACING': series()['model_facing'], 'NATLANG_COLLECTOR_SHARED': '0'}
+           'NATLANG_MODEL_FACING': series()['model_facing'], 'NATLANG_COLLECTOR_SHARED': '0',
+           'NATLANG_MEMETIC_PYTHON': sys.executable}   # a memetic episode's workspace (world-bridge.ts kind memetic)
     server = ReplayServer()
     if args.limit:
         import itertools
@@ -1507,6 +1578,9 @@ def core_candidates(args, work, funnel, held):
     total, missing = teacher_coverage(args.teacher_pool, extracted)
     funnel['teacher']['manifest_successes_now'] = total
     funnel['teacher']['manifest_successes_not_extracted'] = len(missing)
+        # a memetic row's support and query worlds (memetic_tasks.episode_case): none may be a held task
+        if set((task.get('curriculum') or {}).get('world_ids') or ()) & held[0]:
+            excluded.add(task_id)
     if missing and not args.allow_stale_teacher:
         raise SystemExit(f'{len(missing)} of {total} teacher successes in the pool manifests are not extracted yet '
                          f'(e.g. {missing[0]}): run extract --teacher POOL --out-name episodes-teacher and replay first')

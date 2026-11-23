@@ -436,6 +436,28 @@ class Collector:
         self.lock = threading.Lock()
         self.pending = collections.deque()          # entries not yet taken by a slot
         self.groups = {}                            # group -> {'dir', 'size', 'done', 'versions', 'task_id'}
+def memetic_rows_held_free(rows, args):
+    """The memetic rows none of whose support or query worlds (their episode specs) is a held task or shares a held
+    split group (``held_eval.exclusion_ids`` of ``--held-manifest`` and every ``--exclude-manifest``): the set was built
+    against the held set of its day, and a later held set must keep its tasks out of the worlds the policy trains on."""
+    from natlang_neuralese.rl.held_eval import exclusion_ids
+    manifests = [m for m in [getattr(args, 'held_manifest', None), *(getattr(args, 'exclude_manifest', None) or [])] if m]
+    if not manifests or not rows:
+        return rows
+    worlds = {}
+    for row in rows:
+        spec = json.loads(Path(row['semantics']['world']['task']).read_text())
+        worlds[row['id']] = spec['support'] + spec['query']
+    cases = [case for cases in worlds.values() for case in cases]
+    held = set()
+    for manifest in manifests:
+        held |= exclusion_ids(manifest, cases)
+    kept = [row for row in rows if not any(case['id'] in held for case in worlds[row['id']])]
+    if len(kept) < len(rows):
+        print(json.dumps({'event': 'memetic rows with held worlds left out', 'rows': len(rows) - len(kept)}), flush=True)
+    return kept
+
+
         self.ready = queue.Queue()                  # finished, scored groups
         self.outstanding = 0                        # groups created and not yet handed to the learner
         self.next_group, self.cursor = first_group, cursor
@@ -471,7 +493,7 @@ class Collector:
         self.memetic_rows, self.memetic_cursor = [], 0   # "improve program P" rows (--memetic-tasks)
         if getattr(args, 'memetic_tasks', None) and getattr(args, 'memetic_share', 0) > 0:
             from natlang_neuralese.common.jsonio import read_jsonl
-            self.memetic_rows = list(read_jsonl(args.memetic_tasks))
+            self.memetic_rows = memetic_rows_held_free(list(read_jsonl(args.memetic_tasks)), args)
             random.Random(args.seed).shuffle(self.memetic_rows)
         # the memetic world's Python (ts-host world-bridge.ts kind memetic): this interpreter, not the pin's missing venv
         self.env['NATLANG_MEMETIC_PYTHON'] = sys.executable
@@ -488,7 +510,7 @@ class Collector:
         from natlang_neuralese.rl import task_rollouts
         from natlang_neuralese.common.jsonio import read_jsonl
         a = self.args
-        memetic = bool(self.memetic_rows) and self.rng.random() < a.memetic_share
+        memetic = bool(self.memetic_rows) and self._memetic_open() and self.rng.random() < a.memetic_share
         if memetic:
             row = self.memetic_rows[self.memetic_cursor % len(self.memetic_rows)]
             self.memetic_cursor += 1
@@ -517,7 +539,8 @@ class Collector:
         (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
         wave = None if memetic else self._wave(row['id'], len(entries))
         self.groups[group] = {'dir': directory, 'size': len(entries), 'done': 0, 'versions': [], 'task_id': row['id'],
-                              'created': time.time(), 'wave': wave, 'held_back': entries[wave:] if wave else []}
+                              'created': time.time(), 'wave': wave, 'held_back': entries[wave:] if wave else [],
+                              **({'memetic': True} if memetic else {})}
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries[:wave])
 
@@ -532,6 +555,10 @@ class Collector:
             return None
         if self.prior is None or (self.prior_stale and time.time() - self.prior_built >= 120):
             rates = {k: (v['successes'], v['scored']) for k, v in self.base_rates.items() if v.get('scored')}
+    def _memetic_open(self):
+        """Whether a new group may be a memetic one (always here; expert-iteration collection bounds them)."""
+        return True
+
             rates.update(self.own)
             family = {k: v.get('family') for k, v in self.base_rates.items()}
 
@@ -799,8 +826,8 @@ class Collector:
         from natlang_neuralese.common.jsonio import read_jsonl
         from natlang_neuralese.rl import jolt
         a, info = self.args, self.groups[group]
-        if getattr(a, 'teacher_attempts', 0) <= 0 or 'teachers' in info:
-            return 0
+        if getattr(a, 'teacher_attempts', 0) <= 0 or 'teachers' in info or info.get('memetic'):
+            return 0   # a memetic episode's reward is graded against its anchor: no privileged attempts of it
         info['teachers'] = 0
         directory = info['dir']
         students = [row for row in read_jsonl(directory / 'rollouts.jsonl') if row.get('jolt_role', 'student') == 'student']

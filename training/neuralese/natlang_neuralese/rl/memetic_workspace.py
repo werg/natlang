@@ -56,6 +56,7 @@ SCOPE_KINDS = ('program', 'function', 'inputs')
 MAX_TEXT = 4000
 REPO = Path(__file__).resolve().parents[4]
 STATE_ID = re.compile(r'nzs1_[a-z2-7]{52}\Z')
+NATIVE_SENTINEL_OPEN, NATIVE_SENTINEL_CLOSE = '\ue002', '\ue003'   # ts-host native/neuralese.ts
 IDENTITY = ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')
 
 DECLARATION = '''declare const workspace: {
@@ -383,7 +384,9 @@ def guidance_binding(server, out, program_id, text, function=None, state=None):
                'text': text, 'native_state_id': state_id,
                'native_state_artifact': {'path': str(path.resolve()), 'sha256': hashlib.sha256(raw).hexdigest(),
                                          'bytes': len(raw)},
-               'program_guidance': state_id}
+               # the runtime's native-state sentinel around the id (ts-host native/neuralese.ts nativeStateSentinel;
+               # guidance/program.ts refuses a binding without it, which failed every guided evaluation before 11-23)
+               'program_guidance': NATIVE_SENTINEL_OPEN + state_id + NATIVE_SENTINEL_CLOSE}
     if function is not None:
         binding['function'] = function
     return binding
@@ -417,6 +420,8 @@ def collection_evaluator(spec):
         with locked(out):
             if (out / 'summary.json').exists():
                 return json.loads((out / 'summary.json').read_text())
+            if spec.get('recorded_only'):   # a replay of a recorded episode (sft_sources): its evaluations as recorded
+                raise ValueError(f'evaluation {name} was not recorded in the replayed episode')
             out.mkdir(parents=True, exist_ok=True)
             (out / 'cases.jsonl').write_text(''.join(json.dumps(case, ensure_ascii=False) + '\n' for case in cases))
             collection = out / 'collection'
@@ -467,7 +472,9 @@ def collection_evaluator(spec):
                     result.setdefault('outcome', {})['status'] = reward['outcome']
                 results.append((cases[reward['group']]['id'], result, reward['reward']))
             scored = [reward for _, _, reward in results if reward is not None]
-            summary = {'success': sum(scored) / len(scored) if scored else 0., 'scored': len(scored),
+            # no run scored (all failed before a verdict: infrastructure, a refused binding) measures nothing: None,
+            # never a success rate of 0 the supervisor and the anchor would read as "this change hurts"
+            summary = {'success': sum(scored) / len(scored) if scored else None, 'scored': len(scored),
                        'rollouts': len(results), 'results': [(world, result) for world, result, _ in results],
                        'rewards': [reward for _, _, reward in results], 'dir': str(out), 'samples': group}
             write_json_durable(out / 'summary.json', summary)
@@ -563,7 +570,8 @@ def prepare(spec, evaluate):
         attempts = [{'digest': attempt_digest(result, attempt_id=f'a{i + 1}', world=world), 'steps': attempt_steps(result)}
                     for i, (world, result) in enumerate(support['results'])]
         resolved = support['scored'] / max(1, support['rollouts'])
-        admitted = not all_passed(support)
+        # a support collection in which no run reached a verdict measures nothing: no evidence, no episode
+        admitted = support['success'] is not None and not all_passed(support)
         prepared = {'schema': 'natlang.memetic-prepared/1', 'support_success': support['success'],
                     'resolved_fraction': round(resolved, 3), 'attempts': attempts, 'admitted': admitted,
                     'baselines': {'none': None, 'default': None}}
@@ -608,6 +616,8 @@ class Workspace:
         if self._prepared is None:
             self._prepared = self._prepare(self.spec, self.evaluate_cases)
             if not self._prepared['admitted']:
+                if self._prepared['support_success'] is None:
+                    raise ValueError('no support run of this program reached a verdict: there is no evidence to work from')
                 raise ValueError('every support sample of this program already passes under this policy: '
                                  'there is nothing to improve')
         return self._prepared
@@ -730,6 +740,8 @@ class Workspace:
         if earlier is None and budget <= 0:
             raise ValueError('the evaluation budget is spent; commit the best change set')
         report = self._run(self.spec['support'], candidate, name)
+        if report['success'] is None:
+            raise ValueError('no support run of this change set reached a verdict, so it is not counted against the budget')
         attempts = [attempt_digest(result, attempt_id=f'{name}:{index}', world=world)
                     for index, (world, result) in enumerate(report['results'])]
         if earlier is None:
@@ -783,6 +795,8 @@ class Workspace:
                 query = self._refined_query(candidate, query)
         else:
             query = {'success': prepared['baselines']['none']['success']}
+        if query['success'] is None:
+            raise ValueError('no query run of the committed change set reached a verdict: the episode is unmeasured')
         quality, anchor, gain, cost = memetic_reward(
             query['success'], prepared['baselines'], evaluations=len(self.state['evaluations']),
             budget=self.spec['budget'], cost_weight=self.spec['settings'].get('cost_weight', 0.05),
@@ -814,7 +828,7 @@ class Workspace:
             return {**query, 'refine': {**record, 'kept': False}}
         refined = self._run_states(self.spec['query'], candidate, 'query-refined-' + key,
                                    self.spec['settings']['query_samples'], states)
-        kept = refined['success'] > query['success']
+        kept = refined['success'] is not None and (query['success'] is None or refined['success'] > query['success'])
         record = {**record, 'kept': kept, 'text_success': query['success'], 'refined_success': refined['success'],
                   'refined_dir': refined.get('dir')}
         return {**(refined if kept else query), 'refine': record}

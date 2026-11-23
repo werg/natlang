@@ -1185,3 +1185,18 @@ def test_task_asset_root_defaults_to_build_tree_when_present(tmp_path, monkeypat
     assert queue_module.bind_task_assets(env) == {'NATLANG_RL_TASK_ASSETS_V3': str(build)}
     explicit = {'NATLANG_RL_TASK_ASSETS_V3': '/elsewhere'}
     assert queue_module.bind_task_assets(explicit) == {'NATLANG_RL_TASK_ASSETS_V3': '/elsewhere'}
+
+
+def test_a_shared_invocations_error_lands_in_its_own_log():
+    """The server's reply carries the invocation's error (cli.ts serve ``finish({exit: 1, error})``); it went only to the
+    server's stderr, so a guided memetic run's 'invalid natlang.memetic-program-guidance/1 binding' never reached the
+    episode's log."""
+    import socket
+    ours, theirs = socket.socketpair()
+    theirs.sendall(json.dumps({'exit': 1, 'error': 'TypeError: invalid binding'}).encode() + b'\n')
+    child = queue_module.SharedChild.__new__(queue_module.SharedChild)
+    child.returncode, child._buffer, child.connection, child.log = None, b'', ours, io.StringIO()
+    assert child.wait(5) == 1 and not child.lost
+    record = json.loads(child.log.getvalue())
+    assert record == {'event': 'shared_collector_error', 'exit': 1, 'error': 'TypeError: invalid binding'}
+    theirs.close()
