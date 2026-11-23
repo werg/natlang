@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {verifyApplicationReturn} from '../scripts/observed-workspace-evidence.mjs';
+import {verifyApplicationReturn,verifyEntry} from '../scripts/observed-workspace-evidence.mjs';
 test('void application transport binds only exact completed native TS void roots',()=>{
   const binding={kind:'void',root_call_id:'root',valueJson:'null',selectedResult:null};
   const entry={program:'skills/reference/review.ts',resultType:'void'};
@@ -15,4 +15,12 @@ test('void application transport binds only exact completed native TS void roots
   for(const [field,value] of [['definition',{returns:'string'}],['executor',{kind:'agent'}],['output',{...record.output,hash:'0'.repeat(64)}]])
     assert.throws(()=>check(binding,{...record,[field]:value}));
   const missing={...binding};delete missing.selectedResult;assert.throws(()=>check(missing));
+});
+
+test('independent entry verification binds the actual TS default export',()=>{
+ const text='"reference"',entry={program:'skills/reference/review.ts',callable:'review',arguments:{goal:'reference'},argumentJson:{goal:text}};
+ const record={program_root:'skills/reference',outcome:'done',executor:{kind:'crisp'},definition:{name:'review',source:'review.ts',id:'ts:review.ts#default'},inputs:{goal:{complete:true,bytes:Buffer.byteLength(text),hash:createHash('sha256').update(text).digest('hex')}}};
+ const interaction={program:entry.program,entry};verifyEntry(interaction,record,false);
+ for(const id of ['ts:review.ts#other',undefined])assert.throws(()=>verifyEntry(interaction,{...record,definition:{...record.definition,id}},false),/default export/);
+ assert.throws(()=>verifyEntry(interaction,{...record,executor:{kind:'agent'}},false),/default export/);
 });

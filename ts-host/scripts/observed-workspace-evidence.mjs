@@ -108,7 +108,7 @@ export function verifyObservedCallTree(records, root) {
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
-function verifyEntry(interaction, record, partial) {
+export function verifyEntry(interaction, record, partial) {
   const entry = interaction.entry ?? {program: 'skills/open-user-goal/runUserGoal.nl',
     callable: 'runUserGoal', arguments: {goal: interaction.goal}};
   if (typeof entry.program !== 'string' || !/\.(nl|ts)$/u.test(entry.program) ||
