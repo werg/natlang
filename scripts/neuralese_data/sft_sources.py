@@ -1472,12 +1472,69 @@ def drifted_success(record, turns=None, ambiguous=None):
             and record.get('replayed_turns') == record.get('recorded_turns'))
 
 
-def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTED_DEFAULT, workers=1, light=False):
+def derived_superset(current, stored, path=''):
+    """The first path where ``current`` is not ``stored`` with fields added (None when it is): every field of the
+    stored extraction is in ``current`` with the same value (recursively; lists element by element), and ``current``
+    may carry fields a later loader derives from the same bytes (e.g. ``trajectory_ir.outcome.task_completed``,
+    ``graph_metrics``, ``invocation_ledger[].program_root``)."""
+    if isinstance(stored, dict) and isinstance(current, dict):
+        for k, v in stored.items():
+            if k not in current:
+                return f'{path}/{k} removed'
+            found = derived_superset(current[k], v, f'{path}/{k}')
+            if found:
+                return found
+        return None
+    if isinstance(stored, list) and isinstance(current, list):
+        if len(stored) != len(current):
+            return f'{path} length {len(stored)} -> {len(current)}'
+        for i, (a, b) in enumerate(zip(current, stored)):
+            found = derived_superset(a, b, f'{path}[{i}]')
+            if found:
+                return found
+        return None
+    return None if (type(current) is type(stored) and current == stored) else f'{path} changed'
+
+
+def recheck_live_episode(episode):
+    """(episode to admit, None, None) or (None, reason, detail) for an extracted observed-live episode: its bound
+    source must still hash to the extracted sha256 and load (``live_teacher_sources.load_episode``: calls, validator and
+    effect artifacts rechecked). The loaded episode is admitted when it equals the extraction, or extends it only with
+    fields a later loader derives from the same verified bytes (``derived_superset``; the loaded one is returned, so
+    consumers see today's derivation); a removed or changed field is ``live_episode_differs``. Before 2026-11-23 any
+    difference raised: the 28 Luna-campaign episodes extracted at c6bbe8f82 lack ``outcome.task_completed`` (added by
+    34fbb1498), so every fill pinned past it failed on its first live WORK."""
+    from live_teacher_sources import load_episode
+    binding = episode.get('live_source') or {}
+    if not binding.get('path'):
+        return None, 'live_source_missing', 'no bound source path'
+    try:
+        digest = sha256_file(binding['path'])
+    except OSError as error:
+        return None, 'live_source_unreadable', repr(error)[:300]
+    if digest != binding.get('sha256'):
+        return None, 'live_source_changed', f'{binding["path"]}: {binding.get("sha256")} -> {digest}'
+    try:
+        current = load_episode(binding['path'])
+    except (ValueError, OSError, KeyError, TypeError) as error:
+        return None, 'live_source_rejected', repr(error)[:300]
+    if current == episode:
+        return episode, None, None
+    found = derived_superset(current, episode)
+    if found:
+        return None, 'live_episode_differs', found
+    return current, None, None
+
+
+def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTED_DEFAULT, workers=1, light=False,
+                      skip_mismatched_live=True):
     """(episode, replay record) of every extracted success of WORK (of ``sources`` only, when given) whose replay under
     the replaying runtime was exact and succeeded (fixture tasks still admitted); counted per source in ``funnel``.
     ``extracted`` (a set) collects every extracted key. ``drifted`` (default on): also teacher successes whose display drifted
     (``drifted_success``; counted as ``replayed_drifted``; ``drifted_sibling_ambiguous`` the ones refused for a possible
-    sibling swap)."""
+    sibling swap). An observed-live episode is rechecked against its bound source (``recheck_live_episode``); one that
+    fails is skipped with its reason (``observed_live_skipped:<reason>`` in ``funnel``, one stderr line with key and
+    detail) and the rest are admitted; ``skip_mismatched_live=False`` raises instead."""
     work = Path(work)
     replays = {}
     replay_path = work / 'replay.jsonl'
@@ -1497,15 +1554,20 @@ def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTE
         f = funnel[source]
         f['successes'] += 1
         if episode.get('verification_mode') == 'observed-live':
-            from live_teacher_sources import load_episode
-            binding = episode.get('live_source') or {}
-            if not binding.get('path') or sha256_file(binding['path']) != binding.get('sha256'):
-                raise ValueError('observed live source changed after extraction')
-            current = load_episode(binding['path'])
-            if current != episode:
-                raise ValueError('extracted live episode differs from its original captured records')
+            current, reason, detail = recheck_live_episode(episode)
+            if current is None:
+                if not skip_mismatched_live:
+                    raise ValueError(f'observed live episode {episode.get("key")}: {reason} ({detail})')
+                f['observed_live_skipped'] += 1
+                f[f'observed_live_skipped:{reason}'] += 1
+                print(json.dumps({'event': 'observed-live skipped', 'work': str(work), 'key': episode.get('key'),
+                                  'reason': reason, 'detail': detail}), file=sys.stderr, flush=True)
+                continue
+            if current is not episode:
+                f['observed_live_rederived'] += 1
             f['observed_live_verified'] += 1
-            yield episode, {'name': None, 'verification_mode': 'observed-live', 'live_source': binding}
+            yield current, {'name': None, 'verification_mode': 'observed-live',
+                            'live_source': current['live_source']}
             continue
         from teacher_admission import check_record, fixture_task
         if fixture_task(episode['task']):
@@ -1612,7 +1674,8 @@ def core_candidates(args, work, funnel, held):
     candidates, tasks = [], {}
     extracted = set()
     for episode, record in verified_episodes(work, funnel, extracted, drifted=getattr(args, 'admit_drifted', 'on') == 'on',
-                                             workers=getattr(args, 'workers', None) or 1, light=True):
+                                             workers=getattr(args, 'workers', None) or 1, light=True,
+                                             skip_mismatched_live=getattr(args, 'live_mismatch', 'skip') == 'skip'):
         source = episode['source']
         if episode.get('verification_mode') == 'observed-live' and not episode['turns']:
             funnel[source]['observed_evidence_without_supervised_targets'] += 1
@@ -3400,6 +3463,9 @@ def main():
                         "'replayed': the replaying runtime's record of them, as before 2026-11-23")
     b.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
                    help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
+    b.add_argument('--live-mismatch', choices=('skip', 'fail'), default='skip',
+                   help='an observed-live episode whose bound source no longer hashes, loads or matches its extraction '
+                        '(recheck_live_episode): skip it with its reason in the funnel (default) or fail the build')
     b.add_argument('--anchor-per-task', type=int, default=1,
                    help='own episodes of a task the frontier marks solved (a light anchor)')
     b.add_argument('--workers', type=int, default=default_workers(),

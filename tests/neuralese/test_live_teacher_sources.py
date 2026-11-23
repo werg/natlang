@@ -213,7 +213,55 @@ def test_shared_admission_rechecks_bound_originals_without_replay(tmp_path):
     assert not (tmp_path / 'replay.jsonl').exists()
     (tmp_path / 'readback.json').write_text('{}')
     with pytest.raises(ValueError, match='artifact changed'):
-        list(s.verified_episodes(tmp_path, funnel))
+        list(s.verified_episodes(tmp_path, funnel, skip_mismatched_live=False))
+    skipped = collections.defaultdict(collections.Counter)
+    assert list(s.verified_episodes(tmp_path, skipped)) == []
+    assert skipped['teacher']['observed_live_skipped:live_source_rejected'] == 1
+
+
+def write_episodes(root, name, episodes):
+    writer = s.ZstdWriter(root / f'{name}.jsonl.zst')
+    for episode in episodes:
+        writer.write(episode)
+    writer.close()
+
+
+def test_stale_extraction_is_rederived_and_a_mismatch_skips_only_itself(tmp_path, capsys):
+    """An extraction made before the loader derived a field (the Luna campaign's c6bbe8f82 episodes lack
+    ``outcome.task_completed``) is admitted as today's derivation of the same verified bytes; an extraction whose own
+    field differs is skipped with its reason and the other episodes still fill (one used to fail the whole fill)."""
+    first = tmp_path / 'first'
+    second = tmp_path / 'second'
+    first.mkdir()
+    second.mkdir()
+    path_a, _, _, _ = fixture(first)
+    path_b, _, _, _ = fixture(second)
+    path_b.write_text(path_b.read_text() + '\n')   # another manifest file: its own episode key
+    a, b = live.load_episode(path_a), live.load_episode(path_b)
+    stale = copy.deepcopy(a)
+    stale['call_tree'][0].pop('scope')          # a field a later loader added
+    stale.pop('world')
+    tampered = copy.deepcopy(b)
+    tampered['task_id'] = 'someone-else'
+    write_episodes(tmp_path, 'episodes-live', [stale, tampered])
+    funnel = collections.defaultdict(collections.Counter)
+    admitted = list(s.verified_episodes(tmp_path, funnel))
+    assert [e for e, _ in admitted] == [a]
+    assert admitted[0][1]['live_source'] == a['live_source']
+    assert funnel['teacher']['observed_live_verified'] == 1
+    assert funnel['teacher']['observed_live_rederived'] == 1
+    assert funnel['teacher']['observed_live_skipped:live_episode_differs'] == 1
+    assert 'task_id changed' in capsys.readouterr().err
+    with pytest.raises(ValueError, match='live_episode_differs'):
+        list(s.verified_episodes(tmp_path, funnel, skip_mismatched_live=False))
+
+
+def test_derived_superset_paths():
+    assert s.derived_superset({'a': [{'x': 1, 'y': 2}]}, {'a': [{'x': 1}]}) is None
+    assert s.derived_superset({'a': [{'x': 2}]}, {'a': [{'x': 1}]}) == '/a[0]/x changed'
+    assert s.derived_superset({'a': []}, {'a': [{'x': 1}]}) == '/a length 1 -> 0'
+    assert s.derived_superset({}, {'a': 1}) == '/a removed'
+    assert s.derived_superset({'a': True}, {'a': 1}) == '/a changed'
 
 
 def tree_fixture(root):
