@@ -410,6 +410,8 @@ def compare(first, second, *, slack_cases=1):
                 continue
             if x['seeds'] != y['seeds']:
                 problems.append(f'{case_id}: seeds differ')
+            if x.get('policy_id') != y.get('policy_id'):
+                problems.append(f'{case_id}: measured on another policy ({x.get("policy_id")} vs {y.get("policy_id")})')
             if not (x['scored'] and y['scored']):
                 continue
             rate_a += x['passes'] / x['scored']

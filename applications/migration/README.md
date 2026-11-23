@@ -48,3 +48,28 @@ the checks. The report lists the changed files with digests and the check result
 stage's instructions spell out, against real checks: repair from check output, a complete first candidate, the exact
 retry with the problem, a spent budget, unrepairable findings, the pluggable settings, and the service's exact
 operations.
+
+## Program migration (`--target program`)
+
+`program/` migrates one legacy prose program (a design brief, an Astra/Sol application) into semantic FP, or deletes it
+(`plans/semantic-fp/07_CORPUS_MIGRATION.md`; the "Program migration" section of [DECOMPOSITION.md](DECOMPOSITION.md)).
+`program/host.ts` is the fixed sequence and the exact checks; the decisions are typed judgments beside it:
+
+```
+program/host.ts           findings from natlang check, keep or delete, step kinds, rewrites under semanticRepair
+program/worthKeeping.nl     migrate or delete (decision; a program with no passing original case is deleted first)
+program/stepKind.nl         judgment, mechanism, guard-for-type or redundant, per step (decision)
+program/rewriteLeaf.nl      the new instructions of a leaf judgment
+program/rewriteDriver.nl    a driver's fixed steps as a TypeScript helper, and the sentence that calls it
+program/nextAttempt.nl      retry or give up after a rejected equivalence comparison (decision)
+```
+
+```sh
+natlang run applications/migration --target program -- propose UNIT.json OUT_DIR
+natlang run applications/migration --target program -- settle SETTLE.json
+```
+
+`scripts/semantic_fp/migrate_corpus.py` runs it over a corpus: units from a baseline report, `propose` in parallel on
+the served model (or a teacher with `--provider`), the equivalence measurement of the candidates
+(`scripts/semantic_fp/equivalence.py`), acceptance by the 07 §4.2 rule, `settle` for rejections, and the commit and
+packaging of the accepted pairs.

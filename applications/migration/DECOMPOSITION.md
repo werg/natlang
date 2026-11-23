@@ -124,3 +124,55 @@ Counts: (a) 10, (b) 2, (c) 3, (d) 2.
 The model-facing text added to signatures is the `Is<...>` predicate of `CheckedPatches`, `CheckedIntent`, `CheckedSite`,
 `CheckedUsage`, `CheckedPlan`, `CheckedFinding`, `CheckedExactness` and `CheckedRepairState`. No instruction sentence
 was changed.
+
+# Program migration: `migrateProgram` (semantic-FP WS7 M2)
+
+The second entry migrates a legacy prose program (a design brief in `codebases/design_briefs/`, an Astra/Sol
+application in `applications/`) into idiomatic semantic FP, or deletes it (`plans/semantic-fp/07_CORPUS_MIGRATION.md`
+§3). It is a TypeScript host (`program/host.ts`) over small typed judgments, as `examples/refunds/desk.ts` is: the
+sequencing is exact and lives in code, every decision is a `.nl` function the local model runs, and the exact checks
+are crisp. Unlike `migrate.nl` it is not a prose driver: the order of its stages is fixed, so it is mechanism.
+
+## What decides, what checks
+
+- **Natural language (`program/*.nl`, run on LFM3; a teacher model only where LFM3 fails, chosen per program by
+  `--model`/`--provider` and recorded in the proposal):**
+  - whether a program is worth keeping (`worthKeeping`, a decision: `migrate` or `delete`);
+  - what each step of a flagged `.nl` body is (`stepKind`, a decision per step: `judgment`, `mechanism`,
+    `guard-for-type` or `redundant`);
+  - the rewrite of a leaf judgment's instructions (`rewriteLeaf`);
+  - the rewrite of a driver whose steps are mechanism: a TypeScript helper in its callable folder plus the short
+    instruction that calls it (`rewriteDriver`);
+  - after a rejected equivalence comparison, whether to try again or give up (`nextAttempt`, a decision).
+- **Crisp, exact:**
+  - `natlang check --json` on the candidate: no error, no idiom-floor warning in a changed file, every function's
+    signature unchanged (cases call the roots with fixed inputs) (`program/host.ts` `problemsOf`);
+  - the floor of `worthKeeping`: a program with no passing original case is deleted without a model call;
+  - the acceptance rule: `scripts/semantic_fp/equivalence.py compare` (07 §4.2) and the floor clean. A judgment can
+    ask for a retry; it can never accept what the exact rule rejects;
+  - file assembly (front matter kept byte for byte, `readout: decision` added; the helper written at its path), step
+    splitting, the bound on attempts, and the commit of accepted files (`scripts/semantic_fp/migrate_corpus.py`).
+
+## Parts
+
+| Part | Decision | Unit | Why |
+|---|---|---|---|
+| Find the sites to migrate | crisp | `host.ts` `checkProgram` (`natlang check --json`, idiom codes) | Exact: the floor is the definition of the old style's markers. |
+| Floor: no passing original case | crisp | `host.ts` `keepOf` | 07 §3: deleted, not migrated; no judgment needed. |
+| Keep or delete | fn, decision | `worthKeeping.nl` | Policy over the brief, its baseline and its findings. |
+| Split a body into steps | crisp | `host.ts` `stepsOf` | Numbered items or paragraphs: plumbing. |
+| Kind of each step | fn, decision, per step in parallel | `stepKind.nl` | Semantic judgment over prose; finite result, scored in one pass. |
+| Role of a flagged file | crisp | `host.ts` `roleOf` | A decision-readout finding is a leaf by the floor's definition; a code-in-prose finding in a file with a callable folder is a driver. |
+| Rewrite a leaf judgment | fn, repaired | `rewriteLeaf.nl` in `semanticRepair` | Generation with an exact check; the problems of the check are the next attempt's input. |
+| Rewrite a driver | fn, repaired | `rewriteDriver.nl` in `semanticRepair` | Same; the helper is TypeScript, its caller one sentence. |
+| Assemble the candidate files | crisp | `host.ts` `assemble` | Front matter is copied; only `readout:` is added. |
+| Exact check of a candidate | crisp | `host.ts` `problemsOf` | `natlang check`, the idiom floor, signatures. |
+| Behavioural equivalence | crisp service | `scripts/semantic_fp/equivalence.py` | Exact: same cases, seeds, policy and k for both versions, batched over many programs per run. |
+| Accept | crisp | `migrate_corpus.py settle` | 07 §4.2 and a clean floor. |
+| Retry or give up after a rejection | fn, decision, bounded | `nextAttempt.nl`, attempts measured by the driver | Policy; the measure ends a loop the judgment never stops. |
+| Commit, delete, record, package | crisp | `migrate_corpus.py` | File commits and the registry are exact. |
+
+The equivalence run is batched across programs rather than called per program from the host: one actor run over many
+programs' cases pairs every version seed for seed and keeps the actor busy. So `migrateProgram` has two calls, `propose`
+(per program, before measurement) and `settle` (per program, after it), and `migrate_corpus.py` runs the measurement
+between them. The loop over attempts is bounded by a count the driver lowers every round.
