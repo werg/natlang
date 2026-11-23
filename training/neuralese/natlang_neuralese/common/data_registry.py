@@ -94,6 +94,8 @@ def canonical_checkout_repo(repo=None) -> Path:
         if current in visited:
             raise ValueError('cyclic immutable pin source chain')
         visited.add(current)
+        if not current.is_dir():
+            raise ValueError(f'immutable pin source checkout is unavailable: {current}')
         git_marker = current / '.git'
         if git_marker.exists() or git_marker.is_symlink():
             env = {key: value for key, value in os.environ.items()
@@ -112,8 +114,8 @@ def canonical_checkout_repo(repo=None) -> Path:
             return assert_registry_writable(current)
         metadata = json.loads(marker.read_text())
         source = metadata.get('source')
-        if not isinstance(source, str) or not source:
-            raise ValueError(f'immutable pin lacks a source checkout: {current}')
+        if not isinstance(source, str) or not source or not Path(source).is_absolute():
+            raise ValueError(f'immutable pin lacks an absolute source checkout: {current}')
         current = Path(source).expanduser().resolve()
 
 
@@ -388,11 +390,11 @@ def record_inventory(identity: str, path, *, note=None, kind='archive', extra=No
     return _append({k: v for k, v in record.items() if v is not None})
 
 
-def _input_refs(inputs) -> list:
+def _input_refs(inputs, *, repo=None) -> list:
     """Inputs as ``{id, manifest_sha256 | sha256, path?}``: ids stay ids (their latest snapshot), paths resolve to the
     dataset that holds them plus the file's own digest."""
     refs = []
-    reg = load()
+    reg = load() if repo is None else load(repo=repo)
     for item in inputs or ():
         if isinstance(item, dict):
             refs.append(item)
@@ -417,7 +419,7 @@ def _input_refs(inputs) -> list:
 
 def record_dataset(identity: str, path, *, kind: str, format: str, include=None, exclude=(), rows=None,
                    inputs=(), license=None, protected=False, supersedes=None, roles=None, note=None,
-                   producer=None, admission=None, closed=True, extra=None) -> dict:
+                   producer=None, admission=None, closed=True, extra=None, registry_repo=None) -> dict:
     """Append a dataset snapshot record (what a producer wrote). PATH is a directory (``include`` globs select files)
     or a single file. ``rows`` defaults to the line count of the selected ``.jsonl`` files. ``closed`` False marks a
     dataset that keeps growing (a teacher campaign, a refreshed source): every later snapshot is another record."""
@@ -438,7 +440,7 @@ def record_dataset(identity: str, path, *, kind: str, format: str, include=None,
     record = {'op': 'dataset', 'id': identity, 'path': manifest['path'], 'kind': kind, 'format': format,
               'include': list(include) if include else None, 'exclude': list(exclude) if exclude else None,
               'manifest_sha256': sha, 'files': len(manifest['files']), 'bytes': manifest['bytes'], 'rows': rows,
-              'inputs': _input_refs(inputs), 'license': license, 'protected': bool(protected),
+              'inputs': _input_refs(inputs, repo=registry_repo), 'license': license, 'protected': bool(protected),
               'supersedes': supersedes, 'roles': roles, 'note': note, 'admission': admission, 'closed': bool(closed),
               'producer': _producer(producer)}
     if extra:
@@ -469,12 +471,12 @@ def record_files(identity: str, paths, base) -> dict | None:
     return _append({'op': 'files', 'id': identity, 'files': files})
 
 
-def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, record=True) -> list[dict]:
+def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, record=True, repo=None) -> list[dict]:
     """Record that RUN read ITEMS (paths or dataset ids) and return the resolved references. A path no dataset contains
     raises ``UnregisteredData`` unless ``allow_unregistered`` (default: ``NATLANG_ALLOW_UNREGISTERED_DATA=1``)."""
     if allow_unregistered is None:
         allow_unregistered = os.environ.get(ALLOW_ENV) == '1'
-    reg = load()
+    reg = load() if repo is None else load(repo=repo)
     refs, missing = [], []
     for item in items:
         if item is None:
@@ -512,11 +514,11 @@ def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, 
     return refs
 
 
-def require_registered(paths) -> None:
+def require_registered(paths, *, repo=None) -> None:
     """Producer-side check: refuse inputs no dataset contains (same opt-out as ``consume``)."""
     if os.environ.get(ALLOW_ENV) == '1':
         return
-    reg = load()
+    reg = load() if repo is None else load(repo=repo)
     missing = []
     for path in paths:
         if path is None:
@@ -535,7 +537,8 @@ def require_registered(paths) -> None:
 class Registry:
     """Merged view: git entries (pinned) plus journal records (machine-wide)."""
 
-    def __init__(self, git_entries: list, journal: list):
+    def __init__(self, git_entries: list, journal: list, *, repo=None):
+        self.repo = Path(repo) if repo is not None else code_repo()
         self.git = {e['id']: e for e in git_entries}
         self.git_order = [e['id'] for e in git_entries]
         self.journal = journal
@@ -783,7 +786,7 @@ class Registry:
         manifest = stored_manifest(ds['manifest_sha256']) if ds.get('manifest_sha256') else None
         if manifest is None and ds.get('layer', '').startswith('git'):
             try:
-                manifest = json.loads((code_repo() / GIT_MANIFESTS / f'{identity}.json').read_text())
+                manifest = json.loads((self.repo / GIT_MANIFESTS / f'{identity}.json').read_text())
             except (OSError, ValueError):
                 manifest = None
         return list((manifest or {}).get('files') or []) + self.extra_files.get(identity, [])
@@ -830,7 +833,7 @@ def load(*, repo=None, fresh=False) -> Registry:
         except (OSError, ValueError, KeyError):
             git_entries = []
         _GIT_CACHE.update(key=key[:2], entries=git_entries)
-    reg = Registry(_GIT_CACHE['entries'], _read_journal())
+    reg = Registry(_GIT_CACHE['entries'], _read_journal(), repo=repo)
     _LOADED = (key, reg)
     return reg
 
@@ -851,7 +854,7 @@ def role_paths(name: str, *, repo=None) -> list[str]:
 def role_prefix_paths(prefix: str, *, repo=None) -> list[tuple[str, str]]:
     """``[(role, local path)]`` of every role whose name starts with PREFIX, sorted by role then role order (the held
     sets: every ``held-eval*`` role is excluded from training, ``held_eval.training_exclusion_ids``)."""
-    reg = load(repo=repo)
+    reg = load() if repo is None else load(repo=repo)
     names = sorted({name for ident in reg.git_order for name in (reg.git[ident].get('roles') or {})
                     if name.startswith(prefix)})
     return [(name, str(p)) for name in names for _, p in reg.role(name)]
