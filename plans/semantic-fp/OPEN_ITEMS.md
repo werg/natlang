@@ -145,6 +145,7 @@ admitting the batch.
 
 ## Operations
 
+- **Neuralese variants are off in aei1's collection** (`--no-neuralese-variants`, driver restarted 19:15 on 2026-11-23). Read-back of Neuralese values is broken: the reader gets the producer's content in about 1% of read-backs (HELD_FAILURES_20261123 finding 1), so variant groups were teaching the policy to skip program functions. Two investigators are on it: a live hunt and an independent static analysis (`NEURALESE_READBACK_STATIC_20261123.md`). Turn variants back on at the round boundary after their fix lands and read-back accuracy is re-measured. Owner: coordinator.
 - **Benchmark arm D (specialize, tune, escalate on sft-v9):** its 24 GB tune job (`bench-tune-b2`) was cancelled at 18:40. It sat at the head of the DGX ledger during round 1's SFT and froze 18 jobs behind it. Rerun arm D (`/home/werg/data/semantic-fp-bench/triage-20261123b/driver.sh`) after the r0001 SFT finishes. Owner: coordinator.
 - **Constrained-decoding rollout (9ab63c622, SGLang fork 17e3458c2e):**
   - The DGX checkout `/home/werg/sglang-natlang` moved to 17e3458c2e on 2026-11-23 17:10 (xgrammar 0.2.7 in its venv).
