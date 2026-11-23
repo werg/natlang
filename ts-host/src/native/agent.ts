@@ -37,7 +37,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 }
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, pluggableMode, type PluggableSetting } from '../runtime/pluggable.js';
-import { modelFacing } from '../runtime/model-facing.js';
+import { modelFacing, promptRevision } from '../runtime/model-facing.js';
 import { argumentInstructions, compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
@@ -131,6 +131,27 @@ export const withCallNotes = (opening: string, notes: string): string => notes ?
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
+
+/**
+ * The tool list from stable to variable (plans/semantic-fp/02 R0): LFM3's template writes the tools into the system turn
+ * after the system prompt, so every engine's prefix cache and the learner's prefix tree share a call's tool block only up
+ * to its first tool that differs. The tools every call has come first (STABLE_TOOLS), then the ones a run or a call
+ * shape adds (escalate, the code-editing tools, the file tools), then return_result, whose value schema is the call's
+ * declared result. Before 2026-11-23 (NATLANG_PROMPT_REVISION=2026-11-22) the file and code-editing tools sat between
+ * eval and compact_history, so calls of different shapes parted right after read_page or read_code.
+ */
+export const STABLE_TOOLS = ['eval', 'read_page', 'read_code', 'compact_history'] as const;
+const TOOL_RANK = (name: string): number => {
+  const stable = (STABLE_TOOLS as readonly string[]).indexOf(name);
+  return stable >= 0 ? stable : name === 'escalate' ? 10 : name === 'edit_code' || name === 'diff_code' ? 11 :
+    name === 'return_result' ? 13 : 12;
+};
+export function orderedTools<T extends { function: { name: string } }>(tools: T[]): T[] {
+  if (promptRevision() === '2026-11-22') return tools;
+  return tools.map((tool, index) => ({ tool, index }))
+    .sort((a, b) => TOOL_RANK(a.tool.function.name) - TOOL_RANK(b.tool.function.name) || a.index - b.index)
+    .map(item => item.tool);
+}
 
 /** Assistant turns the model has taken, not counting the runtime's pre-filled scope calls. */
 export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): number {
@@ -1271,7 +1292,7 @@ export class NativeToolAgent {
         remaining_subproblem: { type: 'string' } }, ['reason', 'evidence', 'attempted_work', 'remaining_subproblem']));
     // read_code is part of the call protocol. edit_code and diff_code are offered only to a call that can change code
     // (functions of its own, edits not denied): elsewhere they were 200 tokens of schema for tools that could only be
-    // refused (2026-11-13). So openings come in two tool lists, with and without them, each sharing one cached prefix.
+    // refused (2026-11-13). Where they and the other per-call tools go is orderedTools' concern.
     tools.splice(2, 0, tool('read_code', READ_CODE_DESCRIPTION, { name: { type: 'string' } }, ['name']),
       ...(session.codeEditable() ? [tool('edit_code', EDIT_CODE_DESCRIPTION,
         { name: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
@@ -1314,7 +1335,7 @@ export class NativeToolAgent {
     }
     // The definition's `withhold:` frontmatter takes those tools out of its calls' schema (the session refuses them too).
     const withheld = session.lam.withheldTools;
-    return withheld?.length ? tools.filter(item => !withheld.includes(item.function.name)) : tools;
+    return orderedTools(withheld?.length ? tools.filter(item => !withheld.includes(item.function.name)) : tools);
   }
 
   tools(session: NativeSession): unknown[] {

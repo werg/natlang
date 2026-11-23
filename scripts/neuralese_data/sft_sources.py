@@ -44,6 +44,7 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+import recorded_turns  # noqa: E402
 
 SUCCESS = 'task_success'
 MEMETIC = 'memetic_scored'   # a memetic improvement episode's outcome (task_rollouts.score); success: memetic_success
@@ -1120,6 +1121,8 @@ def replay_episode(args, server, episode, env):
     for path in directory.iterdir():   # keep the verdict, the replayed record and the logs; drop the job scratch
         if path.is_dir():
             shutil.rmtree(path)
+    if episode['source'] in recorded_turns.OWN_SOURCES:   # an own success renders as sampled (recorded_turns.py)
+        recorded_turns.write(args.work, name, episode['turns'])
     done.write_text(json.dumps(record) + '\n')
     return record
 
@@ -1877,6 +1880,28 @@ def replayed_turns(work, name):
     return mark_detour_spawned([semantic_turn(t, False) for t in replayed['turns']])
 
 
+def own_as_recorded(args, work, core, funnel):
+    """Own candidates render their recorded turns (``--own-render recorded``, the default; recorded_turns.py): their
+    files are backfilled from WORK's extractions; an own candidate whose recording is gone is left out
+    (``recorded_turns_missing``), never rendered under a prompt it was not sampled with."""
+    if getattr(args, 'own_render', 'recorded') != 'recorded':
+        return core
+    own = {c['key']: c['name'] for c in core if c['source'] in recorded_turns.OWN_SOURCES and c.get('name')}
+    written, missing = recorded_turns.backfill(work, own, episode_files(work), zstd_lines)
+    missing = set(missing)
+    kept = []
+    for c in core:
+        if c['key'] in own:
+            if c['key'] in missing:
+                funnel[c['source']]['recorded_turns_missing'] += 1
+                continue
+            c['recorded_turns'] = True
+            funnel[c['source']]['rendered_as_recorded'] += 1
+        kept.append(c)
+    funnel['own_render'].update(recorded_backfilled=written, recorded_missing=len(missing))
+    return kept
+
+
 def candidate_turns(work, c):
     """The turns ``build`` renders for candidate ``c``: an observed-live episode's captured turns (its source checked
     unchanged), else the replaying runtime's record."""
@@ -1886,6 +1911,8 @@ def candidate_turns(work, c):
         if sha256_file(source['path']) != source['sha256']:
             raise ValueError('observed live source changed before rendering')
         return mark_detour_spawned(load_episode(source['path'])['turns'])
+    if c.get('recorded_turns'):   # an own success: the turns as sampled (recorded_turns.py)
+        return mark_detour_spawned(recorded_turns.read(work, c['name']))
     return replayed_turns(work, c['name'])
 
 
@@ -2287,6 +2314,7 @@ def build(args):
     #    policy, near-duplicates out (teacher first), then each source capped on its own: task caps by base pass rate,
     #    family shares, the dataset-wrapper share
     core, tasks = core_candidates(args, work, funnel, held)
+    core = own_as_recorded(args, work, core, funnel)
     for candidate in core:
         if candidate.get('open_goal'):
             require_registered_open_goal(candidate, registered_training)
@@ -3283,6 +3311,9 @@ def main():
                    'this build trains; each task keeps its cheapest verified source (frontier_drop)')
     b.add_argument('--previous-policy', help='adjacent previous policy SHA-256 whose own successes share top priority '
                    'with --frontier policy (async-train §3; default: frontier.json previous_policy)')
+    b.add_argument('--own-render', choices=('recorded', 'replayed'), default='recorded',
+                   help="own successes (rl-own, jolt-guided) render the turns they were sampled with (recorded_turns.py); "
+                        "'replayed': the replaying runtime's record of them, as before 2026-11-23")
     b.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
                    help='teacher successes whose replay display drifted (sft_sources.drifted_success) join the exact ones')
     b.add_argument('--anchor-per-task', type=int, default=1,

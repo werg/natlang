@@ -24,3 +24,23 @@ function enabled(): ReadonlySet<string> {
 
 const active = enabled();
 export const modelFacing = (name: ModelFacingVariant): boolean => active.has(name);
+
+/**
+ * The model-facing prompt revision (plans/semantic-fp/02 R1): `current`, or `2026-11-22` for the texts and tool order
+ * before the 2026-11-23 sentence pass, byte for byte (native/prompt-2026-11-22.ts). Set by NATLANG_PROMPT_REVISION, or
+ * by a `prompt-revision-2026-11-22` entry in NATLANG_MODEL_FACING (held_eval.series() passes it on that way, so it is
+ * part of the series key and reaches every collector).
+ */
+export const PROMPT_REVISIONS = ['current', '2026-11-22'] as const;
+export type PromptRevision = typeof PROMPT_REVISIONS[number];
+const revision: PromptRevision = (() => {
+  if (typeof process === 'undefined') return 'current';
+  const raw = (process.env.NATLANG_PROMPT_REVISION ?? '').trim();
+  const named = raw || ((process.env.NATLANG_MODEL_FACING ?? '').split(',').map(name => name.trim())
+    .find(name => name.startsWith('prompt-revision-'))?.slice('prompt-revision-'.length) ?? '');
+  if (!named) return 'current';
+  if (!(PROMPT_REVISIONS as readonly string[]).includes(named))
+    throw new Error(`NATLANG_PROMPT_REVISION=${named} is not a prompt revision; use one of ${PROMPT_REVISIONS.join(', ')}`);
+  return named as PromptRevision;
+})();
+export const promptRevision = (): PromptRevision => revision;

@@ -72,7 +72,7 @@ test('file guidance preserves each supplied handle view and explicit output auth
 });
 
 test('inline lambda guidance exposes explicit snapshots and latest state arguments', () => {
-  assert.match(TOOLS_PROMPT, /nl\.with<boolean>\(\{ policy \}\)/);
+  assert.match(TOOLS_PROMPT, /nl\.with<boolean>\(\{ <criterion> \}\)/);
   assert.match(TOOLS_PROMPT, /nl\.with<ResultType> declares the child result type; its object argument supplies fixed context/);
   assert.match(TOOLS_PROMPT, /Keep input FileHandles in the arguments/);
   assert.match(TOOLS_PROMPT, /snapshots taken when the function is created/);
@@ -90,10 +90,11 @@ test('partial semantic checks retain explicit evidence scope without inheriting 
 });
 
 
-test('ordered repairs keep the current pass and the declared carried-value shape', () => {
-  assert.match(TOOLS_PROMPT, /apply only the current pass's correction/);
-  assert.match(TOOLS_PROMPT, /evidence for later passes/);
-  assert.match(TOOLS_PROMPT, /Return the declared draft value itself/);
+test('the system prompt carries no rule written for one task shape (prompt-audit-20261123.md)', () => {
+  for (const scar of [/current pass's correction/, /Return the declared draft value itself/, /change-request\.json/,
+    /save JSON and return it/, /isolated quote/, /recursive tree walker/, /pagination/])
+    assert.doesNotMatch(TOOLS_PROMPT + directoryReducerPrompt('all'), scar);
+  assert.match(TOOLS_PROMPT, /have it return the declared child type/);
 });
 
 

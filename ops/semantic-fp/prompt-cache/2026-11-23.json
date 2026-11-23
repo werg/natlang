@@ -1,0 +1,453 @@
+{
+ "schema": "natlang.prompt-cache-map/1",
+ "label": "recorded prompts (before B2)",
+ "block": 16,
+ "rewrite": false,
+ "tokenizer": {
+  "tokenizer_sha256": "7b156713cfb1fa2664e31e86a3fd3be281649df41365cc9b1243233827d4e185",
+  "chat_template_sha256": "f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818",
+  "model_type": "lfm3",
+  "history_reasoning": {
+   "policy": "keep",
+   "backbone": "lfm3",
+   "template_kwargs": {
+    "preserve_thinking": true
+   },
+   "probe": "keep"
+  }
+ },
+ "sources": [
+  {
+   "source": "collect:/home/werg/data/lfm3-rl-dgx-20261029/ops/ei/sft-v9/collect",
+   "all_calls": {
+    "calls": 2187,
+    "prompt_tokens": 23828131,
+    "episode": {
+     "shared_tokens": 20955342,
+     "recomputed_tokens": 2872789,
+     "hit_rate": 0.8794,
+     "mean_shared": 9581.8,
+     "first_difference": {
+      "history": 1841,
+      "system": 166,
+      "end": 88,
+      "tools": 77,
+      "opening": 15
+     },
+     "first_differing_tool": {
+      "read_code": 27,
+      "return_result": 25,
+      "compact_history": 20,
+      "edit_code": 5
+     }
+    },
+    "window": {
+     "shared_tokens": 21857929,
+     "recomputed_tokens": 1970202,
+     "hit_rate": 0.9173,
+     "mean_shared": 9994.5,
+     "first_difference": {
+      "history": 1800,
+      "end": 295,
+      "tools": 50,
+      "opening": 40,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 48,
+      "read_code": 1,
+      "edit_code": 1
+     }
+    }
+   },
+   "invocation_openings": {
+    "calls": 505,
+    "prompt_tokens": 2240332,
+    "episode": {
+     "shared_tokens": 1238095,
+     "recomputed_tokens": 1002237,
+     "hit_rate": 0.5526,
+     "mean_shared": 2451.7,
+     "first_difference": {
+      "system": 166,
+      "history": 159,
+      "end": 88,
+      "tools": 77,
+      "opening": 15
+     },
+     "first_differing_tool": {
+      "read_code": 27,
+      "return_result": 25,
+      "compact_history": 20,
+      "edit_code": 5
+     }
+    },
+    "window": {
+     "shared_tokens": 2140486,
+     "recomputed_tokens": 99846,
+     "hit_rate": 0.9554,
+     "mean_shared": 4238.6,
+     "first_difference": {
+      "end": 295,
+      "history": 118,
+      "tools": 50,
+      "opening": 40,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 48,
+      "read_code": 1,
+      "edit_code": 1
+     }
+    }
+   },
+   "mean_system_tokens": 3467.2,
+   "mean_tool_tokens": 1322.3,
+   "mean_opening_tokens": 780.3,
+   "distinct_system_texts": 2,
+   "distinct_tool_blocks": 52,
+   "distinct_tool_lists_without_return_result": {
+    "eval,read_page,read_code,compact_history": 891,
+    "eval,read_page,list_files,search_files,read_file,write_file,edit_file,diff_files,bash,python,delegate,editor,read_code,edit_code,diff_code,compact_history": 631,
+    "eval,read_page,read_code,edit_code,diff_code,compact_history": 544,
+    "": 121
+   }
+  },
+  {
+   "source": "held:/home/werg/data/lfm3-rl-dgx-20261029/ops/ei/sft-v9/held/start",
+   "all_calls": {
+    "calls": 5376,
+    "prompt_tokens": 63363164,
+    "episode": {
+     "shared_tokens": 55124227,
+     "recomputed_tokens": 8238937,
+     "hit_rate": 0.87,
+     "mean_shared": 10253.8,
+     "first_difference": {
+      "history": 4376,
+      "system": 516,
+      "end": 260,
+      "tools": 178,
+      "opening": 46
+     },
+     "first_differing_tool": {
+      "compact_history": 91,
+      "return_result": 61,
+      "read_code": 26
+     }
+    },
+    "window": {
+     "shared_tokens": 57907520,
+     "recomputed_tokens": 5455644,
+     "hit_rate": 0.9139,
+     "mean_shared": 10771.5,
+     "first_difference": {
+      "history": 4353,
+      "end": 622,
+      "opening": 248,
+      "tools": 151,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 148,
+      "compact_history": 1,
+      "read_code": 1,
+      "edit_code": 1
+     }
+    }
+   },
+   "invocation_openings": {
+    "calls": 1365,
+    "prompt_tokens": 5990338,
+    "episode": {
+     "shared_tokens": 2650259,
+     "recomputed_tokens": 3340079,
+     "hit_rate": 0.4424,
+     "mean_shared": 1941.6,
+     "first_difference": {
+      "system": 516,
+      "history": 365,
+      "end": 260,
+      "tools": 178,
+      "opening": 46
+     },
+     "first_differing_tool": {
+      "compact_history": 91,
+      "return_result": 61,
+      "read_code": 26
+     }
+    },
+    "window": {
+     "shared_tokens": 5432640,
+     "recomputed_tokens": 557698,
+     "hit_rate": 0.9069,
+     "mean_shared": 3980.0,
+     "first_difference": {
+      "end": 618,
+      "history": 346,
+      "opening": 248,
+      "tools": 151,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 148,
+      "compact_history": 1,
+      "read_code": 1,
+      "edit_code": 1
+     }
+    }
+   },
+   "mean_system_tokens": 3417.1,
+   "mean_tool_tokens": 1326.0,
+   "mean_opening_tokens": 791.8,
+   "distinct_system_texts": 2,
+   "distinct_tool_blocks": 153,
+   "distinct_tool_lists_without_return_result": {
+    "eval,read_page,read_code,edit_code,diff_code,compact_history": 1811,
+    "eval,read_page,read_code,compact_history": 1603,
+    "eval,read_page,list_files,search_files,read_file,write_file,edit_file,diff_files,bash,python,delegate,editor,read_code,edit_code,diff_code,compact_history": 1268,
+    "": 372,
+    "eval,read_page,list_files,search_files,read_file,write_file,edit_file,diff_files,bash,python,delegate,editor,read_code,compact_history": 322
+   }
+  },
+  {
+   "source": "turns:/home/werg/data/vibestudio-live-corpus/seed-v1/sft/work/episodes.jsonl.zst",
+   "all_calls": {
+    "calls": 37,
+    "prompt_tokens": 355005,
+    "episode": {
+     "shared_tokens": 271963,
+     "recomputed_tokens": 83042,
+     "hit_rate": 0.7661,
+     "mean_shared": 7350.4,
+     "first_difference": {
+      "history": 29,
+      "tools": 5,
+      "opening": 2,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 5
+     }
+    },
+    "window": {
+     "shared_tokens": 271963,
+     "recomputed_tokens": 83042,
+     "hit_rate": 0.7661,
+     "mean_shared": 7350.4,
+     "first_difference": {
+      "history": 29,
+      "tools": 5,
+      "opening": 2,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 5
+     }
+    }
+   },
+   "invocation_openings": {
+    "calls": 13,
+    "prompt_tokens": 104839,
+    "episode": {
+     "shared_tokens": 62794,
+     "recomputed_tokens": 42045,
+     "hit_rate": 0.599,
+     "mean_shared": 4830.3,
+     "first_difference": {
+      "tools": 5,
+      "history": 5,
+      "opening": 2,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 5
+     }
+    },
+    "window": {
+     "shared_tokens": 62794,
+     "recomputed_tokens": 42045,
+     "hit_rate": 0.599,
+     "mean_shared": 4830.3,
+     "first_difference": {
+      "tools": 5,
+      "history": 5,
+      "opening": 2,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 5
+     }
+    }
+   },
+   "mean_system_tokens": 3676.0,
+   "mean_tool_tokens": 1211.9,
+   "mean_opening_tokens": 431.9,
+   "distinct_system_texts": 1,
+   "distinct_tool_blocks": 6,
+   "distinct_tool_lists_without_return_result": {
+    "eval,read_page,read_code,edit_code,diff_code,compact_history": 37
+   }
+  },
+  {
+   "source": "turns:/home/werg/data/vibestudio-live-corpus/seed-v2/sft/work/episodes.jsonl.zst",
+   "all_calls": {
+    "calls": 58,
+    "prompt_tokens": 540435,
+    "episode": {
+     "shared_tokens": 419834,
+     "recomputed_tokens": 120601,
+     "hit_rate": 0.7768,
+     "mean_shared": 7238.5,
+     "first_difference": {
+      "history": 40,
+      "tools": 11,
+      "opening": 5,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 11
+     }
+    },
+    "window": {
+     "shared_tokens": 424638,
+     "recomputed_tokens": 115797,
+     "hit_rate": 0.7857,
+     "mean_shared": 7321.3,
+     "first_difference": {
+      "history": 40,
+      "tools": 12,
+      "opening": 5,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 12
+     }
+    }
+   },
+   "invocation_openings": {
+    "calls": 23,
+    "prompt_tokens": 179994,
+    "episode": {
+     "shared_tokens": 106197,
+     "recomputed_tokens": 73797,
+     "hit_rate": 0.59,
+     "mean_shared": 4617.3,
+     "first_difference": {
+      "tools": 11,
+      "opening": 5,
+      "history": 5,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 11
+     }
+    },
+    "window": {
+     "shared_tokens": 111001,
+     "recomputed_tokens": 68993,
+     "hit_rate": 0.6167,
+     "mean_shared": 4826.1,
+     "first_difference": {
+      "tools": 12,
+      "opening": 5,
+      "history": 5,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 12
+     }
+    }
+   },
+   "mean_system_tokens": 3676.0,
+   "mean_tool_tokens": 1208.2,
+   "mean_opening_tokens": 555.5,
+   "distinct_system_texts": 1,
+   "distinct_tool_blocks": 13,
+   "distinct_tool_lists_without_return_result": {
+    "eval,read_page,read_code,edit_code,diff_code,compact_history": 58
+   }
+  },
+  {
+   "source": "turns:/home/werg/data/semantic-fp-r0/triage-before.jsonl",
+   "all_calls": {
+    "calls": 32,
+    "prompt_tokens": 158208,
+    "episode": {
+     "shared_tokens": 144312,
+     "recomputed_tokens": 13896,
+     "hit_rate": 0.9122,
+     "mean_shared": 4509.8,
+     "first_difference": {
+      "history": 26,
+      "tools": 4,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 4
+     }
+    },
+    "window": {
+     "shared_tokens": 151010,
+     "recomputed_tokens": 7198,
+     "hit_rate": 0.9545,
+     "mean_shared": 4719.1,
+     "first_difference": {
+      "history": 15,
+      "end": 14,
+      "tools": 2,
+      "system": 1
+     },
+     "first_differing_tool": {
+      "return_result": 2
+     }
+    }
+   },
+   "invocation_openings": {
+    "calls": 6,
+    "prompt_tokens": 29215,
+    "episode": {
+     "shared_tokens": 18116,
+     "recomputed_tokens": 11099,
+     "hit_rate": 0.6201,
+     "mean_shared": 3019.3,
+     "first_difference": {
+      "tools": 4,
+      "system": 2
+     },
+     "first_differing_tool": {
+      "return_result": 4
+     }
+    },
+    "window": {
+     "shared_tokens": 23579,
+     "recomputed_tokens": 5636,
+     "hit_rate": 0.8071,
+     "mean_shared": 3929.8,
+     "first_difference": {
+      "tools": 2,
+      "end": 2,
+      "system": 1,
+      "history": 1
+     },
+     "first_differing_tool": {
+      "return_result": 2
+     }
+    }
+   },
+   "mean_system_tokens": 3667.0,
+   "mean_tool_tokens": 971.0,
+   "mean_opening_tokens": 104.9,
+   "distinct_system_texts": 1,
+   "distinct_tool_blocks": 3,
+   "distinct_tool_lists_without_return_result": {
+    "eval,read_page,read_code,compact_history": 32
+   }
+  }
+ ],
+ "code": {
+  "schema": "natlang.code-provenance/1",
+  "git_commit": "e8dbf721e4591304ab234b5645e6a6be1f30dbf2",
+  "dirty": true
+ }
+}
