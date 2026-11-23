@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import * as core from '../dist/index.js';
 import {workerdPlatform} from '../dist/core/workerd.js';
 const files={
- 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
+ 'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
  'describe.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe the number.',
 };
 function setup(platform=core.nodePlatform(),recording){
@@ -28,6 +28,20 @@ for(const mode of ['node','workerd'])test(`actual ${mode} compiled TS root owns 
   assert.deepEqual(root.definition.params,[{name:'value',type:'number'}]);
   assert.equal(env.store.value(root.inputs.value),7);assert.deepEqual(env.store.value(root.output),{description:'seven',doubled:14});
   assert.equal(child.parent_call_id,root.call_id);assert.ok(env.store.events(child.call_id).some(event=>event.kind==='model_request'));
+  assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
+ }finally{env.close();}
+});
+for(const mode of ['node','workerd'])test(`actual ${mode} TS optional input stays optional in replay identity`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const env=setup(platform);try{
+  assert.equal(await env.rt.run(()=>env.module.withOptional(7)),'prefixseven');
+  const rows=env.store.calls().map(row=>env.store.call(row.call_id));
+  const root=rows.find(row=>row.parent_call_id===null),child=rows.find(row=>row.definition.name==='describe');
+  assert.equal(root.definition.id,'ts:entry.ts#withOptional');
+  assert.deepEqual(root.definition.params.map(({name,optional})=>({name,...(optional?{optional}: {})})),[{name:'value'},{name:'label',optional:true}]);
+  assert.equal(Object.hasOwn(root.inputs,'label'),false);
+  assert.equal(env.store.value(root.inputs.value),7);
+  assert.equal(child.parent_call_id,root.call_id);
   assert.deepEqual(root.graph_custody.child_call_ids,[child.call_id]);
  }finally{env.close();}
 });

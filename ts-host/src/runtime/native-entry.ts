@@ -15,7 +15,7 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
   const declared=record.exports[exportName];
   const spec=declared?.kind==='function'?declared:{args:Object.fromEntries(args.map((_,index)=>[`arg${index}`,'unknown'])),returns:'unknown'};
   const callId=task.nextCallId(),name=exportName==='default'?record.name:exportName;
-  const params=Object.entries(spec.args).map(([name,type])=>({name:name.replace(/\?$/,''),type}));
+  const params=Object.entries(spec.args).map(([name,type])=>({name:name.replace(/\?$/,''),type,...(name.endsWith('?')?{optional:true}:{})}));
   const identity:DefinitionIdentity={id:`${record.id}#${exportName}`,name,source:record.source,
     key:definitionKey({id:`${record.id}#${exportName}`,body:record.text,params,returns:spec.returns,types:record.types,subtype:'function'}),
     interface:interfaceHash(record.codebase),site:'named',subtype:'function',params,returns:spec.returns,types:record.types,
