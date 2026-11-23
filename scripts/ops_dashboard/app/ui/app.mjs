@@ -36,7 +36,11 @@ function takeSnapshot(rec) {
   if (!rec?.data || rec.data.v !== 3) { report({ ev: 'snapshot_rejected', why: !rec?.data ? 'empty' : `version ${rec.data.v}` }); return; }
   if (S.snap && rec.data.ts < S.snap.ts) return;
   if (!S.snap) report({ ev: 'snapshot_first', age_s: Math.round((Date.now() - rec.data.ts) / 1000), runs: (rec.data.runs || []).length, machines: Object.keys(rec.data.machines || {}).length });
-  S.snap = rec.data;
+  S.snap = rec.data; S.snapCached = false;
+  if (now() - (S.cachedAt || 0) > 120e3) {          // the last snapshot paints a reopened page at once (marked with its age)
+    S.cachedAt = now();
+    try { const text = JSON.stringify(rec.data); if (text.length < 3e6) localStorage.setItem('ops.snap-cache', text); } catch {}
+  }
   if (!S.selTouched) defaultSelection();
   schedule();
 }
@@ -182,7 +186,7 @@ function heroRunning() {
 function heroTraining() {
   const run = activeRun(), v = improving(run);
   const el = h('div', { class: `card hero ${v.tone}` }, h('div', { class: 'q' }, 'Is training improving?'));
-  if (!run) return el.append(h('div', { class: 'big' }, 'No run yet')), el;
+  if (!run) return el.append(h('div', { class: 'big' }, S.snap ? 'No run yet' : 'Loading…')), el;
   el.append(h('div', { class: `big tone-${v.tone}` }, v.headline), h('div', { class: 'sub' }, v.sub ? `${v.sub} · ${v.detail}` : v.detail),
     h('div', { class: 'small muted', style: 'margin-top:4px' }, `${run.id} · ${run.steps} steps · ${run.active ? 'running' : 'idle'}${run.last_ts ? ` · last step ${ago(run.last_ts, now())}` : ''}`));
   const sp = run.spark || {};
@@ -212,6 +216,7 @@ function diskRows(m) {
 }
 function machineCard(name, m, { detail = false } = {}) {
   const title = name === 'dgx' ? 'DGX (GB10, unified memory)' : 'Pop (RTX 4060 8 GB)';
+  if (!m && !S.snap) return h('div', { class: 'card' }, h('header', {}, h('h2', {}, title)), h('div', { class: 'muted' }, 'Loading…'));
   if (!m) return h('div', { class: 'card' }, h('header', {}, h('h2', {}, title)), h('div', { class: 'alert crit' }, h('span', { class: 'ic' }, '✖'), h('div', { class: 'what' }, 'No data from this machine. The exporter could not reach it.')));
   const hist = (S.hist.get(name) || []).filter(r => now() - r.ts < 12 * 3600e3);
   const head = m.ledger?.headroom_gb, lowHead = name === 'dgx' && num(head) && head < LEDGER_FLOOR_GB;
@@ -231,13 +236,13 @@ function machineCard(name, m, { detail = false } = {}) {
 }
 function eventsView(limit = 8) {
   const evs = [...S.events].sort((a, b) => b.ts - a.ts).slice(0, S.evAll ? 80 : limit);
-  if (!evs.length) return h('div', { class: 'muted' }, 'No events recorded yet.');
+  if (!evs.length) return h('div', { class: 'muted' }, S.snap ? 'No events recorded yet.' : 'Loading…');
   const evLink = e => e.kind === 'flag' && e.run_id && num(e.step) ? dl.step('grpo:' + e.run_id.replace(/\./g, '/'), e.step) : e.kind === 'held' && e.run_id ? dl.ds('grpo:' + e.run_id.replace(/\./g, '/'), { part: 'held' }) : null;
   return h('div', { class: 'timeline' }, evs.map(e => h('div', { class: `ev ${e.level || ''}` }, h('time', { title: dayClock(e.ts) }, ago(e.ts, now())), h('span', { class: 't' }, evLink(e) ? h('a', { href: evLink(e), title: e.kind === 'flag' ? 'What this step trained on' : 'Held episodes' }, e.text || e.kind) : (e.text || e.kind)))));
 }
 function teachersMini() {
   const tt = S.snap?.teachers;
-  if (!tt) return h('div', { class: 'card' }, h('header', {}, h('h2', {}, 'Teacher generation')), h('div', { class: 'muted' }, 'No pool configured.'));
+  if (!tt) return h('div', { class: 'card' }, h('header', {}, h('h2', {}, 'Teacher generation')), h('div', { class: 'muted' }, S.snap ? 'No pool configured.' : 'Loading…'));
   const live_ = live().find(p => p.unit.startsWith('tgen-'));
   return h('div', { class: 'card' }, h('header', {}, h('h2', {}, `Teacher generation · ${tt.pool}`), h('button', { class: 'btn sm', onclick: () => go('teachers') }, 'Details')),
     h('div', { class: 'grid', style: 'grid-template-columns:repeat(3,1fr);gap:10px' }, stat(`${fmt(tt.tasks_done)}`, `of ${fmt(tt.eligible)} tasks`), stat(fmt(tt.success), 'verified successes'), stat(`${fmt(tt.success_last_hour)}/h`, 'successes, last hour')),
@@ -471,7 +476,8 @@ function freshness() {
   releaseLine();
   const el = $('fresh'), age = S.snap ? now() - S.snap.ts : null;
   el.className = `live ${age == null ? 'dead' : age < 90e3 ? 'fresh' : age < SNAP_STALE_MS * 2 ? 'stale' : 'dead'}`;
-  $('fresh-text').textContent = !src ? 'not connected' : age == null ? 'connected, waiting for data' : `data ${dur(age / 1000)} old`;
+  $('fresh-text').textContent = S.snapCached ? `showing saved data ${dur(age / 1000)} old · ${src ? 'connected, fetching live data' : 'connecting'}`
+    : !src ? 'connecting' : age == null ? 'connected, waiting for data' : `data ${dur(age / 1000)} old`;
 }
 function render() {
   const hv = health(S.snap, now(), S.acked);
@@ -487,7 +493,7 @@ function render() {
   const banner = S.gate || !src ? null : S.tab === 'data' ? (hv.open.length ? h('div', { class: 'alertline' }, h('span', { class: `tone-${hv.level}` }, levelIcon(hv.level), ` ${hv.open.length} open alert${hv.open.length > 1 ? 's' : ''}: `), hv.open[0].text, ' ', h('a', { href: '#overview' }, 'Overview')) : null) : alertsView(hv);
   if (banner) next.append(banner);
   if (S.gate) { next.append(S.gate); view.replaceChildren(next); return; }
-  if (!S.snap && S.tab !== 'data') next.append(h('div', { class: 'notice' }, 'Connected. The first snapshot comes from the DGX within about 30 seconds. If nothing arrives in a minute, the exporter or the native ops participant on the DGX is not running.'));
+  if (!S.snap && S.tab !== 'data' && src) next.append(h('div', { class: 'notice' }, 'Connected. The first snapshot comes from the DGX within about 30 seconds. If nothing arrives in a minute, the exporter or the native ops participant on the DGX is not running.'));
   try { next.append((VIEWS[S.tab] || overview)(hv)); } catch (e) { next.append(h('div', { class: 'alert crit' }, `This section failed to draw: ${e.message}`)); console.error(e); report({ ev: 'render_failed', tab: S.tab, error: String(e.message).slice(0, 200), stack: String(e.stack || '').slice(0, 300) }); }
   view.replaceChildren(next);
   if (restoreTo != null && document.documentElement.scrollHeight > restoreTo + innerHeight * 0.5) { window.scrollTo({ top: restoreTo }); restoreTo = null; }
@@ -588,4 +594,5 @@ export function start(source) {
   render();
 }
 export function showGate(node) { S.gate = node; render(); }
+{ const saved = store('ops.snap-cache'); if (saved?.v === 3 && !S.snap) { S.snap = saved; S.snapCached = true; if (!S.selTouched) defaultSelection(); } }
 render();
