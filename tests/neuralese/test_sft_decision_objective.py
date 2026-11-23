@@ -320,6 +320,13 @@ def test_field_mode_step_replies_and_strays(lfm3_renderer):
     stray = _field_turn('{"label":"spam","urgency":"none","route":"tech"}')
     prompt, _ = _render(lfm3_renderer, stray)
     assert sft_sources.render_decision(lfm3_renderer, stray, prompt) == {'error': 'reply-not-a-form'}
+    # the last scored step when the record's later fields have one alternative (not scored, not recorded)
+    fixed = _field_turn('{"label":"spam","')
+    fixed['messages'][-1]['content'] = fixed['messages'][-1]['content'].replace(
+        '"urgency":<"low" | "mid" | "high">,"route":<"billing" | "tech" | "sales" | "abuse">', '"urgency":"low","route":"tech"')
+    prompt, _ = _render(lfm3_renderer, fixed)
+    steps = sft_sources.render_decision(lfm3_renderer, fixed, prompt)['steps']
+    assert len(steps) == 1 and steps[0]['values'][steps[0]['label']] == '{"label":"spam","'
     loose = _field_turn('{"route": "tech", "label": "spam", "urgency": "mid"}')
     prompt, _ = _render(lfm3_renderer, loose)
     steps = sft_sources.render_decision(lfm3_renderer, loose, prompt)['steps']
