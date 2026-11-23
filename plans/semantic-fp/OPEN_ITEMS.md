@@ -59,6 +59,7 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 
 ## Operations
 
+- **Benchmark arm D (specialize, tune, escalate on sft-v9):** its 24 GB tune job (`bench-tune-b2`) was cancelled at 18:40. It sat at the head of the DGX ledger during round 1's SFT and froze 18 jobs behind it. Rerun arm D (`/home/werg/data/semantic-fp-bench/triage-20261123b/driver.sh`) after the r0001 SFT finishes. Owner: coordinator.
 - **Constrained-decoding rollout (9ab63c622, SGLang fork 17e3458c2e):**
   - The DGX checkout `/home/werg/sglang-natlang` moved to 17e3458c2e on 2026-11-23 17:10 (xgrammar 0.2.7 in its venv).
   - Read round 2's collection throughput, and set `NATLANG_TOOL_GRAMMAR=0` if it drops.
