@@ -88,7 +88,7 @@ def validate_return_contribution(item, proof, records):
     valid_path = lambda path: isinstance(path, list) and all(
         isinstance(key, str) or type(key) is int and 0 <= key <= 9007199254740991 for key in path)
     if (not isinstance(c, dict) or c.get('schema') != 'natlang.application-return-contribution/1' or
-            c.get('kind') not in ('root', 'forwarded', 'projection', 'uncertain-projection') or
+            c.get('kind') not in ('root', 'forwarded', 'projection', 'uncertain-projection', 'incidental-child') or
             not all(isinstance(c.get(key), str) for key in ('root_call_id', 'producer_call_id', 'root_value_json')) or
             hashlib.sha256(c['root_value_json'].encode()).hexdigest() != c.get('root_sha256') or
             not all(valid_path(c.get(key)) for key in ('root_path', 'producer_path')) or
@@ -143,7 +143,7 @@ def validate_return_contribution(item, proof, records):
                 cost['model_requests'] > 0 and str((record.get('definition') or {}).get('source') or '').endswith('.nl') and
                 any(turn.get('kind') == 'generation' and reply_present(turn) and not turn.get('error')
                     for turn in record.get('model_turns') or []))
-    def chain(record):
+    def chain(record, crisp=True):
         path, seen = [], set()
         while record:
             key = record.get('call_id')
@@ -154,9 +154,15 @@ def validate_return_contribution(item, proof, records):
             if key == root['call_id']:
                 return path
             record = records.get(record.get('parent_call_id'))
-            if not record or (record.get('executor') or {}).get('kind') != 'crisp' or record.get('outcome') != 'done':
+            if not record or crisp and ((record.get('executor') or {}).get('kind') != 'crisp' or record.get('outcome') != 'done'):
                 return None
         return None
+    if c['kind'] == 'incidental-child':
+        incidental = (roles.get('incidentalValues') or {}).get('checks') or {}
+        if (producer is root or not sampled(producer) or chain(producer, crisp=False) != c['lineage'] or
+                c['root_path'] or c['producer_path'] or any(incidental.get(name) is not False for name in c['checks'])):
+            raise ValueError('incidental child hold needs an actual sampled child and independently failed incidental checks')
+        return c['producer_call_id']
     if producer is root or not sampled(producer) or chain(producer) != c['lineage']:
         raise ValueError('application return contribution needs a sampled NL producer with actual crisp ancestry')
     if c['kind'] == 'forwarded':

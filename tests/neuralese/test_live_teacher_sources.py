@@ -1020,3 +1020,26 @@ def test_optional_wrong_return_masks_do_not_depend_on_a_false_or_even_declared_i
     proof['outcomeDimensions']['returnedValue']['incorrectReturns'] = [selector]
     del proof['outcomeDimensions']['incidentalValues']
     assert live.declared_return_exclusions([proof], records) == {'producer': 2}
+
+
+def test_independently_checked_unused_child_preserves_the_correct_public_answer():
+    proof, records, selector = contribution_fixture()
+    actual = {'answer': 'correct'}
+    text = json.dumps(actual, separators=(',', ':'))
+    root_hash = hashlib.sha256(text.encode()).hexdigest()
+    records['root']['output'] = {'complete': True, 'hash': root_hash, 'bytes': len(text)}
+    proof['actualResult'] = actual
+    proof['outcomeDimensions']['returnedValue']['checks']['answerCorrect'] = True
+    proof['outcomeDimensions']['incidentalValues']['checks'] = {'unusedClassification': False}
+    c = selector['contribution']
+    c.update(kind='incidental-child', root_value_json=text, root_sha256=root_hash,
+             root_path=[], producer_path=[], checks=['unusedClassification'])
+    del c['candidates'], c['producer_source_suffix']
+    # Incidental child quality is independently checked; it claims no projection or crisp forwarding.
+    records['parent'] = {**copy.deepcopy(records['producer']), 'call_id': 'parent', 'parent_call_id': 'root'}
+    records['producer']['parent_call_id'] = 'parent'
+    c['lineage'] = ['root', 'parent', 'producer']
+    assert live.declared_return_exclusions([proof], records) == {'producer': 2}
+    c['checks'] = ['answerCorrect']
+    with pytest.raises(ValueError):
+        live.declared_return_exclusions([proof], records)
