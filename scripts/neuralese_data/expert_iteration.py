@@ -248,12 +248,9 @@ def held_budget_gb(slots=HELD_SLOTS):
 
 
 def ledger_queued(unit):
-    """Whether the memory ledger holds ``unit`` waiting or requeued (a preempted resumable unit before its relaunch)."""
-    try:
-        status = json.loads(subprocess.run([*LEDGER, 'status'], capture_output=True, text=True, timeout=60).stdout or '')
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return False
-    return any(w.get('unit', '').removesuffix('.service') == unit for w in status.get('waiting') or ())
+    """Whether the ledger retains ownership, including preemption/requeue transitions."""
+    from scripts.memory_ledger import unit_owned
+    return unit_owned(unit)
 
 
 def _pid_alive(pid):
@@ -1459,8 +1456,34 @@ class Cycle:
         return ['--neuralese-variants', self.a.neuralese_variants, '--neuralese-variant-share',
                 self.a.neuralese_variant_share]
 
+    def data_repo(self):
+        return Path(getattr(self.a, 'data_repo', None) or self.pin)
+
     def fill_repo(self):
-        return Path(getattr(self.a, 'fill_repo', None) or self.pin)
+        return Path(getattr(self.a, 'fill_repo', None) or self.data_repo())
+
+    def require_data_readers(self):
+        minimum = getattr(self.a, 'minimum_data_reader_commit', None)
+        if not minimum:
+            return
+        for repo in {self.data_repo(), self.fill_repo()}:
+            marker = repo / '.natlang-pin.json'
+            recorded = json.loads(marker.read_text())
+            actual = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+            if recorded.get('commit') != actual:
+                raise ValueError(f'data reader pin identity differs: {repo}')
+            subprocess.run(['git', '-C', str(repo), 'merge-base', '--is-ancestor', minimum, actual], check=True)
+            subprocess.run(['git', '-C', str(repo), 'diff', '--quiet', 'HEAD', '--'], check=True)
+
+    def data_py(self, script, *args):
+        return [PY, str(self.data_repo() / 'scripts/neuralese_data' / script), *map(str, args)]
+
+    def fill_build_command(self, *args):
+        # A data stage may intentionally use different fill and mix readers.
+        repo = self.fill_repo()
+        return ['/usr/bin/env', 'NATLANG_REPO=' + str(repo),
+                f'PYTHONPATH={repo}/scripts/neuralese_data:{repo}/training/neuralese:{repo}',
+                PY, str(repo / 'scripts/neuralese_data/filled_reasoning.py'), 'build', *map(str, args)]
 
     def fill_alongside(self, collect_unit, sha=None):
         """Filled reasoning (filled_reasoning.py generate, the rationalization strand's tool) drawn from the same actor
@@ -1487,6 +1510,7 @@ class Cycle:
         that when the engine has spare slots), with twice as many episode workers so the cap is reached (each worker
         draws at most 4 candidates at a time and scores between them). In the fill window the dedicated actor's every
         slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes)."""
+        self.require_data_readers()
         from natlang_neuralese.common import data_registry
         live = [str(w) for w in getattr(self.a, 'live_work', None) or ()]
         works = list(dict.fromkeys([*live, *map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
@@ -1547,6 +1571,7 @@ class Cycle:
             os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', self.work / 'tokenizer')
 
     def data_stage(self):
+        self.require_data_readers()
         w = self.work
         self.work_tokenizer()
         steps = []
@@ -1560,25 +1585,27 @@ class Cycle:
         link_live_works(w, getattr(self.a, 'live_work', None) or ())
         name = f'episodes-{self.a.name}'
         if not (w / f'{name}-extract.json').exists():
-            steps.append(self.py('sft_sources.py', 'extract', '--work', w, '--rl',
+            steps.append(self.data_py('sft_sources.py', 'extract', '--work', w, '--rl',
                                  # groups are read live from the run dir; the collection writes no zst archive, so
                                  # the archive is the (registered) collect dir itself
                                  f'{self.collect_dir}:{self.collect_dir}', '--out-name', name))
-        steps.append(self.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
+        steps.append(self.data_py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                              '--runtime-repo', self.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
             failed = [x for p in self.failed_policies() for x in ('--exclude-policy', p)]
-            steps.append([PY, str(self.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'build',
-                          '--out', str(self.a.fill), '--corpus', str(self.dir / 'filled'), *failed])
+            steps.append(self.fill_build_command('--out', self.a.fill, '--corpus', self.dir / 'filled', *failed))
         lines = [' '.join(map(_quote, s)) for s in steps]
         if not self.a.no_own_neuralese_graph:
             # a failure ends the stage (set -e): sft-v7's silently fell back to a mix without the student's own consumer
             # calls, the ran-out fix; --no-own-neuralese-graph is the deliberate opt-out
             lines.append(' '.join(map(_quote, self.own_neuralese_graph_command())))
         script = self.dir / 'data.sh'
-        script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
+        if not self.present(f'{self.a.name}-data'):
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
+            os.replace(tmp, script)
         # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
-        self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log')
+        self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log', repo=self.data_repo())
         self.mark('data')
 
     def failed_policies(self):
@@ -1597,7 +1624,7 @@ class Cycle:
         the state), so without this part a cycle's mix holds no consumer call of the student's own: held-v3 after
         sft-v5 (DECISIONS 2026-11-21 "ran-out") showed the student calling Neuralese consumers twice as often while
         they loop ~7.6 calls each. ``--no-own-neuralese-graph`` opts out."""
-        return self.py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
+        return self.data_py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
                        '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
                        # this cycle's collection ran on the cycle's pin: its surfaces are current
                        '--current-surface-run', '^rl:' + re.escape('/'.join(self.collect_dir.parts[-2:])) + '$')
@@ -1605,13 +1632,14 @@ class Cycle:
     def build_command(self):
         """The mix build (``sft_sources build``) and the checkout it runs from: ``--data-repo`` (data preparation,
         outside the held scoring series), else the pin."""
+        self.require_data_readers()
         aux = list(self.a.aux)
         if (self.dir / 'filled' / 'chains.pkl').exists():
             aux.append(f'filled={self.dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         own_graph = self.dir / 'neuralese-graph-own' / 'chains.pkl'
         if not self.a.no_own_neuralese_graph and own_graph.exists():
             aux.append(f'own-neuralese-graph={own_graph},share={self.a.own_neuralese_graph_share},task_tokens=40000')
-        repo = Path(getattr(self.a, 'data_repo', None) or self.pin)
+        repo = self.data_repo()
         command = mix_build_command(repo, work=self.work, out=self.mix, frontier=self.dir / 'frontier.json', aux=aux,
                                     prefer_unseen=self.train_policy()[2], teacher_budget=self.a.teacher_budget,
                                     own_share=self.a.own_share,
@@ -2406,7 +2434,12 @@ class AsyncRoundDriver:
             held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
             collect_profile='dgx', sft_profile='dgx', select_args=a.select_args, prefer_unseen=[],
-            fill_repo=None, data_repo=None, success_pts=a.success_pts, fail_pts=a.fail_pts)
+            # The controller's immutable source supplies data tooling; the actor/learner
+            # keep --commit/--pin. Explicit old-pin paths opt out at a normal resume.
+            fill_repo=getattr(a, 'fill_repo', None) or getattr(a, 'data_repo', None) or str(REPO),
+            data_repo=getattr(a, 'data_repo', None) or str(REPO),
+            minimum_data_reader_commit=getattr(a, 'minimum_data_reader_commit', None),
+            success_pts=a.success_pts, fail_pts=a.fail_pts)
 
     def note(self, **record):
         self.c.note(stage='async', **record)
@@ -2467,7 +2500,8 @@ class AsyncRoundDriver:
         if actor['checkpoint_sha256'] != policy['sha256']:
             return
         self.c.work_tokenizer()
-        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor), work / 'fill.log', detach=True)
+        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor), work / 'fill.log', detach=True,
+                      repo=self.c.fill_repo())
         self.note(fill_started=f'{unit}-fill', policy=policy['sha256'])
 
     def remote_units(self, unit):
@@ -2549,24 +2583,23 @@ class AsyncRoundDriver:
         lines = []
         rl = [*collections_, *[d for d in sorted(self.root.glob('r*/grpo')) if (d / 'groups').exists()]]
         teachers = [d for d in sorted(self.root.glob('teacher-*')) if (d / 'manifest.jsonl').exists()]
-        lines.append(self.c.py('sft_sources.py', 'extract', '--work', w,
+        lines.append(self.c.data_py('sft_sources.py', 'extract', '--work', w,
                                *[x for d in rl for x in ('--rl', f'{d}:{d}')], *[x for d in teachers for x in ('--teacher', d)],
                                '--out-name', f'episodes-{self.a.name}-{round_dir.name}'))
-        lines.append(self.c.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
+        lines.append(self.c.data_py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                                '--runtime-repo', self.c.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
-            lines.append([PY, str(self.c.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'build',
-                          '--out', str(self.a.fill), '--corpus', str(round_dir / 'filled'),
-                          *[x for s in self.failed_policies() for x in ('--exclude-policy', s)]])
+            lines.append(self.c.fill_build_command('--out', self.a.fill, '--corpus', round_dir / 'filled',
+                          *[x for s in self.failed_policies() for x in ('--exclude-policy', s)]))
         surfaces = '|'.join(re.escape('/'.join(Path(d).parts[-2:])) for d in collections_) or '(?!)'
-        lines.append(self.c.py('sft_sources.py', 'neuralese-graph', '--work', w, '--out', round_dir / 'neuralese-graph-own',
+        lines.append(self.c.data_py('sft_sources.py', 'neuralese-graph', '--work', w, '--out', round_dir / 'neuralese-graph-own',
                                '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
                                '--current-surface-run', f'^rl:({surfaces})$'))
         aux = list(self.a.aux)
         aux.append(f'filled={round_dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
-        build = mix_build_command(self.c.pin, work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
+        build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
                                   aux=aux, prefer_unseen=self.controller.state['prefer_unseen'],
                                   teacher_budget=self.a.teacher_budget, own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
@@ -2614,19 +2647,22 @@ class AsyncRoundDriver:
 
         # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
-        def step(name, budget, argv):
+        def step(name, budget, argv, repo=None):
             done = round_dir / 'stages' / f'{name}.done'
             if not done.exists():
                 self.c.ledger(f'{self.a.name}-{round_dir.name}-{name}', budget, STAGE_PRIORITY, argv,
-                              round_dir / f'{name}.log')
+                              round_dir / f'{name}.log', repo=repo)
                 done.write_text(json.dumps({'time': time.time()}) + '\n')
         step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
-        if not (round_dir / 'stages' / 'data.done').exists():
-            script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
-        step('data', 12, ['/bin/sh', str(script)])
-        step('build', 24, build)
+        # Preserve an admitted/requeued plan and atomically replace inactive plans.
+        if not (round_dir / 'stages' / 'data.done').exists() and not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+            os.replace(tmp, script)
+        step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
+        step('build', 24, build, repo=self.c.data_repo())
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
@@ -2654,6 +2690,7 @@ class AsyncRoundDriver:
         """launch-sft.sh's environment for a round: the one recipe for the G4 and the DGX learner (launch-sft.sh
         writes ``--epochs 1 --warmup 10 --batch-loss-tokens 30000 --min-lr-fraction 0.1 --clip 1.0``; a resumed state
         indexes the same step list wherever it trains) plus the round's flags."""
+        self.c.require_data_readers()
         run = round_dir / 'sft'
         extra = ['--round-id', round_dir.name, '--export-factors-dir', str(run / 'factors'), '--factors-only', '--resume']
         vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (round_dir / 'mix' / v).exists()]
@@ -3022,6 +3059,8 @@ class AsyncRoundDriver:
 
     def run(self):
         """Drive up to ``--max-rounds`` (0: continuous) rounds."""
+        self.c.require_data_readers()
+        self.record_reader_sources()
         self.c.pin_stage()
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
@@ -3104,6 +3143,20 @@ class AsyncRoundDriver:
         print(message, file=sys.stderr, flush=True)
         return 3
 
+    def reader_sources(self):
+        from natlang_neuralese.common.code_provenance import code_provenance
+        return {role: {'path': str(repo), **code_provenance(repo)} for role, repo in (
+            ('controller', REPO), ('runtime', self.c.pin),
+            ('fill', self.c.fill_repo()), ('data', self.c.data_repo()))}
+
+    def record_reader_sources(self):
+        from natlang_neuralese.common.jsonio import write_json_durable
+        record = {'schema': 'natlang.async-reader-sources/1', 'sources': self.reader_sources(),
+                  'runtime_commit': self.a.commit,
+                  'minimum_data_reader_commit': getattr(self.a, 'minimum_data_reader_commit', None), 'time': time.time()}
+        write_json_durable(self.root / 'reader-sources.json', record)
+        self.note(reader_sources=record['sources'])
+
     def plan(self):
         """``--dry-run``: the commands one round of the current state would run, without running them."""
         cur = self.controller.current
@@ -3124,6 +3177,7 @@ class AsyncRoundDriver:
                            'budget_gb': max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4),
                            'collect': list(map(str, argv))})
         plan = {'phase': self.controller.phase, 'policy': cur, 'pin': str(self.c.pin),
+                'reader_sources': self.reader_sources(),
                 'select': self.select_command(self.collect_dir(cur) / 'tasks.json'), 'collect': collect,
                 'remote_collect': remote, 'sft_dgx': {'activation_gb': self.a.sft_activation_gb,
                                                       'budget_gb': self.a.sft_budget},
@@ -3295,6 +3349,7 @@ def main():
                    "cycle's mix until a Pop serve stops it)")
     y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
                    'tooling outside the held scoring series)')
+    y.add_argument('--minimum-data-reader-commit', help='required ancestor of both immutable data/fill reader pins; runtime scoring pin unchanged')
     y.add_argument('--data-repo', help="checkout whose sft_sources.py builds the mix (default the pin; data preparation "
                    'outside the held scoring series, e.g. a faster build that keeps chains byte-identical)')
     y.add_argument('--speculative-after', help='previous cycle DIR whose SFT candidate is --start: collect while Pop '
@@ -3446,6 +3501,9 @@ def main():
     ad.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS)
     memetic_flags(ad)
     ad.add_argument('--fill', help='filled_reasoning.py OUT directory: fills on the standing collection actor')
+    ad.add_argument('--minimum-data-reader-commit', help='required ancestor of both immutable data/fill reader pins; checked at controller start and each SFT boundary')
+    ad.add_argument('--data-repo', help='immutable data-reader checkout (default: controller source); actor/learner --pin is unchanged')
+    ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')
     ad.add_argument('--grpo-steps', type=int, default=20, help='GRPO steps per round in the polish phase')

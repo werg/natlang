@@ -137,3 +137,42 @@ test('rounds keep the best development release, continue it, stop early and resu
   assert.deepEqual(calls, [], 'a finished journal does nothing');
   await assert.rejects(runRounds({ ...options, journal: join(dir, 'other.json'), schedule: ['rl'] }), /starts with an sft round/);
 });
+
+test('a reasoned readout records every scored entry as a turn, in graph order, and keeps only the action reasoning', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-tune-rd-'));
+  writeFileSync(join(root, 'invite.nl'), `---\nargs: { invite: string }\nreturns: '"accept" | "decline"'\nreadout: decision\n---\nAnswer the invitation.\n`);
+  writeFileSync(join(root, 'package.json'), '{"type":"module"}');
+  const built = host.buildProject({ project: root, emit: false, write: false });
+  assert.equal(built.ok, true, host.formatDiagnostics(built.diagnostics));
+  const program = built.manifest.adaptation, manifest = release(program);
+  const weights = [new WeightBinding(manifest, { program, available: new Set(manifest.artifacts.map(item => item.artifact)), strict: true })];
+  const capture = ids => ({ schema: 'natlang.native-rl-sampling/2', prompt: [{ kind: 'tokens', token_ids: [1, 2] }],
+    samples: ids.map((token_id, index) => ({ index, token_id, logp: -0.5 })) });
+  // the scorer answers sample 0 last: turn order must follow the graph's numbering, not completion
+  const driver = Object.assign(async request => ({ text: '"accept"', reasoning: `think ${request.decision_reasoning?.index}`,
+    raw_response: { choices: [{ message: { content: '"accept"' } }], x_natlang_rl_capture: capture([50 + (request.decision_reasoning?.index ?? 9), 99]) } }),
+  { decide: async request => {
+    await new Promise(resolve => setTimeout(resolve, request.reasoning === 'think 0' ? 20 : 0));
+    return { log_probs: [Math.log(0.7), Math.log(0.3)], tokens: [2, 2],
+      native_decision_capture: { schema: 'natlang.native-decision-capture/1', prompt: [], continuations: [[11], [13]], reasoning: request.reasoning } };
+  } });
+  const out = join(root, 'rollouts.jsonl');
+  const examples = [{ id: 'r1', function: 'invite.nl', input: { invite: 'Thu' }, expected: 'accept', component: 'c1', partition: 'train' }];
+  await runRollouts({ root, program, release: manifest, weights, driver, examples, samples: 2, temperature: 1, round: 1, out,
+    policyCheckpointSha256: base.checkpoint_sha256 });
+  for (const row of readFileSync(out, 'utf8').trim().split('\n').map(line => JSON.parse(line))) {
+    const { turns, execution_graph: graph } = row.episode;
+    const nodes = graph.filter(event => event.kind === 'model_turn');
+    assert.equal(turns.length, nodes.length, 'one turn per scored entry, as the graph has; reasoning generations are no turns');
+    assert.deepEqual(turns.map(turn => turn.decision_reasoning.index), [0, 1, 2, 3]);
+    const actions = turns.filter(turn => turn.decision_reasoning.action);
+    assert.equal(actions.length, 1);
+    assert.ok(actions[0].sampling.decision_sample, 'the action entry carries the sampling receipt');
+    assert.deepEqual(actions[0].decision_reasoning.reasoning_sampling.samples.map(sample => sample.token_id),
+      [50 + actions[0].decision_reasoning.index, 99], 'its own reasoning generation\'s capture');
+    for (const other of turns.filter(turn => !turn.decision_reasoning.action)) {
+      assert.equal(other.sampling.decision_sample, undefined);
+      assert.equal(other.decision_reasoning.reasoning_sampling, undefined);
+    }
+  }
+});

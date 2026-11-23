@@ -118,39 +118,53 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
 
 async function runOne(options: Parameters<typeof runRollouts>[0], example: SplitExample, group: string, sample: number, seed: number,
     behavior: ReturnType<typeof releaseBehavior>): Promise<TuneRollout> {
-  const turns: Json[] = [], bindings: Record<string, string | null> = {}, counters = new Map<string, number>();
+  const turns: (Json | null)[] = [], bindings: Record<string, string | null> = {}, counters = new Map<string, number>();
   const stacks: ResolvedWeightStack[] = [], events: Json[] = [];
   let transport: unknown, refused: string | undefined, fatal: Error | undefined;
   // A refusal inside the driver surfaces through the runtime as an ordinary failure; remember it so it never scores 0.
   const refuse = (reason: string): never => { refused ??= reason; throw new Skip(reason); };
   const inner = options.driver as (request: ModelTurnRequest, ...rest: unknown[]) => Promise<ModelTurn>;
+  // A reasoned readout's reasoning generations are no turns (their reply after the reasoning was never used); each
+  // waits here, by invocation and sample index, for its scored entry. The action entry keeps its capture.
+  const reasonings = new Map<string, Json>();
   // A decision readout is an action over its option set: sampled from softmax(scores / T) for exploration, with its
-  // exact scoring capture and sampling receipt as the episode turn (rl/decision_policy.py).
+  // exact scoring capture and sampling receipt as the episode turn (rl/decision_policy.py). Every scored entry is a
+  // turn, as every one is a model turn of the execution graph, in the order the graph numbers them (a slot is taken
+  // before scoring); a reasoned readout's other samples only estimated its probabilities, so their entries carry no
+  // sampling receipt and stay context, and the action entry carries its reasoning's exact capture
+  // (`decision_reasoning.reasoning_sampling`, trained with it: rl/episode_graph.whole_episode_turns), as
+  // rl.task_rollouts.rollout_turns records collector episodes.
   const rolloutDecide = (decide: DecisionScorer): DecisionScorer => async (request: DecisionRequest, signal?: AbortSignal) => {
     const call = request.invocation_id;
     if (!call) return refuse('a decision readout has no invocation identity');
     const turn = (counters.get(call) ?? 0) + 1;
     counters.set(call, turn);
     const turnSeed = derivedSeed(seed, call, turn);
+    const slot = turns.length;
+    turns.push(null);
     let scores: DecisionScores;
     try { scores = await decide({ ...request, native_recording: true }, signal); }
     catch (error) { transport ??= error; throw error; }
     const capture = scores.native_decision_capture;
     if (!capture) throw fatal ??= new Error('rollout-capture-unavailable: decision readouts need the native server\'s '
       + 'decision capture');
-    // A reasoned readout's other samples only estimate its probabilities: its action sample is the episode's turn.
-    if (request.reasoning_sample && !request.reasoning_sample.action) return scores;
-    const chosen = sampleOption(scores.log_probs, options.temperature, turnSeed);
+    const action = !request.reasoning_sample || request.reasoning_sample.action;
+    const chosen = action ? sampleOption(scores.log_probs, options.temperature, turnSeed) :
+      scores.log_probs.indexOf(Math.max(...scores.log_probs));
     const binding = currentFrame()?.weights?.binding ?? null;
     if (call in bindings && bindings[call] !== binding) refuse('one invocation ran under two bindings');
     bindings[call] = binding;
-    turns.push({ messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]!,
+    const key = request.reasoning_sample ? `${call}\0${request.reasoning_sample.index}` : undefined;
+    const reasoning = action && key !== undefined ? reasonings.get(key) : undefined;
+    if (reasoning !== undefined) reasonings.delete(key!);   // a field-mode readout's later steps reuse the same reasoning
+    turns[slot] = { messages: structuredClone(request.messages), target: { role: 'assistant', content: request.options[chosen]!,
         ...(typeof request.reasoning === 'string' ? { reasoning_content: request.reasoning } : {}) },
-      ...(request.reasoning_sample ? { decision_reasoning: { ...request.reasoning_sample } } : {}),
-      invocation_id: call, sampling: { ...structuredClone(capture), decision_sample: { schema: 'natlang.decision-sample/1',
-        log_probs: [...scores.log_probs], chosen, temperature: options.temperature, seed: turnSeed } },
-      replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
-    return { ...scores, chosen };
+      ...(request.reasoning_sample ? { decision_reasoning: { ...request.reasoning_sample,
+        ...(reasoning !== undefined ? { reasoning_sampling: reasoning } : {}) } } : {}),
+      invocation_id: call, sampling: { ...structuredClone(capture), ...(action ? { decision_sample: { schema: 'natlang.decision-sample/1',
+        log_probs: [...scores.log_probs], chosen, temperature: options.temperature, seed: turnSeed } } : {}) },
+      replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } };
+    return action ? { ...scores, chosen } : scores;
   };
   const driver = wrapDriver(options.driver, { decide: rolloutDecide, turn: async (request: ModelTurnRequest, ...rest: unknown[]) => {
     const call = request.invocation_id;
@@ -169,12 +183,16 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     const binding = currentFrame()?.weights?.binding ?? null;
     if (call in bindings && bindings[call] !== binding) refuse('one invocation ran under two bindings');
     bindings[call] = binding;
+    if (request.decision_reasoning) {
+      reasonings.set(`${call}\0${request.decision_reasoning.index}`,
+        { ...structuredClone(capture), ...(Array.isArray(imports) ? { native_state_imports: structuredClone(imports) } : {}) });
+      return reply;
+    }
     const message = ((raw.choices as Json[] | undefined)?.[0]?.message ?? {}) as Json;
     turns.push({ messages: structuredClone(request.messages), ...(request.tools?.length ? { tools: structuredClone(request.tools) } : {}),
       ...(request.response_tools ? {response_tools: structuredClone(request.response_tools)} : {}),
       ...(reply.tool_parse ? {tool_parse: structuredClone(reply.tool_parse), native_xml_turn: trajectoryTurn(request,reply)} : {}),
       target: { role: 'assistant', content: message.content ?? '', ...(message.tool_calls ? { tool_calls: structuredClone(message.tool_calls) } : {}) },
-      ...(request.decision_reasoning ? { decision_reasoning: { ...request.decision_reasoning } } : {}),
       invocation_id: call, sampling: { ...structuredClone(capture), ...(Array.isArray(imports) ? { native_state_imports: structuredClone(imports) } : {}) },
       replay: { raw_calls_retained: true, temperature: options.temperature, seed: turnSeed } });
     return reply;
@@ -193,7 +211,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   if (fatal) throw fatal;
   if (refused) throw new Skip(refused);
   if (transport) throw new Skip(`model transport failed: ${transport instanceof Error ? transport.message : String(transport)}`.slice(0, 300));
-  if (!turns.length) throw new Skip('the root made no model turn');
+  if (!turns.some(turn => turn !== null)) throw new Skip('the root made no model turn');
   const degraded = stacks.find(stack => stack.status !== 'ready' && stack.status !== 'untuned' || stack.effective.length < stack.requested.length);
   if (degraded) throw new Skip(`a call did not run its release stack (${degraded.status}${degraded.reason ? `: ${degraded.reason}` : ''})`);
   const reward = (await scoreRoot(options.root, example as unknown as Record<string, unknown>, value, failed))!;
@@ -202,5 +220,5 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     ...(options.execution ? { execution: options.execution } : {}), reward, behavior: { ...behavior, temperature: options.temperature, seed }, bindings,
     episode: { task_id: example.id, split: 'train', sample, group, reward: { quality },
       policy: { checkpoint_sha256: options.policyCheckpointSha256, release: options.release.digest, temperature: options.temperature },
-      turns, execution_graph: events, ...(executionFailure ? { execution_failure: executionFailure.slice(0, 1000) } : {}) } };
+      turns: turns.filter(turn => turn !== null), execution_graph: events, ...(executionFailure ? { execution_failure: executionFailure.slice(0, 1000) } : {}) } };
 }

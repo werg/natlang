@@ -9262,6 +9262,46 @@ episodes after the staged layout (c64d250b2) entered at the 14:26 relaunch on `p
 - **Left:** a round boundary that stops the standing collection abandons every group in flight, memetic ones (up to
   ~2.4 h) most often; families never measured on the actor get no memetic group until they are.
 
+## 2026-11-23 Tune RL trains the action reasoning of reasoned decisions (follow-up to "GRPO trains the action reasoning")
+
+**Defect, confirmed by a run.** A `readout: decision` root went through `runRollouts` (worktree build at 7e3d18520)
+and then through `validate_rollout_graph`, the check `tune/rl.py` applies through `whole_episode_turns`. Every episode
+was refused: "whole-episode graph model-turn inventory differs from captured turns". The tune rollout recorded k+1
+turns (the 4 reasoning generations plus the action entry) against the graph's 4 scored-entry nodes. So tune RL could
+not train any episode with a reasoned readout. Had the names matched, it would have trained all k reasonings with
+their unused free replies.
+
+**Fix, consistent with GRPO.** Default on; recipe `rl_decision_reasoning: false` opts out (the choice only).
+- `ts-host/src/tune/rollouts.ts`:
+  - Every scored entry is a turn, in the order the graph numbers them (a slot is taken before scoring), as
+    `rl.task_rollouts.rollout_turns` records collector episodes.
+  - Only the action entry carries the sampling receipt. The other entries are context, with no receipt.
+  - Reasoning generations are no longer turns. The action entry keeps its reasoning's exact capture
+    (`decision_reasoning.reasoning_sampling`).
+- `rl/episode_graph.whole_episode_turns(rollout, think_close)` adds that capture as one more sampled turn, cut
+  through its first `</think>` (`action_reasoning_capture`), named `<action turn>:reasoning`.
+- `rl/native_replay.compile_replay` counts its node among the action turn's nodes. The objective's turn inventory is
+  unchanged, and the node is recorded in `graph_nodes`.
+- `invocation_behavior_policy` and `prepare_objective` take the same `think_close`. `tune/rl.RLEpisodes` reads it
+  from the engine tokenizer.
+- The decision turns' choice term and the other samples' context are unchanged.
+
+**Tests.**
+- `tests/neuralese/test_tune_rl_decision_reasoning.py`: compile with and without `think_close`, folding of the
+  reasoning node, cut and refusal rules.
+- `ts-host/test/tune-rollouts.test.mjs` (11/11 with `decision-reasoning.test.mjs`, built and run on Pop while the DGX
+  ledger queue was frozen behind the round SFT): one turn per graph node, graph order under out-of-order scoring, only the
+  action entry has a receipt and a reasoning capture.
+- Also run: `test_rl_episode_graph`, `test_native_rl_replay` and `test_native_invocation_actors` (47 passed together
+  with the new file).
+
+## 2026-11-23 18:30 Async prepare never rewrites a running data script; held-v4 reference result
+
+**Data script race.** The 17:27 driver restart rewrote `r0002/data.sh` while the earlier driver's `aei1-r0002-data` unit was executing it. sh reads its script by byte offset, so it resumed mid-line in the new file (`data.sh: 6: es.py: not found`) and the data stage failed at 18:04.
+
+The fix: prepare no longer rewrites `data.sh` while its data unit is present (running or queued), and writes it atomically (temporary file plus `os.replace`), so a running shell keeps the old inode. A test covers it. The 1c177e3fc per-step markers introduced the rewrite path.
+
+**held-v4 reference.** sft-v6 (dc95f29d) on held-v4 (manifest c09720e1, 252 tasks), measured on Pop at 2 samples per task: 241 of 500 scored episodes pass (48.2%), with 3 timeouts. The run was resumed once after a collector preemption. This is the semantic-FP baseline; later policies are measured on the round cadence (every third round, or when held-v3 is significant or the health report flags a semantic-FP construct).
 **2026-11-23 18:45, Google Drive is the third storage tier and the Colab sessions' shared store (`scripts/drive_tier.py`).**
 The owner added `drive.file` to ADC. The coordinator enabled `drive.googleapis.com` on awareness-481308 as the quota
 project (5,498 GB limit, 346 GB used).

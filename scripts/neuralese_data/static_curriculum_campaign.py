@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path[:0] = [str(REPO), str(Path(__file__).resolve().parent)]
 import render_parts  # noqa: E402
 io_quiet = render_parts.io_quiet
 TS = REPO / 'ts-host'
@@ -295,12 +295,8 @@ def render(root: Path, name: str, cpus: int, budget_gb: int, docker_gb: int) -> 
     def pending_units() -> list[str]:
         listed = subprocess.run(['systemctl', '--user', 'list-units', '--state=active,activating', '--plain',
                                  '--no-legend', f'{prefix}*'], capture_output=True, text=True).stdout.split()
-        try:
-            status = json.loads(subprocess.run(['python3', str(REPO / 'scripts/memory_ledger.py'), 'status'],
-                                               capture_output=True, text=True).stdout)
-            queued = [w['unit'] for w in status.get('waiting', [])]
-        except (ValueError, KeyError, TypeError):
-            queued = []
+        from scripts.memory_ledger import owned_units
+        queued = list(owned_units())
         return [u for u in listed + queued if u.startswith(prefix)]
 
     while pending_units() and not (out / 'receipt.json').exists():
@@ -320,7 +316,8 @@ def ensure_teacher_queued() -> None:
     """Queue the local teacher for a memory gap: low priority and resumable, so training (high) preempts it and the
     ledger relaunches it when memory frees again. Never service class here: that would hold memory training needs."""
     active = subprocess.run(['systemctl', '--user', 'is-active', '-q', 'natlang-qwen36-teacher.service']).returncode == 0
-    if active or teacher_serving():
+    from scripts.memory_ledger import unit_owned
+    if active or unit_owned('natlang-qwen36-teacher') or teacher_serving():
         return
     subprocess.run(['systemctl', '--user', 'reset-failed', 'natlang-qwen36-teacher.service'], capture_output=True)
     # --wait blocks until admitted; run it detached so this loop keeps preparing prompts meanwhile.

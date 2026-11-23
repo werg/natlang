@@ -538,6 +538,13 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                           'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
                          for index, token in enumerate(continuation)]
                         for option, continuation in zip(option_nodes, sample['continuations'])]})
+    # a reasoned decision's action reasoning (episode_graph.whole_episode_turns) is part of its action entry's turn
+    from .episode_graph import REASONING_SUFFIX
+    for name in [name for name in turn_nodes if name.endswith(REASONING_SUFFIX)]:
+        action = name[:-len(REASONING_SUFFIX)]
+        if action not in turn_nodes or prepared[action]['decision_sample'] is None:
+            raise ValueError('a decision reasoning turn needs its sampled decision entry')
+        turn_nodes[action] = [*turn_nodes.pop(name), *turn_nodes[action]]
     return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,written_sources,
         {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']},
         input_actions, tuple(decision_actions), turn_nodes)
@@ -1548,14 +1555,15 @@ def _rollout_source_custody(rollout):
     return {'status': 'packet-row-bound', **custody}
 
 
-def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
-    """Bind actual scored train calls; a collector base header is not behavior."""
+def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block,think_close=None):
+    """Bind actual scored train calls; a collector base header is not behavior. ``think_close``: as
+    ``prepare_objective``'s (both must see the same turns)."""
     from .episode_graph import whole_episode_turns
     from ..common.hashing import canonical_json_sha256_hex
     episodes={}
     for rollout in rollouts:
         _require_scored_training_episode(rollout,identity)
-        turns=whole_episode_turns(rollout)
+        turns=whole_episode_turns(rollout,think_close)
         actors=capture_invocation_actors(turns,identity)
         compile_replay(turns,identity=identity,roles=roles,fetch_block=fetch_block,invocation_actors=actors)
         key=canonical_json_sha256_hex(rollout)
@@ -1650,7 +1658,7 @@ def second_close_queries(replay, close_id, stop_ids):
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,
                       min_quality=1., policy_loss=None, privileged=None, actors=None, engine_guard=None,
-                      truncated='drop', second_close=None, budget_stop='train'):
+                      truncated='drop', second_close=None, budget_stop='train', think_close=None):
     """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
     [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
     whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``.
@@ -1667,7 +1675,10 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     ``second_close`` ((``</think>`` id, action-start ids): ``train.reply_format.second_close_ids``; None: off) leaves
     out the sampled tokens of a reply's second and later ``</think>`` and what follows each up to its action
     (``train.reply_format.second_close_mask``) wherever they would be reinforced: in every rft episode and in grpo
-    episodes with a positive advantage. A negative advantage still pushes them down (grpo's ``--second-close context``)."""
+    episodes with a positive advantage. A negative advantage still pushes them down (grpo's ``--second-close context``).
+    ``think_close`` (the ``</think>`` id; None: off) trains each reasoned decision's action reasoning, through its
+    ``</think>``, as sampled tokens of its decision's turn (``episode_graph.whole_episode_turns``); the readout's other
+    samples stay context."""
     from .policy_math import policy_loss_declaration, objective_policy_loss
     from .actors import actor_declaration
     actors = actor_declaration(actors, learner_identity=identity)
@@ -1732,7 +1743,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             invocation_actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
             if behavior_policy is not None and invocation_actors is None:
                 raise ValueError('native invocation behavior descriptor omits an admitted source episode')
-            turns = whole_episode_turns(rollout)
+            turns = whole_episode_turns(rollout, think_close)
             if empty := _empty_text_writes(turns):
                 # A sampled open marker followed at once by its close has no state to replay; the episode stays in
                 # its group's baseline and contributes no gradient.
