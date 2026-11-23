@@ -13,15 +13,9 @@
   ],
   "source_class": "immutable-RL-task-source",
   "split": "Train-only 121-row RL task source for grpo.py POOLS: authored round-15 rows (w259-w266, 8 new families incl. WikiSQL train-split table desk with SQL-executed answers); folder reducers 84%, decide 69%, call depth >= 3 62%, iterateOn 62%, typed Neuralese results 49%.",
-  "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 10. Qualified on the grpo-v4 pin runtime a0981794b, novelty-gated, Sonnet blind-solved (196/196 admitted, none held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r15. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (16 w260/w265 rows whose root inputs equal a held sibling's, and 40 earlier custody rows, left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 259 --max-worker 266 --drop-related round15/custody-drop.json. Data on /mnt/external (runs/ entry is a symlink).",
+  "note": "plans/neuralese/TASK_SUPPLY_20261118.md section 10. Qualified on the grpo-v4 pin runtime a0981794b, novelty-gated, Sonnet blind-solved (196/196 admitted, none held back) and admitted to natlang-rl-authoring/admitted; held worlds registered as natlang-rl-authored-{dev,confirmation}-20261118r15. held_eval verify vs held-v3: 0 shared ids or groups (also with the recorded exposure); ProtectedWorlds: 0 related (16 w260/w265 rows whose root inputs equal a held sibling's, and 40 earlier custody rows, left out); LFM3 group closure passed. Builder: /mnt/external/natlang-rl-authoring/round10/build_supply.py --min-worker 259 --max-worker 266 --drop-related round15/custody-drop.json. Data on /mnt/external (runs/ entry is a symlink). Superseded in the grpo-pool role by natlang-rl-task-supply-20261118f-typed (2026-11-23, typed output contracts).",
   "kind": "rl-tasks",
   "format": "natlang.program/2 task JSONL (cases.jsonl), one task per line",
-  "roles": {
-    "grpo-pool": {
-      "order": 8,
-      "file": "cases.jsonl"
-    }
-  },
   "license": "project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by reference, negative and alias replay",
   "training_admission": "grpo-task-pool"
 }
