@@ -4,9 +4,9 @@
 The fallow-22 whole-chain Neuralese graphs (``FALLOW/<source>-s<N>``, FALLOW the external tier's
 ``natlang-fallow22-20261110``: fetaqa, 2wiki, bird) are token graphs on an old surface (a 33.4k-character system
 prompt) with native-write spans inside producer calls, a form today's runtime does not produce
-(NEURALESE_PASSTHROUGH_20261117.md). Their source records (``shard-*.records.jsonl`` under each shard's receipt ``inputs.work``) keep every call's original plain messages and
-reply (``native_source_conversion.source_messages`` / ``source_target``: the trajectories ran without a Neuralese
-server; the spans were a post-hoc conversion) and the task program (``task.program_ir``). This writes them in the
+(NEURALESE_PASSTHROUGH_20261117.md). Their source records (``shard-*.records.jsonl`` under each shard's receipt
+``inputs.work``) keep every call's original plain messages and reply (``native_source_conversion.source_messages`` /
+``source_target``: the trajectories ran without a Neuralese server; the spans were a post-hoc conversion) and the task program (``task.program_ir``). This writes them in the
 October row form the extract stage turns into ``teacher`` episodes, so ``sft_sources.py replay`` runs each task again
 on today's runtime against the recorded replies and the build renders today's prompts. A producer's result reaches its
 consumer as text in the consumer's own context, which is how today's runtime reads a text-written state too
