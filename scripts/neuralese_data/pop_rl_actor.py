@@ -1360,6 +1360,155 @@ def pull_learner_state(host, remote_run, local_state, *, attempts=3):
     return True
 
 
+def remote_sft_run(cfg, run_name):
+    """The VM directory of ``run-sft --run-name RUN_NAME`` (its learner state, logs, factors)."""
+    return f'{cfg["work_root"]}/sft-{run_name}'
+
+
+def state_step(manifest):
+    """The step a learner state resumes at (``exp0_sft``: the batch cursor's ``next_step``, else ``learner_step``)."""
+    cursor = manifest.get('batch_cursor') or {}
+    return int(cursor.get('next_step', manifest.get('learner_step', 0)))
+
+
+def remote_state_step(host, remote_run):
+    """The resume step of ``remote_run``'s learner state on ``host``; None when it holds none."""
+    out = ssh_host(host, f'cat {shlex.quote(remote_run + "/learner-state/learner_manifest.json")} 2>/dev/null || true',
+                   timeout=60, check=False).strip()
+    try:
+        return state_step(json.loads(out)) if out else None
+    except ValueError:
+        return None
+
+
+def snapshot_learner_state(local_state, *, attempts=20):
+    """A hardlink snapshot of the live ``local_state`` holding one save (``save_learner_state`` rotates whole
+    directories; a copy across a rotation mixes two saves): taken while the directory kept its inode, beside it as
+    ``<name>.push``. The DGX learner's next rotation unlinks its names, never the snapshot's data."""
+    local_state = Path(local_state)
+    snap = local_state.with_name(local_state.name + '.push')
+    for _ in range(attempts):
+        shutil.rmtree(snap, ignore_errors=True)
+        try:
+            inode = local_state.stat().st_ino
+            shutil.copytree(local_state, snap, copy_function=os.link)
+            if local_state.stat().st_ino == inode and (snap / 'learner_manifest.json').is_file():
+                return snap
+        except (OSError, shutil.Error):
+            pass
+        time.sleep(3)
+    shutil.rmtree(snap, ignore_errors=True)
+    raise RuntimeError(f'no consistent snapshot of {local_state}')
+
+
+def tree_sha256(root):
+    """{relative path: sha256} of every file under ``root``."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    root = Path(root)
+    return {str(p.relative_to(root)): sha256_file_hex(p) for p in sorted(root.rglob('*')) if p.is_file()}
+
+
+def remote_tree_sha256(host, remote_dir):
+    """{relative path: sha256} of every file under ``remote_dir`` on ``host``."""
+    out = ssh_host(host, f'cd {shlex.quote(remote_dir)} && find . -type f -exec sha256sum {{}} +', timeout=1800)
+    pairs = (line.split(None, 1) for line in out.splitlines() if line.strip())
+    return {name.strip().removeprefix('./'): sha for sha, name in pairs}
+
+
+def sft_state_push_needed(host, remote_run, local_state):
+    """Whether ``run-sft`` pushes the DGX's ``local_state`` before its learner starts: the DGX holds a state, no learner
+    of the run runs on the VM, and the VM holds no state or an older one."""
+    manifest = Path(local_state) / 'learner_manifest.json'
+    if not manifest.exists() or remote_learner_state(host, remote_run) == 'running':
+        return False
+    remote_step = remote_state_step(host, remote_run)
+    return remote_step is None or state_step(json.loads(manifest.read_text())) > remote_step
+
+
+def push_learner_state(host, cfg, remote_run, local_state, *, run_name, via='auto'):
+    """Place ``local_state`` (the DGX learner's latest save: FP32 factors, optimizer, RNG and batch cursor) as
+    ``remote_run``'s learner state on ``host``, verified: a consistent snapshot goes to ``learner-state.incoming`` on
+    the VM through Drive (``via`` auto/drive: the DGX uplink is about 2x the tunnel, the VM fetches inside Google's
+    network; any Drive failure falls back) or the tunnel, every file's sha256 is checked against the snapshot, and only
+    then does it replace the VM's state. Refused while a learner of the run runs there (its own state is newer).
+    Returns {step, via, seconds, bytes, files}."""
+    if remote_learner_state(host, remote_run) == 'running':
+        raise RuntimeError(f'{host}: a learner of {remote_run} is running; its state is not replaced')
+    started = time.time()
+    snap = snapshot_learner_state(local_state)
+    try:
+        step = state_step(json.loads((snap / 'learner_manifest.json').read_text()))
+        want = tree_sha256(snap)
+        size = sum(p.stat().st_size for p in snap.rglob('*') if p.is_file())
+        incoming = f'{remote_run}/learner-state.incoming'
+        q = shlex.quote
+        ssh_host(host, f'mkdir -p {q(remote_run)} && rm -rf {q(incoming)}')
+        how = None
+        if via in ('auto', 'drive') and drive_enabled(cfg):
+            try:
+                from scripts import drive_tier
+                prefix = f'colab/{run_name}/handback-state'
+                drive_tier.put_dir(argparse.Namespace(token_file=None, dir=str(snap), prefix=prefix))
+                got = drive_vm(host, cfg, 'get-dir', prefix, incoming)
+                if got.get('event') == 'get-dir':
+                    how = 'drive'
+            except Exception as error:      # any Drive failure falls back to the tunnel
+                log(event='learner state via Drive failed: using the tunnel', host=host, error=repr(error)[:300])
+                ssh_host(host, f'rm -rf {q(incoming)}', check=False)
+        if how is None:
+            sync_to_remote(f'{snap}/', f'{incoming}/', host)
+            how = 'tunnel'
+        got = remote_tree_sha256(host, incoming)
+        if got != want:
+            ssh_host(host, f'rm -rf {q(incoming)}', check=False)
+            bad = sorted(k for k in set(want) | set(got) if want.get(k) != got.get(k))
+            raise RuntimeError(f'the learner state on {host} does not match the DGX snapshot ({bad[:5]}); discarded')
+        if remote_learner_state(host, remote_run) == 'running':
+            raise RuntimeError(f'{host}: a learner of {remote_run} started during the push; its state is kept')
+        state = f'{remote_run}/learner-state'
+        ssh_host(host, f'rm -rf {q(state + ".old")} && {{ [ ! -e {q(state)} ] || mv -T {q(state)} {q(state + ".old")}; }} '
+                       f'&& mv -T {q(incoming)} {q(state)} && rm -rf {q(state + ".old")}')
+        record = {'step': step, 'via': how, 'seconds': round(time.time() - started, 1), 'bytes': size,
+                  'files': len(want)}
+        log(event='learner state pushed and verified', host=host, remote_run=remote_run, **record)
+        return record
+    finally:
+        shutil.rmtree(snap, ignore_errors=True)
+
+
+# transfer rates for planning a move of a round to a session (measured 2026-11-23, 35a91a22f): the DGX uplink to
+# Drive 5.49 MB/s, the tunnel 2.63 up; rsync -z shrinks chains ~12x and a BF16 checkpoint ~20%, an FP32 state barely
+SFT_MOVE_RATES_MB_S = {'drive': 5.0, 'tunnel': 2.4}
+# checkout, admission, model load, compile (113 s on the DGX) and the Ambient teacher before the first step on a VM
+SFT_REMOTE_SETUP_SECONDS = 900.0
+
+
+def sft_move_seconds(host, cfg, *, run_name, launch, state_bytes, via='auto'):
+    """Planned seconds to start ``launch``'s round on ``host`` from a pushed learner state of ``state_bytes``: what the
+    VM still lacks (the chains, the start checkpoint unless it is there) plus the state, at the measured rates, plus
+    the learner's setup. Returns (seconds, parts)."""
+    recipe = shlex.split(launch['exp0_sft_args'])
+    value = lambda flag: recipe[recipe.index(flag) + 1]
+    rate = SFT_MOVE_RATES_MB_S['drive' if via in ('auto', 'drive') and drive_enabled(cfg) else 'tunnel'] * 1e6
+    tunnel = SFT_MOVE_RATES_MB_S['tunnel'] * 1e6
+    q = shlex.quote
+    chains_remote = f'{remote_sft_run(cfg, run_name)}/chains.pkl'
+    ckpt_remote = f'{cfg["checkpoints"]}/{launch["start_checkpoint_sha256"]}.pt'
+    have = ssh_host(host, f'for f in {q(chains_remote)} {q(ckpt_remote)}; do test -f "$f" && echo yes || echo no; done',
+                    timeout=60, check=False).split()
+    have = (have + ['no', 'no'])[:2]
+    parts = {'state': round(state_bytes / rate, 1), 'setup': SFT_REMOTE_SETUP_SECONDS,
+             'chains': 0.0 if have[0] == 'yes' else round(Path(value('--chains')).stat().st_size / rate, 1),
+             'checkpoint': 0.0}
+    if have[1] != 'yes':
+        published = read_json(Path(value('--checkpoint')).with_name('published.json')) or {}
+        factors = Path(published['factors_dir']) / 'adapter_factors_fp32.safetensors' \
+            if published.get('factors_dir') else None
+        parts['checkpoint'] = round(factors.stat().st_size / tunnel + 120 if factors and factors.exists() else
+                                    Path(value('--checkpoint')).stat().st_size / rate, 1)
+    return round(sum(parts.values()), 1), parts
+
+
 def restore_colab_actor(record):
     """Serve again the Colab actor ``run-sft`` stopped for a learner it did not fit beside (its recorded serve
     arguments); a failure is logged, never raised (the round's factors are already home)."""
@@ -1417,10 +1566,14 @@ def run_remote_sft(args):
         ship_file(vpath, rv, host, cfg, sha256_file_hex(vpath))
         mapping[vpath] = rv
     local_state = local_work / 'learner-state'
-    # exact resume across a preemption (the DGX holds the state); never into a learner of this run still running
-    # (its own state is newer than the DGX's last pull)
-    if (local_state / 'learner_manifest.json').exists() and remote_learner_state(host, remote_run) == 'none':
-        sync_to_remote(f'{local_state}/', f'{remote_run}/learner-state/', host)
+    # exact resume across a preemption or from a DGX learner the round moved from (the DGX holds the newer state):
+    # pushed verified whenever it is ahead of the VM's (a VM whose earlier learner failed, 'rc 1', kept a stale state
+    # the old rule resumed); never into a learner of this run still running (its own state is newer)
+    if sft_state_push_needed(host, remote_run, local_state):
+        t = time.time()
+        pushed = push_learner_state(host, cfg, remote_run, local_state, run_name=args.run_name,
+                                    via=getattr(args, 'state_transfer', 'auto'))
+        timings.update(state_via=pushed['via'], state_step=pushed['step'], state_seconds=round(time.time() - t, 1))
     # an async round's recipe exports its factors (--export-factors-dir, --round-id: one argv for the G4 and the DGX
     # learner, expert_iteration.round_sft_env); the factors land beside the run on the VM and are pulled back
     factors_only = '--factors-only' in recipe
@@ -1762,6 +1915,8 @@ def main(argv=None):
     rs.add_argument('--vram-gib', type=float, help='admission claim (default: from the session hardware, the learner '
                     'alone or beside the capped actor the session runs)')
     rs.add_argument('--host-ram-gib', type=float, help='admission claim (default: from the session hardware)')
+    rs.add_argument('--state-transfer', choices=('auto', 'drive', 'tunnel'), default='auto',
+                    help='how a DGX learner state ahead of the VM\'s is pushed (auto: Drive, the tunnel on failure)')
     rc = commands.add_parser('reachable', help='list reachable remote hosts for a profile')
     rc.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='colab')
     rc.add_argument('--hosts', help='comma-separated SSH host aliases')

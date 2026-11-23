@@ -464,7 +464,8 @@ def test_cycle_collect_on_colab_runs_the_same_command_with_variants_and_stops_it
         return json.dumps({'endpoint': f'http://{host}:18531'}) + '\n'
     monkeypatch.setattr(ei.subprocess, 'run', run)
     monkeypatch.setattr(ei.subprocess, 'check_output', check_output)
-    active = iter([True, False])
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: False)   # the ledger owns no unit here (its import
+    active = iter([True, False])                                      # under the patched subprocess.run failed)
     monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: next(active, False)))
     monkeypatch.setattr(ei.Cycle, 'ledger', lambda self, unit, budget, prio, command, log, detach=False, **k:
                         units.append((unit, budget, command, detach)))

@@ -77,6 +77,25 @@ def compute_capability(hardware: dict) -> tuple[int, int] | None:
     return int(major), int(minor or 0)
 
 
+# measured round-SFT speed against the GB10 on one mix (the A100's 9 s/step against 36.8 s above); a GPU without a
+# measurement plans with its BF16 TFLOPS ratio, which undershoots the A100's (2.5x against 4.1x measured)
+MEASURED_SFT_SPEEDUP_BY_NAME = (('A100', round(36.8 / 9.0, 2)),)
+
+
+def sft_speedup(hardware: dict, measured: dict | None = None) -> tuple[float | None, str]:
+    """(round SFT speed of the session's GPU against the DGX's, its source): ``measured`` ({gpu name: speedup}, what
+    this loop measured on a round that moved), else the built-in measurement, else the BF16 TFLOPS ratio (None when
+    the GPU is unknown)."""
+    name = str(hardware.get('gpu_name') or '')
+    if measured and measured.get(name):
+        return float(measured[name]), 'measured by this loop'
+    known = next((x for key, x in MEASURED_SFT_SPEEDUP_BY_NAME if key in name), None)
+    if known:
+        return known, 'measured (execution_profile)'
+    tflops = bf16_dense_tflops(hardware)
+    return (round(tflops / GB10_BF16_TFLOPS, 2), 'BF16 TFLOPS ratio') if tflops else (None, 'unknown GPU')
+
+
 def bf16_dense_tflops(hardware: dict) -> float | None:
     """Peak dense BF16 TFLOPS of a session's GPU by name (None when unknown)."""
     name = str(hardware.get('gpu_name') or '')

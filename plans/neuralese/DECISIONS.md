@@ -9624,3 +9624,51 @@ and excluded; without the receipt the old refusal stands), `test_teacher_text_oc
 
 The live collector (pin 108cd84) runs the old ts-host and keeps hitting this until the driver moves to a pin with the
 fix; do not re-enable Neuralese variants on a pin without it.
+
+## 2026-11-23 23:30 Async SFT hand-back: a round on the DGX moves back to a fit Colab session from its verified state
+
+**Why.** aei1 r0001's SFT went to the DGX because the session was an L4 (unfit by `colab_sft_fit`). The keeper later
+got an A100, but nothing moved the round back: at step ~309 of 1150 and ~85 s/step (median of the last 40 steps;
+the brief's 45 s was optimistic) it had ~20 h left on the DGX, while the A100 sat on collection.
+
+**Decision (built, default on; `--no-sft-handback` opts out).** `AsyncRoundDriver.sft_handback`, checked every
+10 min while the round's DGX unit runs (`--sft-handback-check-minutes`):
+- Rule (`sft_handback_decision`): DGX left = (total - current step) x median s/step of the last 20 steps; session
+  left = move + (total - last saved step) x DGX s/step / speedup. Move = what the VM lacks (chains, start checkpoint,
+  state) at the measured link rates (Drive 5.0, tunnel 2.4 MB/s) + 900 s learner setup (`pop_rl_actor.sft_move_seconds`).
+  Speedup = this loop's measurement from an earlier move (`ROOT/sft-speed.json`, written when a moved round finishes),
+  else the built-in A100 measurement (36.8/9 = 4.09x), else the BF16 TFLOPS ratio (A100 2.5x). It moves only when
+  the session finishes within 75% of the DGX's time and at least 60 min sooner (`--sft-handback-margin 0.25`,
+  `--sft-handback-min-gain-minutes 60`). For r0001 at step 309 that is ~20 h vs ~5.5 h (4.09x) or ~8.7 h (2.5x), with a ~40 min move.
+- Exact resume: right after a DGX save (it waits for one if the push could not finish before the next), a hardlink
+  snapshot of `sft/learner-state` (FP32 factors, optimizer, RNG and batch cursor, `trainer_state`) goes to
+  `learner-state.incoming` on the VM through Drive (`put-dir` / `get-dir`, the tunnel on any failure,
+  `--sft-state-transfer`); every file's sha256 is checked against the snapshot, only then does it replace the VM's
+  state, and only then does the DGX unit stop. `run-sft` resumes it with the same recipe (`launch.json`) and step
+  list (`exp0_sft --resume` refuses other chains or a different step count). The VM runs the driver's commit, not
+  the DGX unit's pin.
+- After the move: DGX collection resumes (`ensure_collection`), the session's actor yields to the learner as before,
+  `round.json` records `dgx -> colab`, `sft/handback.json` keeps the decision and push, and the DGX logs are kept as
+  `sft/train.dgx-N.{jsonl,log}` (run-sft's pulls replace `train.jsonl`/`train.log`). At most 2 moves a round, none
+  after its Colab learner failed 3 times. A session lost afterwards falls back to the DGX from the synced state.
+
+**Fixed along the way.**
+- A driver restarted while the round's DGX learner ran entered the Colab loop when a fit session answered and started
+  `run-sft` beside it: two learners on one round, the 15-min pulls overwriting the DGX's `learner-state`. Now
+  `train_sft` joins a present DGX unit and only the verified hand-back moves it.
+- run-sft pushed the DGX state only when the VM's learner state probe said `none`. A VM whose earlier learner failed
+  (`rc 1`) kept its stale state and resumed from it. Now the DGX state is pushed (verified) whenever it is ahead of the
+  VM's state and no learner runs there (`sft_state_push_needed`).
+- The DGX learner launch uses `present` (running or ledger-held) instead of `active`, so a requeued unit is not
+  launched twice.
+
+**Not covered.** The `cycle` SFT stage (`Cycle.sft_stage`, the path async-drive replaces, no cycle running) gets
+the shared run-sft push fix but no hand-back. GRPO rounds train only on the DGX. Not checked: a live push to the
+A100 (no live unit was touched); Drive `put-dir`/`get-dir` of a 1.5 GB state (only `put`/`get` of blobs were
+measured); whether exp0_sft's restored `trainer_state` OOM plan (DGX pack 19573 tokens, 56 GiB) is the right plan
+on the A100 (it changes memory, not the step list, as in the existing Colab -> DGX takeover). Hand-back Drive
+objects (`natlang/colab/<run>/handback-state`) are replaced per move, not deleted.
+
+Tests: `tests/neuralese/test_async_train.py` (decision, move after verified push, no move when opted out,
+unfavourable, unsaved, unverified or blocked, VM state replaced only whole and verified, run-sft push rule, move
+estimate).
